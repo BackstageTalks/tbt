@@ -55,6 +55,13 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python scripts/backtest.py
 
+      - name: Verify trained artifact
+        run: |
+          set -euo pipefail
+          test -s api/artifacts/model.joblib
+          echo "Model artifact present:"
+          ls -lh api/artifacts/model.joblib
+
       - name: Upload evaluation reports
         uses: actions/upload-artifact@v4
         with:
@@ -62,111 +69,13 @@ jobs:
           path: reports/
           retention-days: 30
 
-      - name: Prepare Azure publish profile
-        id: azure_profile
-        env:
-          RAW_PROFILE: ${{ secrets.BLINQ_FUNCTION_PUBLISH_PROFILE }}
-          FUNCTION_APP_NAME: ${{ vars.BLINQ_FUNCTION_APP_NAME }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ -z "${FUNCTION_APP_NAME:-}" ]; then
-            echo "::error::Missing repository variable BLINQ_FUNCTION_APP_NAME"
-            exit 1
-          fi
-
-          python - <<'PY'
-          import base64
-          import html
-          import json
-          import os
-          import xml.etree.ElementTree as ET
-
-          raw = os.environ.get("RAW_PROFILE", "")
-          if not raw.strip():
-              raise SystemExit("BLINQ_FUNCTION_PUBLISH_PROFILE is empty")
-
-          def variants(value):
-              seen = set()
-              queue = [value]
-              while queue:
-                  v = queue.pop(0)
-                  if not isinstance(v, str):
-                      continue
-                  v = v.strip().lstrip("\ufeff")
-                  if len(v) >= 2 and v[0] == v[-1] and v[0] in {"'", '"'}:
-                      v = v[1:-1].strip()
-                  if not v or v in seen:
-                      continue
-                  seen.add(v)
-                  yield v
-
-                  h = html.unescape(v)
-                  if h not in seen:
-                      queue.append(h)
-
-                  if "\\n" in v or "\\r" in v or '\\"' in v:
-                      try:
-                          queue.append(bytes(v, "utf-8").decode("unicode_escape"))
-                      except Exception:
-                          pass
-
-                  try:
-                      queue.append(base64.b64decode(v, validate=True).decode("utf-8"))
-                  except Exception:
-                      pass
-
-                  if v.startswith("{"):
-                      try:
-                          obj = json.loads(v)
-                          for key in ("publishProfile", "profile", "xml", "value"):
-                              x = obj.get(key)
-                              if isinstance(x, str):
-                                  queue.append(x)
-                      except Exception:
-                          pass
-
-          profile = None
-          for candidate in variants(raw):
-              pos = candidate.find("<")
-              if pos < 0:
-                  continue
-              candidate = candidate[pos:]
-              try:
-                  root = ET.fromstring(candidate)
-              except Exception:
-                  continue
-
-              tag = root.tag.lower()
-              if tag.endswith("publishdata") or tag.endswith("publishprofile"):
-                  profile = candidate
-                  break
-
-          if profile is None:
-              raise SystemExit(
-                  "BLINQ_FUNCTION_PUBLISH_PROFILE is not a valid Azure publish-profile XML. "
-                  "In Azure Function App -> Deployment Center / Get publish profile, download the "
-                  "publish profile and paste the COMPLETE file contents into this GitHub secret."
-              )
-
-          # Azure/functions-action expects the actual XML text, not Base64.
-          output_file = os.environ["GITHUB_OUTPUT"]
-          marker = "AZURE_PROFILE_EOF"
-          if marker in profile:
-              marker = "AZURE_PROFILE_EOF_2"
-          with open(output_file, "a", encoding="utf-8") as fh:
-              fh.write(f"profile<<{marker}\n{profile}\n{marker}\n")
-
-          print("Azure Function App:", os.environ["FUNCTION_APP_NAME"])
-          print("Publish profile XML validated.")
-          PY
-
-      - name: Deploy exact tested model artifact
-        uses: Azure/functions-action@v1
+      - name: Deploy tested model and API to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
         with:
-          app-name: ${{ vars.BLINQ_FUNCTION_APP_NAME }}
-          package: api
-          publish-profile: ${{ steps.azure_profile.outputs.profile }}
-          scm-do-build-during-deployment: true
-          enable-oryx-build: true
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: web
+          api_location: api
+          output_location: ""
+          skip_app_build: true
