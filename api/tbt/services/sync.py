@@ -92,6 +92,57 @@ def bootstrap_history(
     return report
 
 
+def _fixture_pair_day_key(match) -> tuple[str, str, str, str]:
+    p1, p2 = sorted((str(match.player1_id), str(match.player2_id)))
+    return (
+        str(match.tour).lower(),
+        match.scheduled_at.astimezone(timezone.utc).date().isoformat(),
+        p1,
+        p2,
+    )
+
+
+def _fixture_priority(match) -> tuple[int, int, float]:
+    """Choose the strongest provider representation of one real fixture.
+
+    Grand Slam category wins over a duplicate ATP/WTA category representation.
+    Then prefer the row carrying a stable provider event id and, as a final
+    deterministic tiebreak, the later provider start timestamp (reschedules tend
+    to supersede earlier provisional times).
+    """
+    raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+    try:
+        category_id = int(raw.get("_tbt_source_category_id"))
+    except (TypeError, ValueError):
+        category_id = 0
+
+    is_grand_slam = 1 if category_id == RapidTennisClient.CATEGORY_GRAND_SLAM else 0
+    has_provider_id = 1 if raw.get("_tbt_provider_event_id") or raw.get("id") else 0
+    return (is_grand_slam, has_provider_id, match.scheduled_at.timestamp())
+
+
+def _dedupe_upcoming(matches: list) -> tuple[list, int]:
+    """Collapse duplicate provider representations of the same singles fixture.
+
+    Two singles players cannot play two separate official matches against each
+    other on the same tour/date in the normal TBT coverage model. Grouping by
+    unordered player pair + UTC date removes category aliases such as
+    ``US Open, Women`` vs ``US Open, New York, USA`` without relying on names.
+    """
+    chosen: dict[tuple[str, str, str, str], object] = {}
+    duplicates = 0
+    for match in sorted(matches, key=lambda m: m.scheduled_at):
+        key = _fixture_pair_day_key(match)
+        existing = chosen.get(key)
+        if existing is None:
+            chosen[key] = match
+            continue
+        duplicates += 1
+        if _fixture_priority(match) > _fixture_priority(existing):
+            chosen[key] = match
+    return sorted(chosen.values(), key=lambda m: m.scheduled_at), duplicates
+
+
 def refresh_predictions(cfg: Settings = settings) -> dict:
     """Refresh only genuinely future, non-cancelled ATP/WTA singles fixtures."""
     provider = RapidTennisClient(cfg)
@@ -115,26 +166,24 @@ def refresh_predictions(cfg: Settings = settings) -> dict:
     # a same-day refresh from creating fresh "pre-match" predictions after start.
     upcoming = [m for m in upcoming if m.scheduled_at > now]
 
-    # Primary dedupe is canonical match_id. Provider event-id duplicates are also
-    # rejected if the same event leaked through multiple category/date feeds.
-    by_match: dict[str, object] = {}
-    seen_provider_ids: set[str] = set()
-    for match in sorted(upcoming, key=lambda m: m.scheduled_at):
-        raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
-        provider_id = str(
-            raw.get("_tbt_provider_event_id") or raw.get("id") or ""
-        ).strip()
-        if provider_id and provider_id in seen_provider_ids:
-            continue
-        if provider_id:
-            seen_provider_ids.add(provider_id)
-        by_match[match.match_id] = match
-    upcoming = list(by_match.values())
+    # First collapse exact canonical IDs, then collapse duplicate provider
+    # representations of the same player pair/date (e.g. Grand Slam aliases).
+    by_match = {m.match_id: m for m in upcoming}
+    upcoming, duplicate_fixtures_removed = _dedupe_upcoming(list(by_match.values()))
 
     repo.upsert_matches(upcoming)
 
     history = repo.get_completed_matches(before=now)
     predictions = predict_matches(model, history, upcoming)
+
+    # Replace only FUTURE, UNSETTLED rows for this model. Historical/started
+    # predictions stay in the DB for audit and settlement.
+    cleanup_end = datetime.combine(
+        horizon + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc
+    )
+    stale_predictions_removed = repo.delete_future_unsettled_predictions(
+        model.version, now, cleanup_end
+    )
     written = repo.upsert_predictions(predictions)
 
     logger.info(
@@ -148,6 +197,8 @@ def refresh_predictions(cfg: Settings = settings) -> dict:
         "rapidapi_requests": rapidapi_requests,
         "rapidapi_remaining": rapidapi_remaining,
         "fixture_source": "calendar/categories -> category/events",
+        "duplicate_fixtures_removed": duplicate_fixtures_removed,
+        "stale_future_predictions_removed": stale_predictions_removed,
     }
 
 
