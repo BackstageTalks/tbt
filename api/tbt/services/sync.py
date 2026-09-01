@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import calendar
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from ..config import Settings, settings
 from ..errors import ProviderError
@@ -18,63 +19,102 @@ def bootstrap_history(
     end_year: int,
     cfg: Settings = settings,
 ) -> dict:
-    """Download real historical matches and persist them to Supabase.
+    """Download only real historical match results and persist them incrementally.
 
-    A bootstrap is considered successful only when completed matches were really
-    stored.  This prevents a green GitHub Action from hiding an empty provider
-    result and later failing during training with "Only 0 completed matches".
+    Data are written month-by-month. A failed run therefore keeps already imported
+    months in Supabase and can safely be rerun because ``match_id`` is upserted.
+    No odds/statistics requests are made during this bulk history step.
     """
+
+    if end_year < start_year:
+        raise ValueError("end_year must be >= start_year")
 
     provider = RapidTennisClient(cfg)
     repo = SupabaseRepository(cfg)
-    report: dict = {"years": {}, "matches_written": 0}
+    report: dict = {
+        "years": {},
+        "matches_written": 0,
+        "rapidapi_requests": 0,
+    }
+
+    yesterday = datetime.now(timezone.utc).date() - timedelta(days=1)
 
     try:
         for year in range(start_year, end_year + 1):
-            for tour in ("atp", "wta"):
-                logger.info("Downloading %s history for %s", tour.upper(), year)
-                matches = provider.historical_year(tour, year)
-                completed = [m for m in matches if m.is_completed and m.winner_id]
+            year_report = {"atp": 0, "wta": 0, "written": 0}
+
+            for month in range(1, 13):
+                month_start = date(year, month, 1)
+                month_end = date(year, month, calendar.monthrange(year, month)[1])
+
+                # Never consume quota on future dates in the current/future year.
+                if month_start > yesterday:
+                    break
+                month_end = min(month_end, yesterday)
+
+                month_matches = []
+                for tour in ("atp", "wta"):
+                    logger.info(
+                        "Downloading %s history for %04d-%02d",
+                        tour.upper(),
+                        year,
+                        month,
+                    )
+                    matches = provider.historical_period(tour, month_start, month_end)
+                    completed = [m for m in matches if m.is_completed and m.winner_id]
+                    year_report[tour] += len(completed)
+                    month_matches.extend(completed)
+
+                # Shared categories/day boundaries can produce duplicates. Store once.
+                deduped = list({m.match_id: m for m in month_matches}.values())
+                written = repo.upsert_matches(deduped)
+                year_report["written"] += written
+                report["matches_written"] += written
 
                 logger.info(
-                    "%s %s: provider returned %s completed matches",
-                    tour.upper(),
+                    "%04d-%02d stored %s real completed matches; "
+                    "RapidAPI requests=%s remaining=%s/%s",
                     year,
-                    len(completed),
+                    month,
+                    written,
+                    provider.request_count,
+                    provider.rate_limit_remaining,
+                    provider.rate_limit_limit,
                 )
 
-                written = repo.upsert_matches(completed)
-                report["years"][f"{tour}-{year}"] = {
-                    "provider_completed": len(completed),
-                    "written": written,
-                }
-                report["matches_written"] += written
+            report["years"][str(year)] = year_report
+
     finally:
+        report["rapidapi_requests"] = provider.request_count
+        report["rapidapi_remaining"] = provider.rate_limit_remaining
+        report["rapidapi_limit"] = provider.rate_limit_limit
         provider.close()
 
-    # Verify the real database state rather than trusting request success codes.
     completed_in_db = len(repo.get_completed_matches())
     report["completed_matches_in_db"] = completed_in_db
     report["minimum_for_training"] = cfg.min_train_matches
 
     if completed_in_db == 0:
         raise ProviderError(
-            "Historical bootstrap completed HTTP requests but Supabase still contains "
-            "0 completed matches. The provider mapping/filtering returned no usable "
-            "real results; refusing to continue with an empty dataset."
+            "Bootstrap finished but Supabase contains 0 completed matches. "
+            "Refusing to train on an empty dataset."
         )
 
+    # For a partial/current-year bootstrap we keep the real imported data even if
+    # it is below the production threshold. Training will enforce its own minimum.
     if completed_in_db < cfg.min_train_matches:
-        raise ProviderError(
-            f"Historical bootstrap stored only {completed_in_db} completed matches, "
-            f"but training requires at least {cfg.min_train_matches}. Extend the "
-            "bootstrap period or fix provider coverage before training."
+        logger.warning(
+            "Bootstrap stored %s completed matches; production training currently "
+            "requires %s. Import more history before retraining.",
+            completed_in_db,
+            cfg.min_train_matches,
+        )
+    else:
+        logger.info(
+            "Bootstrap verified: %s completed matches available in Supabase",
+            completed_in_db,
         )
 
-    logger.info(
-        "Bootstrap verified: %s completed matches available in Supabase",
-        completed_in_db,
-    )
     return report
 
 
@@ -92,7 +132,6 @@ def refresh_predictions(cfg: Settings = settings) -> dict:
     finally:
         provider.close()
 
-    # Dedupe in case provider date windows return overlapping events.
     upcoming = list({m.match_id: m for m in upcoming}.values())
     repo.upsert_matches(upcoming)
 
@@ -113,12 +152,17 @@ def refresh_predictions(cfg: Settings = settings) -> dict:
 def sync_current_year_results(cfg: Settings = settings) -> dict:
     provider = RapidTennisClient(cfg)
     repo = SupabaseRepository(cfg)
-    year = datetime.now(timezone.utc).year
+    today = datetime.now(timezone.utc).date()
+
+    # Daily reconciliation should only revisit a short rolling window, not download
+    # the whole current year every day. Older results are already persisted.
+    start = today - timedelta(days=7)
+    end = today - timedelta(days=1)
 
     try:
         completed = []
         for tour in ("atp", "wta"):
-            completed.extend(provider.historical_year(tour, year))
+            completed.extend(provider.historical_period(tour, start, end))
     finally:
         provider.close()
 
