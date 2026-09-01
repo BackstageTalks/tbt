@@ -1,32 +1,40 @@
 name: Retrain, backtest and deploy
+
 on:
   workflow_dispatch:
   schedule:
     - cron: '17 4 * * 1'
+
 permissions:
   contents: read
+
 jobs:
   retrain:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       PYTHONPATH: api
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
-          cache-dependency-path: api/requirements.txt
-      - name: Install dependencies
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install training dependencies
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
-          pip install -r api/requirements.txt pytest
+          pip install -r api/requirements-train.txt pytest
+
       - name: Unit tests
         run: pytest
+
       - name: Train production artifact
         env:
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
@@ -38,24 +46,57 @@ jobs:
           TGBOT: ${{ secrets.TGBOT }}
           TGCHID: ${{ secrets.TGCHID }}
         run: python scripts/train.py --output api/artifacts/model.joblib
+
       - name: Walk-forward backtest
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python scripts/backtest.py
-      - name: Verify trained model
+
+      - name: Verify model artifact
         run: |
           set -euo pipefail
           test -s api/artifacts/model.joblib
           ls -lh api/artifacts/model.joblib
+
+      - name: Store production model in Supabase Storage
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/model_store.py upload --file api/artifacts/model.joblib
+
+      - name: Generate fresh production predictions
+        env:
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
+          RAPIDAPI_BASE_URL: https://tennisapi1.p.rapidapi.com
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/refresh_predictions.py
+
+      - name: Reconcile recent results
+        env:
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
+          RAPIDAPI_BASE_URL: https://tennisapi1.p.rapidapi.com
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/settle_results.py
+
       - name: Upload evaluation reports
         uses: actions/upload-artifact@v4
         with:
           name: tbt-evaluation
           path: reports/
           retention-days: 30
-      - name: Deploy tested model and API to Azure Static Web Apps Free
+
+      - name: Remove heavy model from Azure deployment package
+        run: rm -f api/artifacts/model.joblib
+
+      - name: Deploy lightweight BlinQ API to Azure Static Web Apps Free
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
