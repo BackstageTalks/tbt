@@ -1,11 +1,10 @@
-name: Deploy BlinQ
+name: Deploy TBT API
 
 on:
   push:
     branches: [main]
     paths:
       - 'api/**'
-      - 'web/**'
       - '.github/workflows/deploy-api.yml'
   workflow_dispatch:
 
@@ -39,13 +38,21 @@ jobs:
           python -m compileall -q api scripts
           pytest
 
-      - name: Deploy BlinQ to Azure Static Web Apps
-        uses: Azure/static-web-apps-deploy@v1
+      - name: Validate Azure Function configuration
+        env:
+          FUNCTION_APP_NAME: ${{ vars.BLINQ_FUNCTION_APP_NAME }}
+          PUBLISH_PROFILE: ${{ secrets.BLINQ_FUNCTION_PUBLISH_PROFILE }}
+        run: |
+          set -euo pipefail
+          test -n "${FUNCTION_APP_NAME:-}" || { echo "::error::Missing repository variable BLINQ_FUNCTION_APP_NAME"; exit 1; }
+          test -n "${PUBLISH_PROFILE:-}" || { echo "::error::Missing secret BLINQ_FUNCTION_PUBLISH_PROFILE"; exit 1; }
+          echo "Deploy target: ${FUNCTION_APP_NAME}"
+
+      - name: Deploy TBT API to Azure Functions
+        uses: Azure/functions-action@v1
         with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: upload
-          app_location: web
-          api_location: api
-          output_location: ""
-          skip_app_build: true
+          app-name: ${{ vars.BLINQ_FUNCTION_APP_NAME }}
+          package: api
+          publish-profile: ${{ secrets.BLINQ_FUNCTION_PUBLISH_PROFILE }}
+          scm-do-build-during-deployment: true
+          enable-oryx-build: true
