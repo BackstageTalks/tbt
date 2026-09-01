@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date
-from typing import Any, Iterable
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
 
 import httpx
 
@@ -12,7 +12,6 @@ from ..errors import ConfigurationError, ProviderError
 from ..schemas import MatchRecord
 from ..utils import (
     deterministic_id,
-    dig,
     first_present,
     normalize_surface,
     parse_datetime,
@@ -24,17 +23,57 @@ logger = logging.getLogger(__name__)
 
 
 class RapidTennisClient:
-    """Adapter for Tennis API – ATP/WTA/ITF on RapidAPI.
+    """RapidAPI adapter for Fidel Lacasse's TennisApi (tennisapi1).
 
-    The provider's historical archive uses winner-first ordering. That convention is
-    normalized into `winner_id`; the feature engine later randomizes training orientation
-    to prevent target leakage.
+    RapidAPI host:
+        tennisapi1.p.rapidapi.com
+
+    The provider uses a SofaScore-like event schema (``homeTeam``, ``awayTeam``,
+    ``winnerCode``, ``status`` and ``startTimestamp``).  The TBT domain model
+    remains provider-independent; all provider-specific details live here.
+
+    The daily bootstrap follows the provider's recommended tennis flow:
+
+        /api/tennis/calendar/{day}/{month}/{year}/categories
+            -> /api/tennis/category/{category_id}/events/{day}/{month}/{year}
+
+    Only ATP/WTA singles events are retained.
     """
+
+    DEFAULT_HOST = "tennisapi1.p.rapidapi.com"
+    DEFAULT_BASE_URL = "https://tennisapi1.p.rapidapi.com"
+    OBSOLETE_HOSTS = {"tennis-api-atp-wta-itf.p.rapidapi.com"}
+
+    FINISHED_STATUS_TYPES = {
+        "finished",
+        "complete",
+        "completed",
+        "ended",
+        "final",
+        "retired",
+        "walkover",
+    }
 
     def __init__(self, cfg: Settings = settings) -> None:
         if not cfg.rapidapi_key:
             raise ConfigurationError("RAPIDAPI_KEY is required")
+
         self.cfg = cfg
+
+        configured_host = str(getattr(cfg, "rapidapi_host", "") or "").strip()
+        configured_base = str(getattr(cfg, "rapidapi_base_url", "") or "").strip()
+
+        if not configured_host or configured_host in self.OBSOLETE_HOSTS:
+            configured_host = self.DEFAULT_HOST
+
+        if (
+            not configured_base
+            or any(old in configured_base for old in self.OBSOLETE_HOSTS)
+        ):
+            configured_base = self.DEFAULT_BASE_URL
+
+        self.host = configured_host
+        self.base_url = configured_base.rstrip("/")
         self.client = httpx.Client(timeout=cfg.request_timeout_seconds)
         self._last_request_at = 0.0
 
@@ -42,195 +81,337 @@ class RapidTennisClient:
     def headers(self) -> dict[str, str]:
         return {
             "X-RapidAPI-Key": self.cfg.rapidapi_key,
-            "X-RapidAPI-Host": self.cfg.rapidapi_host,
+            "X-RapidAPI-Host": self.host,
             "Accept": "application/json",
-            "User-Agent": "TBT-v200/2.0",
+            "User-Agent": "TBT-v200/2.1",
         }
 
     def _throttle(self) -> None:
-        # Official docs currently state 100 requests/minute/IP. Stay below that globally.
+        # Keep some margin for RapidAPI throttling while still allowing a full
+        # historical year to complete comfortably inside the workflow timeout.
         elapsed = time.monotonic() - self._last_request_at
-        if elapsed < 0.66:
-            time.sleep(0.66 - elapsed)
+        minimum_interval = 0.25
+        if elapsed < minimum_interval:
+            time.sleep(minimum_interval - elapsed)
 
     def _get(self, path: str, params: dict[str, Any] | None = None) -> Any:
-        url = f"{self.cfg.rapidapi_base_url}{path}"
+        if not path.startswith("/"):
+            path = "/" + path
+
+        url = f"{self.base_url}{path}"
         last_error: Exception | None = None
+
         for attempt in range(5):
             self._throttle()
             try:
-                response = self.client.get(url, headers=self.headers, params=params or {})
+                response = self.client.get(
+                    url,
+                    headers=self.headers,
+                    params=params or {},
+                )
                 self._last_request_at = time.monotonic()
+
+                if response.status_code in {401, 403}:
+                    raise ProviderError(
+                        "TennisApi1 authentication/subscription error "
+                        f"HTTP {response.status_code} for {url}. "
+                        f"Response={response.text[:500]}"
+                    )
+
+                if response.status_code == 404:
+                    raise ProviderError(
+                        f"TennisApi1 endpoint not found: {url}. "
+                        f"Response={response.text[:500]}"
+                    )
+
                 if response.status_code == 429:
-                    delay = float(response.headers.get("Retry-After", 2 + attempt * 2))
-                    time.sleep(min(max(delay, 1.0), 30.0))
+                    retry_header = response.headers.get("Retry-After")
+                    try:
+                        delay = float(retry_header) if retry_header else 2 + attempt * 2
+                    except ValueError:
+                        delay = 2 + attempt * 2
+                    time.sleep(min(max(delay, 1.0), 60.0))
                     continue
+
                 if response.status_code >= 500:
-                    time.sleep(min(2**attempt, 15))
+                    time.sleep(min(2**attempt, 20))
                     continue
+
                 response.raise_for_status()
                 return response.json()
+
+            except ProviderError:
+                raise
             except (httpx.HTTPError, ValueError) as exc:
                 last_error = exc
-                time.sleep(min(2**attempt, 10))
-        raise ProviderError(f"RapidAPI request failed: {path}: {last_error}")
+                if attempt < 4:
+                    time.sleep(min(2**attempt, 10))
+
+        raise ProviderError(f"RapidAPI request failed: {url}: {last_error}")
 
     @staticmethod
     def _data(payload: Any) -> list[dict[str, Any]]:
         if isinstance(payload, list):
-            return [x for x in payload if isinstance(x, dict)]
+            return [item for item in payload if isinstance(item, dict)]
+
         if not isinstance(payload, dict):
             return []
-        for key in ("data", "result", "results", "fixtures", "matches"):
+
+        for key in (
+            "events",
+            "categories",
+            "rankings",
+            "data",
+            "result",
+            "results",
+            "matches",
+            "fixtures",
+            "tournaments",
+        ):
             value = payload.get(key)
             if isinstance(value, list):
-                return [x for x in value if isinstance(x, dict)]
+                return [item for item in value if isinstance(item, dict)]
+
         return []
 
     @staticmethod
-    def _has_next(payload: Any) -> bool:
-        if not isinstance(payload, dict):
-            return False
-        return bool(
-            payload.get("hasNextPage")
-            or payload.get("has_next_page")
-            or dig(payload, "meta", "hasNextPage")
+    def _category_id(category: dict[str, Any]) -> str | None:
+        value = first_present(category, "id", "categoryId", "category_id")
+        return None if value in (None, "") else str(value)
+
+    @staticmethod
+    def _category_name(category: dict[str, Any]) -> str:
+        return str(first_present(category, "name", "slug", "title") or "").strip()
+
+    @classmethod
+    def _category_matches_tour(cls, category: dict[str, Any], tour: str) -> bool:
+        text = cls._category_name(category).lower()
+        if tour == "atp":
+            return text == "atp" or text.startswith("atp ") or text.startswith("atp-")
+        if tour == "wta":
+            return text == "wta" or text.startswith("wta ") or text.startswith("wta-")
+        return False
+
+    def _calendar_categories(self, day: date) -> list[dict[str, Any]]:
+        payload = self._get(
+            f"/api/tennis/calendar/{day.day}/{day.month}/{day.year}/categories"
         )
+        return self._data(payload)
 
-    def _paged(self, path: str, params: dict[str, Any] | None = None, page_size: int = 200) -> list[dict[str, Any]]:
-        params = dict(params or {})
-        params.setdefault("pageSize", page_size)
-        page = 1
-        rows: list[dict[str, Any]] = []
-        while True:
-            params["pageNo"] = page
-            payload = self._get(path, params)
-            chunk = self._data(payload)
-            rows.extend(chunk)
-            if not self._has_next(payload) or not chunk:
-                break
-            page += 1
-            if page > 200:
-                raise ProviderError(f"Pagination safety limit exceeded for {path}")
-        return rows
+    def _events_for_category_day(
+        self,
+        category_id: str,
+        day: date,
+    ) -> list[dict[str, Any]]:
+        payload = self._get(
+            f"/api/tennis/category/{category_id}/events/"
+            f"{day.day}/{day.month}/{day.year}"
+        )
+        return self._data(payload)
 
-    def upcoming(self, tour: str, start: date, end: date | None = None) -> list[MatchRecord]:
+    @staticmethod
+    def _looks_like_doubles(raw: dict[str, Any]) -> bool:
+        tournament = raw.get("tournament")
+        if not isinstance(tournament, dict):
+            tournament = {}
+
+        unique = tournament.get("uniqueTournament")
+        if not isinstance(unique, dict):
+            unique = {}
+
+        for value in (
+            first_present(tournament, "name", "slug"),
+            first_present(unique, "name", "slug"),
+        ):
+            if "double" in str(value or "").lower():
+                return True
+
+        for side in ("homeTeam", "awayTeam"):
+            team = raw.get(side)
+            if not isinstance(team, dict):
+                continue
+            name = str(first_present(team, "name", "shortName", "fullName") or "")
+            if " / " in name:
+                return True
+
+        return False
+
+    def _matches_for_day(
+        self,
+        tour: str,
+        day: date,
+        historical: bool,
+    ) -> list[MatchRecord]:
+        matches: dict[str, MatchRecord] = {}
+
+        categories = [
+            category
+            for category in self._calendar_categories(day)
+            if self._category_matches_tour(category, tour)
+        ]
+
+        for category in categories:
+            category_id = self._category_id(category)
+            if not category_id:
+                continue
+
+            for raw in self._events_for_category_day(category_id, day):
+                if self._looks_like_doubles(raw):
+                    continue
+
+                try:
+                    match = self.normalize_match(raw, tour=tour, historical=historical)
+                except Exception as exc:
+                    logger.warning(
+                        "Skipping malformed TennisApi1 event id=%s: %s",
+                        raw.get("id"),
+                        exc,
+                    )
+                    continue
+
+                matches[match.match_id] = match
+
+        return list(matches.values())
+
+    def upcoming(
+        self,
+        tour: str,
+        start: date,
+        end: date | None = None,
+    ) -> list[MatchRecord]:
         tour = tour.lower()
         if tour not in {"atp", "wta"}:
             raise ValueError("tour must be atp or wta")
-        if end is None or end == start:
-            path = f"/tennis/v2/{tour}/fixtures/{start.isoformat()}"
-        else:
-            path = f"/tennis/v2/{tour}/fixtures/{start.isoformat()}/{end.isoformat()}"
-        rows = self._paged(
-            path,
-            {
-                "include": "round,tournament,tournament.court,tournament.rank,tournament.country,h2h",
-                "filter": "PlayerGroup:singles",
-            },
-        )
-        return [self.normalize_match(row, tour=tour, historical=False) for row in rows]
 
-    def tournament_calendar(self, tour: str, year: int) -> list[dict[str, Any]]:
-        return self._paged(
-            f"/tennis/v2/{tour}/tournament/calendar/{year}",
-            {"include": "rating", "pageSize": 2000},
-            page_size=2000,
-        )
+        end = end or start
+        if end < start:
+            raise ValueError("end must be >= start")
 
-    def advanced_calendar(self, tour: str, year: int) -> list[dict[str, Any]]:
-        return self._paged(
-            f"/tennis/v2/calendar/{tour}/{year}",
-            {"pageSize": 200},
-            page_size=200,
-        )
+        matches: dict[str, MatchRecord] = {}
+        current = start
+        while current <= end:
+            for match in self._matches_for_day(tour, current, historical=False):
+                if not match.is_completed:
+                    matches[match.match_id] = match
+            current += timedelta(days=1)
 
-    def tournament_results(self, tour: str, season_id: str | int) -> list[MatchRecord]:
-        payload = self._get(f"/tennis/v2/{tour}/tournament/results/{season_id}")
-        return [
-            self.normalize_match(row, tour=tour, historical=True)
-            for row in self._data(payload)
-        ]
+        return sorted(matches.values(), key=lambda match: match.scheduled_at)
 
     def historical_year(self, tour: str, year: int) -> list[MatchRecord]:
-        """Fetch a full historical year with request-efficient calendar-first strategy.
+        """Fetch a complete ATP/WTA singles year using TennisApi1 daily schedules."""
 
-        The advanced calendar can contain matches nested inside tournament objects. If a
-        provider plan does not include nested matches, fall back to tournament season IDs
-        and fetch each season's results.
-        """
+        tour = tour.lower()
+        if tour not in {"atp", "wta"}:
+            raise ValueError("tour must be atp or wta")
+
         matches: dict[str, MatchRecord] = {}
-        calendar_rows = self.advanced_calendar(tour, year)
-        for node in self._walk_match_nodes(calendar_rows):
-            match = self.normalize_match(node, tour=tour, historical=True)
-            if match.player1_id and match.player2_id and match.is_completed:
-                matches[match.match_id] = match
+        current = date(year, 1, 1)
+        finish = date(year, 12, 31)
+        last_month: int | None = None
 
-        if matches:
-            logger.info("RapidAPI %s %s: %s historical matches from advanced calendar", tour, year, len(matches))
-            return sorted(matches.values(), key=lambda m: m.scheduled_at)
+        while current <= finish:
+            if current.month != last_month:
+                logger.info(
+                    "TennisApi1 bootstrap %s %s-%02d",
+                    tour.upper(),
+                    current.year,
+                    current.month,
+                )
+                last_month = current.month
 
-        logger.info("Advanced calendar did not expose match nodes; falling back to tournament results")
-        tournaments = self.tournament_calendar(tour, year)
-        for tournament in tournaments:
-            season_id = first_present(tournament, "seasonid", "seasonId", "id", "tournament_id")
-            if season_id in (None, ""):
-                continue
-            try:
-                for match in self.tournament_results(tour, season_id):
+            for match in self._matches_for_day(tour, current, historical=True):
+                # Schedule endpoints can overlap the UTC day boundary.
+                if match.scheduled_at.year != year:
+                    continue
+                if match.is_completed and match.winner_id:
                     matches[match.match_id] = match
-            except ProviderError as exc:
-                logger.warning("Skipping season %s after provider error: %s", season_id, exc)
-        return sorted(matches.values(), key=lambda m: m.scheduled_at)
 
-    @classmethod
-    def _walk_match_nodes(cls, value: Any) -> Iterable[dict[str, Any]]:
-        if isinstance(value, list):
-            for item in value:
-                yield from cls._walk_match_nodes(item)
-            return
-        if not isinstance(value, dict):
-            return
-        keys = {str(k).lower() for k in value.keys()}
-        has_p1 = any(k in keys for k in {"player1", "player1id", "player1_id", "participant1"})
-        has_p2 = any(k in keys for k in {"player2", "player2id", "player2_id", "participant2"})
-        if has_p1 and has_p2:
-            yield value
-        for nested in value.values():
-            if isinstance(nested, (dict, list)):
-                yield from cls._walk_match_nodes(nested)
+            current += timedelta(days=1)
+
+        result = sorted(matches.values(), key=lambda match: match.scheduled_at)
+        logger.info(
+            "TennisApi1 %s %s: %s completed singles matches",
+            tour.upper(),
+            year,
+            len(result),
+        )
+        return result
+
+    def rankings(self, tour: str) -> list[dict[str, Any]]:
+        tour = tour.lower()
+        if tour not in {"atp", "wta"}:
+            raise ValueError("tour must be atp or wta")
+        return self._data(self._get(f"/api/tennis/rankings/{tour}/"))
 
     @staticmethod
-    def _player(raw: dict[str, Any], number: int) -> tuple[str, str, int | None]:
-        obj = first_present(
-            raw,
-            f"player{number}",
-            f"participant{number}",
-            f"player_{number}",
-        )
-        player_id = first_present(
-            raw,
-            f"player{number}Id",
-            f"player{number}_id",
-            f"participant{number}Id",
-        )
-        name = first_present(
-            raw,
-            f"player{number}Name",
-            f"player{number}_name",
-            f"participant{number}Name",
-        )
-        rank = first_present(raw, f"player{number}Rank", f"player{number}_rank")
-        if isinstance(obj, dict):
-            player_id = player_id or first_present(obj, "id", "playerId", "player_id", "key")
-            name = name or first_present(obj, "name", "playerName", "fullName", "displayName")
-            rank = rank or first_present(obj, "rank", "ranking", "position")
-        elif isinstance(obj, str):
-            name = name or obj
-        # IDs are preferable; stable name fallback keeps the pipeline usable if a plan omits IDs.
+    def _player(
+        raw: dict[str, Any],
+        side: str,
+    ) -> tuple[str, str, int | None]:
+        obj = raw.get(side)
+        if not isinstance(obj, dict):
+            obj = {}
+
+        player_id = first_present(obj, "id", "playerId", "player_id", "teamId")
+        name = first_present(obj, "name", "fullName", "shortName", "playerName")
+        rank = first_present(obj, "ranking", "rank", "position")
+
+        number = 1 if side == "homeTeam" else 2
         name = str(name or f"Player {number}").strip()
         player_id = str(player_id or f"name:{name.lower()}").strip()
         return player_id, name, safe_int(rank)
+
+    @staticmethod
+    def _provider_datetime(value: Any) -> datetime:
+        if isinstance(value, (int, float)):
+            return datetime.fromtimestamp(float(value), tz=timezone.utc)
+        if isinstance(value, str) and value.strip().isdigit():
+            return datetime.fromtimestamp(float(value.strip()), tz=timezone.utc)
+        return parse_datetime(value)
+
+    @staticmethod
+    def _status_type(raw: dict[str, Any]) -> str:
+        status = raw.get("status")
+        if isinstance(status, dict):
+            value = first_present(status, "type", "description", "name")
+        else:
+            value = status
+        return str(value or "unknown").strip().lower()
+
+    @staticmethod
+    def _score_number(raw: dict[str, Any], side: str) -> int | None:
+        score = raw.get(side)
+        if not isinstance(score, dict):
+            return safe_int(score)
+
+        for key in ("norm", "current", "display"):
+            value = safe_int(score.get(key))
+            if value is not None:
+                return value
+        return None
+
+    @classmethod
+    def _winner_id(
+        cls,
+        raw: dict[str, Any],
+        p1_id: str,
+        p2_id: str,
+        status: str,
+    ) -> str | None:
+        winner_code = safe_int(first_present(raw, "winnerCode", "winner_code"))
+        if winner_code == 1:
+            return p1_id
+        if winner_code == 2:
+            return p2_id
+
+        if status not in cls.FINISHED_STATUS_TYPES:
+            return None
+
+        home_score = cls._score_number(raw, "homeScore")
+        away_score = cls._score_number(raw, "awayScore")
+        if home_score is not None and away_score is not None and home_score != away_score:
+            return p1_id if home_score > away_score else p2_id
+        return None
 
     @staticmethod
     def _stats(raw: dict[str, Any]) -> dict[str, float | None]:
@@ -238,58 +419,110 @@ class RapidTennisClient:
         if not isinstance(stat, dict):
             return {}
 
-        def side_value(side: str, aliases: tuple[str, ...]) -> float | None:
-            side_obj = stat.get(side)
-            if isinstance(side_obj, dict):
-                for alias in aliases:
-                    if alias in side_obj:
-                        return safe_float(side_obj[alias])
-            for alias in aliases:
-                for key in (f"{side}_{alias}", f"{alias}_{side}"):
-                    if key in stat:
-                        return safe_float(stat[key])
+        aliases = {
+            "first_serve_win": (
+                "firstServeWon",
+                "firstServePointsWon",
+                "first_serve_won",
+                "firstServeWinPct",
+            ),
+            "second_serve_win": (
+                "secondServeWon",
+                "secondServePointsWon",
+                "second_serve_won",
+                "secondServeWinPct",
+            ),
+            "ace_rate": ("aceRate", "ace_rate", "acesPct", "aces"),
+            "return_points_won": (
+                "returnPointsWon",
+                "return_points_won",
+                "returnWinPct",
+            ),
+            "break_points_won": (
+                "breakPointsWon",
+                "break_points_won",
+                "breakPointConversion",
+            ),
+        }
+
+        def side_value(
+            side_aliases: tuple[str, ...],
+            names: tuple[str, ...],
+        ) -> float | None:
+            for side in side_aliases:
+                side_obj = stat.get(side)
+                if isinstance(side_obj, dict):
+                    for name in names:
+                        if name in side_obj:
+                            return safe_float(side_obj[name])
             return None
 
         result: dict[str, float | None] = {}
-        aliases = {
-            "first_serve_win": ("firstServeWon", "first_serve_won", "win_1st_serve", "firstServeWinPct"),
-            "second_serve_win": ("secondServeWon", "second_serve_won", "win_2nd_serve", "secondServeWinPct"),
-            "ace_rate": ("aceRate", "ace_rate", "acesPct"),
-            "return_points_won": ("returnPointsWon", "return_points_won", "returnWinPct"),
-            "break_points_won": ("breakPointsWon", "break_points_won", "breakPointConversion"),
-        }
-        for prefix, provider_side in (("p1", "player1"), ("p2", "player2")):
+        for prefix, sides in {
+            "p1": ("home", "homeTeam", "player1"),
+            "p2": ("away", "awayTeam", "player2"),
+        }.items():
             for canonical, names in aliases.items():
-                result[f"{prefix}_{canonical}"] = side_value(provider_side, names)
+                result[f"{prefix}_{canonical}"] = side_value(sides, names)
         return result
 
     @classmethod
-    def normalize_match(cls, raw: dict[str, Any], tour: str, historical: bool) -> MatchRecord:
-        p1_id, p1_name, p1_rank = cls._player(raw, 1)
-        p2_id, p2_name, p2_rank = cls._player(raw, 2)
-        tournament_obj = first_present(raw, "tournament", "tour", "event")
-        if not isinstance(tournament_obj, dict):
-            tournament_obj = {}
-        court_obj = first_present(tournament_obj, "court", "surface")
-        rank_obj = first_present(tournament_obj, "rank", "level", "category")
+    def normalize_match(
+        cls,
+        raw: dict[str, Any],
+        tour: str,
+        historical: bool,
+    ) -> MatchRecord:
+        p1_id, p1_name, p1_rank = cls._player(raw, "homeTeam")
+        p2_id, p2_name, p2_rank = cls._player(raw, "awayTeam")
 
-        surface_value: Any = first_present(raw, "surface", "court", "courtName")
-        if isinstance(court_obj, dict):
-            surface_value = first_present(court_obj, "name", "court_name", "type") or surface_value
-        elif isinstance(court_obj, str):
-            surface_value = court_obj
+        tournament = raw.get("tournament")
+        if not isinstance(tournament, dict):
+            tournament = {}
 
-        level_value: Any = first_present(raw, "tournamentLevel", "level", "rankName")
-        if isinstance(rank_obj, dict):
-            level_value = first_present(rank_obj, "name", "rank_name", "title") or level_value
-        elif isinstance(rank_obj, str):
-            level_value = rank_obj
+        unique = tournament.get("uniqueTournament")
+        if not isinstance(unique, dict):
+            unique = {}
 
-        tournament_name = first_present(raw, "tournamentName", "eventName")
-        tournament_id = first_present(raw, "tournamentId", "tourId", "seasonId", "seasonid")
-        if tournament_obj:
-            tournament_name = tournament_name or first_present(tournament_obj, "name", "tournamentName", "title")
-            tournament_id = tournament_id or first_present(tournament_obj, "id", "seasonid", "seasonId", "tournamentId")
+        category = tournament.get("category")
+        if not isinstance(category, dict):
+            category = unique.get("category")
+        if not isinstance(category, dict):
+            category = {}
+
+        tournament_name = first_present(tournament, "name", "title") or first_present(
+            unique, "name", "title"
+        )
+        tournament_id = first_present(tournament, "id", "tournamentId") or first_present(
+            unique, "id", "uniqueTournamentId"
+        )
+        level_value = first_present(category, "name", "slug")
+
+        surface_value: Any = first_present(raw, "groundType", "surface", "court")
+        if surface_value in (None, ""):
+            surface_value = first_present(tournament, "groundType", "surface", "court")
+        if surface_value in (None, ""):
+            surface_value = first_present(unique, "groundType", "surface", "court")
+
+        surface_text = str(surface_value or "").strip()
+        surface = normalize_surface(surface_text)
+
+        indoor: bool | None = None
+        lower_surface = surface_text.lower()
+        if "indoor" in lower_surface:
+            indoor = True
+        elif "outdoor" in lower_surface:
+            indoor = False
+        elif surface == "indoor_hard":
+            indoor = True
+
+        round_info = raw.get("roundInfo")
+        if not isinstance(round_info, dict):
+            round_info = {}
+        round_name = first_present(round_info, "name", "roundName", "round") or first_present(
+            raw, "roundName", "round"
+        )
+        round_name = str(round_name or "")
 
         scheduled = first_present(
             raw,
@@ -298,58 +531,35 @@ class RapidTennisClient:
             "scheduledAt",
             "scheduled_at",
             "date",
-            "matchDate",
-            "eventDate",
         )
-        result_text = first_present(raw, "result", "score", "finalScore")
-        status = str(
-            first_present(raw, "status", "state")
-            or ("completed" if result_text not in (None, "") else "upcoming")
-        )
+        if scheduled in (None, ""):
+            raise ValueError("TennisApi1 event has no startTimestamp")
 
-        winner_id: str | None = None
-        explicit_winner = first_present(raw, "winnerId", "winner_id")
-        completed_status = status.lower() in {
-            "completed", "complete", "ended", "finished", "final", "retired", "walkover"
-        }
-        if explicit_winner is not None:
-            winner_id = str(explicit_winner)
-        elif result_text not in (None, "") or completed_status:
-            # Provider docs guarantee winner-first ordering in the historical Game archive.
-            winner_id = p1_id
+        scheduled_dt = cls._provider_datetime(scheduled)
+        status = cls._status_type(raw)
+        winner_id = cls._winner_id(raw, p1_id, p2_id, status)
 
-        round_obj = first_present(raw, "round", "roundInfo")
-        round_name = first_present(raw, "roundName", "round_name")
-        round_id = first_present(raw, "roundId", "round_id")
-        if isinstance(round_obj, dict):
-            round_id = round_id or first_present(round_obj, "id", "roundId", "key")
-            round_name = round_name or first_present(round_obj, "name", "roundName", "title")
-        elif isinstance(round_obj, str):
-            round_name = round_name or round_obj
-        round_token = round_id or round_name or ""
+        # Do not trust event.player.ranking as an historical point-in-time value.
+        # Current rankings in old rows would create severe future-data leakage.
+        if historical:
+            p1_rank = None
+            p2_rank = None
 
-        scheduled_dt = parse_datetime(scheduled)
-        # Canonical ID is deliberately independent of provider table IDs and player order.
-        # Upcoming fixtures and the historical winner-first archive can therefore settle
-        # against the same prediction even when provider IDs/order differ.
+        best_of = safe_int(first_present(raw, "bestOf", "best_of", "setsToPlay"))
+        if best_of is None:
+            best_of = safe_int(first_present(tournament, "bestOf", "setsToPlay"))
+
         player_pair = sorted((p1_id, p2_id))
         match_id = deterministic_id(
             [
-                tour,
+                tour.lower(),
                 scheduled_dt.date().isoformat(),
-                tournament_id,
+                tournament_id or "",
                 player_pair[0],
                 player_pair[1],
-                round_token,
+                round_name,
             ]
         )
-
-        best_of = safe_int(first_present(raw, "bestOf", "best_of", "setsToPlay"))
-        indoor_raw = first_present(raw, "indoor", "isIndoor")
-        indoor = None if indoor_raw is None else bool(indoor_raw)
-        surface = normalize_surface(surface_value)
-        if surface == "indoor_hard":
-            indoor = True
 
         return MatchRecord(
             match_id=match_id,
@@ -363,7 +573,7 @@ class RapidTennisClient:
             tournament=str(tournament_name or ""),
             tournament_id=str(tournament_id or ""),
             tournament_level=str(level_value or ""),
-            round_name=str(round_name or ""),
+            round_name=round_name,
             player1_rank=p1_rank,
             player2_rank=p2_rank,
             winner_id=winner_id,
@@ -373,3 +583,12 @@ class RapidTennisClient:
             stats=cls._stats(raw),
             provider_payload=raw,
         )
+
+    def close(self) -> None:
+        self.client.close()
+
+    def __enter__(self) -> "RapidTennisClient":
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
