@@ -5,62 +5,212 @@ on:
   schedule:
     - cron: '17 4 * * 1'
 
+permissions:
+  contents: read
+
 jobs:
   retrain:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+
+    env:
+      PYTHONPATH: api
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
-      - name: Install
-        run: pip install -r api/requirements.txt pytest
+          cache-dependency-path: api/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r api/requirements.txt pytest
+
       - name: Unit tests
-        env:
-          PYTHONPATH: api
         run: pytest
+
       - name: Train production artifact
         env:
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+          RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
+          RAPIDAPI_BASE_URL: https://tennisapi1.p.rapidapi.com
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TGBOT: ${{ secrets.TGBOT }}
           TGCHID: ${{ secrets.TGCHID }}
         run: python scripts/train.py --output api/artifacts/model.joblib
+
       - name: Walk-forward backtest
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python scripts/backtest.py
+
       - name: Upload evaluation reports
         uses: actions/upload-artifact@v4
         with:
-          name: tbt-v200-evaluation
+          name: tbt-evaluation
           path: reports/
           retention-days: 30
-      - name: Resolve Function App name from publish profile
+
+      - name: Resolve Azure Function App name
         env:
           PROFILE: ${{ secrets.BLINQ_FUNCTION_PUBLISH_PROFILE }}
+          FUNCTION_APP_NAME: ${{ vars.AZURE_FUNCTIONAPP_NAME }}
+        shell: bash
         run: |
+          set -euo pipefail
+
           python - <<'PY'
-          import os, xml.etree.ElementTree as ET
+          import base64
+          import html
+          import json
+          import os
+          import re
+          import xml.etree.ElementTree as ET
           from urllib.parse import urlparse
-          root = ET.fromstring(os.environ['PROFILE'])
-          nodes = list(root) if root.tag.lower().endswith('publishdata') else [root]
-          node = next((n for n in nodes if n.attrib.get('destinationAppUrl')), nodes[0])
-          name = (urlparse(node.attrib.get('destinationAppUrl', '')).hostname or '').split('.')[0]
-          if not name:
-              name = node.attrib.get('msdeploySite') or node.attrib.get('userName', '').replace('$', '').split('\\')[-1]
-          if not name:
-              raise SystemExit('Could not derive Function App name')
-          with open(os.environ['GITHUB_ENV'], 'a') as f:
-              f.write(f'AZURE_FUNCTIONAPP_NAME={name}\n')
+
+          explicit = os.environ.get("FUNCTION_APP_NAME", "").strip()
+          if explicit:
+              name = explicit
+          else:
+              raw = os.environ.get("PROFILE", "")
+              if not raw or not raw.strip():
+                  raise SystemExit(
+                      "BLINQ_FUNCTION_PUBLISH_PROFILE is missing. "
+                      "Add the Azure Function App publish profile as a GitHub secret."
+                  )
+
+              def candidates(value: str):
+                  seen = set()
+
+                  def add(v):
+                      if not isinstance(v, str):
+                          return
+                      v = v.strip().lstrip("\ufeff")
+                      if len(v) >= 2 and v[0] == v[-1] and v[0] in {"'", '"'}:
+                          v = v[1:-1].strip()
+                      if v and v not in seen:
+                          seen.add(v)
+                          yield v
+
+                  initial = list(add(value))
+                  for v in initial:
+                      yield v
+                      unescaped = html.unescape(v)
+                      yield from add(unescaped)
+                      if "\\n" in v or "\\r" in v or '\\"' in v:
+                          try:
+                              yield from add(bytes(v, "utf-8").decode("unicode_escape"))
+                          except Exception:
+                              pass
+                      try:
+                          decoded = base64.b64decode(v, validate=True).decode("utf-8")
+                          yield from add(decoded)
+                      except Exception:
+                          pass
+
+              def derive_from_xml(text: str):
+                  root = ET.fromstring(text)
+                  nodes = list(root) if root.tag.lower().endswith("publishdata") else [root]
+                  if not nodes:
+                      return None
+
+                  node = next(
+                      (
+                          n for n in nodes
+                          if n.attrib.get("destinationAppUrl")
+                          or n.attrib.get("msdeploySite")
+                          or n.attrib.get("userName")
+                      ),
+                      nodes[0],
+                  )
+
+                  url = node.attrib.get("destinationAppUrl", "").strip()
+                  hostname = urlparse(url if "://" in url else f"https://{url}").hostname or ""
+                  if hostname:
+                      candidate = hostname.split(".")[0].strip()
+                      if candidate:
+                          return candidate
+
+                  site = node.attrib.get("msdeploySite", "").strip()
+                  if site:
+                      return site
+
+                  username = node.attrib.get("userName", "").strip().replace("$", "")
+                  if username:
+                      # Common forms: $appname or $appname\\appname
+                      username = username.split("\\")[-1].split("/")[-1].strip()
+                      if username:
+                          return username
+                  return None
+
+              name = None
+              parse_errors = []
+
+              for value in candidates(raw):
+                  if value.startswith("{"):
+                      try:
+                          obj = json.loads(value)
+                          for key in ("name", "appName", "functionAppName", "siteName"):
+                              val = obj.get(key)
+                              if isinstance(val, str) and val.strip():
+                                  name = val.strip()
+                                  break
+                          if name:
+                              break
+                      except Exception:
+                          pass
+
+                  xml_start = value.find("<")
+                  if xml_start >= 0:
+                      xml_value = value[xml_start:]
+                      try:
+                          name = derive_from_xml(xml_value)
+                          if name:
+                              break
+                      except Exception as exc:
+                          parse_errors.append(type(exc).__name__)
+
+              if not name:
+                  # Last-resort non-secret pattern extraction from common publish-profile text.
+                  patterns = [
+                      r'destinationAppUrl=["\']https?://([^."\']+)',
+                      r'msdeploySite=["\']([^"\']+)',
+                      r'userName=["\']\$?([^\\/"\']+)',
+                  ]
+                  for pattern in patterns:
+                      match = re.search(pattern, raw, flags=re.IGNORECASE)
+                      if match:
+                          name = match.group(1).strip()
+                          break
+
+              if not name:
+                  raise SystemExit(
+                      "Could not derive Azure Function App name from BLINQ_FUNCTION_PUBLISH_PROFILE. "
+                      "The workflow accepts raw XML, quoted XML, HTML-escaped XML and Base64 XML. "
+                      "Alternatively add repository variable AZURE_FUNCTIONAPP_NAME with the Function App name."
+                  )
+
+          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,59}", name):
+              raise SystemExit(f"Derived Function App name has an invalid format: {name!r}")
+
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
+              fh.write(f"AZURE_FUNCTIONAPP_NAME={name}\n")
+
+          print(f"Azure Function App resolved: {name}")
           PY
-      - name: Deploy the exact tested model artifact
+
+      - name: Deploy exact tested model artifact
         uses: Azure/functions-action@v1
         with:
           app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
