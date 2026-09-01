@@ -78,6 +78,27 @@ class SupabaseRepository:
         data = response.json() if response.content else []
         return len(data) if isinstance(data, list) else 0
 
+    def delete(
+        self,
+        table: str,
+        filters: dict[str, str],
+    ) -> int:
+        """Delete rows matching explicit PostgREST filters.
+
+        Callers must always provide filters; an unfiltered DELETE is intentionally
+        refused to protect production data.
+        """
+        if not filters:
+            raise ValueError("Refusing unfiltered Supabase DELETE")
+        response = self.client.delete(
+            f"{self.base}/{table}",
+            headers=self._headers(write=True, prefer="return=representation"),
+            params=filters,
+        )
+        self._raise(response)
+        data = response.json() if response.content else []
+        return len(data) if isinstance(data, list) else 0
+
     def select_all(
         self,
         table: str,
@@ -172,14 +193,42 @@ class SupabaseRepository:
             )
         return total
 
+    def delete_future_unsettled_predictions(
+        self,
+        model_version: str,
+        start: datetime,
+        end: datetime,
+    ) -> int:
+        """Remove replaceable future rows for one model version only.
+
+        Settled/historical predictions are never touched. This is used immediately
+        before a fresh upcoming snapshot is written, so fixtures removed or
+        rescheduled by the provider cannot remain visible as stale picks.
+        """
+        start_utc = start.astimezone(timezone.utc)
+        end_utc = end.astimezone(timezone.utc)
+        if end_utc <= start_utc:
+            return 0
+        return self.delete(
+            "predictions",
+            {
+                "model_version": f"eq.{model_version}",
+                "is_correct": "is.null",
+                "scheduled_at": f"gte.{start_utc.isoformat()}",
+                "and": f"(scheduled_at.lt.{end_utc.isoformat()})",
+            },
+        )
+
     def list_predictions(
         self,
         start: datetime,
         end: datetime,
         tour: str | None = None,
     ) -> list[dict[str, Any]]:
+        now = datetime.now(timezone.utc)
+        effective_start = max(start.astimezone(timezone.utc), now)
         filters = {
-            "scheduled_at": f"gte.{start.astimezone(timezone.utc).isoformat()}",
+            "scheduled_at": f"gte.{effective_start.isoformat()}",
             "and": f"(scheduled_at.lt.{end.astimezone(timezone.utc).isoformat()})",
         }
         if tour:
