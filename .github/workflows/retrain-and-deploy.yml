@@ -62,159 +62,111 @@ jobs:
           path: reports/
           retention-days: 30
 
-      - name: Resolve Azure Function App name
+      - name: Prepare Azure publish profile
+        id: azure_profile
         env:
-          PROFILE: ${{ secrets.BLINQ_FUNCTION_PUBLISH_PROFILE }}
+          RAW_PROFILE: ${{ secrets.BLINQ_FUNCTION_PUBLISH_PROFILE }}
           FUNCTION_APP_NAME: ${{ vars.BLINQ_FUNCTION_APP_NAME }}
         shell: bash
         run: |
           set -euo pipefail
+
+          if [ -z "${FUNCTION_APP_NAME:-}" ]; then
+            echo "::error::Missing repository variable BLINQ_FUNCTION_APP_NAME"
+            exit 1
+          fi
 
           python - <<'PY'
           import base64
           import html
           import json
           import os
-          import re
           import xml.etree.ElementTree as ET
-          from urllib.parse import urlparse
 
-          explicit = os.environ.get("FUNCTION_APP_NAME", "").strip()
-          if explicit:
-              name = explicit
-          else:
-              raw = os.environ.get("PROFILE", "")
-              if not raw or not raw.strip():
-                  raise SystemExit(
-                      "BLINQ_FUNCTION_PUBLISH_PROFILE is missing. "
-                      "Add the Azure Function App publish profile as a GitHub secret."
-                  )
+          raw = os.environ.get("RAW_PROFILE", "")
+          if not raw.strip():
+              raise SystemExit("BLINQ_FUNCTION_PUBLISH_PROFILE is empty")
 
-              def candidates(value: str):
-                  seen = set()
+          def variants(value):
+              seen = set()
+              queue = [value]
+              while queue:
+                  v = queue.pop(0)
+                  if not isinstance(v, str):
+                      continue
+                  v = v.strip().lstrip("\ufeff")
+                  if len(v) >= 2 and v[0] == v[-1] and v[0] in {"'", '"'}:
+                      v = v[1:-1].strip()
+                  if not v or v in seen:
+                      continue
+                  seen.add(v)
+                  yield v
 
-                  def add(v):
-                      if not isinstance(v, str):
-                          return
-                      v = v.strip().lstrip("\ufeff")
-                      if len(v) >= 2 and v[0] == v[-1] and v[0] in {"'", '"'}:
-                          v = v[1:-1].strip()
-                      if v and v not in seen:
-                          seen.add(v)
-                          yield v
+                  h = html.unescape(v)
+                  if h not in seen:
+                      queue.append(h)
 
-                  initial = list(add(value))
-                  for v in initial:
-                      yield v
-                      unescaped = html.unescape(v)
-                      yield from add(unescaped)
-                      if "\\n" in v or "\\r" in v or '\\"' in v:
-                          try:
-                              yield from add(bytes(v, "utf-8").decode("unicode_escape"))
-                          except Exception:
-                              pass
+                  if "\\n" in v or "\\r" in v or '\\"' in v:
                       try:
-                          decoded = base64.b64decode(v, validate=True).decode("utf-8")
-                          yield from add(decoded)
+                          queue.append(bytes(v, "utf-8").decode("unicode_escape"))
                       except Exception:
                           pass
 
-              def derive_from_xml(text: str):
-                  root = ET.fromstring(text)
-                  nodes = list(root) if root.tag.lower().endswith("publishdata") else [root]
-                  if not nodes:
-                      return None
+                  try:
+                      queue.append(base64.b64decode(v, validate=True).decode("utf-8"))
+                  except Exception:
+                      pass
 
-                  node = next(
-                      (
-                          n for n in nodes
-                          if n.attrib.get("destinationAppUrl")
-                          or n.attrib.get("msdeploySite")
-                          or n.attrib.get("userName")
-                      ),
-                      nodes[0],
-                  )
-
-                  url = node.attrib.get("destinationAppUrl", "").strip()
-                  hostname = urlparse(url if "://" in url else f"https://{url}").hostname or ""
-                  if hostname:
-                      candidate = hostname.split(".")[0].strip()
-                      if candidate:
-                          return candidate
-
-                  site = node.attrib.get("msdeploySite", "").strip()
-                  if site:
-                      return site
-
-                  username = node.attrib.get("userName", "").strip().replace("$", "")
-                  if username:
-                      # Common forms: $appname or $appname\\appname
-                      username = username.split("\\")[-1].split("/")[-1].strip()
-                      if username:
-                          return username
-                  return None
-
-              name = None
-              parse_errors = []
-
-              for value in candidates(raw):
-                  if value.startswith("{"):
+                  if v.startswith("{"):
                       try:
-                          obj = json.loads(value)
-                          for key in ("name", "appName", "functionAppName", "siteName"):
-                              val = obj.get(key)
-                              if isinstance(val, str) and val.strip():
-                                  name = val.strip()
-                                  break
-                          if name:
-                              break
+                          obj = json.loads(v)
+                          for key in ("publishProfile", "profile", "xml", "value"):
+                              x = obj.get(key)
+                              if isinstance(x, str):
+                                  queue.append(x)
                       except Exception:
                           pass
 
-                  xml_start = value.find("<")
-                  if xml_start >= 0:
-                      xml_value = value[xml_start:]
-                      try:
-                          name = derive_from_xml(xml_value)
-                          if name:
-                              break
-                      except Exception as exc:
-                          parse_errors.append(type(exc).__name__)
+          profile = None
+          for candidate in variants(raw):
+              pos = candidate.find("<")
+              if pos < 0:
+                  continue
+              candidate = candidate[pos:]
+              try:
+                  root = ET.fromstring(candidate)
+              except Exception:
+                  continue
 
-              if not name:
-                  # Last-resort non-secret pattern extraction from common publish-profile text.
-                  patterns = [
-                      r'destinationAppUrl=["\']https?://([^."\']+)',
-                      r'msdeploySite=["\']([^"\']+)',
-                      r'userName=["\']\$?([^\\/"\']+)',
-                  ]
-                  for pattern in patterns:
-                      match = re.search(pattern, raw, flags=re.IGNORECASE)
-                      if match:
-                          name = match.group(1).strip()
-                          break
+              tag = root.tag.lower()
+              if tag.endswith("publishdata") or tag.endswith("publishprofile"):
+                  profile = candidate
+                  break
 
-              if not name:
-                  raise SystemExit(
-                      "Could not derive Azure Function App name from BLINQ_FUNCTION_PUBLISH_PROFILE. "
-                      "The workflow accepts raw XML, quoted XML, HTML-escaped XML and Base64 XML. "
-                      "Alternatively add repository variable BLINQ_FUNCTION_APP_NAME with the Function App name."
-                  )
+          if profile is None:
+              raise SystemExit(
+                  "BLINQ_FUNCTION_PUBLISH_PROFILE is not a valid Azure publish-profile XML. "
+                  "In Azure Function App -> Deployment Center / Get publish profile, download the "
+                  "publish profile and paste the COMPLETE file contents into this GitHub secret."
+              )
 
-          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,59}", name):
-              raise SystemExit(f"Derived Function App name has an invalid format: {name!r}")
+          # Azure/functions-action expects the actual XML text, not Base64.
+          output_file = os.environ["GITHUB_OUTPUT"]
+          marker = "AZURE_PROFILE_EOF"
+          if marker in profile:
+              marker = "AZURE_PROFILE_EOF_2"
+          with open(output_file, "a", encoding="utf-8") as fh:
+              fh.write(f"profile<<{marker}\n{profile}\n{marker}\n")
 
-          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as fh:
-              fh.write(f"AZURE_FUNCTIONAPP_NAME={name}\n")
-
-          print(f"Azure Function App resolved: {name}")
+          print("Azure Function App:", os.environ["FUNCTION_APP_NAME"])
+          print("Publish profile XML validated.")
           PY
 
       - name: Deploy exact tested model artifact
         uses: Azure/functions-action@v1
         with:
-          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          app-name: ${{ vars.BLINQ_FUNCTION_APP_NAME }}
           package: api
-          publish-profile: ${{ secrets.BLINQ_FUNCTION_PUBLISH_PROFILE }}
+          publish-profile: ${{ steps.azure_profile.outputs.profile }}
           scm-do-build-during-deployment: true
           enable-oryx-build: true
