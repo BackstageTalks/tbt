@@ -76,6 +76,8 @@ class RapidTennisClient:
         self.base_url = configured_base.rstrip("/")
         self.client = httpx.Client(timeout=cfg.request_timeout_seconds)
         self._last_request_at = 0.0
+        self._calendar_cache: dict[str, list[dict[str, Any]]] = {}
+        self._events_cache: dict[tuple[str, str], list[dict[str, Any]]] = {}
 
     @property
     def headers(self) -> dict[str, str]:
@@ -193,21 +195,68 @@ class RapidTennisClient:
         return False
 
     def _calendar_categories(self, day: date) -> list[dict[str, Any]]:
-        payload = self._get(
-            f"/api/tennis/calendar/{day.day}/{day.month}/{day.year}/categories"
-        )
-        return self._data(payload)
+        key = day.isoformat()
+        if key not in self._calendar_cache:
+            payload = self._get(
+                f"/api/tennis/calendar/{day.day}/{day.month}/{day.year}/categories"
+            )
+            self._calendar_cache[key] = self._data(payload)
+        return self._calendar_cache[key]
 
     def _events_for_category_day(
         self,
         category_id: str,
         day: date,
     ) -> list[dict[str, Any]]:
-        payload = self._get(
-            f"/api/tennis/category/{category_id}/events/"
-            f"{day.day}/{day.month}/{day.year}"
-        )
-        return self._data(payload)
+        key = (day.isoformat(), str(category_id))
+        if key not in self._events_cache:
+            payload = self._get(
+                f"/api/tennis/category/{category_id}/events/"
+                f"{day.day}/{day.month}/{day.year}"
+            )
+            self._events_cache[key] = self._data(payload)
+        return self._events_cache[key]
+
+    @staticmethod
+    def _event_tour(raw: dict[str, Any]) -> str | None:
+        """Infer ATP/WTA from real provider metadata; never guess from player names."""
+        tournament = raw.get("tournament")
+        if not isinstance(tournament, dict):
+            tournament = {}
+        unique = tournament.get("uniqueTournament")
+        if not isinstance(unique, dict):
+            unique = {}
+
+        category = tournament.get("category")
+        if not isinstance(category, dict):
+            category = unique.get("category")
+        if not isinstance(category, dict):
+            category = {}
+
+        tokens = [
+            first_present(category, "name", "slug", "title"),
+            first_present(tournament, "name", "slug", "title"),
+            first_present(unique, "name", "slug", "title"),
+        ]
+        text = " ".join(str(x or "") for x in tokens).lower()
+        if "wta" in text:
+            return "wta"
+        if "atp" in text:
+            return "atp"
+
+        # Some TennisApi1 payloads expose gender but not ATP/WTA in the category label.
+        genders: list[str] = []
+        for side in ("homeTeam", "awayTeam"):
+            obj = raw.get(side)
+            if isinstance(obj, dict):
+                g = str(first_present(obj, "gender", "genderCode") or "").lower()
+                if g:
+                    genders.append(g)
+        if genders and all(g in {"m", "male", "men", "man"} for g in genders):
+            return "atp"
+        if genders and all(g in {"f", "female", "women", "woman"} for g in genders):
+            return "wta"
+        return None
 
     @staticmethod
     def _looks_like_doubles(raw: dict[str, Any]) -> bool:
@@ -244,11 +293,18 @@ class RapidTennisClient:
     ) -> list[MatchRecord]:
         matches: dict[str, MatchRecord] = {}
 
-        categories = [
+        all_categories = self._calendar_categories(day)
+        preferred = [
             category
-            for category in self._calendar_categories(day)
+            for category in all_categories
             if self._category_matches_tour(category, tour)
         ]
+
+        # TennisApi1 calendar category labels are not guaranteed to be literally ATP/WTA
+        # for every historical date. If no direct category match exists, inspect all
+        # categories that actually have play that day and classify each event from its
+        # tournament/gender metadata. This fixes silent 0-match historical bootstraps.
+        categories = preferred or all_categories
 
         for category in categories:
             category_id = self._category_id(category)
@@ -257,6 +313,13 @@ class RapidTennisClient:
 
             for raw in self._events_for_category_day(category_id, day):
                 if self._looks_like_doubles(raw):
+                    continue
+
+                detected_tour = self._event_tour(raw)
+                if detected_tour is not None and detected_tour != tour:
+                    continue
+                if detected_tour is None and not self._category_matches_tour(category, tour):
+                    # Ambiguous event: do not fabricate a tour assignment.
                     continue
 
                 try:
