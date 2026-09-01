@@ -1,0 +1,24 @@
+name: Deploy Blinq web
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'web/**'
+      - '.github/workflows/deploy-web.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy static web app
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
+          action: upload
+          app_location: /web
+          api_location: ''
+          output_location: ''
+          skip_app_build: true

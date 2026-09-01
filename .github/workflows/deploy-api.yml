@@ -1,0 +1,54 @@
+name: Deploy API
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'api/**'
+      - '.github/workflows/deploy-api.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install + test
+        run: |
+          pip install -r api/requirements.txt pytest
+          python -m compileall -q api scripts
+          PYTHONPATH=api pytest
+      - name: Resolve Function App name from publish profile
+        env:
+          PROFILE: ${{ secrets.BLINQ_FUNCTION_PUBLISH_PROFILE }}
+        run: |
+          python - <<'PY'
+          import os, xml.etree.ElementTree as ET
+          from urllib.parse import urlparse
+          profile = os.environ.get('PROFILE', '').strip()
+          if not profile:
+              raise SystemExit('BLINQ_FUNCTION_PUBLISH_PROFILE is missing')
+          root = ET.fromstring(profile)
+          candidates = list(root) if root.tag.lower().endswith('publishdata') else [root]
+          node = next((n for n in candidates if n.attrib.get('destinationAppUrl')), candidates[0])
+          url = node.attrib.get('destinationAppUrl', '')
+          name = (urlparse(url).hostname or '').split('.')[0]
+          if not name:
+              name = node.attrib.get('msdeploySite') or node.attrib.get('userName', '').replace('$', '').split('\\')[-1]
+          if not name:
+              raise SystemExit('Could not derive Function App name from publish profile')
+          with open(os.environ['GITHUB_ENV'], 'a') as f:
+              f.write(f'AZURE_FUNCTIONAPP_NAME={name}\n')
+          print('Deploying Function App:', name)
+          PY
+      - name: Deploy Azure Function
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: api
+          publish-profile: ${{ secrets.BLINQ_FUNCTION_PUBLISH_PROFILE }}
+          scm-do-build-during-deployment: true
+          enable-oryx-build: true
