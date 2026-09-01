@@ -25,6 +25,13 @@ FEATURE_NAMES = [
     "rank_known_both",
     "rest_advantage",
     "layoff_advantage",
+    "fatigue_3d_advantage",
+    "fatigue_7d_advantage",
+    "travel_km_advantage",
+    "altitude_change_advantage",
+    "weather_serve_interaction",
+    "altitude_serve_interaction",
+    "environment_known",
     "h2h_advantage",
     "serve_quality_diff",
     "return_quality_diff",
@@ -54,6 +61,9 @@ class PlayerState:
     surface_elo: dict[str, float] = field(default_factory=dict)
     surface_matches: dict[str, int] = field(default_factory=dict)
     last_played: datetime | None = None
+    last_latitude: float | None = None
+    last_longitude: float | None = None
+    last_altitude_m: float | None = None
     recent: deque[RecentPerformance] = field(default_factory=lambda: deque(maxlen=80))
 
     def get_surface_elo(self, surface: str) -> float:
@@ -185,6 +195,99 @@ class FeatureBuilder:
         # No penalty up to ~3 weeks, increasing softly afterwards.
         return math.log1p(max(days - 21.0, 0.0))
 
+    @staticmethod
+    def _matches_in_window(state: PlayerState, now: datetime, days: float) -> int:
+        cutoff_seconds = max(days, 0.0) * 86400.0
+        return sum(
+            1
+            for item in state.recent
+            if 0.0 <= (now - item.played_at).total_seconds() <= cutoff_seconds
+        )
+
+    @staticmethod
+    def _environment(match: MatchRecord) -> dict:
+        """Read optional point-in-time environment enrichment.
+
+        Expected shape inside provider_payload:
+        {
+          "_tbt_environment": {
+            "venue": {
+              "latitude": ...,
+              "longitude": ...,
+              "elevation_m": ...
+            },
+            "weather": {
+              "temperature_c": ...,
+              "relative_humidity_pct": ...,
+              "wind_speed_kmh": ...,
+              "wind_gusts_kmh": ...,
+              "surface_pressure_hpa": ...
+            }
+          }
+        }
+
+        Missing values stay missing; they are never guessed or backfilled here.
+        """
+        raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+        env = raw.get("_tbt_environment")
+        return env if isinstance(env, dict) else {}
+
+    @staticmethod
+    def _num(value) -> float | None:
+        try:
+            if value is None or value == "":
+                return None
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _venue_values(
+        cls, match: MatchRecord
+    ) -> tuple[float | None, float | None, float | None]:
+        env = cls._environment(match)
+        venue = env.get("venue")
+        if not isinstance(venue, dict):
+            return None, None, None
+        return (
+            cls._num(venue.get("latitude")),
+            cls._num(venue.get("longitude")),
+            cls._num(venue.get("elevation_m")),
+        )
+
+    @classmethod
+    def _weather_values(cls, match: MatchRecord) -> dict[str, float | None]:
+        env = cls._environment(match)
+        weather = env.get("weather")
+        if not isinstance(weather, dict):
+            return {}
+        return {
+            "temperature_c": cls._num(weather.get("temperature_c")),
+            "relative_humidity_pct": cls._num(weather.get("relative_humidity_pct")),
+            "wind_speed_kmh": cls._num(weather.get("wind_speed_kmh")),
+            "wind_gusts_kmh": cls._num(weather.get("wind_gusts_kmh")),
+            "surface_pressure_hpa": cls._num(weather.get("surface_pressure_hpa")),
+        }
+
+    @staticmethod
+    def _haversine_km(
+        lat1: float | None,
+        lon1: float | None,
+        lat2: float | None,
+        lon2: float | None,
+    ) -> float | None:
+        if None in (lat1, lon1, lat2, lon2):
+            return None
+        r = 6371.0088
+        phi1, phi2 = math.radians(float(lat1)), math.radians(float(lat2))
+        dphi = math.radians(float(lat2) - float(lat1))
+        dlambda = math.radians(float(lon2) - float(lon1))
+        a = (
+            math.sin(dphi / 2.0) ** 2
+            + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2.0) ** 2
+        )
+        return 2.0 * r * math.asin(math.sqrt(a))
+
     def snapshot(self, match: MatchRecord) -> dict[str, float]:
         p1 = self._state(match, True)
         p2 = self._state(match, False)
@@ -220,12 +323,80 @@ class FeatureBuilder:
             self._layoff_penalty(rest2) - self._layoff_penalty(rest1), -3.0, 3.0
         )
 
+        # Objective fatigue/workload features. Positive values favour player 1,
+        # i.e. player 2 has carried the heavier recent match load.
+        p1_3d = self._matches_in_window(p1, match.scheduled_at, 3.0)
+        p2_3d = self._matches_in_window(p2, match.scheduled_at, 3.0)
+        p1_7d = self._matches_in_window(p1, match.scheduled_at, 7.0)
+        p2_7d = self._matches_in_window(p2, match.scheduled_at, 7.0)
+        fatigue_3d_advantage = clamp((p2_3d - p1_3d) / 3.0, -2.0, 2.0)
+        fatigue_7d_advantage = clamp((p2_7d - p1_7d) / 5.0, -2.0, 2.0)
+
+        current_lat, current_lon, current_alt = self._venue_values(match)
+        travel1 = self._haversine_km(
+            p1.last_latitude, p1.last_longitude, current_lat, current_lon
+        )
+        travel2 = self._haversine_km(
+            p2.last_latitude, p2.last_longitude, current_lat, current_lon
+        )
+        travel_known = travel1 is not None and travel2 is not None
+        travel_km_advantage = (
+            clamp((float(travel2) - float(travel1)) / 5000.0, -2.0, 2.0)
+            if travel_known
+            else 0.0
+        )
+
+        alt_change1 = (
+            abs(current_alt - p1.last_altitude_m)
+            if current_alt is not None and p1.last_altitude_m is not None
+            else None
+        )
+        alt_change2 = (
+            abs(current_alt - p2.last_altitude_m)
+            if current_alt is not None and p2.last_altitude_m is not None
+            else None
+        )
+        altitude_change_known = alt_change1 is not None and alt_change2 is not None
+        altitude_change_advantage = (
+            clamp((float(alt_change2) - float(alt_change1)) / 2000.0, -2.0, 2.0)
+            if altitude_change_known
+            else 0.0
+        )
+
         serve1 = self._stat_quality(p1, match.scheduled_at, "serve_quality")
         serve2 = self._stat_quality(p2, match.scheduled_at, "serve_quality")
         return1 = self._stat_quality(p1, match.scheduled_at, "return_quality")
         return2 = self._stat_quality(p2, match.scheduled_at, "return_quality")
         stats_known = float(
             serve1 is not None and serve2 is not None and return1 is not None and return2 is not None
+        )
+
+        weather = self._weather_values(match)
+        wind = weather.get("wind_speed_kmh")
+        temperature = weather.get("temperature_c")
+        humidity = weather.get("relative_humidity_pct")
+        weather_known = wind is not None and temperature is not None and humidity is not None
+        environment_known = float(
+            current_lat is not None
+            and current_lon is not None
+            and current_alt is not None
+            and weather_known
+        )
+
+        # Raw weather is identical for both players and therefore cannot create a
+        # meaningful side advantage after deterministic orientation. We expose only
+        # physically interpretable interactions with the pre-match serve-strength
+        # difference. They are zero when either component is genuinely unavailable.
+        serve_diff = (serve1 - serve2) if stats_known else 0.0
+        weather_serve_interaction = (
+            clamp(serve_diff * ((float(wind) - 10.0) / 20.0), -3.0, 3.0)
+            if weather_known and stats_known
+            else 0.0
+        )
+        altitude_serve_interaction = (
+            clamp(serve_diff * (float(current_alt) / 2000.0), -3.0, 3.0)
+            if current_alt is not None and stats_known
+            else 0.0
         )
 
         return {
@@ -246,6 +417,13 @@ class FeatureBuilder:
             "rank_known_both": rank_known,
             "rest_advantage": rest_advantage,
             "layoff_advantage": layoff_advantage,
+            "fatigue_3d_advantage": fatigue_3d_advantage,
+            "fatigue_7d_advantage": fatigue_7d_advantage,
+            "travel_km_advantage": travel_km_advantage,
+            "altitude_change_advantage": altitude_change_advantage,
+            "weather_serve_interaction": weather_serve_interaction,
+            "altitude_serve_interaction": altitude_serve_interaction,
+            "environment_known": environment_known,
             "h2h_advantage": self._h2h_advantage(match),
             "serve_quality_diff": (serve1 - serve2) if stats_known else 0.0,
             "return_quality_diff": (return1 - return2) if stats_known else 0.0,
@@ -334,6 +512,16 @@ class FeatureBuilder:
         p2.matches += 1
         p1.last_played = match.scheduled_at
         p2.last_played = match.scheduled_at
+
+        venue_lat, venue_lon, venue_alt = self._venue_values(match)
+        if venue_lat is not None and venue_lon is not None:
+            p1.last_latitude = venue_lat
+            p1.last_longitude = venue_lon
+            p2.last_latitude = venue_lat
+            p2.last_longitude = venue_lon
+        if venue_alt is not None:
+            p1.last_altitude_m = venue_alt
+            p2.last_altitude_m = venue_alt
 
         key1 = self.player_key(match.tour, match.player1_id)
         key2 = self.player_key(match.tour, match.player2_id)
