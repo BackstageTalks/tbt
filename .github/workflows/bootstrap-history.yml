@@ -4,32 +4,119 @@ on:
   workflow_dispatch:
     inputs:
       start_year:
-        description: First historical year
+        description: "Start year"
         required: true
-        default: '2021'
+        default: "2021"
       end_year:
-        description: Last historical year (blank = current)
+        description: "End year (blank = current year)"
         required: false
-        default: ''
+        default: ""
+
+permissions:
+  contents: read
 
 jobs:
   bootstrap:
+    name: Download and store historical tennis matches
     runs-on: ubuntu-latest
-    timeout-minutes: 300
+    timeout-minutes: 360
+
+    env:
+      PYTHONPATH: api
+
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
+      RAPIDAPI_BASE_URL: https://tennisapi1.p.rapidapi.com
+
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+      TGBOT: ${{ secrets.TGBOT }}
+      TGCHID: ${{ secrets.TGCHID }}
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-          cache: pip
-      - run: pip install -r api/requirements.txt
-      - name: Download and store historical tennis matches
-        env:
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: api/requirements.txt
+
+      - name: Install dependencies
+        shell: bash
         run: |
-          END="${{ inputs.end_year }}"
-          if [ -z "$END" ]; then END=$(date -u +%Y); fi
-          python scripts/bootstrap_history.py --start-year "${{ inputs.start_year }}" --end-year "$END"
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r api/requirements.txt
+
+      - name: Validate configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "${RAPIDAPI_KEY:-}" ]; then
+            echo "::error::Missing GitHub secret RAPIDAPI_KEY"
+            exit 1
+          fi
+
+          if [ -z "${SUPABASE_URL:-}" ]; then
+            echo "::error::Missing GitHub secret SUPABASE_URL"
+            exit 1
+          fi
+
+          if [ -z "${SUPABASE_SERVICE_ROLE_KEY:-}" ]; then
+            echo "::error::Missing GitHub secret SUPABASE_SERVICE_ROLE_KEY"
+            exit 1
+          fi
+
+          echo "Configuration OK"
+          echo "RapidAPI host: ${RAPIDAPI_HOST}"
+
+      - name: Test TennisApi1 connection
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          STATUS=$(curl \
+            --silent \
+            --show-error \
+            --output /tmp/tennisapi.json \
+            --write-out "%{http_code}" \
+            --request GET \
+            --url "${RAPIDAPI_BASE_URL}/api/tennis/events/live" \
+            --header "X-RapidAPI-Key: ${RAPIDAPI_KEY}" \
+            --header "X-RapidAPI-Host: ${RAPIDAPI_HOST}")
+
+          echo "TennisApi1 HTTP status: ${STATUS}"
+
+          if [ "${STATUS}" -lt 200 ] || [ "${STATUS}" -ge 300 ]; then
+            echo "::error::TennisApi1 connection failed with HTTP ${STATUS}"
+            cat /tmp/tennisapi.json || true
+            exit 1
+          fi
+
+          echo "TennisApi1 connection successful"
+
+      - name: Download and store historical tennis matches
+        shell: bash
+        env:
+          START_YEAR: ${{ github.event.inputs.start_year }}
+          END_YEAR: ${{ github.event.inputs.end_year }}
+        run: |
+          set -euo pipefail
+
+          END="${END_YEAR}"
+
+          if [ -z "${END}" ]; then
+            END=$(date -u +%Y)
+          fi
+
+          echo "Bootstrap period: ${START_YEAR}-${END}"
+
+          python scripts/bootstrap_history.py \
+            --start-year "${START_YEAR}" \
+            --end-year "${END}"
