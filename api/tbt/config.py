@@ -24,10 +24,10 @@ def _int_env(name: str, default: int) -> int:
 class Settings:
     rapidapi_key: str = os.getenv("RAPIDAPI_KEY", "")
     rapidapi_host: str = os.getenv(
-        "RAPIDAPI_HOST", "tennis-api-atp-wta-itf.p.rapidapi.com"
+        "RAPIDAPI_HOST", "tennisapi1.p.rapidapi.com"
     )
     rapidapi_base_url: str = os.getenv(
-        "RAPIDAPI_BASE_URL", "https://tennis-api-atp-wta-itf.p.rapidapi.com"
+        "RAPIDAPI_BASE_URL", "https://tennisapi1.p.rapidapi.com"
     ).rstrip("/")
 
     supabase_url: str = os.getenv("SUPABASE_URL", "").rstrip("/")
