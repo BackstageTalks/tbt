@@ -65,7 +65,7 @@ jobs:
       - name: Resolve Azure Function App name
         env:
           PROFILE: ${{ secrets.BLINQ_FUNCTION_PUBLISH_PROFILE }}
-          FUNCTION_APP_NAME: ${{ vars.AZURE_FUNCTIONAPP_NAME }}
+          FUNCTION_APP_NAME: ${{ vars.BLINQ_FUNCTION_APP_NAME }}
         shell: bash
         run: |
           set -euo pipefail
@@ -198,7 +198,7 @@ jobs:
                   raise SystemExit(
                       "Could not derive Azure Function App name from BLINQ_FUNCTION_PUBLISH_PROFILE. "
                       "The workflow accepts raw XML, quoted XML, HTML-escaped XML and Base64 XML. "
-                      "Alternatively add repository variable AZURE_FUNCTIONAPP_NAME with the Function App name."
+                      "Alternatively add repository variable BLINQ_FUNCTION_APP_NAME with the Function App name."
                   )
 
           if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9-]{0,59}", name):
