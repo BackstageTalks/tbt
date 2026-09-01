@@ -6,11 +6,11 @@ on:
       start_year:
         description: "First historical year"
         required: true
-        default: "2021"
+        default: "2026"
       end_year:
-        description: "Last historical year (blank = current year)"
-        required: false
-        default: ""
+        description: "Last historical year"
+        required: true
+        default: "2026"
 
 permissions:
   contents: read
@@ -70,31 +70,40 @@ jobs:
           echo "Configuration OK"
           echo "RapidAPI host: ${RAPIDAPI_HOST}"
 
-      - name: Test TennisApi1 connection
+      - name: Verify confirmed TennisApi calendar flow
         shell: bash
         run: |
           set -euo pipefail
 
+          # Provider explicitly confirmed this date/flow. One request gives us an
+          # immediate fail-fast check without burning a long bootstrap worth of quota.
           HTTP_CODE=$(curl \
             --silent \
             --show-error \
-            --output /tmp/tennisapi-response.json \
+            --output /tmp/tennis-calendar.json \
             --write-out "%{http_code}" \
             --request GET \
-            --url "${RAPIDAPI_BASE_URL}/api/tennis/events/live" \
+            --url "${RAPIDAPI_BASE_URL}/api/tennis/calendar/4/7/2026/categories" \
             --header "X-RapidAPI-Key: ${RAPIDAPI_KEY}" \
             --header "X-RapidAPI-Host: ${RAPIDAPI_HOST}" \
             --header "Accept: application/json")
 
-          echo "TennisApi1 HTTP status: ${HTTP_CODE}"
-
-          if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
-            echo "::error::TennisApi1 connection failed with HTTP ${HTTP_CODE}"
-            cat /tmp/tennisapi-response.json || true
+          echo "Calendar HTTP status: ${HTTP_CODE}"
+          if [ "${HTTP_CODE}" -ne 200 ]; then
+            echo "::error::Confirmed TennisApi calendar endpoint failed with HTTP ${HTTP_CODE}"
+            cat /tmp/tennis-calendar.json || true
             exit 1
           fi
 
-          echo "TennisApi1 connection successful"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/tennis-calendar.json').read_text())
+          categories = payload.get('categories', []) if isinstance(payload, dict) else []
+          print(f"Active categories on provider test date: {len(categories)}")
+          if not categories:
+              raise SystemExit('Provider calendar returned no categories on confirmed test date')
+          PY
 
       - name: Download and store historical tennis matches
         shell: bash
@@ -103,13 +112,8 @@ jobs:
           END_YEAR: ${{ inputs.end_year }}
         run: |
           set -euo pipefail
-
-          END="${END_YEAR}"
-          if [ -z "${END}" ]; then
-            END=$(date -u +%Y)
-          fi
-
-          echo "Bootstrap period: ${START_YEAR}-${END}"
+          echo "Bootstrap period: ${START_YEAR}-${END_YEAR}"
+          echo "Bulk bootstrap uses real event results only; no odds/statistics enrichment."
           python scripts/bootstrap_history.py \
             --start-year "${START_YEAR}" \
-            --end-year "${END}"
+            --end-year "${END_YEAR}"
