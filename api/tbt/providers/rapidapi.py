@@ -342,8 +342,13 @@ class RapidTennisClient:
                 if not historical and not self._raw_is_predictable(raw):
                     continue
 
+                raw_for_normalize = dict(raw)
+                raw_for_normalize["_tbt_source_category_id"] = category_id
+
                 try:
-                    match = self.normalize_match(raw, tour=tour, historical=historical)
+                    match = self.normalize_match(
+                        raw_for_normalize, tour=tour, historical=historical
+                    )
                 except Exception as exc:
                     logger.warning(
                         "Skipping malformed TennisApi event id=%s: %s", raw.get("id"), exc
