@@ -1,0 +1,52 @@
+name: Cleanup provider duplicates
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dry-run:
+    name: Duplicate cleanup dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    env:
+      PYTHONPATH: api
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r api/requirements-train.txt
+
+      - name: Compile
+        run: |
+          python -m compileall -q api scripts
+
+      - name: Provider duplicate cleanup dry-run
+        run: |
+          python scripts/cleanup_provider_duplicates.py
+
+      - name: Upload cleanup dry-run report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: provider-duplicate-cleanup-dry-run
+          path: reports/provider_duplicate_cleanup_dry_run.json
+          if-no-files-found: warn
+          retention-days: 14
