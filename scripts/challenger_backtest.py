@@ -18,8 +18,6 @@ from tbt.repositories.supabase import SupabaseRepository
 from tbt.schemas import MatchRecord
 
 
-# Frozen champion feature set.
-# Baseline sa nesmie automaticky meniť podľa experimentov vo FeatureBuilder.
 BASE_FEATURES = [
     "elo_diff",
     "surface_elo_diff",
@@ -49,35 +47,65 @@ EXPERIMENTAL_FEATURES = [
     "fatigue_3d_advantage",
     "fatigue_7d_advantage",
     "travel_km_advantage",
+    "travel_known_both",
     "altitude_change_advantage",
+    "altitude_known_both",
     "weather_temperature",
     "weather_humidity",
     "weather_wind",
+    "weather_known",
     "environment_known",
 ]
 
 
+# Promotion guardrails.
+MIN_ENV_COVERAGE = 0.70
+MIN_LOG_LOSS_IMPROVEMENT = 0.0001
+MIN_BRIER_IMPROVEMENT = 0.00005
+MIN_ROC_AUC_DELTA = 0.0
+MIN_ACCURACY_DELTA = -0.001
+MAX_ECE_WORSENING = 0.002
+
+
 VARIANTS = {
-    "baseline": [],
-    "fatigue": [
-        "fatigue_3d_advantage",
-        "fatigue_7d_advantage",
-    ],
-    "travel": [
-        "travel_km_advantage",
-        "environment_known",
-    ],
-    "altitude": [
-        "altitude_change_advantage",
-        "environment_known",
-    ],
-    "weather": [
-        "weather_temperature",
-        "weather_humidity",
-        "weather_wind",
-        "environment_known",
-    ],
-    "environment_all": list(EXPERIMENTAL_FEATURES),
+    "baseline": {
+        "features": [],
+        "coverage_column": None,
+    },
+    "fatigue": {
+        "features": [
+            "fatigue_3d_advantage",
+            "fatigue_7d_advantage",
+        ],
+        "coverage_column": None,
+    },
+    "travel": {
+        "features": [
+            "travel_km_advantage",
+            "travel_known_both",
+        ],
+        "coverage_column": "travel_known_both",
+    },
+    "altitude": {
+        "features": [
+            "altitude_change_advantage",
+            "altitude_known_both",
+        ],
+        "coverage_column": "altitude_known_both",
+    },
+    "weather": {
+        "features": [
+            "weather_temperature",
+            "weather_humidity",
+            "weather_wind",
+            "weather_known",
+        ],
+        "coverage_column": "weather_known",
+    },
+    "environment_all": {
+        "features": list(EXPERIMENTAL_FEATURES),
+        "coverage_column": "environment_bundle_known",
+    },
 }
 
 
@@ -86,6 +114,7 @@ class ExperimentalPlayerState:
     recent_matches: deque = field(
         default_factory=lambda: deque(maxlen=100)
     )
+
     last_latitude: float | None = None
     last_longitude: float | None = None
     last_altitude: float | None = None
@@ -109,13 +138,22 @@ def _environment(
 ) -> dict:
     payload = (
         match.provider_payload
-        if isinstance(match.provider_payload, dict)
+        if isinstance(
+            match.provider_payload,
+            dict,
+        )
         else {}
     )
 
-    value = payload.get("_tbt_environment")
+    value = payload.get(
+        "_tbt_environment"
+    )
 
-    return value if isinstance(value, dict) else {}
+    return (
+        value
+        if isinstance(value, dict)
+        else {}
+    )
 
 
 def _venue(
@@ -123,7 +161,11 @@ def _venue(
 ) -> dict:
     value = env.get("venue")
 
-    return value if isinstance(value, dict) else {}
+    return (
+        value
+        if isinstance(value, dict)
+        else {}
+    )
 
 
 def _weather(
@@ -131,7 +173,11 @@ def _weather(
 ) -> dict:
     value = env.get("weather")
 
-    return value if isinstance(value, dict) else {}
+    return (
+        value
+        if isinstance(value, dict)
+        else {}
+    )
 
 
 def _safe_float(
@@ -148,8 +194,26 @@ def _safe_float(
 
         return number
 
-    except (TypeError, ValueError):
+    except (
+        TypeError,
+        ValueError,
+    ):
         return None
+
+
+def _venue_altitude(
+    venue: dict,
+) -> float | None:
+    value = _safe_float(
+        venue.get("elevation_m")
+    )
+
+    if value is None:
+        value = _safe_float(
+            venue.get("altitude_m")
+        )
+
+    return value
 
 
 def _haversine_km(
@@ -163,8 +227,13 @@ def _haversine_km(
     phi1 = math.radians(lat1)
     phi2 = math.radians(lat2)
 
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lon2 - lon1)
+    dphi = math.radians(
+        lat2 - lat1
+    )
+
+    dlambda = math.radians(
+        lon2 - lon1
+    )
 
     a = (
         math.sin(dphi / 2.0) ** 2
@@ -176,7 +245,9 @@ def _haversine_km(
     return (
         2.0
         * radius
-        * math.asin(math.sqrt(a))
+        * math.asin(
+            math.sqrt(a)
+        )
     )
 
 
@@ -185,14 +256,19 @@ def _recent_count(
     now,
     days: float,
 ) -> int:
-    limit_seconds = days * 86400.0
+    limit_seconds = (
+        days * 86400.0
+    )
 
     return sum(
         1
-        for played_at in state.recent_matches
+        for played_at
+        in state.recent_matches
         if (
             0.0
-            <= (now - played_at).total_seconds()
+            <= (
+                now - played_at
+            ).total_seconds()
             <= limit_seconds
         )
     )
@@ -201,14 +277,6 @@ def _recent_count(
 def build_experimental_frame(
     matches: list[MatchRecord],
 ) -> pd.DataFrame:
-    """
-    Challenger-only feature builder.
-
-    Rovnako ako production FeatureBuilder:
-    všetky zápasy v jednom kalendárnom dni sa najprv
-    snapshotnú a až potom sa aktualizuje player state.
-    """
-
     states: dict[
         str,
         ExperimentalPlayerState,
@@ -231,15 +299,20 @@ def build_experimental_frame(
     )
 
     current_date = None
-    batch: list[MatchRecord] = []
+    batch: list[
+        MatchRecord
+    ] = []
 
     def process_batch(
-        day_matches: list[MatchRecord],
+        day_matches: list[
+            MatchRecord
+        ],
     ) -> None:
-        # SNAPSHOT
+        # Snapshot celeho dna pred update player state.
         for original in day_matches:
             oriented, _ = (
-                FeatureBuilder.orient_for_training(
+                FeatureBuilder
+                .orient_for_training(
                     original
                 )
             )
@@ -284,93 +357,152 @@ def build_experimental_frame(
                 )
             )
 
-            env = _environment(oriented)
-            venue = _venue(env)
-            weather = _weather(env)
+            env = _environment(
+                oriented
+            )
+
+            venue = _venue(
+                env
+            )
+
+            weather = _weather(
+                env
+            )
 
             latitude = _safe_float(
-                venue.get("latitude")
+                venue.get(
+                    "latitude"
+                )
             )
 
             longitude = _safe_float(
-                venue.get("longitude")
+                venue.get(
+                    "longitude"
+                )
             )
 
-            altitude = _safe_float(
-                venue.get("elevation_m")
+            altitude = (
+                _venue_altitude(
+                    venue
+                )
             )
 
             environment_known = float(
-                env.get("venue_resolved") is True
-                and latitude is not None
-                and longitude is not None
+                env.get(
+                    "venue_resolved"
+                )
+                is True
+                and latitude
+                is not None
+                and longitude
+                is not None
+            )
+
+            travel_known_both = float(
+                environment_known
+                and p1.last_latitude
+                is not None
+                and p1.last_longitude
+                is not None
+                and p2.last_latitude
+                is not None
+                and p2.last_longitude
+                is not None
             )
 
             travel1 = 0.0
             travel2 = 0.0
 
-            if (
-                environment_known
-                and p1.last_latitude is not None
-                and p1.last_longitude is not None
-            ):
-                travel1 = _haversine_km(
-                    p1.last_latitude,
-                    p1.last_longitude,
-                    latitude,
-                    longitude,
+            if travel_known_both:
+                travel1 = (
+                    _haversine_km(
+                        p1.last_latitude,
+                        p1.last_longitude,
+                        latitude,
+                        longitude,
+                    )
                 )
 
-            if (
-                environment_known
-                and p2.last_latitude is not None
-                and p2.last_longitude is not None
-            ):
-                travel2 = _haversine_km(
-                    p2.last_latitude,
-                    p2.last_longitude,
-                    latitude,
-                    longitude,
+                travel2 = (
+                    _haversine_km(
+                        p2.last_latitude,
+                        p2.last_longitude,
+                        latitude,
+                        longitude,
+                    )
                 )
+
+            altitude_known_both = (
+                float(
+                    altitude
+                    is not None
+                    and p1.last_altitude
+                    is not None
+                    and p2.last_altitude
+                    is not None
+                )
+            )
 
             altitude_change1 = 0.0
             altitude_change2 = 0.0
 
-            if (
-                altitude is not None
-                and p1.last_altitude is not None
-            ):
+            if altitude_known_both:
                 altitude_change1 = abs(
                     altitude
                     - p1.last_altitude
                 )
 
-            if (
-                altitude is not None
-                and p2.last_altitude is not None
-            ):
                 altitude_change2 = abs(
                     altitude
                     - p2.last_altitude
                 )
 
-            temperature = _safe_float(
-                weather.get("temperature_2m")
-            )
-
-            humidity = _safe_float(
-                weather.get(
-                    "relative_humidity_2m"
+            temperature = (
+                _safe_float(
+                    weather.get(
+                        "temperature_2m"
+                    )
                 )
             )
 
-            wind = _safe_float(
-                weather.get("wind_speed_10m")
+            humidity = (
+                _safe_float(
+                    weather.get(
+                        "relative_humidity_2m"
+                    )
+                )
+            )
+
+            wind = (
+                _safe_float(
+                    weather.get(
+                        "wind_speed_10m"
+                    )
+                )
+            )
+
+            weather_known = float(
+                temperature
+                is not None
+                and humidity
+                is not None
+                and wind
+                is not None
+            )
+
+            environment_bundle_known = (
+                float(
+                    travel_known_both
+                    and altitude_known_both
+                    and weather_known
+                )
             )
 
             rows.append(
                 {
-                    "match_id": original.match_id,
+                    "match_id": (
+                        original.match_id
+                    ),
                     "fatigue_3d_advantage": (
                         fatigue_3d
                     ),
@@ -388,6 +520,9 @@ def build_experimental_frame(
                             2.0,
                         )
                     ),
+                    "travel_known_both": (
+                        travel_known_both
+                    ),
                     "altitude_change_advantage": float(
                         np.clip(
                             (
@@ -399,42 +534,68 @@ def build_experimental_frame(
                             2.0,
                         )
                     ),
+                    "altitude_known_both": (
+                        altitude_known_both
+                    ),
                     "weather_temperature": (
-                        temperature / 40.0
-                        if temperature is not None
+                        temperature
+                        / 40.0
+                        if temperature
+                        is not None
                         else 0.0
                     ),
                     "weather_humidity": (
-                        humidity / 100.0
-                        if humidity is not None
+                        humidity
+                        / 100.0
+                        if humidity
+                        is not None
                         else 0.0
                     ),
                     "weather_wind": (
-                        wind / 50.0
-                        if wind is not None
+                        wind
+                        / 50.0
+                        if wind
+                        is not None
                         else 0.0
+                    ),
+                    "weather_known": (
+                        weather_known
                     ),
                     "environment_known": (
                         environment_known
                     ),
+                    "environment_bundle_known": (
+                        environment_bundle_known
+                    ),
                 }
             )
 
-        # UPDATE až po celom dennom batchi
+        # Update az po snapshotovani celeho dna.
         for original in day_matches:
-            env = _environment(original)
-            venue = _venue(env)
+            env = _environment(
+                original
+            )
+
+            venue = _venue(
+                env
+            )
 
             latitude = _safe_float(
-                venue.get("latitude")
+                venue.get(
+                    "latitude"
+                )
             )
 
             longitude = _safe_float(
-                venue.get("longitude")
+                venue.get(
+                    "longitude"
+                )
             )
 
-            altitude = _safe_float(
-                venue.get("elevation_m")
+            altitude = (
+                _venue_altitude(
+                    venue
+                )
             )
 
             for first in (
@@ -453,8 +614,10 @@ def build_experimental_frame(
                 )
 
                 if (
-                    latitude is not None
-                    and longitude is not None
+                    latitude
+                    is not None
+                    and longitude
+                    is not None
                 ):
                     state.last_latitude = (
                         latitude
@@ -479,7 +642,9 @@ def build_experimental_frame(
             match.event_date
             != current_date
         ):
-            process_batch(batch)
+            process_batch(
+                batch
+            )
 
             batch = []
 
@@ -487,12 +652,18 @@ def build_experimental_frame(
                 match.event_date
             )
 
-        batch.append(match)
+        batch.append(
+            match
+        )
 
     if batch:
-        process_batch(batch)
+        process_batch(
+            batch
+        )
 
-    return pd.DataFrame(rows)
+    return pd.DataFrame(
+        rows
+    )
 
 
 def _fit_variant(
@@ -501,14 +672,6 @@ def _fit_variant(
     test: pd.DataFrame,
     feature_names: list[str],
 ) -> np.ndarray:
-    """
-    TennisEnsemble používa FEATURE_NAMES importované
-    na module-level.
-
-    Preto ich dočasne prepíšeme iba počas jedného
-    experimentálneho fitu a potom ich okamžite obnovíme.
-    """
-
     original_features = getattr(
         ensemble_module,
         "FEATURE_NAMES",
@@ -517,25 +680,62 @@ def _fit_variant(
 
     try:
         ensemble_module.FEATURE_NAMES = (
-            list(feature_names)
+            list(
+                feature_names
+            )
         )
 
-        model = TennisEnsemble().fit(
-            train,
-            calibration,
+        model = (
+            TennisEnsemble()
+            .fit(
+                train,
+                calibration,
+            )
         )
 
-        probabilities = (
-            model.predict_proba(test)
+        return (
+            model.predict_proba(
+                test
+            )
         )
-
-        return probabilities
 
     finally:
-        if original_features is not None:
+        if (
+            original_features
+            is not None
+        ):
             ensemble_module.FEATURE_NAMES = (
                 original_features
             )
+
+
+def _coverage(
+    frame: pd.DataFrame,
+    column: str | None,
+) -> float:
+    if column is None:
+        return 1.0
+
+    if (
+        column
+        not in frame.columns
+        or frame.empty
+    ):
+        return 0.0
+
+    values = (
+        pd.to_numeric(
+            frame[column],
+            errors="coerce",
+        )
+        .fillna(0.0)
+    )
+
+    return float(
+        (
+            values > 0.5
+        ).mean()
+    )
 
 
 def _metric_delta(
@@ -557,7 +757,9 @@ def _metric_delta(
         ),
         "brier_score": (
             metrics["brier_score"]
-            - baseline["brier_score"]
+            - baseline[
+                "brier_score"
+            ]
         ),
         "ece_10": (
             metrics["ece_10"]
@@ -566,8 +768,107 @@ def _metric_delta(
     }
 
 
+def _promotion_decision(
+    name: str,
+    delta: dict,
+    coverage: dict,
+) -> tuple[
+    bool,
+    list[str],
+]:
+    reasons: list[str] = []
+
+    if name in {
+        "travel",
+        "altitude",
+        "weather",
+        "environment_all",
+    }:
+        minimum_coverage = min(
+            coverage.get(
+                "train",
+                0.0,
+            ),
+            coverage.get(
+                "calibration",
+                0.0,
+            ),
+            coverage.get(
+                "test",
+                0.0,
+            ),
+        )
+
+        if (
+            minimum_coverage
+            < MIN_ENV_COVERAGE
+        ):
+            reasons.append(
+                "coverage "
+                f"{minimum_coverage:.3f} "
+                "< "
+                f"{MIN_ENV_COVERAGE:.3f}"
+            )
+
+    if (
+        delta["log_loss"]
+        > -MIN_LOG_LOSS_IMPROVEMENT
+    ):
+        reasons.append(
+            "log_loss improvement "
+            "below threshold "
+            f"({delta['log_loss']:+.6f})"
+        )
+
+    if (
+        delta["brier_score"]
+        > -MIN_BRIER_IMPROVEMENT
+    ):
+        reasons.append(
+            "brier improvement "
+            "below threshold "
+            f"({delta['brier_score']:+.6f})"
+        )
+
+    if (
+        delta["roc_auc"]
+        < MIN_ROC_AUC_DELTA
+    ):
+        reasons.append(
+            "roc_auc declined "
+            f"({delta['roc_auc']:+.6f})"
+        )
+
+    if (
+        delta["accuracy"]
+        < MIN_ACCURACY_DELTA
+    ):
+        reasons.append(
+            "accuracy declined "
+            "too much "
+            f"({delta['accuracy']:+.6f})"
+        )
+
+    if (
+        delta["ece_10"]
+        > MAX_ECE_WORSENING
+    ):
+        reasons.append(
+            "ECE worsened "
+            "too much "
+            f"({delta['ece_10']:+.6f})"
+        )
+
+    return (
+        not reasons,
+        reasons,
+    )
+
+
 def main() -> None:
-    repo = SupabaseRepository()
+    repo = (
+        SupabaseRepository()
+    )
 
     matches = (
         repo.get_completed_matches()
@@ -591,62 +892,12 @@ def main() -> None:
             "no training rows"
         )
 
-    experimental = (
-        build_experimental_frame(
-            matches
-        )
-    )
-
-    if experimental.empty:
-        raise SystemExit(
-            "Experimental feature builder "
-            "returned no rows"
-        )
-
-    # Dôležité:
-    # ak FeatureBuilder už niektorý experimentálny
-    # feature obsahuje, nemergujeme ho druhýkrát.
-    # Inak pandas vytvorí *_x / *_y a pôvodný názov zmizne.
-    missing_experimental = [
-        column
-        for column in EXPERIMENTAL_FEATURES
-        if column not in base.columns
-    ]
-
-    merge_columns = (
-        ["match_id"]
-        + missing_experimental
-    )
-
-    frame = base.merge(
-        experimental[
-            merge_columns
-        ],
-        on="match_id",
-        how="left",
-        validate="one_to_one",
-    )
-
-    # Garantujeme existenciu všetkých challenger columns.
-    for column in (
-        EXPERIMENTAL_FEATURES
-    ):
-        if column not in frame.columns:
-            frame[column] = 0.0
-
-        frame[column] = (
-            pd.to_numeric(
-                frame[column],
-                errors="coerce",
-            )
-            .fillna(0.0)
-            .astype(float)
-        )
-
     missing_base = [
         column
-        for column in BASE_FEATURES
-        if column not in frame.columns
+        for column
+        in BASE_FEATURES
+        if column
+        not in base.columns
     ]
 
     if missing_base:
@@ -658,18 +909,77 @@ def main() -> None:
             )
         )
 
-    frame = frame.sort_values(
-        [
-            "scheduled_at",
-            "match_id",
+    experimental = (
+        build_experimental_frame(
+            matches
+        )
+    )
+
+    if experimental.empty:
+        raise SystemExit(
+            "Experimental feature "
+            "builder returned no rows"
+        )
+
+    # Experimenty vzdy berieme z challenger buildera,
+    # aby nevznikali *_x / *_y konflikty.
+    base = base.drop(
+        columns=(
+            EXPERIMENTAL_FEATURES
+            + [
+                "environment_bundle_known"
+            ]
+        ),
+        errors="ignore",
+    )
+
+    frame = base.merge(
+        experimental,
+        on="match_id",
+        how="left",
+        validate="one_to_one",
+    )
+
+    numeric_columns = (
+        EXPERIMENTAL_FEATURES
+        + [
+            "environment_bundle_known"
         ]
-    ).reset_index(
-        drop=True
+    )
+
+    for column in numeric_columns:
+        if (
+            column
+            not in frame.columns
+        ):
+            frame[column] = 0.0
+
+        frame[column] = (
+            pd.to_numeric(
+                frame[column],
+                errors="coerce",
+            )
+            .fillna(0.0)
+            .astype(float)
+        )
+
+    frame = (
+        frame.sort_values(
+            [
+                "scheduled_at",
+                "match_id",
+            ]
+        )
+        .reset_index(
+            drop=True
+        )
     )
 
     frame["year"] = (
         pd.to_datetime(
-            frame["scheduled_at"],
+            frame[
+                "scheduled_at"
+            ],
             utc=True,
         )
         .dt.year
@@ -677,9 +987,10 @@ def main() -> None:
 
     years = sorted(
         int(year)
-        for year in (
-            frame["year"].unique()
-        )
+        for year
+        in frame[
+            "year"
+        ].unique()
     )
 
     if not years:
@@ -693,29 +1004,23 @@ def main() -> None:
         years[-1] - 3,
     )
 
-    existing_experimental = sorted(
-        set(
-            EXPERIMENTAL_FEATURES
-        ).intersection(
-            base.columns
-        )
-    )
-
     print(
         f"Base features: "
         f"{len(BASE_FEATURES)}"
     )
 
     print(
-        "Experimental already in "
-        "FeatureBuilder: "
-        f"{existing_experimental}"
-    )
-
-    print(
-        "Experimental derived by "
-        "challenger: "
-        f"{missing_experimental}"
+        "Environment coverage overall: "
+        f"venue="
+        f"{_coverage(frame, 'environment_known'):.3f}, "
+        f"travel="
+        f"{_coverage(frame, 'travel_known_both'):.3f}, "
+        f"altitude="
+        f"{_coverage(frame, 'altitude_known_both'):.3f}, "
+        f"weather="
+        f"{_coverage(frame, 'weather_known'):.3f}, "
+        f"bundle="
+        f"{_coverage(frame, 'environment_bundle_known'):.3f}"
     )
 
     results = {
@@ -723,14 +1028,20 @@ def main() -> None:
             "folds": [],
             "y": [],
             "p": [],
+            "coverage": [],
+            "skipped_folds": [],
         }
-        for name in VARIANTS
+        for name
+        in VARIANTS
     }
 
     for year in [
         value
         for value in years
-        if value >= first_test_year
+        if (
+            value
+            >= first_test_year
+        )
     ]:
         historical = frame[
             frame["year"] < year
@@ -790,11 +1101,80 @@ def main() -> None:
 
         for (
             variant_name,
-            extras,
+            config,
         ) in VARIANTS.items():
+            coverage_column = (
+                config[
+                    "coverage_column"
+                ]
+            )
+
+            coverage = {
+                "train": _coverage(
+                    train,
+                    coverage_column,
+                ),
+                "calibration": _coverage(
+                    calibration,
+                    coverage_column,
+                ),
+                "test": _coverage(
+                    test,
+                    coverage_column,
+                ),
+            }
+
+            requires_environment = (
+                coverage_column
+                is not None
+            )
+
+            if (
+                requires_environment
+                and min(
+                    coverage.values()
+                )
+                < MIN_ENV_COVERAGE
+            ):
+                results[
+                    variant_name
+                ][
+                    "skipped_folds"
+                ].append(
+                    {
+                        "year": int(
+                            year
+                        ),
+                        "reason": (
+                            "insufficient_"
+                            "environment_"
+                            "coverage"
+                        ),
+                        "coverage": (
+                            coverage
+                        ),
+                    }
+                )
+
+                print(
+                    f"  {variant_name}: "
+                    "skipped, coverage="
+                    f"{coverage['train']:.3f}/"
+                    f"{coverage['calibration']:.3f}/"
+                    f"{coverage['test']:.3f}"
+                )
+
+                continue
+
             feature_names = (
-                list(BASE_FEATURES)
-                + list(extras)
+                list(
+                    BASE_FEATURES
+                )
+                + list(
+                    config[
+                        "features"
+                    ]
+                )
             )
 
             probabilities = (
@@ -808,46 +1188,75 @@ def main() -> None:
 
             metrics = (
                 evaluate_probabilities(
-                    test["target"],
+                    test[
+                        "target"
+                    ],
                     probabilities,
                 )
             )
 
             results[
                 variant_name
-            ]["folds"].append(
+            ][
+                "folds"
+            ].append(
                 {
-                    "year": int(year),
+                    "year": int(
+                        year
+                    ),
                     "train_rows": int(
                         len(train)
                     ),
                     "calibration_rows": int(
-                        len(calibration)
+                        len(
+                            calibration
+                        )
                     ),
                     "test_rows": int(
                         len(test)
                     ),
-                    "metrics": metrics,
+                    "coverage": (
+                        coverage
+                    ),
+                    "metrics": (
+                        metrics
+                    ),
                 }
             )
 
             results[
                 variant_name
-            ]["y"].extend(
-                test["target"]
+            ][
+                "coverage"
+            ].append(
+                coverage
+            )
+
+            results[
+                variant_name
+            ][
+                "y"
+            ].extend(
+                test[
+                    "target"
+                ]
                 .astype(int)
                 .tolist()
             )
 
             results[
                 variant_name
-            ]["p"].extend(
+            ][
+                "p"
+            ].extend(
                 probabilities.tolist()
             )
 
     if not results[
         "baseline"
-    ]["y"]:
+    ][
+        "y"
+    ]:
         raise SystemExit(
             "Not enough history "
             "to create challenger folds"
@@ -855,9 +1264,10 @@ def main() -> None:
 
     report = {
         "method": (
-            "calendar-year walk-forward "
-            "challenger test; every test "
-            "year is strictly later than "
+            "calendar-year "
+            "walk-forward challenger "
+            "test; every test year "
+            "is strictly later than "
             "training/calibration"
         ),
         "first_test_year": int(
@@ -866,14 +1276,58 @@ def main() -> None:
         "canonical_matches": int(
             len(matches)
         ),
-        "environment_coverage": float(
-            (
-                frame[
-                    "environment_known"
-                ]
-                > 0.5
-            ).mean()
-        ),
+        "coverage": {
+            "environment_known": (
+                _coverage(
+                    frame,
+                    "environment_known",
+                )
+            ),
+            "travel_known_both": (
+                _coverage(
+                    frame,
+                    "travel_known_both",
+                )
+            ),
+            "altitude_known_both": (
+                _coverage(
+                    frame,
+                    "altitude_known_both",
+                )
+            ),
+            "weather_known": (
+                _coverage(
+                    frame,
+                    "weather_known",
+                )
+            ),
+            "environment_bundle_known": (
+                _coverage(
+                    frame,
+                    "environment_bundle_known",
+                )
+            ),
+        },
+        "guardrails": {
+            "min_environment_coverage": (
+                MIN_ENV_COVERAGE
+            ),
+            "min_log_loss_improvement": (
+                MIN_LOG_LOSS_IMPROVEMENT
+            ),
+            "min_brier_improvement": (
+                MIN_BRIER_IMPROVEMENT
+            ),
+            "min_roc_auc_delta": (
+                MIN_ROC_AUC_DELTA
+            ),
+            "min_accuracy_delta": (
+                MIN_ACCURACY_DELTA
+            ),
+            "max_ece_worsening": (
+                MAX_ECE_WORSENING
+            ),
+        },
         "variants": {},
     }
 
@@ -881,12 +1335,15 @@ def main() -> None:
         variant_name,
         result,
     ) in results.items():
-        overall = (
-            evaluate_probabilities(
-                result["y"],
-                result["p"],
+        if result["y"]:
+            overall = (
+                evaluate_probabilities(
+                    result["y"],
+                    result["p"],
+                )
             )
-        )
+        else:
+            overall = None
 
         report[
             "variants"
@@ -894,9 +1351,14 @@ def main() -> None:
             variant_name
         ] = {
             "overall": overall,
-            "folds": result[
-                "folds"
-            ],
+            "folds": (
+                result["folds"]
+            ),
+            "skipped_folds": (
+                result[
+                    "skipped_folds"
+                ]
+            ),
         }
 
     baseline_metrics = (
@@ -909,14 +1371,10 @@ def main() -> None:
         ]
     )
 
-    for result in (
-        report["variants"].values()
-    ):
-        result[
-            "delta_vs_baseline"
-        ] = _metric_delta(
-            result["overall"],
-            baseline_metrics,
+    if baseline_metrics is None:
+        raise SystemExit(
+            "Baseline metrics "
+            "are unavailable"
         )
 
     promotion_candidates: list[
@@ -935,23 +1393,128 @@ def main() -> None:
             variant_name
             == "baseline"
         ):
+            result[
+                "delta_vs_baseline"
+            ] = {
+                "accuracy": 0.0,
+                "roc_auc": 0.0,
+                "log_loss": 0.0,
+                "brier_score": 0.0,
+                "ece_10": 0.0,
+            }
+
+            result[
+                "promotion"
+            ] = {
+                "eligible": False,
+                "reasons": [
+                    "baseline"
+                ],
+            }
+
             continue
 
-        delta = result[
-            "delta_vs_baseline"
+        metrics = result[
+            "overall"
         ]
 
-        # Konzervatívny shortlist.
-        # Produkčný promotion ešte nerobíme automaticky.
-        if (
-            delta["log_loss"] < 0.0
-            and delta[
-                "brier_score"
-            ] < 0.0
-            and delta[
-                "roc_auc"
-            ] >= -0.001
-        ):
+        if metrics is None:
+            result[
+                "delta_vs_baseline"
+            ] = None
+
+            result[
+                "promotion"
+            ] = {
+                "eligible": False,
+                "reasons": [
+                    "no_valid_fold"
+                ],
+            }
+
+            continue
+
+        delta = _metric_delta(
+            metrics,
+            baseline_metrics,
+        )
+
+        result[
+            "delta_vs_baseline"
+        ] = delta
+
+        coverage_column = (
+            VARIANTS[
+                variant_name
+            ][
+                "coverage_column"
+            ]
+        )
+
+        fold_coverage = (
+            results[
+                variant_name
+            ][
+                "coverage"
+            ]
+        )
+
+        if coverage_column is None:
+            aggregate_coverage = {
+                "train": 1.0,
+                "calibration": 1.0,
+                "test": 1.0,
+            }
+
+        elif fold_coverage:
+            aggregate_coverage = {
+                split_name: float(
+                    min(
+                        item[
+                            split_name
+                        ]
+                        for item
+                        in fold_coverage
+                    )
+                )
+                for split_name
+                in (
+                    "train",
+                    "calibration",
+                    "test",
+                )
+            }
+
+        else:
+            aggregate_coverage = {
+                "train": 0.0,
+                "calibration": 0.0,
+                "test": 0.0,
+            }
+
+        eligible, reasons = (
+            _promotion_decision(
+                variant_name,
+                delta,
+                aggregate_coverage,
+            )
+        )
+
+        result[
+            "promotion"
+        ] = {
+            "eligible": (
+                eligible
+            ),
+            "coverage": (
+                aggregate_coverage
+            ),
+            "reasons": (
+                reasons
+            ),
+        }
+
+        if eligible:
             promotion_candidates.append(
                 variant_name
             )
@@ -975,6 +1538,7 @@ def main() -> None:
         json.dumps(
             report,
             indent=2,
+            ensure_ascii=False,
             default=str,
         ),
         encoding="utf-8",
@@ -984,6 +1548,7 @@ def main() -> None:
         json.dumps(
             report,
             indent=2,
+            ensure_ascii=False,
             default=str,
         )
     )
