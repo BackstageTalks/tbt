@@ -1,26 +1,55 @@
-# scripts/audit_provider_duplicates.py
-
 from __future__ import annotations
 
 import json
 from collections import Counter, defaultdict
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from _bootstrap import ROOT
+
 from tbt.repositories.supabase import SupabaseRepository
 
 
-REPORT_PATH = ROOT / "reports" / "provider_duplicate_audit.json"
-TOP_GROUPS = 100
+MIN_CANONICAL_COMPLETED = 10_000
+MAX_FUTURE_COMPLETED_DAYS = 2
+MAX_DUPLICATE_EXTRA_RATIO = 0.05
+MAX_MISSING_PLAYER_RATIO = 0.001
+MAX_INVALID_WINNER_RATIO = 0.001
 
 
-def _payload(row: dict[str, Any]) -> dict[str, Any]:
-    value = row.get("provider_payload")
-    return value if isinstance(value, dict) else {}
+VALID_TOURS = {
+    "atp",
+    "wta",
+}
 
 
-def _provider_event_id(row: dict[str, Any]) -> str | None:
-    # Keep the same extraction logic as the existing data-quality guardrail.
+VALID_SURFACES = {
+    "hard",
+    "clay",
+    "grass",
+    "indoor_hard",
+    "carpet",
+    "unknown",
+}
+
+
+def _payload(
+    row: dict[str, Any],
+) -> dict[str, Any]:
+    value = row.get(
+        "provider_payload"
+    )
+
+    return (
+        value
+        if isinstance(value, dict)
+        else {}
+    )
+
+
+def _provider_event_id(
+    row: dict[str, Any],
+) -> str | None:
     payload = _payload(row)
 
     for key in (
@@ -29,351 +58,892 @@ def _provider_event_id(row: dict[str, Any]) -> str | None:
         "eventId",
     ):
         value = payload.get(key)
-        if value not in (None, ""):
+
+        if value not in (
+            None,
+            "",
+        ):
             return str(value)
 
-    event = payload.get("event")
+    event = payload.get(
+        "event"
+    )
+
     if isinstance(event, dict):
-        value = event.get("id")
-        if value not in (None, ""):
+        value = event.get(
+            "id"
+        )
+
+        if value not in (
+            None,
+            "",
+        ):
             return str(value)
 
-    value = payload.get("id")
-    if value not in (None, ""):
+    value = payload.get(
+        "id"
+    )
+
+    if value not in (
+        None,
+        "",
+    ):
         return str(value)
 
     return None
 
 
-def _environment_present(row: dict[str, Any]) -> bool:
-    env = _payload(row).get("_tbt_environment")
-    return isinstance(env, dict) and bool(env)
+def _environment(
+    row: dict[str, Any],
+) -> dict[str, Any]:
+    payload = _payload(row)
+
+    value = payload.get(
+        "_tbt_environment"
+    )
+
+    return (
+        value
+        if isinstance(value, dict)
+        else {}
+    )
 
 
-def _same_real_match(rows: list[dict[str, Any]]) -> bool:
-    """
-    Conservative signature:
-    - same tour
-    - same calendar date
-    - same unordered player pair
+def _weather_present(
+    env: dict[str, Any],
+) -> bool:
+    weather = env.get(
+        "weather"
+    )
 
-    Tournament ID is deliberately excluded so we can detect the exact
-    duplicate pattern where one real provider event was stored under
-    multiple tournament mappings.
-    """
-    signatures: set[tuple[str, str, tuple[str, str]]] = set()
+    return (
+        isinstance(weather, dict)
+        and bool(weather)
+    )
 
-    for row in rows:
-        tour = str(row.get("tour") or "").lower()
 
-        scheduled_at = str(row.get("scheduled_at") or "")
-        event_date = scheduled_at[:10]
+def _parse_dt(
+    value: Any,
+) -> datetime | None:
+    if value in (
+        None,
+        "",
+    ):
+        return None
 
-        player1 = str(row.get("player1_id") or "")
-        player2 = str(row.get("player2_id") or "")
-        players = tuple(sorted((player1, player2)))
+    try:
+        text = str(value).replace(
+            "Z",
+            "+00:00",
+        )
 
-        signatures.add(
-            (
-                tour,
-                event_date,
-                players,
+        parsed = (
+            datetime.fromisoformat(
+                text
             )
         )
 
-    return len(signatures) == 1
+        if (
+            parsed.tzinfo
+            is None
+        ):
+            parsed = (
+                parsed.replace(
+                    tzinfo=timezone.utc
+                )
+            )
+
+        return parsed.astimezone(
+            timezone.utc
+        )
+
+    except (
+        TypeError,
+        ValueError,
+    ):
+        return None
 
 
-def _compact_row(row: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "match_id": row.get("match_id"),
-        "provider_event_id": _provider_event_id(row),
-        "scheduled_at": row.get("scheduled_at"),
-        "tour": row.get("tour"),
-        "tournament": row.get("tournament"),
-        "tournament_id": row.get("tournament_id"),
-        "tournament_level": row.get("tournament_level"),
-        "round_name": row.get("round_name"),
-        "player1_id": row.get("player1_id"),
-        "player1_name": row.get("player1_name"),
-        "player2_id": row.get("player2_id"),
-        "player2_name": row.get("player2_name"),
-        "winner_id": row.get("winner_id"),
-        "status": row.get("status"),
-        "created_at": row.get("created_at"),
-        "updated_at": row.get("updated_at"),
-        "has_environment": _environment_present(row),
-    }
+def _ratio(
+    numerator: int,
+    denominator: int,
+) -> float:
+    if denominator <= 0:
+        return 0.0
+
+    return (
+        numerator
+        / denominator
+    )
 
 
 def main() -> None:
-    repo = SupabaseRepository()
+    repo = (
+        SupabaseRepository()
+    )
 
-    # One Supabase read only.
-    # No RapidAPI.
-    # No Open-Meteo.
-    # No INSERT / UPDATE / DELETE.
+    now = datetime.now(
+        timezone.utc
+    )
+
     all_rows = repo.select_all(
         "matches",
         order="scheduled_at.asc",
     )
 
-    completed_rows = [
+    raw_completed = [
         row
         for row in all_rows
-        if row.get("winner_id") not in (None, "")
+        if row.get(
+            "winner_id"
+        )
+        not in (
+            None,
+            "",
+        )
     ]
+
+    canonical_completed = (
+        repo.get_completed_matches()
+    )
+
+    warnings: list[str] = []
+    failures: list[str] = []
+
+    # -------------------------------------------------
+    # Core row counts
+    # -------------------------------------------------
+
+    total_rows = len(
+        all_rows
+    )
+
+    raw_completed_count = len(
+        raw_completed
+    )
+
+    canonical_completed_count = len(
+        canonical_completed
+    )
+
+    if (
+        canonical_completed_count
+        < MIN_CANONICAL_COMPLETED
+    ):
+        failures.append(
+            "Canonical completed history "
+            f"too small: "
+            f"{canonical_completed_count} "
+            f"< {MIN_CANONICAL_COMPLETED}"
+        )
+
+    # -------------------------------------------------
+    # Missing IDs
+    # -------------------------------------------------
+
+    missing_player1 = sum(
+        1
+        for row in raw_completed
+        if row.get(
+            "player1_id"
+        )
+        in (
+            None,
+            "",
+        )
+    )
+
+    missing_player2 = sum(
+        1
+        for row in raw_completed
+        if row.get(
+            "player2_id"
+        )
+        in (
+            None,
+            "",
+        )
+    )
+
+    missing_player_any = sum(
+        1
+        for row in raw_completed
+        if (
+            row.get(
+                "player1_id"
+            )
+            in (
+                None,
+                "",
+            )
+            or row.get(
+                "player2_id"
+            )
+            in (
+                None,
+                "",
+            )
+        )
+    )
+
+    missing_player_ratio = (
+        _ratio(
+            missing_player_any,
+            raw_completed_count,
+        )
+    )
+
+    if (
+        missing_player_ratio
+        > MAX_MISSING_PLAYER_RATIO
+    ):
+        failures.append(
+            "Too many completed matches "
+            "with missing player IDs: "
+            f"{missing_player_any}/"
+            f"{raw_completed_count} "
+            f"({missing_player_ratio:.4%})"
+        )
+
+    # -------------------------------------------------
+    # Winner sanity
+    # -------------------------------------------------
+
+    invalid_winner_rows = []
+
+    for row in raw_completed:
+        winner_id = str(
+            row.get(
+                "winner_id"
+            )
+            or ""
+        )
+
+        player1_id = str(
+            row.get(
+                "player1_id"
+            )
+            or ""
+        )
+
+        player2_id = str(
+            row.get(
+                "player2_id"
+            )
+            or ""
+        )
+
+        if (
+            winner_id
+            and winner_id
+            not in {
+                player1_id,
+                player2_id,
+            }
+        ):
+            if (
+                len(
+                    invalid_winner_rows
+                )
+                < 20
+            ):
+                invalid_winner_rows.append(
+                    {
+                        "match_id": row.get(
+                            "match_id"
+                        ),
+                        "winner_id": (
+                            winner_id
+                        ),
+                        "player1_id": (
+                            player1_id
+                        ),
+                        "player2_id": (
+                            player2_id
+                        ),
+                    }
+                )
+
+    invalid_winner_count = len(
+        [
+            row
+            for row in raw_completed
+            if (
+                str(
+                    row.get(
+                        "winner_id"
+                    )
+                    or ""
+                )
+                not in {
+                    str(
+                        row.get(
+                            "player1_id"
+                        )
+                        or ""
+                    ),
+                    str(
+                        row.get(
+                            "player2_id"
+                        )
+                        or ""
+                    ),
+                }
+            )
+        ]
+    )
+
+    invalid_winner_ratio = (
+        _ratio(
+            invalid_winner_count,
+            raw_completed_count,
+        )
+    )
+
+    if (
+        invalid_winner_ratio
+        > MAX_INVALID_WINNER_RATIO
+    ):
+        failures.append(
+            "Too many invalid winner IDs: "
+            f"{invalid_winner_count}/"
+            f"{raw_completed_count} "
+            f"({invalid_winner_ratio:.4%})"
+        )
+
+    # -------------------------------------------------
+    # Duplicate provider event IDs
+    # -------------------------------------------------
 
     provider_groups: dict[
         str,
         list[dict[str, Any]],
     ] = defaultdict(list)
 
-    rows_without_provider_event_id = 0
+    for row in raw_completed:
+        provider_id = (
+            _provider_event_id(
+                row
+            )
+        )
 
-    for row in completed_rows:
-        provider_id = _provider_event_id(row)
-
-        if provider_id is None:
-            rows_without_provider_event_id += 1
-            continue
-
-        provider_groups[provider_id].append(row)
+        if provider_id:
+            provider_groups[
+                provider_id
+            ].append(
+                row
+            )
 
     duplicate_groups = {
         provider_id: rows
-        for provider_id, rows in provider_groups.items()
+        for (
+            provider_id,
+            rows,
+        )
+        in provider_groups.items()
         if len(rows) > 1
     }
 
     duplicate_rows_total = sum(
         len(rows)
-        for rows in duplicate_groups.values()
+        for rows
+        in duplicate_groups.values()
     )
 
-    extra_rows = sum(
+    duplicate_extra_rows = sum(
         len(rows) - 1
-        for rows in duplicate_groups.values()
+        for rows
+        in duplicate_groups.values()
     )
 
-    extra_ratio = (
-        extra_rows / len(completed_rows)
-        if completed_rows
-        else 0.0
+    duplicate_extra_ratio = (
+        _ratio(
+            duplicate_extra_rows,
+            raw_completed_count,
+        )
     )
 
-    group_size_distribution = Counter(
-        len(rows)
-        for rows in duplicate_groups.values()
+    if (
+        duplicate_extra_ratio
+        > MAX_DUPLICATE_EXTRA_RATIO
+    ):
+        failures.append(
+            "Raw duplicate provider-event "
+            "ratio too high: "
+            f"{duplicate_extra_ratio:.4%}"
+        )
+
+    elif (
+        duplicate_extra_rows
+        > 0
+    ):
+        warnings.append(
+            "Raw provider-event duplicates "
+            f"exist: {duplicate_extra_rows} "
+            "extra rows. This is acceptable "
+            "only while canonical repository "
+            "dedupe removes them."
+        )
+
+    duplicate_examples = []
+
+    for (
+        provider_id,
+        rows,
+    ) in list(
+        duplicate_groups.items()
+    )[:10]:
+        duplicate_examples.append(
+            {
+                "provider_event_id": (
+                    provider_id
+                ),
+                "count": len(rows),
+                "match_ids": [
+                    row.get(
+                        "match_id"
+                    )
+                    for row
+                    in rows
+                ],
+            }
+        )
+
+    # -------------------------------------------------
+    # Date sanity
+    # -------------------------------------------------
+
+    invalid_dates = []
+    future_completed = []
+
+    future_limit = (
+        now
+        + timedelta(
+            days=MAX_FUTURE_COMPLETED_DAYS
+        )
     )
 
-    duplicate_rows_by_year: Counter[str] = Counter()
-    duplicate_rows_by_tour: Counter[str] = Counter()
-
-    same_real_match_groups = 0
-    conflicting_provider_id_groups = 0
-
-    groups_with_multiple_tournament_ids = 0
-    groups_with_multiple_match_ids = 0
-
-    detailed_groups: list[dict[str, Any]] = []
-
-    sorted_groups = sorted(
-        duplicate_groups.items(),
-        key=lambda item: (
-            -len(item[1]),
-            item[0],
-        ),
-    )
-
-    for provider_id, rows in sorted_groups:
-        same_real_match = _same_real_match(rows)
-
-        if same_real_match:
-            same_real_match_groups += 1
-        else:
-            conflicting_provider_id_groups += 1
-
-        match_ids = {
-            str(row.get("match_id") or "")
-            for row in rows
-        }
-
-        tournament_ids = {
-            str(row.get("tournament_id") or "")
-            for row in rows
-        }
-
-        tournament_names = {
-            str(row.get("tournament") or "")
-            for row in rows
-        }
-
-        round_names = {
-            str(row.get("round_name") or "")
-            for row in rows
-        }
-
-        if len(match_ids) > 1:
-            groups_with_multiple_match_ids += 1
-
-        if len(tournament_ids) > 1:
-            groups_with_multiple_tournament_ids += 1
-
-        for row in rows:
-            tour = str(
-                row.get("tour")
-                or "unknown"
-            ).lower()
-
-            duplicate_rows_by_tour[tour] += 1
-
-            scheduled_at = str(
-                row.get("scheduled_at")
-                or ""
+    for row in raw_completed:
+        scheduled = _parse_dt(
+            row.get(
+                "scheduled_at"
             )
+        )
 
+        if scheduled is None:
             if (
-                len(scheduled_at) >= 4
-                and scheduled_at[:4].isdigit()
+                len(
+                    invalid_dates
+                )
+                < 20
             ):
-                duplicate_rows_by_year[
-                    scheduled_at[:4]
-                ] += 1
+                invalid_dates.append(
+                    row.get(
+                        "match_id"
+                    )
+                )
 
-        if len(detailed_groups) < TOP_GROUPS:
-            detailed_groups.append(
-                {
-                    "provider_event_id": provider_id,
-                    "count": len(rows),
-                    "same_real_match_signature": (
-                        same_real_match
-                    ),
-                    "distinct_match_ids": len(
-                        match_ids
-                    ),
-                    "distinct_tournament_ids": len(
-                        tournament_ids
-                    ),
-                    "match_ids": sorted(
-                        match_ids
-                    ),
-                    "tournament_ids": sorted(
-                        tournament_ids
-                    ),
-                    "tournament_names": sorted(
-                        tournament_names
-                    ),
-                    "round_names": sorted(
-                        round_names
-                    ),
-                    "rows": [
-                        _compact_row(row)
-                        for row in rows
-                    ],
-                }
+            continue
+
+        if (
+            scheduled
+            > future_limit
+        ):
+            if (
+                len(
+                    future_completed
+                )
+                < 20
+            ):
+                future_completed.append(
+                    {
+                        "match_id": row.get(
+                            "match_id"
+                        ),
+                        "scheduled_at": (
+                            scheduled.isoformat()
+                        ),
+                    }
+                )
+
+    if invalid_dates:
+        failures.append(
+            "Completed rows with invalid "
+            f"scheduled_at: "
+            f"{len(invalid_dates)}+"
+        )
+
+    if future_completed:
+        failures.append(
+            "Completed matches dated more "
+            "than "
+            f"{MAX_FUTURE_COMPLETED_DAYS} "
+            "days in the future: "
+            f"{len(future_completed)}+"
+        )
+
+    # -------------------------------------------------
+    # Tour sanity
+    # -------------------------------------------------
+
+    tour_counter = Counter(
+        str(
+            row.get(
+                "tour"
             )
+            or ""
+        ).lower()
+        for row
+        in raw_completed
+    )
+
+    invalid_tours = {
+        tour: count
+        for (
+            tour,
+            count,
+        )
+        in tour_counter.items()
+        if tour
+        not in VALID_TOURS
+    }
+
+    if invalid_tours:
+        warnings.append(
+            "Unexpected tour values exist: "
+            f"{invalid_tours}"
+        )
+
+    # -------------------------------------------------
+    # Surface sanity
+    # -------------------------------------------------
+
+    surface_counter = Counter(
+        str(
+            row.get(
+                "surface"
+            )
+            or "unknown"
+        ).lower()
+        for row
+        in raw_completed
+    )
+
+    invalid_surfaces = {
+        surface: count
+        for (
+            surface,
+            count,
+        )
+        in surface_counter.items()
+        if surface
+        not in VALID_SURFACES
+    }
+
+    if invalid_surfaces:
+        warnings.append(
+            "Unexpected surface values exist: "
+            f"{invalid_surfaces}"
+        )
+
+    # -------------------------------------------------
+    # Environment coverage - raw
+    # -------------------------------------------------
+
+    raw_env_count = 0
+    raw_weather_count = 0
+    raw_resolved_count = 0
+
+    for row in raw_completed:
+        env = _environment(
+            row
+        )
+
+        if not env:
+            continue
+
+        raw_env_count += 1
+
+        if (
+            env.get(
+                "venue_resolved"
+            )
+            is True
+        ):
+            raw_resolved_count += 1
+
+        if _weather_present(
+            env
+        ):
+            raw_weather_count += 1
+
+    # -------------------------------------------------
+    # Environment coverage - canonical
+    # -------------------------------------------------
+
+    canonical_env_count = 0
+    canonical_weather_count = 0
+    canonical_resolved_count = 0
+
+    for match in canonical_completed:
+        payload = (
+            match.provider_payload
+            if isinstance(
+                match.provider_payload,
+                dict,
+            )
+            else {}
+        )
+
+        env = payload.get(
+            "_tbt_environment"
+        )
+
+        if not isinstance(
+            env,
+            dict,
+        ):
+            continue
+
+        if not env:
+            continue
+
+        canonical_env_count += 1
+
+        if (
+            env.get(
+                "venue_resolved"
+            )
+            is True
+        ):
+            canonical_resolved_count += 1
+
+        if _weather_present(
+            env
+        ):
+            canonical_weather_count += 1
+
+    canonical_env_coverage = (
+        _ratio(
+            canonical_env_count,
+            canonical_completed_count,
+        )
+    )
+
+    canonical_weather_coverage = (
+        _ratio(
+            canonical_weather_count,
+            canonical_completed_count,
+        )
+    )
+
+    if (
+        canonical_env_coverage
+        < 0.70
+    ):
+        warnings.append(
+            "Canonical environment coverage "
+            "is below challenger threshold: "
+            f"{canonical_env_coverage:.2%}"
+        )
+
+    # -------------------------------------------------
+    # Canonical reduction sanity
+    # -------------------------------------------------
+
+    canonical_reduction = (
+        raw_completed_count
+        - canonical_completed_count
+    )
+
+    if (
+        canonical_reduction
+        < 0
+    ):
+        failures.append(
+            "Canonical completed count is "
+            "larger than raw completed count."
+        )
+
+    # -------------------------------------------------
+    # Final report
+    # -------------------------------------------------
+
+    status = (
+        "FAIL"
+        if failures
+        else (
+            "WARN"
+            if warnings
+            else "PASS"
+        )
+    )
 
     report = {
-        "status": "AUDIT_ONLY",
-        "read_only": True,
-        "description": (
-            "Provider-event duplicate diagnostics. "
-            "No database writes and no external "
-            "TennisApi/Open-Meteo calls."
+        "status": status,
+        "generated_at": (
+            now.isoformat()
         ),
+        "thresholds": {
+            "min_canonical_completed": (
+                MIN_CANONICAL_COMPLETED
+            ),
+            "max_future_completed_days": (
+                MAX_FUTURE_COMPLETED_DAYS
+            ),
+            "max_duplicate_extra_ratio": (
+                MAX_DUPLICATE_EXTRA_RATIO
+            ),
+            "max_missing_player_ratio": (
+                MAX_MISSING_PLAYER_RATIO
+            ),
+            "max_invalid_winner_ratio": (
+                MAX_INVALID_WINNER_RATIO
+            ),
+            "environment_challenger_threshold": (
+                0.70
+            ),
+        },
         "counts": {
-            "all_match_rows": len(
-                all_rows
+            "all_rows": (
+                total_rows
             ),
-            "completed_rows": len(
-                completed_rows
+            "raw_completed": (
+                raw_completed_count
             ),
-            "completed_with_provider_event_id": (
-                len(completed_rows)
-                - rows_without_provider_event_id
+            "canonical_completed": (
+                canonical_completed_count
             ),
-            "completed_without_provider_event_id": (
-                rows_without_provider_event_id
+            "canonical_reduction": (
+                canonical_reduction
+            ),
+        },
+        "players": {
+            "missing_player1_id": (
+                missing_player1
+            ),
+            "missing_player2_id": (
+                missing_player2
+            ),
+            "missing_any_player_id": (
+                missing_player_any
+            ),
+            "missing_ratio": (
+                missing_player_ratio
+            ),
+        },
+        "winners": {
+            "invalid_winner_count": (
+                invalid_winner_count
+            ),
+            "invalid_winner_ratio": (
+                invalid_winner_ratio
+            ),
+            "examples": (
+                invalid_winner_rows
             ),
         },
         "duplicates": {
-            "provider_event_duplicate_groups": len(
-                duplicate_groups
+            "provider_event_duplicate_groups": (
+                len(
+                    duplicate_groups
+                )
             ),
             "duplicate_rows_total": (
                 duplicate_rows_total
             ),
-            "extra_rows_if_deduped": (
-                extra_rows
+            "extra_rows": (
+                duplicate_extra_rows
             ),
-            "extra_row_ratio": (
-                extra_ratio
+            "extra_ratio": (
+                duplicate_extra_ratio
             ),
-            "extra_row_ratio_percent": (
-                extra_ratio * 100.0
+            "examples": (
+                duplicate_examples
             ),
-            "group_size_distribution": {
-                str(size): count
-                for size, count
-                in sorted(
-                    group_size_distribution.items()
-                )
+        },
+        "dates": {
+            "invalid_scheduled_at_examples": (
+                invalid_dates
+            ),
+            "future_completed_examples": (
+                future_completed
+            ),
+        },
+        "tour_counts": dict(
+            sorted(
+                tour_counter.items()
+            )
+        ),
+        "unexpected_tours": (
+            invalid_tours
+        ),
+        "surface_counts": dict(
+            sorted(
+                surface_counter.items()
+            )
+        ),
+        "unexpected_surfaces": (
+            invalid_surfaces
+        ),
+        "environment": {
+            "raw": {
+                "with_environment": (
+                    raw_env_count
+                ),
+                "venue_resolved": (
+                    raw_resolved_count
+                ),
+                "with_weather": (
+                    raw_weather_count
+                ),
+                "environment_coverage": (
+                    _ratio(
+                        raw_env_count,
+                        raw_completed_count,
+                    )
+                ),
+                "weather_coverage": (
+                    _ratio(
+                        raw_weather_count,
+                        raw_completed_count,
+                    )
+                ),
+            },
+            "canonical": {
+                "with_environment": (
+                    canonical_env_count
+                ),
+                "venue_resolved": (
+                    canonical_resolved_count
+                ),
+                "with_weather": (
+                    canonical_weather_count
+                ),
+                "environment_coverage": (
+                    canonical_env_coverage
+                ),
+                "weather_coverage": (
+                    canonical_weather_coverage
+                ),
             },
         },
-        "classification": {
-            "same_real_match_signature_groups": (
-                same_real_match_groups
-            ),
-            "conflicting_provider_id_groups": (
-                conflicting_provider_id_groups
-            ),
-            "groups_with_multiple_match_ids": (
-                groups_with_multiple_match_ids
-            ),
-            "groups_with_multiple_tournament_ids": (
-                groups_with_multiple_tournament_ids
-            ),
-        },
-        "duplicate_rows_by_tour": dict(
-            sorted(
-                duplicate_rows_by_tour.items()
-            )
-        ),
-        "duplicate_rows_by_year": dict(
-            sorted(
-                duplicate_rows_by_year.items()
-            )
-        ),
-        "top_duplicate_groups": (
-            detailed_groups
-        ),
-        "diagnostic_notes": {
-            "same_real_match_signature_groups": (
-                "Same provider event ID, same tour/date/player pair. "
-                "These are very likely duplicate representations "
-                "of one real tennis match."
-            ),
-            "multiple_tournament_ids": (
-                "If this number is high, tournament mapping changes "
-                "are probably creating different match_id values "
-                "for the same provider event."
-            ),
-            "conflicting_provider_id_groups": (
-                "Same provider event ID attached to different "
-                "tour/date/player signatures. These require manual "
-                "inspection because provider ID extraction or "
-                "provider payload may be wrong."
-            ),
-        },
+        "warnings": warnings,
+        "failures": failures,
     }
 
-    REPORT_PATH.parent.mkdir(
+    report_path = (
+        ROOT
+        / "reports"
+        / "data_quality_guardrail.json"
+    )
+
+    report_path.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    REPORT_PATH.write_text(
+    report_path.write_text(
         json.dumps(
             report,
             indent=2,
@@ -392,19 +962,10 @@ def main() -> None:
         )
     )
 
-    print()
-    print(
-        f"Report written to: "
-        f"{REPORT_PATH}"
-    )
-    print(
-        "READ ONLY: no DB rows were modified."
-    )
-
-    # Important:
-    # duplicates are what we are investigating,
-    # therefore this diagnostic workflow must not fail
-    # merely because duplicates exist.
+    if failures:
+        raise SystemExit(
+            "Data quality guardrail FAILED"
+        )
 
 
 if __name__ == "__main__":
