@@ -6,114 +6,55 @@ on:
       start_year:
         description: "First historical year"
         required: true
-        default: "2026"
+        default: "2021"
+
       end_year:
         description: "Last historical year"
         required: true
-        default: "2026"
-
-permissions:
-  contents: read
+        default: "2023"
 
 jobs:
-  bootstrap:
-    name: Download and store historical tennis matches
+  bootstrap-history:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-
-    env:
-      PYTHONPATH: api
-      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-      RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
-      RAPIDAPI_BASE_URL: https://tennisapi1.p.rapidapi.com
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-      TGBOT: ${{ secrets.TGBOT }}
-      TGCHID: ${{ secrets.TGCHID }}
+    timeout-minutes: 120
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-          cache: pip
-          cache-dependency-path: api/requirements.txt
+          python-version: "3.11"
 
       - name: Install dependencies
-        shell: bash
         run: |
-          set -euo pipefail
           python -m pip install --upgrade pip
-          pip install -r api/requirements.txt
+          pip install -r api/requirements-train.txt
 
-      - name: Validate configuration
-        shell: bash
+      - name: Compile
         run: |
-          set -euo pipefail
-
-          missing=0
-          for name in RAPIDAPI_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
-            if [ -z "${!name:-}" ]; then
-              echo "::error::Missing GitHub secret ${name}"
-              missing=1
-            fi
-          done
-
-          if [ "$missing" -ne 0 ]; then
-            exit 1
-          fi
-
-          echo "Configuration OK"
-          echo "RapidAPI host: ${RAPIDAPI_HOST}"
-
-      - name: Verify confirmed TennisApi calendar flow
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # Provider explicitly confirmed this date/flow. One request gives us an
-          # immediate fail-fast check without burning a long bootstrap worth of quota.
-          HTTP_CODE=$(curl \
-            --silent \
-            --show-error \
-            --output /tmp/tennis-calendar.json \
-            --write-out "%{http_code}" \
-            --request GET \
-            --url "${RAPIDAPI_BASE_URL}/api/tennis/calendar/4/7/2026/categories" \
-            --header "X-RapidAPI-Key: ${RAPIDAPI_KEY}" \
-            --header "X-RapidAPI-Host: ${RAPIDAPI_HOST}" \
-            --header "Accept: application/json")
-
-          echo "Calendar HTTP status: ${HTTP_CODE}"
-          if [ "${HTTP_CODE}" -ne 200 ]; then
-            echo "::error::Confirmed TennisApi calendar endpoint failed with HTTP ${HTTP_CODE}"
-            cat /tmp/tennis-calendar.json || true
-            exit 1
-          fi
-
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          payload = json.loads(Path('/tmp/tennis-calendar.json').read_text())
-          categories = payload.get('categories', []) if isinstance(payload, dict) else []
-          print(f"Active categories on provider test date: {len(categories)}")
-          if not categories:
-              raise SystemExit('Provider calendar returned no categories on confirmed test date')
-          PY
+          python -m compileall -q api scripts
 
       - name: Download and store historical tennis matches
-        shell: bash
         env:
+          PYTHONPATH: api
+
+          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
           START_YEAR: ${{ inputs.start_year }}
           END_YEAR: ${{ inputs.end_year }}
+
         run: |
           set -euo pipefail
+
           echo "Bootstrap period: ${START_YEAR}-${END_YEAR}"
           echo "Bulk bootstrap uses real event results only; no odds/statistics enrichment."
+
           python scripts/bootstrap_history.py \
             --start-year "${START_YEAR}" \
             --end-year "${END_YEAR}"
