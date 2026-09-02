@@ -1,23 +1,11 @@
 from __future__ import annotations
 
-"""Free environment/travel enrichment for TBT.
-
-This module deliberately does NOT alter model probabilities by itself. It collects
-real, timestamped external covariates that can be joined into the feature engine
-and accepted only after chronological walk-forward validation.
-
-Data source: Open-Meteo public APIs (geocoding, elevation, forecast/archive).
-No API key is required.
-"""
-
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
-from math import asin, cos, radians, sin, sqrt
 from typing import Any
 
 import httpx
-
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
@@ -50,52 +38,51 @@ class WeatherAtMatch:
 
 class OpenMeteoClient:
     def __init__(self, timeout_seconds: float = 20.0) -> None:
-        self.client = httpx.Client(timeout=timeout_seconds)
+        self.client = httpx.Client(
+            timeout=timeout_seconds,
+            headers={"User-Agent": "TBT environment-enrichment"},
+        )
 
     def close(self) -> None:
         self.client.close()
 
-    @lru_cache(maxsize=512)
+    @lru_cache(maxsize=2048)
     def geocode(self, query: str) -> Venue | None:
         query = " ".join(str(query or "").split())
         if not query:
             return None
+
         response = self.client.get(
             GEOCODE_URL,
-            params={"name": query, "count": 1, "language": "en", "format": "json"},
+            params={"name": query, "count": 5, "language": "en", "format": "json"},
         )
         response.raise_for_status()
         rows = response.json().get("results") or []
         if not rows:
-            # Tournament labels often start with the event name. Retry the
-            # location-like suffix after the first comma.
-            if "," in query:
-                shorter = query.split(",", 1)[1].strip()
-                if shorter and shorter != query:
-                    return self.geocode(shorter)
             return None
 
         row = rows[0]
-        lat = float(row["latitude"])
-        lon = float(row["longitude"])
+        latitude = float(row["latitude"])
+        longitude = float(row["longitude"])
         elevation = row.get("elevation")
         if elevation is None:
-            elevation = self.elevation(lat, lon)
+            elevation = self.elevation(latitude, longitude)
 
         return Venue(
             query=query,
             name=str(row.get("name") or query),
-            latitude=lat,
-            longitude=lon,
+            latitude=latitude,
+            longitude=longitude,
             elevation_m=float(elevation) if elevation is not None else None,
             timezone=row.get("timezone"),
             country=row.get("country"),
         )
 
-    @lru_cache(maxsize=2048)
+    @lru_cache(maxsize=4096)
     def elevation(self, latitude: float, longitude: float) -> float | None:
         response = self.client.get(
-            ELEVATION_URL, params={"latitude": latitude, "longitude": longitude}
+            ELEVATION_URL,
+            params={"latitude": latitude, "longitude": longitude},
         )
         response.raise_for_status()
         values = response.json().get("elevation")
@@ -106,11 +93,20 @@ class OpenMeteoClient:
                 return None
         return None
 
-    def weather_at(self, venue: Venue, scheduled_at: datetime) -> WeatherAtMatch:
-        scheduled_at = scheduled_at.astimezone(timezone.utc)
-        day = scheduled_at.date().isoformat()
-        now_day = datetime.now(timezone.utc).date()
-        base_url = ARCHIVE_URL if scheduled_at.date() < now_day else FORECAST_URL
+    @lru_cache(maxsize=32768)
+    def _weather_hour(
+        self,
+        latitude: float,
+        longitude: float,
+        hour_utc_iso: str,
+    ) -> WeatherAtMatch:
+        scheduled = datetime.fromisoformat(hour_utc_iso).astimezone(timezone.utc)
+        day = scheduled.date().isoformat()
+        base_url = (
+            ARCHIVE_URL
+            if scheduled.date() < datetime.now(timezone.utc).date()
+            else FORECAST_URL
+        )
 
         hourly = ",".join(
             [
@@ -126,8 +122,8 @@ class OpenMeteoClient:
         response = self.client.get(
             base_url,
             params={
-                "latitude": venue.latitude,
-                "longitude": venue.longitude,
+                "latitude": latitude,
+                "longitude": longitude,
                 "start_date": day,
                 "end_date": day,
                 "hourly": hourly,
@@ -137,21 +133,20 @@ class OpenMeteoClient:
         response.raise_for_status()
         data = response.json().get("hourly") or {}
         times = data.get("time") or []
-        if not times:
-            return WeatherAtMatch(None, None, None, None, None, None, None, None)
+        target = scheduled.replace(minute=0, second=0, microsecond=0)
 
-        target = scheduled_at.replace(minute=0, second=0, microsecond=0)
-        parsed = []
+        candidates: list[tuple[float, int, datetime]] = []
         for idx, value in enumerate(times):
             try:
                 dt = datetime.fromisoformat(str(value)).replace(tzinfo=timezone.utc)
-                parsed.append((abs((dt - target).total_seconds()), idx, dt))
+                candidates.append((abs((dt - target).total_seconds()), idx, dt))
             except ValueError:
                 continue
-        if not parsed:
+
+        if not candidates:
             return WeatherAtMatch(None, None, None, None, None, None, None, None)
 
-        _, idx, source_time = min(parsed)
+        _, idx, source_time = min(candidates)
 
         def num(key: str) -> float | None:
             arr = data.get(key) or []
@@ -174,31 +169,106 @@ class OpenMeteoClient:
             source_time_utc=source_time.isoformat(),
         )
 
+    def weather_at(self, venue: Venue, scheduled_at: datetime) -> WeatherAtMatch:
+        hour = scheduled_at.astimezone(timezone.utc).replace(
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        return self._weather_hour(
+            round(venue.latitude, 5),
+            round(venue.longitude, 5),
+            hour.isoformat(),
+        )
 
-def haversine_km(a: Venue, b: Venue) -> float:
-    radius_km = 6371.0088
-    lat1, lon1, lat2, lon2 = map(
-        radians, [a.latitude, a.longitude, b.latitude, b.longitude]
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def location_candidates(
+    provider_payload: dict[str, Any],
+    tournament: str = "",
+) -> list[str]:
+    """Build factual venue queries from provider data; never invent a city."""
+
+    raw = _as_dict(provider_payload)
+    tournament_obj = _as_dict(raw.get("tournament"))
+    unique = _as_dict(tournament_obj.get("uniqueTournament"))
+    venue = _as_dict(raw.get("venue"))
+    country = _as_dict(tournament_obj.get("country")) or _as_dict(unique.get("country"))
+
+    candidates: list[str] = []
+
+    def add(value: Any) -> None:
+        text = " ".join(str(value or "").split()).strip(" ,")
+        if text and text.lower() not in {item.lower() for item in candidates}:
+            candidates.append(text)
+
+    venue_name = venue.get("name") or venue.get("city")
+    venue_city = venue.get("city")
+    venue_country = _as_dict(venue.get("country")).get("name") or venue.get("countryName")
+    if venue_city and venue_country:
+        add(f"{venue_city}, {venue_country}")
+    if venue_name and venue_country:
+        add(f"{venue_name}, {venue_country}")
+    add(venue_name)
+
+    city = (
+        tournament_obj.get("city")
+        or unique.get("city")
+        or raw.get("city")
+        or raw.get("venueCity")
     )
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    h = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-    return 2 * radius_km * asin(sqrt(h))
+    country_name = (
+        country.get("name")
+        or raw.get("countryName")
+        or _as_dict(raw.get("country")).get("name")
+    )
+    if city and country_name:
+        add(f"{city}, {country_name}")
+    add(city)
+
+    add(unique.get("name"))
+    add(tournament_obj.get("name"))
+    add(tournament)
+    return candidates
+
+
+def resolve_match_venue(
+    client: OpenMeteoClient,
+    provider_payload: dict[str, Any],
+    tournament: str,
+) -> tuple[Venue | None, str | None]:
+    for query in location_candidates(provider_payload, tournament):
+        venue = client.geocode(query)
+        if venue is not None:
+            return venue, query
+    return None, None
 
 
 def environment_payload(
     client: OpenMeteoClient,
-    tournament_location: str,
+    provider_payload: dict[str, Any],
+    tournament: str,
     scheduled_at: datetime,
 ) -> dict[str, Any]:
-    venue = client.geocode(tournament_location)
+    venue, query = resolve_match_venue(client, provider_payload, tournament)
     if venue is None:
-        return {"venue_resolved": False, "query": tournament_location}
+        return {
+            "venue_resolved": False,
+            "location_query": None,
+            "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
+            "source": "open-meteo",
+        }
 
     weather = client.weather_at(venue, scheduled_at)
     return {
         "venue_resolved": True,
+        "location_query": query,
         "venue": asdict(venue),
         "weather": asdict(weather),
         "match_hour_utc": scheduled_at.astimezone(timezone.utc).hour,
+        "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
+        "source": "open-meteo",
     }
