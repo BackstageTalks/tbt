@@ -32,8 +32,12 @@ class RapidTennisClient:
     - home/away ordering.
 
     This allows an upcoming fixture and its later historical representation
-    to resolve to the same match_id while also preventing duplicate rows
-    caused by tournament remapping.
+    to resolve to the same match_id while preventing duplicate rows caused
+    by tournament remapping.
+
+    Historical ranking values are deliberately ignored unless a provider
+    guarantees point-in-time semantics. This avoids current-ranking leakage
+    into historical training data.
     """
 
     def __init__(self, cfg: Settings = settings) -> None:
@@ -108,7 +112,6 @@ class RapidTennisClient:
                             30.0,
                         )
                     )
-
                     continue
 
                 if response.status_code >= 500:
@@ -118,7 +121,6 @@ class RapidTennisClient:
                             15,
                         )
                     )
-
                     continue
 
                 response.raise_for_status()
@@ -960,10 +962,6 @@ class RapidTennisClient:
             }
         )
 
-        # Historical fallback for legacy winner-first archives only.
-        #
-        # Do NOT infer a winner from an upcoming fixture merely because
-        # player1 is present.
         if (
             historical
             and (
@@ -1122,6 +1120,13 @@ class RapidTennisClient:
             2,
         )
 
+        # Historical ranking snapshots from the provider are not trusted
+        # unless their point-in-time semantics are explicitly guaranteed.
+        # Dropping them prevents current-ranking leakage into old matches.
+        if historical:
+            p1_rank = None
+            p2_rank = None
+
         tournament_obj = first_present(
             raw,
             "tournament",
@@ -1197,7 +1202,9 @@ class RapidTennisClient:
                 "",
             )
         ):
-            surface_value = tournament_ground
+            surface_value = (
+                tournament_ground
+            )
 
         level_value: Any = (
             first_present(
@@ -1416,21 +1423,12 @@ class RapidTennisClient:
             )
         )
 
-        # Canonical ID:
+        # Canonical identity deliberately excludes provider event ID and
+        # tournament_id. Both were observed to differ across representations
+        # of the same real match.
         #
-        # DO NOT include:
-        # - provider event id:
-        #   upcoming and historical feeds may use different IDs.
-        #
-        # - tournament_id:
-        #   audit proved the same real match can be exposed under multiple
-        #   tournament mappings / IDs.
-        #
-        # - player ordering:
-        #   historical feeds can swap home/away or use winner-first ordering.
-        #
-        # This preserves settlement compatibility and prevents the duplicate
-        # pattern found in the database.
+        # Player order is sorted, so home/away or winner-first reordering
+        # does not alter identity.
         match_id = deterministic_id(
             [
                 tour.lower(),
