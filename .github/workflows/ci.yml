@@ -2,25 +2,41 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  test:
+  tests:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.11"
           cache: pip
-      - name: Install dependencies
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install test dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r api/requirements.txt pytest
+          pip install -r api/requirements-train.txt
+
       - name: Compile
-        run: python -m compileall -q api scripts
+        run: |
+          python -m compileall -q api scripts
+
       - name: Tests
         env:
           PYTHONPATH: api
-        run: pytest
+        run: |
+          pytest -q
