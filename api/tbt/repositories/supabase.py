@@ -164,6 +164,42 @@ class SupabaseRepository:
             provider_payload=row.get("provider_payload") or {},
         )
 
+    def get_matches_between(
+        self,
+        start: datetime,
+        end: datetime,
+        completed_only: bool = False,
+    ) -> list[MatchRecord]:
+        start_utc = start.astimezone(timezone.utc)
+        end_utc = end.astimezone(timezone.utc)
+        if end_utc <= start_utc:
+            return []
+
+        and_parts = [f"scheduled_at.lt.{end_utc.isoformat()}"]
+        if completed_only:
+            and_parts.append("winner_id.not.is.null")
+
+        rows = self.select_all(
+            "matches",
+            filters={
+                "scheduled_at": f"gte.{start_utc.isoformat()}",
+                "and": f"({','.join(and_parts)})",
+            },
+            order="scheduled_at.asc",
+        )
+        return [self._match_from_row(row) for row in rows]
+
+    def update_match_provider_payload(
+        self,
+        match_id: str,
+        provider_payload: dict[str, Any],
+    ) -> int:
+        return self.update(
+            "matches",
+            {"match_id": f"eq.{match_id}"},
+            {"provider_payload": provider_payload},
+        )
+
     def get_completed_matches(self, before: datetime | None = None) -> list[MatchRecord]:
         filters = {"winner_id": "not.is.null"}
         if before is not None:
