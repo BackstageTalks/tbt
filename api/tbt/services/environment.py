@@ -186,6 +186,66 @@ def _as_dict(value: Any) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+
+_GENERIC_TOURNAMENT_TOKENS = {
+    "atp", "wta", "men", "women", "mens", "womens", "qualifying", "qualification",
+    "singles", "doubles", "open", "grand slam",
+}
+
+# Aliases are only added after they are observed in real provider data and fail the
+# geocoder in their provider spelling. Keep this intentionally small and auditable.
+_LOCATION_ALIASES = {
+    "winston salem": "Winston-Salem",
+}
+
+
+def _clean_location_token(value: Any) -> str:
+    text = " ".join(str(value or "").replace("_", " ").split()).strip(" ,-()")
+    return text
+
+
+def _location_from_tournament_name(name: Any) -> list[str]:
+    """Extract explicit city/country text embedded in a tournament label.
+
+    Example: ``US Open, New York, USA, Qualifying`` -> ``New York, USA``.
+    This does not infer a venue; it only reuses location words present in provider data.
+    """
+    text = _clean_location_token(name)
+    if not text or "," not in text:
+        return []
+
+    parts = [_clean_location_token(p) for p in text.split(",")]
+    parts = [p for p in parts if p]
+    if len(parts) < 2:
+        return []
+
+    usable: list[str] = []
+    for idx, part in enumerate(parts):
+        low = part.lower()
+        if idx == 0 and ("open" in low or low in _GENERIC_TOURNAMENT_TOKENS):
+            continue
+        if low in _GENERIC_TOURNAMENT_TOKENS or "qualif" in low:
+            continue
+        usable.append(part)
+
+    if not usable:
+        return []
+
+    out: list[str] = []
+    # Prefer city + country when both are explicitly present.
+    if len(usable) >= 2:
+        out.append(f"{usable[0]}, {usable[1]}")
+    out.append(usable[0])
+    return out
+
+
+def _query_variants(query: str) -> list[str]:
+    variants = [query]
+    alias = _LOCATION_ALIASES.get(query.lower())
+    if alias and alias.lower() != query.lower():
+        variants.insert(0, alias)
+    return variants
+
 def location_candidates(
     provider_payload: dict[str, Any],
     tournament: str = "",
@@ -201,7 +261,7 @@ def location_candidates(
     candidates: list[str] = []
 
     def add(value: Any) -> None:
-        text = " ".join(str(value or "").split()).strip(" ,")
+        text = _clean_location_token(value)
         if text and text.lower() not in {item.lower() for item in candidates}:
             candidates.append(text)
 
@@ -229,6 +289,18 @@ def location_candidates(
         add(f"{city}, {country_name}")
     add(city)
 
+    # Many TennisApi rows omit venue/city fields but embed a real location in the
+    # tournament label. Extract only those explicit tokens before trying competition
+    # names such as "US Open, Men" which are not geocodable places.
+    for source_name in (
+        tournament_obj.get("name"),
+        tournament,
+        unique.get("name"),
+    ):
+        for parsed in _location_from_tournament_name(source_name):
+            add(parsed)
+
+    # Raw labels remain last-resort queries for place-named tournaments like Monterrey.
     add(unique.get("name"))
     add(tournament_obj.get("name"))
     add(tournament)
@@ -240,10 +312,11 @@ def resolve_match_venue(
     provider_payload: dict[str, Any],
     tournament: str,
 ) -> tuple[Venue | None, str | None]:
-    for query in location_candidates(provider_payload, tournament):
-        venue = client.geocode(query)
-        if venue is not None:
-            return venue, query
+    for raw_query in location_candidates(provider_payload, tournament):
+        for query in _query_variants(raw_query):
+            venue = client.geocode(query)
+            if venue is not None:
+                return venue, query
     return None, None
 
 
