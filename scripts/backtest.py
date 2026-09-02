@@ -7,7 +7,7 @@ from pathlib import Path
 from _bootstrap import ROOT
 from tbt.config import settings
 from tbt.repositories.supabase import SupabaseRepository
-from tbt.services.backtest import walk_forward_backtest
+from tbt.services.backtest_service import walk_forward_backtest
 
 
 def main() -> None:
