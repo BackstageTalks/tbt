@@ -24,22 +24,23 @@ logger = logging.getLogger(__name__)
 
 
 class RapidTennisClient:
-    """Adapter for Tennis API – ATP/WTA/ITF on RapidAPI.
+    """Tennis provider adapter.
 
-    Historical provider feeds may use winner-first ordering. That convention is
-    normalized into winner_id; the feature engine later randomizes training
-    orientation to prevent target leakage.
+    Canonical match identity is intentionally independent of:
+    - provider event ID,
+    - tournament/provider table ID,
+    - home/away ordering.
 
-    Match identity rules:
-    - Prefer the stable provider event ID whenever available.
-    - tournament_id is metadata and MUST NOT define match identity.
-    - If provider event ID is unavailable, use a deterministic fallback based
-      on tour/date/player pair/round.
+    This allows an upcoming fixture and its later historical representation
+    to resolve to the same match_id while also preventing duplicate rows
+    caused by tournament remapping.
     """
 
     def __init__(self, cfg: Settings = settings) -> None:
         if not cfg.rapidapi_key:
-            raise ConfigurationError("RAPIDAPI_KEY is required")
+            raise ConfigurationError(
+                "RAPIDAPI_KEY is required"
+            )
 
         self.cfg = cfg
         self.client = httpx.Client(
@@ -57,7 +58,6 @@ class RapidTennisClient:
         }
 
     def _throttle(self) -> None:
-        # Stay conservatively below provider request limits.
         elapsed = (
             time.monotonic()
             - self._last_request_at
@@ -123,6 +123,9 @@ class RapidTennisClient:
 
                 response.raise_for_status()
 
+                if not response.content:
+                    return {}
+
                 return response.json()
 
             except (
@@ -152,10 +155,10 @@ class RapidTennisClient:
             list,
         ):
             return [
-                item
-                for item in payload
+                row
+                for row in payload
                 if isinstance(
-                    item,
+                    row,
                     dict,
                 )
             ]
@@ -170,6 +173,7 @@ class RapidTennisClient:
             "data",
             "result",
             "results",
+            "events",
             "fixtures",
             "matches",
         ):
@@ -182,10 +186,10 @@ class RapidTennisClient:
                 list,
             ):
                 return [
-                    item
-                    for item in value
+                    row
+                    for row in value
                     if isinstance(
-                        item,
+                        row,
                         dict,
                     )
                 ]
@@ -232,6 +236,7 @@ class RapidTennisClient:
         )
 
         page = 1
+
         rows: list[
             dict[str, Any]
         ] = []
@@ -392,12 +397,6 @@ class RapidTennisClient:
     def _match_richness_score(
         match: MatchRecord,
     ) -> tuple[int, int]:
-        """Score duplicate representations without inventing data.
-
-        Used only to choose which representation of the SAME canonical
-        provider event is retained during one ingestion run.
-        """
-
         payload = (
             match.provider_payload
             if isinstance(
@@ -464,7 +463,6 @@ class RapidTennisClient:
             is not None
         )
 
-        # Payload length is only a deterministic tie breaker.
         return (
             score,
             len(payload),
@@ -489,21 +487,13 @@ class RapidTennisClient:
             ] = incoming
             return
 
-        existing_score = (
-            cls._match_richness_score(
-                existing
-            )
-        )
-
-        incoming_score = (
+        if (
             cls._match_richness_score(
                 incoming
             )
-        )
-
-        if (
-            incoming_score
-            > existing_score
+            > cls._match_richness_score(
+                existing
+            )
         ):
             matches[
                 incoming.match_id
@@ -514,13 +504,6 @@ class RapidTennisClient:
         tour: str,
         year: int,
     ) -> list[MatchRecord]:
-        """Fetch a historical year and deduplicate before persistence.
-
-        A stable provider event ID becomes the canonical match_id, so
-        alternate tournament mappings of the same provider event collapse
-        into one MatchRecord before Supabase receives them.
-        """
-
         matches: dict[
             str,
             MatchRecord,
@@ -575,9 +558,9 @@ class RapidTennisClient:
             )
 
         logger.info(
-            "Advanced calendar did not "
-            "expose match nodes; falling "
-            "back to tournament results"
+            "Advanced calendar did not expose "
+            "match nodes; falling back to "
+            "tournament results"
         )
 
         tournaments = (
@@ -603,14 +586,12 @@ class RapidTennisClient:
                 continue
 
             try:
-                season_matches = (
+                for match in (
                     self.tournament_results(
                         tour,
                         season_id,
                     )
-                )
-
-                for match in season_matches:
+                ):
                     if (
                         not match.player1_id
                         or not match.player2_id
@@ -677,6 +658,8 @@ class RapidTennisClient:
                 "player1id",
                 "player1_id",
                 "participant1",
+                "hometeam",
+                "home_team",
             }
         )
 
@@ -687,6 +670,8 @@ class RapidTennisClient:
                 "player2id",
                 "player2_id",
                 "participant2",
+                "awayteam",
+                "away_team",
             }
         )
 
@@ -721,31 +706,88 @@ class RapidTennisClient:
         str,
         int | None,
     ]:
+        if number == 1:
+            object_keys = (
+                "player1",
+                "participant1",
+                "player_1",
+                "homeTeam",
+                "home_team",
+            )
+
+            id_keys = (
+                "player1Id",
+                "player1_id",
+                "participant1Id",
+                "homeTeamId",
+                "home_team_id",
+            )
+
+            name_keys = (
+                "player1Name",
+                "player1_name",
+                "participant1Name",
+                "homeTeamName",
+                "home_team_name",
+            )
+
+            rank_keys = (
+                "player1Rank",
+                "player1_rank",
+                "homeRank",
+                "home_rank",
+            )
+
+        else:
+            object_keys = (
+                "player2",
+                "participant2",
+                "player_2",
+                "awayTeam",
+                "away_team",
+            )
+
+            id_keys = (
+                "player2Id",
+                "player2_id",
+                "participant2Id",
+                "awayTeamId",
+                "away_team_id",
+            )
+
+            name_keys = (
+                "player2Name",
+                "player2_name",
+                "participant2Name",
+                "awayTeamName",
+                "away_team_name",
+            )
+
+            rank_keys = (
+                "player2Rank",
+                "player2_rank",
+                "awayRank",
+                "away_rank",
+            )
+
         obj = first_present(
             raw,
-            f"player{number}",
-            f"participant{number}",
-            f"player_{number}",
+            *object_keys,
         )
 
         player_id = first_present(
             raw,
-            f"player{number}Id",
-            f"player{number}_id",
-            f"participant{number}Id",
+            *id_keys,
         )
 
         name = first_present(
             raw,
-            f"player{number}Name",
-            f"player{number}_name",
-            f"participant{number}Name",
+            *name_keys,
         )
 
         rank = first_present(
             raw,
-            f"player{number}Rank",
-            f"player{number}_rank",
+            *rank_keys,
         )
 
         if isinstance(
@@ -771,6 +813,7 @@ class RapidTennisClient:
                     "playerName",
                     "fullName",
                     "displayName",
+                    "shortName",
                 )
             )
 
@@ -781,6 +824,7 @@ class RapidTennisClient:
                     "rank",
                     "ranking",
                     "position",
+                    "currentRanking",
                 )
             )
 
@@ -793,8 +837,6 @@ class RapidTennisClient:
                 or obj
             )
 
-        # IDs are preferable. Stable name fallback keeps the pipeline
-        # usable if a provider response omits player IDs.
         name = str(
             name
             or f"Player {number}"
@@ -815,6 +857,127 @@ class RapidTennisClient:
                 rank
             ),
         )
+
+    @staticmethod
+    def _status_text(
+        raw: dict[str, Any],
+    ) -> str:
+        value = first_present(
+            raw,
+            "status",
+            "state",
+        )
+
+        if isinstance(
+            value,
+            dict,
+        ):
+            nested = first_present(
+                value,
+                "type",
+                "name",
+                "status",
+                "state",
+                "description",
+            )
+
+            return str(
+                nested
+                or ""
+            ).lower()
+
+        return str(
+            value
+            or ""
+        ).lower()
+
+    @staticmethod
+    def _winner_id(
+        raw: dict[str, Any],
+        p1_id: str,
+        p2_id: str,
+        historical: bool,
+        status: str,
+        result_text: Any,
+    ) -> str | None:
+        explicit_winner = (
+            first_present(
+                raw,
+                "winnerId",
+                "winner_id",
+                "winnerTeamId",
+            )
+        )
+
+        if explicit_winner not in (
+            None,
+            "",
+        ):
+            return str(
+                explicit_winner
+            )
+
+        winner_code = first_present(
+            raw,
+            "winnerCode",
+            "winner_code",
+        )
+
+        if winner_code not in (
+            None,
+            "",
+        ):
+            code = str(
+                winner_code
+            ).strip().lower()
+
+            if code in {
+                "1",
+                "home",
+                "player1",
+                "p1",
+            }:
+                return p1_id
+
+            if code in {
+                "2",
+                "away",
+                "player2",
+                "p2",
+            }:
+                return p2_id
+
+        completed_status = (
+            status
+            in {
+                "completed",
+                "complete",
+                "ended",
+                "finished",
+                "final",
+                "retired",
+                "walkover",
+            }
+        )
+
+        # Historical fallback for legacy winner-first archives only.
+        #
+        # Do NOT infer a winner from an upcoming fixture merely because
+        # player1 is present.
+        if (
+            historical
+            and (
+                result_text
+                not in (
+                    None,
+                    "",
+                )
+                or completed_status
+            )
+        ):
+            return p1_id
+
+        return None
 
     @staticmethod
     def _stats(
@@ -852,10 +1015,7 @@ class RapidTennisClient:
                 dict,
             ):
                 for alias in aliases:
-                    if (
-                        alias
-                        in side_obj
-                    ):
+                    if alias in side_obj:
                         return safe_float(
                             side_obj[
                                 alias
@@ -937,70 +1097,6 @@ class RapidTennisClient:
 
         return result
 
-    @staticmethod
-    def _provider_event_id(
-        raw: dict[str, Any],
-    ) -> str | None:
-        """Extract stable provider event identity.
-
-        Mirrors the provider-event extraction used by the data-quality audit,
-        so ingestion and diagnostics agree on what constitutes one event.
-        """
-
-        for key in (
-            "provider_event_id",
-            "event_id",
-            "eventId",
-        ):
-            value = raw.get(
-                key
-            )
-
-            if value not in (
-                None,
-                "",
-            ):
-                return str(
-                    value
-                )
-
-        event = raw.get(
-            "event"
-        )
-
-        if isinstance(
-            event,
-            dict,
-        ):
-            value = first_present(
-                event,
-                "id",
-                "eventId",
-                "event_id",
-            )
-
-            if value not in (
-                None,
-                "",
-            ):
-                return str(
-                    value
-                )
-
-        value = raw.get(
-            "id"
-        )
-
-        if value not in (
-            None,
-            "",
-        ):
-            return str(
-                value
-            )
-
-        return None
-
     @classmethod
     def normalize_match(
         cls,
@@ -1008,25 +1104,28 @@ class RapidTennisClient:
         tour: str,
         historical: bool,
     ) -> MatchRecord:
-        p1_id, p1_name, p1_rank = (
-            cls._player(
-                raw,
-                1,
-            )
+        (
+            p1_id,
+            p1_name,
+            p1_rank,
+        ) = cls._player(
+            raw,
+            1,
         )
 
-        p2_id, p2_name, p2_rank = (
-            cls._player(
-                raw,
-                2,
-            )
+        (
+            p2_id,
+            p2_name,
+            p2_rank,
+        ) = cls._player(
+            raw,
+            2,
         )
 
         tournament_obj = first_present(
             raw,
             "tournament",
             "tour",
-            "event",
         )
 
         if not isinstance(
@@ -1054,6 +1153,7 @@ class RapidTennisClient:
                 "surface",
                 "court",
                 "courtName",
+                "groundType",
             )
         )
 
@@ -1078,6 +1178,26 @@ class RapidTennisClient:
             surface_value = (
                 court_obj
             )
+
+        tournament_ground = first_present(
+            tournament_obj,
+            "groundType",
+            "ground_type",
+        )
+
+        if (
+            surface_value
+            in (
+                None,
+                "",
+            )
+            and tournament_ground
+            not in (
+                None,
+                "",
+            )
+        ):
+            surface_value = tournament_ground
 
         level_value: Any = (
             first_present(
@@ -1108,6 +1228,36 @@ class RapidTennisClient:
         ):
             level_value = (
                 rank_obj
+            )
+
+        category_obj = (
+            tournament_obj.get(
+                "category"
+            )
+            if isinstance(
+                tournament_obj,
+                dict,
+            )
+            else None
+        )
+
+        if (
+            level_value
+            in (
+                None,
+                "",
+            )
+            and isinstance(
+                category_obj,
+                dict,
+            )
+        ):
+            level_value = (
+                first_present(
+                    category_obj,
+                    "name",
+                    "slug",
+                )
             )
 
         tournament_name = (
@@ -1161,6 +1311,12 @@ class RapidTennisClient:
             "eventDate",
         )
 
+        scheduled_dt = (
+            parse_datetime(
+                scheduled
+            )
+        )
+
         result_text = first_present(
             raw,
             "result",
@@ -1168,13 +1324,12 @@ class RapidTennisClient:
             "finalScore",
         )
 
-        status = str(
-            first_present(
-                raw,
-                "status",
-                "state",
-            )
-            or (
+        status = cls._status_text(
+            raw
+        )
+
+        if not status:
+            status = (
                 "completed"
                 if result_text
                 not in (
@@ -1183,51 +1338,15 @@ class RapidTennisClient:
                 )
                 else "upcoming"
             )
+
+        winner_id = cls._winner_id(
+            raw=raw,
+            p1_id=p1_id,
+            p2_id=p2_id,
+            historical=historical,
+            status=status,
+            result_text=result_text,
         )
-
-        winner_id: str | None = None
-
-        explicit_winner = (
-            first_present(
-                raw,
-                "winnerId",
-                "winner_id",
-            )
-        )
-
-        completed_status = (
-            status.lower()
-            in {
-                "completed",
-                "complete",
-                "ended",
-                "finished",
-                "final",
-                "retired",
-                "walkover",
-            }
-        )
-
-        if (
-            explicit_winner
-            is not None
-        ):
-            winner_id = str(
-                explicit_winner
-            )
-
-        elif (
-            result_text
-            not in (
-                None,
-                "",
-            )
-            or completed_status
-        ):
-            # Historical provider archive uses winner-first ordering.
-            winner_id = (
-                p1_id
-            )
 
         round_obj = first_present(
             raw,
@@ -1280,73 +1399,47 @@ class RapidTennisClient:
                 or round_obj
             )
 
-        round_token = (
+        round_token = str(
             round_id
             or round_name
             or ""
-        )
-
-        scheduled_dt = (
-            parse_datetime(
-                scheduled
-            )
-        )
-
-        provider_event_id = (
-            cls._provider_event_id(
-                raw
-            )
-        )
+        ).strip().lower()
 
         player_pair = sorted(
             (
-                p1_id,
-                p2_id,
+                str(
+                    p1_id
+                ),
+                str(
+                    p2_id
+                ),
             )
         )
 
-        # CRITICAL IDENTITY RULE
+        # Canonical ID:
         #
-        # Provider event ID is the strongest identity available.
+        # DO NOT include:
+        # - provider event id:
+        #   upcoming and historical feeds may use different IDs.
         #
-        # The audit proved that TennisApi may expose the same real match
-        # using different tournament mappings, for example:
+        # - tournament_id:
+        #   audit proved the same real match can be exposed under multiple
+        #   tournament mappings / IDs.
         #
-        #   Brisbane, Australia / tournament_id 143441
-        #   Brisbane            / tournament_id 2644
+        # - player ordering:
+        #   historical feeds can swap home/away or use winner-first ordering.
         #
-        # tournament_id therefore MUST NOT be part of canonical match
-        # identity whenever the provider gives us an event ID.
-        if provider_event_id:
-            match_id = (
-                deterministic_id(
-                    [
-                        "provider_event",
-                        tour.lower(),
-                        provider_event_id,
-                    ]
-                )
-            )
-
-        else:
-            # Provider-ID-free fallback.
-            #
-            # tournament_id is intentionally excluded here too because
-            # tournament remapping must not produce a second match.
-            match_id = (
-                deterministic_id(
-                    [
-                        "match_fallback",
-                        tour.lower(),
-                        scheduled_dt.date().isoformat(),
-                        player_pair[0],
-                        player_pair[1],
-                        str(
-                            round_token
-                        ),
-                    ]
-                )
-            )
+        # This preserves settlement compatibility and prevents the duplicate
+        # pattern found in the database.
+        match_id = deterministic_id(
+            [
+                tour.lower(),
+                scheduled_dt.date().isoformat(),
+                player_pair[0],
+                player_pair[1],
+                round_token,
+            ]
+        )
 
         best_of = safe_int(
             first_present(
