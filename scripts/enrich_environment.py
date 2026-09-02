@@ -5,11 +5,16 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from typing import Any
 
 from _bootstrap import ROOT  # noqa: F401
 
 from tbt.repositories.supabase import SupabaseRepository
-from tbt.services.environment import OpenMeteoClient, environment_payload
+from tbt.services.environment import (
+    OpenMeteoClient,
+    environment_payload,
+    location_candidates,
+)
 
 logger = logging.getLogger("tbt.enrich_environment")
 
@@ -24,9 +29,50 @@ def parse_utc(value: str) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _provider_diagnostics(payload: dict[str, Any]) -> dict[str, Any]:
+    tournament = _as_dict(payload.get("tournament"))
+    unique = _as_dict(tournament.get("uniqueTournament"))
+    category = _as_dict(tournament.get("category"))
+    venue = _as_dict(payload.get("venue"))
+    country = _as_dict(tournament.get("country")) or _as_dict(unique.get("country"))
+
+    return {
+        "provider_event_id": payload.get("id"),
+        "provider_tournament": tournament.get("name"),
+        "provider_tournament_id": tournament.get("id"),
+        "provider_unique_tournament": unique.get("name"),
+        "provider_unique_tournament_id": unique.get("id"),
+        "provider_category": category.get("name"),
+        "provider_category_id": category.get("id"),
+        "provider_venue": venue.get("name"),
+        "provider_city": (
+            venue.get("city")
+            or tournament.get("city")
+            or unique.get("city")
+            or payload.get("city")
+            or payload.get("venueCity")
+        ),
+        "provider_country": (
+            _as_dict(venue.get("country")).get("name")
+            or venue.get("countryName")
+            or country.get("name")
+            or payload.get("countryName")
+            or _as_dict(payload.get("country")).get("name")
+        ),
+        "tbt_source_category_id": payload.get("_tbt_source_category_id"),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Backfill Open-Meteo weather/elevation into match provider_payload."
+        description=(
+            "Backfill Open-Meteo weather/elevation into match provider_payload, "
+            "with detailed venue-resolution diagnostics."
+        )
     )
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
@@ -34,6 +80,12 @@ def main() -> None:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--sleep-ms", type=int, default=50)
+    parser.add_argument(
+        "--diagnostics-limit",
+        type=int,
+        default=100,
+        help="Maximum unresolved/resolved diagnostic rows included in the final JSON report.",
+    )
     args = parser.parse_args()
 
     start = parse_utc(args.start)
@@ -43,7 +95,7 @@ def main() -> None:
 
     repo = SupabaseRepository()
     weather = OpenMeteoClient()
-    report = {
+    report: dict[str, Any] = {
         "start": start.isoformat(),
         "end": end.isoformat(),
         "inspected": 0,
@@ -53,6 +105,9 @@ def main() -> None:
         "updated": 0,
         "errors": 0,
         "dry_run": bool(args.dry_run),
+        "unresolved_details": [],
+        "resolved_details": [],
+        "error_details": [],
     }
 
     try:
@@ -73,6 +128,9 @@ def main() -> None:
                 report["already_enriched"] += 1
                 continue
 
+            candidates = location_candidates(payload, match.tournament)
+            provider_diag = _provider_diagnostics(payload)
+
             try:
                 env = environment_payload(
                     weather,
@@ -82,16 +140,36 @@ def main() -> None:
                 )
                 payload["_tbt_environment"] = env
 
+                detail = {
+                    "match_id": match.match_id,
+                    "scheduled_at": match.scheduled_at.astimezone(timezone.utc).isoformat(),
+                    "tour": match.tour,
+                    "tournament": match.tournament,
+                    "tournament_id": match.tournament_id,
+                    "round_name": match.round_name,
+                    "player1": match.player1_name,
+                    "player2": match.player2_name,
+                    "location_candidates": candidates,
+                    **provider_diag,
+                }
+
                 if env.get("venue_resolved"):
                     report["resolved"] += 1
+                    detail["resolved_query"] = env.get("location_query")
+                    detail["resolved_venue"] = env.get("venue")
+                    if len(report["resolved_details"]) < args.diagnostics_limit:
+                        report["resolved_details"].append(detail)
                 else:
                     report["unresolved"] += 1
+                    if len(report["unresolved_details"]) < args.diagnostics_limit:
+                        report["unresolved_details"].append(detail)
 
                 if not args.dry_run:
                     report["updated"] += repo.update_match_provider_payload(
                         match.match_id,
                         payload,
                     )
+
             except Exception as exc:
                 report["errors"] += 1
                 logger.warning(
@@ -100,16 +178,37 @@ def main() -> None:
                     match.tournament,
                     exc,
                 )
+                if len(report["error_details"]) < args.diagnostics_limit:
+                    report["error_details"].append(
+                        {
+                            "match_id": match.match_id,
+                            "scheduled_at": match.scheduled_at.astimezone(timezone.utc).isoformat(),
+                            "tour": match.tour,
+                            "tournament": match.tournament,
+                            "tournament_id": match.tournament_id,
+                            "location_candidates": candidates,
+                            "error": f"{type(exc).__name__}: {exc}",
+                            **provider_diag,
+                        }
+                    )
 
             if index % 250 == 0:
-                logger.info("Progress %s/%s: %s", index, len(matches), report)
+                logger.info(
+                    "Progress %s/%s resolved=%s unresolved=%s errors=%s",
+                    index,
+                    len(matches),
+                    report["resolved"],
+                    report["unresolved"],
+                    report["errors"],
+                )
 
             if args.sleep_ms > 0:
                 time.sleep(args.sleep_ms / 1000.0)
+
     finally:
         weather.close()
 
-    print(json.dumps(report, indent=2, ensure_ascii=False))
+    print(json.dumps(report, indent=2, ensure_ascii=False, default=str))
 
 
 if __name__ == "__main__":
