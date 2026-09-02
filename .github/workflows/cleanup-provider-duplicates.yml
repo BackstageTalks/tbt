@@ -2,15 +2,28 @@ name: Cleanup provider duplicates
 
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Migration mode"
+        required: true
+        default: "dry-run"
+        type: choice
+        options:
+          - dry-run
+          - apply
 
 permissions:
   contents: read
 
+concurrency:
+  group: provider-duplicate-cleanup
+  cancel-in-progress: false
+
 jobs:
-  dry-run:
-    name: Duplicate cleanup dry-run
+  cleanup:
+    name: Canonical match migration
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 60
 
     env:
       PYTHONPATH: api
@@ -38,15 +51,22 @@ jobs:
         run: |
           python -m compileall -q api scripts
 
-      - name: Provider duplicate cleanup dry-run
+      - name: Run cleanup
+        shell: bash
         run: |
-          python scripts/cleanup_provider_duplicates.py
+          set -euo pipefail
 
-      - name: Upload cleanup dry-run report
+          if [[ "${{ inputs.mode }}" == "apply" ]]; then
+            python scripts/cleanup_provider_duplicates.py --apply
+          else
+            python scripts/cleanup_provider_duplicates.py
+          fi
+
+      - name: Upload cleanup report
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: provider-duplicate-cleanup-dry-run
-          path: reports/provider_duplicate_cleanup_dry_run.json
+          name: provider-duplicate-cleanup-${{ inputs.mode }}
+          path: reports/provider_duplicate_cleanup.json
           if-no-files-found: warn
-          retention-days: 14
+          retention-days: 30
