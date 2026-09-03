@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from collections import Counter, defaultdict
 from typing import Any
 
@@ -24,6 +25,7 @@ MATCH_SELECT = ",".join(
         "match_id",
         "tour",
         "scheduled_at",
+        "surface",
         "tournament",
         "tournament_id",
         "tournament_level",
@@ -53,6 +55,7 @@ def _provider_event_id(row: dict[str, Any]) -> str | None:
     payload = _payload(row)
 
     for key in (
+        "_tbt_provider_event_id",
         "provider_event_id",
         "event_id",
         "eventId",
@@ -179,57 +182,94 @@ def _select_completed_matches_keyset(
     page_size: int = COMPLETED_PAGE_SIZE,
 ) -> list[dict[str, Any]]:
     """
-    Load completed matches with keyset pagination on the primary key.
+    Scan all matches by primary-key keyset pagination, then keep completed rows
+    locally in Python.
 
-    Why keyset instead of offset pagination:
-    - stable ordering on unique match_id
-    - no progressively expensive OFFSET scans
-    - predictable requests for a large table
+    Do NOT push winner_id=not.is.null into this query. On the current large
+    table that predicate combined with ORDER BY match_id has already hit the
+    PostgreSQL statement timeout (SQLSTATE 57014) after >120k rows.
+
+    The database query stays deliberately simple and index-friendly:
+        match_id > cursor
+        ORDER BY match_id ASC
+        LIMIT page_size
 
     This function is strictly read-only.
     """
     if page_size <= 0:
         raise ValueError("page_size must be positive")
 
-    rows: list[dict[str, Any]] = []
+    completed_rows: list[dict[str, Any]] = []
     last_match_id: str | None = None
     page = 0
+    scanned_rows = 0
+    request_page_size = page_size
 
     while True:
         params: dict[str, str] = {
             "select": MATCH_SELECT,
-            "winner_id": "not.is.null",
             "order": "match_id.asc",
-            "limit": str(page_size),
+            "limit": str(request_page_size),
         }
 
         if last_match_id is not None:
             params["match_id"] = f"gt.{last_match_id}"
 
-        response = repo.client.get(
-            f"{repo.base}/matches",
-            headers=repo._headers(write=False),
-            params=params,
-        )
-        repo._raise(response)
+        timeout_retries = 0
+        while True:
+            response = repo.client.get(
+                f"{repo.base}/matches",
+                headers=repo._headers(write=False),
+                params=params,
+            )
+
+            body = response.text or ""
+            is_statement_timeout = (
+                response.status_code >= 500
+                and (
+                    '"57014"' in body
+                    or "statement timeout" in body.lower()
+                )
+            )
+
+            if not is_statement_timeout:
+                repo._raise(response)
+                break
+
+            timeout_retries += 1
+            if request_page_size > 100:
+                request_page_size = max(100, request_page_size // 2)
+                params["limit"] = str(request_page_size)
+
+            if timeout_retries > 5:
+                repo._raise(response)
+
+            wait_seconds = min(2 ** timeout_retries, 8)
+            print(
+                "  Supabase statement timeout; retrying same cursor "
+                f"with limit={request_page_size} after {wait_seconds}s..."
+            )
+            time.sleep(wait_seconds)
 
         chunk = response.json()
         if not isinstance(chunk, list):
-            raise RuntimeError(
-                "Supabase completed-match query returned a non-list payload"
-            )
+            raise RuntimeError("Supabase match scan returned a non-list payload")
 
         if not chunk:
             break
 
         page += 1
-        rows.extend(chunk)
+        scanned_rows += len(chunk)
+
+        # Equivalent to the previous PostgREST condition winner_id=not.is.null,
+        # but intentionally evaluated locally.
+        completed_rows.extend(
+            row for row in chunk if row.get("winner_id") is not None
+        )
 
         current_last = str(chunk[-1].get("match_id") or "")
         if not current_last:
-            raise RuntimeError(
-                "Keyset pagination received a row without match_id"
-            )
+            raise RuntimeError("Keyset pagination received a row without match_id")
 
         if last_match_id is not None and current_last <= last_match_id:
             raise RuntimeError(
@@ -241,15 +281,19 @@ def _select_completed_matches_keyset(
 
         if page % PROGRESS_EVERY_PAGES == 0:
             print(
-                f"  pages={page:,}, completed rows loaded={len(rows):,}, "
+                f"  pages={page:,}, rows scanned={scanned_rows:,}, "
+                f"completed rows kept={len(completed_rows):,}, "
                 f"last_match_id={last_match_id}"
             )
 
-        if len(chunk) < page_size:
+        if len(chunk) < request_page_size:
             break
 
-    return rows
-
+    print(
+        f"Match scan finished: scanned={scanned_rows:,}, "
+        f"completed={len(completed_rows):,}"
+    )
+    return completed_rows
 
 def _build_report(
     *,
@@ -392,6 +436,27 @@ def _build_report(
         - rows_without_provider_event_id
     )
 
+    completed_rows_by_year: Counter[str] = Counter()
+    completed_rows_by_tour: Counter[str] = Counter()
+    completed_rows_by_surface: Counter[str] = Counter()
+    completed_timestamps: list[str] = []
+
+    for row in completed_rows:
+        tour = str(row.get("tour") or "unknown").lower()
+        surface = str(row.get("surface") or "unknown").lower()
+        scheduled_at = str(row.get("scheduled_at") or "")
+
+        completed_rows_by_tour[tour] += 1
+        completed_rows_by_surface[surface] += 1
+
+        if len(scheduled_at) >= 4 and scheduled_at[:4].isdigit():
+            completed_rows_by_year[scheduled_at[:4]] += 1
+
+        if scheduled_at:
+            completed_timestamps.append(scheduled_at)
+
+    estimated_after_provider_dedupe = len(completed_rows) - extra_rows
+
     return {
         "status": "AUDIT_ONLY",
         "read_only": True,
@@ -405,9 +470,11 @@ def _build_report(
             "paging_key": "match_id",
             "paging_order": "match_id.asc",
             "offset_pagination": False,
-            "page_size_completed": COMPLETED_PAGE_SIZE,
+            "page_size_requested": COMPLETED_PAGE_SIZE,
             "select_star": False,
-            "completed_select": MATCH_SELECT,
+            "server_completed_filter": False,
+            "completed_filter": "local: winner_id IS NOT NULL",
+            "match_select": MATCH_SELECT,
         },
         "counts": {
             "all_match_rows": all_match_rows,
@@ -417,6 +484,27 @@ def _build_report(
             ),
             "completed_without_provider_event_id": (
                 rows_without_provider_event_id
+            ),
+        },
+        "history": {
+            "earliest_completed_match": (
+                min(completed_timestamps) if completed_timestamps else None
+            ),
+            "latest_completed_match": (
+                max(completed_timestamps) if completed_timestamps else None
+            ),
+            "completed_rows_by_year": dict(
+                sorted(completed_rows_by_year.items())
+            ),
+            "completed_rows_by_tour": dict(
+                sorted(completed_rows_by_tour.items())
+            ),
+            "completed_rows_by_surface": dict(
+                sorted(completed_rows_by_surface.items())
+            ),
+            "provider_event_unique_ids": len(provider_groups),
+            "estimated_completed_rows_after_provider_event_dedupe": (
+                estimated_after_provider_dedupe
             ),
         },
         "duplicates": {
@@ -504,12 +592,12 @@ def main() -> None:
     all_match_rows = _count_match_rows(repo)
     print(f"Total match rows: {all_match_rows:,}")
 
-    print("Loading completed matches with keyset pagination...")
+    print("Scanning matches by primary-key keyset pagination...")
     completed_rows = _select_completed_matches_keyset(
         repo,
         page_size=COMPLETED_PAGE_SIZE,
     )
-    print(f"Completed match rows loaded: {len(completed_rows):,}")
+    print(f"Completed match rows retained: {len(completed_rows):,}")
 
     print("Building provider duplicate audit...")
     report = _build_report(
