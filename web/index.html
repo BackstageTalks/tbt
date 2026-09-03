@@ -4,21 +4,26 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="theme-color" content="#07111f" />
-  <title>Blinq · TBT v200</title>
+  <title>BlinQ · Tennis Analytics</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
   <div class="ambient ambient-a"></div>
   <div class="ambient ambient-b"></div>
+
   <header class="shell topbar">
     <div class="brand">
       <div class="brand-mark">B</div>
       <div>
         <div class="brand-name">BLINQ</div>
-        <div class="brand-sub">TBT v200 · calibrated tennis intelligence</div>
+        <div class="brand-sub">Pre-match tennis intelligence</div>
       </div>
     </div>
-    <div class="status" id="status"><span class="dot"></span><span>Connecting</span></div>
+
+    <div class="status" id="status">
+      <span class="dot"></span>
+      <span>Connecting</span>
+    </div>
   </header>
 
   <main class="shell">
@@ -26,29 +31,88 @@
       <div>
         <div class="eyebrow">PRE-MATCH ANALYTICS</div>
         <h1>Today's model board</h1>
-        <p>Point-in-time predictions with surface strength, opponent-adjusted form and probability calibration.</p>
+        <p>
+          Data-driven match probabilities built from point-in-time
+          player strength, surface performance, form, workload and
+          available match environment.
+        </p>
       </div>
-      <button id="refresh" class="button">Refresh</button>
+
+      <button id="refresh" class="button">
+        Refresh
+      </button>
     </section>
 
     <section class="metrics" id="metrics">
-      <article class="metric"><span>Matches</span><strong id="metricMatches">—</strong><small>prediction horizon</small></article>
-      <article class="metric"><span>Model</span><strong id="metricModel">—</strong><small>deployed version</small></article>
-      <article class="metric"><span>Log loss</span><strong id="metricLogLoss">—</strong><small>latest walk-forward</small></article>
-      <article class="metric"><span>Brier</span><strong id="metricBrier">—</strong><small>latest walk-forward</small></article>
+      <article class="metric">
+        <span>Matches</span>
+        <strong id="metricMatches">—</strong>
+        <small>prediction horizon</small>
+      </article>
+
+      <article class="metric">
+        <span>Champion</span>
+        <strong id="metricModel">—</strong>
+        <small>active model</small>
+      </article>
+
+      <article class="metric">
+        <span>Status</span>
+        <strong id="metricStatus">—</strong>
+        <small>model lifecycle</small>
+      </article>
+
+      <article class="metric">
+        <span>Updated</span>
+        <strong id="metricUpdated">—</strong>
+        <small>latest refresh</small>
+      </article>
     </section>
 
     <section class="toolbar">
-      <div class="segmented" role="group" aria-label="Tour filter">
-        <button class="segment active" data-tour="">All</button>
-        <button class="segment" data-tour="atp">ATP</button>
-        <button class="segment" data-tour="wta">WTA</button>
+      <div
+        class="segmented"
+        role="group"
+        aria-label="Tour filter"
+      >
+        <button
+          class="segment active"
+          data-tour=""
+        >
+          All
+        </button>
+
+        <button
+          class="segment"
+          data-tour="atp"
+        >
+          ATP
+        </button>
+
+        <button
+          class="segment"
+          data-tour="wta"
+        >
+          WTA
+        </button>
       </div>
-      <div class="updated" id="updated">Not updated yet</div>
+
+      <div
+        class="updated"
+        id="updated"
+      >
+        Not updated yet
+      </div>
     </section>
 
-    <section id="board" class="board" aria-live="polite">
-      <div class="empty">Loading predictions…</div>
+    <section
+      id="board"
+      class="board"
+      aria-live="polite"
+    >
+      <div class="empty">
+        Loading predictions…
+      </div>
     </section>
   </main>
 
@@ -60,22 +124,52 @@
           <h2 class="tournament"></h2>
           <div class="meta"></div>
         </div>
+
         <div class="confidence-chip"></div>
       </div>
+
       <div class="players">
         <div class="player player-one">
-          <div class="player-row"><span class="name"></span><span class="rank"></span></div>
-          <div class="prob-row"><span class="prob"></span><span class="pct"></span></div>
+          <div class="player-row">
+            <span class="name"></span>
+            <span class="rank"></span>
+          </div>
+
+          <div class="prob-row">
+            <span class="prob"></span>
+            <span class="pct"></span>
+          </div>
         </div>
+
         <div class="versus">VS</div>
+
         <div class="player player-two">
-          <div class="player-row"><span class="name"></span><span class="rank"></span></div>
-          <div class="prob-row"><span class="prob"></span><span class="pct"></span></div>
+          <div class="player-row">
+            <span class="name"></span>
+            <span class="rank"></span>
+          </div>
+
+          <div class="prob-row">
+            <span class="prob"></span>
+            <span class="pct"></span>
+          </div>
         </div>
       </div>
-      <div class="pick-line"><span class="pick-label">MODEL PICK</span><strong class="pick"></strong></div>
+
+      <div class="pick-line">
+        <span class="pick-label">
+          BLINQ PICK
+        </span>
+
+        <strong class="pick"></strong>
+      </div>
+
       <div class="signals"></div>
-      <div class="card-foot"><span class="model-version"></span><span class="generated"></span></div>
+
+      <div class="card-foot">
+        <span class="model-version"></span>
+        <span class="generated"></span>
+      </div>
     </article>
   </template>
 
