@@ -207,6 +207,42 @@ class RapidTennisClient:
 
         return []
 
+    @classmethod
+    def _named_list(
+        cls,
+        payload: Any,
+        key: str,
+    ) -> list[dict[str, Any]]:
+        """Find a list under *key* even when TennisApi wraps it in data/result."""
+        if isinstance(payload, list):
+            return [
+                row
+                for row in payload
+                if isinstance(row, dict)
+            ]
+
+        if not isinstance(payload, dict):
+            return []
+
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [
+                row
+                for row in value
+                if isinstance(row, dict)
+            ]
+
+        for nested in payload.values():
+            if isinstance(nested, dict):
+                rows = cls._named_list(
+                    nested,
+                    key,
+                )
+                if rows:
+                    return rows
+
+        return []
+
     @staticmethod
     def _has_next(
         payload: Any,
@@ -314,16 +350,32 @@ class RapidTennisClient:
 
     @staticmethod
     def _category_id(category: dict[str, Any]) -> int | None:
-        value = first_present(
-            category,
-            "id",
-            "categoryId",
-            "category_id",
+        nested = (
+            category.get("category")
+            if isinstance(category.get("category"), dict)
+            else {}
         )
+
+        value = (
+            first_present(
+                category,
+                "id",
+                "categoryId",
+                "category_id",
+            )
+            or first_present(
+                nested,
+                "id",
+                "categoryId",
+                "category_id",
+            )
+        )
+
         try:
             return int(value)
         except (TypeError, ValueError):
             return None
+
 
     @classmethod
     def _category_tour(
@@ -447,7 +499,13 @@ class RapidTennisClient:
         payload = self._get(
             f"/api/tennis/calendar/{token}/categories"
         )
-        rows = self._data(payload)
+        rows = self._named_list(
+            payload,
+            "categories",
+        )
+        if not rows:
+            rows = self._data(payload)
+
         self._category_cache[key] = rows
         return rows
 
@@ -465,7 +523,13 @@ class RapidTennisClient:
         payload = self._get(
             f"/api/tennis/category/{category_id}/events/{token}"
         )
-        rows = self._data(payload)
+        rows = self._named_list(
+            payload,
+            "events",
+        )
+        if not rows:
+            rows = self._data(payload)
+
         self._event_cache[cache_key] = rows
         return rows
 
@@ -505,8 +569,28 @@ class RapidTennisClient:
             if category_id is None:
                 continue
 
+            nested_category = (
+                category.get("category")
+                if isinstance(
+                    category.get("category"),
+                    dict,
+                )
+                else {}
+            )
+
             category_name = str(
-                first_present(category, "name", "title", "slug")
+                first_present(
+                    category,
+                    "name",
+                    "title",
+                    "slug",
+                )
+                or first_present(
+                    nested_category,
+                    "name",
+                    "title",
+                    "slug",
+                )
                 or ""
             )
             category_tour = self._category_tour(category)
@@ -703,9 +787,18 @@ class RapidTennisClient:
 
         matches: dict[str, MatchRecord] = {}
         day = start
+        days_checked = 0
+        days_with_categories = 0
+        normalized_matches = 0
 
         while day <= end:
+            days_checked += 1
+
             try:
+                categories = self.calendar_categories(day)
+                if categories:
+                    days_with_categories += 1
+
                 daily = self.matches_for_day(
                     tour,
                     day,
@@ -721,6 +814,8 @@ class RapidTennisClient:
                 day += timedelta(days=1)
                 continue
 
+            normalized_matches += len(daily)
+
             for match in daily:
                 if not match.is_completed or not match.winner_id:
                     continue
@@ -729,12 +824,25 @@ class RapidTennisClient:
             day += timedelta(days=1)
 
         logger.info(
-            "RapidAPI %s %s: %s completed canonical singles via "
-            "calendar/categories -> category/events",
+            "RapidAPI %s %s: days=%s category_days=%s normalized=%s "
+            "completed=%s via calendar/categories -> category/events",
             tour.upper(),
             year,
+            days_checked,
+            days_with_categories,
+            normalized_matches,
             len(matches),
         )
+
+        if not matches:
+            raise ProviderError(
+                "TennisApi history returned zero completed matches for "
+                f"{tour.upper()} {year}. "
+                f"days_checked={days_checked}, "
+                f"days_with_categories={days_with_categories}, "
+                f"normalized_matches={normalized_matches}. "
+                "Refusing to report a successful empty bootstrap."
+            )
 
         return sorted(
             matches.values(),
