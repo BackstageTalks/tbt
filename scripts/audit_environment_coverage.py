@@ -1,3 +1,5 @@
+# scripts/audit_environment_coverage.py
+
 from __future__ import annotations
 
 import json
@@ -36,11 +38,7 @@ LEGACY_WEATHER_FIELDS = (
     "surface_pressure",
 )
 
-# Do not SELECT * from the growing matches table.
-# These are the only columns required for:
-# - environment coverage
-# - provider-event canonical dedupe
-# - repository-equivalent canonical priority
+# Only columns required by this audit.
 AUDIT_SELECT = ",".join(
     (
         "match_id",
@@ -55,9 +53,12 @@ AUDIT_SELECT = ",".join(
     )
 )
 
-# provider_payload can be large because it now also contains
-# environment/weather data. Keep pages intentionally small.
+# provider_payload can be quite large.
+# Small pages keep each individual Supabase statement cheap.
 AUDIT_PAGE_SIZE = 200
+
+# Progress output only.
+PROGRESS_EVERY = 10000
 
 
 def as_dict(
@@ -141,8 +142,9 @@ def provider_event_id(
 ) -> str | None:
     """
     Extract the real provider event ID using the same precedence
-    used by the current canonical repository.
+    used by the canonical repository.
     """
+
     raw = payload(row)
 
     for key in (
@@ -255,9 +257,8 @@ def calculate(
 
         # Deliberately independent of schema_version.
         #
-        # This tells us whether the actual weather values are
-        # usable by the model even if only the metadata stamp
-        # still needs migration.
+        # This tells us whether actual weather values are usable
+        # even if only the metadata schema stamp still needs work.
         if weather_usable(weather):
             counts[
                 "usable_weather"
@@ -359,9 +360,10 @@ def canonical_priority(
     """
     Mirror SupabaseRepository._canonical_match_priority().
 
-    When the same real provider event exists under multiple
-    database match IDs, choose the richest/current representation.
+    When the same provider event exists under multiple match rows,
+    choose the richest/current representation.
     """
+
     raw = payload(row)
 
     source_category_id = raw.get(
@@ -457,14 +459,12 @@ def dedupe_completed_rows(
     """
     Canonical completed-match dedupe.
 
-    Only rows sharing the same real provider event ID are
-    collapsed.
+    Only rows sharing the same real provider event ID
+    are collapsed.
 
-    Rows without a provider event ID remain untouched.
-
-    This intentionally mirrors the repository behaviour without
-    doing another full-table Supabase query.
+    Rows without provider event IDs are preserved.
     """
+
     grouped: dict[
         str,
         list[dict[str, Any]],
@@ -515,8 +515,6 @@ def dedupe_completed_rows(
         without_provider_id
     )
 
-    # The audit itself does not need SQL chronological sorting.
-    # Sorting locally is cheap and deterministic.
     canonical.sort(
         key=lambda row: (
             str(
@@ -537,41 +535,193 @@ def dedupe_completed_rows(
     return canonical
 
 
+def select_completed_matches_keyset(
+    repo: SupabaseRepository,
+) -> list[dict[str, Any]]:
+    """
+    Read completed matches using keyset pagination.
+
+    IMPORTANT:
+    This intentionally does NOT use repo.select_all().
+
+    select_all() uses HTTP Range/OFFSET pagination.
+    With ~200k match rows the later OFFSET queries become
+    increasingly expensive and can hit Supabase PostgreSQL
+    statement_timeout.
+
+    Keyset pagination instead performs:
+
+        match_id > previous_match_id
+        ORDER BY match_id ASC
+        LIMIT N
+
+    Therefore query cost stays roughly stable as the table grows.
+    """
+
+    rows: list[
+        dict[str, Any]
+    ] = []
+
+    last_match_id: str | None = None
+
+    next_progress = (
+        PROGRESS_EVERY
+    )
+
+    page_number = 0
+
+    while True:
+        params: dict[
+            str,
+            str,
+        ] = {
+            "select": (
+                AUDIT_SELECT
+            ),
+            "winner_id": (
+                "not.is.null"
+            ),
+            "order": (
+                "match_id.asc"
+            ),
+            "limit": (
+                str(
+                    AUDIT_PAGE_SIZE
+                )
+            ),
+        }
+
+        if last_match_id is not None:
+            params[
+                "match_id"
+            ] = (
+                f"gt.{last_match_id}"
+            )
+
+        response = (
+            repo.client.get(
+                f"{repo.base}/matches",
+                headers=(
+                    repo._headers(
+                        write=False
+                    )
+                ),
+                params=params,
+            )
+        )
+
+        repo._raise(
+            response
+        )
+
+        chunk = (
+            response.json()
+        )
+
+        if not isinstance(
+            chunk,
+            list,
+        ):
+            raise RuntimeError(
+                "Unexpected Supabase response while "
+                "reading environment audit rows."
+            )
+
+        if not chunk:
+            break
+
+        rows.extend(
+            chunk
+        )
+
+        page_number += 1
+
+        newest_match_id = str(
+            chunk[-1].get(
+                "match_id"
+            )
+            or ""
+        )
+
+        if not newest_match_id:
+            raise RuntimeError(
+                "Keyset pagination encountered a row "
+                "without match_id."
+            )
+
+        if (
+            last_match_id is not None
+            and newest_match_id
+            <= last_match_id
+        ):
+            raise RuntimeError(
+                "Keyset pagination did not advance: "
+                f"previous={last_match_id}, "
+                f"current={newest_match_id}"
+            )
+
+        last_match_id = (
+            newest_match_id
+        )
+
+        while (
+            len(rows)
+            >= next_progress
+        ):
+            print(
+                "Environment audit: loaded "
+                f"{len(rows):,} completed rows..."
+            )
+
+            next_progress += (
+                PROGRESS_EVERY
+            )
+
+        if (
+            len(chunk)
+            < AUDIT_PAGE_SIZE
+        ):
+            break
+
+    print(
+        "Environment audit: finished loading "
+        f"{len(rows):,} completed rows "
+        f"in {page_number:,} pages."
+    )
+
+    return rows
+
+
 def main() -> None:
     repo = (
         SupabaseRepository()
     )
 
     # -------------------------------------------------
-    # ONE Supabase snapshot only
+    # ONE DATABASE SNAPSHOT
     # -------------------------------------------------
     #
-    # Previous implementation:
+    # Previous implementations eventually failed because
+    # repo.select_all() performs OFFSET/Range pagination.
     #
-    # 1. select=* completed rows ordered by scheduled_at
-    # 2. repo.get_completed_matches()
-    #    -> another select=* ordered by scheduled_at
+    # With ~197k rows the later pages become expensive even
+    # after removing SELECT * and scheduled_at sorting.
     #
-    # At the current DB size that produces PostgreSQL
-    # statement_timeout (57014).
+    # This version uses keyset pagination on match_id.
     #
-    # New implementation:
-    #
-    # - filter completed rows server-side
-    # - fetch only required columns
-    # - page by match_id
-    # - canonical dedupe locally
-    #
-    raw_rows = repo.select_all(
-        "matches",
-        filters={
-            "winner_id": (
-                "not.is.null"
-            ),
-        },
-        select=AUDIT_SELECT,
-        order="match_id.asc",
-        page_size=AUDIT_PAGE_SIZE,
+    print(
+        "Loading completed matches "
+        "with keyset pagination..."
+    )
+
+    raw_rows = (
+        select_completed_matches_keyset(
+            repo
+        )
+    )
+
+    print(
+        "Building canonical completed-match set..."
     )
 
     canonical_rows = (
@@ -580,8 +730,16 @@ def main() -> None:
         )
     )
 
+    print(
+        "Calculating raw environment coverage..."
+    )
+
     raw_report = calculate(
         raw_rows
+    )
+
+    print(
+        "Calculating canonical environment coverage..."
     )
 
     canonical_report = calculate(
@@ -601,19 +759,22 @@ def main() -> None:
             CORE_WEATHER_FIELDS
         ),
         "query_strategy": {
-            "single_supabase_snapshot": (
-                True
-            ),
-            "completed_filter_server_side": (
-                True
-            ),
+            "single_supabase_snapshot": True,
+            "completed_filter_server_side": True,
             "select_star": False,
+            "pagination": (
+                "keyset"
+            ),
+            "paging_key": (
+                "match_id"
+            ),
             "paging_order": (
                 "match_id.asc"
             ),
             "page_size": (
                 AUDIT_PAGE_SIZE
             ),
+            "offset_pagination": False,
             "canonical_dedupe": (
                 "local provider-event dedupe "
                 "mirroring repository priority"
@@ -643,6 +804,8 @@ def main() -> None:
             canonical_report
         ),
     }
+
+    print()
 
     print(
         json.dumps(
