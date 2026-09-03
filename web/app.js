@@ -1,224 +1,628 @@
-const config = window.TBT_CONFIG || { apiBase: "" };
+const config =
+  window.TBT_CONFIG || {
+    apiBase: "",
+  };
 
 let selectedTour = "";
 
-const el = (id) => document.getElementById(id);
+const el = (id) =>
+  document.getElementById(id);
 
 const endpoint = (path) =>
-  `${(config.apiBase || "").replace(/\/$/, "")}${path}`;
+  `${
+    (config.apiBase || "")
+      .replace(/\/$/, "")
+  }${path}`;
 
-function fmtDate(value) {
-  if (!value) return "TBA";
+function safeText(value, fallback = "—") {
+  const text =
+    value === null ||
+    value === undefined
+      ? ""
+      : String(value).trim();
 
-  const d = new Date(value);
+  return text || fallback;
+}
 
-  return new Intl.DateTimeFormat(
-    undefined,
-    {
-      weekday: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-      day: "2-digit",
-      month: "short",
-    }
-  ).format(d);
+function probability(value) {
+  const number =
+    Number(value);
+
+  if (!Number.isFinite(number)) {
+    return 50;
+  }
+
+  return Math.max(
+    0,
+    Math.min(
+      100,
+      number
+    )
+  );
 }
 
 function pct(value) {
-  return `${Number(value || 0).toFixed(1)}%`;
+  return `${
+    probability(value)
+      .toFixed(1)
+  }%`;
+}
+
+function formatMatchTime(value) {
+  if (!value) {
+    return "Time TBA";
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "Time TBA";
+  }
+
+  return new Intl
+    .DateTimeFormat(
+      undefined,
+      {
+        weekday: "short",
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      }
+    )
+    .format(date);
+}
+
+function formatGenerated(value) {
+  if (!value) {
+    return "";
+  }
+
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime()
+    )
+  ) {
+    return "";
+  }
+
+  return `Generated ${
+    new Intl
+      .DateTimeFormat(
+        undefined,
+        {
+          day: "2-digit",
+          month: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        }
+      )
+      .format(date)
+  }`;
+}
+
+function confidenceLabel(value) {
+  const band =
+    safeText(
+      value,
+      "low"
+    )
+      .toLowerCase();
+
+  return {
+    band,
+    label:
+      `${band} confidence`,
+  };
+}
+
+function surfaceLabel(value) {
+  return safeText(
+    value,
+    "unknown"
+  )
+    .replaceAll(
+      "_",
+      " "
+    )
+    .toUpperCase();
 }
 
 async function getJSON(path) {
-  const response = await fetch(
-    endpoint(path),
-    {
-      headers: {
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    }
-  );
+  const response =
+    await fetch(
+      endpoint(path),
+      {
+        headers: {
+          Accept:
+            "application/json",
+        },
 
-  const data = await response.json();
+        cache:
+          "no-store",
+      }
+    );
+
+  let data;
+
+  try {
+    data =
+      await response.json();
+  } catch {
+    throw new Error(
+      `Invalid API response (${response.status})`
+    );
+  }
 
   if (!response.ok) {
     throw new Error(
-      data.error || `HTTP ${response.status}`
+      data?.error ||
+      `HTTP ${response.status}`
     );
   }
 
   return data;
 }
 
-function renderMatch(match) {
-  const node = el(
-    "matchTemplate"
-  ).content.cloneNode(true);
+function setStatus(
+  text,
+  state = ""
+) {
+  const status =
+    el("status");
 
-  const card = node.querySelector(
-    ".match-card"
+  status.classList.remove(
+    "online",
+    "error"
   );
 
-  card.querySelector(
-    ".tour-pill"
-  ).textContent =
-    `${match.tour || "TOUR"} · ${
-      (match.surface || "unknown")
-        .replace("_", " ")
-        .toUpperCase()
-    }`;
+  if (state) {
+    status.classList.add(
+      state
+    );
+  }
 
-  card.querySelector(
-    ".tournament"
-  ).textContent =
-    match.tournament || "Tournament";
+  status
+    .querySelector(
+      ".status-text"
+    )
+    .textContent =
+      text;
+}
 
-  card.querySelector(
-    ".meta"
-  ).textContent =
-    `${fmtDate(match.scheduled_at)}${
-      match.round
-        ? ` · ${match.round}`
-        : ""
-    }`;
+function renderSignal(
+  container,
+  signal
+) {
+  if (
+    !signal ||
+    typeof signal !==
+      "object"
+  ) {
+    return;
+  }
 
-  const chip = card.querySelector(
-    ".confidence-chip"
+  const factor =
+    safeText(
+      signal.factor,
+      ""
+    );
+
+  const player =
+    safeText(
+      signal.favours_player_name,
+      ""
+    );
+
+  if (
+    !factor &&
+    !player
+  ) {
+    return;
+  }
+
+  const tag =
+    document
+      .createElement(
+        "span"
+      );
+
+  tag.className =
+    "signal";
+
+  if (
+    factor &&
+    player
+  ) {
+    tag.textContent =
+      `${factor} · ${player}`;
+  } else {
+    tag.textContent =
+      factor || player;
+  }
+
+  container.appendChild(
+    tag
   );
+}
 
-  const band =
-    match.prediction?.confidence_band
-    || "low";
-
-  chip.textContent =
-    `${band} · ${
-      pct(
-        match.prediction
-          ?.probability_pct
-      )
-    }`;
-
-  chip.classList.add(band);
-
-  [
-    [
-      ".player-one",
-      match.player1,
-    ],
-    [
-      ".player-two",
-      match.player2,
-    ],
-  ].forEach(
-    ([selector, player]) => {
-      const box = card.querySelector(
+function renderPlayer(
+  card,
+  selector,
+  player
+) {
+  const box =
+    card
+      .querySelector(
         selector
       );
 
-      box.querySelector(
-        ".name"
-      ).textContent =
-        player?.name || "Unknown";
+  const name =
+    safeText(
+      player?.name,
+      "Unknown player"
+    );
 
-      box.querySelector(
-        ".rank"
-      ).textContent =
-        player?.rank
-          ? `#${player.rank}`
-          : "NR";
+  const rank =
+    player?.rank
+      ? `#${player.rank}`
+      : "NR";
 
-      box.querySelector(
-        ".pct"
-      ).textContent =
-        pct(
-          player?.win_probability_pct
-        );
+  const chance =
+    probability(
+      player
+        ?.win_probability_pct
+    );
 
-      box.querySelector(
-        ".prob"
-      ).style.setProperty(
-        "--p",
-        `${
-          Math.max(
-            1,
-            Math.min(
-              99,
-              player?.win_probability_pct
-              || 50
-            )
-          )
-        }%`
+  box
+    .querySelector(
+      ".name"
+    )
+    .textContent =
+      name;
+
+  box
+    .querySelector(
+      ".rank"
+    )
+    .textContent =
+      rank;
+
+  box
+    .querySelector(
+      ".pct"
+    )
+    .textContent =
+      pct(chance);
+
+  box
+    .querySelector(
+      ".prob-fill"
+    )
+    .style
+    .setProperty(
+      "--probability",
+      `${chance}%`
+    );
+}
+
+function renderMatch(match) {
+  const node =
+    el(
+      "matchTemplate"
+    )
+      .content
+      .cloneNode(true);
+
+  const card =
+    node
+      .querySelector(
+        ".match-card"
       );
-    }
+
+  const tour =
+    safeText(
+      match?.tour,
+      "TOUR"
+    )
+      .toUpperCase();
+
+  const confidence =
+    confidenceLabel(
+      match
+        ?.prediction
+        ?.confidence_band
+    );
+
+  const predictionProbability =
+    probability(
+      match
+        ?.prediction
+        ?.probability_pct
+    );
+
+  card
+    .querySelector(
+      ".tour-pill"
+    )
+    .textContent =
+      tour;
+
+  card
+    .querySelector(
+      ".surface-pill"
+    )
+    .textContent =
+      surfaceLabel(
+        match?.surface
+      );
+
+  card
+    .querySelector(
+      ".tournament"
+    )
+    .textContent =
+      safeText(
+        match?.tournament,
+        "Tournament"
+      );
+
+  card
+    .querySelector(
+      ".match-time"
+    )
+    .textContent =
+      formatMatchTime(
+        match
+          ?.scheduled_at
+      );
+
+  const round =
+    card
+      .querySelector(
+        ".round"
+      );
+
+  const roundText =
+    safeText(
+      match?.round,
+      ""
+    );
+
+  if (roundText) {
+    round.textContent =
+      roundText;
+  } else {
+    round.remove();
+  }
+
+  const chip =
+    card
+      .querySelector(
+        ".confidence-chip"
+      );
+
+  chip.textContent =
+    confidence.label;
+
+  chip.classList.add(
+    confidence.band
   );
 
-  card.querySelector(
-    ".pick"
-  ).textContent =
-    match.prediction?.winner_name
-    || "—";
+  card
+    .querySelector(
+      ".pick"
+    )
+    .textContent =
+      safeText(
+        match
+          ?.prediction
+          ?.winner_name,
+        "No pick"
+      );
 
-  const signals = card.querySelector(
-    ".signals"
+  card
+    .querySelector(
+      ".pick-probability"
+    )
+    .textContent =
+      pct(
+        predictionProbability
+      );
+
+  renderPlayer(
+    card,
+    ".player-one",
+    match?.player1
   );
 
-  (
-    match.prediction?.signals
-    || []
-  )
-    .slice(0, 4)
-    .forEach((signal) => {
-      const tag =
-        document.createElement("span");
+  renderPlayer(
+    card,
+    ".player-two",
+    match?.player2
+  );
 
-      tag.className = "signal";
+  const signals =
+    card
+      .querySelector(
+        ".signals"
+      );
 
-      tag.textContent =
-        `${signal.factor} → ${
-          signal.favours_player_name
-        }`;
+  const sourceSignals =
+    Array.isArray(
+      match
+        ?.prediction
+        ?.signals
+    )
+      ? match
+          .prediction
+          .signals
+      : [];
 
-      signals.appendChild(tag);
-    });
+  sourceSignals
+    .slice(
+      0,
+      4
+    )
+    .forEach(
+      (signal) =>
+        renderSignal(
+          signals,
+          signal
+        )
+    );
 
-  if (!signals.children.length) {
+  if (
+    !signals.children.length
+  ) {
     signals.textContent =
       "No strong secondary signal.";
   }
 
-  card.querySelector(
-    ".model-version"
-  ).textContent =
-    match.model_version
-    || "model —";
+  card
+    .querySelector(
+      ".model-version"
+    )
+    .textContent =
+      safeText(
+        match?.model_version,
+        "Model —"
+      );
 
-  card.querySelector(
-    ".generated"
-  ).textContent =
-    match.generated_at
-      ? `generated ${
-          fmtDate(match.generated_at)
-        }`
-      : "";
+  card
+    .querySelector(
+      ".generated"
+    )
+    .textContent =
+      formatGenerated(
+        match?.generated_at
+      );
 
   return node;
 }
 
-async function load() {
-  const status = el("status");
+function showEmpty(message) {
+  const board =
+    el("board");
 
-  status.classList.remove(
-    "online"
+  board.innerHTML = "";
+
+  const empty =
+    document
+      .createElement(
+        "div"
+      );
+
+  empty.className =
+    "empty-state";
+
+  empty.textContent =
+    message;
+
+  board.appendChild(
+    empty
+  );
+}
+
+function updateOverview(
+  predictions,
+  model
+) {
+  const champion =
+    model?.champion ||
+    model?.model ||
+    null;
+
+  el(
+    "metricMatches"
+  )
+    .textContent =
+      predictions
+        ?.count ??
+      predictions
+        ?.matches
+        ?.length ??
+      0;
+
+  el(
+    "metricModel"
+  )
+    .textContent =
+      champion
+        ?.model_version ||
+      predictions
+        ?.matches
+        ?.[0]
+        ?.model_version ||
+      "—";
+
+  el(
+    "metricStatus"
+  )
+    .textContent =
+      safeText(
+        champion
+          ?.lifecycle_status,
+        "—"
+      )
+        .toUpperCase();
+
+  const now =
+    new Date();
+
+  const time =
+    now
+      .toLocaleTimeString(
+        [],
+        {
+          hour:
+            "2-digit",
+          minute:
+            "2-digit",
+        }
+      );
+
+  el(
+    "metricUpdated"
+  )
+    .textContent =
+      time;
+
+  el(
+    "updated"
+  )
+    .textContent =
+      `Updated ${time}`;
+}
+
+async function load() {
+  const refresh =
+    el("refresh");
+
+  refresh.disabled =
+    true;
+
+  refresh.textContent =
+    "Updating…";
+
+  setStatus(
+    "Updating"
   );
 
-  status.querySelector(
-    "span:last-child"
-  ).textContent = "Updating";
-
   const query =
-    new URLSearchParams({
-      days: "3",
-    });
+    new URLSearchParams(
+      {
+        days: "3",
+      }
+    );
 
   if (selectedTour) {
     query.set(
@@ -231,152 +635,135 @@ async function load() {
     const [
       predictions,
       model,
-    ] = await Promise.all([
-      getJSON(
-        `/api/v1/predictions/upcoming?${query}`
-      ),
-      getJSON(
-        "/api/v1/model/status"
-      ).catch(
-        () => ({
-          model: null,
-        })
-      ),
-    ]);
+    ] =
+      await Promise.all([
+        getJSON(
+          `/api/v1/predictions/upcoming?${query}`
+        ),
 
-    const board = el("board");
-
-    board.innerHTML = "";
-
-    (
-      predictions.matches
-      || []
-    ).forEach(
-      (match) =>
-        board.appendChild(
-          renderMatch(match)
+        getJSON(
+          "/api/v1/model/status"
         )
-    );
+          .catch(
+            () => ({
+              champion:
+                null,
+              model:
+                null,
+            })
+          ),
+      ]);
+
+    const matches =
+      Array.isArray(
+        predictions
+          ?.matches
+      )
+        ? predictions
+            .matches
+        : [];
+
+    const board =
+      el("board");
+
+    board.innerHTML =
+      "";
 
     if (
-      !predictions.matches?.length
+      !matches.length
     ) {
-      board.innerHTML =
-        '<div class="empty">No precomputed matches in the selected horizon yet.</div>';
+      showEmpty(
+        "No upcoming BlinQ predictions in the selected horizon."
+      );
+    } else {
+      matches
+        .forEach(
+          (match) => {
+            board
+              .appendChild(
+                renderMatch(
+                  match
+                )
+              );
+          }
+        );
     }
 
-    const champion =
-      model.champion
-      || model.model
-      || null;
-
-    el(
-      "metricMatches"
-    ).textContent =
-      predictions.count ?? 0;
-
-    el(
-      "metricModel"
-    ).textContent =
-      champion?.model_version
-      || predictions.matches?.[0]
-        ?.model_version
-      || "—";
-
-    el(
-      "metricStatus"
-    ).textContent =
-      champion?.lifecycle_status
-        ?.toUpperCase()
-      || "—";
-
-    const currentTime =
-      new Date();
-
-    el(
-      "metricUpdated"
-    ).textContent =
-      currentTime.toLocaleTimeString(
-        [],
-        {
-          hour: "2-digit",
-          minute: "2-digit",
-        }
-      );
-
-    el(
-      "updated"
-    ).textContent =
-      `Updated ${
-        currentTime
-          .toLocaleTimeString(
-            [],
-            {
-              hour: "2-digit",
-              minute: "2-digit",
-            }
-          )
-      }`;
-
-    status.classList.add(
-      "online"
+    updateOverview(
+      predictions,
+      model
     );
 
-    status.querySelector(
-      "span:last-child"
-    ).textContent =
-      "BlinQ online";
+    setStatus(
+      "BlinQ online",
+      "online"
+    );
   } catch (error) {
-    el(
-      "board"
-    ).innerHTML =
-      `<div class="empty">Could not load BlinQ: ${error.message}</div>`;
+    showEmpty(
+      `Could not load predictions: ${
+        error?.message ||
+        "unknown error"
+      }`
+    );
 
-    status.querySelector(
-      "span:last-child"
-    ).textContent =
-      "API unavailable";
+    setStatus(
+      "API unavailable",
+      "error"
+    );
+  } finally {
+    refresh.disabled =
+      false;
+
+    refresh.textContent =
+      "Refresh board";
   }
 }
 
-el(
-  "refresh"
-).addEventListener(
-  "click",
-  load
-);
+el("refresh")
+  .addEventListener(
+    "click",
+    load
+  );
 
 document
   .querySelectorAll(
     ".segment"
   )
   .forEach(
-    (button) =>
-      button.addEventListener(
-        "click",
-        () => {
-          document
-            .querySelectorAll(
-              ".segment"
-            )
-            .forEach(
-              (item) =>
-                item.classList.remove(
-                  "active"
-                )
-            );
+    (button) => {
+      button
+        .addEventListener(
+          "click",
+          () => {
+            document
+              .querySelectorAll(
+                ".segment"
+              )
+              .forEach(
+                (item) =>
+                  item
+                    .classList
+                    .remove(
+                      "active"
+                    )
+              );
 
-          button.classList.add(
-            "active"
-          );
+            button
+              .classList
+              .add(
+                "active"
+              );
 
-          selectedTour =
-            button.dataset.tour
-            || "";
+            selectedTour =
+              button
+                .dataset
+                .tour ||
+              "";
 
-          load();
-        }
-      )
+            load();
+          }
+        );
+    }
   );
 
 load();
