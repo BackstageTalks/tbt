@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import calendar
 import logging
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 from ..config import Settings, settings
 from ..errors import ProviderError
@@ -15,16 +14,46 @@ from .predictor import predict_matches
 logger = logging.getLogger(__name__)
 
 
+def _close_provider(
+    provider: RapidTennisClient,
+) -> None:
+    """
+    Close the provider's underlying HTTP client.
+
+    The current RapidTennisClient exposes the httpx client directly and
+    does not define its own close() method.
+    """
+
+    client = getattr(
+        provider,
+        "client",
+        None,
+    )
+
+    if client is not None:
+        close = getattr(
+            client,
+            "close",
+            None,
+        )
+
+        if callable(close):
+            close()
+
+
 def bootstrap_history(
     start_year: int,
     end_year: int,
     cfg: Settings = settings,
 ) -> dict:
-    """Download only real historical match results and persist them incrementally.
+    """
+    Download real historical ATP/WTA results and persist them incrementally.
 
-    Data are written month-by-month. No odds/statistics/weather calls are made
-    in this bulk step; those are separate enrichment layers so the tennis quota
-    and provenance remain auditable.
+    The current provider exposes historical data by full calendar year.
+    Each tour/year is therefore downloaded once.
+
+    Existing Supabase rows are preserved through canonical upserts.
+    No odds, statistics, rankings or environment data are fabricated here.
     """
 
     if end_year < start_year:
@@ -43,7 +72,6 @@ def bootstrap_history(
     report: dict = {
         "years": {},
         "matches_written": 0,
-        "rapidapi_requests": 0,
     }
 
     yesterday = (
@@ -60,119 +88,109 @@ def bootstrap_history(
             start_year,
             end_year + 1,
         ):
+            if year > yesterday.year:
+                logger.info(
+                    "Skipping future year %s",
+                    year,
+                )
+
+                continue
+
             year_report = {
                 "atp": 0,
                 "wta": 0,
+                "canonical": 0,
                 "written": 0,
             }
 
-            for month in range(
-                1,
-                13,
+            year_matches = []
+
+            for tour in (
+                "atp",
+                "wta",
             ):
-                month_start = date(
+                logger.info(
+                    "Downloading %s history for %s",
+                    tour.upper(),
                     year,
-                    month,
-                    1,
                 )
 
-                month_end = date(
-                    year,
-                    month,
-                    calendar.monthrange(
+                matches = (
+                    provider.historical_year(
+                        tour,
                         year,
-                        month,
-                    )[1],
-                )
-
-                if (
-                    month_start
-                    > yesterday
-                ):
-                    break
-
-                month_end = min(
-                    month_end,
-                    yesterday,
-                )
-
-                month_matches = []
-
-                for tour in (
-                    "atp",
-                    "wta",
-                ):
-                    logger.info(
-                        "Downloading %s history "
-                        "for %04d-%02d",
-                        tour.upper(),
-                        year,
-                        month,
                     )
+                )
 
-                    matches = (
-                        provider.historical_period(
-                            tour,
-                            month_start,
-                            month_end,
+                completed = [
+                    match
+                    for match
+                    in matches
+                    if (
+                        match.is_completed
+                        and match.winner_id
+                        and (
+                            year
+                            < yesterday.year
+                            or (
+                                match.scheduled_at
+                                .astimezone(
+                                    timezone.utc
+                                )
+                                .date()
+                                <= yesterday
+                            )
                         )
                     )
-
-                    completed = [
-                        match
-                        for match in matches
-                        if (
-                            match.is_completed
-                            and match.winner_id
-                        )
-                    ]
-
-                    year_report[
-                        tour
-                    ] += len(
-                        completed
-                    )
-
-                    month_matches.extend(
-                        completed
-                    )
-
-                deduped = list(
-                    {
-                        match.match_id: (
-                            match
-                        )
-                        for match
-                        in month_matches
-                    }.values()
-                )
-
-                written = (
-                    repo.upsert_matches(
-                        deduped
-                    )
-                )
+                ]
 
                 year_report[
-                    "written"
-                ] += written
+                    tour
+                ] = len(
+                    completed
+                )
 
-                report[
-                    "matches_written"
-                ] += written
+                year_matches.extend(
+                    completed
+                )
 
                 logger.info(
-                    "%04d-%02d stored %s real "
-                    "completed matches; "
-                    "RapidAPI requests=%s "
-                    "remaining=%s/%s",
+                    "%s %s returned %s "
+                    "completed canonical matches",
+                    tour.upper(),
                     year,
-                    month,
-                    written,
-                    provider.request_count,
-                    provider.rate_limit_remaining,
-                    provider.rate_limit_limit,
+                    len(
+                        completed
+                    ),
                 )
+
+            deduped = list(
+                {
+                    match.match_id: match
+                    for match
+                    in year_matches
+                }.values()
+            )
+
+            year_report[
+                "canonical"
+            ] = len(
+                deduped
+            )
+
+            written = (
+                repo.upsert_matches(
+                    deduped
+                )
+            )
+
+            year_report[
+                "written"
+            ] = written
+
+            report[
+                "matches_written"
+            ] += written
 
             report[
                 "years"
@@ -180,26 +198,26 @@ def bootstrap_history(
                 str(year)
             ] = year_report
 
+            logger.info(
+                "%s history complete: "
+                "ATP=%s WTA=%s canonical=%s written=%s",
+                year,
+                year_report[
+                    "atp"
+                ],
+                year_report[
+                    "wta"
+                ],
+                year_report[
+                    "canonical"
+                ],
+                written,
+            )
+
     finally:
-        report[
-            "rapidapi_requests"
-        ] = (
-            provider.request_count
+        _close_provider(
+            provider
         )
-
-        report[
-            "rapidapi_remaining"
-        ] = (
-            provider.rate_limit_remaining
-        )
-
-        report[
-            "rapidapi_limit"
-        ] = (
-            provider.rate_limit_limit
-        )
-
-        provider.close()
 
     completed_in_db = len(
         repo.get_completed_matches()
@@ -227,8 +245,8 @@ def bootstrap_history(
         logger.warning(
             "Bootstrap stored %s completed "
             "matches; production training "
-            "currently requires %s. Import more "
-            "history before retraining.",
+            "currently requires %s. "
+            "Import more history before retraining.",
             completed_in_db,
             cfg.min_train_matches,
         )
@@ -259,9 +277,14 @@ def _fixture_pair_day_key(
         str(
             match.tour
         ).lower(),
-        match.scheduled_at.astimezone(
-            timezone.utc
-        ).date().isoformat(),
+        (
+            match.scheduled_at
+            .astimezone(
+                timezone.utc
+            )
+            .date()
+            .isoformat()
+        ),
         p1,
         p2,
     )
@@ -274,7 +297,12 @@ def _fixture_priority(
     int,
     float,
 ]:
-    """Choose the strongest provider representation of one real fixture."""
+    """
+    Choose the strongest representation of one upcoming fixture.
+
+    Prefer a provider event ID, then a richer raw payload, then the latest
+    provider timestamp as a deterministic final tiebreak.
+    """
 
     raw = (
         match.provider_payload
@@ -285,33 +313,17 @@ def _fixture_priority(
         else {}
     )
 
-    try:
-        category_id = int(
-            raw.get(
-                "_tbt_source_category_id"
-            )
-        )
-
-    except (
-        TypeError,
-        ValueError,
-    ):
-        category_id = 0
-
-    is_grand_slam = (
-        1
-        if (
-            category_id
-            == RapidTennisClient.CATEGORY_GRAND_SLAM
-        )
-        else 0
-    )
-
     has_provider_id = (
         1
         if (
             raw.get(
                 "_tbt_provider_event_id"
+            )
+            or raw.get(
+                "provider_event_id"
+            )
+            or raw.get(
+                "eventId"
             )
             or raw.get(
                 "id"
@@ -321,8 +333,10 @@ def _fixture_priority(
     )
 
     return (
-        is_grand_slam,
         has_provider_id,
+        len(
+            raw
+        ),
         match.scheduled_at.timestamp(),
     )
 
@@ -333,7 +347,9 @@ def _dedupe_upcoming(
     list,
     int,
 ]:
-    """Collapse duplicate provider representations of the same fixture."""
+    """
+    Collapse multiple provider representations of the same singles fixture.
+    """
 
     chosen: dict[
         tuple[
@@ -402,11 +418,8 @@ def _require_champion_artifact(
     model,
 ) -> dict:
     """
-    Refuse prediction generation unless the loaded local artifact is
-    exactly the currently approved database champion.
-
-    This prevents a newly trained challenger artifact from silently
-    generating production predictions.
+    Refuse production prediction generation unless the loaded artifact is
+    exactly the current database champion.
     """
 
     champion = (
@@ -438,8 +451,8 @@ def _require_champion_artifact(
 
     if not artifact_version:
         raise RuntimeError(
-            "Loaded model artifact has no "
-            "model version."
+            "Loaded model artifact has "
+            "no model version."
         )
 
     if (
@@ -460,18 +473,16 @@ def _require_champion_artifact(
 def refresh_predictions(
     cfg: Settings = settings,
 ) -> dict:
-    """Refresh only future ATP/WTA singles fixtures using the champion model."""
+    """
+    Refresh genuinely future ATP/WTA singles fixtures using the champion model.
+    """
 
-    provider = (
-        RapidTennisClient(
-            cfg
-        )
+    provider = RapidTennisClient(
+        cfg
     )
 
-    repo = (
-        SupabaseRepository(
-            cfg
-        )
+    repo = SupabaseRepository(
+        cfg
     )
 
     model = load_model(
@@ -516,20 +527,15 @@ def refresh_predictions(
                 )
             )
 
-        rapidapi_requests = (
-            provider.request_count
-        )
-
-        rapidapi_remaining = (
-            provider.rate_limit_remaining
-        )
-
     finally:
-        provider.close()
+        _close_provider(
+            provider
+        )
 
     upcoming = [
         match
-        for match in upcoming
+        for match
+        in upcoming
         if (
             match.scheduled_at
             > now
@@ -537,9 +543,7 @@ def refresh_predictions(
     ]
 
     by_match = {
-        match.match_id: (
-            match
-        )
+        match.match_id: match
         for match
         in upcoming
     }
@@ -607,13 +611,9 @@ def refresh_predictions(
     )
 
     return {
-        "predictions": (
-            written
-        ),
-        "fixtures": (
-            len(
-                upcoming
-            )
+        "predictions": written,
+        "fixtures": len(
+            upcoming
         ),
         "model_version": (
             model.version
@@ -623,15 +623,8 @@ def refresh_predictions(
                 "lifecycle_status"
             )
         ),
-        "rapidapi_requests": (
-            rapidapi_requests
-        ),
-        "rapidapi_remaining": (
-            rapidapi_remaining
-        ),
         "fixture_source": (
-            "calendar/categories -> "
-            "category/events"
+            "RapidTennisClient.upcoming"
         ),
         "duplicate_fixtures_removed": (
             duplicate_fixtures_removed
@@ -645,16 +638,19 @@ def refresh_predictions(
 def sync_current_year_results(
     cfg: Settings = settings,
 ) -> dict:
-    provider = (
-        RapidTennisClient(
-            cfg
-        )
+    """
+    Reconcile the previous seven completed UTC days.
+
+    The provider exposes history by year, so the current year is fetched once
+    per tour and then filtered locally to the required date window.
+    """
+
+    provider = RapidTennisClient(
+        cfg
     )
 
-    repo = (
-        SupabaseRepository(
-            cfg
-        )
+    repo = SupabaseRepository(
+        cfg
     )
 
     today = (
@@ -677,39 +673,55 @@ def sync_current_year_results(
         )
     )
 
+    years = range(
+        start.year,
+        end.year + 1,
+    )
+
     try:
         completed = []
 
-        for tour in (
-            "atp",
-            "wta",
-        ):
-            completed.extend(
-                provider.historical_period(
-                    tour,
-                    start,
-                    end,
+        for year in years:
+            for tour in (
+                "atp",
+                "wta",
+            ):
+                matches = (
+                    provider.historical_year(
+                        tour,
+                        year,
+                    )
                 )
-            )
 
-        rapidapi_requests = (
-            provider.request_count
-        )
+                completed.extend(
+                    match
+                    for match
+                    in matches
+                    if (
+                        match.is_completed
+                        and match.winner_id
+                        and start
+                        <= (
+                            match.scheduled_at
+                            .astimezone(
+                                timezone.utc
+                            )
+                            .date()
+                        )
+                        <= end
+                    )
+                )
 
     finally:
-        provider.close()
+        _close_provider(
+            provider
+        )
 
     completed = list(
         {
-            match.match_id: (
-                match
-            )
+            match.match_id: match
             for match
             in completed
-            if (
-                match.is_completed
-                and match.winner_id
-            )
         }.values()
     )
 
@@ -726,13 +738,21 @@ def sync_current_year_results(
     )
 
     return {
+        "window_start": (
+            start.isoformat()
+        ),
+        "window_end": (
+            end.isoformat()
+        ),
+        "completed_matches_found": (
+            len(
+                completed
+            )
+        ),
         "completed_matches_upserted": (
             upserted
         ),
         "predictions_settled": (
             settled
-        ),
-        "rapidapi_requests": (
-            rapidapi_requests
         ),
     }
