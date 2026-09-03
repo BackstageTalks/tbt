@@ -15,7 +15,8 @@ concurrency:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
+
     env:
       PYTHONPATH: api
 
@@ -36,13 +37,20 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt
 
-      - name: Download tested production model
+      - name: Compile
+        run: |
+          python -m compileall -q api scripts
+
+      - name: Download current champion artifact
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/model_store.py download --file api/artifacts/model.joblib
+        run: |
+          python scripts/model_store.py download \
+            --champion \
+            --file api/artifacts/model.joblib
 
-      - name: Refresh upcoming predictions
+      - name: Refresh upcoming champion predictions
         env:
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
@@ -50,7 +58,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/refresh_predictions.py
+        run: |
+          python scripts/refresh_predictions.py
 
       - name: Reconcile recent results
         env:
@@ -60,4 +69,5 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/settle_results.py
+        run: |
+          python scripts/settle_results.py
