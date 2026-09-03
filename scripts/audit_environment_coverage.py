@@ -1,8 +1,10 @@
+# scripts/audit_environment_coverage.py
+
 from __future__ import annotations
 
 import json
 import math
-from collections import Counter
+from collections import Counter, defaultdict
 from typing import Any
 
 from _bootstrap import ROOT  # noqa: F401
@@ -36,9 +38,38 @@ LEGACY_WEATHER_FIELDS = (
     "surface_pressure",
 )
 
+# Only fetch data actually required by this audit.
+#
+# This replaces the old SELECT * query that became too
+# expensive once provider_payload/environment data grew.
+AUDIT_SELECT = ",".join(
+    (
+        "match_id",
+        "scheduled_at",
+        "tour",
+        "tournament",
+        "tournament_id",
+        "round_name",
+        "winner_id",
+        "stats",
+        "provider_payload",
+    )
+)
 
-def as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
+AUDIT_PAGE_SIZE = 200
+
+
+def as_dict(
+    value: Any,
+) -> dict[str, Any]:
+    return (
+        value
+        if isinstance(
+            value,
+            dict,
+        )
+        else {}
+    )
 
 
 def safe_number(
@@ -48,14 +79,21 @@ def safe_number(
         if value is None:
             return None
 
-        number = float(value)
+        number = float(
+            value
+        )
 
-        if not math.isfinite(number):
+        if not math.isfinite(
+            number
+        ):
             return None
 
         return number
 
-    except (TypeError, ValueError):
+    except (
+        TypeError,
+        ValueError,
+    ):
         return None
 
 
@@ -64,10 +102,13 @@ def weather_usable(
 ) -> bool:
     return all(
         safe_number(
-            weather.get(field)
+            weather.get(
+                field
+            )
         )
         is not None
-        for field in CORE_WEATHER_FIELDS
+        for field
+        in CORE_WEATHER_FIELDS
     )
 
 
@@ -76,7 +117,8 @@ def canonical_schema(
 ) -> bool:
     return all(
         field in weather
-        for field in CANONICAL_WEATHER_FIELDS
+        for field
+        in CANONICAL_WEATHER_FIELDS
     )
 
 
@@ -85,121 +127,300 @@ def legacy_schema(
 ) -> bool:
     return any(
         field in weather
-        for field in LEGACY_WEATHER_FIELDS
+        for field
+        in LEGACY_WEATHER_FIELDS
+    )
+
+
+def payload(
+    row: dict[str, Any],
+) -> dict[str, Any]:
+    return as_dict(
+        row.get(
+            "provider_payload"
+        )
     )
 
 
 def environment(
     row: dict[str, Any],
 ) -> dict[str, Any]:
-    payload = as_dict(
-        row.get("provider_payload")
+    raw = payload(
+        row
     )
 
     return as_dict(
-        payload.get("_tbt_environment")
+        raw.get(
+            "_tbt_environment"
+        )
     )
+
+
+def provider_event_id(
+    row: dict[str, Any],
+) -> str | None:
+    """
+    Extract real provider event ID with the same precedence
+    used by the current canonical repository.
+    """
+
+    raw = payload(
+        row
+    )
+
+    for key in (
+        "_tbt_provider_event_id",
+        "provider_event_id",
+        "event_id",
+        "eventId",
+    ):
+        value = raw.get(
+            key
+        )
+
+        if value not in (
+            None,
+            "",
+        ):
+            return str(
+                value
+            )
+
+    event = raw.get(
+        "event"
+    )
+
+    if isinstance(
+        event,
+        dict,
+    ):
+        value = event.get(
+            "id"
+        )
+
+        if value not in (
+            None,
+            "",
+        ):
+            return str(
+                value
+            )
+
+    value = raw.get(
+        "id"
+    )
+
+    if value not in (
+        None,
+        "",
+    ):
+        return str(
+            value
+        )
+
+    return None
 
 
 def state(
     env: dict[str, Any],
 ) -> str:
     if not env:
-        return "missing"
+        return (
+            "missing"
+        )
 
-    if env.get("venue_resolved") is not True:
-        return "unresolved"
+    if (
+        env.get(
+            "venue_resolved"
+        )
+        is not True
+    ):
+        return (
+            "unresolved"
+        )
 
     weather = as_dict(
-        env.get("weather")
+        env.get(
+            "weather"
+        )
     )
 
     if not weather:
-        return "no_weather"
+        return (
+            "no_weather"
+        )
 
-    if legacy_schema(weather):
-        return "legacy_weather_schema"
+    if legacy_schema(
+        weather
+    ):
+        return (
+            "legacy_weather_schema"
+        )
 
-    if not canonical_schema(weather):
-        return "noncanonical_weather"
+    if not canonical_schema(
+        weather
+    ):
+        return (
+            "noncanonical_weather"
+        )
 
-    if not weather_usable(weather):
-        return "incomplete_weather"
+    if not weather_usable(
+        weather
+    ):
+        return (
+            "incomplete_weather"
+        )
 
     if (
-        env.get("schema_version")
+        env.get(
+            "schema_version"
+        )
         != ENVIRONMENT_SCHEMA_VERSION
     ):
-        return "needs_schema_stamp"
+        return (
+            "needs_schema_stamp"
+        )
 
-    return "current"
+    return (
+        "current"
+    )
 
 
 def calculate(
-    rows: list[dict[str, Any]],
+    rows: list[
+        dict[str, Any]
+    ],
 ) -> dict[str, Any]:
     counts = Counter()
 
     for row in rows:
-        env = environment(row)
+        env = environment(
+            row
+        )
+
         weather = as_dict(
-            env.get("weather")
+            env.get(
+                "weather"
+            )
         )
 
         if env:
-            counts["with_environment"] += 1
+            counts[
+                "with_environment"
+            ] += 1
 
-        if env.get("venue_resolved") is True:
-            counts["venue_resolved"] += 1
+        if (
+            env.get(
+                "venue_resolved"
+            )
+            is True
+        ):
+            counts[
+                "venue_resolved"
+            ] += 1
 
         if weather:
-            counts["with_weather_object"] += 1
+            counts[
+                "with_weather_object"
+            ] += 1
 
-        if canonical_schema(weather):
+        if canonical_schema(
+            weather
+        ):
             counts[
                 "canonical_weather_schema"
             ] += 1
 
         # Deliberately independent of schema_version.
-        if weather_usable(weather):
-            counts["usable_weather"] += 1
+        #
+        # A row can contain useful weather data even if only
+        # its environment schema stamp needs migration.
+        if weather_usable(
+            weather
+        ):
+            counts[
+                "usable_weather"
+            ] += 1
 
         if (
-            env.get("schema_version")
+            env.get(
+                "schema_version"
+            )
             == ENVIRONMENT_SCHEMA_VERSION
         ):
-            counts["schema_v2"] += 1
+            counts[
+                "schema_v2"
+            ] += 1
 
-        counts[state(env)] += 1
+        counts[
+            state(
+                env
+            )
+        ] += 1
 
-    total = len(rows)
+    total = len(
+        rows
+    )
 
-    def ratio(value: int) -> float:
-        return value / total if total else 0.0
+    def ratio(
+        value: int,
+    ) -> float:
+        return (
+            value
+            / total
+            if total
+            else 0.0
+        )
 
     return {
-        "total": total,
-        **dict(counts),
+        "total": (
+            total
+        ),
+        **dict(
+            counts
+        ),
         "coverage": {
-            "environment": ratio(
-                counts["with_environment"]
+            "environment": (
+                ratio(
+                    counts[
+                        "with_environment"
+                    ]
+                )
             ),
-            "venue_resolved": ratio(
-                counts["venue_resolved"]
+            "venue_resolved": (
+                ratio(
+                    counts[
+                        "venue_resolved"
+                    ]
+                )
             ),
-            "weather_object": ratio(
-                counts["with_weather_object"]
+            "weather_object": (
+                ratio(
+                    counts[
+                        "with_weather_object"
+                    ]
+                )
             ),
-            "canonical_weather_schema": ratio(
-                counts[
-                    "canonical_weather_schema"
-                ]
+            "canonical_weather_schema": (
+                ratio(
+                    counts[
+                        "canonical_weather_schema"
+                    ]
+                )
             ),
-            "usable_weather": ratio(
-                counts["usable_weather"]
+            "usable_weather": (
+                ratio(
+                    counts[
+                        "usable_weather"
+                    ]
+                )
             ),
-            "schema_v2": ratio(
-                counts["schema_v2"]
+            "schema_v2": (
+                ratio(
+                    counts[
+                        "schema_v2"
+                    ]
+                )
             ),
         },
         "migration": {
@@ -209,9 +430,15 @@ def calculate(
                 ]
             ),
             "real_refresh_needed": (
-                counts["missing"]
-                + counts["unresolved"]
-                + counts["no_weather"]
+                counts[
+                    "missing"
+                ]
+                + counts[
+                    "unresolved"
+                ]
+                + counts[
+                    "no_weather"
+                ]
                 + counts[
                     "legacy_weather_schema"
                 ]
@@ -226,42 +453,361 @@ def calculate(
     }
 
 
-def main() -> None:
-    repo = SupabaseRepository()
+def canonical_priority(
+    row: dict[str, Any],
+) -> tuple[
+    int,
+    int,
+    int,
+    int,
+    str,
+]:
+    """
+    Mirror SupabaseRepository._canonical_match_priority().
 
-    raw_rows = repo.select_all(
-        "matches",
-        filters={
-            "winner_id": "not.is.null",
-        },
-        order="scheduled_at.asc",
+    If multiple database rows represent one provider event,
+    prefer the representation produced by the current
+    category-based ingestion and then the richer payload.
+    """
+
+    raw = payload(
+        row
     )
 
-    canonical_matches = (
-        repo.get_completed_matches()
+    source_category_id = (
+        raw.get(
+            "_tbt_source_category_id"
+        )
     )
 
-    canonical_rows = [
-        {
-            "provider_payload": (
-                match.provider_payload
+    tournament = (
+        raw.get(
+            "tournament"
+        )
+        if isinstance(
+            raw.get(
+                "tournament"
+            ),
+            dict,
+        )
+        else {}
+    )
+
+    unique_tournament = (
+        tournament.get(
+            "uniqueTournament"
+        )
+        if isinstance(
+            tournament.get(
+                "uniqueTournament"
+            ),
+            dict,
+        )
+        else {}
+    )
+
+    richness = sum(
+        int(
+            bool(
+                value
             )
-        }
-        for match in canonical_matches
-    ]
+        )
+        for value
+        in (
+            source_category_id,
+            unique_tournament.get(
+                "id"
+            ),
+            unique_tournament.get(
+                "name"
+            ),
+            tournament.get(
+                "id"
+            ),
+            tournament.get(
+                "name"
+            ),
+            row.get(
+                "tournament_id"
+            ),
+            row.get(
+                "round_name"
+            ),
+            row.get(
+                "stats"
+            ),
+        )
+    )
+
+    try:
+        payload_size = len(
+            json.dumps(
+                raw,
+                ensure_ascii=False,
+                default=str,
+            )
+        )
+
+    except Exception:
+        payload_size = 0
+
+    return (
+        int(
+            source_category_id
+            is not None
+        ),
+        int(
+            bool(
+                unique_tournament.get(
+                    "id"
+                )
+            )
+        ),
+        richness,
+        payload_size,
+        str(
+            row.get(
+                "match_id"
+            )
+            or ""
+        ),
+    )
+
+
+def dedupe_completed_rows(
+    rows: list[
+        dict[str, Any]
+    ],
+) -> list[
+    dict[str, Any]
+]:
+    """
+    Canonical completed-match dedupe.
+
+    Only rows that share the same real provider event ID
+    are collapsed.
+
+    Rows without provider event IDs remain untouched.
+
+    This mirrors repository behaviour without issuing
+    another huge Supabase SELECT.
+    """
+
+    grouped: dict[
+        str,
+        list[
+            dict[str, Any]
+        ],
+    ] = defaultdict(
+        list
+    )
+
+    without_provider_id: list[
+        dict[str, Any]
+    ] = []
+
+    for row in rows:
+        event_id = (
+            provider_event_id(
+                row
+            )
+        )
+
+        if event_id is None:
+            without_provider_id.append(
+                row
+            )
+
+            continue
+
+        grouped[
+            event_id
+        ].append(
+            row
+        )
+
+    canonical: list[
+        dict[str, Any]
+    ] = []
+
+    for group in grouped.values():
+        if (
+            len(
+                group
+            )
+            == 1
+        ):
+            canonical.append(
+                group[0]
+            )
+
+            continue
+
+        winner = max(
+            group,
+            key=(
+                canonical_priority
+            ),
+        )
+
+        canonical.append(
+            winner
+        )
+
+    canonical.extend(
+        without_provider_id
+    )
+
+    # No SQL sort needed.
+    # Local deterministic ordering is cheap.
+    canonical.sort(
+        key=lambda row: (
+            str(
+                row.get(
+                    "scheduled_at"
+                )
+                or ""
+            ),
+            str(
+                row.get(
+                    "match_id"
+                )
+                or ""
+            ),
+        )
+    )
+
+    return canonical
+
+
+def main() -> None:
+    repo = (
+        SupabaseRepository()
+    )
+
+    # -------------------------------------------------
+    # ONE Supabase snapshot only
+    # -------------------------------------------------
+    #
+    # Previous implementation did:
+    #
+    # 1. select=* completed matches
+    #    ORDER BY scheduled_at
+    #
+    # 2. repo.get_completed_matches()
+    #    which performs another large select
+    #
+    # This became too expensive and triggered:
+    #
+    # 57014 canceling statement due to statement timeout
+    #
+    # New approach:
+    #
+    # - winner filter server-side
+    # - limited column selection
+    # - 200 rows per page
+    # - paging by match_id
+    # - canonical dedupe locally
+    #
+    raw_rows = (
+        repo.select_all(
+            "matches",
+            filters={
+                "winner_id": (
+                    "not.is.null"
+                ),
+            },
+            select=(
+                AUDIT_SELECT
+            ),
+            order=(
+                "match_id.asc"
+            ),
+            page_size=(
+                AUDIT_PAGE_SIZE
+            ),
+        )
+    )
+
+    canonical_rows = (
+        dedupe_completed_rows(
+            raw_rows
+        )
+    )
+
+    raw_report = (
+        calculate(
+            raw_rows
+        )
+    )
+
+    canonical_report = (
+        calculate(
+            canonical_rows
+        )
+    )
+
+    duplicate_rows_ignored = (
+        len(
+            raw_rows
+        )
+        - len(
+            canonical_rows
+        )
+    )
 
     report = {
         "environment_schema_version": (
             ENVIRONMENT_SCHEMA_VERSION
         ),
-        "usable_weather_definition": list(
-            CORE_WEATHER_FIELDS
+        "usable_weather_definition": (
+            list(
+                CORE_WEATHER_FIELDS
+            )
         ),
-        "raw": calculate(
-            raw_rows
+        "query_strategy": {
+            "single_supabase_snapshot": True,
+            "completed_filter_server_side": True,
+            "select_star": False,
+            "paging_order": (
+                "match_id.asc"
+            ),
+            "page_size": (
+                AUDIT_PAGE_SIZE
+            ),
+            "canonical_dedupe": (
+                "local provider-event dedupe "
+                "mirroring repository priority"
+            ),
+        },
+        "duplicates": {
+            "raw_completed_rows": (
+                len(
+                    raw_rows
+                )
+            ),
+            "canonical_completed_rows": (
+                len(
+                    canonical_rows
+                )
+            ),
+            "duplicate_rows_ignored": (
+                duplicate_rows_ignored
+            ),
+            "duplicate_ratio": (
+                duplicate_rows_ignored
+                / len(
+                    raw_rows
+                )
+                if raw_rows
+                else 0.0
+            ),
+        },
+        "raw": (
+            raw_report
         ),
-        "canonical": calculate(
-            canonical_rows
+        "canonical": (
+            canonical_report
         ),
     }
 
