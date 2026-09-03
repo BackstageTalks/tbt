@@ -106,9 +106,29 @@ function savePreviewSession(user) { localStorage.setItem("blinq_preview_session"
 
 function setAuthView(view) {
   const map = { signin: "signInView", register: "registerView", forgot: "forgotView" };
-  Object.values(map).forEach((id) => { const node = $(id); if (node) node.hidden = id !== map[view]; });
+
+  // Keep the email the user already typed when switching between auth screens.
+  const email = String(
+    $("emailInput")?.value || $("registerEmailInput")?.value || $("forgotEmailInput")?.value || ""
+  ).trim();
+
+  Object.values(map).forEach((id) => {
+    const node = $(id);
+    if (node) node.hidden = id !== map[view];
+  });
+
+  if (email) {
+    if ($("emailInput")) $("emailInput").value = email;
+    if ($("registerEmailInput")) $("registerEmailInput").value = email;
+    if ($("forgotEmailInput")) $("forgotEmailInput").value = email;
+  }
+
   const msg = $("authMessage");
-  if (msg) { msg.hidden = true; msg.textContent = ""; msg.classList.remove("error", "success"); }
+  if (msg) {
+    msg.hidden = true;
+    msg.textContent = "";
+    msg.classList.remove("error", "success");
+  }
 }
 function authMessage(message, type = "success") {
   const node = $("authMessage");
@@ -503,13 +523,13 @@ function setupEvents() {
     if (password.length < 8) return authMessage("Password must contain at least 8 characters.", "error");
     const pending = { email, telegram_nick: telegram, created_at: new Date().toISOString() };
     localStorage.setItem("blinq_preview_pending_registration", JSON.stringify(pending));
-    authMessage("Preview registration accepted. Production mode will send a verification email before the 24-hour trial starts.");
+    authMessage("Preview registration accepted. No email is sent in preview mode yet. Email verification will be enabled when Supabase Auth + Brevo is connected.");
   });
 
   $("forgotForm").addEventListener("submit", (event) => {
     event.preventDefault();
     const email = $("forgotEmailInput").value.trim();
-    authMessage(`Preview only: reset request prepared for ${email}. Production mode will send the reset link by email.`);
+    authMessage(`Preview only: reset request prepared for ${email}. No reset email is sent until production auth is connected.`);
   });
   $("refreshButton").addEventListener("click", loadPredictions);
   ["tourFilter", "tournamentFilter", "surfaceFilter", "confidenceFilter"].forEach((id) => $(id).addEventListener("change", renderPredictions));

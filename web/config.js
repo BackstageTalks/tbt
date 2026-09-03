@@ -5,5 +5,5 @@ window.BLINQ_CONFIG = {
   previewAdmin: true,
   predictionsDays: 3,
   refreshMinutes: 5,
-  uiConfigPath: "./ui-config.json"
+  uiConfigPath: "/ui-config.json"
 };
