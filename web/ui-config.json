@@ -144,7 +144,7 @@
     "home_banner_middle": {
       "enabled": false,
       "target": "bannerMiddle",
-      "image": "/assets/banners/partner-middle.webp",
+      "image": "./assets/banners/partner-middle.webp",
       "link": "https://example.com",
       "link_target": "_blank",
       "sponsored": true,
@@ -156,7 +156,7 @@
     "home_banner_bottom": {
       "enabled": false,
       "target": "bannerBottom",
-      "image": "/assets/banners/partner-bottom.webp",
+      "image": "./assets/banners/partner-bottom.webp",
       "link": "https://example.com",
       "link_target": "_blank",
       "sponsored": true,

@@ -104,6 +104,24 @@ function loadPreviewSession() {
 }
 function savePreviewSession(user) { localStorage.setItem("blinq_preview_session", JSON.stringify(user)); }
 
+function setAuthView(view) {
+  const map = { signin: "signInView", register: "registerView", forgot: "forgotView" };
+  Object.values(map).forEach((id) => { const node = $(id); if (node) node.hidden = id !== map[view]; });
+  const msg = $("authMessage");
+  if (msg) { msg.hidden = true; msg.textContent = ""; msg.classList.remove("error", "success"); }
+}
+function authMessage(message, type = "success") {
+  const node = $("authMessage");
+  if (!node) return;
+  node.textContent = message;
+  node.className = `auth-message ${type}`;
+  node.hidden = false;
+}
+function normalizeTelegram(value) {
+  const clean = String(value || "").trim().replace(/^@+/, "");
+  return clean ? `@${clean}` : "";
+}
+
 function startSession(user) {
   state.user = { ...user, role: user.role || (cfg.authMode === "preview" && cfg.previewAdmin ? "admin" : "user") };
   seedPreviewAdminUser();
@@ -465,11 +483,33 @@ function showMainModule(route) {
 }
 
 function setupEvents() {
+  document.querySelectorAll("[data-auth-view]").forEach((button) => button.addEventListener("click", () => setAuthView(button.dataset.authView)));
+
   $("loginForm").addEventListener("submit", (event) => {
     event.preventDefault();
-    const user = { email: $("emailInput").value.trim(), name: $("nameInput").value.trim(), startedAt: Date.now() };
+    const email = $("emailInput").value.trim();
+    const user = { email, name: email.split("@")[0] || "BlinQ User", startedAt: Date.now() };
     savePreviewSession(user);
     startSession(user);
+  });
+
+  $("registerForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const telegram = normalizeTelegram($("telegramInput").value);
+    const email = $("registerEmailInput").value.trim();
+    const password = $("registerPasswordInput").value;
+    const repeat = $("registerPasswordRepeatInput").value;
+    if (password !== repeat) return authMessage("Passwords do not match.", "error");
+    if (password.length < 8) return authMessage("Password must contain at least 8 characters.", "error");
+    const pending = { email, telegram_nick: telegram, created_at: new Date().toISOString() };
+    localStorage.setItem("blinq_preview_pending_registration", JSON.stringify(pending));
+    authMessage("Preview registration accepted. Production mode will send a verification email before the 24-hour trial starts.");
+  });
+
+  $("forgotForm").addEventListener("submit", (event) => {
+    event.preventDefault();
+    const email = $("forgotEmailInput").value.trim();
+    authMessage(`Preview only: reset request prepared for ${email}. Production mode will send the reset link by email.`);
   });
   $("refreshButton").addEventListener("click", loadPredictions);
   ["tourFilter", "tournamentFilter", "surfaceFilter", "confidenceFilter"].forEach((id) => $(id).addEventListener("change", renderPredictions));

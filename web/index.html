@@ -10,9 +10,8 @@
 <body>
   <div class="app-shell" id="appShell" hidden>
     <aside class="sidebar">
-      <a class="brand" href="#" aria-label="BlinQ home">
-        <span class="brand-ball">Q</span>
-        <span class="brand-word">Blin<span>Q</span></span>
+      <a class="brand brand-logo" href="#predictions" data-route="predictions" aria-label="BlinQ home">
+        <img src="assets/blinq_logo.svg" alt="BlinQ" />
       </a>
 
       <nav class="nav-section" aria-label="Main navigation">
@@ -199,20 +198,54 @@
   <div class="login-screen" id="loginScreen">
     <div class="login-glow login-glow-a"></div>
     <div class="login-glow login-glow-b"></div>
-    <section class="login-card">
-      <a class="brand login-brand" href="#" aria-label="BlinQ home">
-        <span class="brand-ball">Q</span>
-        <span class="brand-word">Blin<span>Q</span></span>
+    <section class="login-card auth-card">
+      <a class="brand login-brand brand-logo" href="#" aria-label="BlinQ home">
+        <img src="assets/blinq_logo.svg" alt="BlinQ" />
       </a>
       <div class="login-kicker">TENNIS INTELLIGENCE</div>
-      <h1>Welcome to BlinQ</h1>
-      <p>Sign in to open your predictions dashboard.</p>
-      <form id="loginForm">
-        <label>Email<input id="emailInput" autocomplete="email" type="email" placeholder="you@example.com" required /></label>
-        <label>Display name<input id="nameInput" autocomplete="name" type="text" placeholder="Your name" /></label>
-        <button class="btn btn-primary btn-full" type="submit">Enter BlinQ</button>
-      </form>
-      <div class="preview-note" id="previewNote">Preview login is enabled for UI testing. Production authentication will be connected separately.</div>
+
+      <div class="auth-view" id="signInView">
+        <h1>Welcome to BlinQ</h1>
+        <p>Sign in to open your predictions dashboard.</p>
+        <form id="loginForm">
+          <label>Email<input id="emailInput" autocomplete="email" type="email" placeholder="you@example.com" required /></label>
+          <label>Password<input id="passwordInput" autocomplete="current-password" type="password" placeholder="Your password" required /></label>
+          <div class="auth-link-row"><button class="text-link" type="button" data-auth-view="forgot">Forgot password?</button></div>
+          <button class="btn btn-primary btn-full" type="submit">Sign in</button>
+        </form>
+        <div class="auth-switch">Don't have an account? <button class="text-link strong" type="button" data-auth-view="register">Create account</button></div>
+      </div>
+
+      <div class="auth-view" id="registerView" hidden>
+        <h1>Create your account</h1>
+        <p>New accounts receive a 24-hour BlinQ trial after verification.</p>
+        <form id="registerForm">
+          <label>Telegram nick
+            <div class="input-with-icon">
+              <svg class="telegram-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.7 3.6 18.5 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6.1 12.8 1.3 11.3c-1-.3-1-1 .2-1.5L20.2 2.6c.9-.3 1.7.2 1.5 1z"/></svg>
+              <input id="telegramInput" autocomplete="username" type="text" placeholder="@telegram_nick" required />
+            </div>
+          </label>
+          <label>Email<input id="registerEmailInput" autocomplete="email" type="email" placeholder="you@example.com" required /></label>
+          <label>Password<input id="registerPasswordInput" autocomplete="new-password" type="password" minlength="8" placeholder="Minimum 8 characters" required /></label>
+          <label>Repeat password<input id="registerPasswordRepeatInput" autocomplete="new-password" type="password" minlength="8" placeholder="Repeat password" required /></label>
+          <button class="btn btn-primary btn-full" type="submit">Create account</button>
+        </form>
+        <div class="auth-switch">Already have an account? <button class="text-link strong" type="button" data-auth-view="signin">Sign in</button></div>
+      </div>
+
+      <div class="auth-view" id="forgotView" hidden>
+        <h1>Reset password</h1>
+        <p>Enter your account email. The production version will send the reset link by email.</p>
+        <form id="forgotForm">
+          <label>Email<input id="forgotEmailInput" autocomplete="email" type="email" placeholder="you@example.com" required /></label>
+          <button class="btn btn-primary btn-full" type="submit">Send reset link</button>
+        </form>
+        <div class="auth-switch"><button class="text-link strong" type="button" data-auth-view="signin">← Back to sign in</button></div>
+      </div>
+
+      <div class="auth-message" id="authMessage" hidden></div>
+      <div class="preview-note" id="previewNote">UI preview mode is active. Account creation, verification email and password reset will be connected to Supabase Auth + Brevo next.</div>
     </section>
   </div>
 
