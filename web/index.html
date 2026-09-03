@@ -2,171 +2,322 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#07111f" />
-  <title>BlinQ · Tennis Analytics</title>
-  <link rel="stylesheet" href="styles.css" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1"
+  />
+  <meta
+    name="theme-color"
+    content="#070d18"
+  />
+
+  <title>BlinQ · Tennis Intelligence</title>
+
+  <link
+    rel="stylesheet"
+    href="styles.css"
+  />
 </head>
+
 <body>
-  <div class="ambient ambient-a"></div>
-  <div class="ambient ambient-b"></div>
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
 
-  <header class="shell topbar">
-    <div class="brand">
-      <div class="brand-mark">B</div>
-      <div>
-        <div class="brand-name">BLINQ</div>
-        <div class="brand-sub">Pre-match tennis intelligence</div>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <a
+        class="brand"
+        href="/"
+        aria-label="BlinQ home"
+      >
+        <div class="brand-mark">
+          B
+        </div>
+
+        <div class="brand-copy">
+          <div class="brand-name">
+            BLINQ
+          </div>
+
+          <div class="brand-sub">
+            Tennis intelligence
+          </div>
+        </div>
+      </a>
+
+      <div
+        class="system-status"
+        id="status"
+      >
+        <span class="status-dot"></span>
+        <span class="status-text">
+          Connecting
+        </span>
       </div>
-    </div>
-
-    <div class="status" id="status">
-      <span class="dot"></span>
-      <span>Connecting</span>
     </div>
   </header>
 
   <main class="shell">
     <section class="hero">
-      <div>
-        <div class="eyebrow">PRE-MATCH ANALYTICS</div>
-        <h1>Today's model board</h1>
+      <div class="hero-copy">
+        <div class="eyebrow">
+          PRE-MATCH INTELLIGENCE
+        </div>
+
+        <h1>
+          Follow the data.
+        </h1>
+
         <p>
-          Data-driven match probabilities built from point-in-time
-          player strength, surface performance, form, workload and
+          BlinQ turns point-in-time tennis data into
+          calibrated pre-match probabilities using player
+          strength, surface performance, form, workload and
           available match environment.
         </p>
       </div>
 
-      <button id="refresh" class="button">
-        Refresh
-      </button>
-    </section>
-
-    <section class="metrics" id="metrics">
-      <article class="metric">
-        <span>Matches</span>
-        <strong id="metricMatches">—</strong>
-        <small>prediction horizon</small>
-      </article>
-
-      <article class="metric">
-        <span>Champion</span>
-        <strong id="metricModel">—</strong>
-        <small>active model</small>
-      </article>
-
-      <article class="metric">
-        <span>Status</span>
-        <strong id="metricStatus">—</strong>
-        <small>model lifecycle</small>
-      </article>
-
-      <article class="metric">
-        <span>Updated</span>
-        <strong id="metricUpdated">—</strong>
-        <small>latest refresh</small>
-      </article>
-    </section>
-
-    <section class="toolbar">
-      <div
-        class="segmented"
-        role="group"
-        aria-label="Tour filter"
-      >
+      <div class="hero-actions">
         <button
-          class="segment active"
-          data-tour=""
+          id="refresh"
+          class="button"
+          type="button"
         >
-          All
+          Refresh board
         </button>
-
-        <button
-          class="segment"
-          data-tour="atp"
-        >
-          ATP
-        </button>
-
-        <button
-          class="segment"
-          data-tour="wta"
-        >
-          WTA
-        </button>
-      </div>
-
-      <div
-        class="updated"
-        id="updated"
-      >
-        Not updated yet
       </div>
     </section>
 
     <section
-      id="board"
+      class="overview"
+      aria-label="BlinQ overview"
+    >
+      <article class="overview-card">
+        <span class="overview-label">
+          Live board
+        </span>
+
+        <strong
+          class="overview-value"
+          id="metricMatches"
+        >
+          —
+        </strong>
+
+        <small>
+          upcoming matches
+        </small>
+      </article>
+
+      <article class="overview-card">
+        <span class="overview-label">
+          Active model
+        </span>
+
+        <strong
+          class="overview-value model-value"
+          id="metricModel"
+        >
+          —
+        </strong>
+
+        <small>
+          current champion
+        </small>
+      </article>
+
+      <article class="overview-card">
+        <span class="overview-label">
+          Lifecycle
+        </span>
+
+        <strong
+          class="overview-value"
+          id="metricStatus"
+        >
+          —
+        </strong>
+
+        <small>
+          production status
+        </small>
+      </article>
+
+      <article class="overview-card">
+        <span class="overview-label">
+          Updated
+        </span>
+
+        <strong
+          class="overview-value"
+          id="metricUpdated"
+        >
+          —
+        </strong>
+
+        <small>
+          local time
+        </small>
+      </article>
+    </section>
+
+    <section class="board-head">
+      <div>
+        <div class="section-kicker">
+          MATCH BOARD
+        </div>
+
+        <h2>
+          Upcoming predictions
+        </h2>
+      </div>
+
+      <div class="board-controls">
+        <div
+          class="segmented"
+          role="group"
+          aria-label="Tour filter"
+        >
+          <button
+            class="segment active"
+            type="button"
+            data-tour=""
+          >
+            All
+          </button>
+
+          <button
+            class="segment"
+            type="button"
+            data-tour="atp"
+          >
+            ATP
+          </button>
+
+          <button
+            class="segment"
+            type="button"
+            data-tour="wta"
+          >
+            WTA
+          </button>
+        </div>
+
+        <div
+          class="updated"
+          id="updated"
+        >
+          Not updated yet
+        </div>
+      </div>
+    </section>
+
+    <section
       class="board"
+      id="board"
       aria-live="polite"
     >
-      <div class="empty">
+      <div class="empty-state">
         Loading predictions…
       </div>
     </section>
   </main>
 
+  <footer class="footer">
+    <div class="shell footer-inner">
+      <span>
+        BlinQ
+      </span>
+
+      <span>
+        Probabilities are analytical estimates, not guarantees.
+      </span>
+    </div>
+  </footer>
+
   <template id="matchTemplate">
     <article class="match-card">
-      <div class="match-head">
+      <div class="card-top">
         <div>
-          <div class="tour-pill"></div>
-          <h2 class="tournament"></h2>
-          <div class="meta"></div>
+          <div class="match-context">
+            <span class="tour-pill"></span>
+            <span class="surface-pill"></span>
+          </div>
+
+          <h3 class="tournament"></h3>
+
+          <div class="match-meta">
+            <span class="match-time"></span>
+            <span class="round"></span>
+          </div>
         </div>
 
         <div class="confidence-chip"></div>
       </div>
 
+      <div class="probability-focus">
+        <div class="pick-caption">
+          BLINQ PICK
+        </div>
+
+        <div class="pick-row">
+          <strong class="pick"></strong>
+          <span class="pick-probability"></span>
+        </div>
+      </div>
+
       <div class="players">
         <div class="player player-one">
-          <div class="player-row">
-            <span class="name"></span>
-            <span class="rank"></span>
+          <div class="player-topline">
+            <div>
+              <div class="player-label">
+                PLAYER 1
+              </div>
+
+              <div class="player-name-row">
+                <span class="name"></span>
+                <span class="rank"></span>
+              </div>
+            </div>
+
+            <strong class="pct"></strong>
           </div>
 
-          <div class="prob-row">
-            <span class="prob"></span>
-            <span class="pct"></span>
+          <div class="probability-bar">
+            <span class="prob-fill"></span>
           </div>
         </div>
-
-        <div class="versus">VS</div>
 
         <div class="player player-two">
-          <div class="player-row">
-            <span class="name"></span>
-            <span class="rank"></span>
+          <div class="player-topline">
+            <div>
+              <div class="player-label">
+                PLAYER 2
+              </div>
+
+              <div class="player-name-row">
+                <span class="name"></span>
+                <span class="rank"></span>
+              </div>
+            </div>
+
+            <strong class="pct"></strong>
           </div>
 
-          <div class="prob-row">
-            <span class="prob"></span>
-            <span class="pct"></span>
+          <div class="probability-bar">
+            <span class="prob-fill"></span>
           </div>
         </div>
       </div>
 
-      <div class="pick-line">
-        <span class="pick-label">
-          BLINQ PICK
-        </span>
+      <div class="analysis-block">
+        <div class="analysis-title">
+          Why BlinQ leans this way
+        </div>
 
-        <strong class="pick"></strong>
+        <div class="signals"></div>
       </div>
 
-      <div class="signals"></div>
-
-      <div class="card-foot">
+      <div class="card-footer">
         <span class="model-version"></span>
         <span class="generated"></span>
       </div>
