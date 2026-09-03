@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import date
+from datetime import date, timedelta
 from typing import Any, Iterable
 
 import httpx
@@ -51,6 +51,8 @@ class RapidTennisClient:
             timeout=cfg.request_timeout_seconds
         )
         self._last_request_at = 0.0
+        self._category_cache: dict[str, list[dict[str, Any]]] = {}
+        self._event_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
 
     @property
     def headers(self) -> dict[str, str]:
@@ -123,6 +125,12 @@ class RapidTennisClient:
                     )
                     continue
 
+                if 400 <= response.status_code < 500:
+                    raise ProviderError(
+                        f"RapidAPI HTTP {response.status_code} for {path}: "
+                        f"{response.text[:300]}"
+                    )
+
                 response.raise_for_status()
 
                 if not response.content:
@@ -176,6 +184,7 @@ class RapidTennisClient:
             "result",
             "results",
             "events",
+            "categories",
             "fixtures",
             "matches",
         ):
@@ -279,121 +288,290 @@ class RapidTennisClient:
 
         return rows
 
+    CATEGORY_ATP = 3
+    CATEGORY_WTA = 6
+    CATEGORY_CHALLENGER = 72
+    CATEGORY_ITF_WOMEN = 213
+    CATEGORY_ITF_MEN = 785
+    CATEGORY_WTA125 = 871
+    CATEGORY_GRAND_SLAM = -100
+
+    _ATP_CATEGORY_IDS = {
+        CATEGORY_ATP,
+        CATEGORY_CHALLENGER,
+        CATEGORY_ITF_MEN,
+    }
+    _WTA_CATEGORY_IDS = {
+        CATEGORY_WTA,
+        CATEGORY_ITF_WOMEN,
+        CATEGORY_WTA125,
+    }
+
+    @staticmethod
+    def _day_token(day: date) -> str:
+        # TennisApi explicitly documents non-zero-padded dates.
+        return f"{day.day}/{day.month}/{day.year}"
+
+    @staticmethod
+    def _category_id(category: dict[str, Any]) -> int | None:
+        value = first_present(
+            category,
+            "id",
+            "categoryId",
+            "category_id",
+        )
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @classmethod
+    def _category_tour(
+        cls,
+        category: dict[str, Any],
+    ) -> str | None:
+        category_id = cls._category_id(category)
+
+        if category_id in cls._ATP_CATEGORY_IDS:
+            return "atp"
+        if category_id in cls._WTA_CATEGORY_IDS:
+            return "wta"
+        if category_id == cls.CATEGORY_GRAND_SLAM:
+            # Grand Slam is shared by men and women; classify each event later.
+            return None
+
+        text = " ".join(
+            str(first_present(category, key) or "")
+            for key in ("name", "slug", "title")
+        ).lower()
+
+        if any(token in text for token in ("wta", "women", "female")):
+            return "wta"
+        if any(
+            token in text
+            for token in ("atp", "challenger", "itf men", " men", "male")
+        ):
+            return "atp"
+        return None
+
+    @staticmethod
+    def _event_text(raw: dict[str, Any]) -> str:
+        tournament = (
+            raw.get("tournament")
+            if isinstance(raw.get("tournament"), dict)
+            else {}
+        )
+        unique = (
+            tournament.get("uniqueTournament")
+            if isinstance(tournament.get("uniqueTournament"), dict)
+            else {}
+        )
+        category = (
+            tournament.get("category")
+            if isinstance(tournament.get("category"), dict)
+            else {}
+        )
+        fields = [
+            raw.get("name"),
+            raw.get("eventName"),
+            raw.get("gender"),
+            tournament.get("name"),
+            tournament.get("slug"),
+            unique.get("name"),
+            unique.get("slug"),
+            category.get("name"),
+            category.get("slug"),
+        ]
+        return " ".join(str(value or "") for value in fields).lower()
+
+    @classmethod
+    def _event_tour(
+        cls,
+        raw: dict[str, Any],
+        source_category_id: int | None,
+        source_category_name: str = "",
+    ) -> str | None:
+        if source_category_id in cls._ATP_CATEGORY_IDS:
+            return "atp"
+        if source_category_id in cls._WTA_CATEGORY_IDS:
+            return "wta"
+
+        text = (
+            cls._event_text(raw)
+            + " "
+            + str(source_category_name or "").lower()
+        )
+
+        if any(token in text for token in ("wta", "women", "woman", "female")):
+            return "wta"
+        if any(token in text for token in ("atp", " men", "men's", "male")):
+            return "atp"
+
+        if source_category_id == cls.CATEGORY_GRAND_SLAM:
+            # TennisApi typically labels the women's draw explicitly while the
+            # men's draw may use the bare tournament name. Only use this fallback
+            # after all explicit gender/tour markers have been checked.
+            return "atp"
+
+        return None
+
+    @classmethod
+    def _is_singles_event(cls, raw: dict[str, Any]) -> bool:
+        text = cls._event_text(raw)
+        if any(
+            token in text
+            for token in ("doubles", "double", "mixed doubles", "mixed double")
+        ):
+            return False
+
+        for side_key in ("homeTeam", "awayTeam", "player1", "player2"):
+            side = raw.get(side_key)
+            if not isinstance(side, dict):
+                continue
+            members = first_present(side, "players", "members", "subTeams")
+            if isinstance(members, list) and len(members) > 1:
+                return False
+            name = str(side.get("name") or "")
+            if "/" in name:
+                return False
+
+        return True
+
+    def calendar_categories(self, day: date) -> list[dict[str, Any]]:
+        key = day.isoformat()
+        cached = self._category_cache.get(key)
+        if cached is not None:
+            return cached
+
+        token = self._day_token(day)
+        payload = self._get(
+            f"/api/tennis/calendar/{token}/categories"
+        )
+        rows = self._data(payload)
+        self._category_cache[key] = rows
+        return rows
+
+    def category_events(
+        self,
+        category_id: int,
+        day: date,
+    ) -> list[dict[str, Any]]:
+        cache_key = (day.isoformat(), int(category_id))
+        cached = self._event_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        token = self._day_token(day)
+        payload = self._get(
+            f"/api/tennis/category/{category_id}/events/{token}"
+        )
+        rows = self._data(payload)
+        self._event_cache[cache_key] = rows
+        return rows
+
+    @staticmethod
+    def _annotate_event(
+        raw: dict[str, Any],
+        category_id: int,
+        category_name: str,
+    ) -> dict[str, Any]:
+        event = dict(raw)
+        event["_tbt_source_category_id"] = category_id
+        event["_tbt_source_category_name"] = category_name
+        provider_event_id = first_present(
+            raw,
+            "id",
+            "eventId",
+            "event_id",
+        )
+        if provider_event_id not in (None, ""):
+            event["_tbt_provider_event_id"] = str(provider_event_id)
+        return event
+
+    def matches_for_day(
+        self,
+        tour: str,
+        day: date,
+        historical: bool,
+    ) -> list[MatchRecord]:
+        tour = tour.lower()
+        if tour not in {"atp", "wta"}:
+            raise ValueError("tour must be atp or wta")
+
+        matches: dict[str, MatchRecord] = {}
+
+        for category in self.calendar_categories(day):
+            category_id = self._category_id(category)
+            if category_id is None:
+                continue
+
+            category_name = str(
+                first_present(category, "name", "title", "slug")
+                or ""
+            )
+            category_tour = self._category_tour(category)
+
+            if category_tour is not None and category_tour != tour:
+                continue
+
+            for raw in self.category_events(category_id, day):
+                if not self._is_singles_event(raw):
+                    continue
+
+                event_tour = self._event_tour(
+                    raw,
+                    category_id,
+                    category_name,
+                )
+                if event_tour != tour:
+                    continue
+
+                event = self._annotate_event(
+                    raw,
+                    category_id,
+                    category_name,
+                )
+                match = self.normalize_match(
+                    event,
+                    tour=tour,
+                    historical=historical,
+                )
+
+                if not match.player1_id or not match.player2_id:
+                    continue
+
+                self._keep_richer_match(matches, match)
+
+        return sorted(
+            matches.values(),
+            key=lambda match: (match.scheduled_at, match.match_id),
+        )
+
     def upcoming(
         self,
         tour: str,
         start: date,
         end: date | None = None,
     ) -> list[MatchRecord]:
-        tour = tour.lower()
+        end = end or start
+        if end < start:
+            raise ValueError("end must be on or after start")
 
-        if tour not in {
-            "atp",
-            "wta",
-        }:
-            raise ValueError(
-                "tour must be atp or wta"
-            )
-
-        if (
-            end is None
-            or end == start
-        ):
-            path = (
-                f"/tennis/v2/{tour}"
-                f"/fixtures/"
-                f"{start.isoformat()}"
-            )
-        else:
-            path = (
-                f"/tennis/v2/{tour}"
-                f"/fixtures/"
-                f"{start.isoformat()}/"
-                f"{end.isoformat()}"
-            )
-
-        rows = self._paged(
-            path,
-            {
-                "include": (
-                    "round,tournament,"
-                    "tournament.court,"
-                    "tournament.rank,"
-                    "tournament.country,"
-                    "h2h"
-                ),
-                "filter": (
-                    "PlayerGroup:singles"
-                ),
-            },
-        )
-
-        return [
-            self.normalize_match(
-                row,
-                tour=tour,
+        matches: dict[str, MatchRecord] = {}
+        day = start
+        while day <= end:
+            for match in self.matches_for_day(
+                tour,
+                day,
                 historical=False,
-            )
-            for row in rows
-        ]
+            ):
+                self._keep_richer_match(matches, match)
+            day += timedelta(days=1)
 
-    def tournament_calendar(
-        self,
-        tour: str,
-        year: int,
-    ) -> list[dict[str, Any]]:
-        return self._paged(
-            (
-                f"/tennis/v2/{tour}"
-                f"/tournament/calendar/"
-                f"{year}"
-            ),
-            {
-                "include": "rating",
-                "pageSize": 2000,
-            },
-            page_size=2000,
+        return sorted(
+            matches.values(),
+            key=lambda match: (match.scheduled_at, match.match_id),
         )
-
-    def advanced_calendar(
-        self,
-        tour: str,
-        year: int,
-    ) -> list[dict[str, Any]]:
-        return self._paged(
-            (
-                f"/tennis/v2/calendar/"
-                f"{tour}/{year}"
-            ),
-            {
-                "pageSize": 200,
-            },
-            page_size=200,
-        )
-
-    def tournament_results(
-        self,
-        tour: str,
-        season_id: str | int,
-    ) -> list[MatchRecord]:
-        payload = self._get(
-            (
-                f"/tennis/v2/{tour}"
-                f"/tournament/results/"
-                f"{season_id}"
-            )
-        )
-
-        return [
-            self.normalize_match(
-                row,
-                tour=tour,
-                historical=True,
-            )
-            for row in self._data(
-                payload
-            )
-        ]
 
     @staticmethod
     def _match_richness_score(
@@ -506,120 +684,61 @@ class RapidTennisClient:
         tour: str,
         year: int,
     ) -> list[MatchRecord]:
-        matches: dict[
-            str,
-            MatchRecord,
-        ] = {}
+        """Fetch real completed singles through the provider-confirmed daily flow.
 
-        calendar_rows = (
-            self.advanced_calendar(
-                tour,
-                year,
-            )
-        )
+        TennisApi retired the old flat daily endpoint and the /tennis/v2 calendar
+        route is not available on the current RapidAPI product. The supported
+        coverage path is calendar/categories -> category/events.
+        """
+        tour = tour.lower()
+        if tour not in {"atp", "wta"}:
+            raise ValueError("tour must be atp or wta")
 
-        for node in self._walk_match_nodes(
-            calendar_rows
-        ):
-            match = (
-                self.normalize_match(
-                    node,
-                    tour=tour,
+        today = date.today()
+        start = date(year, 1, 1)
+        end = min(date(year, 12, 31), today)
+
+        if start > today:
+            return []
+
+        matches: dict[str, MatchRecord] = {}
+        day = start
+
+        while day <= end:
+            try:
+                daily = self.matches_for_day(
+                    tour,
+                    day,
                     historical=True,
                 )
-            )
-
-            if (
-                not match.player1_id
-                or not match.player2_id
-                or not match.is_completed
-            ):
-                continue
-
-            self._keep_richer_match(
-                matches,
-                match,
-            )
-
-        if matches:
-            logger.info(
-                "RapidAPI %s %s: "
-                "%s canonical historical "
-                "matches from advanced calendar",
-                tour,
-                year,
-                len(matches),
-            )
-
-            return sorted(
-                matches.values(),
-                key=lambda match: (
-                    match.scheduled_at,
-                    match.match_id,
-                ),
-            )
-
-        logger.info(
-            "Advanced calendar did not expose "
-            "match nodes; falling back to "
-            "tournament results"
-        )
-
-        tournaments = (
-            self.tournament_calendar(
-                tour,
-                year,
-            )
-        )
-
-        for tournament in tournaments:
-            season_id = first_present(
-                tournament,
-                "seasonid",
-                "seasonId",
-                "id",
-                "tournament_id",
-            )
-
-            if season_id in (
-                None,
-                "",
-            ):
-                continue
-
-            try:
-                for match in (
-                    self.tournament_results(
-                        tour,
-                        season_id,
-                    )
-                ):
-                    if (
-                        not match.player1_id
-                        or not match.player2_id
-                        or not match.is_completed
-                    ):
-                        continue
-
-                    self._keep_richer_match(
-                        matches,
-                        match,
-                    )
-
             except ProviderError as exc:
                 logger.warning(
-                    "Skipping season %s "
-                    "after provider error: %s",
-                    season_id,
+                    "Skipping %s %s after provider error: %s",
+                    tour.upper(),
+                    day.isoformat(),
                     exc,
                 )
+                day += timedelta(days=1)
+                continue
+
+            for match in daily:
+                if not match.is_completed or not match.winner_id:
+                    continue
+                self._keep_richer_match(matches, match)
+
+            day += timedelta(days=1)
+
+        logger.info(
+            "RapidAPI %s %s: %s completed canonical singles via "
+            "calendar/categories -> category/events",
+            tour.upper(),
+            year,
+            len(matches),
+        )
 
         return sorted(
             matches.values(),
-            key=lambda match: (
-                match.scheduled_at,
-                match.match_id,
-            ),
+            key=lambda match: (match.scheduled_at, match.match_id),
         )
 
     @classmethod
@@ -949,32 +1068,10 @@ class RapidTennisClient:
             }:
                 return p2_id
 
-        completed_status = (
-            status
-            in {
-                "completed",
-                "complete",
-                "ended",
-                "finished",
-                "final",
-                "retired",
-                "walkover",
-            }
-        )
-
-        if (
-            historical
-            and (
-                result_text
-                not in (
-                    None,
-                    "",
-                )
-                or completed_status
-            )
-        ):
-            return p1_id
-
+        # Never infer a winner from player ordering or completed status.
+        # Category/event payloads normally expose winnerCode; if the provider
+        # omits a real winner signal, keep winner_id missing and exclude that row
+        # from supervised training rather than manufacture a label.
         return None
 
     @staticmethod
