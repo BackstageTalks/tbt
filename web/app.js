@@ -1,5 +1,5 @@
 const cfg = window.BLINQ_CONFIG || {};
-const state = { predictions: [], ui: null, user: null };
+const state = { predictions: [], ui: null, user: null, adminUser: null };
 const $ = (id) => document.getElementById(id);
 const api = (path) => `${String(cfg.apiBase || "").replace(/\/$/, "")}${path}`;
 
@@ -52,7 +52,7 @@ function renderNavigationGroup(items, containerId) {
   const host = $(containerId);
   host.innerHTML = "";
   [...(items || [])]
-    .filter((item) => item.enabled !== false)
+    .filter((item) => item.enabled !== false && (!item.admin_only || isAdminSession()))
     .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
     .forEach((item, index) => {
       const a = document.createElement("a");
@@ -105,7 +105,9 @@ function loadPreviewSession() {
 function savePreviewSession(user) { localStorage.setItem("blinq_preview_session", JSON.stringify(user)); }
 
 function startSession(user) {
-  state.user = user;
+  state.user = { ...user, role: user.role || (cfg.authMode === "preview" && cfg.previewAdmin ? "admin" : "user") };
+  seedPreviewAdminUser();
+  renderNavigation();
   $("loginScreen").hidden = true;
   $("appShell").hidden = false;
   $("profileName").textContent = user.name || user.email || "BlinQ User";
@@ -292,6 +294,176 @@ function openMatchDialog(match) {
   $("matchDialog").showModal();
 }
 
+
+function isAdminSession() {
+  return Boolean(state.user?.role === "admin" || (cfg.authMode === "preview" && cfg.previewAdmin === true));
+}
+
+function previewAdminUsers() {
+  try { return JSON.parse(localStorage.getItem("blinq_preview_admin_users") || "[]"); } catch { return []; }
+}
+function savePreviewAdminUsers(rows) { localStorage.setItem("blinq_preview_admin_users", JSON.stringify(rows)); }
+function previewAccessHistory() {
+  try { return JSON.parse(localStorage.getItem("blinq_preview_access_history") || "[]"); } catch { return []; }
+}
+function savePreviewAccessHistory(rows) { localStorage.setItem("blinq_preview_access_history", JSON.stringify(rows)); }
+
+function seedPreviewAdminUser() {
+  if (cfg.authMode !== "preview" || !state.user) return;
+  const rows = previewAdminUsers();
+  const email = String(state.user.email || "").toLowerCase();
+  if (!email || rows.some((x) => String(x.email || "").toLowerCase() === email)) return;
+  rows.push({
+    user_id: `preview-${btoa(email).replace(/=+$/g, "").slice(0, 18)}`,
+    email,
+    telegram_nick: "@preview_user",
+    display_name: state.user.name || "BlinQ User",
+    role: "admin",
+    plan: "trial",
+    status: "active",
+    access_started_at: new Date(state.user.startedAt || Date.now()).toISOString(),
+    access_ends_at: new Date((state.user.startedAt || Date.now()) + 24*3600*1000).toISOString(),
+    lifetime_access: false,
+    payment_reference: "",
+    admin_note: "Preview account"
+  });
+  savePreviewAdminUsers(rows);
+}
+
+function planDurationMs(plan) {
+  return ({ trial: 24*3600e3, pro: 30*86400e3, elite: 90*86400e3, legend: 365*86400e3 })[plan] || 0;
+}
+function effectiveStatus(user) {
+  const status = String(user?.status || "locked").toLowerCase();
+  if (["banned","suspended","locked"].includes(status)) return status;
+  if (user?.lifetime_access || user?.plan === "goat") return "active";
+  const end = new Date(user?.access_ends_at || 0).getTime();
+  return end > Date.now() ? "active" : "locked";
+}
+function remainingLabel(user) {
+  if (user?.lifetime_access || user?.plan === "goat") return "Lifetime access";
+  const ms = new Date(user?.access_ends_at || 0).getTime() - Date.now();
+  if (ms <= 0) return "Access expired";
+  const days = Math.floor(ms / 86400e3);
+  const hours = Math.floor((ms % 86400e3) / 3600e3);
+  return days ? `${days}d ${hours}h remaining` : `${hours}h remaining`;
+}
+function showAdminToast(message, isError=false) {
+  document.querySelector(".admin-toast")?.remove();
+  const node=document.createElement("div");
+  node.className=`admin-toast${isError ? " error" : ""}`;
+  node.textContent=message;
+  document.body.appendChild(node);
+  setTimeout(()=>node.remove(),2600);
+}
+function renderAdminHistory(userId) {
+  const host=$("adminHistoryList");
+  const rows=previewAccessHistory().filter((x)=>x.user_id===userId).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+  host.innerHTML=rows.length ? rows.map((x)=>`<div class="admin-history-row"><span>${escapeHtml(new Date(x.created_at).toLocaleString())}</span><strong>${escapeHtml(String(x.plan||x.action||"").toUpperCase())}</strong><span>${escapeHtml(x.detail||"")}</span></div>`).join("") : '<div class="admin-history-empty">No access changes recorded yet.</div>';
+}
+function renderAdminUser(user) {
+  state.adminUser={...user};
+  $("adminEmptyState").hidden=true;
+  $("adminUserEditor").hidden=false;
+  $("adminUserAvatar").textContent=initials(user.display_name || user.email);
+  $("adminUserEmail").textContent=user.email || "—";
+  $("adminUserTelegram").textContent=user.telegram_nick || "No Telegram nick";
+  $("adminUserId").textContent=user.user_id || "—";
+  $("adminCurrentPlan").textContent=String(user.plan || "trial").toUpperCase();
+  $("adminEffectiveStatus").textContent=effectiveStatus(user).toUpperCase();
+  $("adminAccessRemaining").textContent=remainingLabel(user);
+  $("adminPlan").value=user.plan || "trial";
+  $("adminStatus").value=user.status || "active";
+  $("adminTelegramNick").value=user.telegram_nick || "";
+  $("adminPaymentReference").value=user.payment_reference || "";
+  $("adminNote").value=user.admin_note || "";
+  renderAdminHistory(user.user_id);
+}
+function adminFindUser() {
+  if (!isAdminSession()) return showAdminToast("Admin access required.", true);
+  seedPreviewAdminUser();
+  const q=$("adminUserSearch").value.trim().toLowerCase().replace(/^@/,"");
+  if (!q) return showAdminToast("Enter email, Telegram nick or user ID.", true);
+  const row=previewAdminUsers().find((u)=>
+    String(u.email||"").toLowerCase().includes(q) ||
+    String(u.telegram_nick||"").toLowerCase().replace(/^@/,"").includes(q) ||
+    String(u.user_id||"").toLowerCase().includes(q)
+  );
+  if (!row) {
+    $("adminUserEditor").hidden=true;
+    $("adminEmptyState").hidden=false;
+    $("adminEmptyState").textContent="No matching preview account found.";
+    return;
+  }
+  renderAdminUser(row);
+}
+function applyPreviewPlan(plan, mode="reset") {
+  if (!state.adminUser) return;
+  const rows=previewAdminUsers();
+  const index=rows.findIndex((x)=>x.user_id===state.adminUser.user_id);
+  if (index<0) return;
+  const now=Date.now();
+  const duration=planDurationMs(plan);
+  const currentEnd=new Date(rows[index].access_ends_at || 0).getTime();
+  const startBase=mode === "extend" && currentEnd > now ? currentEnd : now;
+  rows[index].plan=plan;
+  rows[index].status="active";
+  rows[index].access_started_at=new Date(now).toISOString();
+  rows[index].lifetime_access=plan === "goat";
+  rows[index].access_ends_at=plan === "goat" ? null : new Date(startBase + duration).toISOString();
+  rows[index].telegram_nick=$("adminTelegramNick").value.trim();
+  rows[index].payment_reference=$("adminPaymentReference").value.trim();
+  rows[index].admin_note=$("adminNote").value.trim();
+  savePreviewAdminUsers(rows);
+  const hist=previewAccessHistory();
+  hist.push({user_id:rows[index].user_id,created_at:new Date().toISOString(),plan,action:mode,detail:`${mode === "extend" ? "Extended" : "Activated"} ${plan.toUpperCase()}${rows[index].payment_reference ? ` · payment ${rows[index].payment_reference}` : ""}`});
+  savePreviewAccessHistory(hist);
+  renderAdminUser(rows[index]);
+  showAdminToast(`${plan.toUpperCase()} access applied in preview mode.`);
+}
+function saveAdminUserPreview() {
+  if (!state.adminUser) return showAdminToast("Find a user first.", true);
+  if (cfg.authMode !== "preview") return showAdminToast("Supabase admin RPC will be connected with production auth.", true);
+  const plan=$("adminPlan").value;
+  const status=$("adminStatus").value;
+  if (status === "active") return applyPreviewPlan(plan, $("adminActivationMode").value);
+  const rows=previewAdminUsers();
+  const index=rows.findIndex((x)=>x.user_id===state.adminUser.user_id);
+  if (index<0) return;
+  rows[index].status=status;
+  rows[index].telegram_nick=$("adminTelegramNick").value.trim();
+  rows[index].payment_reference=$("adminPaymentReference").value.trim();
+  rows[index].admin_note=$("adminNote").value.trim();
+  savePreviewAdminUsers(rows);
+  const hist=previewAccessHistory();
+  hist.push({user_id:rows[index].user_id,created_at:new Date().toISOString(),action:status,detail:`Account status changed to ${status.toUpperCase()}`});
+  savePreviewAccessHistory(hist);
+  renderAdminUser(rows[index]);
+  showAdminToast(`Account status changed to ${status.toUpperCase()}.`);
+}
+function showMainModule(route) {
+  const isAdmin = route === "admin_users";
+  $("adminUsersPanel").hidden = !isAdmin;
+  $("predictionToolbar").hidden = isAdmin || state.ui?.panels?.predictionToolbar?.enabled === false;
+  $("predictionsPanel").hidden = isAdmin || state.ui?.panels?.predictionsPanel?.enabled === false;
+  $("howBlinqWorks").hidden = isAdmin || state.ui?.panels?.howBlinqWorks?.enabled === false;
+  $("bannerTop").hidden = isAdmin || !state.ui?.banners?.home_banner_top?.enabled;
+  $("bannerMiddle").hidden = isAdmin || !state.ui?.banners?.home_banner_middle?.enabled;
+  $("bannerBottom").hidden = isAdmin || !state.ui?.banners?.home_banner_bottom?.enabled;
+  if (isAdmin) {
+    $("pageEyebrow").textContent="BLINQ ADMIN";
+    $("pageTitle").textContent="Account Management";
+    $("pageSubtitle").textContent="Manage manual payments, tiers and time-based access.";
+    $("adminModeNote").textContent = cfg.authMode === "preview" ? "Preview mode: UI changes are stored only in this browser. Run the included Supabase migration and connect production auth before using this for real accounts." : "Changes are protected by the admin role.";
+  } else {
+    $("pageEyebrow").textContent="PRE-MATCH ANALYTICS";
+    if (route === "predictions") {
+      $("pageTitle").textContent="Today's Predictions";
+      $("pageSubtitle").textContent="Real model output from the currently available data.";
+    }
+  }
+}
+
 function setupEvents() {
   $("loginForm").addEventListener("submit", (event) => {
     event.preventDefault();
@@ -304,12 +476,18 @@ function setupEvents() {
   $("searchInput").addEventListener("input", renderPredictions);
   $("dialogClose").addEventListener("click", () => $("matchDialog").close());
   $("matchDialog").addEventListener("click", (event) => { if (event.target === $("matchDialog")) $("matchDialog").close(); });
+  $("adminFindUser").addEventListener("click", adminFindUser);
+  $("adminUserSearch").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); adminFindUser(); } });
+  $("adminSaveUser").addEventListener("click", saveAdminUserPreview);
+  $("adminLockUser").addEventListener("click", () => { if (!state.adminUser) return; $("adminStatus").value = "locked"; saveAdminUserPreview(); });
+  document.querySelectorAll("[data-plan-action]").forEach((button) => button.addEventListener("click", () => { if (!state.adminUser) return showAdminToast("Find a user first.", true); $("adminPlan").value=button.dataset.planAction; $("adminStatus").value="active"; $("adminActivationMode").value="extend"; applyPreviewPlan(button.dataset.planAction, "extend"); }));
   document.addEventListener("click", (event) => {
     const route = event.target.closest("[data-route]")?.dataset.route;
     if (!route) return;
-    if (route !== "predictions") {
-      event.preventDefault();
-      document.querySelectorAll(".nav-link").forEach((x) => x.classList.toggle("active", x.dataset.route === route));
+    event.preventDefault();
+    document.querySelectorAll(".nav-link").forEach((x) => x.classList.toggle("active", x.dataset.route === route));
+    showMainModule(route);
+    if (!["predictions","admin_users"].includes(route)) {
       $("pageTitle").textContent = route === "account" ? "Account" : route.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
       $("pageSubtitle").textContent = "This module is prepared in navigation and can be connected next.";
     }

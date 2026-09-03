@@ -80,6 +80,95 @@
         </div>
       </section>
 
+
+      <section class="admin-panel content-panel" id="adminUsersPanel" hidden>
+        <div class="panel-head admin-panel-head">
+          <div>
+            <div class="eyebrow">ADMIN CONTROL</div>
+            <h2>Manage BlinQ accounts</h2>
+            <p>Search by email, Telegram nick or user ID and change access without editing the database manually.</p>
+          </div>
+          <span class="admin-security-badge">ADMIN ONLY</span>
+        </div>
+
+        <div class="admin-search-row">
+          <label class="admin-search-box"><span>⌕</span><input id="adminUserSearch" type="search" placeholder="Email, @telegram or user ID…" /></label>
+          <button class="btn btn-primary" id="adminFindUser" type="button">Find account</button>
+        </div>
+
+        <div class="admin-empty" id="adminEmptyState">Search for an account to manage access.</div>
+
+        <div class="admin-user-editor" id="adminUserEditor" hidden>
+          <div class="admin-user-summary">
+            <div class="admin-user-avatar" id="adminUserAvatar">BU</div>
+            <div class="admin-user-identity">
+              <strong id="adminUserEmail">—</strong>
+              <span id="adminUserTelegram">—</span>
+              <small id="adminUserId">—</small>
+            </div>
+            <div class="admin-user-status">
+              <span class="plan-pill" id="adminCurrentPlan">TRIAL</span>
+              <strong id="adminEffectiveStatus">ACTIVE</strong>
+              <small id="adminAccessRemaining">—</small>
+            </div>
+          </div>
+
+          <div class="admin-grid">
+            <label>Plan
+              <select id="adminPlan">
+                <option value="trial">TRIAL · 24 hours</option>
+                <option value="pro">PRO · 30 days</option>
+                <option value="elite">ELITE · 90 days</option>
+                <option value="legend">LEGEND · 365 days</option>
+                <option value="goat">GOAT · Lifetime</option>
+              </select>
+            </label>
+            <label>Activation mode
+              <select id="adminActivationMode">
+                <option value="reset">Start from now</option>
+                <option value="extend">Add to remaining access</option>
+              </select>
+            </label>
+            <label>Account status
+              <select id="adminStatus">
+                <option value="active">ACTIVE</option>
+                <option value="locked">LOCKED</option>
+                <option value="suspended">SUSPENDED</option>
+                <option value="banned">BANNED</option>
+              </select>
+            </label>
+            <label>Telegram nick
+              <input id="adminTelegramNick" type="text" placeholder="@username" />
+            </label>
+            <label>Payment reference
+              <input id="adminPaymentReference" type="text" placeholder="Optional payment note / reference" />
+            </label>
+            <label class="admin-note-field">Admin note
+              <textarea id="adminNote" rows="3" placeholder="Internal note visible only to admins"></textarea>
+            </label>
+          </div>
+
+          <div class="admin-quick-actions">
+            <button class="btn btn-ghost" type="button" data-plan-action="trial">+24h Trial</button>
+            <button class="btn btn-ghost" type="button" data-plan-action="pro">+30d PRO</button>
+            <button class="btn btn-ghost" type="button" data-plan-action="elite">+90d ELITE</button>
+            <button class="btn btn-ghost" type="button" data-plan-action="legend">+365d LEGEND</button>
+            <button class="btn btn-ghost" type="button" data-plan-action="goat">Lifetime GOAT</button>
+            <button class="btn btn-danger" type="button" id="adminLockUser">Lock account</button>
+          </div>
+
+          <div class="admin-save-row">
+            <div class="admin-mode-note" id="adminModeNote"></div>
+            <button class="btn btn-primary" id="adminSaveUser" type="button">Apply changes</button>
+          </div>
+
+          <div class="admin-history">
+            <h3>Access history</h3>
+            <div id="adminHistoryList" class="admin-history-list"></div>
+          </div>
+        </div>
+      </section>
+
       <section id="bannerMiddle" class="banner-slot" hidden></section>
 
       <section class="learn-panel" id="howBlinqWorks">
