@@ -579,7 +579,8 @@ function openMatchDialog(match) {
 }
 
 function setupEvents() {
-  $("loginForm").addEventListener("submit", (event) => {
+  const loginForm = $("loginForm");
+  if (loginForm) loginForm.addEventListener("submit", (event) => {
     event.preventDefault();
     const user = {
       email: $("emailInput").value.trim(),
@@ -640,16 +641,10 @@ async function boot() {
   setupEvents();
   await loadUiConfig();
 
-  if (String(cfg.authMode || "preview").toLowerCase() === "none") {
-    startSession({ email: "preview@blinq.local", name: "BlinQ User", startedAt: Date.now() });
-  } else {
-    const session = loadPreviewSession();
-    if (session) startSession(session);
-    else {
-      $("loginScreen").hidden = false;
-      $("appShell").hidden = true;
-    }
-  }
+  // Production public dashboard: authentication is intentionally disabled here.
+  // This is independent of the current URL path and does not rely on config.js
+  // to decide whether the login screen should be shown.
+  startSession({ email: "public@blinq.local", name: "BlinQ User", startedAt: Date.now() });
 
   setInterval(updateTrialTimer, 60 * 1000);
   setInterval(() => {
