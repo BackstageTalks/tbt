@@ -12,8 +12,14 @@ from tbt.repositories.supabase import SupabaseRepository
 
 REPORT_PATH = ROOT / "reports" / "provider_duplicate_audit.json"
 TOP_GROUPS = 100
+COMPLETED_PAGE_SIZE = 200
+PROGRESS_EVERY_PAGES = 25
 
-AUDIT_SELECT = ",".join(
+# IMPORTANT:
+# `public.matches` has `updated_at`, but it does NOT have `created_at`.
+# Keep this projection explicit so the audit does not download unnecessary
+# columns and does not accidentally depend on columns that are not in schema.
+MATCH_SELECT = ",".join(
     (
         "match_id",
         "tour",
@@ -28,127 +34,62 @@ AUDIT_SELECT = ",".join(
         "player2_name",
         "winner_id",
         "status",
-        "created_at",
         "updated_at",
         "provider_payload",
     )
 )
 
-AUDIT_PAGE_SIZE = 200
-PROGRESS_EVERY = 10000
+
+def _payload(row: dict[str, Any]) -> dict[str, Any]:
+    value = row.get("provider_payload")
+    return value if isinstance(value, dict) else {}
 
 
-def _payload(
-    row: dict[str, Any],
-) -> dict[str, Any]:
-    value = row.get(
-        "provider_payload"
-    )
-
-    return (
-        value
-        if isinstance(value, dict)
-        else {}
-    )
-
-
-def _provider_event_id(
-    row: dict[str, Any],
-) -> str | None:
-    payload = _payload(
-        row
-    )
+def _provider_event_id(row: dict[str, Any]) -> str | None:
+    """
+    Extract the provider event ID using the same tolerant logic used by the
+    existing data-quality guardrails.
+    """
+    payload = _payload(row)
 
     for key in (
-        "_tbt_provider_event_id",
         "provider_event_id",
         "event_id",
         "eventId",
     ):
-        value = payload.get(
-            key
-        )
+        value = payload.get(key)
+        if value not in (None, ""):
+            return str(value)
 
-        if value not in (
-            None,
-            "",
-        ):
-            return str(
-                value
-            )
+    event = payload.get("event")
+    if isinstance(event, dict):
+        value = event.get("id")
+        if value not in (None, ""):
+            return str(value)
 
-    event = payload.get(
-        "event"
-    )
-
-    if isinstance(
-        event,
-        dict,
-    ):
-        value = event.get(
-            "id"
-        )
-
-        if value not in (
-            None,
-            "",
-        ):
-            return str(
-                value
-            )
-
-    value = payload.get(
-        "id"
-    )
-
-    if value not in (
-        None,
-        "",
-    ):
-        return str(
-            value
-        )
+    value = payload.get("id")
+    if value not in (None, ""):
+        return str(value)
 
     return None
 
 
-def _environment_present(
-    row: dict[str, Any],
-) -> bool:
-    env = _payload(
-        row
-    ).get(
-        "_tbt_environment"
-    )
-
-    return (
-        isinstance(
-            env,
-            dict,
-        )
-        and bool(
-            env
-        )
-    )
+def _environment_present(row: dict[str, Any]) -> bool:
+    env = _payload(row).get("_tbt_environment")
+    return isinstance(env, dict) and bool(env)
 
 
-def _same_real_match(
-    rows: list[
-        dict[str, Any]
-    ],
-) -> bool:
+def _same_real_match(rows: list[dict[str, Any]]) -> bool:
     """
     Conservative signature:
-
     - same tour
     - same calendar date
     - same unordered player pair
 
-    Tournament ID is deliberately excluded so duplicate
-    representations under different tournament mappings
-    can still be detected.
+    Tournament ID is deliberately excluded so we can detect the exact
+    duplicate pattern where one real provider event was stored under
+    multiple tournament mappings.
     """
-
     signatures: set[
         tuple[
             str,
@@ -159,34 +100,22 @@ def _same_real_match(
 
     for row in rows:
         tour = str(
-            row.get(
-                "tour"
-            )
+            row.get("tour")
             or ""
         ).lower()
 
         scheduled_at = str(
-            row.get(
-                "scheduled_at"
-            )
+            row.get("scheduled_at")
             or ""
         )
-
-        event_date = (
-            scheduled_at[:10]
-        )
+        event_date = scheduled_at[:10]
 
         player1 = str(
-            row.get(
-                "player1_id"
-            )
+            row.get("player1_id")
             or ""
         )
-
         player2 = str(
-            row.get(
-                "player2_id"
-            )
+            row.get("player2_id")
             or ""
         )
 
@@ -207,155 +136,181 @@ def _same_real_match(
             )
         )
 
-    return (
-        len(signatures)
-        == 1
-    )
+    return len(signatures) == 1
 
 
 def _compact_row(
     row: dict[str, Any],
 ) -> dict[str, Any]:
+    """
+    Small representation stored in top_duplicate_groups.
+    """
     return {
         "match_id": (
-            row.get(
-                "match_id"
-            )
+            row.get("match_id")
         ),
         "provider_event_id": (
-            _provider_event_id(
-                row
-            )
+            _provider_event_id(row)
         ),
         "scheduled_at": (
-            row.get(
-                "scheduled_at"
-            )
+            row.get("scheduled_at")
         ),
         "tour": (
-            row.get(
-                "tour"
-            )
+            row.get("tour")
         ),
         "tournament": (
-            row.get(
-                "tournament"
-            )
+            row.get("tournament")
         ),
         "tournament_id": (
-            row.get(
-                "tournament_id"
-            )
+            row.get("tournament_id")
         ),
         "tournament_level": (
-            row.get(
-                "tournament_level"
-            )
+            row.get("tournament_level")
         ),
         "round_name": (
-            row.get(
-                "round_name"
-            )
+            row.get("round_name")
         ),
         "player1_id": (
-            row.get(
-                "player1_id"
-            )
+            row.get("player1_id")
         ),
         "player1_name": (
-            row.get(
-                "player1_name"
-            )
+            row.get("player1_name")
         ),
         "player2_id": (
-            row.get(
-                "player2_id"
-            )
+            row.get("player2_id")
         ),
         "player2_name": (
-            row.get(
-                "player2_name"
-            )
+            row.get("player2_name")
         ),
         "winner_id": (
-            row.get(
-                "winner_id"
-            )
+            row.get("winner_id")
         ),
         "status": (
-            row.get(
-                "status"
-            )
-        ),
-        "created_at": (
-            row.get(
-                "created_at"
-            )
+            row.get("status")
         ),
         "updated_at": (
-            row.get(
-                "updated_at"
-            )
+            row.get("updated_at")
         ),
         "has_environment": (
-            _environment_present(
-                row
-            )
+            _environment_present(row)
         ),
     }
 
 
+def _count_match_rows(
+    repo: SupabaseRepository,
+) -> int:
+    """
+    Count rows without downloading the whole matches table.
+
+    PostgREST returns the exact total in Content-Range when
+    Prefer=count=exact is used. Only one tiny row is requested.
+    """
+    headers = repo._headers(
+        write=False
+    )
+
+    headers["Prefer"] = (
+        "count=exact"
+    )
+    headers["Range"] = (
+        "0-0"
+    )
+
+    response = repo.client.get(
+        f"{repo.base}/matches",
+        headers=headers,
+        params={
+            "select": "match_id",
+            "limit": "1",
+        },
+    )
+
+    repo._raise(
+        response
+    )
+
+    content_range = (
+        response.headers.get(
+            "content-range",
+            "",
+        )
+    )
+
+    if "/" not in content_range:
+        raise RuntimeError(
+            "Supabase count query did not "
+            "return Content-Range: "
+            f"{content_range!r}"
+        )
+
+    total_text = (
+        content_range
+        .rsplit("/", 1)[-1]
+        .strip()
+    )
+
+    if not total_text.isdigit():
+        raise RuntimeError(
+            "Supabase count query returned "
+            "an invalid total: "
+            f"{content_range!r}"
+        )
+
+    return int(
+        total_text
+    )
+
+
 def _select_completed_matches_keyset(
     repo: SupabaseRepository,
+    *,
+    page_size: int = COMPLETED_PAGE_SIZE,
 ) -> list[dict[str, Any]]:
     """
-    Read completed match rows with keyset pagination.
+    Load completed matches with keyset pagination on the primary key.
 
-    This deliberately avoids repo.select_all(), because select_all()
-    uses Range/OFFSET pagination and becomes progressively more
-    expensive on a ~200k-row table.
+    Why keyset instead of offset pagination:
+    - stable ordering on unique match_id
+    - no progressively expensive OFFSET scans
+    - predictable requests for a large table
 
-    Query pattern:
-
-        winner_id IS NOT NULL
-        match_id > previous_match_id
-        ORDER BY match_id ASC
-        LIMIT AUDIT_PAGE_SIZE
+    This function is strictly read-only.
     """
+    if page_size <= 0:
+        raise ValueError(
+            "page_size must be positive"
+        )
 
     rows: list[
         dict[str, Any]
     ] = []
 
-    last_match_id: str | None = None
-    page_number = 0
-    next_progress = PROGRESS_EVERY
+    last_match_id: (
+        str
+        | None
+    ) = None
+
+    page = 0
 
     while True:
         params: dict[
             str,
             str,
         ] = {
-            "select": (
-                AUDIT_SELECT
-            ),
+            "select": MATCH_SELECT,
             "winner_id": (
                 "not.is.null"
             ),
             "order": (
                 "match_id.asc"
             ),
-            "limit": (
-                str(
-                    AUDIT_PAGE_SIZE
-                )
+            "limit": str(
+                page_size
             ),
         }
 
-        if (
-            last_match_id
-            is not None
-        ):
+        if last_match_id is not None:
             params[
                 "match_id"
             ] = (
@@ -365,10 +320,8 @@ def _select_completed_matches_keyset(
         response = (
             repo.client.get(
                 f"{repo.base}/matches",
-                headers=(
-                    repo._headers(
-                        write=False
-                    )
+                headers=repo._headers(
+                    write=False
                 ),
                 params=params,
             )
@@ -387,224 +340,82 @@ def _select_completed_matches_keyset(
             list,
         ):
             raise RuntimeError(
-                "Unexpected Supabase response while "
-                "reading provider duplicate audit rows."
+                "Supabase completed-match "
+                "query returned a non-list "
+                "payload"
             )
 
         if not chunk:
             break
 
+        page += 1
+
         rows.extend(
             chunk
         )
 
-        page_number += 1
-
-        newest_match_id = str(
+        current_last = str(
             chunk[-1].get(
                 "match_id"
             )
             or ""
         )
 
-        if not newest_match_id:
+        if not current_last:
             raise RuntimeError(
-                "Keyset pagination encountered "
-                "a row without match_id."
+                "Keyset pagination received "
+                "a row without match_id"
             )
 
         if (
-            last_match_id
-            is not None
-            and newest_match_id
+            last_match_id is not None
+            and current_last
             <= last_match_id
         ):
             raise RuntimeError(
-                "Keyset pagination did not advance: "
-                f"previous={last_match_id}, "
-                f"current={newest_match_id}"
+                "Keyset pagination did not "
+                "advance: "
+                f"previous={last_match_id!r}, "
+                f"current={current_last!r}"
             )
 
         last_match_id = (
-            newest_match_id
+            current_last
         )
 
-        while (
-            len(rows)
-            >= next_progress
+        if (
+            page
+            % PROGRESS_EVERY_PAGES
+            == 0
         ):
             print(
-                "Provider duplicate audit: loaded "
-                f"{len(rows):,} completed rows..."
-            )
-
-            next_progress += (
-                PROGRESS_EVERY
+                f"  pages={page:,}, "
+                f"completed rows loaded="
+                f"{len(rows):,}, "
+                f"last_match_id="
+                f"{last_match_id}"
             )
 
         if (
             len(chunk)
-            < AUDIT_PAGE_SIZE
+            < page_size
         ):
             break
-
-    print(
-        "Provider duplicate audit: finished loading "
-        f"{len(rows):,} completed rows "
-        f"in {page_number:,} pages."
-    )
 
     return rows
 
 
-def _select_all_match_ids_keyset(
-    repo: SupabaseRepository,
-) -> list[dict[str, Any]]:
-    """
-    Cheap full-table row count using only match_id.
-
-    This also uses keyset pagination so the audit never relies
-    on large OFFSET values.
-    """
-
-    rows: list[
+def _build_report(
+    *,
+    all_match_rows: int,
+    completed_rows: list[
         dict[str, Any]
-    ] = []
-
-    last_match_id: str | None = None
-
-    while True:
-        params: dict[
-            str,
-            str,
-        ] = {
-            "select": (
-                "match_id"
-            ),
-            "order": (
-                "match_id.asc"
-            ),
-            "limit": (
-                "1000"
-            ),
-        }
-
-        if (
-            last_match_id
-            is not None
-        ):
-            params[
-                "match_id"
-            ] = (
-                f"gt.{last_match_id}"
-            )
-
-        response = (
-            repo.client.get(
-                f"{repo.base}/matches",
-                headers=(
-                    repo._headers(
-                        write=False
-                    )
-                ),
-                params=params,
-            )
-        )
-
-        repo._raise(
-            response
-        )
-
-        chunk = (
-            response.json()
-        )
-
-        if not isinstance(
-            chunk,
-            list,
-        ):
-            raise RuntimeError(
-                "Unexpected Supabase response while "
-                "counting match rows."
-            )
-
-        if not chunk:
-            break
-
-        rows.extend(
-            chunk
-        )
-
-        newest_match_id = str(
-            chunk[-1].get(
-                "match_id"
-            )
-            or ""
-        )
-
-        if not newest_match_id:
-            raise RuntimeError(
-                "Keyset pagination encountered "
-                "a row without match_id."
-            )
-
-        if (
-            last_match_id
-            is not None
-            and newest_match_id
-            <= last_match_id
-        ):
-            raise RuntimeError(
-                "Keyset pagination did not advance "
-                "while counting all matches."
-            )
-
-        last_match_id = (
-            newest_match_id
-        )
-
-        if len(chunk) < 1000:
-            break
-
-    return rows
-
-
-def main() -> None:
-    repo = (
-        SupabaseRepository()
-    )
-
-    print(
-        "Counting all match rows..."
-    )
-
-    all_match_ids = (
-        _select_all_match_ids_keyset(
-            repo
-        )
-    )
-
-    print(
-        f"Total match rows: "
-        f"{len(all_match_ids):,}"
-    )
-
-    print(
-        "Loading completed matches "
-        "with keyset pagination..."
-    )
-
-    completed_rows = (
-        _select_completed_matches_keyset(
-            repo
-        )
-    )
+    ],
+) -> dict[str, Any]:
 
     provider_groups: dict[
         str,
-        list[
-            dict[str, Any]
-        ],
+        list[dict[str, Any]],
     ] = defaultdict(
         list
     )
@@ -633,46 +444,35 @@ def main() -> None:
         for (
             provider_id,
             rows,
-        )
-        in provider_groups.items()
-        if len(
-            rows
-        )
-        > 1
+        ) in provider_groups.items()
+        if len(rows) > 1
     }
 
     duplicate_rows_total = sum(
-        len(
-            rows
-        )
+        len(rows)
         for rows
         in duplicate_groups.values()
     )
 
     extra_rows = sum(
-        len(
-            rows
-        )
-        - 1
+        len(rows) - 1
         for rows
         in duplicate_groups.values()
     )
 
     extra_ratio = (
         extra_rows
-        / len(
-            completed_rows
-        )
+        / len(completed_rows)
         if completed_rows
         else 0.0
     )
 
-    group_size_distribution = Counter(
-        len(
-            rows
+    group_size_distribution = (
+        Counter(
+            len(rows)
+            for rows
+            in duplicate_groups.values()
         )
-        for rows
-        in duplicate_groups.values()
     )
 
     duplicate_rows_by_year: Counter[
@@ -696,9 +496,7 @@ def main() -> None:
     sorted_groups = sorted(
         duplicate_groups.items(),
         key=lambda item: (
-            -len(
-                item[1]
-            ),
+            -len(item[1]),
             item[0],
         ),
     )
@@ -707,6 +505,7 @@ def main() -> None:
         provider_id,
         rows,
     ) in sorted_groups:
+
         same_real_match = (
             _same_real_match(
                 rows
@@ -725,8 +524,7 @@ def main() -> None:
                 )
                 or ""
             )
-            for row
-            in rows
+            for row in rows
         }
 
         tournament_ids = {
@@ -736,8 +534,7 @@ def main() -> None:
                 )
                 or ""
             )
-            for row
-            in rows
+            for row in rows
         }
 
         tournament_names = {
@@ -747,8 +544,7 @@ def main() -> None:
                 )
                 or ""
             )
-            for row
-            in rows
+            for row in rows
         }
 
         round_names = {
@@ -758,14 +554,10 @@ def main() -> None:
                 )
                 or ""
             )
-            for row
-            in rows
+            for row in rows
         }
 
-        if (
-            len(match_ids)
-            > 1
-        ):
+        if len(match_ids) > 1:
             groups_with_multiple_match_ids += 1
 
         if (
@@ -794,24 +586,17 @@ def main() -> None:
             )
 
             if (
-                len(
-                    scheduled_at
-                )
-                >= 4
+                len(scheduled_at) >= 4
                 and scheduled_at[
                     :4
                 ].isdigit()
             ):
                 duplicate_rows_by_year[
-                    scheduled_at[
-                        :4
-                    ]
+                    scheduled_at[:4]
                 ] += 1
 
         if (
-            len(
-                detailed_groups
-            )
+            len(detailed_groups)
             < TOP_GROUPS
         ):
             detailed_groups.append(
@@ -820,9 +605,7 @@ def main() -> None:
                         provider_id
                     ),
                     "count": (
-                        len(
-                            rows
-                        )
+                        len(rows)
                     ),
                     "same_real_match_signature": (
                         same_real_match
@@ -867,15 +650,22 @@ def main() -> None:
                 }
             )
 
-    report = {
+    completed_with_provider_event_id = (
+        len(completed_rows)
+        - rows_without_provider_event_id
+    )
+
+    return {
         "status": (
             "AUDIT_ONLY"
         ),
         "read_only": True,
         "description": (
-            "Provider-event duplicate diagnostics. "
-            "No database writes and no external "
-            "TennisApi/Open-Meteo calls."
+            "Provider-event duplicate "
+            "diagnostics. "
+            "No database writes and no "
+            "external TennisApi/Open-Meteo "
+            "calls."
         ),
         "query_strategy": {
             "pagination": (
@@ -887,17 +677,22 @@ def main() -> None:
             "paging_order": (
                 "match_id.asc"
             ),
-            "offset_pagination": False,
-            "completed_page_size": (
-                AUDIT_PAGE_SIZE
+            "offset_pagination": (
+                False
             ),
-            "select_star": False,
+            "page_size_completed": (
+                COMPLETED_PAGE_SIZE
+            ),
+            "select_star": (
+                False
+            ),
+            "completed_select": (
+                MATCH_SELECT
+            ),
         },
         "counts": {
             "all_match_rows": (
-                len(
-                    all_match_ids
-                )
+                all_match_rows
             ),
             "completed_rows": (
                 len(
@@ -905,10 +700,7 @@ def main() -> None:
                 )
             ),
             "completed_with_provider_event_id": (
-                len(
-                    completed_rows
-                )
-                - rows_without_provider_event_id
+                completed_with_provider_event_id
             ),
             "completed_without_provider_event_id": (
                 rows_without_provider_event_id
@@ -934,14 +726,11 @@ def main() -> None:
                 * 100.0
             ),
             "group_size_distribution": {
-                str(
-                    size
-                ): count
+                str(size): count
                 for (
                     size,
                     count,
-                )
-                in sorted(
+                ) in sorted(
                     group_size_distribution.items()
                 )
             },
@@ -960,14 +749,18 @@ def main() -> None:
                 groups_with_multiple_tournament_ids
             ),
         },
-        "duplicate_rows_by_tour": dict(
-            sorted(
-                duplicate_rows_by_tour.items()
+        "duplicate_rows_by_tour": (
+            dict(
+                sorted(
+                    duplicate_rows_by_tour.items()
+                )
             )
         ),
-        "duplicate_rows_by_year": dict(
-            sorted(
-                duplicate_rows_by_year.items()
+        "duplicate_rows_by_year": (
+            dict(
+                sorted(
+                    duplicate_rows_by_year.items()
+                )
             )
         ),
         "top_duplicate_groups": (
@@ -975,23 +768,35 @@ def main() -> None:
         ),
         "diagnostic_notes": {
             "same_real_match_signature_groups": (
-                "Same provider event ID, same tour/date/player pair. "
-                "These are very likely duplicate representations "
+                "Same provider event ID, "
+                "same tour/date/player pair. "
+                "These are very likely "
+                "duplicate representations "
                 "of one real tennis match."
             ),
             "multiple_tournament_ids": (
-                "If this number is high, tournament mapping changes "
-                "are probably creating different match_id values "
+                "If this number is high, "
+                "tournament mapping changes "
+                "are probably creating "
+                "different match_id values "
                 "for the same provider event."
             ),
             "conflicting_provider_id_groups": (
-                "Same provider event ID attached to different "
-                "tour/date/player signatures. These require manual "
-                "inspection because provider ID extraction or "
-                "provider payload may be wrong."
+                "Same provider event ID "
+                "attached to different "
+                "tour/date/player signatures. "
+                "These require manual "
+                "inspection because provider "
+                "ID extraction or provider "
+                "payload may be wrong."
             ),
         },
     }
+
+
+def _write_report(
+    report: dict[str, Any],
+) -> None:
 
     REPORT_PATH.parent.mkdir(
         parents=True,
@@ -1005,9 +810,73 @@ def main() -> None:
             ensure_ascii=False,
             default=str,
         ),
-        encoding=(
-            "utf-8"
-        ),
+        encoding="utf-8",
+    )
+
+
+def main() -> None:
+    repo = (
+        SupabaseRepository()
+    )
+
+    # READ ONLY audit:
+    # - Supabase GET only
+    # - no RapidAPI / TennisApi calls
+    # - no Open-Meteo calls
+    # - no INSERT / UPDATE / DELETE
+
+    print(
+        "Counting all match rows..."
+    )
+
+    all_match_rows = (
+        _count_match_rows(
+            repo
+        )
+    )
+
+    print(
+        f"Total match rows: "
+        f"{all_match_rows:,}"
+    )
+
+    print(
+        "Loading completed matches "
+        "with keyset pagination..."
+    )
+
+    completed_rows = (
+        _select_completed_matches_keyset(
+            repo,
+            page_size=(
+                COMPLETED_PAGE_SIZE
+            ),
+        )
+    )
+
+    print(
+        f"Completed match rows loaded: "
+        f"{len(completed_rows):,}"
+    )
+
+    print(
+        "Building provider duplicate "
+        "audit..."
+    )
+
+    report = (
+        _build_report(
+            all_match_rows=(
+                all_match_rows
+            ),
+            completed_rows=(
+                completed_rows
+            ),
+        )
+    )
+
+    _write_report(
+        report
     )
 
     print()
@@ -1029,8 +898,14 @@ def main() -> None:
     )
 
     print(
-        "READ ONLY: no DB rows were modified."
+        "READ ONLY: no DB rows "
+        "were modified."
     )
+
+    # Duplicates are exactly what this diagnostic
+    # workflow investigates, therefore the script
+    # intentionally does NOT fail merely because
+    # duplicate groups exist.
 
 
 if __name__ == "__main__":
