@@ -66,3 +66,8 @@ Both ad placements are controlled in `ui-config.json`:
 - `ads.lower_right` — small lower-right ad card
 
 They can be disabled with `"enabled": false` or have their copy/link changed without touching `app.js`.
+
+
+## Dashboard without preview login
+
+`config.js` now uses `authMode: "none"`, so the predictions dashboard opens immediately. The login markup remains available for later production authentication but is hidden by default.
