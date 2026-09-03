@@ -1,169 +1,74 @@
 {
   "navigation": {
     "main": [
-      {
-        "id": "predictions",
-        "enabled": true,
-        "label": "Predictions",
-        "href": "#predictions",
-        "icon": "◎",
-        "order": 1
-      },
-      {
-        "id": "tournaments",
-        "enabled": true,
-        "label": "Tournaments",
-        "href": "#tournaments",
-        "icon": "♕",
-        "order": 2
-      },
-      {
-        "id": "players",
-        "enabled": true,
-        "label": "Players",
-        "href": "#players",
-        "icon": "♙",
-        "order": 3
-      },
-      {
-        "id": "stats",
-        "enabled": true,
-        "label": "Stats & Insights",
-        "href": "#stats",
-        "icon": "▥",
-        "order": 4
-      },
-      {
-        "id": "model",
-        "enabled": true,
-        "label": "Model Performance",
-        "href": "#model",
-        "icon": "↗",
-        "order": 5
-      },
-      {
-        "id": "backtests",
-        "enabled": true,
-        "label": "Backtests",
-        "href": "#backtests",
-        "icon": "◴",
-        "order": 6
-      },
-      {
-        "id": "account",
-        "enabled": true,
-        "label": "Account",
-        "href": "#account",
-        "icon": "◉",
-        "order": 7
-      },
-      {
-        "id": "admin_users",
-        "enabled": true,
-        "admin_only": true,
-        "label": "Admin · Users",
-        "href": "#admin-users",
-        "icon": "⚙",
-        "order": 90
-      }
+      {"id":"predictions","enabled":true,"label":"Predictions","href":"#predictions","icon":"◎","order":1},
+      {"id":"tournaments","enabled":true,"label":"Tournaments","href":"#tournaments","icon":"♕","order":2},
+      {"id":"players","enabled":true,"label":"Players","href":"#players","icon":"♙","order":3},
+      {"id":"stats","enabled":true,"label":"Stats & Insights","href":"#stats","icon":"▥","order":4},
+      {"id":"model","enabled":true,"label":"Model Performance","href":"#model","icon":"↗","order":5},
+      {"id":"backtests","enabled":true,"label":"Backtests","href":"#backtests","icon":"◴","order":6},
+      {"id":"account","enabled":true,"label":"Account","href":"#account","icon":"◉","order":7}
     ],
     "learn": [
-      {
-        "id": "how_blinq_works",
-        "enabled": true,
-        "label": "How BlinQ Works",
-        "href": "#how-it-works",
-        "icon": "◉",
-        "order": 101
-      },
-      {
-        "id": "methodology",
-        "enabled": true,
-        "label": "Methodology",
-        "href": "#methodology",
-        "icon": "▱",
-        "order": 102
-      },
-      {
-        "id": "model_data",
-        "enabled": true,
-        "label": "Model & Data",
-        "href": "#model-data",
-        "icon": "◫",
-        "order": 103
-      },
-      {
-        "id": "faq",
-        "enabled": true,
-        "label": "FAQ",
-        "href": "#faq",
-        "icon": "?",
-        "order": 104
-      },
-      {
-        "id": "responsible_use",
-        "enabled": true,
-        "label": "Responsible Use",
-        "href": "#responsible-use",
-        "icon": "◇",
-        "order": 105
-      }
+      {"id":"how_blinq_works","enabled":true,"label":"How BlinQ Works","href":"#how-it-works","icon":"◉","order":101},
+      {"id":"methodology","enabled":true,"label":"Methodology","href":"#methodology","icon":"▱","order":102},
+      {"id":"model_data","enabled":true,"label":"Model & Data","href":"#model-data","icon":"◫","order":103},
+      {"id":"faq","enabled":true,"label":"FAQ","href":"#faq","icon":"?","order":104},
+      {"id":"responsible_use","enabled":true,"label":"Responsible Use","href":"#responsible-use","icon":"◇","order":105}
     ]
   },
   "panels": {
-    "predictionToolbar": {
-      "enabled": true
-    },
-    "predictionsPanel": {
-      "enabled": true
-    },
-    "howBlinqWorks": {
-      "enabled": true
-    },
-    "sidebarPromo": {
-      "enabled": true
-    },
-    "adminUsersPanel": {
-      "enabled": true,
-      "admin_only": true
-    }
+    "predictionToolbar": {"enabled":true},
+    "predictionsPanel": {"enabled":true},
+    "howBlinqWorks": {"enabled":true},
+    "sidebarPromo": {"enabled":true}
   },
   "banners": {
     "home_banner_top": {
       "enabled": true,
       "target": "bannerTop",
-      "image": "",
       "link": "#account",
       "link_target": "_self",
-      "sponsored": false,
-      "eyebrow": "BLINQ PRO",
-      "headline": "Unlock advanced analytics, detailed stats & backtests.",
-      "text": "More data. Deeper insights. Stronger workflow.",
-      "button_text": "Upgrade Now"
+      "sponsored": true,
+      "eyebrow": "SPONSORED",
+      "headline": "Premium tennis analytics, powered by AI.",
+      "text": "Model confidence, surface context, form and matchup signals in one transparent workflow.",
+      "button_text": "Unlock Full Power",
+      "meta": "Configurable ad/promo slot"
     },
     "home_banner_middle": {
       "enabled": false,
       "target": "bannerMiddle",
-      "image": "./assets/banners/partner-middle.webp",
-      "link": "https://example.com",
-      "link_target": "_blank",
+      "link": "#account",
+      "link_target": "_self",
       "sponsored": true,
       "eyebrow": "SPONSORED",
       "headline": "Partner banner",
-      "text": "Replace this image and link directly in ui-config.json.",
+      "text": "Enable this slot when needed.",
       "button_text": "Open"
     },
     "home_banner_bottom": {
       "enabled": false,
       "target": "bannerBottom",
-      "image": "./assets/banners/partner-bottom.webp",
-      "link": "https://example.com",
-      "link_target": "_blank",
+      "link": "#account",
+      "link_target": "_self",
       "sponsored": true,
       "eyebrow": "SPONSORED",
       "headline": "Partner banner",
-      "text": "This slot is ready whenever you need it.",
+      "text": "Enable this slot when needed.",
       "button_text": "Open"
+    }
+  },
+  "ads": {
+    "lower_right": {
+      "enabled": true,
+      "target": "adLowerRight",
+      "label": "Ad",
+      "headline": "Sharper insights. Stronger workflow.",
+      "text": "Reserved for a sponsored tennis or analytics partner.",
+      "button_text": "See Partner",
+      "link": "#account",
+      "link_target": "_self"
     }
   }
 }
