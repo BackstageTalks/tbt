@@ -9,19 +9,14 @@ from datetime import datetime, timezone
 from typing import Any
 
 from _bootstrap import ROOT  # noqa: F401
-
 from tbt.repositories.supabase import SupabaseRepository
 from tbt.services.environment import (
     OpenMeteoClient,
     environment_payload,
-    location_candidates,
 )
 
 
-logger = logging.getLogger(
-    "tbt.enrich_environment"
-)
-
+logger = logging.getLogger("blinq.environment")
 
 ENVIRONMENT_SCHEMA_VERSION = 2
 
@@ -43,21 +38,14 @@ CORE_WEATHER_FIELDS = (
 )
 
 
-def parse_utc(
-    value: str,
-) -> datetime:
+def parse_utc(value: str) -> datetime:
     text = value.strip()
 
     if len(text) == 10:
-        text += (
-            "T00:00:00+00:00"
-        )
+        text += "T00:00:00+00:00"
 
     dt = datetime.fromisoformat(
-        text.replace(
-            "Z",
-            "+00:00",
-        )
+        text.replace("Z", "+00:00")
     )
 
     if dt.tzinfo is None:
@@ -65,282 +53,84 @@ def parse_utc(
             tzinfo=timezone.utc
         )
 
-    return dt.astimezone(
-        timezone.utc
-    )
+    return dt.astimezone(timezone.utc)
 
 
-def _as_dict(
+def as_dict(
     value: Any,
 ) -> dict[str, Any]:
-    return (
-        value
-        if isinstance(
-            value,
-            dict,
-        )
-        else {}
-    )
+    return value if isinstance(value, dict) else {}
 
 
-def _safe_number(
+def safe_number(
     value: Any,
 ) -> float | None:
     try:
         if value is None:
             return None
 
-        number = float(
-            value
-        )
+        number = float(value)
 
-        if not math.isfinite(
-            number
-        ):
+        if not math.isfinite(number):
             return None
 
         return number
 
-    except (
-        TypeError,
-        ValueError,
-    ):
+    except (TypeError, ValueError):
         return None
 
 
-def _weather_schema_is_current(
+def canonical_schema(
     weather: dict[str, Any],
 ) -> bool:
-    """
-    A current weather payload uses the canonical TBT field names.
-
-    Old payloads used raw Open-Meteo names such as temperature_2m,
-    relative_humidity_2m and wind_speed_10m. Those must be re-enriched.
-    """
-
     return all(
         field in weather
-        for field
-        in CANONICAL_WEATHER_FIELDS
+        for field in CANONICAL_WEATHER_FIELDS
     )
 
 
-def _weather_is_usable(
+def usable_weather(
     weather: dict[str, Any],
 ) -> bool:
-    """
-    Require the three core weather observations actually consumed by the
-    model. Merely having a weather dictionary is not sufficient.
-    """
-
     return all(
-        _safe_number(
-            weather.get(
-                field
-            )
+        safe_number(
+            weather.get(field)
         )
         is not None
-        for field
-        in CORE_WEATHER_FIELDS
+        for field in CORE_WEATHER_FIELDS
     )
 
 
-def _environment_state(
-    existing: Any,
+def classify(
+    env: dict[str, Any],
 ) -> str:
-    """
-    Classify an existing enrichment.
-
-    Returns:
-      missing
-      unresolved
-      stale_schema
-      incomplete_weather
-      current
-    """
-
-    if not isinstance(
-        existing,
-        dict,
-    ):
+    if not env:
         return "missing"
 
-    if (
-        existing.get(
-            "venue_resolved"
-        )
-        is not True
-    ):
+    if env.get("venue_resolved") is not True:
         return "unresolved"
 
-    weather = _as_dict(
-        existing.get(
-            "weather"
-        )
+    weather = as_dict(
+        env.get("weather")
     )
 
-    schema_version = (
-        existing.get(
-            "schema_version"
-        )
-    )
+    if not weather:
+        return "no_weather"
 
-    if (
-        schema_version
-        != ENVIRONMENT_SCHEMA_VERSION
-        or not _weather_schema_is_current(
-            weather
-        )
-    ):
-        return "stale_schema"
+    if canonical_schema(weather) and usable_weather(weather):
+        if (
+            env.get("schema_version")
+            == ENVIRONMENT_SCHEMA_VERSION
+        ):
+            return "current"
 
-    if not _weather_is_usable(
-        weather
-    ):
-        return "incomplete_weather"
+        return "stamp_only"
 
-    return "current"
-
-
-def _provider_diagnostics(
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    tournament = _as_dict(
-        payload.get(
-            "tournament"
-        )
-    )
-
-    unique = _as_dict(
-        tournament.get(
-            "uniqueTournament"
-        )
-    )
-
-    category = _as_dict(
-        tournament.get(
-            "category"
-        )
-    )
-
-    venue = _as_dict(
-        payload.get(
-            "venue"
-        )
-    )
-
-    country = (
-        _as_dict(
-            tournament.get(
-                "country"
-            )
-        )
-        or _as_dict(
-            unique.get(
-                "country"
-            )
-        )
-    )
-
-    return {
-        "provider_event_id": (
-            payload.get(
-                "id"
-            )
-        ),
-        "provider_tournament": (
-            tournament.get(
-                "name"
-            )
-        ),
-        "provider_tournament_id": (
-            tournament.get(
-                "id"
-            )
-        ),
-        "provider_unique_tournament": (
-            unique.get(
-                "name"
-            )
-        ),
-        "provider_unique_tournament_id": (
-            unique.get(
-                "id"
-            )
-        ),
-        "provider_category": (
-            category.get(
-                "name"
-            )
-        ),
-        "provider_category_id": (
-            category.get(
-                "id"
-            )
-        ),
-        "provider_venue": (
-            venue.get(
-                "name"
-            )
-        ),
-        "provider_city": (
-            venue.get(
-                "city"
-            )
-            or tournament.get(
-                "city"
-            )
-            or unique.get(
-                "city"
-            )
-            or payload.get(
-                "city"
-            )
-            or payload.get(
-                "venueCity"
-            )
-        ),
-        "provider_country": (
-            _as_dict(
-                venue.get(
-                    "country"
-                )
-            ).get(
-                "name"
-            )
-            or venue.get(
-                "countryName"
-            )
-            or country.get(
-                "name"
-            )
-            or payload.get(
-                "countryName"
-            )
-            or _as_dict(
-                payload.get(
-                    "country"
-                )
-            ).get(
-                "name"
-            )
-        ),
-        "tbt_source_category_id": (
-            payload.get(
-                "_tbt_source_category_id"
-            )
-        ),
-    }
+    return "refresh"
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description=(
-            "Backfill canonical Open-Meteo weather/elevation into "
-            "match provider_payload and automatically migrate stale "
-            "environment payload schemas."
-        )
-    )
+    parser = argparse.ArgumentParser()
 
     parser.add_argument(
         "--start",
@@ -374,25 +164,10 @@ def main() -> None:
         default=50,
     )
 
-    parser.add_argument(
-        "--diagnostics-limit",
-        type=int,
-        default=100,
-        help=(
-            "Maximum diagnostic rows included "
-            "in the final JSON report."
-        ),
-    )
-
     args = parser.parse_args()
 
-    start = parse_utc(
-        args.start
-    )
-
-    end = parse_utc(
-        args.end
-    )
+    start = parse_utc(args.start)
+    end = parse_utc(args.end)
 
     if end <= start:
         raise SystemExit(
@@ -400,130 +175,66 @@ def main() -> None:
         )
 
     repo = SupabaseRepository()
+    client = OpenMeteoClient()
 
-    weather_client = (
-        OpenMeteoClient()
-    )
-
-    report: dict[
-        str,
-        Any,
-    ] = {
-        "start": (
-            start.isoformat()
-        ),
-        "end": (
-            end.isoformat()
-        ),
+    report = {
         "environment_schema_version": (
             ENVIRONMENT_SCHEMA_VERSION
         ),
         "inspected": 0,
         "already_current": 0,
-        "missing": 0,
-        "unresolved_existing": 0,
-        "stale_schema": 0,
-        "incomplete_weather": 0,
-        "forced": 0,
+        "schema_stamped_without_api": 0,
+        "external_refreshes": 0,
         "resolved": 0,
-        "weather_usable": 0,
-        "weather_incomplete_after_refresh": 0,
         "unresolved": 0,
+        "weather_usable": 0,
         "updated": 0,
         "errors": 0,
-        "dry_run": bool(
-            args.dry_run
-        ),
-        "unresolved_details": [],
-        "resolved_details": [],
-        "incomplete_weather_details": [],
-        "error_details": [],
+        "dry_run": args.dry_run,
     }
 
     try:
-        matches = (
-            repo.get_matches_between(
-                start,
-                end,
-                completed_only=True,
-            )
+        matches = repo.get_matches_between(
+            start,
+            end,
+            completed_only=True,
         )
 
         if args.limit > 0:
-            matches = matches[
-                : args.limit
-            ]
+            matches = matches[: args.limit]
 
-        for (
-            index,
-            match,
-        ) in enumerate(
+        for index, match in enumerate(
             matches,
             start=1,
         ):
-            report[
-                "inspected"
-            ] += 1
+            report["inspected"] += 1
 
             payload = dict(
                 match.provider_payload
                 or {}
             )
 
-            existing = (
+            env = as_dict(
                 payload.get(
                     "_tbt_environment"
                 )
             )
 
-            state = (
-                _environment_state(
-                    existing
-                )
-            )
+            state = classify(env)
 
-            if args.force:
-                report[
-                    "forced"
-                ] += 1
+            if not args.force and state == "current":
+                report["already_current"] += 1
+                continue
 
-            else:
-                if state == "current":
-                    report[
-                        "already_current"
-                    ] += 1
-                    continue
-
-                report[
-                    state
-                ] += 1
-
-            candidates = (
-                location_candidates(
-                    payload,
-                    match.tournament,
-                )
-            )
-
-            provider_diag = (
-                _provider_diagnostics(
-                    payload
-                )
-            )
-
-            try:
-                env = (
-                    environment_payload(
-                        weather_client,
-                        payload,
-                        match.tournament,
-                        match.scheduled_at,
-                    )
-                )
-
-                env[
-                    "schema_version"
-                ] = (
+            # Important migration path:
+            # good canonical weather already exists.
+            # No Open-Meteo request is needed.
+            if (
+                not args.force
+                and state == "stamp_only"
+            ):
+                env = dict(env)
+                env["schema_version"] = (
                     ENVIRONMENT_SCHEMA_VERSION
                 )
 
@@ -531,144 +242,69 @@ def main() -> None:
                     "_tbt_environment"
                 ] = env
 
-                detail = {
-                    "match_id": (
-                        match.match_id
-                    ),
-                    "scheduled_at": (
-                        match.scheduled_at
-                        .astimezone(
-                            timezone.utc
-                        )
-                        .isoformat()
-                    ),
-                    "tour": (
-                        match.tour
-                    ),
-                    "tournament": (
-                        match.tournament
-                    ),
-                    "tournament_id": (
-                        match.tournament_id
-                    ),
-                    "round_name": (
-                        match.round_name
-                    ),
-                    "player1": (
-                        match.player1_name
-                    ),
-                    "player2": (
-                        match.player2_name
-                    ),
-                    "previous_environment_state": (
-                        state
-                    ),
-                    "location_candidates": (
-                        candidates
-                    ),
-                    **provider_diag,
-                }
+                report[
+                    "schema_stamped_without_api"
+                ] += 1
 
-                if env.get(
-                    "venue_resolved"
+                report[
+                    "weather_usable"
+                ] += 1
+
+                if not args.dry_run:
+                    report["updated"] += (
+                        repo.update_match_provider_payload(
+                            match.match_id,
+                            payload,
+                        )
+                    )
+
+                continue
+
+            try:
+                report[
+                    "external_refreshes"
+                ] += 1
+
+                new_env = environment_payload(
+                    client,
+                    payload,
+                    match.tournament,
+                    match.scheduled_at,
+                )
+
+                new_env[
+                    "schema_version"
+                ] = ENVIRONMENT_SCHEMA_VERSION
+
+                payload[
+                    "_tbt_environment"
+                ] = new_env
+
+                if (
+                    new_env.get(
+                        "venue_resolved"
+                    )
+                    is True
                 ):
-                    report[
-                        "resolved"
-                    ] += 1
+                    report["resolved"] += 1
 
-                    detail[
-                        "resolved_query"
-                    ] = (
-                        env.get(
-                            "location_query"
-                        )
-                    )
-
-                    detail[
-                        "resolved_venue"
-                    ] = (
-                        env.get(
-                            "venue"
-                        )
-                    )
-
-                    current_weather = (
-                        _as_dict(
-                            env.get(
+                    if usable_weather(
+                        as_dict(
+                            new_env.get(
                                 "weather"
                             )
                         )
-                    )
-
-                    if _weather_is_usable(
-                        current_weather
                     ):
                         report[
                             "weather_usable"
                         ] += 1
-
-                    else:
-                        report[
-                            "weather_incomplete_after_refresh"
-                        ] += 1
-
-                        detail[
-                            "weather"
-                        ] = (
-                            current_weather
-                        )
-
-                        if (
-                            len(
-                                report[
-                                    "incomplete_weather_details"
-                                ]
-                            )
-                            < args.diagnostics_limit
-                        ):
-                            report[
-                                "incomplete_weather_details"
-                            ].append(
-                                detail
-                            )
-
-                    if (
-                        len(
-                            report[
-                                "resolved_details"
-                            ]
-                        )
-                        < args.diagnostics_limit
-                    ):
-                        report[
-                            "resolved_details"
-                        ].append(
-                            detail
-                        )
-
                 else:
                     report[
                         "unresolved"
                     ] += 1
 
-                    if (
-                        len(
-                            report[
-                                "unresolved_details"
-                            ]
-                        )
-                        < args.diagnostics_limit
-                    ):
-                        report[
-                            "unresolved_details"
-                        ].append(
-                            detail
-                        )
-
                 if not args.dry_run:
-                    report[
-                        "updated"
-                    ] += (
+                    report["updated"] += (
                         repo.update_match_provider_payload(
                             match.match_id,
                             payload,
@@ -676,125 +312,40 @@ def main() -> None:
                     )
 
             except Exception as exc:
-                report[
-                    "errors"
-                ] += 1
+                report["errors"] += 1
 
                 logger.warning(
                     "Environment enrichment failed "
-                    "match=%s tournament=%r: %s",
+                    "match=%s: %s",
                     match.match_id,
-                    match.tournament,
                     exc,
                 )
 
-                if (
-                    len(
-                        report[
-                            "error_details"
-                        ]
-                    )
-                    < args.diagnostics_limit
-                ):
-                    report[
-                        "error_details"
-                    ].append(
-                        {
-                            "match_id": (
-                                match.match_id
-                            ),
-                            "scheduled_at": (
-                                match.scheduled_at
-                                .astimezone(
-                                    timezone.utc
-                                )
-                                .isoformat()
-                            ),
-                            "tour": (
-                                match.tour
-                            ),
-                            "tournament": (
-                                match.tournament
-                            ),
-                            "tournament_id": (
-                                match.tournament_id
-                            ),
-                            "previous_environment_state": (
-                                state
-                            ),
-                            "location_candidates": (
-                                candidates
-                            ),
-                            "error": (
-                                f"{type(exc).__name__}: "
-                                f"{exc}"
-                            ),
-                            **provider_diag,
-                        }
-                    )
-
-            if index % 250 == 0:
-                logger.info(
-                    "Progress %s/%s "
-                    "current=%s stale=%s "
-                    "incomplete=%s resolved=%s "
-                    "weather_usable=%s "
-                    "unresolved=%s errors=%s",
-                    index,
-                    len(
-                        matches
-                    ),
-                    report[
-                        "already_current"
-                    ],
-                    report[
-                        "stale_schema"
-                    ],
-                    report[
-                        "incomplete_weather"
-                    ],
-                    report[
-                        "resolved"
-                    ],
-                    report[
-                        "weather_usable"
-                    ],
-                    report[
-                        "unresolved"
-                    ],
-                    report[
-                        "errors"
-                    ],
+            if (
+                args.sleep_ms > 0
+                and state != "stamp_only"
+            ):
+                time.sleep(
+                    args.sleep_ms / 1000.0
                 )
 
-            if args.sleep_ms > 0:
-                time.sleep(
-                    args.sleep_ms
-                    / 1000.0
+            if index % 500 == 0:
+                logger.info(
+                    "Environment %s/%s "
+                    "current=%s stamped=%s "
+                    "external=%s errors=%s",
+                    index,
+                    len(matches),
+                    report["already_current"],
+                    report[
+                        "schema_stamped_without_api"
+                    ],
+                    report["external_refreshes"],
+                    report["errors"],
                 )
 
     finally:
-        weather_client.close()
-
-    report[
-        "refresh_candidates"
-    ] = (
-        report[
-            "missing"
-        ]
-        + report[
-            "unresolved_existing"
-        ]
-        + report[
-            "stale_schema"
-        ]
-        + report[
-            "incomplete_weather"
-        ]
-        + report[
-            "forced"
-        ]
-    )
+        client.close()
 
     print(
         json.dumps(
@@ -808,13 +359,7 @@ def main() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(
-        level=logging.INFO,
-        format=(
-            "%(asctime)s "
-            "%(levelname)s "
-            "%(name)s: "
-            "%(message)s"
-        ),
+        level=logging.INFO
     )
 
     main()
