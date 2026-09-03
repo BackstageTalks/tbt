@@ -18,9 +18,7 @@ from tbt.services.contracts import (
 
 configure_logging()
 
-logger = logging.getLogger(
-    "tbt.function_app"
-)
+logger = logging.getLogger("blinq.api")
 
 app = func.FunctionApp(
     http_auth_level=func.AuthLevel.ANONYMOUS
@@ -40,19 +38,14 @@ def _json(
         status_code=status,
         mimetype="application/json",
         headers={
-            "Access-Control-Allow-Origin": (
-                settings.cors_origins
-            ),
+            "Access-Control-Allow-Origin": settings.cors_origins,
             "Cache-Control": "no-store",
             "X-BlinQ-Engine": "TBT",
         },
     )
 
 
-@app.route(
-    route="health",
-    methods=["GET"],
-)
+@app.route(route="health", methods=["GET"])
 def health(
     req: func.HttpRequest,
 ) -> func.HttpResponse:
@@ -61,14 +54,10 @@ def health(
             "ok": True,
             "service": "BlinQ",
             "engine": "TBT",
-            "utc": (
-                datetime.now(
-                    timezone.utc
-                ).isoformat()
-            ),
-            "inference_mode": (
-                "offline-github-actions"
-            ),
+            "utc": datetime.now(
+                timezone.utc
+            ).isoformat(),
+            "inference_mode": "offline-github-actions",
             "supabase_configured": bool(
                 settings.supabase_url
                 and settings.supabase_anon_key
@@ -98,67 +87,38 @@ def predictions_upcoming(
             ),
         )
 
-        tour = req.params.get(
-            "tour"
-        )
+        tour = req.params.get("tour")
 
-        if (
-            tour
-            and tour.lower()
-            not in {
-                "atp",
-                "wta",
-            }
-        ):
+        if tour and tour.lower() not in {"atp", "wta"}:
             return _json(
-                {
-                    "error": (
-                        "tour must be ATP or WTA"
-                    )
-                },
+                {"error": "tour must be ATP or WTA"},
                 400,
             )
 
         now = (
-            datetime.now(
-                timezone.utc
-            )
-            - timedelta(
-                hours=6
-            )
+            datetime.now(timezone.utc)
+            - timedelta(hours=6)
         )
 
-        end = (
-            now
-            + timedelta(
-                days=days
-            )
-        )
+        end = now + timedelta(days=days)
 
-        rows = (
-            SupabaseRepository()
-            .list_predictions(
-                now,
-                end,
-                tour=tour,
-            )
+        rows = SupabaseRepository().list_predictions(
+            now,
+            end,
+            tour=tour,
         )
 
         data = [
-            public_prediction(
-                row
-            )
+            public_prediction(row)
             for row in rows
         ]
 
         return _json(
             {
                 "success": True,
-                "generated_at": (
-                    datetime.now(
-                        timezone.utc
-                    ).isoformat()
-                ),
+                "generated_at": datetime.now(
+                    timezone.utc
+                ).isoformat(),
                 "count": len(data),
                 "matches": data,
             }
@@ -200,28 +160,109 @@ def blinq_predictions(
         )
 
         now = (
-            datetime.now(
-                timezone.utc
-            )
-            - timedelta(
-                hours=6
-            )
+            datetime.now(timezone.utc)
+            - timedelta(hours=6)
         )
 
-        rows = (
-            SupabaseRepository()
-            .list_predictions(
-                now,
-                now
-                + timedelta(
-                    days=days
-                ),
-            )
+        rows = SupabaseRepository().list_predictions(
+            now,
+            now + timedelta(days=days),
         )
 
         return _json(
             {
                 "success": True,
                 "source": "BlinQ",
-                "updated_at": (
-                   
+                "updated_at": datetime.now(
+                    timezone.utc
+                ).isoformat(),
+                "data": [
+                    blinq_flat_prediction(row)
+                    for row in rows
+                ],
+            }
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "blinq_predictions failed"
+        )
+
+        return _json(
+            {
+                "success": False,
+                "error": str(exc),
+                "data": [],
+            },
+            500,
+        )
+
+
+@app.route(
+    route="v1/model/status",
+    methods=["GET"],
+)
+def model_status(
+    req: func.HttpRequest,
+) -> func.HttpResponse:
+    try:
+        repo = SupabaseRepository()
+
+        champion = repo.champion_model_version()
+        challenger = repo.latest_challenger_model_version()
+
+        return _json(
+            {
+                "success": True,
+                "model": champion,
+                "champion": champion,
+                "challenger": challenger,
+            }
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "model_status failed"
+        )
+
+        return _json(
+            {
+                "success": False,
+                "error": str(exc),
+            },
+            500,
+        )
+
+
+@app.route(
+    route="v1/backtest/latest",
+    methods=["GET"],
+)
+def backtest_latest(
+    req: func.HttpRequest,
+) -> func.HttpResponse:
+    try:
+        latest = (
+            SupabaseRepository()
+            .latest_backtest()
+        )
+
+        return _json(
+            {
+                "success": True,
+                "backtest": latest,
+            }
+        )
+
+    except Exception as exc:
+        logger.exception(
+            "backtest_latest failed"
+        )
+
+        return _json(
+            {
+                "success": False,
+                "error": str(exc),
+            },
+            500,
+        )
