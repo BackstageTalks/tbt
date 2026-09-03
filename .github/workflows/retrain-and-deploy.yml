@@ -1,4 +1,4 @@
-name: Retrain, backtest and deploy
+name: Retrain, evaluate and deploy
 
 on:
   workflow_dispatch:
@@ -8,10 +8,15 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tbt-model-retrain
+  cancel-in-progress: false
+
 jobs:
   retrain:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
+
     env:
       PYTHONPATH: api
 
@@ -32,10 +37,15 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt pytest
 
-      - name: Unit tests
-        run: pytest
+      - name: Compile
+        run: |
+          python -m compileall -q api scripts
 
-      - name: Train production artifact
+      - name: Unit tests
+        run: |
+          pytest -q
+
+      - name: Train challenger
         env:
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
@@ -45,28 +55,74 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           TGBOT: ${{ secrets.TGBOT }}
           TGCHID: ${{ secrets.TGCHID }}
-        run: python scripts/train.py --output api/artifacts/model.joblib
+        run: |
+          python scripts/train.py \
+            --output api/artifacts/challenger.joblib
 
-      - name: Walk-forward backtest
+      - name: Resolve challenger version
+        id: challenger
+        run: |
+          set -euo pipefail
+
+          VERSION=$(python - <<'PY'
+          import sys
+          sys.path.insert(0, "api")
+          from tbt.models.artifact import load_model
+          print(load_model("api/artifacts/challenger.joblib").version)
+          PY
+          )
+
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Challenger: ${VERSION}"
+
+      - name: Upload immutable challenger artifact
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python scripts/model_store.py upload \
+            --file api/artifacts/challenger.joblib \
+            --version "${{ steps.challenger.outputs.version }}"
+
+      - name: Download current champion artifact
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python scripts/model_store.py download \
+            --champion \
+            --file api/artifacts/champion.joblib
+
+      - name: Direct challenger versus champion evaluation
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/backtest.py
-
-      - name: Verify model artifact
         run: |
-          set -euo pipefail
-          test -s api/artifacts/model.joblib
-          ls -lh api/artifacts/model.joblib
+          python scripts/evaluate_challenger.py \
+            --challenger api/artifacts/challenger.joblib \
+            --champion api/artifacts/champion.joblib
 
-      - name: Store production model in Supabase Storage
+      - name: Walk-forward diagnostic backtest
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          python scripts/backtest.py
+
+      - name: Download final champion after lifecycle decision
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/model_store.py upload --file api/artifacts/model.joblib
+        run: |
+          rm -f api/artifacts/model.joblib
 
-      - name: Generate fresh production predictions
+          python scripts/model_store.py download \
+            --champion \
+            --file api/artifacts/model.joblib
+
+      - name: Generate fresh champion predictions
         env:
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
@@ -74,7 +130,8 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/refresh_predictions.py
+        run: |
+          python scripts/refresh_predictions.py
 
       - name: Reconcile recent results
         env:
@@ -84,19 +141,23 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/settle_results.py
+        run: |
+          python scripts/settle_results.py
 
       - name: Upload evaluation reports
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: tbt-evaluation
           path: reports/
+          if-no-files-found: warn
           retention-days: 30
 
-      - name: Remove heavy model from Azure deployment package
-        run: rm -f api/artifacts/model.joblib
+      - name: Remove heavy models from Azure package
+        run: |
+          rm -f api/artifacts/*.joblib
 
-      - name: Deploy lightweight BlinQ API to Azure Static Web Apps Free
+      - name: Deploy lightweight BlinQ API
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
