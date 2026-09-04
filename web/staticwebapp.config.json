@@ -1,4 +1,20 @@
 {
+  "routes": [
+    {
+      "route": "/",
+      "redirect": "/follow-the-data/",
+      "statusCode": 301
+    },
+    {
+      "route": "/follow-the-data",
+      "redirect": "/follow-the-data/",
+      "statusCode": 301
+    },
+    {
+      "route": "/follow-the-data/*",
+      "rewrite": "/index.html"
+    }
+  ],
   "navigationFallback": {
     "rewrite": "/index.html",
     "exclude": ["*.css", "*.js", "*.json", "*.png", "*.jpg", "*.jpeg", "*.webp", "*.svg", "*.ico"]

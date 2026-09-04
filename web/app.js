@@ -50,6 +50,67 @@ function fmtToday() {
   return new Intl.DateTimeFormat(undefined, { weekday: "short", day: "2-digit", month: "short", year: "numeric" }).format(new Date());
 }
 
+function fmtDate(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return String(value);
+  return new Intl.DateTimeFormat(undefined, { day: "2-digit", month: "short", year: "numeric" }).format(d);
+}
+
+function fmtInt(value) {
+  const n = Number(value);
+  return Number.isFinite(n) ? new Intl.NumberFormat().format(n) : "—";
+}
+
+function pctMetric(value, digits = 2) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${(Math.abs(n) <= 1.000001 ? n * 100 : n).toFixed(digits)}%`;
+}
+
+function decMetric(value, digits = 4) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n.toFixed(digits) : "—";
+}
+
+function metricCard(label, value, note = "") {
+  return `<article class="metric-card performance-metric"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong>${note ? `<span>${escapeHtml(note)}</span>` : ""}</article>`;
+}
+
+function metricDelta(value, goodWhenPositive = true) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return { text: "—", cls: "neutral" };
+  const good = goodWhenPositive ? n > 0 : n < 0;
+  const bad = goodWhenPositive ? n < 0 : n > 0;
+  return { text: `${n > 0 ? "+" : ""}${(n * 100).toFixed(2)} pp`, cls: good ? "positive" : bad ? "negative" : "neutral" };
+}
+
+function numericDelta(value, goodWhenNegative = true, digits = 4) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return { text: "—", cls: "neutral" };
+  const good = goodWhenNegative ? n < 0 : n > 0;
+  const bad = goodWhenNegative ? n > 0 : n < 0;
+  return { text: `${n > 0 ? "+" : ""}${n.toFixed(digits)}`, cls: good ? "positive" : bad ? "negative" : "neutral" };
+}
+
+function normalizeMetricObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+function calibrationTable(metrics) {
+  const bins = Array.isArray(metrics?.calibration_bins) ? metrics.calibration_bins : [];
+  if (!bins.length) return '<div class="state-card compact-state">Calibration bins are not stored for this model snapshot.</div>';
+  const rows = bins.map((bin) => {
+    const lo = Number(bin.min_probability || 0) * 100;
+    const hi = Number(bin.max_probability || 0) * 100;
+    const predicted = Number(bin.mean_probability || 0) * 100;
+    const actual = Number(bin.actual_win_rate || 0) * 100;
+    const gap = actual - predicted;
+    return `<tr><td>${lo.toFixed(0)}–${hi.toFixed(0)}%</td><td>${fmtInt(bin.count)}</td><td>${predicted.toFixed(2)}%</td><td>${actual.toFixed(2)}%</td><td class="${Math.abs(gap) <= 2 ? "positive" : Math.abs(gap) <= 5 ? "neutral" : "negative"}">${gap > 0 ? "+" : ""}${gap.toFixed(2)} pp</td></tr>`;
+  }).join("");
+  return `<div class="table-wrap"><table class="access-table performance-table"><thead><tr><th>Probability band</th><th>N</th><th>Mean predicted</th><th>Actual win rate</th><th>Gap</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
 async function getJSON(url) {
   const response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
   let data = null;
@@ -653,14 +714,37 @@ function moduleShell(title, subtitle, body) {
 function renderTournaments() {
   const groups = new Map();
   state.predictions.forEach((m) => {
-    if (!groups.has(m.tournament)) groups.set(m.tournament, []);
-    groups.get(m.tournament).push(m);
+    const key = m.tournament || "Unknown tournament";
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(m);
   });
-  const cards = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([name, rows]) => {
-    const top = primeRows(rows)[0];
-    return `<article class="data-tile tournament-tile"><span>${escapeHtml(rows[0]?.tour || "")}</span><h3>${escapeHtml(name)}</h3><p>${rows.length} current matches · ${escapeHtml(rows[0]?.surface || "surface unknown")}</p>${top ? `<div class="mini-pick">Top model pick <strong>${escapeHtml(top.pick)}</strong> ${fmtPct(top.probability)}</div>` : ""}</article>`;
-  }).join("");
-  moduleShell("Tournaments", "Current tournaments with live prediction coverage.", `<div class="module-grid">${cards || '<div class="state-card">No current tournaments in the prediction feed.</div>'}</div>`);
+
+  const cards = [...groups.entries()]
+    .sort((a, b) => {
+      const aTop = Math.max(...a[1].map((x) => Number(x.probability || 0)));
+      const bTop = Math.max(...b[1].map((x) => Number(x.probability || 0)));
+      return bTop - aTop || a[0].localeCompare(b[0]);
+    })
+    .map(([name, rows]) => {
+      const top = [...rows].sort((a, b) => Number(b.probability || 0) - Number(a.probability || 0))[0];
+      const surfaces = [...new Set(rows.map((x) => x.surface || "unknown"))];
+      const tours = [...new Set(rows.map((x) => x.tour || "Unknown"))];
+      const high = rows.filter((x) => x.confidence === "high").length;
+      return `<article class="data-tile tournament-tile">
+        <div class="tile-topline"><span>${escapeHtml(tours.join(" / "))}</span><small>${rows.length} match${rows.length === 1 ? "" : "es"}</small></div>
+        <h3>${escapeHtml(name)}</h3>
+        <p>${escapeHtml(surfaces.join(" · "))} · ${high} high-confidence</p>
+        ${top ? `<div class="mini-pick"><span>Top current model pick</span><strong>${escapeHtml(top.pick)}</strong><b>${fmtPct(top.probability)}</b></div>` : ""}
+        <button class="btn btn-ghost tournament-open" type="button" data-open-tournament="${escapeHtml(name)}">View predictions →</button>
+      </article>`;
+    }).join("");
+
+  moduleShell("Tournaments", "Current tournaments ranked by their strongest available model selection.", `<div class="module-grid">${cards || '<div class="state-card">No current tournaments in the prediction feed.</div>'}</div>`);
+  document.querySelectorAll("[data-open-tournament]").forEach((button) => button.addEventListener("click", () => {
+    navigate("prime_picks");
+    const select = $("tournamentFilter");
+    if (select) { select.value = button.dataset.openTournament || ""; state.featuredIndex = 0; renderPredictions(); }
+  }));
 }
 
 function renderPlayers() {
@@ -688,44 +772,180 @@ function renderStats() {
 }
 
 async function renderModelPerformance() {
-  moduleShell("Model Performance", "Current production model status and quality metrics.", '<div class="state-card">Loading model status…</div>');
+  moduleShell("Model Performance", "Latest stored model metadata, holdout quality and probability calibration.", '<div class="state-card">Loading model status…</div>');
   try {
     const data = await getJSON(api("/api/v1/model/status"));
-    $("moduleView").querySelector(".module-card").innerHTML = `<pre class="json-view">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+    if (state.currentRoute !== "model") return;
+    const model = normalizeMetricObject(data?.model);
+    if (!Object.keys(model).length) {
+      $("moduleView").querySelector(".module-card").innerHTML = '<div class="state-card">No production model metadata is stored yet.</div>';
+      return;
+    }
+    const metadata = normalizeMetricObject(model.metadata);
+    const metrics = normalizeMetricObject(model.holdout_metrics || metadata.holdout_metrics);
+    const features = Array.isArray(metadata.feature_names) ? metadata.feature_names : [];
+    const status = String(model.lifecycle_status || metadata.lifecycle_status || "production").toUpperCase();
+    const cards = [
+      metricCard("Accuracy", pctMetric(metrics.accuracy), "untouched holdout"),
+      metricCard("ROC-AUC", decMetric(metrics.roc_auc), "ranking quality"),
+      metricCard("Log Loss", decMetric(metrics.log_loss), "lower is better"),
+      metricCard("Brier Score", decMetric(metrics.brier_score), "lower is better"),
+      metricCard("ECE", pctMetric(metrics.ece_10), "10-bin calibration"),
+      metricCard("Training Matches", fmtInt(model.training_matches || metadata.training_matches), "point-in-time history"),
+    ].join("");
+
+    const lifecycleClass = status === "CHAMPION" ? "positive" : status === "REJECTED" ? "negative" : "neutral";
+    const detailRows = [
+      ["Model version", model.model_version || "—"],
+      ["Lifecycle", status],
+      ["History start", fmtDate(model.history_start || metadata.history_start)],
+      ["History end", fmtDate(model.history_end || metadata.history_end)],
+      ["Calibration", metadata.calibration_method || "—"],
+      ["Boost blend", metadata.blend_weight_boost != null ? decMetric(metadata.blend_weight_boost, 2) : "—"],
+      ["Feature count", features.length || "—"],
+      ["Recorded", fmtDate(model.created_at)],
+    ];
+
+    $("moduleView").querySelector(".module-card").innerHTML = `
+      <div class="performance-hero">
+        <div><span class="module-kicker">LATEST MODEL SNAPSHOT</span><h2>${escapeHtml(model.model_version || "Current model")}</h2><p>Metrics below come from stored model metadata. No browser-side metric is invented or recomputed.</p></div>
+        <span class="status-pill ${lifecycleClass}">${escapeHtml(status)}</span>
+      </div>
+      <div class="metric-grid performance-grid">${cards}</div>
+      <div class="performance-columns">
+        <section class="breakdown-card"><h3>Model metadata</h3>${detailRows.map(([k,v]) => `<div><span>${escapeHtml(k)}</span><strong>${escapeHtml(v)}</strong></div>`).join("")}</section>
+        <section class="breakdown-card"><h3>Feature engine</h3><p class="module-copy">${features.length ? `${features.length} point-in-time features are recorded in this model artifact.` : "Feature metadata is unavailable for this snapshot."}</p><div class="feature-chips">${features.slice(0, 18).map((x) => `<span>${escapeHtml(x)}</span>`).join("")}${features.length > 18 ? `<span>+${features.length - 18} more</span>` : ""}</div></section>
+      </div>
+      <section class="performance-section"><div class="section-title-row"><div><span class="module-kicker">CALIBRATION</span><h3>Predicted probability vs observed win rate</h3></div><small>${metrics.n ? `${fmtInt(metrics.n)} holdout predictions` : "Stored holdout bins"}</small></div>${calibrationTable(metrics)}</section>
+    `;
   } catch (error) {
+    if (state.currentRoute !== "model") return;
     $("moduleView").querySelector(".module-card").innerHTML = `<div class="state-card error">Model status endpoint unavailable.<small>${escapeHtml(error.message)}</small></div>`;
   }
 }
 
 async function renderBacktests() {
-  moduleShell("Backtests", "Chronological holdout and walk-forward evaluation.", '<div class="state-card">Loading latest backtest…</div>');
+  moduleShell("Backtests", "Leakage-safe chronological walk-forward evaluation against the internal Elo baseline.", '<div class="state-card">Loading latest backtest…</div>');
   try {
     const data = await getJSON(api("/api/v1/backtest/latest"));
-    $("moduleView").querySelector(".module-card").innerHTML = `<pre class="json-view">${escapeHtml(JSON.stringify(data, null, 2))}</pre>`;
+    if (state.currentRoute !== "backtests") return;
+    const row = normalizeMetricObject(data?.backtest);
+    const report = normalizeMetricObject(row.report);
+    if (!Object.keys(report).length) {
+      $("moduleView").querySelector(".module-card").innerHTML = '<div class="state-card">No stored backtest report is available yet.</div>';
+      return;
+    }
+    const folds = Array.isArray(report.folds) ? report.folds : [];
+    const latestFold = folds[folds.length - 1] || {};
+    const latestModel = normalizeMetricObject(latestFold.model);
+    const overall = normalizeMetricObject(report.model_overall || report.overall || latestModel);
+    const elo = normalizeMetricObject(report.elo_baseline_overall || latestFold.elo_baseline);
+    const delta = normalizeMetricObject(report.delta_vs_elo || latestFold.delta_vs_elo);
+    const accDelta = metricDelta(delta.accuracy, true);
+    const aucDelta = metricDelta(delta.roc_auc, true);
+    const logDelta = numericDelta(delta.log_loss, true);
+    const brierDelta = numericDelta(delta.brier_score, true);
+    const cards = [
+      metricCard("Tested Matches", fmtInt(report.tested_matches || overall.n), "all walk-forward folds"),
+      metricCard("Model Accuracy", pctMetric(overall.accuracy), latestFold.year ? `latest fold ${latestFold.year}` : "walk-forward"),
+      metricCard("Model ROC-AUC", decMetric(overall.roc_auc), "out-of-time"),
+      metricCard("Accuracy vs Elo", accDelta.text, "positive favours BlinQ"),
+      metricCard("Log Loss", decMetric(overall.log_loss), "lower is better"),
+      metricCard("Brier Score", decMetric(overall.brier_score), "lower is better"),
+    ].join("");
+
+    const foldRows = folds.map((fold) => {
+      const m = normalizeMetricObject(fold.model);
+      const e = normalizeMetricObject(fold.elo_baseline);
+      const d = normalizeMetricObject(fold.delta_vs_elo);
+      return `<tr><td><strong>${escapeHtml(fold.year || "—")}</strong></td><td>${fmtInt(fold.train_rows)}</td><td>${fmtInt(fold.calibration_rows)}</td><td>${fmtInt(fold.test_rows || m.n)}</td><td>${pctMetric(m.accuracy)}</td><td>${pctMetric(e.accuracy)}</td><td class="${Number(d.accuracy) >= 0 ? "positive" : "negative"}">${metricDelta(d.accuracy, true).text}</td><td>${decMetric(m.roc_auc)}</td><td>${decMetric(m.log_loss)}</td><td>${decMetric(m.brier_score)}</td><td>${pctMetric(m.ece_10)}</td></tr>`;
+    }).join("");
+
+    $("moduleView").querySelector(".module-card").innerHTML = `
+      <div class="performance-hero"><div><span class="module-kicker">WALK-FORWARD</span><h2>${escapeHtml(row.model_version || "Latest stored backtest")}</h2><p>${escapeHtml(report.method || "Chronological out-of-time evaluation.")}</p></div><span class="status-pill positive">OUT-OF-TIME</span></div>
+      <div class="metric-grid performance-grid">${cards}</div>
+      <div class="delta-strip">
+        <div><span>Accuracy Δ</span><strong class="${accDelta.cls}">${accDelta.text}</strong></div>
+        <div><span>ROC-AUC Δ</span><strong class="${aucDelta.cls}">${aucDelta.text}</strong></div>
+        <div><span>Log Loss Δ</span><strong class="${logDelta.cls}">${logDelta.text}</strong></div>
+        <div><span>Brier Δ</span><strong class="${brierDelta.cls}">${brierDelta.text}</strong></div>
+      </div>
+      <section class="performance-section"><div class="section-title-row"><div><span class="module-kicker">YEARLY FOLDS</span><h3>Chronological validation</h3></div><small>${folds.length} fold${folds.length === 1 ? "" : "s"}</small></div>
+        ${folds.length ? `<div class="table-wrap"><table class="access-table performance-table"><thead><tr><th>Year</th><th>Train</th><th>Calibration</th><th>Test</th><th>Accuracy</th><th>Elo</th><th>Δ</th><th>AUC</th><th>Log Loss</th><th>Brier</th><th>ECE</th></tr></thead><tbody>${foldRows}</tbody></table></div>` : '<div class="state-card compact-state">This stored report has no yearly fold detail.</div>'}
+      </section>
+      <section class="performance-section"><div class="section-title-row"><div><span class="module-kicker">LATEST FOLD CALIBRATION</span><h3>Probability reliability</h3></div><small>${latestFold.year || "latest"}</small></div>${calibrationTable(latestModel)}</section>
+    `;
   } catch (error) {
+    if (state.currentRoute !== "backtests") return;
     $("moduleView").querySelector(".module-card").innerHTML = `<div class="state-card error">Backtest endpoint unavailable.<small>${escapeHtml(error.message)}</small></div>`;
   }
 }
 
 function renderAccountPage() {
   const user = state.user;
-  moduleShell("Account", "Plan, access and subscription overview.", `<div class="account-page-grid"><article class="account-hero"><div class="avatar avatar-xl">${escapeHtml(initials(user.name))}</div><div><small>ACCOUNT</small><h2>${escapeHtml(user.name)}</h2><p>${escapeHtml(user.planLabel)} · ${escapeHtml(user.entitlement || "Active")}</p></div></article><article class="access-summary"><h3>Current access</h3><p>All menu modules stay visible. Locked modules open an upgrade/data notice instead of disappearing.</p><button class="btn btn-primary" data-upgrade type="button">Upgrade plan</button></article></div>`);
+  const mainItems = (state.ui?.navigation?.main || []).filter((x) => x.enabled !== false);
+  const accessRows = mainItems.map((item) => {
+    const access = routeAccess(item);
+    return `<div class="account-access-row"><span>${escapeHtml(item.label)}</span><strong class="${access.allowed ? "positive" : "neutral"}">${access.allowed ? "Unlocked" : `Requires ${escapeHtml(item.required_label || "upgrade")}`}</strong></div>`;
+  }).join("");
+  moduleShell("Account", "Plan, access and subscription overview.", `
+    <div class="account-page-grid">
+      <article class="account-hero"><div class="avatar avatar-xl">${escapeHtml(initials(user.name))}</div><div><small>ACCOUNT</small><h2>${escapeHtml(user.name)}</h2><p>${escapeHtml(user.planLabel)} · ${escapeHtml(user.entitlement || "Active")}</p></div></article>
+      <article class="access-summary"><h3>Current plan</h3><p>Your plan controls access while every product module remains visible in navigation.</p><div class="account-plan-badge">${escapeHtml(String(user.plan || "free").toUpperCase())}</div><button class="btn btn-primary" data-upgrade type="button">View upgrade options</button></article>
+    </div>
+    <section class="performance-section"><div class="section-title-row"><div><span class="module-kicker">ENTITLEMENTS</span><h3>Module access</h3></div></div><div class="account-access-list">${accessRows}</div></section>
+  `);
 }
 
 function learnBody(route) {
   const content = {
-    how_blinq_works: ["How BlinQ Works", "A simple view of the prediction pipeline.", ["1. Real match data is processed point-in-time.", "2. TBT creates strength, surface, form, workload and matchup features.", "3. The model returns a calibrated match-win probability.", "4. BlinQ Prime Picks rank the strongest supported selections.", "5. The user sees probability plus model context, not a guaranteed outcome."]],
-    methodology: ["Methodology", "Technical model methodology.", ["Point-in-time feature construction", "Internal overall and surface Elo", "Decayed and opponent-adjusted form", "H2H shrinkage", "Rest, layoff and workload signals", "Chronological validation and probability calibration"]],
-    model_data: ["Model & Data", "What comes from providers and what TBT calculates internally.", ["Provider: fixtures, results, tournament, surface, ranking and available match statistics", "TBT: Elo, surface Elo, form, H2H, workload and model features", "Predictions are precomputed and stored before frontend traffic", "No bookmaker edge is shown until a real odds feed is connected"]],
-    faq: ["FAQ", "Common questions about BlinQ predictions.", ["Prime Pick means a strongest current model selection, not a safe or guaranteed bet.", "Probability is the calibrated model estimate for the match winner.", "Factor bars are normalized internal indicators, not separate probabilities.", "Value Picks will require live bookmaker odds before activation."]],
-    responsible_use: ["Responsible Use", "Probabilities are not guarantees.", ["BlinQ is an analytical tool.", "Prime Picks must never be presented as certain outcomes.", "Do not chase losses or stake money you cannot afford to lose.", "Use model probabilities as one input in a broader decision process."]],
+    how_blinq_works: { title: "How BlinQ Works", subtitle: "From historical tennis data to a calibrated pre-match probability.", sections: [
+      ["1 · Point-in-time data", "Every historical prediction is built only from information available before that match. Future results never enter the feature state."],
+      ["2 · Feature engine", "Internal overall and surface Elo, recent and medium form, opponent-adjusted form, H2H, ranking context, rest/workload, serve/return statistics and optional environment signals are combined."],
+      ["3 · Ensemble model", "A regularized logistic model and gradient boosting model are blended, then calibrated on a chronologically later sample."],
+      ["4 · Symmetric inference", "The fixture is evaluated in both player orders and reconciled so player ordering cannot create an artificial prediction advantage."],
+      ["5 · Prime Picks", "Current Prime Picks are ranked by calibrated match-win probability. Factor agreement and Data Depth explain context and act only as tie-breakers."],
+    ]},
+    methodology: { title: "Methodology", subtitle: "The rules that keep evaluation realistic and reproducible.", sections: [
+      ["Chronological validation", "Training, calibration and testing are split by time, with whole UTC-day boundaries and later seasons reserved for out-of-time evaluation."],
+      ["Strength & surface", "BlinQ maintains internal Elo and surface-specific Elo rather than treating official ranking as the only measure of player strength."],
+      ["Form & opponent quality", "Recent results are time-decayed and adjusted for opponent strength so a raw winning streak against weak opposition is not treated the same as elite-level form."],
+      ["H2H shrinkage", "Head-to-head history is included conservatively so tiny samples cannot dominate a prediction."],
+      ["Workload & environment", "Rest, layoff and recent workload are point-in-time features. Travel, altitude and weather are used only when known; missingness is explicitly flagged."],
+      ["Probability calibration", "Model scores are calibrated before being exposed as probabilities. Accuracy alone is not sufficient; Log Loss, Brier Score and ECE are tracked too."],
+    ]},
+    model_data: { title: "Model & Data", subtitle: "What is provider data and what BlinQ calculates internally.", sections: [
+      ["Provider layer", "Fixtures, results, tournament context, surface, available rankings and match statistics are normalized from the tennis data provider."],
+      ["Internal calculations", "Overall Elo, surface Elo, form, opponent-adjusted form, H2H, workload and other model features are calculated by TBT from historical match state."],
+      ["Environment", "Venue, weather, travel and altitude enrichment is optional and coverage-aware. Unknown values are never presented as measured conditions."],
+      ["Prediction storage", "Upcoming predictions are precomputed and stored. Loading the website does not call the upstream tennis provider."],
+      ["Market data", "Value Picks remain unavailable until real bookmaker odds are connected. BlinQ does not invent implied probability or betting edge."],
+      ["Specialized markets", "Ace Picks and Games & Sets require dedicated labels/models. Match-winner probabilities are not relabeled as ace, set or games predictions."],
+    ]},
+    faq: { title: "FAQ", subtitle: "How to interpret probabilities, confidence and Prime Picks.", sections: [
+      ["What is a Prime Pick?", "One of the strongest current match-winner selections according to calibrated model probability. It is not a guaranteed or 'safe' outcome."],
+      ["Is 90% a guarantee?", "No. A calibrated 90% estimate still implies losses can occur. Reliability is measured historically through calibration and out-of-time backtests."],
+      ["What are the factor bars?", "Normalized explanatory indicators derived from point-in-time model features. They are context, not independent probabilities."],
+      ["What is Data Depth?", "A quality indicator describing how much relevant historical information is available for the matchup. It is not a win probability."],
+      ["Why can a prediction change?", "Newly completed matches, updated fixtures, rankings or other pre-match information can change the model state before a fixture begins."],
+      ["Where are Value Picks?", "They stay locked until a reliable odds source is connected, because value requires comparing model probability with real market price."],
+    ]},
+    responsible_use: { title: "Responsible Use", subtitle: "BlinQ is a probability and analytics product, not a promise of outcomes.", sections: [
+      ["Probabilities, not certainty", "Every prediction can lose. Labels such as Prime and High Confidence describe model output, not guaranteed results."],
+      ["No loss chasing", "Do not increase risk simply to recover previous losses or because a previous model selection failed."],
+      ["Risk limits", "Never commit money you cannot afford to lose and use explicit personal limits if you use predictions alongside betting markets."],
+      ["Independent decision", "Model output should be one input in your own decision process. Context, data availability and market conditions can matter."],
+      ["Adults only", "Where predictions are used in connection with betting, users must comply with local age and gambling laws."],
+    ]},
   };
   return content[route];
 }
 
 function renderLearn(route) {
-  const [title, subtitle, points] = learnBody(route);
-  moduleShell(title, subtitle, `<div class="learn-article"><ol>${points.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ol></div>`);
+  const page = learnBody(route);
+  if (!page) return moduleShell("Learn", "BlinQ documentation.", '<div class="state-card">Page unavailable.</div>');
+  const sections = page.sections.map(([title, text]) => `<article class="learn-section"><span>${escapeHtml(title)}</span><p>${escapeHtml(text)}</p></article>`).join("");
+  moduleShell(page.title, page.subtitle, `<div class="learn-intro"><span class="module-kicker">BLINQ DOCUMENTATION</span><p>Transparent model behavior is part of the product. The descriptions below reflect the current implementation and deliberately avoid claims that are not backed by data.</p></div><div class="learn-sections">${sections}</div>`);
 }
 
 function renderPendingModule(route) {
