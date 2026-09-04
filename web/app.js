@@ -231,15 +231,18 @@ async function loadUiConfig() {
     try { remote = await getJSON(api("/api/v1/ui-config")); } catch (_) { remote = null; }
     const merged = remote?.config ? deepMerge(baseline, remote.config) : baseline;
     state.ui = applyLocalAdminOverride(merged);
+    ensureAccessRegistry();
   } catch {
     state.ui = { account: {}, navigation: { main: [], learn: [], admin: [] }, banner_zones: {}, header_zone: { count: 0, items: [] }, plans: [] };
   }
+  ensureAccessRegistry();
   startPublicSession();
   renderBranding();
   renderNavigation();
   renderHeaderSponsor();
   renderBannerZones();
   renderPlanGrid();
+  applyManagedPanelVisibility();
 }
 
 function startPublicSession() {
@@ -303,6 +306,146 @@ function renderAccount() {
   }
 }
 
+
+const ACCESS_PLANS = ["free", "pro", "elite", "legend", "goat", "admin"];
+
+const ACCESS_PANEL_CATALOG = [
+  { id: "panel.header_banners", label: "Header banner zone", group: "Dashboard / Header", type: "panel", selector: "#headerBannerZone" },
+  { id: "panel.header_banner_1", label: "Header banner · Slot 1", group: "Dashboard / Header", type: "panel", selector: '[data-access-feature="panel.header_banner_1"]' },
+  { id: "panel.header_banner_2", label: "Header banner · Slot 2", group: "Dashboard / Header", type: "panel", selector: '[data-access-feature="panel.header_banner_2"]' },
+  { id: "panel.header_banner_3", label: "Header banner · Slot 3", group: "Dashboard / Header", type: "panel", selector: '[data-access-feature="panel.header_banner_3"]' },
+  { id: "panel.prediction_filters", label: "Prediction filters", group: "Dashboard", type: "panel", selector: "#predictionToolbar" },
+  { id: "panel.dashboard_snapshot", label: "Dashboard snapshot", group: "Dashboard", type: "panel", selector: "#dashboardSnapshot" },
+  { id: "panel.top_banners", label: "Top banner zone", group: "Dashboard / Banners", type: "panel", selector: "#bannerZoneTop" },
+  { id: "panel.top_banner_1", label: "Top banner · Slot 1", group: "Dashboard / Banners", type: "panel", selector: '[data-access-feature="panel.top_banner_1"]' },
+  { id: "panel.top_banner_2", label: "Top banner · Slot 2", group: "Dashboard / Banners", type: "panel", selector: '[data-access-feature="panel.top_banner_2"]' },
+  { id: "panel.top_banner_3", label: "Top banner · Slot 3", group: "Dashboard / Banners", type: "panel", selector: '[data-access-feature="panel.top_banner_3"]' },
+  { id: "panel.top_banner_4", label: "Top banner · Slot 4", group: "Dashboard / Banners", type: "panel", selector: '[data-access-feature="panel.top_banner_4"]' },
+  { id: "panel.prime_picks_board", label: "Prime Picks board", group: "Predictions", type: "panel", selector: "#pickCarouselShell" },
+  { id: "panel.bottom_banners", label: "Bottom banner zone", group: "Dashboard / Banners", type: "panel", selector: "#bannerZoneBottom" },
+  { id: "panel.bottom_banner_1", label: "Bottom banner · Slot 1", group: "Dashboard / Banners", type: "panel", selector: '[data-access-feature="panel.bottom_banner_1"]' },
+  { id: "panel.bottom_banner_2", label: "Bottom banner · Slot 2", group: "Dashboard / Banners", type: "panel", selector: '[data-access-feature="panel.bottom_banner_2"]' },
+  { id: "panel.bottom_banner_3", label: "Bottom banner · Slot 3", group: "Dashboard / Banners", type: "panel", selector: '[data-access-feature="panel.bottom_banner_3"]' },
+  { id: "panel.bottom_banner_4", label: "Bottom banner · Slot 4", group: "Dashboard / Banners", type: "panel", selector: '[data-access-feature="panel.bottom_banner_4"]' },
+  { id: "panel.footer_learn", label: "Footer Learn links", group: "Footer", type: "panel", selector: "#footerLearnNavigation" },
+  { id: "panel.language_switcher", label: "Language switcher", group: "Footer", type: "panel", selector: ".footer-languages" },
+];
+
+function accessControlState() {
+  if (!state.ui) state.ui = {};
+  if (!state.ui.access_control || typeof state.ui.access_control !== "object") state.ui.access_control = {};
+  const ac = state.ui.access_control;
+  ac.version = Number(ac.version || 1);
+  ac.default_new_feature_access = "all";
+  ac.default_new_feature_visibility = "all";
+  if (!ac.entries || typeof ac.entries !== "object" || Array.isArray(ac.entries)) ac.entries = {};
+  return ac;
+}
+
+function normalizePlanList(value, fallback = ACCESS_PLANS) {
+  const rows = Array.isArray(value) ? value.map((x) => String(x).toLowerCase()) : [...fallback];
+  return ACCESS_PLANS.filter((plan) => rows.includes(plan));
+}
+
+function registerAccessFeature(meta, initialAllowed = ACCESS_PLANS, initialVisible = ACCESS_PLANS) {
+  if (!meta?.id) return null;
+  const ac = accessControlState();
+  const existing = ac.entries[meta.id];
+  if (!existing) {
+    ac.entries[meta.id] = {
+      id: meta.id,
+      label: meta.label || meta.id,
+      type: meta.type || "panel",
+      group: meta.group || "Other",
+      source: meta.source || "auto",
+      auto_discovered: meta.auto_discovered !== false,
+      admin_only: Boolean(meta.admin_only),
+      allowed_plans: meta.admin_only ? ["admin"] : normalizePlanList(initialAllowed),
+      visible_plans: meta.admin_only ? ["admin"] : normalizePlanList(initialVisible),
+    };
+  } else {
+    existing.label = meta.label || existing.label || meta.id;
+    existing.type = meta.type || existing.type || "panel";
+    existing.group = meta.group || existing.group || "Other";
+    existing.source = meta.source || existing.source || "auto";
+    existing.admin_only = Boolean(meta.admin_only || existing.admin_only);
+    existing.auto_discovered = existing.auto_discovered !== false;
+    existing.allowed_plans = existing.admin_only ? ["admin"] : normalizePlanList(existing.allowed_plans);
+    existing.visible_plans = existing.admin_only ? ["admin"] : normalizePlanList(existing.visible_plans);
+  }
+  return ac.entries[meta.id];
+}
+
+function ensureAccessRegistry() {
+  const nav = state.ui?.navigation || {};
+  [
+    ...(nav.main || []).map((item) => ({ item, group: "Main navigation" })),
+    ...(nav.learn || []).map((item) => ({ item, group: "Learn / Footer" })),
+    ...(nav.admin || []).map((item) => ({ item, group: "Administration" })),
+  ].forEach(({ item, group }) => {
+    registerAccessFeature(
+      { id: `route.${item.id}`, label: item.label || item.id, type: "page", group, source: "navigation", admin_only: Boolean(item.admin_only) },
+      item.admin_only ? ["admin"] : (Array.isArray(item.allowed_plans) ? item.allowed_plans : ACCESS_PLANS),
+      item.admin_only ? ["admin"] : ACCESS_PLANS,
+    );
+  });
+  ACCESS_PANEL_CATALOG.forEach((meta) => registerAccessFeature({ ...meta, source: "panel_catalog" }, ACCESS_PLANS, ACCESS_PLANS));
+  document.querySelectorAll("[data-access-feature]").forEach((node) => {
+    registerAccessFeature({
+      id: node.dataset.accessFeature,
+      label: node.dataset.accessLabel || node.dataset.accessFeature,
+      type: "panel",
+      group: node.dataset.accessGroup || "Auto-discovered panels",
+      source: "dom",
+    }, ACCESS_PLANS, ACCESS_PLANS);
+  });
+  return accessControlState();
+}
+
+function accessEntry(featureId) {
+  return ensureAccessRegistry().entries?.[featureId] || null;
+}
+
+function planHasFeatureAccess(featureId, plan = state.user?.plan || "free") {
+  const entry = accessEntry(featureId);
+  if (!entry) return true;
+  if (entry.admin_only) return String(plan).toLowerCase() === "admin" || state.adminSession;
+  return normalizePlanList(entry.allowed_plans).includes(String(plan || "free").toLowerCase());
+}
+
+function planCanSeeFeature(featureId, plan = state.user?.plan || "free") {
+  const entry = accessEntry(featureId);
+  if (!entry) return true;
+  if (entry.admin_only) return String(plan).toLowerCase() === "admin" || state.adminSession;
+  return normalizePlanList(entry.visible_plans).includes(String(plan || "free").toLowerCase());
+}
+
+function applyManagedPanelVisibility() {
+  ensureAccessRegistry();
+  ACCESS_PANEL_CATALOG.forEach((meta) => {
+    document.querySelectorAll(meta.selector).forEach((node) => {
+      const visible = planCanSeeFeature(meta.id);
+      node.dataset.planVisible = visible ? "1" : "0";
+      if (!visible) node.hidden = true;
+    });
+  });
+  document.querySelectorAll("[data-access-feature]").forEach((node) => {
+    const id = node.dataset.accessFeature;
+    const visible = planCanSeeFeature(id);
+    node.dataset.planVisible = visible ? "1" : "0";
+    if (!visible) node.hidden = true;
+  });
+}
+
+function syncRouteAccessBackToNavigation() {
+  const nav = state.ui?.navigation || {};
+  [...(nav.main || []), ...(nav.learn || []), ...(nav.admin || [])].forEach((item) => {
+    const entry = accessEntry(`route.${item.id}`);
+    if (!entry) return;
+    item.allowed_plans = normalizePlanList(entry.allowed_plans);
+  });
+}
+
 function allNavItems() {
   const nav = state.ui?.navigation || {};
   return [...(nav.main || []), ...(nav.learn || []), ...(nav.admin || [])];
@@ -312,12 +455,17 @@ function navItem(route) { return allNavItems().find((x) => x.id === route); }
 
 function routeAccess(item) {
   if (!item) return { allowed: true };
-  if (item.admin_only) {
+  const featureId = `route.${item.id}`;
+  const entry = accessEntry(featureId);
+  if (item.admin_only || entry?.admin_only) {
     return (state.user?.plan === "admin" || state.adminSession)
       ? { allowed: true }
       : { allowed: false, label: "Admin", reason: "This module is available only to administrators." };
   }
-  const allowedPlans = item.allowed_plans || ["free", "pro", "elite", "legend", "goat", "admin"];
+  if (!planCanSeeFeature(featureId)) {
+    return { allowed: false, hidden: true, label: "Unavailable", reason: "This module is hidden for your current account level." };
+  }
+  const allowedPlans = entry ? normalizePlanList(entry.allowed_plans) : (item.allowed_plans || ACCESS_PLANS);
   if (!allowedPlans.includes(state.user?.plan || "free")) {
     return {
       allowed: false,
@@ -344,6 +492,7 @@ function renderFooterLearnNavigation() {
     .filter((item) => item.enabled !== false)
     .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
   items.forEach((item) => {
+    if (!planCanSeeFeature(`route.${item.id}`)) return;
     const a = document.createElement("a");
     a.href = item.href || `#${item.id}`;
     a.className = `footer-link${state.currentRoute === item.id ? " active" : ""}`;
@@ -363,6 +512,7 @@ function renderNavigationGroup(items, containerId) {
     .forEach((item) => {
       if (item.admin_only && state.user?.plan !== "admin" && !state.adminSession) return;
       const access = routeAccess(item);
+      if (access.hidden || !planCanSeeFeature(`route.${item.id}`)) return;
       const a = document.createElement("a");
       a.href = item.href || `#${item.id}`;
       a.className = `nav-link${state.currentRoute === item.id ? " active" : ""}${access.allowed ? "" : " locked"}`;
@@ -383,23 +533,47 @@ function renderNavigation() {
   applyLanguageChrome();
 }
 
+function bannerSlotFeatureId(zoneName, index) {
+  const slot = Number(index) + 1;
+  if (zoneName === "header") return `panel.header_banner_${slot}`;
+  if (zoneName === "top") return `panel.top_banner_${slot}`;
+  return `panel.bottom_banner_${slot}`;
+}
+
+function bannerSlotVisible(zoneName, index) {
+  return planCanSeeFeature(bannerSlotFeatureId(zoneName, index));
+}
+
+function bannerSlotAccessible(zoneName, index) {
+  return planHasFeatureAccess(bannerSlotFeatureId(zoneName, index));
+}
+
 function renderHeaderSponsor() {
   const legacy = state.ui?.header_ad ? { count: 1, items: [state.ui.header_ad] } : null;
   const zone = state.ui?.header_zone || legacy || { count: 0, items: [] };
   const host = $("headerBannerZone");
   if (!host) return;
+  if (!planCanSeeFeature("panel.header_banners")) { host.hidden = true; host.innerHTML = ""; return; }
   const count = clamp(Number(zone.count || 0), 0, 3);
-  const items = (zone.items || []).filter((x) => x.enabled !== false).slice(0, count);
+  const items = (zone.items || [])
+    .slice(0, count)
+    .map((item, originalIndex) => ({ item, originalIndex }))
+    .filter(({ item, originalIndex }) => item?.enabled !== false && bannerSlotVisible("header", originalIndex));
   host.className = `header-banner-zone header-count-${items.length}`;
   if (!items.length) { host.hidden = true; host.innerHTML = ""; return; }
   host.hidden = false;
-  host.innerHTML = items.map((ad, index) => {
-    const route = String(ad.link || "").startsWith("#") ? String(ad.link).slice(1).replaceAll("-", "_") : "";
+  host.innerHTML = items.map(({ item: ad, originalIndex }) => {
+    const featureId = bannerSlotFeatureId("header", originalIndex);
+    const unlocked = bannerSlotAccessible("header", originalIndex);
+    const configuredLink = ad.link || "#account";
+    const finalLink = unlocked ? configuredLink : "#account";
+    const route = String(finalLink || "").startsWith("#") ? String(finalLink).slice(1).replaceAll("-", "_") : "";
     const theme = `plan-${escapeHtml(ad.plan || "default")}`;
-    return `<a class="header-banner-card ${theme}" href="${escapeHtml(ad.link || "#account")}" ${route ? `data-route="${escapeHtml(route)}"` : ""}>
+    return `<a class="header-banner-card ${theme}${unlocked ? "" : " access-locked"}" href="${escapeHtml(finalLink)}" ${route ? `data-route="${escapeHtml(route)}"` : ""} data-access-feature="${escapeHtml(featureId)}" data-access-label="${escapeHtml(`Header banner · Slot ${originalIndex + 1}`)}" data-access-group="Dashboard / Header">
       ${ad.image ? `<img src="${escapeHtml(ad.image)}" alt="" loading="lazy" decoding="async" style="object-fit:${escapeHtml(ad.fit || "cover")}" />` : ""}
       <span class="header-sponsor-label">${escapeHtml(ad.eyebrow || ad.label || "BLINQ")}</span>
       <span class="header-sponsor-copy"><strong>${escapeHtml(localizedBannerValue(ad, "headline", "header") || "Upgrade your BlinQ level")}</strong><small>${escapeHtml(localizedBannerValue(ad, "text", "header") || "")}</small></span>
+      ${unlocked ? "" : '<span class="banner-access-lock">🔒</span>'}
     </a>`;
   }).join("");
 }
@@ -420,23 +594,33 @@ function renderBannerZone(zoneName) {
   const zone = state.ui?.banner_zones?.[zoneName] || { count: 0, items: [] };
   const host = $(zoneName === "top" ? "bannerZoneTop" : "bannerZoneBottom");
   if (!host) return;
+  const featureId = zoneName === "top" ? "panel.top_banners" : "panel.bottom_banners";
+  if (!planCanSeeFeature(featureId)) { host.hidden = true; host.innerHTML = ""; return; }
   const count = clamp(Number(zone.count || 0), 0, 4);
-  const items = (zone.items || []).filter((x) => x.enabled !== false).slice(0, count);
+  const items = (zone.items || [])
+    .slice(0, count)
+    .map((item, originalIndex) => ({ item, originalIndex }))
+    .filter(({ item, originalIndex }) => item?.enabled !== false && bannerSlotVisible(zoneName, originalIndex));
   if (!items.length) { host.hidden = true; host.innerHTML = ""; return; }
   host.hidden = false;
   host.className = `banner-zone banner-zone-${zoneName} banner-count-${items.length}`;
-  host.innerHTML = items.map((banner, index) => {
+  host.innerHTML = items.map(({ item: banner, originalIndex }) => {
+    const slotFeatureId = bannerSlotFeatureId(zoneName, originalIndex);
+    const unlocked = bannerSlotAccessible(zoneName, originalIndex);
     const image = banner.image ? `<div class="zone-banner-art"><img src="${escapeHtml(banner.image)}" alt="" loading="lazy" decoding="async" style="object-fit:${escapeHtml(banner.fit || "cover")}" /></div>` : '<div class="zone-banner-art generated-art"><span></span></div>';
-    const route = String(banner.link || "").startsWith("#") ? String(banner.link).slice(1).replaceAll("-", "_") : "";
-    return `<article class="zone-banner zone-banner-${index + 1} plan-${escapeHtml(banner.plan || "default")}">
+    const configuredLink = banner.link || "#";
+    const finalLink = unlocked ? configuredLink : "#account";
+    const route = String(finalLink || "").startsWith("#") ? String(finalLink).slice(1).replaceAll("-", "_") : "";
+    return `<article class="zone-banner zone-banner-${originalIndex + 1} plan-${escapeHtml(banner.plan || "default")}${unlocked ? "" : " access-locked"}" data-access-feature="${escapeHtml(slotFeatureId)}" data-access-label="${escapeHtml(`${zoneName === "top" ? "Top" : "Bottom"} banner · Slot ${originalIndex + 1}`)}" data-access-group="Dashboard / Banners">
       <div class="zone-banner-copy">
         <span class="promo-eyebrow">${escapeHtml(banner.eyebrow || (banner.sponsored ? "SPONSORED" : "BLINQ"))}</span>
         <h2>${escapeHtml(localizedBannerValue(banner, "headline", zoneName) || "")}</h2>
         <p>${escapeHtml(localizedBannerValue(banner, "text", zoneName) || "")}</p>
-        <a class="promo-cta" href="${escapeHtml(banner.link || "#")}" ${route ? `data-route="${escapeHtml(route)}"` : ""}>${escapeHtml(banner.button_text || t("button.open", "Open"))}</a>
+        <a class="promo-cta" href="${escapeHtml(finalLink)}" ${route ? `data-route="${escapeHtml(route)}"` : ""}>${escapeHtml(unlocked ? (banner.button_text || t("button.open", "Open")) : t("shell.upgrade", "Upgrade"))}</a>
       </div>
       ${image}
       ${banner.sponsored ? '<span class="promo-sponsor">Sponsored</span>' : ""}
+      ${unlocked ? "" : '<span class="banner-access-lock">🔒</span>'}
     </article>`;
   }).join("");
 }
@@ -862,7 +1046,7 @@ function median(values) {
 function renderDashboardSnapshot(rows = currentFilteredPredictions()) {
   const host = $("dashboardSnapshot");
   if (!host) return;
-  if (state.currentRoute !== "dashboard") { host.hidden = true; return; }
+  if (state.currentRoute !== "dashboard" || !planCanSeeFeature("panel.dashboard_snapshot")) { host.hidden = true; return; }
   host.hidden = false;
 
   const sorted = [...rows].sort((a, b) => primeRankingValue(b) - primeRankingValue(a));
@@ -918,6 +1102,9 @@ function renderFeedStatus() {
 }
 
 function renderPredictions() {
+  const boardShell = $("pickCarouselShell");
+  const boardVisible = planCanSeeFeature("panel.prime_picks_board");
+  if (boardShell) boardShell.hidden = !boardVisible;
   renderFeedStatus();
   const filtered = currentFilteredPredictions();
   renderDashboardSnapshot(filtered);
@@ -993,9 +1180,10 @@ function navigate(route) {
   state.featuredIndex = 0;
   if (route === "dashboard" || route === "prime_picks") {
     $("dashboardView").hidden = false; $("moduleView").hidden = true;
-    $("bannerZoneTop").hidden = route !== "dashboard";
-    $("bannerZoneBottom").hidden = route !== "dashboard";
-    if ($("dashboardSnapshot")) $("dashboardSnapshot").hidden = route !== "dashboard";
+    $("bannerZoneTop").hidden = route !== "dashboard" || !planCanSeeFeature("panel.top_banners");
+    $("bannerZoneBottom").hidden = route !== "dashboard" || !planCanSeeFeature("panel.bottom_banners");
+    if ($("dashboardSnapshot")) $("dashboardSnapshot").hidden = route !== "dashboard" || !planCanSeeFeature("panel.dashboard_snapshot");
+    if ($("predictionToolbar")) $("predictionToolbar").hidden = !planCanSeeFeature("panel.prediction_filters");
     if (route === "dashboard") {
       setRouteHeader("Dashboard", "Recommended Prime Picks and current tennis intelligence.");
       $("picksTitle").textContent = t("picks.title", "BlinQ Prime Picks");
@@ -1006,9 +1194,11 @@ function navigate(route) {
       $("picksSubtitle").textContent = t("picks.subtitle_top10", "Top 10 ranked by calibrated model win probability; factor agreement and data depth are tie-breakers only.");
     }
     renderPredictions();
+    applyManagedPanelVisibility();
   } else {
     $("dashboardView").hidden = true; $("moduleView").hidden = false;
     renderCurrentModule();
+    applyManagedPanelVisibility();
   }
   history.replaceState(null, "", `#${route.replaceAll("_", "-")}`);
 }
@@ -1595,6 +1785,7 @@ function configForPersistence() {
     avatar_sets: state.ui.avatar_sets,
     prime_picks: state.ui.prime_picks,
     banner_admin: state.ui.banner_admin,
+    access_control: state.ui.access_control,
   };
 }
 
@@ -1610,7 +1801,7 @@ async function publishUiConfig() {
 
 function renderAdminBanners() {
   moduleShell("Banner Studio", "Build header and homepage banner layouts visually, verify exact creative dimensions and publish the configuration globally.", `
-    <div class="admin-studio-intro"><div><span class="module-kicker">PERSISTENT ADMIN</span><h2>Homepage Banner Studio</h2><p>Header supports 1–3 banners. Both homepage zones around Prime Picks support 1–4 banners and keep equal heights automatically.</p></div><div class="dimension-legend"><strong>Creative specs</strong><span>Header: 900×180 / 450×180 / 300×180</span><span>Main: 1200×400 / 600×400 / 300×400</span></div></div>
+    <div class="admin-studio-intro"><div><span class="module-kicker">PERSISTENT ADMIN</span><h2>Homepage Banner Studio</h2><p>Header supports 1–3 banners. Both homepage zones around Prime Picks support 1–4 banners and keep equal heights automatically. Visibility and unlocked access for every individual slot are controlled in Access Manager.</p></div><div class="dimension-legend"><strong>Creative specs</strong><span>Header: 900×180 / 450×180 / 300×180</span><span>Main: 1200×400 / 600×400 / 300×400</span></div></div>
     ${bannerManagerZoneEditor("header")}${bannerManagerZoneEditor("top")}${bannerManagerZoneEditor("bottom")}
     <div class="admin-actions sticky-admin-actions"><button class="btn btn-primary" id="publishBannerConfig" type="button">Publish globally</button><button class="btn btn-ghost" id="saveBannerConfig" type="button">Save browser preview</button><button class="btn btn-ghost" id="exportBannerConfig" type="button">Export JSON</button><button class="btn btn-ghost" id="resetBannerConfig" type="button">Reset preview</button></div>
   `);
@@ -1648,12 +1839,154 @@ function renderAdminUsers() {
   $("publishAccountConfig")?.addEventListener("click", async()=>{try{state.ui.account={...state.ui.account,display_name:$("adminDisplayName").value.trim(),plan:$("adminDefaultPlan").value,plan_label:$("adminPlanLabel").value.trim(),entitlement_text:$("adminEntitlement").value.trim()};await adminRequest("/api/v1/admin/ui-config",{method:"POST",body:JSON.stringify(configForPersistence())});alert("Account defaults published.");}catch(error){alert(`Publish failed: ${error.message}`);}});
 }
 
+function accessManagerEntries() {
+  ensureAccessRegistry();
+  const rows = Object.values(state.ui.access_control.entries || {});
+  const typeOrder = { page: 0, panel: 1 };
+  return rows.sort((a, b) =>
+    String(a.group || "").localeCompare(String(b.group || "")) ||
+    (typeOrder[a.type] ?? 9) - (typeOrder[b.type] ?? 9) ||
+    String(a.label || a.id).localeCompare(String(b.label || b.id))
+  );
+}
+
+function accessManagerSummary(entries) {
+  return ACCESS_PLANS.map((plan) => {
+    const total = entries.filter((e) => !e.admin_only || plan === "admin").length;
+    const unlocked = entries.filter((e) => normalizePlanList(e.allowed_plans).includes(plan)).length;
+    const visible = entries.filter((e) => normalizePlanList(e.visible_plans).includes(plan)).length;
+    return `<article class="access-summary-card"><small>${plan.toUpperCase()}</small><strong>${unlocked}/${total}</strong><span>unlocked · ${visible} visible</span></article>`;
+  }).join("");
+}
+
+function accessManagerRow(entry) {
+  const dataStatus = (() => {
+    if (!String(entry.id).startsWith("route.")) return "";
+    const item = navItem(String(entry.id).slice(6));
+    return item?.data_status || "";
+  })();
+  const cells = ACCESS_PLANS.map((plan) => {
+    const locked = entry.admin_only && plan !== "admin";
+    const visible = normalizePlanList(entry.visible_plans).includes(plan);
+    const allowed = normalizePlanList(entry.allowed_plans).includes(plan);
+    return `<td class="access-plan-cell" data-plan-cell="${plan}">
+      <label title="Visible"><span>V</span><input type="checkbox" data-access-visible="${plan}" ${visible ? "checked" : ""} ${locked ? "disabled" : ""}></label>
+      <label title="Unlocked"><span>A</span><input type="checkbox" data-access-allowed="${plan}" ${allowed ? "checked" : ""} ${locked ? "disabled" : ""}></label>
+    </td>`;
+  }).join("");
+  return `<tr data-access-feature-row="${escapeHtml(entry.id)}" data-access-type="${escapeHtml(entry.type || "other")}" data-access-group="${escapeHtml(entry.group || "Other")}">
+    <td class="access-feature-cell"><div><strong>${escapeHtml(entry.label || entry.id)}</strong><small>${escapeHtml(entry.id)}</small></div>${entry.auto_discovered ? '<span class="auto-badge">AUTO</span>' : ""}</td>
+    <td><span class="access-type-badge">${escapeHtml(entry.type || "feature")}</span></td>
+    <td>${escapeHtml(entry.group || "Other")}</td>
+    ${cells}
+    <td>${dataStatus ? `<span class="data-status-warn">${escapeHtml(dataStatus)}</span>` : '<span class="data-status-ready">ready</span>'}</td>
+    <td class="row-actions"><button class="mini-action" type="button" data-row-grant-all>All</button><button class="mini-action" type="button" data-row-revoke-all>None</button></td>
+  </tr>`;
+}
+
+function readAccessManagerToState() {
+  ensureAccessRegistry();
+  document.querySelectorAll("[data-access-feature-row]").forEach((row) => {
+    const entry = state.ui.access_control.entries[row.dataset.accessFeatureRow];
+    if (!entry) return;
+    if (entry.admin_only) {
+      entry.allowed_plans = ["admin"];
+      entry.visible_plans = ["admin"];
+      return;
+    }
+    entry.visible_plans = ACCESS_PLANS.filter((plan) => row.querySelector(`[data-access-visible="${plan}"]`)?.checked);
+    entry.allowed_plans = ACCESS_PLANS.filter((plan) => row.querySelector(`[data-access-allowed="${plan}"]`)?.checked);
+    // Access implies visibility. Keep the matrix internally consistent.
+    entry.allowed_plans.forEach((plan) => { if (!entry.visible_plans.includes(plan)) entry.visible_plans.push(plan); });
+    entry.visible_plans = normalizePlanList(entry.visible_plans);
+    entry.allowed_plans = normalizePlanList(entry.allowed_plans);
+  });
+  syncRouteAccessBackToNavigation();
+}
+
+function bindAccessManager() {
+  const table = $("accessManagerTable");
+  const applyFilter = () => {
+    const q = String($("accessSearch")?.value || "").trim().toLowerCase();
+    const type = $("accessTypeFilter")?.value || "";
+    const group = $("accessGroupFilter")?.value || "";
+    document.querySelectorAll("[data-access-feature-row]").forEach((row) => {
+      const hay = row.textContent.toLowerCase();
+      row.hidden = Boolean((q && !hay.includes(q)) || (type && row.dataset.accessType !== type) || (group && row.dataset.accessGroup !== group));
+    });
+  };
+  $("accessSearch")?.addEventListener("input", applyFilter);
+  $("accessTypeFilter")?.addEventListener("change", applyFilter);
+  $("accessGroupFilter")?.addEventListener("change", applyFilter);
+
+  table?.addEventListener("change", (event) => {
+    const input = event.target.closest("input[type=checkbox]");
+    if (!input) return;
+    const row = input.closest("[data-access-feature-row]");
+    if (!row) return;
+    const plan = input.dataset.accessAllowed || input.dataset.accessVisible;
+    if (input.dataset.accessAllowed && input.checked) {
+      const visible = row.querySelector(`[data-access-visible="${plan}"]`);
+      if (visible) visible.checked = true;
+    }
+    if (input.dataset.accessVisible && !input.checked) {
+      const allowed = row.querySelector(`[data-access-allowed="${plan}"]`);
+      if (allowed) allowed.checked = false;
+    }
+  });
+
+  table?.addEventListener("click", (event) => {
+    const row = event.target.closest("[data-access-feature-row]");
+    if (!row) return;
+    if (event.target.closest("[data-row-grant-all]")) {
+      row.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach((x) => { x.checked = true; });
+    }
+    if (event.target.closest("[data-row-revoke-all]")) {
+      row.querySelectorAll('input[type="checkbox"]:not(:disabled)').forEach((x) => { x.checked = false; });
+    }
+  });
+
+  document.querySelectorAll("[data-plan-bulk]").forEach((button) => button.addEventListener("click", () => {
+    const plan = button.dataset.planBulk;
+    const mode = button.dataset.bulkMode;
+    document.querySelectorAll(`[data-access-feature-row] [data-access-visible="${plan}"]:not(:disabled), [data-access-feature-row] [data-access-allowed="${plan}"]:not(:disabled)`).forEach((x) => { x.checked = mode === "grant"; });
+  }));
+
+  $("grantEverything")?.addEventListener("click", () => {
+    document.querySelectorAll('[data-access-feature-row] input[type="checkbox"]:not(:disabled)').forEach((x) => { x.checked = true; });
+  });
+  $("publishAccessMatrix")?.addEventListener("click", async () => {
+    try {
+      readAccessManagerToState();
+      await adminRequest("/api/v1/admin/ui-config", { method: "POST", body: JSON.stringify(configForPersistence()) });
+      renderNavigation(); renderHeaderSponsor(); renderBannerZones(); applyManagedPanelVisibility();
+      alert("Access configuration published globally.");
+    } catch (error) { alert(`Publish failed: ${error.message}`); }
+  });
+}
+
 function renderAdminAccess() {
-  const plans=["free","pro","elite","legend","goat","admin"];
-  const items=(state.ui?.navigation?.main||[]).filter((x)=>x.enabled!==false);
-  const rows=items.map((item)=>`<tr data-access-route="${escapeHtml(item.id)}"><td><strong>${escapeHtml(item.label)}</strong></td>${plans.map((plan)=>`<td><input type="checkbox" data-access-plan="${plan}" ${((item.allowed_plans||[]).includes(plan))?"checked":""} ${item.admin_only&&plan!=="admin"?"disabled":""}/></td>`).join("")}<td>${item.data_status?escapeHtml(item.data_status):"ready"}</td></tr>`).join("");
-  moduleShell("Plan Access", "Edit module visibility/entitlements and publish the matrix globally.", `<div class="performance-section"><div class="section-title-row"><div><span class="module-kicker">ENTITLEMENTS</span><h3>Plan access matrix</h3></div><button class="btn btn-primary" id="publishAccessMatrix" type="button">Publish access</button></div><div class="table-wrap"><table class="access-table access-editor-table"><thead><tr><th>Module</th>${plans.map((p)=>`<th>${p.toUpperCase()}</th>`).join("")}<th>Data status</th></tr></thead><tbody>${rows}</tbody></table></div></div>`);
-  $("publishAccessMatrix")?.addEventListener("click",async()=>{try{document.querySelectorAll("[data-access-route]").forEach((row)=>{const item=(state.ui.navigation.main||[]).find((x)=>x.id===row.dataset.accessRoute);if(!item)return;item.allowed_plans=[...row.querySelectorAll("[data-access-plan]:checked")].map((x)=>x.dataset.accessPlan);});await adminRequest("/api/v1/admin/ui-config",{method:"POST",body:JSON.stringify(configForPersistence())});renderNavigation();alert("Plan access published.");}catch(error){alert(`Publish failed: ${error.message}`);}});
+  const entries = accessManagerEntries();
+  const groups = [...new Set(entries.map((e) => e.group || "Other"))].sort();
+  const rows = entries.map(accessManagerRow).join("");
+  const bulkHeads = ACCESS_PLANS.map((plan) => `<th><div class="plan-head"><strong>${plan.toUpperCase()}</strong><span><button type="button" data-plan-bulk="${plan}" data-bulk-mode="grant">All</button><button type="button" data-plan-bulk="${plan}" data-bulk-mode="revoke">None</button></span></div></th>`).join("");
+  moduleShell("Access Manager", "Control visibility and unlocked access for every account level. Pages, whole zones and individual banner slots are managed here; new managed features default to all plans.", `
+    <div class="access-manager-intro">
+      <div><span class="module-kicker">GLOBAL ENTITLEMENTS</span><h2>Pages & panels access</h2><p>Every registered page, managed panel and banner slot appears here automatically. New features default to <strong>Visible + Unlocked for all plans</strong> until you change them. You can hide a panel completely or leave it visible but locked. Admin-only tools remain protected.</p></div>
+      <div class="access-policy-box"><span>NEW FEATURE POLICY</span><strong>ALL LEVELS</strong><small>Access does not bypass missing data/model requirements.</small></div>
+    </div>
+    <div class="access-manager-summary">${accessManagerSummary(entries)}</div>
+    <div class="access-manager-toolbar">
+      <input id="accessSearch" type="search" placeholder="Search page, panel or feature ID…" />
+      <select id="accessTypeFilter"><option value="">All types</option><option value="page">Pages</option><option value="panel">Panels</option></select>
+      <select id="accessGroupFilter"><option value="">All groups</option>${groups.map((g)=>`<option value="${escapeHtml(g)}">${escapeHtml(g)}</option>`).join("")}</select>
+      <button class="btn btn-ghost" id="grantEverything" type="button">Grant all levels</button>
+      <button class="btn btn-primary" id="publishAccessMatrix" type="button">Publish globally</button>
+    </div>
+    <div class="access-legend"><span><b>V</b> Visible</span><span><b>A</b> Unlocked access</span><span><i class="auto-badge">AUTO</i> auto-registered</span></div>
+    <div class="table-wrap access-manager-wrap"><table class="access-table access-editor-table access-manager-table" id="accessManagerTable"><thead><tr><th>Feature</th><th>Type</th><th>Group</th>${bulkHeads}<th>Data</th><th>Row</th></tr></thead><tbody>${rows}</tbody></table></div>
+  `);
+  bindAccessManager();
 }
 
 

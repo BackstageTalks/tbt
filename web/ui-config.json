@@ -352,7 +352,7 @@
       {
         "id": "admin_access",
         "enabled": true,
-        "label": "Plan Access",
+        "label": "Access Manager",
         "href": "#admin-access",
         "icon": "⌘",
         "order": 203,
@@ -595,5 +595,11 @@
     "selection_basis": "calibrated_model_probability",
     "odds_status": "not_connected",
     "beta": true
+  },
+  "access_control": {
+    "version": 1,
+    "default_new_feature_access": "all",
+    "default_new_feature_visibility": "all",
+    "entries": {}
   }
 }

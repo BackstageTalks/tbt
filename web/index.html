@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/assets/blinq_favicon.png" />
   <link rel="shortcut icon" href="/assets/blinq_favicon.png" />
   <title>BlinQ · Tennis Intelligence</title>
-  <link rel="stylesheet" href="/styles.css?v=20260904-14" />
+  <link rel="stylesheet" href="/styles.css?v=20260904-16" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -54,7 +54,7 @@
           </div>
         </div>
 
-        <section id="headerBannerZone" class="header-banner-zone" aria-label="Header promotions"></section>
+        <section id="headerBannerZone" class="header-banner-zone" data-access-feature="panel.header_banners" data-access-label="Header banners" data-access-group="Dashboard" aria-label="Header promotions"></section>
 
         <div class="topbar-actions account-actions">
           <div class="plan-chip" id="planChip"><span id="planName">FREE</span><strong id="planEntitlement">23 days left</strong></div>
@@ -68,7 +68,7 @@
       </header>
 
       <section id="dashboardView">
-        <section class="toolbar" id="predictionToolbar" aria-label="Prediction filters">
+        <section class="toolbar" id="predictionToolbar" data-access-feature="panel.prediction_filters" data-access-label="Prediction filters" data-access-group="Dashboard" aria-label="Prediction filters">
           <label><span class="sr-only">Tour</span><select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select></label>
           <label><span class="sr-only">Tournament</span><select id="tournamentFilter"><option value="">All Tournaments</option></select></label>
           <label><span class="sr-only">Surface</span><select id="surfaceFilter"><option value="">All Surfaces</option></select></label>
@@ -76,9 +76,9 @@
           <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search matches or players…" /></label>
         </section>
 
-        <section id="dashboardSnapshot" class="dashboard-snapshot" aria-label="Current prediction board summary"></section>
+        <section id="dashboardSnapshot" class="dashboard-snapshot" data-access-feature="panel.dashboard_snapshot" data-access-label="Dashboard snapshot" data-access-group="Dashboard" aria-label="Current prediction board summary"></section>
 
-        <section id="bannerZoneTop" class="banner-zone" aria-label="Sponsored content"></section>
+        <section id="bannerZoneTop" class="banner-zone" data-access-feature="panel.top_banners" data-access-label="Top banner zone" data-access-group="Dashboard" aria-label="Sponsored content"></section>
 
         <section class="picks-panel prime-panel" id="predictionsPanel">
           <div class="panel-head picks-head">
@@ -93,7 +93,7 @@
             </div>
           </div>
 
-          <div class="pick-carousel-shell" id="pickCarouselShell">
+          <div class="pick-carousel-shell" id="pickCarouselShell" data-access-feature="panel.prime_picks_board" data-access-label="Prime Picks board" data-access-group="Predictions">
             <button class="carousel-arrow carousel-arrow-left" id="prevPick" type="button" aria-label="Previous Prime Pick">‹</button>
             <div class="pick-carousel" id="predictionGrid">
               <div class="state-card">Loading predictions…</div>
@@ -103,7 +103,7 @@
           <div class="carousel-dots" id="carouselDots" aria-label="Prime Pick selector"></div>
         </section>
 
-        <section id="bannerZoneBottom" class="banner-zone banner-zone-bottom" aria-label="Promotions"></section>
+        <section id="bannerZoneBottom" class="banner-zone banner-zone-bottom" data-access-feature="panel.bottom_banners" data-access-label="Bottom banner zone" data-access-group="Dashboard" aria-label="Promotions"></section>
       </section>
 
       <section id="moduleView" class="module-view" hidden></section>
@@ -116,8 +116,8 @@
         </div>
         <p class="footer-disclaimer" data-i18n="footer.disclaimer">This data is provided for informational and analytical purposes only. Powered by BackstageTalks Statistical Engine.</p>
         <div class="footer-bottom">
-          <nav class="footer-learn-links" id="footerLearnNavigation" aria-label="Learn footer links"></nav>
-          <nav class="footer-languages" aria-label="Language versions"><span data-i18n="footer.languages">Language</span><a href="?lang=sk#dashboard" data-lang-choice="sk">SK</a><a href="?lang=cz#dashboard" data-lang-choice="cz">CZ</a><a href="?lang=pl#dashboard" data-lang-choice="pl">PL</a><a href="?lang=hu#dashboard" data-lang-choice="hu">HU</a><a href="?lang=de#dashboard" data-lang-choice="de">DE</a><a href="?lang=ua#dashboard" data-lang-choice="ua">UA</a><a href="?lang=ru#dashboard" data-lang-choice="ru">RU</a></nav>
+          <nav class="footer-learn-links" id="footerLearnNavigation" aria-label="Learn footer links" data-access-feature="panel.footer_learn" data-access-label="Footer Learn links" data-access-group="Footer"></nav>
+          <nav class="footer-languages" aria-label="Language versions" data-access-feature="panel.language_switcher" data-access-label="Language switcher" data-access-group="Footer"><span data-i18n="footer.languages">Language</span><a href="?lang=en#dashboard" data-lang-choice="en">EN</a><a href="?lang=sk#dashboard" data-lang-choice="sk">SK</a><a href="?lang=cz#dashboard" data-lang-choice="cz">CZ</a><a href="?lang=pl#dashboard" data-lang-choice="pl">PL</a><a href="?lang=hu#dashboard" data-lang-choice="hu">HU</a><a href="?lang=de#dashboard" data-lang-choice="de">DE</a><a href="?lang=ua#dashboard" data-lang-choice="ua">UA</a><a href="?lang=ru#dashboard" data-lang-choice="ru">RU</a></nav>
         </div>
       </footer>
     </main>
@@ -145,8 +145,8 @@
     <div class="plan-grid" id="planGrid"></div>
   </dialog>
 
-  <script src="/i18n.js?v=20260904-14"></script>
-  <script src="/config.js?v=20260904-14"></script>
-  <script src="/app.js?v=20260904-14"></script>
+  <script src="/i18n.js?v=20260904-16"></script>
+  <script src="/config.js?v=20260904-16"></script>
+  <script src="/app.js?v=20260904-16"></script>
 </body>
 </html>
