@@ -354,92 +354,108 @@
   },
   "banner_zones": {
     "top": {
-      "count": 1,
-      "items": [
-        {
-          "enabled": true,
-          "sponsored": true,
-          "eyebrow": "SPONSORED",
-          "headline": "Premium tennis analytics, powered by AI.",
-          "text": "Model confidence, surface context, form and matchup signals in one transparent workflow.",
-          "button_text": "Unlock Full Power",
-          "link": "#account",
-          "image": ""
-        },
-        {
-          "enabled": true,
-          "sponsored": true,
-          "eyebrow": "SPONSORED",
-          "headline": "Partner banner 2",
-          "text": "Second top placement.",
-          "button_text": "Open",
-          "link": "#account",
-          "image": ""
-        },
-        {
-          "enabled": true,
-          "sponsored": true,
-          "eyebrow": "SPONSORED",
-          "headline": "Partner banner 3",
-          "text": "Third top placement.",
-          "button_text": "Open",
-          "link": "#account",
-          "image": ""
-        },
-        {
-          "enabled": true,
-          "sponsored": true,
-          "eyebrow": "SPONSORED",
-          "headline": "Partner banner 4",
-          "text": "Fourth top placement.",
-          "button_text": "Open",
-          "link": "#account",
-          "image": ""
-        }
-      ]
-    },
-    "bottom": {
-      "count": 2,
+      "count": 4,
       "items": [
         {
           "enabled": true,
           "sponsored": false,
-          "eyebrow": "BLINQ",
-          "headline": "24h Free Trial",
-          "text": "Explore Prime Picks, tournaments and the current prediction board before choosing a plan.",
-          "button_text": "View Plans",
+          "plan": "pro",
+          "eyebrow": "BLINQ PRO",
+          "headline": "Upgrade to PRO",
+          "text": "Prime Picks, Predictions and Tournaments. A faster way to see the strongest current model selections.",
+          "button_text": "See PRO",
           "link": "#account",
-          "image": ""
+          "image": "",
+          "fit": "cover"
         },
         {
           "enabled": true,
-          "sponsored": true,
-          "eyebrow": "AD",
-          "headline": "Sharper insights. Stronger workflow.",
-          "text": "Reserved for a sponsored tennis or analytics partner.",
-          "button_text": "See Partner",
+          "sponsored": false,
+          "plan": "elite",
+          "eyebrow": "BLINQ ELITE",
+          "headline": "Move faster with Elite",
+          "text": "Everything in PRO plus higher plan limits and priority prediction access for a more powerful daily workflow.",
+          "button_text": "See Elite",
           "link": "#account",
-          "image": ""
+          "image": "",
+          "fit": "cover"
         },
         {
           "enabled": true,
-          "sponsored": true,
-          "eyebrow": "AD",
-          "headline": "Partner placement 3",
-          "text": "Third lower placement.",
-          "button_text": "Open",
+          "sponsored": false,
+          "plan": "legend",
+          "eyebrow": "BLINQ LEGEND",
+          "headline": "Go deeper with Legend",
+          "text": "Players, Stats & Insights and advanced player analytics for richer pre-match context.",
+          "button_text": "See Legend",
           "link": "#account",
-          "image": ""
+          "image": "",
+          "fit": "cover"
         },
         {
           "enabled": true,
-          "sponsored": true,
-          "eyebrow": "AD",
-          "headline": "Partner placement 4",
-          "text": "Fourth lower placement.",
-          "button_text": "Open",
+          "sponsored": false,
+          "plan": "goat",
+          "eyebrow": "BLINQ GOAT",
+          "headline": "Unlock the full engine",
+          "text": "Model Performance, Backtests and full analytics access for users who want maximum transparency and depth.",
+          "button_text": "See GOAT",
           "link": "#account",
-          "image": ""
+          "image": "",
+          "fit": "cover"
+        }
+      ]
+    },
+    "bottom": {
+      "count": 4,
+      "items": [
+        {
+          "enabled": true,
+          "sponsored": false,
+          "plan": "goat",
+          "eyebrow": "BLINQ GOAT",
+          "headline": "GOAT · Full analytical control",
+          "text": "Inspect model performance, walk-forward backtests and the complete BlinQ analytics stack.",
+          "button_text": "See GOAT",
+          "link": "#account",
+          "image": "",
+          "fit": "cover"
+        },
+        {
+          "enabled": true,
+          "sponsored": false,
+          "plan": "legend",
+          "eyebrow": "BLINQ LEGEND",
+          "headline": "Legend · Understand the players",
+          "text": "Advanced player analytics and Stats & Insights add context beyond a single win probability.",
+          "button_text": "See Legend",
+          "link": "#account",
+          "image": "",
+          "fit": "cover"
+        },
+        {
+          "enabled": true,
+          "sponsored": false,
+          "plan": "elite",
+          "eyebrow": "BLINQ ELITE",
+          "headline": "Elite · Priority workflow",
+          "text": "Higher limits and priority prediction access for users who follow more matches and tournaments.",
+          "button_text": "See Elite",
+          "link": "#account",
+          "image": "",
+          "fit": "cover"
+        },
+        {
+          "enabled": true,
+          "sponsored": false,
+          "plan": "pro",
+          "eyebrow": "BLINQ PRO",
+          "headline": "PRO · Start with Prime",
+          "text": "Prime Picks, Predictions and Tournaments in one focused daily dashboard.",
+          "button_text": "See PRO",
+          "link": "#account",
+          "image": "",
+          "fit": "cover"
         }
       ]
     }
@@ -467,5 +483,82 @@
     "admin": [
       "/assets/goat.webp"
     ]
+  },
+  "header_zone": {
+    "count": 3,
+    "items": [
+      {
+        "enabled": true,
+        "sponsored": false,
+        "plan": "pro",
+        "eyebrow": "BLINQ PRO",
+        "headline": "Prime Picks + Tournaments",
+        "text": "Unlock daily Prime Picks and tournament intelligence in one clean workflow.",
+        "button_text": "Explore PRO",
+        "link": "#account",
+        "image": "",
+        "fit": "cover"
+      },
+      {
+        "enabled": true,
+        "sponsored": false,
+        "plan": "legend",
+        "eyebrow": "BLINQ LEGEND",
+        "headline": "Player intelligence",
+        "text": "Advanced player profiles, Stats & Insights and deeper matchup context.",
+        "button_text": "Explore Legend",
+        "link": "#account",
+        "image": "",
+        "fit": "cover"
+      },
+      {
+        "enabled": true,
+        "sponsored": false,
+        "plan": "goat",
+        "eyebrow": "BLINQ GOAT",
+        "headline": "Full analytics access",
+        "text": "Model Performance, Backtests and the complete analytics toolkit.",
+        "button_text": "Explore GOAT",
+        "link": "#account",
+        "image": "",
+        "fit": "cover"
+      }
+    ]
+  },
+  "banner_admin": {
+    "header_sizes": {
+      "1": [
+        "900×180"
+      ],
+      "2": [
+        "450×180",
+        "450×180"
+      ],
+      "3": [
+        "300×180",
+        "300×180",
+        "300×180"
+      ]
+    },
+    "main_sizes": {
+      "1": [
+        "1200×400"
+      ],
+      "2": [
+        "600×400",
+        "600×400"
+      ],
+      "3": [
+        "600×400",
+        "300×400",
+        "300×400"
+      ],
+      "4": [
+        "300×400",
+        "300×400",
+        "300×400",
+        "300×400"
+      ]
+    }
   }
 }

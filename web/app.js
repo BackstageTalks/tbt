@@ -122,6 +122,51 @@ async function getJSON(url) {
   return data;
 }
 
+function deepMerge(base, extra) {
+  if (!extra || typeof extra !== "object" || Array.isArray(extra)) return base;
+  const out = { ...(base || {}) };
+  Object.entries(extra).forEach(([key, value]) => {
+    out[key] = value && typeof value === "object" && !Array.isArray(value)
+      ? deepMerge(out[key] && typeof out[key] === "object" ? out[key] : {}, value)
+      : value;
+  });
+  return out;
+}
+
+function adminKey() { return sessionStorage.getItem("blinq_admin_key") || ""; }
+
+async function adminRequest(path, options = {}) {
+  const key = adminKey();
+  if (!key) throw new Error("Admin key is not set for this browser session.");
+  const response = await fetch(api(path), {
+    ...options,
+    headers: { Accept: "application/json", "Content-Type": "application/json", "x-admin-key": key, ...(options.headers || {}) },
+    cache: "no-store",
+  });
+  let data = null;
+  try { data = await response.json(); } catch { data = null; }
+  if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
+  return data;
+}
+
+async function unlockAdminSession() {
+  let key = adminKey();
+  if (!key) key = window.prompt("Enter TBT admin key for this browser session:") || "";
+  if (!key) return false;
+  sessionStorage.setItem("blinq_admin_key", key);
+  try {
+    await adminRequest("/api/v1/admin/session");
+    state.adminSession = true;
+    renderNavigation();
+    return true;
+  } catch (error) {
+    sessionStorage.removeItem("blinq_admin_key");
+    state.adminSession = false;
+    alert(`Admin access failed: ${error.message}`);
+    return false;
+  }
+}
+
 function loadLocalAdminOverride() {
   try { return JSON.parse(localStorage.getItem("blinq_admin_ui_override") || "null"); } catch { return null; }
 }
@@ -135,9 +180,14 @@ function applyLocalAdminOverride(ui) {
 
 async function loadUiConfig() {
   try {
-    state.ui = applyLocalAdminOverride(await getJSON(cfg.uiConfigPath || "/ui-config.json"));
+    const baseline = await getJSON(cfg.uiConfigPath || "/ui-config.json");
+    state.staticUi = baseline;
+    let remote = null;
+    try { remote = await getJSON(api("/api/v1/ui-config")); } catch (_) { remote = null; }
+    const merged = remote?.config ? deepMerge(baseline, remote.config) : baseline;
+    state.ui = applyLocalAdminOverride(merged);
   } catch {
-    state.ui = { account: {}, navigation: { main: [], learn: [], admin: [] }, banner_zones: {}, plans: [] };
+    state.ui = { account: {}, navigation: { main: [], learn: [], admin: [] }, banner_zones: {}, header_zone: { count: 0, items: [] }, plans: [] };
   }
   startPublicSession();
   renderBranding();
@@ -218,7 +268,7 @@ function navItem(route) { return allNavItems().find((x) => x.id === route); }
 function routeAccess(item) {
   if (!item) return { allowed: true };
   if (item.admin_only) {
-    return state.user?.plan === "admin"
+    return (state.user?.plan === "admin" || state.adminSession)
       ? { allowed: true }
       : { allowed: false, label: "Admin", reason: "This module is available only to administrators." };
   }
@@ -249,7 +299,7 @@ function renderNavigationGroup(items, containerId) {
     .filter((item) => item.enabled !== false)
     .sort((a, b) => Number(a.order || 0) - Number(b.order || 0))
     .forEach((item) => {
-      if (item.admin_only && state.user?.plan !== "admin") return;
+      if (item.admin_only && state.user?.plan !== "admin" && !state.adminSession) return;
       const access = routeAccess(item);
       const a = document.createElement("a");
       a.href = item.href || `#${item.id}`;
@@ -265,29 +315,41 @@ function renderNavigation() {
   renderNavigationGroup(nav.main, "mainNavigation");
   renderNavigationGroup(nav.learn, "learnNavigation");
   const adminSection = $("adminNavigationSection");
-  if (adminSection) adminSection.hidden = state.user?.plan !== "admin";
-  if (state.user?.plan === "admin") renderNavigationGroup(nav.admin, "adminNavigation");
+  if (adminSection) adminSection.hidden = !(state.user?.plan === "admin" || state.adminSession);
+  if (state.user?.plan === "admin" || state.adminSession) renderNavigationGroup(nav.admin, "adminNavigation");
 }
 
 function renderHeaderSponsor() {
-  const ad = state.ui?.header_ad || {};
-  const host = $("headerSponsor");
+  const legacy = state.ui?.header_ad ? { count: 1, items: [state.ui.header_ad] } : null;
+  const zone = state.ui?.header_zone || legacy || { count: 0, items: [] };
+  const host = $("headerBannerZone");
   if (!host) return;
-  if (ad.enabled === false) { host.hidden = true; return; }
+  const count = clamp(Number(zone.count || 0), 0, 3);
+  const items = (zone.items || []).filter((x) => x.enabled !== false).slice(0, count);
+  host.className = `header-banner-zone header-count-${items.length}`;
+  if (!items.length) { host.hidden = true; host.innerHTML = ""; return; }
   host.hidden = false;
-  host.href = ad.link || "#";
-  const route = String(ad.link || "").startsWith("#") ? String(ad.link).slice(1).replaceAll("-", "_") : "";
-  if (route) host.dataset.route = route; else delete host.dataset.route;
-  host.innerHTML = `${ad.image ? `<img src="${escapeHtml(ad.image)}" alt="" />` : ""}<span class="header-sponsor-label">${escapeHtml(ad.label || "Sponsored")}</span><span class="header-sponsor-copy"><strong>${escapeHtml(ad.headline || "Partner placement")}</strong><small>${escapeHtml(ad.text || "")}</small></span>`;
+  host.innerHTML = items.map((ad, index) => {
+    const route = String(ad.link || "").startsWith("#") ? String(ad.link).slice(1).replaceAll("-", "_") : "";
+    const theme = `plan-${escapeHtml(ad.plan || "default")}`;
+    return `<a class="header-banner-card ${theme}" href="${escapeHtml(ad.link || "#account")}" ${route ? `data-route="${escapeHtml(route)}"` : ""}>
+      ${ad.image ? `<img src="${escapeHtml(ad.image)}" alt="" loading="lazy" decoding="async" style="object-fit:${escapeHtml(ad.fit || "cover")}" />` : ""}
+      <span class="header-sponsor-label">${escapeHtml(ad.eyebrow || ad.label || "BLINQ")}</span>
+      <span class="header-sponsor-copy"><strong>${escapeHtml(ad.headline || "Upgrade your BlinQ level")}</strong><small>${escapeHtml(ad.text || "")}</small></span>
+    </a>`;
+  }).join("");
 }
 
-function sizeHint(count) {
-  return ({
-    1: "1 × 1200×400",
-    2: "2 × 600×400",
-    3: "1 × 600×400 + 2 × 300×400",
-    4: "4 × 300×400",
-  })[Number(count)] || "Flexible";
+function sizeHint(count, zoneName = "main") {
+  const n = Number(count);
+  if (zoneName === "header") return ({ 1: "1 × 900×180", 2: "2 × 450×180", 3: "3 × 300×180" })[n] || "Flexible";
+  return ({ 1: "1 × 1200×400", 2: "2 × 600×400", 3: "1 × 600×400 + 2 × 300×400", 4: "4 × 300×400" })[n] || "Flexible";
+}
+
+function bannerSlotSpec(zoneName, count, index) {
+  const n = Number(count);
+  if (zoneName === "header") return ({ 1: ["900×180"], 2: ["450×180", "450×180"], 3: ["300×180", "300×180", "300×180"] })[n]?.[index] || "Flexible";
+  return ({ 1: ["1200×400"], 2: ["600×400", "600×400"], 3: ["600×400", "300×400", "300×400"], 4: ["300×400", "300×400", "300×400", "300×400"] })[n]?.[index] || "Flexible";
 }
 
 function renderBannerZone(zoneName) {
@@ -300,9 +362,9 @@ function renderBannerZone(zoneName) {
   host.hidden = false;
   host.className = `banner-zone banner-zone-${zoneName} banner-count-${items.length}`;
   host.innerHTML = items.map((banner, index) => {
-    const image = banner.image ? `<div class="zone-banner-art"><img src="${escapeHtml(banner.image)}" alt="" /></div>` : '<div class="zone-banner-art generated-art"><span></span></div>';
+    const image = banner.image ? `<div class="zone-banner-art"><img src="${escapeHtml(banner.image)}" alt="" loading="lazy" decoding="async" style="object-fit:${escapeHtml(banner.fit || "cover")}" /></div>` : '<div class="zone-banner-art generated-art"><span></span></div>';
     const route = String(banner.link || "").startsWith("#") ? String(banner.link).slice(1).replaceAll("-", "_") : "";
-    return `<article class="zone-banner zone-banner-${index + 1}">
+    return `<article class="zone-banner zone-banner-${index + 1} plan-${escapeHtml(banner.plan || "default")}">
       <div class="zone-banner-copy">
         <span class="promo-eyebrow">${escapeHtml(banner.eyebrow || (banner.sponsored ? "SPONSORED" : "BLINQ"))}</span>
         <h2>${escapeHtml(banner.headline || "")}</h2>
@@ -1285,10 +1347,12 @@ function renderAccountPage() {
       <section class="performance-section engine-summary"><div class="engine-summary-mark"><img src="${escapeHtml(goatLogo)}" data-fallback="${escapeHtml(goatFallback)}" alt="BackstageTalks Statistical Engine" /></div><div><span class="module-kicker">POWERED BY</span><h3>BackstageTalks Statistical Engine</h3><p class="module-copy">BlinQ is the product interface. The statistical engine handles feature construction, model evaluation and prediction generation.</p></div></section>
     </div>
     <section class="performance-section"><div class="section-title-row"><div><span class="module-kicker">ENTITLEMENTS</span><h3>Module access</h3></div></div><div class="account-access-list">${accessRows}</div></section>
+    <section class="performance-section admin-access-card"><div class="section-title-row"><div><span class="module-kicker">OWNER TOOLS</span><h3>Admin Studio</h3></div><small>Session-only key</small></div><p class="module-copy">Open persistent Banner Manager, Plan Access and account configuration. The admin key is kept only in sessionStorage for this browser tab/session.</p><button class="btn btn-ghost" id="openAdminStudio" type="button">Open Admin Studio</button></section>
   `);
   document.querySelectorAll("[data-avatar-variant]").forEach((button) => button.addEventListener("click", () => setAvatarVariant(button.dataset.avatarVariant)));
   const engineImage = document.querySelector(".engine-summary-mark img");
   if (engineImage) engineImage.addEventListener("error", function () { if (this.dataset.fallback && this.src !== this.dataset.fallback) this.src = this.dataset.fallback; });
+  $("openAdminStudio")?.addEventListener("click", async () => { if (await unlockAdminSession()) navigate("admin_banners"); });
 }
 
 
@@ -1350,59 +1414,162 @@ function renderPendingModule(route) {
 }
 
 function bannerManagerZoneEditor(zoneName) {
-  const zone = state.ui?.banner_zones?.[zoneName] || { count: 1, items: [] };
-  const count = clamp(Number(zone.count || 1), 1, 4);
-  const slots = Array.from({ length: 4 }, (_, i) => zone.items?.[i] || {});
-  return `<section class="admin-editor" data-banner-zone="${zoneName}"><div class="admin-editor-head"><div><span>${zoneName.toUpperCase()} BANNER ZONE</span><h3>${sizeHint(count)}</h3></div><label>Layout<select class="admin-count" data-zone="${zoneName}">${[1,2,3,4].map((n)=>`<option value="${n}" ${n===count?"selected":""}>${n} banner${n>1?"s":""}</option>`).join("")}</select></label></div><div class="admin-slot-grid">${slots.map((item,i)=>`<article class="admin-slot" data-zone="${zoneName}" data-index="${i}" ${i>=count?'hidden':''}><strong>Slot ${i+1}</strong><label>Headline<input data-field="headline" value="${escapeHtml(item.headline || "")}" /></label><label>Text<input data-field="text" value="${escapeHtml(item.text || "")}" /></label><label>Link<input data-field="link" value="${escapeHtml(item.link || "#account")}" /></label><label>Image URL / path<input data-field="image" value="${escapeHtml(item.image || "")}" /></label><label class="file-label">Preview upload<input type="file" accept="image/*" data-banner-upload /></label><small class="admin-image-note">Upload is stored as a local browser preview in this build. Use the final storage API for global publishing.</small></article>`).join("")}</div></section>`;
+  const isHeader = zoneName === "header";
+  const zone = isHeader ? (state.ui?.header_zone || { count: 1, items: [] }) : (state.ui?.banner_zones?.[zoneName] || { count: 1, items: [] });
+  const max = isHeader ? 3 : 4;
+  const count = clamp(Number(zone.count || 1), 1, max);
+  const slots = Array.from({ length: max }, (_, i) => zone.items?.[i] || {});
+  const label = isHeader ? "HEADER BANNER ZONE" : `${zoneName.toUpperCase()} HOMEPAGE ZONE`;
+  return `<section class="admin-editor banner-studio-editor" data-banner-zone="${zoneName}">
+    <div class="admin-editor-head"><div><span>${label}</span><h3>${sizeHint(count, isHeader ? "header" : "main")}</h3></div>
+      <label>Layout<select class="admin-count" data-zone="${zoneName}">${Array.from({length:max},(_,i)=>i+1).map((n)=>`<option value="${n}" ${n===count?"selected":""}>${n} banner${n>1?"s":""}</option>`).join("")}</select></label>
+    </div>
+    <div class="admin-preview-toolbar"><span>LIVE PREVIEW</span><button class="preview-device active" type="button" data-preview-device="desktop" data-zone="${zoneName}">Desktop</button><button class="preview-device" type="button" data-preview-device="tablet" data-zone="${zoneName}">Tablet</button><button class="preview-device" type="button" data-preview-device="mobile" data-zone="${zoneName}">Mobile</button></div>
+    <div class="banner-live-preview preview-desktop" data-preview-zone="${zoneName}"></div>
+    <div class="admin-slot-grid">${slots.map((item,i)=>`<article class="admin-slot" data-zone="${zoneName}" data-index="${i}" ${i>=count?'hidden':''}>
+      <div class="admin-slot-title"><strong>Slot ${i+1}</strong><span class="slot-dimension" data-slot-dimension>${bannerSlotSpec(zoneName,count,i)}</span></div>
+      <label>Plan / theme<select data-field="plan">${["pro","elite","legend","goat","default"].map((x)=>`<option value="${x}" ${String(item.plan||"default")===x?"selected":""}>${x.toUpperCase()}</option>`).join("")}</select></label>
+      <label>Eyebrow<input data-field="eyebrow" value="${escapeHtml(item.eyebrow || "")}" /></label>
+      <label>Headline<input data-field="headline" value="${escapeHtml(item.headline || "")}" /></label>
+      <label>Text<textarea data-field="text" rows="3">${escapeHtml(item.text || "")}</textarea></label>
+      <div class="admin-field-row"><label>CTA text<input data-field="button_text" value="${escapeHtml(item.button_text || "Open")}" /></label><label>Link<input data-field="link" value="${escapeHtml(item.link || "#account")}" /></label></div>
+      <label>Image URL / asset path<input data-field="image" value="${escapeHtml(item.image || "")}" placeholder="/assets/banner-name.webp" /></label>
+      <div class="admin-field-row"><label>Image fit<select data-field="fit"><option value="cover" ${(item.fit||"cover")==="cover"?"selected":""}>Cover</option><option value="contain" ${item.fit==="contain"?"selected":""}>Contain</option></select></label><label>Sponsored<select data-field="sponsored"><option value="false" ${item.sponsored?"":"selected"}>No</option><option value="true" ${item.sponsored?"selected":""}>Yes</option></select></label></div>
+      <label class="file-label">Check local creative<input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" data-banner-upload /></label>
+      <div class="image-property-box"><span>Required: <strong data-required-size>${bannerSlotSpec(zoneName,count,i)}</strong></span><span>Actual: <strong data-actual-size>—</strong></span><span data-size-status class="size-status neutral">No image selected</span></div>
+      <small class="admin-image-note">Local file is preview-only. For global publishing, upload the optimized file to web/assets or your storage/CDN and use that path above.</small>
+    </article>`).join("")}</div>
+  </section>`;
 }
 
-function renderAdminBanners() {
-  moduleShell("Banner Manager", "Switch 1–4 banners per zone and preview creative without editing HTML/CSS.", `${bannerManagerZoneEditor("top")}${bannerManagerZoneEditor("bottom")}<div class="admin-actions"><button class="btn btn-primary" id="saveBannerConfig" type="button">Save local preview</button><button class="btn btn-ghost" id="exportBannerConfig" type="button">Export JSON</button><button class="btn btn-ghost" id="resetBannerConfig" type="button">Reset local preview</button></div>`);
-  bindBannerManager();
+function bannerPreviewCard(item, header = false) {
+  const theme = `plan-${escapeHtml(item.plan || "default")}`;
+  const img = item.image ? `<div class="${header ? "header-preview-image" : "zone-banner-art"}"><img src="${escapeHtml(item.image)}" alt="" style="object-fit:${escapeHtml(item.fit || "cover")}" /></div>` : `<div class="${header ? "header-preview-image" : "zone-banner-art"} generated-art"><span></span></div>`;
+  if (header) return `<article class="header-banner-card ${theme}"><span class="header-sponsor-label">${escapeHtml(item.eyebrow || "BLINQ")}</span><span class="header-sponsor-copy"><strong>${escapeHtml(item.headline || "Banner headline")}</strong><small>${escapeHtml(item.text || "Banner text")}</small></span>${img}</article>`;
+  return `<article class="zone-banner ${theme}"><div class="zone-banner-copy"><span class="promo-eyebrow">${escapeHtml(item.eyebrow || "BLINQ")}</span><h2>${escapeHtml(item.headline || "Banner headline")}</h2><p>${escapeHtml(item.text || "Banner text")}</p><span class="promo-cta">${escapeHtml(item.button_text || "Open")}</span></div>${img}</article>`;
+}
+
+function editorZoneState(zoneName) {
+  const editor = document.querySelector(`[data-banner-zone="${zoneName}"]`);
+  if (!editor) return { count: 0, items: [] };
+  const count = Number(editor.querySelector(".admin-count")?.value || 1);
+  const items = [];
+  editor.querySelectorAll(".admin-slot").forEach((slot) => {
+    const item = { enabled: true };
+    slot.querySelectorAll("[data-field]").forEach((input) => {
+      let value = input.value;
+      if (input.dataset.field === "sponsored") value = value === "true";
+      item[input.dataset.field] = value;
+    });
+    items[Number(slot.dataset.index)] = item;
+  });
+  return { count, items };
+}
+
+function renderBannerStudioPreview(zoneName) {
+  const preview = document.querySelector(`[data-preview-zone="${zoneName}"]`);
+  if (!preview) return;
+  const zone = editorZoneState(zoneName);
+  const items = zone.items.slice(0, zone.count);
+  const header = zoneName === "header";
+  preview.classList.toggle("header-preview-zone", header);
+  preview.classList.toggle("main-preview-zone", !header);
+  preview.dataset.count = String(zone.count);
+  preview.innerHTML = items.map((item) => bannerPreviewCard(item, header)).join("");
+}
+
+function updateSlotDimensions(zoneName) {
+  const editor = document.querySelector(`[data-banner-zone="${zoneName}"]`);
+  if (!editor) return;
+  const count = Number(editor.querySelector(".admin-count")?.value || 1);
+  editor.querySelectorAll(".admin-slot").forEach((slot) => {
+    const i = Number(slot.dataset.index);
+    const visible = i < count;
+    slot.hidden = !visible;
+    if (!visible) return;
+    const size = bannerSlotSpec(zoneName, count, i);
+    slot.querySelector("[data-slot-dimension]").textContent = size;
+    slot.querySelector("[data-required-size]").textContent = size;
+  });
+  editor.querySelector(".admin-editor-head h3").textContent = sizeHint(count, zoneName === "header" ? "header" : "main");
 }
 
 function readBannerEditorToState() {
-  ["top", "bottom"].forEach((zoneName) => {
-    const editor = document.querySelector(`[data-banner-zone="${zoneName}"]`); if (!editor) return;
-    const zone = state.ui.banner_zones[zoneName]; zone.count = Number(editor.querySelector(".admin-count").value || 1);
-    editor.querySelectorAll(".admin-slot").forEach((slot) => {
-      const i = Number(slot.dataset.index); zone.items[i] = zone.items[i] || { enabled: true };
-      slot.querySelectorAll("[data-field]").forEach((input) => { zone.items[i][input.dataset.field] = input.value; });
-    });
-  });
+  const header = editorZoneState("header");
+  state.ui.header_zone = header;
+  ["top", "bottom"].forEach((zoneName) => { state.ui.banner_zones[zoneName] = editorZoneState(zoneName); });
+}
+
+function configForPersistence() {
+  return {
+    header_zone: state.ui.header_zone,
+    banner_zones: state.ui.banner_zones,
+    navigation: state.ui.navigation,
+    plans: state.ui.plans,
+    account: state.ui.account,
+    branding: state.ui.branding,
+    avatar_sets: state.ui.avatar_sets,
+    prime_picks: state.ui.prime_picks,
+    banner_admin: state.ui.banner_admin,
+  };
+}
+
+async function publishUiConfig() {
+  readBannerEditorToState();
+  const payload = configForPersistence();
+  const serialized = JSON.stringify(payload);
+  if (serialized.includes("data:image/")) throw new Error("A local preview image is still embedded. Publish asset files/URLs instead of data URLs.");
+  await adminRequest("/api/v1/admin/ui-config", { method: "POST", body: serialized });
+  localStorage.removeItem("blinq_admin_ui_override");
+  renderHeaderSponsor(); renderBannerZones();
+}
+
+function renderAdminBanners() {
+  moduleShell("Banner Studio", "Build header and homepage banner layouts visually, verify exact creative dimensions and publish the configuration globally.", `
+    <div class="admin-studio-intro"><div><span class="module-kicker">PERSISTENT ADMIN</span><h2>Homepage Banner Studio</h2><p>Header supports 1–3 banners. Both homepage zones around Prime Picks support 1–4 banners and keep equal heights automatically.</p></div><div class="dimension-legend"><strong>Creative specs</strong><span>Header: 900×180 / 450×180 / 300×180</span><span>Main: 1200×400 / 600×400 / 300×400</span></div></div>
+    ${bannerManagerZoneEditor("header")}${bannerManagerZoneEditor("top")}${bannerManagerZoneEditor("bottom")}
+    <div class="admin-actions sticky-admin-actions"><button class="btn btn-primary" id="publishBannerConfig" type="button">Publish globally</button><button class="btn btn-ghost" id="saveBannerConfig" type="button">Save browser preview</button><button class="btn btn-ghost" id="exportBannerConfig" type="button">Export JSON</button><button class="btn btn-ghost" id="resetBannerConfig" type="button">Reset preview</button></div>
+  `);
+  bindBannerManager();
 }
 
 function bindBannerManager() {
-  document.querySelectorAll(".admin-count").forEach((select) => select.addEventListener("change", () => {
-    const zone = select.dataset.zone; const count = Number(select.value || 1);
-    document.querySelectorAll(`.admin-slot[data-zone="${zone}"]`).forEach((slot) => { slot.hidden = Number(slot.dataset.index) >= count; });
-    select.closest(".admin-editor-head").querySelector("h3").textContent = sizeHint(count);
+  ["header","top","bottom"].forEach((zone) => { updateSlotDimensions(zone); renderBannerStudioPreview(zone); });
+  document.querySelectorAll(".admin-count").forEach((select) => select.addEventListener("change", () => { const zone=select.dataset.zone; updateSlotDimensions(zone); renderBannerStudioPreview(zone); }));
+  document.querySelectorAll(".admin-slot [data-field]").forEach((input) => input.addEventListener("input", () => renderBannerStudioPreview(input.closest(".admin-slot").dataset.zone)));
+  document.querySelectorAll("[data-preview-device]").forEach((button) => button.addEventListener("click", () => {
+    const zone = button.dataset.zone; const preview=document.querySelector(`[data-preview-zone="${zone}"]`); if(!preview)return;
+    button.closest(".admin-editor").querySelectorAll("[data-preview-device]").forEach((x)=>x.classList.remove("active")); button.classList.add("active");
+    preview.classList.remove("preview-desktop","preview-tablet","preview-mobile"); preview.classList.add(`preview-${button.dataset.previewDevice}`);
   }));
   document.querySelectorAll("[data-banner-upload]").forEach((input) => input.addEventListener("change", () => {
-    const file = input.files?.[0]; if (!file) return;
-    if (file.size > 1_500_000) { alert("For local preview keep the image under 1.5 MB. Production upload will use Storage."); input.value = ""; return; }
-    const reader = new FileReader(); reader.onload = () => { input.closest(".admin-slot").querySelector('[data-field="image"]').value = String(reader.result || ""); }; reader.readAsDataURL(file);
+    const file=input.files?.[0]; if(!file)return; const slot=input.closest(".admin-slot");
+    if(file.size>2_000_000){alert("Creative is over 2 MB. Optimize it before publishing; recommended target is under 500 KB for web delivery.");}
+    const url=URL.createObjectURL(file); const img=new Image(); img.onload=()=>{
+      const actual=`${img.naturalWidth}×${img.naturalHeight}`; slot.querySelector("[data-actual-size]").textContent=actual;
+      const required=slot.querySelector("[data-required-size]").textContent; const status=slot.querySelector("[data-size-status]");
+      const exact=required===actual; status.className=`size-status ${exact?"positive":"warn"}`; status.textContent=exact?"Exact dimensions":"Resize before final publish";
+      slot.dataset.localPreviewUrl=url; const imageInput=slot.querySelector('[data-field="image"]'); imageInput.dataset.remoteValue=imageInput.value; imageInput.value=url; renderBannerStudioPreview(slot.dataset.zone);
+    }; img.src=url;
   }));
-  $("saveBannerConfig")?.addEventListener("click", () => {
-    readBannerEditorToState();
-    localStorage.setItem("blinq_admin_ui_override", JSON.stringify({ banner_zones: state.ui.banner_zones, header_ad: state.ui.header_ad }));
-    renderBannerZones(); alert("Local admin preview saved in this browser.");
-  });
-  $("exportBannerConfig")?.addEventListener("click", () => {
-    readBannerEditorToState();
-    const blob = new Blob([JSON.stringify({ banner_zones: state.ui.banner_zones, header_ad: state.ui.header_ad }, null, 2)], { type: "application/json" });
-    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "blinq-banner-config.json"; a.click(); URL.revokeObjectURL(a.href);
-  });
-  $("resetBannerConfig")?.addEventListener("click", () => { localStorage.removeItem("blinq_admin_ui_override"); location.reload(); });
+  $("saveBannerConfig")?.addEventListener("click",()=>{readBannerEditorToState();localStorage.setItem("blinq_admin_ui_override",JSON.stringify({header_zone:state.ui.header_zone,banner_zones:state.ui.banner_zones}));renderHeaderSponsor();renderBannerZones();alert("Browser preview saved locally.");});
+  $("publishBannerConfig")?.addEventListener("click",async()=>{try{document.querySelectorAll('.admin-slot [data-field="image"]').forEach((input)=>{if(input.value.startsWith("blob:")&&input.dataset.remoteValue!==undefined)input.value=input.dataset.remoteValue;});await publishUiConfig();alert("Banner configuration published to Supabase.");}catch(error){alert(`Publish failed: ${error.message}`);}});
+  $("exportBannerConfig")?.addEventListener("click",()=>{readBannerEditorToState();const blob=new Blob([JSON.stringify(configForPersistence(),null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="blinq-ui-config.json";a.click();URL.revokeObjectURL(a.href);});
+  $("resetBannerConfig")?.addEventListener("click",()=>{localStorage.removeItem("blinq_admin_ui_override");location.reload();});
 }
 
 function renderAdminUsers() {
-  moduleShell("User Management", "Admin-only account management shell.", '<div class="state-card">User management UI is prepared. Connect it to the account/subscription backend before enabling writes.</div>');
+  const account = state.ui?.account || {};
+  moduleShell("Account Configuration", "Persistent public account defaults today; structured so real identity/subscription entitlements can replace them later.", `<div class="admin-editor account-admin-editor"><div class="admin-editor-head"><div><span>ACCOUNT DEFAULTS</span><h3>Public session profile</h3></div></div><div class="admin-slot-grid"><article class="admin-slot"><label>Display name<input id="adminDisplayName" value="${escapeHtml(account.display_name || "BlinQ User")}" /></label><label>Plan<select id="adminDefaultPlan">${["free","pro","elite","legend","goat","admin"].map((x)=>`<option value="${x}" ${String(account.plan||"free")===x?"selected":""}>${x.toUpperCase()}</option>`).join("")}</select></label><label>Plan label<input id="adminPlanLabel" value="${escapeHtml(account.plan_label || "Free Trial")}" /></label><label>Entitlement text<input id="adminEntitlement" value="${escapeHtml(account.entitlement_text || "Active")}" /></label><button class="btn btn-primary" id="publishAccountConfig" type="button">Publish account defaults</button></article><article class="admin-slot"><strong>Login / entitlement preparation</strong><p class="module-copy">The UI no longer needs hard-coded plan rules. Once authentication is connected, the same account + allowed_plans contract can be populated per signed-in user instead of using these public defaults.</p><div class="image-property-box"><span>Current auth mode: <strong>${escapeHtml(cfg.authMode || "none")}</strong></span><span>Persistent config: <strong>Supabase app_settings</strong></span><span>Admin writes: <strong>x-admin-key protected</strong></span></div></article></div></div>`);
+  $("publishAccountConfig")?.addEventListener("click", async()=>{try{state.ui.account={...state.ui.account,display_name:$("adminDisplayName").value.trim(),plan:$("adminDefaultPlan").value,plan_label:$("adminPlanLabel").value.trim(),entitlement_text:$("adminEntitlement").value.trim()};await adminRequest("/api/v1/admin/ui-config",{method:"POST",body:JSON.stringify(configForPersistence())});alert("Account defaults published.");}catch(error){alert(`Publish failed: ${error.message}`);}});
 }
 
 function renderAdminAccess() {
-  const rows = (state.ui?.navigation?.main || []).map((item) => `<tr><td>${escapeHtml(item.label)}</td><td>${escapeHtml((item.allowed_plans || []).join(", "))}</td><td>${item.data_status ? escapeHtml(item.data_status) : "ready"}</td></tr>`).join("");
-  moduleShell("Plan Access", "Current frontend access matrix.", `<div class="table-wrap"><table class="access-table"><thead><tr><th>Module</th><th>Allowed plans</th><th>Data status</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+  const plans=["free","pro","elite","legend","goat","admin"];
+  const items=(state.ui?.navigation?.main||[]).filter((x)=>x.enabled!==false);
+  const rows=items.map((item)=>`<tr data-access-route="${escapeHtml(item.id)}"><td><strong>${escapeHtml(item.label)}</strong></td>${plans.map((plan)=>`<td><input type="checkbox" data-access-plan="${plan}" ${((item.allowed_plans||[]).includes(plan))?"checked":""} ${item.admin_only&&plan!=="admin"?"disabled":""}/></td>`).join("")}<td>${item.data_status?escapeHtml(item.data_status):"ready"}</td></tr>`).join("");
+  moduleShell("Plan Access", "Edit module visibility/entitlements and publish the matrix globally.", `<div class="performance-section"><div class="section-title-row"><div><span class="module-kicker">ENTITLEMENTS</span><h3>Plan access matrix</h3></div><button class="btn btn-primary" id="publishAccessMatrix" type="button">Publish access</button></div><div class="table-wrap"><table class="access-table access-editor-table"><thead><tr><th>Module</th>${plans.map((p)=>`<th>${p.toUpperCase()}</th>`).join("")}<th>Data status</th></tr></thead><tbody>${rows}</tbody></table></div></div>`);
+  $("publishAccessMatrix")?.addEventListener("click",async()=>{try{document.querySelectorAll("[data-access-route]").forEach((row)=>{const item=(state.ui.navigation.main||[]).find((x)=>x.id===row.dataset.accessRoute);if(!item)return;item.allowed_plans=[...row.querySelectorAll("[data-access-plan]:checked")].map((x)=>x.dataset.accessPlan);});await adminRequest("/api/v1/admin/ui-config",{method:"POST",body:JSON.stringify(configForPersistence())});renderNavigation();alert("Plan access published.");}catch(error){alert(`Publish failed: ${error.message}`);}});
 }
 
 function renderCurrentModule() {
