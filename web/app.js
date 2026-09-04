@@ -219,6 +219,7 @@ function loadLocalAdminOverride() {
 function applyLocalAdminOverride(ui) {
   const local = loadLocalAdminOverride();
   if (local?.banner_zones) ui.banner_zones = local.banner_zones;
+  if (local?.sidebar_zone) ui.sidebar_zone = local.sidebar_zone;
   if (local?.header_ad) ui.header_ad = local.header_ad;
   return ui;
 }
@@ -233,7 +234,7 @@ async function loadUiConfig() {
     state.ui = applyLocalAdminOverride(merged);
     ensureAccessRegistry();
   } catch {
-    state.ui = { account: {}, navigation: { main: [], learn: [], admin: [] }, banner_zones: {}, header_zone: { count: 0, items: [] }, plans: [] };
+    state.ui = { account: {}, navigation: { main: [], learn: [], admin: [] }, banner_zones: {}, header_zone: { count: 0, items: [] }, sidebar_zone: { count: 0, items: [] }, banner_registry: { version: 1, total_slots: 14, slots: [] }, plans: [] };
   }
   ensureAccessRegistry();
   startPublicSession();
@@ -314,6 +315,7 @@ const ACCESS_PANEL_CATALOG = [
   { id: "panel.header_banner_1", label: "Header banner · Slot 1", group: "Dashboard / Header", type: "panel", selector: '[data-access-feature="panel.header_banner_1"]' },
   { id: "panel.header_banner_2", label: "Header banner · Slot 2", group: "Dashboard / Header", type: "panel", selector: '[data-access-feature="panel.header_banner_2"]' },
   { id: "panel.header_banner_3", label: "Header banner · Slot 3", group: "Dashboard / Header", type: "panel", selector: '[data-access-feature="panel.header_banner_3"]' },
+  { id: "panel.sidebar_banners", label: "Sidebar banner zone", group: "Dashboard / Sidebar", type: "panel", selector: "#sidebarBannerZone" },
   { id: "panel.prediction_filters", label: "Prediction filters", group: "Dashboard", type: "panel", selector: "#predictionToolbar" },
   { id: "panel.dashboard_snapshot", label: "Dashboard snapshot", group: "Dashboard", type: "panel", selector: "#dashboardSnapshot" },
   { id: "panel.top_banners", label: "Top banner zone", group: "Dashboard / Banners", type: "panel", selector: "#bannerZoneTop" },
@@ -390,6 +392,8 @@ function ensureAccessRegistry() {
     );
   });
   ACCESS_PANEL_CATALOG.forEach((meta) => registerAccessFeature({ ...meta, source: "panel_catalog" }, ACCESS_PLANS, ACCESS_PLANS));
+  const bannerZones = { header: state.ui?.header_zone, top: state.ui?.banner_zones?.top, bottom: state.ui?.banner_zones?.bottom, sidebar: state.ui?.sidebar_zone };
+  Object.entries(bannerZones).forEach(([zoneName, zone]) => (zone?.items || []).forEach((item, index) => ensureBannerAccessEntry(zoneName, index, item)));
   document.querySelectorAll("[data-access-feature]").forEach((node) => {
     registerAccessFeature({
       id: node.dataset.accessFeature,
@@ -533,19 +537,55 @@ function renderNavigation() {
   applyLanguageChrome();
 }
 
-function bannerSlotFeatureId(zoneName, index) {
-  const slot = Number(index) + 1;
-  if (zoneName === "header") return `panel.header_banner_${slot}`;
-  if (zoneName === "top") return `panel.top_banner_${slot}`;
-  return `panel.bottom_banner_${slot}`;
+const BANNER_SLOT_IDS = {
+  header: ["BLQ-H01","BLQ-H02","BLQ-H03"],
+  top: ["BLQ-T01","BLQ-T02","BLQ-T03","BLQ-T04"],
+  bottom: ["BLQ-B01","BLQ-B02","BLQ-B03","BLQ-B04"],
+  sidebar: ["BLQ-S01","BLQ-S02","BLQ-S03"],
+};
+
+function bannerRegistryId(zoneName, index, item = null) {
+  return String(item?.banner_id || BANNER_SLOT_IDS?.[zoneName]?.[Number(index)] || `BLQ-${String(zoneName).toUpperCase()}-${Number(index)+1}`);
 }
 
-function bannerSlotVisible(zoneName, index) {
-  return planCanSeeFeature(bannerSlotFeatureId(zoneName, index));
+function bannerSlotFeatureId(zoneName, index, item = null) {
+  return `banner.${bannerRegistryId(zoneName, index, item)}`;
 }
 
-function bannerSlotAccessible(zoneName, index) {
-  return planHasFeatureAccess(bannerSlotFeatureId(zoneName, index));
+function bannerRequiredPlans(item) {
+  const order = ["free","pro","elite","legend","goat","admin"];
+  const required = String(item?.plan || "free").toLowerCase();
+  const start = Math.max(0, order.indexOf(required));
+  return order.slice(start);
+}
+
+function ensureBannerAccessEntry(zoneName, index, item = null) {
+  const id = bannerSlotFeatureId(zoneName, index, item);
+  const ac = accessControlState();
+  if (!ac.entries[id]) {
+    const bannerId = bannerRegistryId(zoneName, index, item);
+    ac.entries[id] = {
+      id,
+      label: `${bannerId} · ${String(item?.headline || `${zoneName} banner ${Number(index)+1}`)}`,
+      group: `Banners / ${zoneName}`,
+      type: "panel",
+      source: "banner_registry",
+      auto_discovered: false,
+      visible_plans: [...ACCESS_PLANS],
+      allowed_plans: bannerRequiredPlans(item),
+    };
+  }
+  return ac.entries[id];
+}
+
+function bannerSlotVisible(zoneName, index, item = null) {
+  ensureBannerAccessEntry(zoneName, index, item);
+  return planCanSeeFeature(bannerSlotFeatureId(zoneName, index, item));
+}
+
+function bannerSlotAccessible(zoneName, index, item = null) {
+  ensureBannerAccessEntry(zoneName, index, item);
+  return planHasFeatureAccess(bannerSlotFeatureId(zoneName, index, item));
 }
 
 function renderHeaderSponsor() {
@@ -558,18 +598,18 @@ function renderHeaderSponsor() {
   const items = (zone.items || [])
     .slice(0, count)
     .map((item, originalIndex) => ({ item, originalIndex }))
-    .filter(({ item, originalIndex }) => item?.enabled !== false && bannerSlotVisible("header", originalIndex));
+    .filter(({ item, originalIndex }) => item?.enabled !== false && bannerSlotVisible("header", originalIndex, item));
   host.className = `header-banner-zone header-count-${items.length}`;
   if (!items.length) { host.hidden = true; host.innerHTML = ""; return; }
   host.hidden = false;
   host.innerHTML = items.map(({ item: ad, originalIndex }) => {
-    const featureId = bannerSlotFeatureId("header", originalIndex);
-    const unlocked = bannerSlotAccessible("header", originalIndex);
+    const featureId = bannerSlotFeatureId("header", originalIndex, ad);
+    const unlocked = bannerSlotAccessible("header", originalIndex, ad);
     const configuredLink = ad.link || "#account";
     const finalLink = unlocked ? configuredLink : "#account";
     const route = String(finalLink || "").startsWith("#") ? String(finalLink).slice(1).replaceAll("-", "_") : "";
     const theme = `plan-${escapeHtml(ad.plan || "default")}`;
-    return `<a class="header-banner-card ${theme}${unlocked ? "" : " access-locked"}" href="${escapeHtml(finalLink)}" ${route ? `data-route="${escapeHtml(route)}"` : ""} data-access-feature="${escapeHtml(featureId)}" data-access-label="${escapeHtml(`Header banner · Slot ${originalIndex + 1}`)}" data-access-group="Dashboard / Header">
+    return `<a class="header-banner-card ${theme}${unlocked ? "" : " access-locked"}" href="${escapeHtml(finalLink)}" ${route ? `data-route="${escapeHtml(route)}"` : ""} data-access-feature="${escapeHtml(featureId)}" data-access-label="${escapeHtml(`${bannerRegistryId("header", originalIndex, ad)} · Header slot ${originalIndex + 1}`)}" data-access-group="Dashboard / Header">
       ${ad.image ? `<img src="${escapeHtml(ad.image)}" alt="" loading="lazy" decoding="async" style="object-fit:${escapeHtml(ad.fit || "cover")}" />` : ""}
       <span class="header-sponsor-label">${escapeHtml(ad.eyebrow || ad.label || "BLINQ")}</span>
       <span class="header-sponsor-copy"><strong>${escapeHtml(localizedBannerValue(ad, "headline", "header") || "Upgrade your BlinQ level")}</strong><small>${escapeHtml(localizedBannerValue(ad, "text", "header") || "")}</small></span>
@@ -578,15 +618,19 @@ function renderHeaderSponsor() {
   }).join("");
 }
 
-function sizeHint(count, zoneName = "main") {
+function sizeHint(count, zoneName = "main", layoutMode = "row") {
   const n = Number(count);
   if (zoneName === "header") return ({ 1: "1 × 900×180", 2: "2 × 450×180", 3: "3 × 300×180" })[n] || "Flexible";
+  if (zoneName === "sidebar") return ({ 1: "1 × 220×420", 2: "2 × 220×205", 3: "3 × 220×130" })[n] || "Flexible";
+  if (n === 4 && layoutMode === "grid_2x2") return "2 × 2 grid · 4 × 600×400";
   return ({ 1: "1 × 1200×400", 2: "2 × 600×400", 3: "1 × 600×400 + 2 × 300×400", 4: "4 × 300×400" })[n] || "Flexible";
 }
 
-function bannerSlotSpec(zoneName, count, index) {
+function bannerSlotSpec(zoneName, count, index, layoutMode = "row") {
   const n = Number(count);
   if (zoneName === "header") return ({ 1: ["900×180"], 2: ["450×180", "450×180"], 3: ["300×180", "300×180", "300×180"] })[n]?.[index] || "Flexible";
+  if (zoneName === "sidebar") return ({ 1: ["220×420"], 2: ["220×205","220×205"], 3: ["220×130","220×130","220×130"] })[n]?.[index] || "Flexible";
+  if (n === 4 && layoutMode === "grid_2x2") return "600×400";
   return ({ 1: ["1200×400"], 2: ["600×400", "600×400"], 3: ["600×400", "300×400", "300×400"], 4: ["300×400", "300×400", "300×400", "300×400"] })[n]?.[index] || "Flexible";
 }
 
@@ -600,20 +644,20 @@ function renderBannerZone(zoneName) {
   const items = (zone.items || [])
     .slice(0, count)
     .map((item, originalIndex) => ({ item, originalIndex }))
-    .filter(({ item, originalIndex }) => item?.enabled !== false && bannerSlotVisible(zoneName, originalIndex));
+    .filter(({ item, originalIndex }) => item?.enabled !== false && bannerSlotVisible(zoneName, originalIndex, item));
   if (!items.length) { host.hidden = true; host.innerHTML = ""; return; }
   host.hidden = false;
-  host.className = `banner-zone banner-zone-${zoneName} banner-count-${items.length}`;
+  host.className = `banner-zone banner-zone-${zoneName} banner-count-${items.length} banner-layout-${escapeHtml(zone.layout_mode || "row")}`;
   host.innerHTML = items.map(({ item: banner, originalIndex }) => {
-    const slotFeatureId = bannerSlotFeatureId(zoneName, originalIndex);
-    const unlocked = bannerSlotAccessible(zoneName, originalIndex);
+    const slotFeatureId = bannerSlotFeatureId(zoneName, originalIndex, banner);
+    const unlocked = bannerSlotAccessible(zoneName, originalIndex, banner);
     const image = banner.image ? `<div class="zone-banner-art"><img src="${escapeHtml(banner.image)}" alt="" loading="lazy" decoding="async" style="object-fit:${escapeHtml(banner.fit || "cover")}" /></div>` : '<div class="zone-banner-art generated-art"><span></span></div>';
     const configuredLink = banner.link || "#";
     const finalLink = unlocked ? configuredLink : "#account";
     const route = String(finalLink || "").startsWith("#") ? String(finalLink).slice(1).replaceAll("-", "_") : "";
-    return `<article class="zone-banner zone-banner-${originalIndex + 1} plan-${escapeHtml(banner.plan || "default")}${unlocked ? "" : " access-locked"}" data-access-feature="${escapeHtml(slotFeatureId)}" data-access-label="${escapeHtml(`${zoneName === "top" ? "Top" : "Bottom"} banner · Slot ${originalIndex + 1}`)}" data-access-group="Dashboard / Banners">
+    return `<article class="zone-banner zone-banner-${originalIndex + 1} plan-${escapeHtml(banner.plan || "default")}${unlocked ? "" : " access-locked"}" data-access-feature="${escapeHtml(slotFeatureId)}" data-access-label="${escapeHtml(`${bannerRegistryId(zoneName, originalIndex, banner)} · ${zoneName === "top" ? "Top" : "Bottom"} slot ${originalIndex + 1}`)}" data-access-group="Dashboard / Banners">
       <div class="zone-banner-copy">
-        <span class="promo-eyebrow">${escapeHtml(banner.eyebrow || (banner.sponsored ? "SPONSORED" : "BLINQ"))}</span>
+        <span class="promo-eyebrow">${escapeHtml(banner.eyebrow || (banner.sponsored ? "SPONSORED" : "BLINQ"))} <em class="banner-id-tag">${escapeHtml(bannerRegistryId(zoneName, originalIndex, banner))}</em></span>
         <h2>${escapeHtml(localizedBannerValue(banner, "headline", zoneName) || "")}</h2>
         <p>${escapeHtml(localizedBannerValue(banner, "text", zoneName) || "")}</p>
         <a class="promo-cta" href="${escapeHtml(finalLink)}" ${route ? `data-route="${escapeHtml(route)}"` : ""}>${escapeHtml(unlocked ? (banner.button_text || t("button.open", "Open")) : t("shell.upgrade", "Upgrade"))}</a>
@@ -625,9 +669,34 @@ function renderBannerZone(zoneName) {
   }).join("");
 }
 
+function renderSidebarBanners() {
+  const host = $("sidebarBannerZone");
+  const zone = state.ui?.sidebar_zone || { count: 0, items: [] };
+  if (!host) return;
+  if (!planCanSeeFeature("panel.sidebar_banners")) { host.hidden = true; host.innerHTML = ""; return; }
+  const count = clamp(Number(zone.count || 0), 0, 3);
+  const items = (zone.items || []).slice(0, count).map((item, originalIndex) => ({item, originalIndex}))
+    .filter(({item, originalIndex}) => item?.enabled !== false && bannerSlotVisible("sidebar", originalIndex, item));
+  if (!items.length) { host.hidden = true; host.innerHTML = ""; return; }
+  host.hidden = false;
+  host.className = `sidebar-banner-zone sidebar-count-${items.length}`;
+  host.innerHTML = items.map(({item, originalIndex}) => {
+    const featureId = bannerSlotFeatureId("sidebar", originalIndex, item);
+    const unlocked = bannerSlotAccessible("sidebar", originalIndex, item);
+    const configuredLink = item.link || "#account";
+    const finalLink = unlocked ? configuredLink : "#account";
+    const route = String(finalLink).startsWith("#") ? String(finalLink).slice(1).replaceAll("-","_") : "";
+    return `<a class="sidebar-promo-card plan-${escapeHtml(item.plan || "default")}${unlocked ? "" : " access-locked"}" href="${escapeHtml(finalLink)}" ${route ? `data-route="${escapeHtml(route)}"` : ""} data-access-feature="${escapeHtml(featureId)}" data-access-label="${escapeHtml(`${bannerRegistryId("sidebar", originalIndex, item)} · Sidebar slot ${originalIndex+1}`)}" data-access-group="Dashboard / Sidebar">
+      <span class="sidebar-promo-id">${escapeHtml(bannerRegistryId("sidebar", originalIndex, item))}</span>
+      <small>${escapeHtml(item.eyebrow || "BLINQ")}</small><strong>${escapeHtml(item.headline || "")}</strong><span>${escapeHtml(item.text || "")}</span>${unlocked ? "" : '<b class="banner-access-lock">🔒</b>'}
+    </a>`;
+  }).join("");
+}
+
 function renderBannerZones() {
   renderBannerZone("top");
   renderBannerZone("bottom");
+  renderSidebarBanners();
 }
 
 function planAvatarSet(planId) {
@@ -1689,11 +1758,14 @@ function renderPendingModule(route) {
 
 function bannerManagerZoneEditor(zoneName) {
   const isHeader = zoneName === "header";
-  const zone = isHeader ? (state.ui?.header_zone || { count: 1, items: [] }) : (state.ui?.banner_zones?.[zoneName] || { count: 1, items: [] });
-  const max = isHeader ? 3 : 4;
+  const isSidebar = zoneName === "sidebar";
+  const zone = isHeader ? (state.ui?.header_zone || { count: 1, items: [] }) : isSidebar ? (state.ui?.sidebar_zone || { count: 1, items: [] }) : (state.ui?.banner_zones?.[zoneName] || { count: 1, items: [] });
+  const max = (isHeader || isSidebar) ? 3 : 4;
   const count = clamp(Number(zone.count || 1), 1, max);
   const slots = Array.from({ length: max }, (_, i) => zone.items?.[i] || {});
-  const label = isHeader ? "HEADER BANNER ZONE" : `${zoneName.toUpperCase()} HOMEPAGE ZONE`;
+  const label = isHeader ? "HEADER BANNER ZONE" : isSidebar ? "SIDEBAR BANNER ZONE" : `${zoneName.toUpperCase()} HOMEPAGE ZONE`;
+  const layoutMode = zone.layout_mode || (isSidebar ? "stack" : "row");
+  const layoutSelect = (!isHeader && !isSidebar) ? `<label class="banner-layout-select">Layout<select class="admin-layout-mode" data-zone="${zoneName}"><option value="row" ${layoutMode === "row" ? "selected" : ""}>1-row / 1–4 across</option><option value="grid_2x2" ${layoutMode === "grid_2x2" ? "selected" : ""}>2 × 2 grid (4 banners)</option></select></label>` : "";
   return `<section class="admin-editor banner-studio-editor" data-banner-zone="${zoneName}">
     <div class="admin-editor-head"><div><span>${label}</span><h3>${sizeHint(count, isHeader ? "header" : "main")}</h3></div>
       <label>Layout<select class="admin-count" data-zone="${zoneName}">${Array.from({length:max},(_,i)=>i+1).map((n)=>`<option value="${n}" ${n===count?"selected":""}>${n} banner${n>1?"s":""}</option>`).join("")}</select></label>
@@ -1737,7 +1809,9 @@ function editorZoneState(zoneName) {
     });
     items[Number(slot.dataset.index)] = item;
   });
-  return { count, items };
+  items.forEach((item, index) => { item.banner_id = bannerRegistryId(zoneName, index, item); item.sort_order = index + 1; });
+  const layoutMode = editor.querySelector(".admin-layout-mode")?.value || (zoneName === "sidebar" ? "stack" : "row");
+  return { count, layout_mode: layoutMode, items };
 }
 
 function renderBannerStudioPreview(zoneName) {
@@ -1746,8 +1820,11 @@ function renderBannerStudioPreview(zoneName) {
   const zone = editorZoneState(zoneName);
   const items = zone.items.slice(0, zone.count);
   const header = zoneName === "header";
+  const sidebar = zoneName === "sidebar";
   preview.classList.toggle("header-preview-zone", header);
-  preview.classList.toggle("main-preview-zone", !header);
+  preview.classList.toggle("sidebar-preview-zone", sidebar);
+  preview.classList.toggle("main-preview-zone", !header && !sidebar);
+  preview.classList.toggle("preview-grid-2x2", zone.layout_mode === "grid_2x2");
   preview.dataset.count = String(zone.count);
   preview.innerHTML = items.map((item) => bannerPreviewCard(item, header)).join("");
 }
@@ -1756,28 +1833,32 @@ function updateSlotDimensions(zoneName) {
   const editor = document.querySelector(`[data-banner-zone="${zoneName}"]`);
   if (!editor) return;
   const count = Number(editor.querySelector(".admin-count")?.value || 1);
+  const layoutMode = editor.querySelector(".admin-layout-mode")?.value || (zoneName === "sidebar" ? "stack" : "row");
   editor.querySelectorAll(".admin-slot").forEach((slot) => {
     const i = Number(slot.dataset.index);
     const visible = i < count;
     slot.hidden = !visible;
     if (!visible) return;
-    const size = bannerSlotSpec(zoneName, count, i);
+    const size = bannerSlotSpec(zoneName, count, i, layoutMode);
     slot.querySelector("[data-slot-dimension]").textContent = size;
     slot.querySelector("[data-required-size]").textContent = size;
   });
-  editor.querySelector(".admin-editor-head h3").textContent = sizeHint(count, zoneName === "header" ? "header" : "main");
+  editor.querySelector(".admin-editor-head h3").textContent = sizeHint(count, zoneName, layoutMode);
 }
 
 function readBannerEditorToState() {
   const header = editorZoneState("header");
   state.ui.header_zone = header;
+  state.ui.sidebar_zone = editorZoneState("sidebar");
   ["top", "bottom"].forEach((zoneName) => { state.ui.banner_zones[zoneName] = editorZoneState(zoneName); });
 }
 
 function configForPersistence() {
   return {
     header_zone: state.ui.header_zone,
+    sidebar_zone: state.ui.sidebar_zone,
     banner_zones: state.ui.banner_zones,
+    banner_registry: state.ui.banner_registry,
     navigation: state.ui.navigation,
     plans: state.ui.plans,
     account: state.ui.account,
@@ -1801,16 +1882,16 @@ async function publishUiConfig() {
 
 function renderAdminBanners() {
   moduleShell("Banner Studio", "Build header and homepage banner layouts visually, verify exact creative dimensions and publish the configuration globally.", `
-    <div class="admin-studio-intro"><div><span class="module-kicker">PERSISTENT ADMIN</span><h2>Homepage Banner Studio</h2><p>Header supports 1–3 banners. Both homepage zones around Prime Picks support 1–4 banners and keep equal heights automatically. Visibility and unlocked access for every individual slot are controlled in Access Manager.</p></div><div class="dimension-legend"><strong>Creative specs</strong><span>Header: 900×180 / 450×180 / 300×180</span><span>Main: 1200×400 / 600×400 / 300×400</span></div></div>
-    ${bannerManagerZoneEditor("header")}${bannerManagerZoneEditor("top")}${bannerManagerZoneEditor("bottom")}
+    <div class="admin-studio-intro"><div><span class="module-kicker">PERSISTENT ADMIN</span><h2>Homepage Banner Studio</h2><p>BlinQ has 14 uniquely numbered banner slots: 3 header, 4 top, 4 bottom and 3 sidebar. Every slot has independent visibility and unlocked-access rules. Main 4-banner zones can run as one row or a 2×2 grid.</p></div><div class="dimension-legend"><strong>Creative specs</strong><span>Header: 900×180 / 450×180 / 300×180</span><span>Main: 1200×400 / 600×400 / 300×400</span></div></div>
+    ${bannerManagerZoneEditor("header")}${bannerManagerZoneEditor("top")}${bannerManagerZoneEditor("bottom")}${bannerManagerZoneEditor("sidebar")}
     <div class="admin-actions sticky-admin-actions"><button class="btn btn-primary" id="publishBannerConfig" type="button">Publish globally</button><button class="btn btn-ghost" id="saveBannerConfig" type="button">Save browser preview</button><button class="btn btn-ghost" id="exportBannerConfig" type="button">Export JSON</button><button class="btn btn-ghost" id="resetBannerConfig" type="button">Reset preview</button></div>
   `);
   bindBannerManager();
 }
 
 function bindBannerManager() {
-  ["header","top","bottom"].forEach((zone) => { updateSlotDimensions(zone); renderBannerStudioPreview(zone); });
-  document.querySelectorAll(".admin-count").forEach((select) => select.addEventListener("change", () => { const zone=select.dataset.zone; updateSlotDimensions(zone); renderBannerStudioPreview(zone); }));
+  ["header","top","bottom","sidebar"].forEach((zone) => { updateSlotDimensions(zone); renderBannerStudioPreview(zone); });
+  document.querySelectorAll(".admin-count,.admin-layout-mode").forEach((select) => select.addEventListener("change", () => { const zone=select.dataset.zone; updateSlotDimensions(zone); renderBannerStudioPreview(zone); }));
   document.querySelectorAll(".admin-slot [data-field]").forEach((input) => input.addEventListener("input", () => renderBannerStudioPreview(input.closest(".admin-slot").dataset.zone)));
   document.querySelectorAll("[data-preview-device]").forEach((button) => button.addEventListener("click", () => {
     const zone = button.dataset.zone; const preview=document.querySelector(`[data-preview-zone="${zone}"]`); if(!preview)return;
@@ -1827,7 +1908,7 @@ function bindBannerManager() {
       slot.dataset.localPreviewUrl=url; const imageInput=slot.querySelector('[data-field="image"]'); imageInput.dataset.remoteValue=imageInput.value; imageInput.value=url; renderBannerStudioPreview(slot.dataset.zone);
     }; img.src=url;
   }));
-  $("saveBannerConfig")?.addEventListener("click",()=>{readBannerEditorToState();localStorage.setItem("blinq_admin_ui_override",JSON.stringify({header_zone:state.ui.header_zone,banner_zones:state.ui.banner_zones}));renderHeaderSponsor();renderBannerZones();alert("Browser preview saved locally.");});
+  $("saveBannerConfig")?.addEventListener("click",()=>{readBannerEditorToState();localStorage.setItem("blinq_admin_ui_override",JSON.stringify({header_zone:state.ui.header_zone,sidebar_zone:state.ui.sidebar_zone,banner_zones:state.ui.banner_zones}));renderHeaderSponsor();renderBannerZones();alert("Browser preview saved locally.");});
   $("publishBannerConfig")?.addEventListener("click",async()=>{try{document.querySelectorAll('.admin-slot [data-field="image"]').forEach((input)=>{if(input.value.startsWith("blob:")&&input.dataset.remoteValue!==undefined)input.value=input.dataset.remoteValue;});await publishUiConfig();alert("Banner configuration published to Supabase.");}catch(error){alert(`Publish failed: ${error.message}`);}});
   $("exportBannerConfig")?.addEventListener("click",()=>{readBannerEditorToState();const blob=new Blob([JSON.stringify(configForPersistence(),null,2)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="blinq-ui-config.json";a.click();URL.revokeObjectURL(a.href);});
   $("resetBannerConfig")?.addEventListener("click",()=>{localStorage.removeItem("blinq_admin_ui_override");location.reload();});

@@ -383,7 +383,9 @@
           "link": "#account",
           "image": "",
           "fit": "cover",
-          "i18n_key": "top.pro"
+          "i18n_key": "top.pro",
+          "banner_id": "BLQ-T01",
+          "sort_order": 1
         },
         {
           "enabled": true,
@@ -396,7 +398,9 @@
           "link": "#account",
           "image": "",
           "fit": "cover",
-          "i18n_key": "top.elite"
+          "i18n_key": "top.elite",
+          "banner_id": "BLQ-T02",
+          "sort_order": 2
         },
         {
           "enabled": true,
@@ -409,7 +413,9 @@
           "link": "#account",
           "image": "",
           "fit": "cover",
-          "i18n_key": "top.legend"
+          "i18n_key": "top.legend",
+          "banner_id": "BLQ-T03",
+          "sort_order": 3
         },
         {
           "enabled": true,
@@ -422,9 +428,12 @@
           "link": "#account",
           "image": "",
           "fit": "cover",
-          "i18n_key": "top.goat"
+          "i18n_key": "top.goat",
+          "banner_id": "BLQ-T04",
+          "sort_order": 4
         }
-      ]
+      ],
+      "layout_mode": "row"
     },
     "bottom": {
       "count": 4,
@@ -440,7 +449,9 @@
           "link": "#account",
           "image": "",
           "fit": "cover",
-          "i18n_key": "bottom.goat"
+          "i18n_key": "bottom.goat",
+          "banner_id": "BLQ-B01",
+          "sort_order": 1
         },
         {
           "enabled": true,
@@ -453,7 +464,9 @@
           "link": "#account",
           "image": "",
           "fit": "cover",
-          "i18n_key": "bottom.legend"
+          "i18n_key": "bottom.legend",
+          "banner_id": "BLQ-B02",
+          "sort_order": 2
         },
         {
           "enabled": true,
@@ -466,7 +479,9 @@
           "link": "#account",
           "image": "",
           "fit": "cover",
-          "i18n_key": "bottom.elite"
+          "i18n_key": "bottom.elite",
+          "banner_id": "BLQ-B03",
+          "sort_order": 3
         },
         {
           "enabled": true,
@@ -479,9 +494,12 @@
           "link": "#account",
           "image": "",
           "fit": "cover",
-          "i18n_key": "bottom.pro"
+          "i18n_key": "bottom.pro",
+          "banner_id": "BLQ-B04",
+          "sort_order": 4
         }
-      ]
+      ],
+      "layout_mode": "row"
     }
   },
   "avatar_sets": {
@@ -522,7 +540,9 @@
         "link": "#account",
         "image": "",
         "fit": "cover",
-        "i18n_key": "header.pro"
+        "i18n_key": "header.pro",
+        "banner_id": "BLQ-H01",
+        "sort_order": 1
       },
       {
         "enabled": true,
@@ -535,7 +555,9 @@
         "link": "#account",
         "image": "",
         "fit": "cover",
-        "i18n_key": "header.legend"
+        "i18n_key": "header.legend",
+        "banner_id": "BLQ-H02",
+        "sort_order": 2
       },
       {
         "enabled": true,
@@ -548,7 +570,9 @@
         "link": "#account",
         "image": "",
         "fit": "cover",
-        "i18n_key": "header.goat"
+        "i18n_key": "header.goat",
+        "banner_id": "BLQ-H03",
+        "sort_order": 3
       }
     ]
   },
@@ -586,6 +610,36 @@
         "300×400",
         "300×400"
       ]
+    },
+    "sidebar_sizes": {
+      "1": [
+        "220×420"
+      ],
+      "2": [
+        "220×205",
+        "220×205"
+      ],
+      "3": [
+        "220×130",
+        "220×130",
+        "220×130"
+      ]
+    },
+    "layout_modes": {
+      "header": [
+        "row"
+      ],
+      "sidebar": [
+        "stack"
+      ],
+      "top": [
+        "row",
+        "grid_2x2"
+      ],
+      "bottom": [
+        "row",
+        "grid_2x2"
+      ]
     }
   },
   "bets_beta": {
@@ -601,5 +655,129 @@
     "default_new_feature_access": "all",
     "default_new_feature_visibility": "all",
     "entries": {}
+  },
+  "sidebar_zone": {
+    "count": 3,
+    "layout_mode": "stack",
+    "items": [
+      {
+        "banner_id": "BLQ-S01",
+        "sort_order": 1,
+        "enabled": true,
+        "sponsored": false,
+        "plan": "pro",
+        "eyebrow": "BLINQ PRO",
+        "headline": "Prime access",
+        "text": "Prime Picks and tournament intelligence.",
+        "button_text": "See PRO",
+        "link": "#account",
+        "image": "",
+        "fit": "cover"
+      },
+      {
+        "banner_id": "BLQ-S02",
+        "sort_order": 2,
+        "enabled": true,
+        "sponsored": false,
+        "plan": "legend",
+        "eyebrow": "BLINQ LEGEND",
+        "headline": "Player intelligence",
+        "text": "Profiles, Stats & Insights and deeper matchup context.",
+        "button_text": "See Legend",
+        "link": "#account",
+        "image": "",
+        "fit": "cover"
+      },
+      {
+        "banner_id": "BLQ-S03",
+        "sort_order": 3,
+        "enabled": true,
+        "sponsored": false,
+        "plan": "goat",
+        "eyebrow": "BLINQ GOAT",
+        "headline": "Full analytics",
+        "text": "Model Performance, Backtests and full analytical access.",
+        "button_text": "See GOAT",
+        "link": "#account",
+        "image": "",
+        "fit": "cover"
+      }
+    ]
+  },
+  "banner_registry": {
+    "version": 1,
+    "total_slots": 14,
+    "slots": [
+      {
+        "banner_id": "BLQ-H01",
+        "zone": "header",
+        "slot": 1
+      },
+      {
+        "banner_id": "BLQ-H02",
+        "zone": "header",
+        "slot": 2
+      },
+      {
+        "banner_id": "BLQ-H03",
+        "zone": "header",
+        "slot": 3
+      },
+      {
+        "banner_id": "BLQ-T01",
+        "zone": "top",
+        "slot": 1
+      },
+      {
+        "banner_id": "BLQ-T02",
+        "zone": "top",
+        "slot": 2
+      },
+      {
+        "banner_id": "BLQ-T03",
+        "zone": "top",
+        "slot": 3
+      },
+      {
+        "banner_id": "BLQ-T04",
+        "zone": "top",
+        "slot": 4
+      },
+      {
+        "banner_id": "BLQ-B01",
+        "zone": "bottom",
+        "slot": 1
+      },
+      {
+        "banner_id": "BLQ-B02",
+        "zone": "bottom",
+        "slot": 2
+      },
+      {
+        "banner_id": "BLQ-B03",
+        "zone": "bottom",
+        "slot": 3
+      },
+      {
+        "banner_id": "BLQ-B04",
+        "zone": "bottom",
+        "slot": 4
+      },
+      {
+        "banner_id": "BLQ-S01",
+        "zone": "sidebar",
+        "slot": 1
+      },
+      {
+        "banner_id": "BLQ-S02",
+        "zone": "sidebar",
+        "slot": 2
+      },
+      {
+        "banner_id": "BLQ-S03",
+        "zone": "sidebar",
+        "slot": 3
+      }
+    ]
   }
 }

@@ -396,3 +396,59 @@ img{max-width:100%;height:auto;display:block}
 .banner-access-lock{position:absolute;right:9px;bottom:8px;display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:999px;border:1px solid rgba(255,255,255,.14);background:rgba(4,9,18,.72);font-size:11px;z-index:4}
 .header-banner-card.access-locked,.zone-banner.access-locked{filter:saturate(.82)}
 .header-banner-card.access-locked::after,.zone-banner.access-locked::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;box-shadow:inset 0 0 0 1px rgba(155,102,255,.18)}
+
+
+/* ===== Batch v17: exact desktop rail + 14-slot banner registry ===== */
+.banner-id-tag{font-style:normal;font-size:7px;letter-spacing:.08em;color:#7f8da2;margin-left:6px}
+.sidebar-banner-zone{display:grid;gap:8px;margin:14px 0 0;min-height:0}
+.sidebar-promo-card{position:relative;display:grid;gap:4px;padding:10px 11px;border:1px solid #27364b;border-radius:10px;background:linear-gradient(145deg,rgba(26,22,65,.92),rgba(8,18,31,.94));color:#fff;text-decoration:none;overflow:hidden}
+.sidebar-promo-card small{font-size:7px;color:#a88aff;font-weight:900;letter-spacing:.09em}.sidebar-promo-card strong{font-size:11px}.sidebar-promo-card>span:not(.sidebar-promo-id){font-size:8px;color:#8190a4;line-height:1.4}.sidebar-promo-id{position:absolute;right:7px;top:6px;font-size:6px!important;color:#5d6d82!important}.sidebar-promo-card.access-locked{opacity:.82}.sidebar-promo-card .banner-access-lock{position:absolute;right:8px;bottom:7px;font-size:9px}
+.banner-layout-grid_2x2.banner-count-4{grid-template-columns:repeat(2,minmax(0,1fr))!important}.banner-layout-grid_2x2.banner-count-4 .zone-banner{min-height:310px}
+.banner-layout-row.banner-count-4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.banner-layout-select{display:inline-flex;align-items:center;gap:7px;font-size:8px;color:#7e8da1}.banner-layout-select select{height:30px;border:1px solid #26364b;border-radius:7px;background:#08111d;color:#fff;padding:0 8px}
+.sidebar-preview-zone{display:grid!important;grid-template-columns:1fr!important;max-width:260px;margin-inline:auto}.sidebar-preview-zone .banner-preview-card{min-height:110px}
+.preview-grid-2x2.main-preview-zone{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+@media(min-width:1181px){
+  /* The divider under the BlinQ sidebar brand and the divider under the top header now share one exact Y coordinate. */
+  :root{--blinq-brand-header-height:132px}
+  .sidebar{padding-top:0!important}
+  .sidebar-product-brand{height:var(--blinq-brand-header-height)!important;min-height:var(--blinq-brand-header-height)!important;box-sizing:border-box!important;padding:16px 12px 15px!important}
+  .product-topbar{height:var(--blinq-brand-header-height)!important;min-height:var(--blinq-brand-header-height)!important;box-sizing:border-box!important;padding-top:12px!important;padding-bottom:12px!important;border-bottom:1px solid #1b2a3f!important}
+  .toolbar{height:58px!important;min-height:58px!important;border-bottom:0!important}
+  .dashboard-snapshot{border-top:1px solid #1b2a3f!important}
+}
+@media(max-width:1450px){.banner-layout-row.banner-count-4{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:820px){.sidebar-banner-zone{display:none!important}.banner-layout-grid_2x2.banner-count-4,.banner-layout-row.banner-count-4{display:flex!important;grid-template-columns:none!important}.banner-layout-grid_2x2.banner-count-4 .zone-banner{min-height:unset}.banner-id-tag{display:none}}
+
+
+/* ===== Batch v18: footer placement + header/control deck alignment ===== */
+@media(min-width:1181px){
+  :root{--blinq-brand-header-height:136px}
+  .sidebar-product-brand{height:var(--blinq-brand-header-height)!important;min-height:var(--blinq-brand-header-height)!important;padding:18px 12px 16px!important}
+  .product-topbar{height:var(--blinq-brand-header-height)!important;min-height:var(--blinq-brand-header-height)!important;grid-template-columns:minmax(350px,.92fr) minmax(430px,1.22fr) auto!important;align-items:stretch!important;padding-top:12px!important;padding-bottom:12px!important}
+  .product-brand-wrap-clean{display:flex;align-items:stretch;height:100%}
+  .product-topbar .route-copy{display:flex;flex-direction:column;justify-content:center;min-height:100%}
+  .header-banner-zone{height:100%;align-self:stretch!important;align-content:stretch!important}
+  .header-banner-card{min-height:60px!important;height:100%}
+  .account-actions{align-self:center!important}
+  .toolbar{min-height:60px!important;padding-top:11px!important;padding-bottom:11px!important;border-top:1px solid #152235;border-bottom:1px solid #152235;box-shadow:inset 0 1px 0 rgba(122,89,230,.04)}
+  .dashboard-snapshot{margin-top:0!important;padding-top:12px!important;padding-bottom:2px;border-top:0!important;border-bottom:1px solid #152235}
+}
+.site-footer{padding:18px 2px 24px}
+.footer-main{display:flex;align-items:center;gap:18px;flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid #152235}
+.footer-main > .footer-learn-links{margin-left:10px;flex:1 1 auto}
+.footer-bottom{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-top:12px;padding-top:0;border-top:0}
+.footer-disclaimer{margin:0;max-width:760px;flex:1 1 auto}
+.footer-languages{margin:0 0 0 auto;padding:0;border:0;justify-content:flex-end;flex:0 0 auto}
+.footer-learn-links{display:flex;align-items:center;gap:16px;flex-wrap:wrap;min-width:0}
+.footer-main .footer-learn-links{padding:0;border:0;margin-top:0}
+@media(max-width:1180px){
+  .footer-main{gap:14px}
+  .footer-main > .footer-learn-links{margin-left:0;flex-basis:100%;padding-top:8px;border-top:1px solid #152235}
+  .footer-bottom{display:grid;grid-template-columns:1fr;gap:12px}
+  .footer-languages{justify-content:flex-start;margin-left:0}
+}
+@media(max-width:820px){
+  .footer-main{display:grid;gap:10px}
+  .footer-main > .footer-learn-links{border-top:0;padding-top:0}
+}
