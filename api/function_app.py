@@ -62,6 +62,43 @@ def _write_ui_config(repo: SupabaseRepository, value: dict[str, Any]) -> None:
     )
 
 
+def _prediction_status(repo: SupabaseRepository) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    future = repo.select_all(
+        "current_predictions",
+        filters={"scheduled_at": f"gte.{now.isoformat()}"},
+        order="scheduled_at.asc",
+        max_rows=5000,
+        page_size=1000,
+    )
+    latest_rows = repo.select_all(
+        "current_predictions",
+        order="scheduled_at.desc",
+        max_rows=1,
+        page_size=1,
+    )
+    latest = latest_rows[0] if latest_rows else {}
+    generated_values = [row.get("generated_at") for row in future if row.get("generated_at")]
+    if latest.get("generated_at"):
+        generated_values.append(latest.get("generated_at"))
+    return {
+        "future_count": len(future),
+        "next_match_at": future[0].get("scheduled_at") if future else None,
+        "latest_scheduled_at": latest.get("scheduled_at"),
+        "latest_generated_at": max(generated_values) if generated_values else None,
+    }
+
+
+@app.route(route="v1/predictions/status", methods=["GET"])
+def predictions_status(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        status = _prediction_status(SupabaseRepository())
+        return _json({"success": True, **status})
+    except Exception as exc:
+        logger.exception("predictions_status failed")
+        return _json({"success": False, "error": str(exc)}, 500)
+
+
 @app.route(route="health", methods=["GET"])
 def health(req: func.HttpRequest) -> func.HttpResponse:
     return _json(
@@ -141,7 +178,7 @@ def predictions_prime(req: func.HttpRequest) -> func.HttpResponse:
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "count": len(data),
                 "matches": data,
-                "ranking": "BlinQ Prime Score",
+                "ranking": "calibrated_model_probability_desc",
             }
         )
     except Exception as exc:
