@@ -348,15 +348,41 @@ function bindAuthEvents() {
   });
   $("signUpForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const submit = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
     const password = $("signUpPassword").value;
+    const email = String($("signUpEmail").value || "").trim();
     if (password !== $("signUpPassword2").value) { authMessage("Passwords do not match.", "error"); return; }
+    if (submit) { submit.disabled = true; submit.textContent = "Creating…"; }
     authMessage("Creating account…");
     try {
-      const result = await window.BLINQ_AUTH.signUp($("signUpName").value, $("signUpEmail").value, password);
+      const result = await window.BLINQ_AUTH.signUp($("signUpTelegram").value, email, password);
       if (result.session) { location.reload(); return; }
-      if (result.confirmationRequired) { showAuthMode("signin", "Account created. Check your email and confirm the address before signing in.", "success"); return; }
-      authMessage("Account created. You can sign in now.", "success");
-    } catch (error) { authMessage(error.message, "error"); }
+
+      if (!result.confirmationRequired && !result.existingAccount) {
+        try {
+          const session = await window.BLINQ_AUTH.signIn(email, password);
+          if (session) { location.reload(); return; }
+        } catch (_) {}
+      }
+
+      if ($("signInEmail")) $("signInEmail").value = email;
+      if ($("signUpPassword")) $("signUpPassword").value = "";
+      if ($("signUpPassword2")) $("signUpPassword2").value = "";
+
+      if (result.existingAccount) {
+        showAuthMode("signin", "An account for this email may already exist. Try signing in or use Forgot password.", "success");
+        return;
+      }
+      if (result.confirmationRequired) {
+        showAuthMode("signin", "Account created. Confirm the email address, then sign in.", "success");
+        return;
+      }
+      showAuthMode("signin", "Account created. Sign in with your email and password.", "success");
+    } catch (error) {
+      authMessage(error.message, "error");
+    } finally {
+      if (submit && document.body.contains(submit)) { submit.disabled = false; submit.textContent = t("auth.sign_up", "Create account"); }
+    }
   });
   $("forgotForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();

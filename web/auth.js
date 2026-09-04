@@ -142,19 +142,33 @@
     return saveSession(data);
   }
 
-  async function signUp(displayName, email, password) {
+  function normalizeTelegramHandle(value) {
+    const raw = String(value || "").trim().replace(/^@+/, "");
+    if (!/^[A-Za-z0-9_]{5,32}$/.test(raw)) throw new Error("Enter a valid Telegram username, e.g. @backstagetalks.");
+    return `@${raw}`;
+  }
+
+  async function signUp(telegramAccount, email, password) {
     const redirectTo = `${location.origin}${location.pathname.replace(/[^/]*$/, "")}`;
+    const telegramHandle = normalizeTelegramHandle(telegramAccount);
     const data = await jsonFetch(`${authEndpoint("/signup")}?redirect_to=${encodeURIComponent(redirectTo)}`, {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({
         email: String(email || "").trim(),
         password: String(password || ""),
-        data: { display_name: String(displayName || "").trim() },
+        data: {
+          display_name: telegramHandle,
+          telegram_handle: telegramHandle.replace(/^@/, ""),
+          preferred_username: telegramHandle.replace(/^@/, ""),
+        },
       }),
     });
     const session = saveSession(data);
-    return { data, session, confirmationRequired: Boolean(data?.user && !session) };
+    const identities = Array.isArray(data?.user?.identities) ? data.user.identities : null;
+    const existingAccount = Boolean(data?.user && identities && identities.length === 0);
+    const confirmationRequired = Boolean(data?.user && !session && !existingAccount);
+    return { data, session, existingAccount, confirmationRequired, telegramHandle };
   }
 
   async function requestPasswordReset(email) {

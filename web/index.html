@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/assets/blinq_favicon.png" />
   <link rel="shortcut icon" href="/assets/blinq_favicon.png" />
   <title>BlinQ · Tennis Intelligence</title>
-  <link rel="stylesheet" href="/styles.css?v=20260905-192" />
+  <link rel="stylesheet" href="/styles.css?v=20260905-193" />
 </head>
 <body>
   <section class="login-screen" id="authScreen" aria-live="polite">
@@ -22,9 +22,9 @@
 
       <div class="auth-panel" id="authSignIn" hidden>
         <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
-        <div class="login-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
         <h1 data-i18n="auth.title">Welcome to BlinQ</h1>
         <p data-i18n="auth.subtitle">Sign in to open your tennis intelligence workspace.</p>
+        <div class="login-kicker auth-brand-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
         <button class="btn btn-telegram btn-full" id="telegramSignIn" type="button" hidden><span class="telegram-mark">✈</span><span data-i18n="auth.telegram">Continue with Telegram</span></button>
         <div class="auth-divider" id="telegramSignInDivider" hidden><span data-i18n="auth.or_email">or use email</span></div>
         <form id="signInForm">
@@ -40,13 +40,13 @@
 
       <div class="auth-panel" id="authSignUp" hidden>
         <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
-        <div class="login-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
         <h1 data-i18n="auth.signup_title">Create your BlinQ account</h1>
         <p data-i18n="auth.signup_copy">New accounts start on the Free level. Your plan can be upgraded later.</p>
+        <div class="login-kicker auth-brand-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
         <button class="btn btn-telegram btn-full" id="telegramSignUp" type="button" hidden><span class="telegram-mark">✈</span><span data-i18n="auth.telegram_signup">Create with Telegram</span></button>
         <div class="auth-divider" id="telegramSignUpDivider" hidden><span data-i18n="auth.or_email">or use email</span></div>
         <form id="signUpForm">
-          <label><span data-i18n="auth.display_name">Display name</span><input id="signUpName" type="text" autocomplete="name" maxlength="80" required /></label>
+          <label class="telegram-account-field"><span class="tg-field-label"><i aria-hidden="true">TG</i><b data-i18n="auth.display_name">Telegram account</b></span><input id="signUpTelegram" type="text" autocomplete="username" inputmode="text" placeholder="@username" pattern="@?[A-Za-z0-9_]{5,32}" maxlength="33" required /></label>
           <label><span data-i18n="auth.email">Email</span><input id="signUpEmail" type="email" autocomplete="email" required /></label>
           <label><span data-i18n="auth.password">Password</span><input id="signUpPassword" type="password" autocomplete="new-password" minlength="8" required /></label>
           <label><span data-i18n="auth.password_confirm">Confirm password</span><input id="signUpPassword2" type="password" autocomplete="new-password" minlength="8" required /></label>
@@ -57,9 +57,9 @@
 
       <div class="auth-panel" id="authForgot" hidden>
         <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
-        <div class="login-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
         <h1 data-i18n="auth.reset_title">Reset password</h1>
         <p data-i18n="auth.reset_copy">We will email you a secure password reset link.</p>
+        <div class="login-kicker auth-brand-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
         <form id="forgotForm">
           <label><span data-i18n="auth.email">Email</span><input id="forgotEmail" type="email" autocomplete="email" required /></label>
           <button class="btn btn-primary btn-full auth-submit" type="submit" data-i18n="auth.send_reset">Send reset link</button>
@@ -69,9 +69,9 @@
 
       <div class="auth-panel" id="authNewPassword" hidden>
         <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
-        <div class="login-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
         <h1 data-i18n="auth.new_password_title">Choose a new password</h1>
         <p data-i18n="auth.new_password_copy">Set a new password for your BlinQ account.</p>
+        <div class="login-kicker auth-brand-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
         <form id="newPasswordForm">
           <label><span data-i18n="auth.new_password">New password</span><input id="newPassword" type="password" autocomplete="new-password" minlength="8" required /></label>
           <label><span data-i18n="auth.password_confirm">Confirm password</span><input id="newPassword2" type="password" autocomplete="new-password" minlength="8" required /></label>
@@ -227,9 +227,9 @@
     <div class="plan-grid" id="planGrid"></div>
   </dialog>
 
-  <script src="/i18n.js?v=20260905-192"></script>
+  <script src="/i18n.js?v=20260905-193"></script>
   <script src="/config.js?v=20260904-17"></script>
-  <script src="/auth.js?v=20260905-192"></script>
-  <script src="/app.js?v=20260905-192"></script>
+  <script src="/auth.js?v=20260905-193"></script>
+  <script src="/app.js?v=20260905-193"></script>
 </body>
 </html>
