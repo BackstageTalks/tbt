@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/assets/blinq_favicon.png" />
   <link rel="shortcut icon" href="/assets/blinq_favicon.png" />
   <title>BlinQ · Tennis Intelligence</title>
-  <link rel="stylesheet" href="/styles.css?v=20260904-12" />
+  <link rel="stylesheet" href="/styles.css?v=20260904-13" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -15,8 +15,8 @@
       <a class="engine-brand sidebar-product-brand" href="#dashboard" data-route="dashboard" aria-label="BlinQ · Statistical Engine by BackstageTalks">
         <img src="/assets/blinq_logo.svg" alt="BlinQ" class="sidebar-product-logo" />
         <span class="sidebar-engine-copy">
-          <strong>STATISTICAL ENGINE</strong>
-          <small>by BackstageTalks</small>
+          <strong data-i18n="shell.stat_engine">STATISTICAL ENGINE</strong>
+          <small data-i18n="shell.by_backstage">by BackstageTalks</small>
         </span>
       </a>
 
@@ -26,7 +26,7 @@
 
       <div class="nav-divider"></div>
       <details class="learn-group" open>
-        <summary>Learn</summary>
+        <summary data-i18n="nav.learn">Learn</summary>
         <nav class="nav-section learn-nav" aria-label="Learn navigation">
           <div class="nav-items" id="learnNavigation"></div>
         </nav>
@@ -41,9 +41,9 @@
       <div class="sidebar-spacer"></div>
       <section class="upgrade-card" id="sidebarPromo">
         <div class="upgrade-icon">♛</div>
-        <strong>Unlock full power</strong>
-        <p>Prime Picks, advanced analytics and premium modules are unlocked by plan.</p>
-        <button class="btn btn-primary btn-full" data-upgrade type="button">Upgrade</button>
+        <strong data-i18n="shell.unlock">Unlock full power</strong>
+        <p data-i18n="shell.unlock_copy">Prime Picks, advanced analytics and premium modules are unlocked by plan.</p>
+        <button class="btn btn-primary btn-full" data-upgrade type="button"><span data-i18n="shell.upgrade">Upgrade</span></button>
       </section>
     </aside>
 
@@ -64,7 +64,7 @@
 
         <div class="topbar-actions account-actions">
           <div class="plan-chip" id="planChip"><span id="planName">FREE</span><strong id="planEntitlement">23 days left</strong></div>
-          <button class="btn btn-primary upgrade-top" data-upgrade type="button">♛ Upgrade</button>
+          <button class="btn btn-primary upgrade-top" data-upgrade type="button">♛ <span data-i18n="shell.upgrade">Upgrade</span></button>
           <button class="profile-button profile-button-large" id="profileButton" data-route="account" type="button">
             <span class="avatar avatar-large" id="avatar">BU</span>
             <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small id="profilePlan">Free Trial</small></span>
@@ -118,11 +118,12 @@
         <div class="footer-main">
           <img class="footer-logo" src="/assets/blinq_logo.svg" alt="BlinQ" />
           <div>© 2026 BlinQ</div>
-          <a href="#methodology" data-route="methodology">Methodology</a>
-          <a href="#responsible-use" data-route="responsible_use">Responsible Use</a>
-          <a href="#privacy">Privacy Policy</a>
+          <a href="#methodology" data-route="methodology" data-i18n="footer.methodology">Methodology</a>
+          <a href="#responsible-use" data-route="responsible_use" data-i18n="footer.responsible">Responsible Use</a>
+          <a href="#privacy" data-i18n="footer.privacy">Privacy Policy</a>
         </div>
-        <p class="footer-disclaimer">This data is provided for informational and analytical purposes only. Powered by BackstageTalks Statistical Engine.</p>
+        <p class="footer-disclaimer" data-i18n="footer.disclaimer">This data is provided for informational and analytical purposes only. Powered by BackstageTalks Statistical Engine.</p>
+        <nav class="footer-languages" aria-label="Language versions"><span data-i18n="footer.languages">Language</span><a href="?lang=sk#dashboard" data-lang-choice="sk">SK</a><a href="?lang=cz#dashboard" data-lang-choice="cz">CZ</a><a href="?lang=pl#dashboard" data-lang-choice="pl">PL</a><a href="?lang=hu#dashboard" data-lang-choice="hu">HU</a><a href="?lang=de#dashboard" data-lang-choice="de">DE</a><a href="?lang=ua#dashboard" data-lang-choice="ua">UA</a><a href="?lang=ru#dashboard" data-lang-choice="ru">RU</a></nav>
       </footer>
     </main>
   </div>
@@ -144,12 +145,13 @@
   <dialog id="upgradeDialog" class="match-dialog upgrade-dialog">
     <button class="dialog-close" data-dialog-close="upgradeDialog" aria-label="Close">×</button>
     <div class="dialog-eyebrow">BLINQ PLANS</div>
-    <h2>Choose your level</h2>
-    <p class="dialog-copy">The checkout window can be connected separately. This UI is ready for plan routing.</p>
+    <h2 data-i18n="plan.choose">Choose your level</h2>
+    <p class="dialog-copy" data-i18n="plan.copy">Select the BlinQ level that matches the depth of analytics you need.</p>
     <div class="plan-grid" id="planGrid"></div>
   </dialog>
 
-  <script src="/config.js?v=20260904-12"></script>
-  <script src="/app.js?v=20260904-12"></script>
+  <script src="/i18n.js?v=20260904-13"></script>
+  <script src="/config.js?v=20260904-13"></script>
+  <script src="/app.js?v=20260904-13"></script>
 </body>
 </html>

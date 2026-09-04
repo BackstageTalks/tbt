@@ -9,12 +9,57 @@ const state = {
   allPredictions: false,
   playerProfiles: [],
   primeFeed: [],
+  predictionStatus: null,
+  language: "en",
   avatarVariant: localStorage.getItem("blinq_avatar_variant") || "a",
 };
 
 const $ = (id) => document.getElementById(id);
 const api = (path) => `${String(cfg.apiBase || "").replace(/\/$/, "")}${path}`;
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const supportedLanguages = ["en", "sk", "cz", "pl", "hu", "de", "ua", "ru"];
+const htmlLanguageCodes = { en: "en", sk: "sk", cz: "cs", pl: "pl", hu: "hu", de: "de", ua: "uk", ru: "ru" };
+
+function resolveLanguage() {
+  const params = new URLSearchParams(location.search);
+  const requested = String(params.get("lang") || localStorage.getItem("blinq_language") || "").toLowerCase();
+  if (supportedLanguages.includes(requested)) return requested;
+  const browser = String(navigator.language || "en").slice(0, 2).toLowerCase();
+  if (browser === "cs") return "cz";
+  if (browser === "uk") return "ua";
+  return supportedLanguages.includes(browser) ? browser : "en";
+}
+
+function t(key, fallback = "") {
+  const dict = window.BLINQ_I18N || {};
+  return dict?.[state.language]?.[key] ?? dict?.en?.[key] ?? fallback ?? key;
+}
+
+function applyLanguageChrome() {
+  document.documentElement.lang = htmlLanguageCodes[state.language] || state.language || "en";
+  document.querySelectorAll("[data-i18n]").forEach((el) => {
+    const key = el.dataset.i18n;
+    const value = t(key, el.textContent);
+    if (value) el.textContent = value;
+  });
+  document.querySelectorAll("[data-lang-choice]").forEach((a) => a.classList.toggle("active", a.dataset.langChoice === state.language));
+  const tour = $("tourFilter"); if (tour?.options?.[0]) tour.options[0].textContent = t("filter.tours", "All Tours");
+  const tournament = $("tournamentFilter"); if (tournament?.options?.[0]) tournament.options[0].textContent = t("filter.tournaments", "All Tournaments");
+  const surface = $("surfaceFilter"); if (surface?.options?.[0]) surface.options[0].textContent = t("filter.surfaces", "All Surfaces");
+  const confidence = $("confidenceFilter");
+  if (confidence?.options?.[0]) confidence.options[0].textContent = t("filter.confidence", "All Confidence");
+  if (confidence?.options?.[1]) confidence.options[1].textContent = t("filter.high", "High");
+  if (confidence?.options?.[2]) confidence.options[2].textContent = t("filter.medium", "Medium");
+  if (confidence?.options?.[3]) confidence.options[3].textContent = t("filter.low", "Low");
+  if ($("searchInput")) $("searchInput").placeholder = t("filter.search", "Search matches or players…");
+  if ($("refreshButton")) $("refreshButton").textContent = `↻ ${t("picks.refresh", "Refresh")}`;
+}
+
+function localizedBannerValue(item, field, zoneName) {
+  const key = item?.i18n_key || (item?.plan ? `${zoneName}.${String(item.plan).toLowerCase()}` : "");
+  if (!key) return item?.[field] || "";
+  return t(`banner.${key}.${field}`, item?.[field] || "");
+}
 
 function escapeHtml(value) {
   return String(value ?? "").replace(/[&<>'"]/g, (ch) => ({
@@ -305,7 +350,7 @@ function renderNavigationGroup(items, containerId) {
       a.href = item.href || `#${item.id}`;
       a.className = `nav-link${state.currentRoute === item.id ? " active" : ""}${access.allowed ? "" : " locked"}`;
       a.dataset.route = item.id;
-      a.innerHTML = `<span class="nav-icon">${escapeHtml(item.icon || "•")}</span><span class="nav-text">${escapeHtml(item.label || item.id)}</span>${access.allowed ? "" : '<span class="nav-lock">🔒</span>'}`;
+      a.innerHTML = `<span class="nav-icon">${escapeHtml(item.icon || "•")}</span><span class="nav-text">${escapeHtml(t(`nav.${item.id}`, item.label || item.id))}</span>${access.allowed ? "" : '<span class="nav-lock">🔒</span>'}`;
       host.appendChild(a);
     });
 }
@@ -317,6 +362,7 @@ function renderNavigation() {
   const adminSection = $("adminNavigationSection");
   if (adminSection) adminSection.hidden = !(state.user?.plan === "admin" || state.adminSession);
   if (state.user?.plan === "admin" || state.adminSession) renderNavigationGroup(nav.admin, "adminNavigation");
+  applyLanguageChrome();
 }
 
 function renderHeaderSponsor() {
@@ -335,7 +381,7 @@ function renderHeaderSponsor() {
     return `<a class="header-banner-card ${theme}" href="${escapeHtml(ad.link || "#account")}" ${route ? `data-route="${escapeHtml(route)}"` : ""}>
       ${ad.image ? `<img src="${escapeHtml(ad.image)}" alt="" loading="lazy" decoding="async" style="object-fit:${escapeHtml(ad.fit || "cover")}" />` : ""}
       <span class="header-sponsor-label">${escapeHtml(ad.eyebrow || ad.label || "BLINQ")}</span>
-      <span class="header-sponsor-copy"><strong>${escapeHtml(ad.headline || "Upgrade your BlinQ level")}</strong><small>${escapeHtml(ad.text || "")}</small></span>
+      <span class="header-sponsor-copy"><strong>${escapeHtml(localizedBannerValue(ad, "headline", "header") || "Upgrade your BlinQ level")}</strong><small>${escapeHtml(localizedBannerValue(ad, "text", "header") || "")}</small></span>
     </a>`;
   }).join("");
 }
@@ -367,9 +413,9 @@ function renderBannerZone(zoneName) {
     return `<article class="zone-banner zone-banner-${index + 1} plan-${escapeHtml(banner.plan || "default")}">
       <div class="zone-banner-copy">
         <span class="promo-eyebrow">${escapeHtml(banner.eyebrow || (banner.sponsored ? "SPONSORED" : "BLINQ"))}</span>
-        <h2>${escapeHtml(banner.headline || "")}</h2>
-        <p>${escapeHtml(banner.text || "")}</p>
-        <a class="promo-cta" href="${escapeHtml(banner.link || "#")}" ${route ? `data-route="${escapeHtml(route)}"` : ""}>${escapeHtml(banner.button_text || "Open")}</a>
+        <h2>${escapeHtml(localizedBannerValue(banner, "headline", zoneName) || "")}</h2>
+        <p>${escapeHtml(localizedBannerValue(banner, "text", zoneName) || "")}</p>
+        <a class="promo-cta" href="${escapeHtml(banner.link || "#")}" ${route ? `data-route="${escapeHtml(route)}"` : ""}>${escapeHtml(banner.button_text || t("button.open", "Open"))}</a>
       </div>
       ${image}
       ${banner.sponsored ? '<span class="promo-sponsor">Sponsored</span>' : ""}
@@ -403,7 +449,7 @@ function renderPlanGrid() {
       <div class="plan-option-top"><span class="plan-label">${escapeHtml(plan.label)}</span><div class="plan-avatar-row">${avatars}</div></div>
       ${priceHtml}
       <ul>${(plan.features || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
-      <button class="btn btn-primary btn-full" type="button" data-plan-choice="${escapeHtml(plan.id)}">Choose ${escapeHtml(plan.label)}</button>
+      <button class="btn btn-primary btn-full" type="button" data-plan-choice="${escapeHtml(plan.id)}">${escapeHtml(t("button.choose", "Choose"))} ${escapeHtml(plan.label)}</button>
     </article>`;
   }).join("");
 }
@@ -528,11 +574,16 @@ function dedupeMatches(rows) {
   return out;
 }
 
+async function fetchPredictionStatus() {
+  try { return await getJSON(api("/api/v1/predictions/status")); } catch (_) { return null; }
+}
+
 async function loadPredictions() {
   const grid = $("predictionGrid");
   if (grid) grid.innerHTML = '<div class="state-card">Loading current model predictions…</div>';
   try {
-    const [boardRows, primeRowsRemote] = await Promise.all([fetchPredictions(), fetchPrimePredictions()]);
+    const [boardRows, primeRowsRemote, statusPayload] = await Promise.all([fetchPredictions(), fetchPrimePredictions(), fetchPredictionStatus()]);
+    state.predictionStatus = statusPayload;
     state.predictions = dedupeMatches(boardRows);
     state.primeFeed = dedupeMatches(primeRowsRemote);
     if (!state.predictions.length && state.primeFeed.length) state.predictions = [...state.primeFeed];
@@ -835,13 +886,16 @@ function renderFeedStatus() {
   host.classList.remove("ok", "warn", "empty");
   if (!count) {
     host.classList.add("empty");
-    host.innerHTML = '<i></i><span>No active feed</span>';
+    const futureCount = Number(state.predictionStatus?.future_count || 0);
+    const latestStored = state.predictionStatus?.latest_generated_at || state.predictionStatus?.latest_scheduled_at || null;
+    const diagnostic = latestStored ? ` · last ${fmtShortGenerated(latestStored)}` : "";
+    host.innerHTML = `<i></i><span>${escapeHtml(t("picks.no_active", "No active feed"))}${futureCount ? ` · ${futureCount} future` : ""}${escapeHtml(diagnostic)}</span>`;
     return;
   }
   const ageHours = latest ? (Date.now() - latest) / 3600000 : null;
   const stale = Number.isFinite(ageHours) && ageHours > 12;
   host.classList.add(stale ? "warn" : "ok");
-  const label = latest ? `${count} loaded · ${fmtShortGenerated(new Date(latest).toISOString())}` : `${count} loaded`;
+  const label = latest ? `${count} ${t("picks.loaded", "loaded")} · ${fmtShortGenerated(new Date(latest).toISOString())}` : `${count} ${t("picks.loaded", "loaded")}`;
   host.innerHTML = `<i></i><span>${escapeHtml(label)}</span>`;
 }
 
@@ -852,14 +906,14 @@ function renderPredictions() {
   const primes = primeRows(filtered);
   const grid = $("predictionGrid");
   $("matchCount").textContent = String(primes.length);
-  $("viewAllButton").textContent = state.allPredictions ? "← Prime Picks" : (state.currentRoute === "dashboard" ? "Open Prime Picks →" : "All predictions →");
+  $("viewAllButton").textContent = state.allPredictions ? t("picks.back", "← Prime Picks") : (state.currentRoute === "dashboard" ? t("picks.open", "Open Prime Picks →") : t("picks.all", "All predictions →"));
   grid.classList.toggle("expanded", state.allPredictions);
   $("pickCarouselShell").classList.toggle("expanded", state.allPredictions);
   $("prevPick").hidden = state.allPredictions || primes.length <= 1;
   $("nextPick").hidden = state.allPredictions || primes.length <= 1;
 
   if (!filtered.length) {
-    grid.innerHTML = state.predictions.length ? '<div class="state-card">No current prediction matches these filters.</div>' : '<div class="state-card feed-empty"><strong>No current prediction board</strong><small>BlinQ checked the standard, 7-day and 14-day windows plus the dedicated Prime feed. If this remains empty, the current predictions have not been generated/stored yet.</small><button class="btn btn-ghost" id="emptyRetry" type="button">↻ Retry feed</button></div>'; setTimeout(() => $("emptyRetry")?.addEventListener("click", loadPredictions), 0);
+    grid.innerHTML = state.predictions.length ? '<div class="state-card">No current prediction matches these filters.</div>' : `<div class="state-card feed-empty"><strong>${escapeHtml(t("picks.no_board", "No current prediction board"))}</strong><small>${escapeHtml(t("picks.no_board_detail", "Run Refresh TBT predictions to generate current picks."))}</small><button class="btn btn-ghost" id="emptyRetry" type="button">↻ ${escapeHtml(t("picks.retry", "Retry feed"))}</button></div>`; setTimeout(() => $("emptyRetry")?.addEventListener("click", loadPredictions), 0);
     renderDots([]); return;
   }
 
@@ -888,9 +942,21 @@ function openMatchDialog(match) {
 }
 
 function setRouteHeader(title, subtitle, eyebrow = "TENNIS INTELLIGENCE") {
-  $("pageTitle").textContent = title;
-  $("pageSubtitle").textContent = subtitle;
-  $("pageEyebrow").textContent = eyebrow;
+  const titleKey = ({
+    "Dashboard": "route.dashboard.title",
+    "BlinQ Prime Picks": "route.prime.title",
+    "Tournaments": "nav.tournaments",
+    "Players": "nav.players",
+    "Stats & Insights": "nav.stats",
+    "Model Performance": "nav.model",
+    "Backtests": "nav.backtests",
+    "Account": "nav.account",
+  })[title];
+  $("pageTitle").textContent = titleKey ? t(titleKey, title) : title;
+  if (title === "Dashboard") $("pageSubtitle").textContent = t("route.dashboard.subtitle", subtitle);
+  else if (title === "BlinQ Prime Picks") $("pageSubtitle").textContent = t("route.prime.subtitle", subtitle);
+  else $("pageSubtitle").textContent = subtitle;
+  $("pageEyebrow").textContent = eyebrow === "PRE-MATCH ANALYTICS" ? t("route.prime.eyebrow", eyebrow) : eyebrow === "TENNIS INTELLIGENCE" ? t("route.default.eyebrow", eyebrow) : eyebrow;
 }
 
 function setActiveRoute(route) {
@@ -914,12 +980,12 @@ function navigate(route) {
     if ($("dashboardSnapshot")) $("dashboardSnapshot").hidden = route !== "dashboard";
     if (route === "dashboard") {
       setRouteHeader("Dashboard", "Recommended Prime Picks and current tennis intelligence.");
-      $("picksTitle").textContent = "BlinQ Prime Picks";
-      $("picksSubtitle").textContent = "Top current selections ranked by calibrated model win probability. Quality factors are shown as context.";
+      $("picksTitle").textContent = t("picks.title", "BlinQ Prime Picks");
+      $("picksSubtitle").textContent = t("picks.subtitle", "Top current selections ranked by calibrated model win probability. Quality factors are shown as context.");
     } else {
       setRouteHeader("BlinQ Prime Picks", "The best current selections our model can support with the available data.", "PRE-MATCH ANALYTICS");
-      $("picksTitle").textContent = "BlinQ Prime Picks · Top 10";
-      $("picksSubtitle").textContent = "Top 10 ranked by calibrated model win probability; factor agreement and data depth are tie-breakers only.";
+      $("picksTitle").textContent = t("picks.top10", "BlinQ Prime Picks · Top 10");
+      $("picksSubtitle").textContent = t("picks.subtitle_top10", "Top 10 ranked by calibrated model win probability; factor agreement and data depth are tie-breakers only.");
     }
     renderPredictions();
   } else {
@@ -1685,6 +1751,8 @@ function setupEvents() {
   });
 
   document.addEventListener("click", (event) => {
+    const language = event.target.closest("[data-lang-choice]")?.dataset.langChoice;
+    if (language && supportedLanguages.includes(language)) { localStorage.setItem("blinq_language", language); return; }
     const closeId = event.target.closest("[data-dialog-close]")?.dataset.dialogClose;
     if (closeId) { $(closeId)?.close(); return; }
     if (event.target.closest("[data-upgrade]")) { event.preventDefault(); openUpgrade(); return; }
@@ -1698,6 +1766,8 @@ function setupEvents() {
 }
 
 async function boot() {
+  state.language = resolveLanguage();
+  applyLanguageChrome();
   setupEvents();
   await loadUiConfig();
   state.currentRoute = routeFromHash();
