@@ -230,6 +230,22 @@
           "goat",
           "admin"
         ]
+      },
+      {
+        "id": "bets_beta",
+        "enabled": true,
+        "label": "BlinQ Bets · Beta",
+        "href": "#bets-beta",
+        "icon": "◈",
+        "order": 2.5,
+        "allowed_plans": [
+          "free",
+          "pro",
+          "elite",
+          "legend",
+          "goat",
+          "admin"
+        ]
       }
     ],
     "learn": [
@@ -560,5 +576,13 @@
         "300×400"
       ]
     }
+  },
+  "bets_beta": {
+    "display_limit": 3,
+    "max_slip_selections": 5,
+    "minimum_probability_pct": 0,
+    "selection_basis": "calibrated_model_probability",
+    "odds_status": "not_connected",
+    "beta": true
   }
 }

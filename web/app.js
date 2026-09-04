@@ -1572,8 +1572,74 @@ function renderAdminAccess() {
   $("publishAccessMatrix")?.addEventListener("click",async()=>{try{document.querySelectorAll("[data-access-route]").forEach((row)=>{const item=(state.ui.navigation.main||[]).find((x)=>x.id===row.dataset.accessRoute);if(!item)return;item.allowed_plans=[...row.querySelectorAll("[data-access-plan]:checked")].map((x)=>x.dataset.accessPlan);});await adminRequest("/api/v1/admin/ui-config",{method:"POST",body:JSON.stringify(configForPersistence())});renderNavigation();alert("Plan access published.");}catch(error){alert(`Publish failed: ${error.message}`);}});
 }
 
+
+function loadBetSlip() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("blinq_bet_slip_beta") || "[]");
+    state.betSlip = Array.isArray(raw) ? raw : [];
+  } catch (_) { state.betSlip = []; }
+}
+
+function saveBetSlip() {
+  localStorage.setItem("blinq_bet_slip_beta", JSON.stringify(state.betSlip));
+}
+
+function addToBetSlip(match) {
+  const max = clamp(Number(state.ui?.bets_beta?.max_slip_selections || 5), 1, 10);
+  if (state.betSlip.some((x) => String(x.id) === String(match.id))) return;
+  if (state.betSlip.length >= max) { alert(`Beta bet slip supports up to ${max} selections.`); return; }
+  state.betSlip.push({
+    id: match.id, date: match.date, tour: match.tour, tournament: match.tournament, surface: match.surface,
+    p1: match.p1, p2: match.p2, pick: match.pick, probability: match.probability, confidence: match.confidence,
+    agreement: primeTieBreakers(match).factorAgreement, dataDepth: primeTieBreakers(match).dataDepth
+  });
+  saveBetSlip();
+  if (state.currentRoute === "bets_beta") renderBetsBeta();
+}
+
+function removeFromBetSlip(id) {
+  state.betSlip = state.betSlip.filter((x) => String(x.id) !== String(id));
+  saveBetSlip();
+  if (state.currentRoute === "bets_beta") renderBetsBeta();
+}
+
+function betaBetCard(match, index) {
+  const quality = primeTieBreakers(match);
+  return `<article class="beta-bet-card">
+    <div class="beta-bet-top"><span class="beta-chip">BETA · STRAIGHT PICK</span><span>#${index + 1}</span></div>
+    <div class="beta-bet-match"><small>${escapeHtml(match.tour || "TOUR")} · ${escapeHtml(match.tournament || "Tournament")}</small><strong>${escapeHtml(match.p1)} <em>vs</em> ${escapeHtml(match.p2)}</strong><span>${escapeHtml(String(match.surface || "unknown").replaceAll("_"," "))} · ${escapeHtml(fmtTime(match.date))}</span></div>
+    <div class="beta-bet-selection"><div><small>BlinQ selection</small><strong>${escapeHtml(match.pick || "—")}</strong></div><div><small>Model win probability</small><b>${fmtPct(match.probability)}</b></div></div>
+    <div class="beta-bet-quality"><span>Confidence <strong>${escapeHtml(String(match.confidence || "low").toUpperCase())}</strong></span><span>Agreement <strong>${quality.factorAgreement.toFixed(0)}%</strong></span><span>Data depth <strong>${quality.dataDepth.toFixed(0)}%</strong></span></div>
+    <button class="btn btn-primary btn-full" type="button" data-add-beta-bet="${escapeHtml(match.id)}">Add to Bet Slip</button>
+  </article>`;
+}
+
+function renderBetsBeta() {
+  loadBetSlip();
+  const cfgBet = state.ui?.bets_beta || {};
+  const limit = clamp(Number(cfgBet.display_limit || 3), 1, 10);
+  const minP = Number(cfgBet.minimum_probability_pct || 0);
+  const rows = primeRows(state.predictions).filter((m) => Number(m.probability || 0) >= minP).slice(0, limit);
+  const slipRows = state.betSlip.map((x) => `<article class="bet-slip-row"><div><small>${escapeHtml(x.tournament || "Tournament")}</small><strong>${escapeHtml(x.pick || "—")}</strong><span>${escapeHtml(x.p1)} vs ${escapeHtml(x.p2)}</span></div><div><b>${fmtPct(x.probability)}</b><button class="bet-slip-remove" type="button" data-remove-beta-bet="${escapeHtml(x.id)}" aria-label="Remove">×</button></div></article>`).join("");
+  moduleShell(
+    "BlinQ Bets · Beta",
+    "First model-backed straight selections. Market odds are not connected yet, so no value edge, payout or stake recommendation is invented.",
+    `<div class="bets-beta-intro"><div><span class="module-kicker">EARLY ACCESS</span><h2>First Bets Beta</h2><p>Selections come from the same calibrated probability engine as Prime Picks. This beta is a shortlist workflow, not a bookmaker-value model.</p></div><span class="status-pill neutral">ODDS FEED: NOT CONNECTED</span></div>
+    <div class="bets-beta-layout">
+      <section><div class="section-title-row"><div><span class="module-kicker">MODEL SELECTIONS</span><h3>Top straight picks</h3></div><small>Ranked by calibrated win probability</small></div><div class="beta-bet-grid">${rows.length ? rows.map(betaBetCard).join("") : '<div class="state-card feed-empty"><strong>No current selections</strong><small>Run Refresh TBT predictions to populate this beta board.</small></div>'}</div></section>
+      <aside class="bet-slip-panel"><div class="section-title-row"><div><span class="module-kicker">PERSONAL SHORTLIST</span><h3>Bet Slip · Beta</h3></div><small>${state.betSlip.length} selected</small></div>${slipRows || '<div class="bet-slip-empty">Add one of the model selections to build a shortlist.</div>'}<div class="bet-slip-note"><strong>No bookmaker odds yet</strong><span>Stake, potential return and Value Pick edge stay disabled until a real market-odds feed is connected.</span></div>${state.betSlip.length ? '<button class="btn btn-ghost btn-full" id="clearBetaSlip" type="button">Clear Bet Slip</button>' : ''}</aside>
+    </div>
+    <div class="responsible-beta-note">BlinQ probabilities are analytical estimates, not guarantees. Use the beta as decision support and set your own limits.</div>`
+  );
+  const byId = new Map(state.predictions.map((m)=>[String(m.id),m]));
+  document.querySelectorAll("[data-add-beta-bet]").forEach((button)=>button.addEventListener("click",()=>{const m=byId.get(String(button.dataset.addBetaBet));if(m)addToBetSlip(m);}));
+  document.querySelectorAll("[data-remove-beta-bet]").forEach((button)=>button.addEventListener("click",()=>removeFromBetSlip(button.dataset.removeBetaBet)));
+  $("clearBetaSlip")?.addEventListener("click",()=>{state.betSlip=[];saveBetSlip();renderBetsBeta();});
+}
+
 function renderCurrentModule() {
   const route = state.currentRoute;
+  if (route === "bets_beta") return renderBetsBeta();
   if (route === "tournaments") return renderTournaments();
   if (route === "players") return renderPlayers();
   if (route === "stats") return renderStats();
@@ -1593,6 +1659,7 @@ function routeFromHash() {
   const aliases = {
     "how-it-works": "how_blinq_works",
     "prime-picks": "prime_picks",
+    "bets-beta": "bets_beta",
     "value-picks": "value_picks",
     "ace-picks": "ace_picks",
     "games-sets": "games_sets",
