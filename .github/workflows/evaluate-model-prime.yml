@@ -79,5 +79,7 @@ jobs:
           path: |
             reports/backtest_current.json
             reports/prime_backtest.json
+            reports/prime_backtest.md
+            reports/prime_backtest.csv
           if-no-files-found: warn
           retention-days: 30
