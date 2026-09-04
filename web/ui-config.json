@@ -1,74 +1,109 @@
 {
+  "account": {
+    "display_name": "BlinQ User",
+    "plan": "free",
+    "plan_label": "Free Trial",
+    "entitlement_text": "23 days left",
+    "avatar_url": ""
+  },
+  "branding": {
+    "engine_label": "Engine Talks",
+    "engine_mark": "/assets/engine_goat.png",
+    "blinq_logo": "/assets/blinq_racket_logo.png"
+  },
+  "prime_picks": {
+    "limit": 10,
+    "visible_cards": 5,
+    "probability_weight": 0.58,
+    "data_depth_weight": 0.22,
+    "signal_agreement_weight": 0.20
+  },
+  "plans": [
+    {"id":"pro","label":"PRO","price":"—","features":["Predictions","Tournaments","Prime Picks"]},
+    {"id":"elite","label":"Elite","price":"—","features":["Everything in PRO","Higher plan limits","Priority prediction access"]},
+    {"id":"legend","label":"Legend","price":"—","features":["Players","Stats & Insights","Advanced player analytics"]},
+    {"id":"goat","label":"GOAT","price":"—","features":["Model Performance","Backtests","Full analytics access"]}
+  ],
   "navigation": {
     "main": [
-      {"id":"predictions","enabled":true,"label":"Predictions","href":"#predictions","icon":"◎","order":1},
-      {"id":"tournaments","enabled":true,"label":"Tournaments","href":"#tournaments","icon":"♕","order":2},
-      {"id":"players","enabled":true,"label":"Players","href":"#players","icon":"♙","order":3},
-      {"id":"stats","enabled":true,"label":"Stats & Insights","href":"#stats","icon":"▥","order":4},
-      {"id":"model","enabled":true,"label":"Model Performance","href":"#model","icon":"↗","order":5},
-      {"id":"backtests","enabled":true,"label":"Backtests","href":"#backtests","icon":"◴","order":6},
-      {"id":"account","enabled":true,"label":"Account","href":"#account","icon":"◉","order":7}
+      {"id":"dashboard","enabled":true,"label":"Dashboard","href":"#dashboard","icon":"⌂","order":1,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
+      {"id":"prime_picks","enabled":true,"label":"BlinQ Prime Picks","href":"#prime-picks","icon":"★","order":2,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
+      {"id":"value_picks","enabled":true,"label":"Value Picks","href":"#value-picks","icon":"◇","order":3,"allowed_plans":["legend","goat","admin"],"required_label":"Legend","data_status":"market_odds_required"},
+      {"id":"ace_picks","enabled":true,"label":"Ace Picks · Top 10","href":"#ace-picks","icon":"A","order":4,"allowed_plans":["legend","goat","admin"],"required_label":"Legend","data_status":"ace_model_required"},
+      {"id":"games_sets","enabled":true,"label":"Games & Sets · Top 10","href":"#games-sets","icon":"▦","order":5,"allowed_plans":["legend","goat","admin"],"required_label":"Legend","data_status":"games_sets_model_required"},
+      {"id":"tournaments","enabled":true,"label":"Tournaments","href":"#tournaments","icon":"♛","order":6,"allowed_plans":["pro","elite","legend","goat","admin"],"required_label":"PRO"},
+      {"id":"players","enabled":true,"label":"Players","href":"#players","icon":"♙","order":7,"allowed_plans":["legend","goat","admin"],"required_label":"Legend"},
+      {"id":"stats","enabled":true,"label":"Stats & Insights","href":"#stats","icon":"▥","order":8,"allowed_plans":["legend","goat","admin"],"required_label":"Legend"},
+      {"id":"model","enabled":true,"label":"Model Performance","href":"#model","icon":"↗","order":9,"allowed_plans":["goat","admin"],"required_label":"GOAT"},
+      {"id":"backtests","enabled":true,"label":"Backtests","href":"#backtests","icon":"◴","order":10,"allowed_plans":["goat","admin"],"required_label":"GOAT"},
+      {"id":"account","enabled":true,"label":"Account","href":"#account","icon":"◉","order":11,"allowed_plans":["free","pro","elite","legend","goat","admin"]}
     ],
     "learn": [
-      {"id":"how_blinq_works","enabled":true,"label":"How BlinQ Works","href":"#how-it-works","icon":"◉","order":101},
-      {"id":"methodology","enabled":true,"label":"Methodology","href":"#methodology","icon":"▱","order":102},
-      {"id":"model_data","enabled":true,"label":"Model & Data","href":"#model-data","icon":"◫","order":103},
-      {"id":"faq","enabled":true,"label":"FAQ","href":"#faq","icon":"?","order":104},
-      {"id":"responsible_use","enabled":true,"label":"Responsible Use","href":"#responsible-use","icon":"◇","order":105}
+      {"id":"how_blinq_works","enabled":true,"label":"How BlinQ Works","href":"#how-it-works","icon":"◉","order":101,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
+      {"id":"methodology","enabled":true,"label":"Methodology","href":"#methodology","icon":"▱","order":102,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
+      {"id":"model_data","enabled":true,"label":"Model & Data","href":"#model-data","icon":"◫","order":103,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
+      {"id":"faq","enabled":true,"label":"FAQ","href":"#faq","icon":"?","order":104,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
+      {"id":"responsible_use","enabled":true,"label":"Responsible Use","href":"#responsible-use","icon":"◇","order":105,"allowed_plans":["free","pro","elite","legend","goat","admin"]}
+    ],
+    "admin": [
+      {"id":"admin_users","enabled":true,"label":"User Management","href":"#admin-users","icon":"♟","order":201,"admin_only":true},
+      {"id":"admin_banners","enabled":true,"label":"Banner Manager","href":"#admin-banners","icon":"▣","order":202,"admin_only":true},
+      {"id":"admin_access","enabled":true,"label":"Plan Access","href":"#admin-access","icon":"⌘","order":203,"admin_only":true}
     ]
   },
-  "panels": {
-    "predictionToolbar": {"enabled":true},
-    "predictionsPanel": {"enabled":true},
-    "howBlinqWorks": {"enabled":true},
-    "sidebarPromo": {"enabled":true}
+  "header_ad": {
+    "enabled": true,
+    "label": "Sponsored",
+    "headline": "Premium tennis partner slot",
+    "text": "Header inventory",
+    "link": "#account",
+    "image": ""
   },
-  "banners": {
-    "home_banner_top": {
-      "enabled": true,
-      "target": "bannerTop",
-      "link": "#account",
-      "link_target": "_self",
-      "sponsored": true,
-      "eyebrow": "SPONSORED",
-      "headline": "Premium tennis analytics, powered by AI.",
-      "text": "Model confidence, surface context, form and matchup signals in one transparent workflow.",
-      "button_text": "Unlock Full Power",
-      "meta": "Configurable ad/promo slot"
+  "banner_zones": {
+    "top": {
+      "count": 1,
+      "items": [
+        {
+          "enabled": true,
+          "sponsored": true,
+          "eyebrow": "SPONSORED",
+          "headline": "Premium tennis analytics, powered by AI.",
+          "text": "Model confidence, surface context, form and matchup signals in one transparent workflow.",
+          "button_text": "Unlock Full Power",
+          "link": "#account",
+          "image": "/assets/banner_art.png"
+        },
+        {"enabled":true,"sponsored":true,"eyebrow":"SPONSORED","headline":"Partner banner 2","text":"Second top placement.","button_text":"Open","link":"#account","image":""},
+        {"enabled":true,"sponsored":true,"eyebrow":"SPONSORED","headline":"Partner banner 3","text":"Third top placement.","button_text":"Open","link":"#account","image":""},
+        {"enabled":true,"sponsored":true,"eyebrow":"SPONSORED","headline":"Partner banner 4","text":"Fourth top placement.","button_text":"Open","link":"#account","image":""}
+      ]
     },
-    "home_banner_middle": {
-      "enabled": false,
-      "target": "bannerMiddle",
-      "link": "#account",
-      "link_target": "_self",
-      "sponsored": true,
-      "eyebrow": "SPONSORED",
-      "headline": "Partner banner",
-      "text": "Enable this slot when needed.",
-      "button_text": "Open"
-    },
-    "home_banner_bottom": {
-      "enabled": false,
-      "target": "bannerBottom",
-      "link": "#account",
-      "link_target": "_self",
-      "sponsored": true,
-      "eyebrow": "SPONSORED",
-      "headline": "Partner banner",
-      "text": "Enable this slot when needed.",
-      "button_text": "Open"
-    }
-  },
-  "ads": {
-    "lower_right": {
-      "enabled": true,
-      "target": "adLowerRight",
-      "label": "Ad",
-      "headline": "Sharper insights. Stronger workflow.",
-      "text": "Reserved for a sponsored tennis or analytics partner.",
-      "button_text": "See Partner",
-      "link": "#account",
-      "link_target": "_self"
+    "bottom": {
+      "count": 2,
+      "items": [
+        {
+          "enabled": true,
+          "sponsored": false,
+          "eyebrow": "BLINQ",
+          "headline": "24h Free Trial",
+          "text": "Explore Prime Picks, tournaments and the current prediction board before choosing a plan.",
+          "button_text": "View Plans",
+          "link": "#account",
+          "image": ""
+        },
+        {
+          "enabled": true,
+          "sponsored": true,
+          "eyebrow": "AD",
+          "headline": "Sharper insights. Stronger workflow.",
+          "text": "Reserved for a sponsored tennis or analytics partner.",
+          "button_text": "See Partner",
+          "link": "#account",
+          "image": ""
+        },
+        {"enabled":true,"sponsored":true,"eyebrow":"AD","headline":"Partner placement 3","text":"Third lower placement.","button_text":"Open","link":"#account","image":""},
+        {"enabled":true,"sponsored":true,"eyebrow":"AD","headline":"Partner placement 4","text":"Fourth lower placement.","button_text":"Open","link":"#account","image":""}
+      ]
     }
   }
 }

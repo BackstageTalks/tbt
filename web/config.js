@@ -3,5 +3,5 @@ window.BLINQ_CONFIG = {
   authMode: "none",
   predictionsDays: 3,
   refreshMinutes: 5,
-  uiConfigPath: "/ui-config.json?v=20260904-1"
+  uiConfigPath: "/ui-config.json"
 };

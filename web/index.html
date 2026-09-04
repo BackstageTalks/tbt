@@ -5,166 +5,145 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#050912" />
   <title>BlinQ · Tennis Intelligence</title>
-  <link rel="stylesheet" href="/styles.css?v=20260904-1" />
+  <link rel="stylesheet" href="/styles.css?v=20260904-3" />
 </head>
 <body>
-  <div class="app-shell" id="appShell" hidden>
+  <div class="app-shell" id="appShell">
     <aside class="sidebar">
-      <a class="brand" href="#predictions" aria-label="BlinQ home">
-        <span class="brand-ball" aria-hidden="true">Q</span>
-        <span class="brand-word">Blin<span>Q</span></span>
+      <a class="engine-brand" href="#dashboard" data-route="dashboard" aria-label="Home">
+        <img src="/assets/engine_goat.png" alt="" class="engine-mark" />
+        <span class="engine-copy"><small>by</small><strong>Engine Talks</strong></span>
       </a>
 
-      <nav class="nav-section" aria-label="Main navigation">
+      <nav class="nav-section nav-main" aria-label="Product navigation">
         <div class="nav-items" id="mainNavigation"></div>
       </nav>
 
       <div class="nav-divider"></div>
-      <div class="nav-label">Learn</div>
-      <nav class="nav-section learn-nav" aria-label="Learn navigation">
-        <div class="nav-items" id="learnNavigation"></div>
-      </nav>
+      <details class="learn-group" open>
+        <summary>Learn</summary>
+        <nav class="nav-section learn-nav" aria-label="Learn navigation">
+          <div class="nav-items" id="learnNavigation"></div>
+        </nav>
+      </details>
+
+      <section class="admin-nav" id="adminNavigationSection" hidden>
+        <div class="nav-divider"></div>
+        <div class="nav-label">Admin</div>
+        <nav class="nav-section"><div class="nav-items" id="adminNavigation"></div></nav>
+      </section>
 
       <div class="sidebar-spacer"></div>
       <section class="upgrade-card" id="sidebarPromo">
         <div class="upgrade-icon">♛</div>
         <strong>Unlock full power</strong>
-        <p>Get access to all predictions, backtests and advanced analytics.</p>
-        <button class="btn btn-primary btn-full" data-route="account" type="button">Upgrade Now</button>
+        <p>Prime Picks, advanced analytics and premium modules are unlocked by plan.</p>
+        <button class="btn btn-primary btn-full" data-upgrade type="button">Upgrade</button>
       </section>
     </aside>
 
     <main class="main">
-      <header class="topbar">
-        <div class="topbar-copy">
-          <div class="eyebrow" id="pageEyebrow">PRE-MATCH ANALYTICS</div>
-          <div class="title-row">
-            <h1 id="pageTitle">Today's Predictions</h1>
-            <span class="today-label" id="todayLabel"></span>
+      <header class="topbar product-topbar">
+        <div class="product-brand-wrap">
+          <img class="product-logo" src="/assets/blinq_racket_logo.png" alt="BlinQ" />
+          <div class="route-copy">
+            <div class="eyebrow" id="pageEyebrow">TENNIS INTELLIGENCE</div>
+            <div class="title-row compact-title-row">
+              <h1 id="pageTitle">Dashboard</h1>
+              <span class="today-label" id="todayLabel"></span>
+            </div>
+            <p class="subtitle" id="pageSubtitle">Your strongest current model selections and live tennis intelligence.</p>
           </div>
-          <p class="subtitle" id="pageSubtitle">Live model output from the currently available TBT data.</p>
         </div>
 
-        <div class="topbar-actions">
-          <div class="last-update">Last update: <strong id="updatedAt">—</strong></div>
-          <div class="trial-chip"><span>TRIAL</span><strong id="trialRemaining">24h</strong></div>
-          <button class="btn btn-primary" data-route="account" type="button">♛ Upgrade</button>
-          <button class="profile-button" id="profileButton" type="button">
-            <span class="avatar" id="avatar">B</span>
+        <a id="headerSponsor" class="header-sponsor" href="#" hidden>
+          <span class="header-sponsor-label">Sponsored</span>
+          <span class="header-sponsor-copy"><strong>Partner placement</strong><small>Premium header inventory</small></span>
+        </a>
+
+        <div class="topbar-actions account-actions">
+          <div class="plan-chip" id="planChip"><span id="planName">FREE</span><strong id="planEntitlement">23 days left</strong></div>
+          <button class="btn btn-primary upgrade-top" data-upgrade type="button">♛ Upgrade</button>
+          <button class="profile-button profile-button-large" id="profileButton" data-route="account" type="button">
+            <span class="avatar avatar-large" id="avatar">BU</span>
             <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small id="profilePlan">Free Trial</small></span>
             <span aria-hidden="true">⌄</span>
           </button>
         </div>
       </header>
 
-      <section class="toolbar" id="predictionToolbar" aria-label="Prediction filters">
-        <label><span class="sr-only">Tour</span><select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select></label>
-        <label><span class="sr-only">Tournament</span><select id="tournamentFilter"><option value="">All Tournaments</option></select></label>
-        <label><span class="sr-only">Surface</span><select id="surfaceFilter"><option value="">All Surfaces</option></select></label>
-        <label><span class="sr-only">Confidence</span><select id="confidenceFilter"><option value="">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
-        <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search matches or players…" /></label>
-      </section>
-
-      <section id="bannerTop" class="banner-slot" hidden></section>
-
-      <section class="picks-panel" id="predictionsPanel">
-        <div class="panel-head picks-head">
-          <div>
-            <div class="section-kicker"><span>✦</span> AI Top Picks</div>
-            <p>Highest-confidence matches in the current view. Factors are visualized from TBT model features.</p>
-          </div>
-          <div class="panel-actions">
-            <span class="match-count"><strong id="matchCount">0</strong> matches</span>
-            <button class="btn btn-ghost" id="refreshButton" type="button">↻ Refresh</button>
-            <button class="btn btn-ghost" id="viewAllButton" type="button">View all matches →</button>
-          </div>
-        </div>
-
-        <div class="pick-carousel-shell" id="pickCarouselShell">
-          <button class="carousel-arrow carousel-arrow-left" id="prevPick" type="button" aria-label="Previous featured pick">‹</button>
-          <div class="pick-carousel" id="predictionGrid">
-            <div class="state-card">Loading predictions…</div>
-          </div>
-          <button class="carousel-arrow carousel-arrow-right" id="nextPick" type="button" aria-label="Next featured pick">›</button>
-        </div>
-        <div class="carousel-dots" id="carouselDots" aria-label="Pick carousel pages"></div>
-      </section>
-
-      <section id="bannerMiddle" class="banner-slot" hidden></section>
-
-      <section class="lower-grid">
-        <section class="learn-panel" id="howBlinqWorks">
-          <div class="panel-head compact">
-            <div><h2>How BlinQ Works</h2><p>Advanced AI. Real data. Transparent model output.</p></div>
-          </div>
-          <div class="steps-grid">
-            <article><span>◫</span><strong>1. Real Data</strong><p>Historical results and pre-match information are processed point-in-time.</p></article>
-            <article><span>◎</span><strong>2. AI Model</strong><p>The model combines strength, surface, form, workload and matchup signals.</p></article>
-            <article><span>↗</span><strong>3. Predictions</strong><p>Each match receives a calibrated probability and confidence band.</p></article>
-            <article><span>⌕</span><strong>4. Insights</strong><p>Key factors show which side each model signal favours before the match.</p></article>
-            <article><span>♕</span><strong>5. Better Decisions</strong><p>Use probabilities and model context instead of a single opaque pick.</p></article>
-          </div>
+      <section id="dashboardView">
+        <section class="toolbar" id="predictionToolbar" aria-label="Prediction filters">
+          <label><span class="sr-only">Tour</span><select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select></label>
+          <label><span class="sr-only">Tournament</span><select id="tournamentFilter"><option value="">All Tournaments</option></select></label>
+          <label><span class="sr-only">Surface</span><select id="surfaceFilter"><option value="">All Surfaces</option></select></label>
+          <label><span class="sr-only">Confidence</span><select id="confidenceFilter"><option value="">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
+          <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search matches or players…" /></label>
         </section>
 
-        <aside class="lower-side">
-          <section class="trial-card" id="trialCard">
-            <div>
-              <span class="trial-eyebrow">BLINQ TRIAL</span>
-              <h2>24h Free Trial</h2>
-              <p>Full access to the prediction board and model insights.</p>
-              <ul>
-                <li>All current predictions</li>
-                <li>Backtests & performance</li>
-                <li>Advanced analytics</li>
-                <li>Data & model insights</li>
-              </ul>
-            </div>
-            <button class="btn btn-primary btn-full" data-route="account" type="button">Start Your Trial Now</button>
-            <div class="trial-racket" aria-hidden="true"></div>
-          </section>
+        <section id="bannerZoneTop" class="banner-zone" aria-label="Sponsored content"></section>
 
-          <section class="ad-card" id="adLowerRight" hidden></section>
-        </aside>
+        <section class="picks-panel prime-panel" id="predictionsPanel">
+          <div class="panel-head picks-head">
+            <div>
+              <div class="section-kicker"><span>✦</span> <span id="picksTitle">BlinQ Prime Picks</span></div>
+              <p id="picksSubtitle">Our strongest model selections based on confidence, data quality and signal agreement.</p>
+            </div>
+            <div class="panel-actions">
+              <span class="match-count"><strong id="matchCount">0</strong> Prime Picks</span>
+              <button class="btn btn-ghost" id="refreshButton" type="button">↻ Refresh</button>
+              <button class="btn btn-ghost" id="viewAllButton" type="button">All predictions →</button>
+            </div>
+          </div>
+
+          <div class="pick-carousel-shell" id="pickCarouselShell">
+            <button class="carousel-arrow carousel-arrow-left" id="prevPick" type="button" aria-label="Previous Prime Pick">‹</button>
+            <div class="pick-carousel" id="predictionGrid">
+              <div class="state-card">Loading predictions…</div>
+            </div>
+            <button class="carousel-arrow carousel-arrow-right" id="nextPick" type="button" aria-label="Next Prime Pick">›</button>
+          </div>
+          <div class="carousel-dots" id="carouselDots" aria-label="Prime Pick selector"></div>
+        </section>
+
+        <section id="bannerZoneBottom" class="banner-zone banner-zone-bottom" aria-label="Promotions"></section>
       </section>
 
-      <section id="bannerBottom" class="banner-slot" hidden></section>
+      <section id="moduleView" class="module-view" hidden></section>
 
       <footer>
         <div class="footer-brand">Blin<span>Q</span></div>
         <div>© 2026 BlinQ</div>
-        <a href="#methodology">Methodology</a>
-        <a href="#responsible-use">Responsible Use</a>
+        <a href="#methodology" data-route="methodology">Methodology</a>
+        <a href="#responsible-use" data-route="responsible_use">Responsible Use</a>
         <a href="#privacy">Privacy Policy</a>
       </footer>
     </main>
   </div>
 
-  <div class="login-screen" id="loginScreen" hidden>
-    <div class="login-glow login-glow-a"></div>
-    <div class="login-glow login-glow-b"></div>
-    <section class="login-card">
-      <a class="brand login-brand" href="#" aria-label="BlinQ home">
-        <span class="brand-ball">Q</span>
-        <span class="brand-word">Blin<span>Q</span></span>
-      </a>
-      <div class="login-kicker">TENNIS INTELLIGENCE</div>
-      <h1>Welcome to BlinQ</h1>
-      <p>Sign in to open your predictions dashboard.</p>
-      <form id="loginForm">
-        <label>Email<input id="emailInput" autocomplete="email" type="email" placeholder="you@example.com" required /></label>
-        <label>Display name<input id="nameInput" autocomplete="name" type="text" placeholder="Your name" /></label>
-        <button class="btn btn-primary btn-full" type="submit">Enter BlinQ</button>
-      </form>
-      <div class="preview-note" id="previewNote">Preview login is enabled for UI testing. Production authentication can remain separate.</div>
-    </section>
-  </div>
-
   <dialog id="matchDialog" class="match-dialog">
-    <button class="dialog-close" id="dialogClose" aria-label="Close">×</button>
+    <button class="dialog-close" data-dialog-close="matchDialog" aria-label="Close">×</button>
     <div id="dialogContent"></div>
   </dialog>
 
-  <script src="/config.js?v=20260904-1"></script>
-  <script src="/app.js?v=20260904-1"></script>
+  <dialog id="lockedDialog" class="match-dialog access-dialog">
+    <button class="dialog-close" data-dialog-close="lockedDialog" aria-label="Close">×</button>
+    <div class="dialog-eyebrow">PREMIUM MODULE</div>
+    <h2 id="lockedTitle">Upgrade required</h2>
+    <p id="lockedText" class="dialog-copy">This module is visible so you can see what is available on higher plans.</p>
+    <div class="access-required"><span>Required plan</span><strong id="lockedPlan">Legend</strong></div>
+    <button class="btn btn-primary btn-full" data-upgrade type="button">View upgrade options</button>
+  </dialog>
+
+  <dialog id="upgradeDialog" class="match-dialog upgrade-dialog">
+    <button class="dialog-close" data-dialog-close="upgradeDialog" aria-label="Close">×</button>
+    <div class="dialog-eyebrow">BLINQ PLANS</div>
+    <h2>Choose your level</h2>
+    <p class="dialog-copy">The checkout window can be connected separately. This UI is ready for plan routing.</p>
+    <div class="plan-grid" id="planGrid"></div>
+  </dialog>
+
+  <script src="/config.js?v=20260904-3"></script>
+  <script src="/app.js?v=20260904-3"></script>
 </body>
 </html>
