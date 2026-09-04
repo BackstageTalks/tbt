@@ -7,6 +7,7 @@ const state = {
   currentRoute: "dashboard",
   featuredIndex: 0,
   allPredictions: false,
+  playerProfiles: [],
 };
 
 const $ = (id) => document.getElementById(id);
@@ -159,6 +160,8 @@ function startPublicSession() {
 
 function renderBranding() {
   const branding = state.ui?.branding || {};
+  const engineLogo = document.querySelector(".engine-full-logo");
+  if (engineLogo && branding.engine_logo) engineLogo.src = branding.engine_logo;
   const engineMark = document.querySelector(".engine-mark");
   if (engineMark && branding.engine_mark) engineMark.src = branding.engine_mark;
   const engineText = document.querySelector(".engine-copy strong");
@@ -536,10 +539,9 @@ function primeLevel(match, rankIndex) {
   const topThreshold = Number(settings.top_prime_probability_pct ?? 90);
   const primeThreshold = Number(settings.prime_probability_pct ?? 80);
   const probability = primeRankingValue(match);
-  if (rankIndex === 0) return "top_prime_1";
-  if (probability >= topThreshold) return "top_prime";
+  if (probability >= topThreshold) return rankIndex === 0 ? "top_prime_1" : "top_prime";
   if (probability >= primeThreshold) return "prime";
-  return "prime";
+  return "candidate";
 }
 
 function factorValueLabel(factor) {
@@ -577,7 +579,9 @@ function cardHtml(match, featured = false, rankIndex = 0) {
     ? '<div class="featured-ribbon"><span>★ TOP PRIME · #1</span></div>'
     : level === "top_prime"
       ? '<div class="prime-badge prime-badge-top">★ TOP PRIME</div>'
-      : '<div class="prime-badge">★ PRIME PICK</div>';
+      : level === "prime"
+        ? '<div class="prime-badge">★ PRIME PICK</div>'
+        : '<div class="prime-badge prime-badge-candidate">PRIME CANDIDATE</div>';
   const quality = primeTieBreakers(match);
   return `<article class="pick-card${featured ? " featured" : ""}" data-match-id="${escapeHtml(match.id)}" tabindex="0" role="button">
     ${ribbon}
@@ -626,8 +630,48 @@ function bindCards(rows) {
   });
 }
 
+function median(values) {
+  const nums = values.map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+  if (!nums.length) return null;
+  const mid = Math.floor(nums.length / 2);
+  return nums.length % 2 ? nums[mid] : (nums[mid - 1] + nums[mid]) / 2;
+}
+
+function renderDashboardSnapshot(rows = currentFilteredPredictions()) {
+  const host = $("dashboardSnapshot");
+  if (!host) return;
+  if (state.currentRoute !== "dashboard") { host.hidden = true; return; }
+  host.hidden = false;
+
+  const sorted = [...rows].sort((a, b) => primeRankingValue(b) - primeRankingValue(a));
+  const top = sorted[0];
+  const high = rows.filter((m) => m.confidence === "high").length;
+  const tournaments = new Set(rows.map((m) => m.tournament).filter(Boolean)).size;
+  const depthValues = rows.map((m) => primeTieBreakers(m).dataDepth);
+  const medianDepth = median(depthValues);
+  const threshold = Number(state.ui?.prime_picks?.prime_probability_pct ?? 80);
+  const thresholdCount = rows.filter((m) => primeRankingValue(m) >= threshold).length;
+
+  const cards = [
+    ["Upcoming", fmtInt(rows.length), "current board"],
+    ["Top probability", top ? fmtPct(top.probability) : "—", top ? top.pick : "no current pick"],
+    [`≥ ${threshold.toFixed(0)}%`, fmtInt(thresholdCount), "current candidates"],
+    ["High confidence", fmtInt(high), "model confidence band"],
+    ["Tournaments", fmtInt(tournaments), "active in feed"],
+    ["Median data depth", medianDepth == null ? "—" : `${medianDepth.toFixed(0)}%`, "context quality"],
+  ];
+
+  host.innerHTML = cards.map(([label, value, note]) => `
+    <article class="snapshot-card">
+      <small>${escapeHtml(label)}</small>
+      <strong>${escapeHtml(value)}</strong>
+      <span>${escapeHtml(note)}</span>
+    </article>`).join("");
+}
+
 function renderPredictions() {
   const filtered = currentFilteredPredictions();
+  renderDashboardSnapshot(filtered);
   const primes = primeRows(filtered);
   const grid = $("predictionGrid");
   $("matchCount").textContent = String(primes.length);
@@ -655,6 +699,7 @@ function renderPredictions() {
 }
 
 function openMatchDialog(match) {
+  $("matchDialog")?.classList.remove("player-profile-dialog");
   const factors = modelFactors(match);
   $("dialogContent").innerHTML = `<div class="dialog-eyebrow">${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}${match.round ? ` · ${escapeHtml(match.round)}` : ""}</div>
     <h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2>
@@ -689,6 +734,7 @@ function navigate(route) {
     $("dashboardView").hidden = false; $("moduleView").hidden = true;
     $("bannerZoneTop").hidden = route !== "dashboard";
     $("bannerZoneBottom").hidden = route !== "dashboard";
+    if ($("dashboardSnapshot")) $("dashboardSnapshot").hidden = route !== "dashboard";
     if (route === "dashboard") {
       setRouteHeader("Dashboard", "Recommended Prime Picks and current tennis intelligence.");
       $("picksTitle").textContent = "BlinQ Prime Picks";
@@ -719,57 +765,274 @@ function renderTournaments() {
     groups.get(key).push(m);
   });
 
-  const cards = [...groups.entries()]
-    .sort((a, b) => {
-      const aTop = Math.max(...a[1].map((x) => Number(x.probability || 0)));
-      const bTop = Math.max(...b[1].map((x) => Number(x.probability || 0)));
-      return bTop - aTop || a[0].localeCompare(b[0]);
-    })
-    .map(([name, rows]) => {
-      const top = [...rows].sort((a, b) => Number(b.probability || 0) - Number(a.probability || 0))[0];
-      const surfaces = [...new Set(rows.map((x) => x.surface || "unknown"))];
-      const tours = [...new Set(rows.map((x) => x.tour || "Unknown"))];
-      const high = rows.filter((x) => x.confidence === "high").length;
+  const buildRows = () => [...groups.entries()].map(([name, rows]) => {
+    const sorted = [...rows].sort((a, b) => primeRankingValue(b) - primeRankingValue(a));
+    return {
+      name,
+      rows,
+      top: sorted[0] || null,
+      second: sorted[1] || null,
+      surfaces: [...new Set(rows.map((x) => String(x.surface || "unknown").replaceAll("_", " ")))],
+      tours: [...new Set(rows.map((x) => x.tour || "Unknown"))],
+      high: rows.filter((x) => x.confidence === "high").length,
+      topProbability: sorted[0] ? primeRankingValue(sorted[0]) : 0,
+    };
+  });
+
+  moduleShell(
+    "Tournaments",
+    "Explore tournaments currently represented in the prediction feed.",
+    `<div class="module-toolbar">
+      <label class="search-box module-search"><span aria-hidden="true">⌕</span><input id="tournamentSearch" type="search" placeholder="Search tournaments…" /></label>
+      <label class="module-select-label">Sort
+        <select id="tournamentSort">
+          <option value="probability">Strongest probability</option>
+          <option value="matches">Most matches</option>
+          <option value="name">Name A–Z</option>
+        </select>
+      </label>
+    </div>
+    <div class="module-grid" id="tournamentGrid"></div>`
+  );
+
+  const renderGrid = () => {
+    const q = String($("tournamentSearch")?.value || "").trim().toLowerCase();
+    const sort = $("tournamentSort")?.value || "probability";
+    let items = buildRows().filter((item) => !q || `${item.name} ${item.tours.join(" ")} ${item.surfaces.join(" ")}`.toLowerCase().includes(q));
+    items.sort((a, b) => sort === "matches"
+      ? b.rows.length - a.rows.length || b.topProbability - a.topProbability
+      : sort === "name"
+        ? a.name.localeCompare(b.name)
+        : b.topProbability - a.topProbability || b.rows.length - a.rows.length);
+
+    const cards = items.map((item) => {
+      const topPicks = [item.top, item.second].filter(Boolean);
       return `<article class="data-tile tournament-tile">
-        <div class="tile-topline"><span>${escapeHtml(tours.join(" / "))}</span><small>${rows.length} match${rows.length === 1 ? "" : "es"}</small></div>
-        <h3>${escapeHtml(name)}</h3>
-        <p>${escapeHtml(surfaces.join(" · "))} · ${high} high-confidence</p>
-        ${top ? `<div class="mini-pick"><span>Top current model pick</span><strong>${escapeHtml(top.pick)}</strong><b>${fmtPct(top.probability)}</b></div>` : ""}
-        <button class="btn btn-ghost tournament-open" type="button" data-open-tournament="${escapeHtml(name)}">View predictions →</button>
+        <div class="tile-topline"><span>${escapeHtml(item.tours.join(" / "))}</span><small>${item.rows.length} match${item.rows.length === 1 ? "" : "es"}</small></div>
+        <h3>${escapeHtml(item.name)}</h3>
+        <p>${escapeHtml(item.surfaces.join(" · "))} · ${item.high} high-confidence</p>
+        <div class="tournament-picks">
+          ${topPicks.map((pick, index) => `<div class="mini-pick"><span>${index === 0 ? "Strongest current pick" : "Next current pick"}</span><strong>${escapeHtml(pick.pick)}</strong><b>${fmtPct(pick.probability)}</b></div>`).join("")}
+        </div>
+        <button class="btn btn-ghost tournament-open" type="button" data-open-tournament="${escapeHtml(item.name)}">View predictions →</button>
       </article>`;
     }).join("");
 
-  moduleShell("Tournaments", "Current tournaments ranked by their strongest available model selection.", `<div class="module-grid">${cards || '<div class="state-card">No current tournaments in the prediction feed.</div>'}</div>`);
-  document.querySelectorAll("[data-open-tournament]").forEach((button) => button.addEventListener("click", () => {
-    navigate("prime_picks");
-    const select = $("tournamentFilter");
-    if (select) { select.value = button.dataset.openTournament || ""; state.featuredIndex = 0; renderPredictions(); }
-  }));
+    $("tournamentGrid").innerHTML = cards || '<div class="state-card">No current tournaments match this search.</div>';
+    document.querySelectorAll("[data-open-tournament]").forEach((button) => button.addEventListener("click", () => {
+      navigate("prime_picks");
+      const select = $("tournamentFilter");
+      if (select) {
+        select.value = button.dataset.openTournament || "";
+        state.featuredIndex = 0;
+        renderPredictions();
+      }
+    }));
+  };
+
+  $("tournamentSearch")?.addEventListener("input", renderGrid);
+  $("tournamentSort")?.addEventListener("change", renderGrid);
+  renderGrid();
+}
+
+
+function buildPlayerProfiles() {
+  const players = new Map();
+
+  const add = (match, side) => {
+    const isP1 = side === 1;
+    const id = isP1 ? match.p1Id : match.p2Id;
+    const name = isP1 ? match.p1 : match.p2;
+    const rank = isP1 ? match.p1Rank : match.p2Rank;
+    const image = isP1 ? match.p1Image : match.p2Image;
+    const probability = Number(isP1 ? match.p1Prob : match.p2Prob);
+    const opponent = isP1 ? match.p2 : match.p1;
+    const opponentRank = isP1 ? match.p2Rank : match.p1Rank;
+    const key = String(id || name || "");
+    if (!key) return;
+
+    if (!players.has(key)) players.set(key, { key, id, name, rank, image, matches: [] });
+    const profile = players.get(key);
+    if (!profile.rank && rank) profile.rank = rank;
+    if (!profile.image && image) profile.image = image;
+    const selected = String(match.pickId ?? "") === String(id ?? "")
+      || String(match.pick || "").trim().toLowerCase() === String(name || "").trim().toLowerCase();
+    profile.matches.push({ match, probability: Number.isFinite(probability) ? probability : 0, opponent, opponentRank, selected });
+  };
+
+  state.predictions.forEach((match) => { add(match, 1); add(match, 2); });
+
+  return [...players.values()].map((profile) => {
+    const probabilities = profile.matches.map((x) => x.probability).filter((x) => x > 0);
+    profile.avgProbability = probabilities.length ? probabilities.reduce((a, b) => a + b, 0) / probabilities.length : 0;
+    profile.bestProbability = probabilities.length ? Math.max(...probabilities) : 0;
+    profile.selectedCount = profile.matches.filter((x) => x.selected).length;
+    profile.surfaces = [...new Set(profile.matches.map((x) => x.match.surface).filter(Boolean))];
+    return profile;
+  });
+}
+
+function fmtPlayerProb(value) {
+  return Number(value) > 0 ? fmtPct(value) : "—";
+}
+
+function openPlayerProfile(index) {
+  const profile = state.playerProfiles[Number(index)];
+  if (!profile) return;
+  $("matchDialog")?.classList.add("player-profile-dialog");
+  const strongest = [...profile.matches].sort((a, b) => b.probability - a.probability)[0];
+  const rows = [...profile.matches]
+    .sort((a, b) => new Date(a.match.date || 0) - new Date(b.match.date || 0))
+    .map((entry) => `<tr>
+      <td><strong>${escapeHtml(entry.opponent)}</strong>${entry.opponentRank ? `<small>#${escapeHtml(entry.opponentRank)}</small>` : ""}</td>
+      <td>${escapeHtml(entry.match.tournament || "—")}</td>
+      <td>${escapeHtml(String(entry.match.surface || "unknown").replaceAll("_", " "))}</td>
+      <td>${escapeHtml(fmtDate(entry.match.date))} · ${escapeHtml(fmtTime(entry.match.date))}</td>
+      <td><strong>${escapeHtml(fmtPlayerProb(entry.probability))}</strong></td>
+      <td>${entry.selected ? '<span class="status-pill positive">BLINQ PICK</span>' : '<span class="status-pill neutral">OPPONENT PICK</span>'}</td>
+    </tr>`).join("");
+
+  $("dialogContent").innerHTML = `
+    <div class="player-profile-hero">
+      ${playerAvatarHtml(profile.name, profile.image)}
+      <div><div class="dialog-eyebrow">CURRENT BOARD PLAYER PROFILE</div><h2>${escapeHtml(profile.name)}</h2><p>${profile.rank ? `Rank #${escapeHtml(profile.rank)}` : "Ranking unavailable"} · ${profile.matches.length} current match${profile.matches.length === 1 ? "" : "es"}</p></div>
+    </div>
+    <div class="metric-grid player-profile-metrics">
+      ${metricCard("Current Matches", fmtInt(profile.matches.length), "prediction horizon")}
+      ${metricCard("Average Probability", fmtPlayerProb(profile.avgProbability), "current board only")}
+      ${metricCard("Strongest Probability", fmtPlayerProb(profile.bestProbability), strongest ? `vs ${strongest.opponent}` : "—")}
+      ${metricCard("Selected Picks", fmtInt(profile.selectedCount), "BlinQ winner selections")}
+    </div>
+    <div class="table-wrap player-match-table-wrap"><table class="performance-table player-match-table">
+      <thead><tr><th>Opponent</th><th>Tournament</th><th>Surface</th><th>Start</th><th>Player probability</th><th>Model side</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <p class="technical-note">This profile summarizes only matches currently loaded in the prediction horizon. It is not a fabricated career-stat profile and does not replace a dedicated historical player analytics API.</p>`;
+  $("matchDialog").showModal();
 }
 
 function renderPlayers() {
-  const players = new Map();
-  state.predictions.forEach((m) => {
-    [[m.p1Id, m.p1, m.p1Rank, m.p1Image], [m.p2Id, m.p2, m.p2Rank, m.p2Image]].forEach(([id, name, rank, image]) => {
-      const key = String(id || name); if (!players.has(key)) players.set(key, { name, rank, image, matches: 0 }); players.get(key).matches += 1;
-    });
-  });
-  const body = [...players.values()].sort((a, b) => Number(a.rank || 9999) - Number(b.rank || 9999)).slice(0, 30).map((p) => `<article class="player-list-card">${playerAvatarHtml(p.name, p.image)}<div><strong>${escapeHtml(p.name)}</strong><small>${p.rank ? `Rank #${escapeHtml(p.rank)}` : "Ranking unavailable"} · ${p.matches} current match${p.matches === 1 ? "" : "es"}</small></div><button class="btn btn-ghost" type="button">Profile</button></article>`).join("");
-  moduleShell("Players", "Player profiles and extended statistics for higher tiers.", `<div class="player-list">${body || '<div class="state-card">No players in the current prediction feed.</div>'}</div>`);
+  state.playerProfiles = buildPlayerProfiles();
+
+  moduleShell(
+    "Players",
+    "Current-player explorer built only from the live prediction board; no career statistics are invented.",
+    `<div class="module-toolbar">
+      <label class="search-box module-search"><span aria-hidden="true">⌕</span><input id="playerSearch" type="search" placeholder="Search players…" /></label>
+      <label class="module-select-label">Sort
+        <select id="playerSort">
+          <option value="rank">Official rank</option>
+          <option value="probability">Strongest current probability</option>
+          <option value="matches">Current matches</option>
+          <option value="name">Name A–Z</option>
+        </select>
+      </label>
+    </div>
+    <div class="player-list" id="playerList"></div>`
+  );
+
+  const renderList = () => {
+    const q = String($("playerSearch")?.value || "").trim().toLowerCase();
+    const sort = $("playerSort")?.value || "rank";
+    let rows = state.playerProfiles.map((p, index) => ({ p, index }))
+      .filter(({ p }) => !q || `${p.name} ${p.surfaces.join(" ")}`.toLowerCase().includes(q));
+
+    rows.sort((a, b) => sort === "probability"
+      ? b.p.bestProbability - a.p.bestProbability || Number(a.p.rank || 99999) - Number(b.p.rank || 99999)
+      : sort === "matches"
+        ? b.p.matches.length - a.p.matches.length || b.p.bestProbability - a.p.bestProbability
+        : sort === "name"
+          ? a.p.name.localeCompare(b.p.name)
+          : Number(a.p.rank || 99999) - Number(b.p.rank || 99999) || a.p.name.localeCompare(b.p.name));
+
+    $("playerList").innerHTML = rows.slice(0, 60).map(({ p, index }) => `<article class="player-list-card">
+      ${playerAvatarHtml(p.name, p.image)}
+      <div><strong>${escapeHtml(p.name)}</strong><small>${p.rank ? `Rank #${escapeHtml(p.rank)}` : "Ranking unavailable"} · ${p.matches.length} current match${p.matches.length === 1 ? "" : "es"} · best ${escapeHtml(fmtPlayerProb(p.bestProbability))}</small></div>
+      <button class="btn btn-ghost" type="button" data-player-profile="${index}">Profile</button>
+    </article>`).join("") || '<div class="state-card">No current players match this search.</div>';
+
+    document.querySelectorAll("[data-player-profile]").forEach((button) => button.addEventListener("click", () => openPlayerProfile(button.dataset.playerProfile)));
+  };
+
+  $("playerSearch")?.addEventListener("input", renderList);
+  $("playerSort")?.addEventListener("change", renderList);
+  renderList();
 }
 
+
 function renderStats() {
-  const tour = {}; const surface = {}; const confidence = {};
-  state.predictions.forEach((m) => { tour[m.tour || "Unknown"] = (tour[m.tour || "Unknown"] || 0) + 1; surface[m.surface || "unknown"] = (surface[m.surface || "unknown"] || 0) + 1; confidence[m.confidence || "low"] = (confidence[m.confidence || "low"] || 0) + 1; });
+  const tour = {};
+  const surface = {};
+  const confidence = {};
+  const tournament = {};
+  const probabilityBands = { "50–59.9%": 0, "60–69.9%": 0, "70–79.9%": 0, "80–89.9%": 0, "90%+": 0 };
+  const depthBands = { "Limited <40%": 0, "Medium 40–64%": 0, "Good 65–84%": 0, "Excellent 85%+": 0 };
+  const probabilities = [];
+  const depths = [];
+  const agreements = [];
+
+  state.predictions.forEach((m) => {
+    tour[m.tour || "Unknown"] = (tour[m.tour || "Unknown"] || 0) + 1;
+    surface[m.surface || "unknown"] = (surface[m.surface || "unknown"] || 0) + 1;
+    confidence[m.confidence || "low"] = (confidence[m.confidence || "low"] || 0) + 1;
+    tournament[m.tournament || "Unknown"] = (tournament[m.tournament || "Unknown"] || 0) + 1;
+
+    const p = primeRankingValue(m);
+    probabilities.push(p);
+    if (p >= 90) probabilityBands["90%+"] += 1;
+    else if (p >= 80) probabilityBands["80–89.9%"] += 1;
+    else if (p >= 70) probabilityBands["70–79.9%"] += 1;
+    else if (p >= 60) probabilityBands["60–69.9%"] += 1;
+    else probabilityBands["50–59.9%"] += 1;
+
+    const quality = primeTieBreakers(m);
+    depths.push(quality.dataDepth);
+    agreements.push(quality.factorAgreement);
+    if (quality.dataDepth >= 85) depthBands["Excellent 85%+"] += 1;
+    else if (quality.dataDepth >= 65) depthBands["Good 65–84%"] += 1;
+    else if (quality.dataDepth >= 40) depthBands["Medium 40–64%"] += 1;
+    else depthBands["Limited <40%"] += 1;
+  });
+
+  const topProbability = probabilities.length ? Math.max(...probabilities) : null;
+  const medianProbability = median(probabilities);
+  const medianDepth = median(depths);
+  const medianAgreement = median(agreements);
+  const threshold = Number(state.ui?.prime_picks?.prime_probability_pct ?? 80);
+  const thresholdCount = probabilities.filter((p) => p >= threshold).length;
+
   const tiles = [
-    ["Current predictions", state.predictions.length],
-    ["Prime Picks", primeRows(state.predictions).length],
-    ["ATP / WTA", `${tour.ATP || 0} / ${tour.WTA || 0}`],
-    ["High confidence", confidence.high || 0],
-  ].map(([label, value]) => `<article class="metric-card"><small>${label}</small><strong>${value}</strong></article>`).join("");
-  const breakdown = (title, data) => `<article class="breakdown-card"><h3>${title}</h3>${Object.entries(data).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div><span>${escapeHtml(k)}</span><strong>${v}</strong></div>`).join("") || '<p>No data.</p>'}</article>`;
-  moduleShell("Stats & Insights", "Live summaries from the currently loaded prediction board.", `<div class="metric-grid">${tiles}</div><div class="breakdown-grid">${breakdown("By tour", tour)}${breakdown("By surface", surface)}${breakdown("By confidence", confidence)}</div>`);
+    ["Current predictions", fmtInt(state.predictions.length), "live board"],
+    ["Top probability", topProbability == null ? "—" : `${topProbability.toFixed(1)}%`, "strongest current selection"],
+    ["Median probability", medianProbability == null ? "—" : `${medianProbability.toFixed(1)}%`, "winner side"],
+    [`≥ ${threshold.toFixed(0)}% candidates`, fmtInt(thresholdCount), "configured Prime threshold"],
+    ["Median data depth", medianDepth == null ? "—" : `${medianDepth.toFixed(0)}%`, "context coverage"],
+    ["Median agreement", medianAgreement == null ? "—" : `${medianAgreement.toFixed(0)}%`, "factor context"],
+  ].map(([label, value, note]) => `<article class="metric-card performance-metric"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note)}</span></article>`).join("");
+
+  const breakdown = (title, data, limit = 12) => `<article class="breakdown-card"><h3>${escapeHtml(title)}</h3>${Object.entries(data)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([k, v]) => `<div><span>${escapeHtml(String(k).replaceAll("_", " "))}</span><strong>${fmtInt(v)}</strong></div>`).join("") || '<p>No data.</p>'}</article>`;
+
+  const distribution = (title, data) => {
+    const total = Object.values(data).reduce((sum, value) => sum + Number(value || 0), 0);
+    return `<article class="distribution-card"><h3>${escapeHtml(title)}</h3>${Object.entries(data).map(([label, count]) => {
+      const share = total ? (Number(count) / total) * 100 : 0;
+      return `<div class="distribution-row"><div><span>${escapeHtml(label)}</span><strong>${fmtInt(count)} · ${share.toFixed(1)}%</strong></div><div class="distribution-track"><i style="width:${clamp(share, 0, 100).toFixed(1)}%"></i></div></div>`;
+    }).join("")}</article>`;
+  };
+
+  moduleShell(
+    "Stats & Insights",
+    "Current prediction-board analytics. Historical hit rate and calibration remain in Model Performance / Backtests.",
+    `<div class="metric-grid performance-grid stats-metric-grid">${tiles}</div>
+     <div class="stats-distributions">${distribution("Probability distribution", probabilityBands)}${distribution("Data-depth distribution", depthBands)}</div>
+     <div class="breakdown-grid stats-breakdowns">${breakdown("By tour", tour)}${breakdown("By surface", surface)}${breakdown("By confidence", confidence)}${breakdown("Top tournaments", tournament, 10)}</div>
+     <p class="technical-note">These are descriptive statistics of currently upcoming predictions, not historical success rates. For observed outcomes use the out-of-time Backtests page.</p>`
+  );
 }
+
 
 async function renderModelPerformance() {
   moduleShell("Model Performance", "Latest stored model metadata, holdout quality and probability calibration.", '<div class="state-card">Loading model status…</div>');

@@ -7,9 +7,10 @@
     "avatar_url": ""
   },
   "branding": {
-    "engine_label": "Engine Talks",
-    "engine_mark": "/assets/engine_goat.png",
-    "blinq_logo": "/assets/blinq_racket_logo.png"
+    "engine_label": "BackstageTalks Statistical Engine",
+    "engine_mark": "/assets/backstagetalks_engine.png",
+    "blinq_logo": "/assets/blinq_logo.svg",
+    "engine_logo": "/assets/backstagetalks_engine.png"
   },
   "prime_picks": {
     "limit": 10,

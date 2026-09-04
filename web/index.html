@@ -4,15 +4,16 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#050912" />
+  <link rel="icon" type="image/png" href="/assets/blinq_favicon.png" />
+  <link rel="shortcut icon" href="/assets/blinq_favicon.png" />
   <title>BlinQ · Tennis Intelligence</title>
-  <link rel="stylesheet" href="/styles.css?v=20260904-4" />
+  <link rel="stylesheet" href="/styles.css?v=20260904-6" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
     <aside class="sidebar">
-      <a class="engine-brand" href="#dashboard" data-route="dashboard" aria-label="Home">
-        <img src="/assets/engine_goat.png" alt="" class="engine-mark" />
-        <span class="engine-copy"><small>by</small><strong>Engine Talks</strong></span>
+      <a class="engine-brand" href="#dashboard" data-route="dashboard" aria-label="BackstageTalks Statistical Engine">
+        <img src="/assets/backstagetalks_engine.png" alt="BackstageTalks Statistical Engine" class="engine-full-logo" />
       </a>
 
       <nav class="nav-section nav-main" aria-label="Product navigation">
@@ -45,7 +46,7 @@
     <main class="main">
       <header class="topbar product-topbar">
         <div class="product-brand-wrap">
-          <img class="product-logo" src="/assets/blinq_racket_logo.png" alt="BlinQ" />
+          <img class="product-logo" src="/assets/blinq_logo.svg" alt="BlinQ" />
           <div class="route-copy">
             <div class="eyebrow" id="pageEyebrow">TENNIS INTELLIGENCE</div>
             <div class="title-row compact-title-row">
@@ -81,6 +82,8 @@
           <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search matches or players…" /></label>
         </section>
 
+        <section id="dashboardSnapshot" class="dashboard-snapshot" aria-label="Current prediction board summary"></section>
+
         <section id="bannerZoneTop" class="banner-zone" aria-label="Sponsored content"></section>
 
         <section class="picks-panel prime-panel" id="predictionsPanel">
@@ -111,12 +114,15 @@
 
       <section id="moduleView" class="module-view" hidden></section>
 
-      <footer>
-        <div class="footer-brand">Blin<span>Q</span></div>
-        <div>© 2026 BlinQ</div>
-        <a href="#methodology" data-route="methodology">Methodology</a>
-        <a href="#responsible-use" data-route="responsible_use">Responsible Use</a>
-        <a href="#privacy">Privacy Policy</a>
+      <footer class="site-footer">
+        <div class="footer-main">
+          <img class="footer-logo" src="/assets/blinq_logo.svg" alt="BlinQ" />
+          <div>© 2026 BlinQ</div>
+          <a href="#methodology" data-route="methodology">Methodology</a>
+          <a href="#responsible-use" data-route="responsible_use">Responsible Use</a>
+          <a href="#privacy">Privacy Policy</a>
+        </div>
+        <p class="footer-disclaimer">This data is provided for informational and analytical purposes only. Powered by BackstageTalks Statistical Engine.</p>
       </footer>
     </main>
   </div>
@@ -143,7 +149,7 @@
     <div class="plan-grid" id="planGrid"></div>
   </dialog>
 
-  <script src="/config.js?v=20260904-4"></script>
-  <script src="/app.js?v=20260904-4"></script>
+  <script src="/config.js?v=20260904-6"></script>
+  <script src="/app.js?v=20260904-6"></script>
 </body>
 </html>
