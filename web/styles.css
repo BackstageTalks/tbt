@@ -133,3 +133,29 @@ footer{display:flex;align-items:center;gap:22px;border-top:1px solid #182231;mar
 .footer-logo{width:62px;max-height:24px;object-fit:contain;object-position:left center}
 .footer-disclaimer{margin:12px 0 0;padding-top:12px;border-top:1px solid #141f2d;color:#697587;font-size:9px;line-height:1.55;max-width:900px}
 @media(max-width:820px){.engine-brand{min-height:auto;padding:4px 0 10px}.engine-full-logo{width:190px}.product-logo{width:145px}.footer-main{gap:14px}.footer-disclaimer{font-size:8.5px}}
+
+
+/* ===== Batch v7: background application + split goat brand ===== */
+body{background:#030813}
+.main{position:relative;isolation:isolate;overflow:hidden}
+.main::before{content:"";position:fixed;inset:0 0 0 250px;background:
+  linear-gradient(180deg,rgba(3,8,19,.76),rgba(3,8,19,.88)),
+  radial-gradient(circle at 50% 0%,rgba(26,48,92,.20),transparent 40%),
+  url('/assets/blinq_background.png') center top/cover no-repeat;
+  opacity:.78;pointer-events:none;z-index:0}
+.main>*{position:relative;z-index:1}
+.sidebar{position:relative;z-index:2;background:linear-gradient(180deg,rgba(4,10,19,.96),rgba(4,10,19,.97));backdrop-filter:blur(6px)}
+.topbar,.toolbar,.dashboard-snapshot,.banner-zone,.picks-panel,.module-card,.performance-section,.snapshot-card,.distribution-card,.upgrade-card,.learn-intro,.learn-section,.match-dialog,.tournament-card,.detail-card,.metric-card,.zone-banner,.account-access-row{backdrop-filter:blur(3px)}
+.engine-brand{min-height:88px;padding:10px 4px 14px;justify-content:flex-start;align-items:center}
+.engine-brand-block{display:flex;align-items:center;gap:12px;min-width:0;width:100%}
+.engine-emblem{width:58px;height:58px;flex:0 0 58px;object-fit:contain;filter:drop-shadow(0 0 18px rgba(78,145,255,.35))}
+.engine-wordmark{display:flex;flex-direction:column;min-width:0}
+.engine-name{display:block;color:#f4f7ff;font-size:22px;line-height:1;font-weight:900;letter-spacing:-.03em;text-shadow:0 0 18px rgba(112,153,255,.12)}
+.engine-tagline{display:block;margin-top:5px;color:#92b5ff;font-size:10px;line-height:1.2;text-transform:uppercase;letter-spacing:.18em}
+.engine-full-logo{display:none}
+.product-topbar{background:linear-gradient(180deg,rgba(5,12,22,.86),rgba(5,12,22,.68));border-bottom-color:#1d2d46}
+.toolbar,.dashboard-snapshot,.banner-zone,.picks-panel,.module-card,.performance-section,.upgrade-card,.learn-intro,.learn-section{background-color:rgba(7,16,28,.68)}
+.banner-zone .zone-banner,.zone-banner{background:linear-gradient(135deg,rgba(32,23,82,.72),rgba(10,39,55,.48))}
+.site-footer{background:linear-gradient(180deg,rgba(5,12,22,.15),rgba(5,12,22,.48))}
+@media(max-width:1180px){.main::before{left:0;background-position:center top}.engine-name{font-size:20px}}
+@media(max-width:820px){.engine-brand{min-height:auto;padding:4px 0 10px}.engine-emblem{width:50px;height:50px;flex-basis:50px}.engine-name{font-size:19px}.engine-tagline{font-size:9px;letter-spacing:.14em}.main::before{position:absolute;inset:0;background-position:center top;opacity:.72}}
