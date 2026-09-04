@@ -31,6 +31,37 @@ def _json(data: Any, status: int = 200) -> func.HttpResponse:
     )
 
 
+def _admin_authorized(req: func.HttpRequest) -> bool:
+    configured = str(settings.admin_api_key or "").strip()
+    provided = str(req.headers.get("x-admin-key") or "").strip()
+    return bool(configured and provided and provided == configured)
+
+
+def _read_ui_config(repo: SupabaseRepository) -> dict[str, Any] | None:
+    rows = repo.select_all(
+        "app_settings",
+        filters={"setting_key": "eq.ui_config"},
+        max_rows=1,
+        page_size=1,
+    )
+    if not rows:
+        return None
+    value = rows[0].get("value")
+    return value if isinstance(value, dict) else None
+
+
+def _write_ui_config(repo: SupabaseRepository, value: dict[str, Any]) -> None:
+    repo.upsert(
+        "app_settings",
+        [{
+            "setting_key": "ui_config",
+            "value": value,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }],
+        "setting_key",
+    )
+
+
 @app.route(route="health", methods=["GET"])
 def health(req: func.HttpRequest) -> func.HttpResponse:
     return _json(
@@ -140,6 +171,43 @@ def blinq_predictions(req: func.HttpRequest) -> func.HttpResponse:
     except Exception as exc:
         logger.exception("blinq_predictions failed")
         return _json({"success": False, "error": str(exc), "data": []}, 500)
+
+
+@app.route(route="v1/ui-config", methods=["GET"])
+def ui_config(req: func.HttpRequest) -> func.HttpResponse:
+    try:
+        config = _read_ui_config(SupabaseRepository())
+        return _json({"success": True, "config": config})
+    except Exception as exc:
+        logger.exception("ui_config failed")
+        return _json({"success": False, "config": None, "error": str(exc)}, 500)
+
+
+@app.route(route="v1/admin/session", methods=["GET"])
+def admin_session(req: func.HttpRequest) -> func.HttpResponse:
+    if not _admin_authorized(req):
+        return _json({"success": False, "error": "unauthorized"}, 401)
+    return _json({"success": True, "admin": True})
+
+
+@app.route(route="v1/admin/ui-config", methods=["POST"])
+def admin_ui_config(req: func.HttpRequest) -> func.HttpResponse:
+    if not _admin_authorized(req):
+        return _json({"success": False, "error": "unauthorized"}, 401)
+    try:
+        raw = req.get_body()
+        if len(raw) > 300_000:
+            return _json({"success": False, "error": "config payload too large"}, 413)
+        payload = req.get_json()
+        if not isinstance(payload, dict):
+            return _json({"success": False, "error": "JSON object required"}, 400)
+        _write_ui_config(SupabaseRepository(), payload)
+        return _json({"success": True, "saved_at": datetime.now(timezone.utc).isoformat()})
+    except ValueError:
+        return _json({"success": False, "error": "invalid JSON"}, 400)
+    except Exception as exc:
+        logger.exception("admin_ui_config failed")
+        return _json({"success": False, "error": str(exc)}, 500)
 
 
 @app.route(route="v1/model/status", methods=["GET"])
