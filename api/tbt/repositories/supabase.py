@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
@@ -504,31 +505,189 @@ class SupabaseRepository:
             },
         )
 
+    def _select_match_rows_keyset(
+        self,
+        *,
+        page_size: int = 1000,
+        max_timeout_retries: int = 5,
+    ) -> list[dict[str, Any]]:
+        """Read the large matches table with primary-key keyset pagination.
+
+        Do not add ``winner_id=not.is.null`` to this full-history query. The
+        production table has already shown that combining that predicate with
+        a large ordered scan can hit PostgreSQL/Supabase SQLSTATE 57014.
+
+        The database query intentionally stays index-friendly:
+        ``match_id > cursor``, ``ORDER BY match_id ASC``, ``LIMIT page_size``.
+        Completion and optional time filtering are applied locally.
+        """
+        if page_size <= 0:
+            raise ValueError("page_size must be positive")
+
+        match_select = ",".join(
+            (
+                "match_id",
+                "tour",
+                "scheduled_at",
+                "player1_id",
+                "player1_name",
+                "player2_id",
+                "player2_name",
+                "surface",
+                "tournament",
+                "tournament_id",
+                "tournament_level",
+                "round_name",
+                "player1_rank",
+                "player2_rank",
+                "winner_id",
+                "status",
+                "best_of",
+                "indoor",
+                "stats",
+                "provider_payload",
+            )
+        )
+
+        rows: list[dict[str, Any]] = []
+        last_match_id: str | None = None
+        request_page_size = page_size
+        page = 0
+
+        while True:
+            params: dict[str, str] = {
+                "select": match_select,
+                "order": "match_id.asc",
+                "limit": str(request_page_size),
+            }
+
+            if last_match_id is not None:
+                params["match_id"] = f"gt.{last_match_id}"
+
+            timeout_retries = 0
+
+            while True:
+                response = self.client.get(
+                    f"{self.base}/matches",
+                    headers=self._headers(write=False),
+                    params=params,
+                )
+
+                body = response.text or ""
+                is_statement_timeout = (
+                    response.status_code >= 500
+                    and (
+                        '"57014"' in body
+                        or "statement timeout" in body.lower()
+                    )
+                )
+
+                if not is_statement_timeout:
+                    self._raise(response)
+                    break
+
+                timeout_retries += 1
+
+                if request_page_size > 100:
+                    request_page_size = max(
+                        100,
+                        request_page_size // 2,
+                    )
+                    params["limit"] = str(request_page_size)
+
+                if timeout_retries > max_timeout_retries:
+                    self._raise(response)
+
+                wait_seconds = min(2 ** timeout_retries, 8)
+                logger.warning(
+                    "Supabase statement timeout during match keyset scan; "
+                    "cursor=%s limit=%s retry=%s/%s in %ss",
+                    last_match_id,
+                    request_page_size,
+                    timeout_retries,
+                    max_timeout_retries,
+                    wait_seconds,
+                )
+                time.sleep(wait_seconds)
+
+            chunk = response.json()
+
+            if not isinstance(chunk, list):
+                raise RuntimeError(
+                    "Supabase match keyset scan returned a non-list payload"
+                )
+
+            if not chunk:
+                break
+
+            rows.extend(chunk)
+            page += 1
+
+            current_last = str(
+                chunk[-1].get("match_id")
+                or ""
+            )
+
+            if not current_last:
+                raise RuntimeError(
+                    "Keyset pagination received a row without match_id"
+                )
+
+            if (
+                last_match_id is not None
+                and current_last <= last_match_id
+            ):
+                raise RuntimeError(
+                    "Keyset pagination did not advance: "
+                    f"previous={last_match_id!r}, "
+                    f"current={current_last!r}"
+                )
+
+            last_match_id = current_last
+
+            if page % 25 == 0:
+                logger.info(
+                    "Match keyset scan: pages=%d rows=%d last_match_id=%s",
+                    page,
+                    len(rows),
+                    last_match_id,
+                )
+
+            if len(chunk) < request_page_size:
+                break
+
+        return rows
+
     def get_completed_matches(
         self,
         before: datetime | None = None,
     ) -> list[MatchRecord]:
-        filters = {
-            "winner_id": "not.is.null"
-        }
-
-        if before is not None:
-            filters["scheduled_at"] = (
-                "lt."
-                f"{before.astimezone(timezone.utc).isoformat()}"
-            )
-
-        rows = self.select_all(
-            "matches",
-            filters=filters,
-            order="scheduled_at.asc",
+        before_utc = (
+            before.astimezone(timezone.utc)
+            if before is not None
+            else None
         )
 
-        matches = [
-            self._match_from_row(row)
-            for row in rows
-        ]
+        matches: list[MatchRecord] = []
 
+        for row in self._select_match_rows_keyset():
+            # Preserve the old winner_id=not.is.null semantics, but apply the
+            # predicate locally so the DB scan remains primary-key-only.
+            if row.get("winner_id") is None:
+                continue
+
+            match = self._match_from_row(row)
+
+            if (
+                before_utc is not None
+                and match.scheduled_at >= before_utc
+            ):
+                continue
+
+            matches.append(match)
+
+        # Existing canonical dedupe also restores deterministic chronological
+        # order required by FeatureBuilder and walk-forward evaluation.
         return self._dedupe_completed_matches(
             matches
         )
