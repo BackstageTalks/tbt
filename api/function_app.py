@@ -122,12 +122,17 @@ def _profile_for_user(repo: SupabaseRepository, user: dict[str, Any]) -> dict[st
     metadata = _identity_metadata(user)
     provider = _auth_provider(user)
     row["auth_provider"] = provider
+    metadata_handle = str(metadata.get("telegram_handle") or metadata.get("preferred_username") or metadata.get("username") or "").strip().lstrip("@")
     if provider.startswith("custom:telegram"):
         row["telegram_id"] = str(metadata.get("id") or metadata.get("sub") or row.get("telegram_id") or "")
         row["telegram_handle"] = str(metadata.get("preferred_username") or metadata.get("username") or row.get("telegram_handle") or "")
         row["telegram_photo_url"] = str(metadata.get("picture") or metadata.get("photo_url") or row.get("telegram_photo_url") or "")
         if not str(row.get("display_name") or "").strip() or str(row.get("display_name")) == "BlinQ User":
             row["display_name"] = str(metadata.get("name") or metadata.get("preferred_username") or "BlinQ User")[:80]
+    elif metadata_handle:
+        row["telegram_handle"] = metadata_handle[:64]
+        if not str(row.get("display_name") or "").strip() or str(row.get("display_name")) == "BlinQ User":
+            row["display_name"] = f"@{metadata_handle[:63]}"
     try:
         repo.upsert("user_profiles", [row], "id")
     except Exception:
