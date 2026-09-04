@@ -4,17 +4,18 @@ import math
 from typing import Any
 
 
-# Provisional production weights only. The Prime backtest searches candidate
-# weights on an earlier out-of-time year and validates the chosen combination
-# on a later untouched year before these should be considered final.
-DEFAULT_PRIME_WEIGHTS = {
-    "model_probability": 0.70,
-    "data_depth": 0.20,
-    "factor_agreement": 0.10,
-}
+# The untouched 2026 validation did not confirm that the former composite
+# Prime Score improved Top-N selection over calibrated model probability.
+# Production ranking therefore uses calibrated winner probability directly.
+PRIME_RANKING_BASIS = "calibrated_model_probability"
 
-# Same feature magnitudes used by predictor._signals. These are not odds and
-# are not treated as probabilities; they only normalize directional support.
+# These labels are presentation defaults only. They are NOT claims about
+# historical hit-rate guarantees. The web can override its display thresholds
+# from ui-config.json after the full Prime segment audit is reviewed.
+DEFAULT_PRIME_PROBABILITY_PCT = 80.0
+DEFAULT_TOP_PRIME_PROBABILITY_PCT = 90.0
+
+# Scales mirror the magnitude thresholds already used by predictor._signals.
 _DIRECTIONAL_FACTORS = (
     ("Overall Strength", "elo_diff", 0.12),
     ("Surface Strength", "surface_elo_diff", 0.12),
@@ -39,7 +40,7 @@ def _number(value: Any, default: float = 0.0) -> float:
 
 
 def _orientation(row: dict[str, Any]) -> float:
-    """+1 if the predicted winner is player1, -1 if player2."""
+    """Return +1 when the prediction selects player1, -1 for player2."""
     p1_id = str(row.get("player1_id") or "")
     p2_id = str(row.get("player2_id") or "")
     winner_id = str(row.get("predicted_winner_id") or "")
@@ -53,10 +54,17 @@ def _orientation(row: dict[str, Any]) -> float:
     return 1.0 if p1 >= p2 else -1.0
 
 
-def _support_score(value: float, scale: float, orientation: float) -> float:
-    """Directional display score in 0..100; 50 is neutral.
+def _winner_probability(row: dict[str, Any]) -> float:
+    p1 = _clamp(_number(row.get("player1_probability"), 0.5), 0.0, 1.0)
+    p2 = _clamp(_number(row.get("player2_probability"), 1.0 - p1), 0.0, 1.0)
+    return max(p1, p2)
 
-    This transform is deliberately not described as probability.
+
+def _support_score(value: float, scale: float, orientation: float) -> float:
+    """Normalize a directional feature to 0..100 from the predicted winner's view.
+
+    50 is neutral, >50 supports the pick and <50 supports the opponent.
+    This is an explanatory transform, not a probability and not the Prime ranking.
     """
     if scale <= 0:
         return 50.0
@@ -101,6 +109,7 @@ def _factor_rows(row: dict[str, Any]) -> tuple[list[dict[str, Any]], float]:
         raw_scores["Surface Strength"] * 0.72
         + raw_scores["Surface Form"] * 0.28
     )
+
     depth = _clamp(_number(features.get("data_depth"), 0.0), 0.0, 1.0) * 100.0
 
     display = [
@@ -112,104 +121,47 @@ def _factor_rows(row: dict[str, Any]) -> tuple[list[dict[str, Any]], float]:
         {"label": "Data Depth", "score": round(depth, 1), "kind": "depth"},
     ]
 
-    agreement_pct = sum(support_values) / len(support_values) if support_values else 50.0
-    return display, agreement_pct
+    factor_agreement = sum(support_values) / len(support_values) if support_values else 50.0
+    return display, factor_agreement
 
 
-def prime_components(row: dict[str, Any]) -> dict[str, Any]:
-    """Return normalized 0..1 ranking components plus display diagnostics.
+def prime_diagnostics(row: dict[str, Any]) -> dict[str, Any]:
+    """Return transparent Prime context without inventing a second probability.
 
-    model_probability_strength:
-      50% => 0, 100% => 1. This keeps a coin-flip prediction from receiving
-      half of the Prime score merely because probabilities start at 0.5.
-
-    factor_agreement_strength:
-      neutral directional support (50/100) => 0; very strong agreement => 1.
-      Opposition to the selected player is clamped to 0 for ranking purposes.
+    Prime ranking is the calibrated winner probability. Data depth and factor
+    agreement remain available as diagnostics/explanation and deterministic
+    tie-breakers only.
     """
-    p1 = _clamp(_number(row.get("player1_probability"), 0.5), 0.0, 1.0)
-    p2 = _clamp(_number(row.get("player2_probability"), 1.0 - p1), 0.0, 1.0)
-    winner_probability = max(p1, p2)
+    winner_probability = _winner_probability(row)
+    winner_probability_pct = winner_probability * 100.0
 
     features = _feature_dict(row)
-    data_depth = _clamp(_number(features.get("data_depth"), 0.0), 0.0, 1.0)
-    factors, agreement_pct = _factor_rows(row)
-
-    model_probability_strength = _clamp((winner_probability - 0.5) / 0.5, 0.0, 1.0)
-    factor_agreement_strength = _clamp((agreement_pct - 50.0) / 45.0, 0.0, 1.0)
-
-    return {
-        "winner_probability": winner_probability,
-        "winner_probability_pct": winner_probability * 100.0,
-        "model_probability_strength": model_probability_strength,
-        "data_depth": data_depth,
-        "data_depth_pct": data_depth * 100.0,
-        "factor_agreement_pct": agreement_pct,
-        "factor_agreement_strength": factor_agreement_strength,
-        "factors": factors,
-    }
-
-
-def _normalized_weights(weights: dict[str, float] | None) -> dict[str, float]:
-    source = dict(weights or DEFAULT_PRIME_WEIGHTS)
-    cleaned = {
-        "model_probability": max(0.0, _number(source.get("model_probability"))),
-        "data_depth": max(0.0, _number(source.get("data_depth"))),
-        "factor_agreement": max(0.0, _number(source.get("factor_agreement"))),
-    }
-    total = sum(cleaned.values())
-    if total <= 0:
-        return dict(DEFAULT_PRIME_WEIGHTS)
-    return {key: value / total for key, value in cleaned.items()}
-
-
-def prime_score_from_components(
-    components: dict[str, Any],
-    weights: dict[str, float] | None = None,
-) -> float:
-    w = _normalized_weights(weights)
-    score = 100.0 * (
-        w["model_probability"] * _number(components.get("model_probability_strength"))
-        + w["data_depth"] * _number(components.get("data_depth"))
-        + w["factor_agreement"] * _number(components.get("factor_agreement_strength"))
+    data_depth_pct = (
+        _clamp(_number(features.get("data_depth"), 0.0), 0.0, 1.0)
+        * 100.0
     )
-    return _clamp(score, 0.0, 100.0)
+    factors, factor_agreement_pct = _factor_rows(row)
 
-
-def prime_diagnostics(
-    row: dict[str, Any],
-    *,
-    weights: dict[str, float] | None = None,
-) -> dict[str, Any]:
-    components = prime_components(row)
-    normalized = _normalized_weights(weights)
-    score = prime_score_from_components(components, normalized)
-
-    winner_probability = float(components["winner_probability"])
-    data_depth = float(components["data_depth"])
-    if score >= 75.0 and winner_probability >= 0.76 and data_depth >= 0.45:
+    if winner_probability_pct >= DEFAULT_TOP_PRIME_PROBABILITY_PCT:
         level = "top_prime"
-    elif winner_probability >= 0.63 and data_depth >= 0.20:
+    elif winner_probability_pct >= DEFAULT_PRIME_PROBABILITY_PCT:
         level = "prime"
     else:
         level = "candidate"
 
     return {
-        "score": round(score, 2),
+        "ranking_basis": PRIME_RANKING_BASIS,
+        "ranking_value_pct": round(winner_probability_pct, 2),
         "level": level,
-        "winner_probability_pct": round(float(components["winner_probability_pct"]), 2),
-        "data_depth_pct": round(float(components["data_depth_pct"]), 1),
-        "factor_agreement_pct": round(float(components["factor_agreement_pct"]), 1),
-        "components": {
-            "model_probability_strength": round(float(components["model_probability_strength"]), 6),
-            "data_depth": round(data_depth, 6),
-            "factor_agreement_strength": round(float(components["factor_agreement_strength"]), 6),
-        },
-        "factors": components["factors"],
-        "weights": normalized,
+        "winner_probability_pct": round(winner_probability_pct, 2),
+        "data_depth_pct": round(data_depth_pct, 1),
+        "factor_agreement_pct": round(factor_agreement_pct, 1),
+        "factors": factors,
+        "tie_breakers": ["factor_agreement_pct", "data_depth_pct"],
         "technical_note": (
-            "Prime Score is a ranking score, not a second win probability and not a bookmaker edge. "
-            "Its final production weights should be selected by out-of-time Prime backtesting."
+            "BlinQ Prime Picks are ranked by calibrated model win probability. "
+            "Data Depth and Factor Agreement are explanatory quality indicators "
+            "and deterministic tie-breakers; they do not create a second win probability."
         ),
     }
 
@@ -218,25 +170,37 @@ def prime_predictions(
     rows: list[dict[str, Any]],
     *,
     limit: int = 10,
-    minimum_score: float | None = None,
-    weights: dict[str, float] | None = None,
+    minimum_probability_pct: float | None = None,
 ) -> list[dict[str, Any]]:
-    ranked: list[tuple[float, float, dict[str, Any]]] = []
+    ranked: list[tuple[float, float, float, dict[str, Any]]] = []
+
     for row in rows:
-        prime = prime_diagnostics(row, weights=weights)
-        score = float(prime["score"])
-        if minimum_score is not None and score < minimum_score:
+        prime = prime_diagnostics(row)
+        probability_pct = float(prime["winner_probability_pct"])
+        if (
+            minimum_probability_pct is not None
+            and probability_pct < float(minimum_probability_pct)
+        ):
             continue
-        probability = max(
-            _number(row.get("player1_probability"), 0.5),
-            _number(row.get("player2_probability"), 0.5),
-        )
+
         copy = dict(row)
         copy["_prime"] = prime
-        ranked.append((score, probability, copy))
+        ranked.append(
+            (
+                probability_pct,
+                float(prime["factor_agreement_pct"]),
+                float(prime["data_depth_pct"]),
+                copy,
+            )
+        )
 
-    ranked.sort(key=lambda item: (-item[0], -item[1], str(item[2].get("scheduled_at") or "")))
-    chosen = [item[2] for item in ranked[: max(1, min(int(limit), 50))]]
-    for index, row in enumerate(chosen, start=1):
-        row["_prime"]["rank"] = index
-    return chosen
+    ranked.sort(
+        key=lambda item: (
+            -item[0],
+            -item[1],
+            -item[2],
+            str(item[3].get("scheduled_at") or ""),
+            str(item[3].get("match_id") or ""),
+        )
+    )
+    return [item[3] for item in ranked[: max(1, min(int(limit), 50))]]
