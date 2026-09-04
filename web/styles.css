@@ -354,3 +354,32 @@ img{max-width:100%;height:auto;display:block}
 @media(max-width:820px){
   .footer-languages{gap:6px}.footer-languages a{min-width:34px;height:30px;font-size:9px}
 }
+
+
+/* ===== Batch v14: footer learn + desktop alignment cleanup ===== */
+.learn-group,.learn-divider,#sidebarPromo{display:none!important}
+.sidebar{padding-bottom:14px}
+.site-footer{padding:18px 2px 24px}
+.footer-main{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.footer-main a,.footer-link{color:#8e9bae;text-decoration:none;font-size:11px}
+.footer-main a:hover,.footer-link:hover,.footer-link.active{color:#ffffff}
+.footer-disclaimer{margin:12px 0 0;color:#6d7c90;font-size:10px;line-height:1.55}
+.footer-bottom{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-top:14px;padding-top:12px;border-top:1px solid #152235}
+.footer-learn-links{display:flex;align-items:center;gap:18px;flex-wrap:wrap;min-width:0}
+.footer-languages{margin-top:0;padding-top:0;border-top:0;justify-content:flex-end;margin-left:auto;flex:0 0 auto}
+@media(min-width:1181px){
+  :root{--blinq-desktop-rail-y:132px}
+  .sidebar-product-brand{height:var(--blinq-desktop-rail-y);min-height:var(--blinq-desktop-rail-y);padding:14px 12px 16px}
+  .sidebar-product-logo{max-height:62px}
+  .product-topbar{height:74px;min-height:74px;padding-top:8px;padding-bottom:8px;border-bottom:1px solid #1b2a3f;grid-template-columns:minmax(310px,.85fr) minmax(360px,1.15fr) auto}
+  .header-banner-zone{align-self:center}
+  .header-banner-card{min-height:52px}
+  .toolbar{min-height:58px;padding-top:10px;padding-bottom:10px;border-bottom:0}
+  .dashboard-snapshot{margin-top:0;padding-top:12px;border-top:1px solid #1b2a3f}
+}
+@media(max-width:820px){
+  .footer-bottom{display:grid;grid-template-columns:1fr;gap:12px}
+  .footer-languages{justify-content:flex-start;margin-left:0}
+  .footer-learn-links{gap:14px}
+  .footer-main a,.footer-link{font-size:10px}
+}

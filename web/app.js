@@ -336,6 +336,23 @@ function routeAccess(item) {
   return { allowed: true };
 }
 
+function renderFooterLearnNavigation() {
+  const host = $("footerLearnNavigation");
+  if (!host) return;
+  host.innerHTML = "";
+  const items = [...(state.ui?.navigation?.learn || [])]
+    .filter((item) => item.enabled !== false)
+    .sort((a, b) => Number(a.order || 0) - Number(b.order || 0));
+  items.forEach((item) => {
+    const a = document.createElement("a");
+    a.href = item.href || `#${item.id}`;
+    a.className = `footer-link${state.currentRoute === item.id ? " active" : ""}`;
+    a.dataset.route = item.id;
+    a.textContent = t(`nav.${item.id}`, item.label || item.id);
+    host.appendChild(a);
+  });
+}
+
 function renderNavigationGroup(items, containerId) {
   const host = $(containerId);
   if (!host) return;
@@ -359,6 +376,7 @@ function renderNavigation() {
   const nav = state.ui?.navigation || {};
   renderNavigationGroup(nav.main, "mainNavigation");
   renderNavigationGroup(nav.learn, "learnNavigation");
+  renderFooterLearnNavigation();
   const adminSection = $("adminNavigationSection");
   if (adminSection) adminSection.hidden = !(state.user?.plan === "admin" || state.adminSession);
   if (state.user?.plan === "admin" || state.adminSession) renderNavigationGroup(nav.admin, "adminNavigation");

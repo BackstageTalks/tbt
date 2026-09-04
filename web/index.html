@@ -7,7 +7,7 @@
   <link rel="icon" type="image/png" href="/assets/blinq_favicon.png" />
   <link rel="shortcut icon" href="/assets/blinq_favicon.png" />
   <title>BlinQ · Tennis Intelligence</title>
-  <link rel="stylesheet" href="/styles.css?v=20260904-13" />
+  <link rel="stylesheet" href="/styles.css?v=20260904-14" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
@@ -24,8 +24,8 @@
         <div class="nav-items" id="mainNavigation"></div>
       </nav>
 
-      <div class="nav-divider"></div>
-      <details class="learn-group" open>
+      <div class="nav-divider learn-divider"></div>
+      <details class="learn-group" open hidden>
         <summary data-i18n="nav.learn">Learn</summary>
         <nav class="nav-section learn-nav" aria-label="Learn navigation">
           <div class="nav-items" id="learnNavigation"></div>
@@ -39,12 +39,6 @@
       </section>
 
       <div class="sidebar-spacer"></div>
-      <section class="upgrade-card" id="sidebarPromo">
-        <div class="upgrade-icon">♛</div>
-        <strong data-i18n="shell.unlock">Unlock full power</strong>
-        <p data-i18n="shell.unlock_copy">Prime Picks, advanced analytics and premium modules are unlocked by plan.</p>
-        <button class="btn btn-primary btn-full" data-upgrade type="button"><span data-i18n="shell.upgrade">Upgrade</span></button>
-      </section>
     </aside>
 
     <main class="main">
@@ -118,12 +112,13 @@
         <div class="footer-main">
           <img class="footer-logo" src="/assets/blinq_logo.svg" alt="BlinQ" />
           <div>© 2026 BlinQ</div>
-          <a href="#methodology" data-route="methodology" data-i18n="footer.methodology">Methodology</a>
-          <a href="#responsible-use" data-route="responsible_use" data-i18n="footer.responsible">Responsible Use</a>
           <a href="#privacy" data-i18n="footer.privacy">Privacy Policy</a>
         </div>
         <p class="footer-disclaimer" data-i18n="footer.disclaimer">This data is provided for informational and analytical purposes only. Powered by BackstageTalks Statistical Engine.</p>
-        <nav class="footer-languages" aria-label="Language versions"><span data-i18n="footer.languages">Language</span><a href="?lang=sk#dashboard" data-lang-choice="sk">SK</a><a href="?lang=cz#dashboard" data-lang-choice="cz">CZ</a><a href="?lang=pl#dashboard" data-lang-choice="pl">PL</a><a href="?lang=hu#dashboard" data-lang-choice="hu">HU</a><a href="?lang=de#dashboard" data-lang-choice="de">DE</a><a href="?lang=ua#dashboard" data-lang-choice="ua">UA</a><a href="?lang=ru#dashboard" data-lang-choice="ru">RU</a></nav>
+        <div class="footer-bottom">
+          <nav class="footer-learn-links" id="footerLearnNavigation" aria-label="Learn footer links"></nav>
+          <nav class="footer-languages" aria-label="Language versions"><span data-i18n="footer.languages">Language</span><a href="?lang=sk#dashboard" data-lang-choice="sk">SK</a><a href="?lang=cz#dashboard" data-lang-choice="cz">CZ</a><a href="?lang=pl#dashboard" data-lang-choice="pl">PL</a><a href="?lang=hu#dashboard" data-lang-choice="hu">HU</a><a href="?lang=de#dashboard" data-lang-choice="de">DE</a><a href="?lang=ua#dashboard" data-lang-choice="ua">UA</a><a href="?lang=ru#dashboard" data-lang-choice="ru">RU</a></nav>
+        </div>
       </footer>
     </main>
   </div>
@@ -150,8 +145,8 @@
     <div class="plan-grid" id="planGrid"></div>
   </dialog>
 
-  <script src="/i18n.js?v=20260904-13"></script>
-  <script src="/config.js?v=20260904-13"></script>
-  <script src="/app.js?v=20260904-13"></script>
+  <script src="/i18n.js?v=20260904-14"></script>
+  <script src="/config.js?v=20260904-14"></script>
+  <script src="/app.js?v=20260904-14"></script>
 </body>
 </html>
