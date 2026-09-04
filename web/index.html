@@ -7,18 +7,16 @@
   <link rel="icon" type="image/png" href="/assets/blinq_favicon.png" />
   <link rel="shortcut icon" href="/assets/blinq_favicon.png" />
   <title>BlinQ · Tennis Intelligence</title>
-  <link rel="stylesheet" href="/styles.css?v=20260904-7" />
+  <link rel="stylesheet" href="/styles.css?v=20260904-10" />
 </head>
 <body>
   <div class="app-shell" id="appShell">
     <aside class="sidebar">
-      <a class="engine-brand" href="#dashboard" data-route="dashboard" aria-label="BackstageTalks Statistical Engine">
-        <span class="engine-brand-block">
-          <img src="/assets/backstagetalks_goat_emblem.png" alt="BackstageTalks goat emblem" class="engine-emblem" />
-          <span class="engine-wordmark">
-            <strong class="engine-name">BackstageTalks</strong>
-            <small class="engine-tagline">Statistical Engine</small>
-          </span>
+      <a class="engine-brand sidebar-product-brand" href="#dashboard" data-route="dashboard" aria-label="BlinQ · Statistical Engine by BackstageTalks">
+        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="sidebar-product-logo" />
+        <span class="sidebar-engine-copy">
+          <strong>STATISTICAL ENGINE</strong>
+          <small>by BackstageTalks</small>
         </span>
       </a>
 
@@ -51,9 +49,8 @@
 
     <main class="main">
       <header class="topbar product-topbar">
-        <div class="product-brand-wrap">
-          <img class="product-logo" src="/assets/blinq_logo.svg" alt="BlinQ" />
-          <div class="route-copy">
+        <div class="product-brand-wrap product-brand-wrap-clean">
+          <div class="route-copy route-copy-clean">
             <div class="eyebrow" id="pageEyebrow">TENNIS INTELLIGENCE</div>
             <div class="title-row compact-title-row">
               <h1 id="pageTitle">Dashboard</h1>
@@ -99,7 +96,7 @@
               <p id="picksSubtitle">Our strongest model selections based on confidence, data quality and signal agreement.</p>
             </div>
             <div class="panel-actions">
-              <span class="match-count"><strong id="matchCount">0</strong> Prime Picks</span>
+              <span class="feed-status" id="feedStatus"><i></i><span>Checking feed…</span></span><span class="match-count"><strong id="matchCount">0</strong> Prime Picks</span>
               <button class="btn btn-ghost" id="refreshButton" type="button">↻ Refresh</button>
               <button class="btn btn-ghost" id="viewAllButton" type="button">All predictions →</button>
             </div>
@@ -155,7 +152,7 @@
     <div class="plan-grid" id="planGrid"></div>
   </dialog>
 
-  <script src="/config.js?v=20260904-7"></script>
-  <script src="/app.js?v=20260904-7"></script>
+  <script src="/config.js?v=20260904-10"></script>
+  <script src="/app.js?v=20260904-10"></script>
 </body>
 </html>

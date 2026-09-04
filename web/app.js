@@ -8,6 +8,8 @@ const state = {
   featuredIndex: 0,
   allPredictions: false,
   playerProfiles: [],
+  primeFeed: [],
+  avatarVariant: localStorage.getItem("blinq_avatar_variant") || "a",
 };
 
 const $ = (id) => document.getElementById(id);
@@ -160,14 +162,35 @@ function startPublicSession() {
 
 function renderBranding() {
   const branding = state.ui?.branding || {};
-  const engineLogo = document.querySelector(".engine-full-logo");
-  if (engineLogo && branding.engine_logo) engineLogo.src = branding.engine_logo;
-  const engineMark = document.querySelector(".engine-mark");
-  if (engineMark && branding.engine_mark) engineMark.src = branding.engine_mark;
-  const engineText = document.querySelector(".engine-copy strong");
-  if (engineText && branding.engine_label) engineText.textContent = branding.engine_label;
+  const sidebarLogo = document.querySelector(".sidebar-product-logo");
+  if (sidebarLogo && branding.blinq_logo) sidebarLogo.src = branding.blinq_logo;
   const productLogo = document.querySelector(".product-logo");
   if (productLogo && branding.blinq_logo) productLogo.src = branding.blinq_logo;
+}
+
+
+function currentAvatarOptions(plan = state.user?.plan || "free") {
+  const sets = state.ui?.avatar_sets || {};
+  const normalized = String(plan || "free").toLowerCase();
+  const rows = Array.isArray(sets[normalized]) ? sets[normalized] : [];
+  if (rows.length) return rows;
+  if (normalized === "goat" || normalized === "admin") return ["/assets/goat.webp"];
+  return [`/assets/${normalized}_a.webp`, `/assets/${normalized}_b.webp`];
+}
+
+function currentAvatarUrl() {
+  if (state.user?.avatarUrl) return state.user.avatarUrl;
+  const options = currentAvatarOptions();
+  if (options.length <= 1) return options[0] || "";
+  return state.avatarVariant === "b" ? options[1] : options[0];
+}
+
+function setAvatarVariant(variant) {
+  const options = currentAvatarOptions();
+  state.avatarVariant = options.length <= 1 ? "a" : (variant === "b" ? "b" : "a");
+  localStorage.setItem("blinq_avatar_variant", state.avatarVariant);
+  renderAccount();
+  if (state.currentRoute === "account") renderAccountPage();
 }
 
 function renderAccount() {
@@ -177,8 +200,9 @@ function renderAccount() {
   $("planName").textContent = String(user.planLabel || user.plan || "FREE").toUpperCase();
   $("planEntitlement").textContent = user.entitlement || "Active";
   const avatar = $("avatar");
-  if (user.avatarUrl) {
-    avatar.innerHTML = `<img src="${escapeHtml(user.avatarUrl)}" alt="" />`;
+  const avatarUrl = currentAvatarUrl();
+  if (avatarUrl) {
+    avatar.innerHTML = `<img src="${escapeHtml(avatarUrl)}" alt="" onerror="this.parentElement.textContent='${escapeHtml(initials(user.name))}'" />`;
   } else {
     avatar.textContent = initials(user.name);
   }
@@ -296,16 +320,33 @@ function renderBannerZones() {
   renderBannerZone("bottom");
 }
 
+function planAvatarSet(planId) {
+  const normalized = String(planId || "").toLowerCase();
+  if (!normalized) return [];
+  if (normalized === "goat") return [{ src: "/assets/goat.webp", alt: "GOAT avatar" }];
+  return [
+    { src: `/assets/${normalized}_a.webp`, alt: `${normalized} avatar A` },
+    { src: `/assets/${normalized}_b.webp`, alt: `${normalized} avatar B` },
+  ];
+}
+
 function renderPlanGrid() {
   const host = $("planGrid");
   if (!host) return;
-  host.innerHTML = (state.ui?.plans || []).map((plan) => `<article class="plan-option">
-    <span>${escapeHtml(plan.label)}</span>
-    <h3>${escapeHtml(plan.price || "—")}</h3>
-    <ul>${(plan.features || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
-    <button class="btn btn-primary btn-full" type="button" data-plan-choice="${escapeHtml(plan.id)}">Choose ${escapeHtml(plan.label)}</button>
-  </article>`).join("");
+  host.innerHTML = (state.ui?.plans || []).map((plan) => {
+    const avatars = (state.ui?.avatar_sets?.[String(plan.id || "").toLowerCase()] || []).map((src, index) => `<span class="plan-avatar"><img src="${escapeHtml(src)}" alt="${escapeHtml(plan.label)} avatar ${index === 0 ? "A" : "B"}" loading="lazy" onerror="this.closest('span').style.display='none'" /></span>`).join("");
+    const price = String(plan.price || "").trim();
+    const priceHtml = price && price !== "—" ? `<h3>${escapeHtml(price)}</h3>` : `<div class="plan-tier-copy">Access tier</div>`;
+    return `<article class="plan-option">
+      <div class="plan-option-top"><span class="plan-label">${escapeHtml(plan.label)}</span><div class="plan-avatar-row">${avatars}</div></div>
+      ${priceHtml}
+      <ul>${(plan.features || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>
+      <button class="btn btn-primary btn-full" type="button" data-plan-choice="${escapeHtml(plan.id)}">Choose ${escapeHtml(plan.label)}</button>
+    </article>`;
+  }).join("");
 }
+
+
 
 function showLocked(item) {
   const access = routeAccess(item);
@@ -379,34 +420,79 @@ function normalizePrediction(raw) {
   };
 }
 
+async function fetchWindowedJson(paths = []) {
+  for (const path of paths) {
+    try {
+      const payload = await getJSON(api(path));
+      const rows = Array.isArray(payload?.matches) ? payload.matches : Array.isArray(payload?.data) ? payload.data : Array.isArray(payload?.predictions) ? payload.predictions : [];
+      if (rows.length) return rows;
+    } catch (_) {}
+  }
+  return [];
+}
+
 async function fetchPredictions() {
-  const days = Number(cfg.predictionsDays || 3);
-  try {
-    const rich = await getJSON(api(`/api/v1/predictions/upcoming?days=${days}`));
-    const rows = Array.isArray(rich?.matches) ? rich.matches : [];
-    if (rows.length) return rows;
-  } catch (_) {}
-  const flat = await getJSON(api(`/api/blinq/predictions?days=${days}`));
-  return Array.isArray(flat?.data) ? flat.data : Array.isArray(flat?.matches) ? flat.matches : [];
+  const baseDays = clamp(Number(cfg.predictionsDays || 3), 1, 14);
+  const uniqueDays = [...new Set([baseDays, 7, 14].filter((d) => d >= baseDays && d <= 14).concat([baseDays]))];
+  const richPaths = uniqueDays.map((days) => `/api/v1/predictions/upcoming?days=${days}`);
+  const flatPaths = uniqueDays.map((days) => `/api/blinq/predictions?days=${days}`);
+  const richRows = await fetchWindowedJson(richPaths);
+  if (richRows.length) return richRows;
+  return fetchWindowedJson(flatPaths);
+}
+
+async function fetchPrimePredictions() {
+  const limit = clamp(Number(state.ui?.prime_picks?.limit || 10), 1, 20);
+  const baseDays = clamp(Number(cfg.predictionsDays || 3), 1, 14);
+  const windows = [...new Set([baseDays, 7, 14].filter((d) => d >= baseDays && d <= 14).concat([baseDays]))];
+  const paths = [];
+  for (const days of windows) {
+    paths.push(`/api/v1/predictions/prime?days=${days}&limit=${limit}`);
+    paths.push(`/api/v1/predictions/prime?days=${days}&limit=${limit}&minimum_probability=0`);
+  }
+  return fetchWindowedJson(paths);
+}
+
+function dedupeMatches(rows) {
+  const out = [];
+  const seen = new Set();
+  for (const row of rows) {
+    const match = normalizePrediction(row);
+    const key = String(match.id || `${match.date}|${match.p1}|${match.p2}`);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(match);
+  }
+  return out;
 }
 
 async function loadPredictions() {
   const grid = $("predictionGrid");
   if (grid) grid.innerHTML = '<div class="state-card">Loading current model predictions…</div>';
   try {
-    const rows = await fetchPredictions();
-    state.predictions = rows.map(normalizePrediction);
+    const [boardRows, primeRowsRemote] = await Promise.all([fetchPredictions(), fetchPrimePredictions()]);
+    state.predictions = dedupeMatches(boardRows);
+    state.primeFeed = dedupeMatches(primeRowsRemote);
+    if (!state.predictions.length && state.primeFeed.length) state.predictions = [...state.primeFeed];
+    if (state.predictions.length && state.primeFeed.length) {
+      const existing = new Set(state.predictions.map((m) => String(m.id)));
+      for (const m of state.primeFeed) if (!existing.has(String(m.id))) state.predictions.push(m);
+    }
     state.featuredIndex = 0;
     populateFilterOptions();
+    renderFeedStatus();
     if (["dashboard", "prime_picks"].includes(state.currentRoute)) renderPredictions();
     else renderCurrentModule();
   } catch (error) {
     state.predictions = [];
+    state.primeFeed = [];
+    renderFeedStatus();
     if (grid) grid.innerHTML = `<div class="state-card error">Predictions API is unavailable.<small>${escapeHtml(error.message)}</small></div>`;
     if ($("matchCount")) $("matchCount").textContent = "0";
     renderDots([]);
   }
 }
+
 
 function populateSelect(id, values, firstLabel) {
   const select = $(id);
@@ -523,7 +609,11 @@ function primeTieBreakers(match) {
 
 function primeRows(rows = currentFilteredPredictions()) {
   const limit = clamp(Number(state.ui?.prime_picks?.limit || 10), 1, 20);
-  return [...rows].sort((a, b) => {
+  const filteredPrimeFeed = state.primeFeed.length
+    ? state.primeFeed.filter((m) => rows.some((row) => String(row.id) === String(m.id)))
+    : [];
+  const source = filteredPrimeFeed.length ? filteredPrimeFeed : rows;
+  return [...source].sort((a, b) => {
     const probabilityDelta = primeRankingValue(b) - primeRankingValue(a);
     if (Math.abs(probabilityDelta) > 1e-9) return probabilityDelta;
     const qa = primeTieBreakers(a);
@@ -533,6 +623,7 @@ function primeRows(rows = currentFilteredPredictions()) {
     return qb.dataDepth - qa.dataDepth;
   }).slice(0, limit);
 }
+
 
 function primeLevel(match, rankIndex) {
   const settings = state.ui?.prime_picks || {};
@@ -669,7 +760,31 @@ function renderDashboardSnapshot(rows = currentFilteredPredictions()) {
     </article>`).join("");
 }
 
+function latestPredictionTimestamp(rows = state.predictions) {
+  const timestamps = rows.map((m) => new Date(m.generatedAt || m.date || 0).getTime()).filter(Number.isFinite);
+  return timestamps.length ? Math.max(...timestamps) : null;
+}
+
+function renderFeedStatus() {
+  const host = $("feedStatus");
+  if (!host) return;
+  const count = state.predictions.length;
+  const latest = latestPredictionTimestamp();
+  host.classList.remove("ok", "warn", "empty");
+  if (!count) {
+    host.classList.add("empty");
+    host.innerHTML = '<i></i><span>No active feed</span>';
+    return;
+  }
+  const ageHours = latest ? (Date.now() - latest) / 3600000 : null;
+  const stale = Number.isFinite(ageHours) && ageHours > 12;
+  host.classList.add(stale ? "warn" : "ok");
+  const label = latest ? `${count} loaded · ${fmtShortGenerated(new Date(latest).toISOString())}` : `${count} loaded`;
+  host.innerHTML = `<i></i><span>${escapeHtml(label)}</span>`;
+}
+
 function renderPredictions() {
+  renderFeedStatus();
   const filtered = currentFilteredPredictions();
   renderDashboardSnapshot(filtered);
   const primes = primeRows(filtered);
@@ -682,7 +797,7 @@ function renderPredictions() {
   $("nextPick").hidden = state.allPredictions || primes.length <= 1;
 
   if (!filtered.length) {
-    grid.innerHTML = '<div class="state-card">No current prediction matches these filters.</div>';
+    grid.innerHTML = state.predictions.length ? '<div class="state-card">No current prediction matches these filters.</div>' : '<div class="state-card feed-empty"><strong>No current prediction board</strong><small>BlinQ checked the standard, 7-day and 14-day windows plus the dedicated Prime feed. If this remains empty, the current predictions have not been generated/stored yet.</small><button class="btn btn-ghost" id="emptyRetry" type="button">↻ Retry feed</button></div>'; setTimeout(() => $("emptyRetry")?.addEventListener("click", loadPredictions), 0);
     renderDots([]); return;
   }
 
@@ -1151,14 +1266,31 @@ function renderAccountPage() {
     const access = routeAccess(item);
     return `<div class="account-access-row"><span>${escapeHtml(item.label)}</span><strong class="${access.allowed ? "positive" : "neutral"}">${access.allowed ? "Unlocked" : `Requires ${escapeHtml(item.required_label || "upgrade")}`}</strong></div>`;
   }).join("");
+  const avatarOptions = currentAvatarOptions();
+  const avatarChoices = avatarOptions.map((src, index) => {
+    const variant = index === 1 ? "b" : "a";
+    const selected = avatarOptions.length === 1 || state.avatarVariant === variant;
+    return `<button class="avatar-choice${selected ? " active" : ""}" type="button" data-avatar-variant="${variant}" ${avatarOptions.length === 1 ? "disabled" : ""}><img src="${escapeHtml(src)}" alt="Avatar ${variant.toUpperCase()}" /></button>`;
+  }).join("");
+  const mainAvatar = currentAvatarUrl();
+  const goatLogo = state.ui?.branding?.goat_logo || "/assets/logo_goat.svg";
+  const goatFallback = state.ui?.branding?.goat_logo_fallback || "/assets/goat_logo.svg";
   moduleShell("Account", "Plan, access and subscription overview.", `
     <div class="account-page-grid">
-      <article class="account-hero"><div class="avatar avatar-xl">${escapeHtml(initials(user.name))}</div><div><small>ACCOUNT</small><h2>${escapeHtml(user.name)}</h2><p>${escapeHtml(user.planLabel)} · ${escapeHtml(user.entitlement || "Active")}</p></div></article>
+      <article class="account-hero"><div class="avatar avatar-xl account-avatar-img">${mainAvatar ? `<img src="${escapeHtml(mainAvatar)}" alt="" />` : escapeHtml(initials(user.name))}</div><div><small>ACCOUNT</small><h2>${escapeHtml(user.name)}</h2><p>${escapeHtml(user.planLabel)} · ${escapeHtml(user.entitlement || "Active")}</p></div></article>
       <article class="access-summary"><h3>Current plan</h3><p>Your plan controls access while every product module remains visible in navigation.</p><div class="account-plan-badge">${escapeHtml(String(user.plan || "free").toUpperCase())}</div><button class="btn btn-primary" data-upgrade type="button">View upgrade options</button></article>
+    </div>
+    <div class="account-settings-grid">
+      <section class="performance-section avatar-settings"><div class="section-title-row"><div><span class="module-kicker">PROFILE</span><h3>Avatar</h3></div><small>${avatarOptions.length > 1 ? "A / B profile choice" : "Plan avatar"}</small></div><div class="avatar-choice-row">${avatarChoices}</div></section>
+      <section class="performance-section engine-summary"><div class="engine-summary-mark"><img src="${escapeHtml(goatLogo)}" data-fallback="${escapeHtml(goatFallback)}" alt="BackstageTalks Statistical Engine" /></div><div><span class="module-kicker">POWERED BY</span><h3>BackstageTalks Statistical Engine</h3><p class="module-copy">BlinQ is the product interface. The statistical engine handles feature construction, model evaluation and prediction generation.</p></div></section>
     </div>
     <section class="performance-section"><div class="section-title-row"><div><span class="module-kicker">ENTITLEMENTS</span><h3>Module access</h3></div></div><div class="account-access-list">${accessRows}</div></section>
   `);
+  document.querySelectorAll("[data-avatar-variant]").forEach((button) => button.addEventListener("click", () => setAvatarVariant(button.dataset.avatarVariant)));
+  const engineImage = document.querySelector(".engine-summary-mark img");
+  if (engineImage) engineImage.addEventListener("error", function () { if (this.dataset.fallback && this.src !== this.dataset.fallback) this.src = this.dataset.fallback; });
 }
+
 
 function learnBody(route) {
   const content = {

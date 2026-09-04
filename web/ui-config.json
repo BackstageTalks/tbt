@@ -7,10 +7,10 @@
     "avatar_url": ""
   },
   "branding": {
-    "engine_label": "BackstageTalks Statistical Engine",
-    "engine_mark": "/assets/backstagetalks_engine.png",
+    "engine_label": "Statistical Engine by BackstageTalks",
     "blinq_logo": "/assets/blinq_logo.svg",
-    "engine_logo": "/assets/backstagetalks_engine.png"
+    "goat_logo": "/assets/logo_goat.svg",
+    "goat_logo_fallback": "/assets/goat_logo.svg"
   },
   "prime_picks": {
     "limit": 10,
@@ -364,7 +364,7 @@
           "text": "Model confidence, surface context, form and matchup signals in one transparent workflow.",
           "button_text": "Unlock Full Power",
           "link": "#account",
-          "image": "/assets/banner_art.png"
+          "image": ""
         },
         {
           "enabled": true,
@@ -443,5 +443,29 @@
         }
       ]
     }
+  },
+  "avatar_sets": {
+    "free": [
+      "/assets/free_a.webp",
+      "/assets/free_b.webp"
+    ],
+    "pro": [
+      "/assets/pro_a.webp",
+      "/assets/pro_b.webp"
+    ],
+    "elite": [
+      "/assets/elite_a.webp",
+      "/assets/elite_b.webp"
+    ],
+    "legend": [
+      "/assets/legend_a.webp",
+      "/assets/legend_b.webp"
+    ],
+    "goat": [
+      "/assets/goat.webp"
+    ],
+    "admin": [
+      "/assets/goat.webp"
+    ]
   }
 }
