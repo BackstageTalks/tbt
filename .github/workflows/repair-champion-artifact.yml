@@ -1,0 +1,48 @@
+name: Repair champion artifact
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: api
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install artifact dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r api/requirements-train.txt
+
+      - name: Compile recovery script
+        run: python -m py_compile scripts/repair_champion_artifact.py
+
+      - name: Repair missing champion artifact safely
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/repair_champion_artifact.py
+
+      - name: Upload repair report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: champion-artifact-repair
+          path: reports/champion_artifact_repair.json
+          if-no-files-found: warn
+          retention-days: 30
