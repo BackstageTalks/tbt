@@ -279,6 +279,7 @@ function normalizePrediction(raw) {
       confidence: String(raw.prediction.confidence_band || fallbackConfidence(probability)).toLowerCase(),
       signals: raw.prediction.signals || [],
       features: raw.features || raw.prediction.features || {},
+      prime: raw.prime || raw.prediction.prime || {},
       model: raw.model_version || "",
       generatedAt: raw.generated_at || null,
     };
@@ -308,6 +309,7 @@ function normalizePrediction(raw) {
     confidence: String(raw.confidence || raw.confidence_band || fallbackConfidence(probability)).toLowerCase(),
     signals: raw.signals || [],
     features: raw.features || {},
+    prime: raw.prime || {},
     model: raw.model || raw.model_version || "",
     generatedAt: raw.generated_at || null,
   };
@@ -400,6 +402,13 @@ function signedFeatureScore(match, value, scale, aliases) {
 }
 
 function modelFactors(match) {
+  if (Array.isArray(match.prime?.factors) && match.prime.factors.length) {
+    return match.prime.factors.map((factor) => ({
+      label: factor.label || "Model factor",
+      score: clamp(Number(factor.score ?? 50), 0, 100),
+      kind: factor.kind || "advantage",
+    }));
+  }
   const overall = signedFeatureScore(match, numericFeature(match, "elo_diff"), 0.55, ["overall strength"]);
   const surfaceElo = numericFeature(match, "surface_elo_diff");
   const surfaceForm = numericFeature(match, "surface_form_diff");
@@ -428,21 +437,62 @@ function modelFactors(match) {
   ];
 }
 
-function primeScore(match) {
-  const settings = state.ui?.prime_picks || {};
+function primeRankingValue(match) {
+  const backend = Number(match.prime?.ranking_value_pct);
+  if (Number.isFinite(backend)) return backend;
+  return Number(match.probability || 0);
+}
+
+function primeTieBreakers(match) {
   const factors = modelFactors(match);
   const advantages = factors.filter((x) => x.kind === "advantage");
-  const agreement = advantages.length ? advantages.reduce((sum, x) => sum + x.score, 0) / advantages.length : 50;
-  const depth = factors.find((x) => x.kind === "depth")?.score ?? 50;
-  const pW = Number(settings.probability_weight ?? .58);
-  const dW = Number(settings.data_depth_weight ?? .22);
-  const aW = Number(settings.signal_agreement_weight ?? .20);
-  return Number(match.probability || 0) * pW + depth * dW + agreement * aW;
+  const agreement = Number(match.prime?.factor_agreement_pct);
+  const factorAgreement = Number.isFinite(agreement)
+    ? agreement
+    : (advantages.length ? advantages.reduce((sum, x) => sum + x.score, 0) / advantages.length : 50);
+  const backendDepth = Number(match.prime?.data_depth_pct);
+  const dataDepth = Number.isFinite(backendDepth)
+    ? backendDepth
+    : (factors.find((x) => x.kind === "depth")?.score ?? 50);
+  return { factorAgreement, dataDepth };
 }
 
 function primeRows(rows = currentFilteredPredictions()) {
   const limit = clamp(Number(state.ui?.prime_picks?.limit || 10), 1, 20);
-  return [...rows].sort((a, b) => primeScore(b) - primeScore(a) || Number(b.probability || 0) - Number(a.probability || 0)).slice(0, limit);
+  return [...rows].sort((a, b) => {
+    const probabilityDelta = primeRankingValue(b) - primeRankingValue(a);
+    if (Math.abs(probabilityDelta) > 1e-9) return probabilityDelta;
+    const qa = primeTieBreakers(a);
+    const qb = primeTieBreakers(b);
+    const agreementDelta = qb.factorAgreement - qa.factorAgreement;
+    if (Math.abs(agreementDelta) > 1e-9) return agreementDelta;
+    return qb.dataDepth - qa.dataDepth;
+  }).slice(0, limit);
+}
+
+function primeLevel(match, rankIndex) {
+  const settings = state.ui?.prime_picks || {};
+  const topThreshold = Number(settings.top_prime_probability_pct ?? 90);
+  const primeThreshold = Number(settings.prime_probability_pct ?? 80);
+  const probability = primeRankingValue(match);
+  if (rankIndex === 0) return "top_prime_1";
+  if (probability >= topThreshold) return "top_prime";
+  if (probability >= primeThreshold) return "prime";
+  return "prime";
+}
+
+function factorValueLabel(factor) {
+  if (factor.kind === "depth") {
+    if (factor.score >= 85) return "Excellent";
+    if (factor.score >= 65) return "Good";
+    if (factor.score >= 40) return "Medium";
+    return "Limited";
+  }
+  if (factor.score >= 72) return "Strong +";
+  if (factor.score >= 57) return "Advantage";
+  if (factor.score <= 28) return "Strong −";
+  if (factor.score <= 43) return "Against";
+  return "Balanced";
 }
 
 function meterHtml(factor) {
@@ -461,7 +511,13 @@ function cardHtml(match, featured = false, rankIndex = 0) {
   const factors = modelFactors(match);
   const surface = String(match.surface || "unknown").replaceAll("_", " ").toUpperCase();
   const meta = `${match.tour || "TOUR"} ${match.tournament || ""}${match.round ? ` · ${match.round}` : ""}`;
-  const ribbon = featured ? '<div class="featured-ribbon"><span>★ TOP PRIME</span></div>' : '<div class="prime-badge">★ PRIME PICK</div>';
+  const level = primeLevel(match, rankIndex);
+  const ribbon = level === "top_prime_1"
+    ? '<div class="featured-ribbon"><span>★ TOP PRIME · #1</span></div>'
+    : level === "top_prime"
+      ? '<div class="prime-badge prime-badge-top">★ TOP PRIME</div>'
+      : '<div class="prime-badge">★ PRIME PICK</div>';
+  const quality = primeTieBreakers(match);
   return `<article class="pick-card${featured ? " featured" : ""}" data-match-id="${escapeHtml(match.id)}" tabindex="0" role="button">
     ${ribbon}
     <div class="pick-meta"><span class="tour-tournament">${escapeHtml(meta)}</span><span>${escapeHtml(fmtTime(match.date))}</span><span class="surface-badge">${escapeHtml(surface)}</span><span class="card-star">☆</span></div>
@@ -471,8 +527,9 @@ function cardHtml(match, featured = false, rankIndex = 0) {
       <div class="player">${playerAvatarHtml(match.p2, match.p2Image)}<strong class="player-name">${escapeHtml(match.p2)}</strong><small class="player-rank">${match.p2Rank ? `#${escapeHtml(match.p2Rank)}` : "NR"}</small></div>
     </div>
     <div class="pick-summary"><div><small>BlinQ Pick</small><strong class="pick-name">${escapeHtml(match.pick || "—")}</strong></div><div class="prob-wrap"><small>Win Probability</small><div class="probability">${fmtPct(match.probability)}</div><span class="confidence ${escapeHtml(match.confidence)}">${escapeHtml(match.confidence.toUpperCase())}</span></div></div>
-    <div class="factors">${factors.map((factor) => `<div class="factor-row" title="Normalized display indicator derived from TBT model features."><span class="factor-label">${escapeHtml(factor.label)}</span>${meterHtml(factor)}</div>`).join("")}</div>
-    <div class="pick-footer"><span>#${rankIndex + 1} Prime</span><span>${escapeHtml(match.model || "model —")}</span><span>${escapeHtml(fmtShortGenerated(match.generatedAt))}</span></div>
+    <div class="factors">${factors.map((factor) => `<div class="factor-row" title="Normalized explanatory indicator derived from point-in-time TBT features."><span class="factor-label">${escapeHtml(factor.label)}</span>${meterHtml(factor)}<span class="factor-value">${escapeHtml(factorValueLabel(factor))}</span></div>`).join("")}</div>
+    <div class="quality-strip"><span>Agreement <strong>${quality.factorAgreement.toFixed(0)}%</strong></span><span>Data depth <strong>${quality.dataDepth.toFixed(0)}%</strong></span></div>
+    <div class="pick-footer"><span>#${rankIndex + 1} by probability</span><span>${escapeHtml(match.model || "model —")}</span><span>${escapeHtml(fmtShortGenerated(match.generatedAt))}</span></div>
   </article>`;
 }
 
@@ -542,8 +599,8 @@ function openMatchDialog(match) {
     <h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2>
     <div class="dialog-pick"><div><small>BlinQ Prime analysis</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${fmtPct(match.probability)}<span class="confidence ${escapeHtml(match.confidence)}">${escapeHtml(match.confidence.toUpperCase())}</span></div></div>
     <div class="dialog-section"><h3>Model factor view</h3>${factors.map((f) => `<div class="dialog-factor"><span>${escapeHtml(f.label)}</span>${meterHtml(f)}<small>${f.kind === "depth" ? "data coverage" : f.score >= 57 ? "favours pick" : f.score <= 43 ? "favours opponent" : "balanced"}</small></div>`).join("")}</div>
-    <div class="dialog-meta"><span>Prime score: ${primeScore(match).toFixed(1)}</span><span>Surface: ${escapeHtml(match.surface)}</span><span>Time: ${escapeHtml(fmtTime(match.date))}</span><span>Model: ${escapeHtml(match.model || "current")}</span></div>
-    <p class="technical-note">Factor bars are normalized indicators from internal TBT features. They are not bookmaker odds, standalone probabilities or externally supplied Elo ratings.</p>`;
+    <div class="dialog-meta"><span>Prime rank basis: calibrated probability</span><span>Surface: ${escapeHtml(match.surface)}</span><span>Time: ${escapeHtml(fmtTime(match.date))}</span><span>Model: ${escapeHtml(match.model || "current")}</span></div>
+    <p class="technical-note">${escapeHtml(match.prime?.technical_note || "BlinQ Prime Picks are ranked by calibrated model win probability. Factor bars and Data Depth explain model context; they are not bookmaker odds or a second probability.")}</p>`;
   $("matchDialog").showModal();
 }
 
@@ -574,11 +631,11 @@ function navigate(route) {
     if (route === "dashboard") {
       setRouteHeader("Dashboard", "Recommended Prime Picks and current tennis intelligence.");
       $("picksTitle").textContent = "BlinQ Prime Picks";
-      $("picksSubtitle").textContent = "The strongest current model selections based on confidence, data quality and signal agreement.";
+      $("picksSubtitle").textContent = "Top current selections ranked by calibrated model win probability. Quality factors are shown as context.";
     } else {
       setRouteHeader("BlinQ Prime Picks", "The best current selections our model can support with the available data.", "PRE-MATCH ANALYTICS");
       $("picksTitle").textContent = "BlinQ Prime Picks · Top 10";
-      $("picksSubtitle").textContent = "Navigate through the current Top 10 without reloading the page.";
+      $("picksSubtitle").textContent = "Top 10 ranked by calibrated model win probability; factor agreement and data depth are tie-breakers only.";
     }
     renderPredictions();
   } else {

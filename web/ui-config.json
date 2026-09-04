@@ -14,41 +14,333 @@
   "prime_picks": {
     "limit": 10,
     "visible_cards": 5,
-    "probability_weight": 0.58,
-    "data_depth_weight": 0.22,
-    "signal_agreement_weight": 0.20
+    "ranking_basis": "calibrated_model_probability",
+    "prime_probability_pct": 80,
+    "top_prime_probability_pct": 90,
+    "thresholds_status": "provisional_pending_full_audit",
+    "tie_breakers": [
+      "factor_agreement_pct",
+      "data_depth_pct"
+    ]
   },
   "plans": [
-    {"id":"pro","label":"PRO","price":"—","features":["Predictions","Tournaments","Prime Picks"]},
-    {"id":"elite","label":"Elite","price":"—","features":["Everything in PRO","Higher plan limits","Priority prediction access"]},
-    {"id":"legend","label":"Legend","price":"—","features":["Players","Stats & Insights","Advanced player analytics"]},
-    {"id":"goat","label":"GOAT","price":"—","features":["Model Performance","Backtests","Full analytics access"]}
+    {
+      "id": "pro",
+      "label": "PRO",
+      "price": "—",
+      "features": [
+        "Predictions",
+        "Tournaments",
+        "Prime Picks"
+      ]
+    },
+    {
+      "id": "elite",
+      "label": "Elite",
+      "price": "—",
+      "features": [
+        "Everything in PRO",
+        "Higher plan limits",
+        "Priority prediction access"
+      ]
+    },
+    {
+      "id": "legend",
+      "label": "Legend",
+      "price": "—",
+      "features": [
+        "Players",
+        "Stats & Insights",
+        "Advanced player analytics"
+      ]
+    },
+    {
+      "id": "goat",
+      "label": "GOAT",
+      "price": "—",
+      "features": [
+        "Model Performance",
+        "Backtests",
+        "Full analytics access"
+      ]
+    }
   ],
   "navigation": {
     "main": [
-      {"id":"dashboard","enabled":true,"label":"Dashboard","href":"#dashboard","icon":"⌂","order":1,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
-      {"id":"prime_picks","enabled":true,"label":"BlinQ Prime Picks","href":"#prime-picks","icon":"★","order":2,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
-      {"id":"value_picks","enabled":true,"label":"Value Picks","href":"#value-picks","icon":"◇","order":3,"allowed_plans":["legend","goat","admin"],"required_label":"Legend","data_status":"market_odds_required"},
-      {"id":"ace_picks","enabled":true,"label":"Ace Picks · Top 10","href":"#ace-picks","icon":"A","order":4,"allowed_plans":["legend","goat","admin"],"required_label":"Legend","data_status":"ace_model_required"},
-      {"id":"games_sets","enabled":true,"label":"Games & Sets · Top 10","href":"#games-sets","icon":"▦","order":5,"allowed_plans":["legend","goat","admin"],"required_label":"Legend","data_status":"games_sets_model_required"},
-      {"id":"tournaments","enabled":true,"label":"Tournaments","href":"#tournaments","icon":"♛","order":6,"allowed_plans":["pro","elite","legend","goat","admin"],"required_label":"PRO"},
-      {"id":"players","enabled":true,"label":"Players","href":"#players","icon":"♙","order":7,"allowed_plans":["legend","goat","admin"],"required_label":"Legend"},
-      {"id":"stats","enabled":true,"label":"Stats & Insights","href":"#stats","icon":"▥","order":8,"allowed_plans":["legend","goat","admin"],"required_label":"Legend"},
-      {"id":"model","enabled":true,"label":"Model Performance","href":"#model","icon":"↗","order":9,"allowed_plans":["goat","admin"],"required_label":"GOAT"},
-      {"id":"backtests","enabled":true,"label":"Backtests","href":"#backtests","icon":"◴","order":10,"allowed_plans":["goat","admin"],"required_label":"GOAT"},
-      {"id":"account","enabled":true,"label":"Account","href":"#account","icon":"◉","order":11,"allowed_plans":["free","pro","elite","legend","goat","admin"]}
+      {
+        "id": "dashboard",
+        "enabled": true,
+        "label": "Dashboard",
+        "href": "#dashboard",
+        "icon": "⌂",
+        "order": 1,
+        "allowed_plans": [
+          "free",
+          "pro",
+          "elite",
+          "legend",
+          "goat",
+          "admin"
+        ]
+      },
+      {
+        "id": "prime_picks",
+        "enabled": true,
+        "label": "BlinQ Prime Picks",
+        "href": "#prime-picks",
+        "icon": "★",
+        "order": 2,
+        "allowed_plans": [
+          "free",
+          "pro",
+          "elite",
+          "legend",
+          "goat",
+          "admin"
+        ]
+      },
+      {
+        "id": "value_picks",
+        "enabled": true,
+        "label": "Value Picks",
+        "href": "#value-picks",
+        "icon": "◇",
+        "order": 3,
+        "allowed_plans": [
+          "legend",
+          "goat",
+          "admin"
+        ],
+        "required_label": "Legend",
+        "data_status": "market_odds_required"
+      },
+      {
+        "id": "ace_picks",
+        "enabled": true,
+        "label": "Ace Picks · Top 10",
+        "href": "#ace-picks",
+        "icon": "A",
+        "order": 4,
+        "allowed_plans": [
+          "legend",
+          "goat",
+          "admin"
+        ],
+        "required_label": "Legend",
+        "data_status": "ace_model_required"
+      },
+      {
+        "id": "games_sets",
+        "enabled": true,
+        "label": "Games & Sets · Top 10",
+        "href": "#games-sets",
+        "icon": "▦",
+        "order": 5,
+        "allowed_plans": [
+          "legend",
+          "goat",
+          "admin"
+        ],
+        "required_label": "Legend",
+        "data_status": "games_sets_model_required"
+      },
+      {
+        "id": "tournaments",
+        "enabled": true,
+        "label": "Tournaments",
+        "href": "#tournaments",
+        "icon": "♛",
+        "order": 6,
+        "allowed_plans": [
+          "pro",
+          "elite",
+          "legend",
+          "goat",
+          "admin"
+        ],
+        "required_label": "PRO"
+      },
+      {
+        "id": "players",
+        "enabled": true,
+        "label": "Players",
+        "href": "#players",
+        "icon": "♙",
+        "order": 7,
+        "allowed_plans": [
+          "legend",
+          "goat",
+          "admin"
+        ],
+        "required_label": "Legend"
+      },
+      {
+        "id": "stats",
+        "enabled": true,
+        "label": "Stats & Insights",
+        "href": "#stats",
+        "icon": "▥",
+        "order": 8,
+        "allowed_plans": [
+          "legend",
+          "goat",
+          "admin"
+        ],
+        "required_label": "Legend"
+      },
+      {
+        "id": "model",
+        "enabled": true,
+        "label": "Model Performance",
+        "href": "#model",
+        "icon": "↗",
+        "order": 9,
+        "allowed_plans": [
+          "goat",
+          "admin"
+        ],
+        "required_label": "GOAT"
+      },
+      {
+        "id": "backtests",
+        "enabled": true,
+        "label": "Backtests",
+        "href": "#backtests",
+        "icon": "◴",
+        "order": 10,
+        "allowed_plans": [
+          "goat",
+          "admin"
+        ],
+        "required_label": "GOAT"
+      },
+      {
+        "id": "account",
+        "enabled": true,
+        "label": "Account",
+        "href": "#account",
+        "icon": "◉",
+        "order": 11,
+        "allowed_plans": [
+          "free",
+          "pro",
+          "elite",
+          "legend",
+          "goat",
+          "admin"
+        ]
+      }
     ],
     "learn": [
-      {"id":"how_blinq_works","enabled":true,"label":"How BlinQ Works","href":"#how-it-works","icon":"◉","order":101,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
-      {"id":"methodology","enabled":true,"label":"Methodology","href":"#methodology","icon":"▱","order":102,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
-      {"id":"model_data","enabled":true,"label":"Model & Data","href":"#model-data","icon":"◫","order":103,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
-      {"id":"faq","enabled":true,"label":"FAQ","href":"#faq","icon":"?","order":104,"allowed_plans":["free","pro","elite","legend","goat","admin"]},
-      {"id":"responsible_use","enabled":true,"label":"Responsible Use","href":"#responsible-use","icon":"◇","order":105,"allowed_plans":["free","pro","elite","legend","goat","admin"]}
+      {
+        "id": "how_blinq_works",
+        "enabled": true,
+        "label": "How BlinQ Works",
+        "href": "#how-it-works",
+        "icon": "◉",
+        "order": 101,
+        "allowed_plans": [
+          "free",
+          "pro",
+          "elite",
+          "legend",
+          "goat",
+          "admin"
+        ]
+      },
+      {
+        "id": "methodology",
+        "enabled": true,
+        "label": "Methodology",
+        "href": "#methodology",
+        "icon": "▱",
+        "order": 102,
+        "allowed_plans": [
+          "free",
+          "pro",
+          "elite",
+          "legend",
+          "goat",
+          "admin"
+        ]
+      },
+      {
+        "id": "model_data",
+        "enabled": true,
+        "label": "Model & Data",
+        "href": "#model-data",
+        "icon": "◫",
+        "order": 103,
+        "allowed_plans": [
+          "free",
+          "pro",
+          "elite",
+          "legend",
+          "goat",
+          "admin"
+        ]
+      },
+      {
+        "id": "faq",
+        "enabled": true,
+        "label": "FAQ",
+        "href": "#faq",
+        "icon": "?",
+        "order": 104,
+        "allowed_plans": [
+          "free",
+          "pro",
+          "elite",
+          "legend",
+          "goat",
+          "admin"
+        ]
+      },
+      {
+        "id": "responsible_use",
+        "enabled": true,
+        "label": "Responsible Use",
+        "href": "#responsible-use",
+        "icon": "◇",
+        "order": 105,
+        "allowed_plans": [
+          "free",
+          "pro",
+          "elite",
+          "legend",
+          "goat",
+          "admin"
+        ]
+      }
     ],
     "admin": [
-      {"id":"admin_users","enabled":true,"label":"User Management","href":"#admin-users","icon":"♟","order":201,"admin_only":true},
-      {"id":"admin_banners","enabled":true,"label":"Banner Manager","href":"#admin-banners","icon":"▣","order":202,"admin_only":true},
-      {"id":"admin_access","enabled":true,"label":"Plan Access","href":"#admin-access","icon":"⌘","order":203,"admin_only":true}
+      {
+        "id": "admin_users",
+        "enabled": true,
+        "label": "User Management",
+        "href": "#admin-users",
+        "icon": "♟",
+        "order": 201,
+        "admin_only": true
+      },
+      {
+        "id": "admin_banners",
+        "enabled": true,
+        "label": "Banner Manager",
+        "href": "#admin-banners",
+        "icon": "▣",
+        "order": 202,
+        "admin_only": true
+      },
+      {
+        "id": "admin_access",
+        "enabled": true,
+        "label": "Plan Access",
+        "href": "#admin-access",
+        "icon": "⌘",
+        "order": 203,
+        "admin_only": true
+      }
     ]
   },
   "header_ad": {
@@ -73,9 +365,36 @@
           "link": "#account",
           "image": "/assets/banner_art.png"
         },
-        {"enabled":true,"sponsored":true,"eyebrow":"SPONSORED","headline":"Partner banner 2","text":"Second top placement.","button_text":"Open","link":"#account","image":""},
-        {"enabled":true,"sponsored":true,"eyebrow":"SPONSORED","headline":"Partner banner 3","text":"Third top placement.","button_text":"Open","link":"#account","image":""},
-        {"enabled":true,"sponsored":true,"eyebrow":"SPONSORED","headline":"Partner banner 4","text":"Fourth top placement.","button_text":"Open","link":"#account","image":""}
+        {
+          "enabled": true,
+          "sponsored": true,
+          "eyebrow": "SPONSORED",
+          "headline": "Partner banner 2",
+          "text": "Second top placement.",
+          "button_text": "Open",
+          "link": "#account",
+          "image": ""
+        },
+        {
+          "enabled": true,
+          "sponsored": true,
+          "eyebrow": "SPONSORED",
+          "headline": "Partner banner 3",
+          "text": "Third top placement.",
+          "button_text": "Open",
+          "link": "#account",
+          "image": ""
+        },
+        {
+          "enabled": true,
+          "sponsored": true,
+          "eyebrow": "SPONSORED",
+          "headline": "Partner banner 4",
+          "text": "Fourth top placement.",
+          "button_text": "Open",
+          "link": "#account",
+          "image": ""
+        }
       ]
     },
     "bottom": {
@@ -101,8 +420,26 @@
           "link": "#account",
           "image": ""
         },
-        {"enabled":true,"sponsored":true,"eyebrow":"AD","headline":"Partner placement 3","text":"Third lower placement.","button_text":"Open","link":"#account","image":""},
-        {"enabled":true,"sponsored":true,"eyebrow":"AD","headline":"Partner placement 4","text":"Fourth lower placement.","button_text":"Open","link":"#account","image":""}
+        {
+          "enabled": true,
+          "sponsored": true,
+          "eyebrow": "AD",
+          "headline": "Partner placement 3",
+          "text": "Third lower placement.",
+          "button_text": "Open",
+          "link": "#account",
+          "image": ""
+        },
+        {
+          "enabled": true,
+          "sponsored": true,
+          "eyebrow": "AD",
+          "headline": "Partner placement 4",
+          "text": "Fourth lower placement.",
+          "button_text": "Open",
+          "link": "#account",
+          "image": ""
+        }
       ]
     }
   }
