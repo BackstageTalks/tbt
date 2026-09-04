@@ -12,6 +12,9 @@ const state = {
   predictionStatus: null,
   language: "en",
   avatarVariant: localStorage.getItem("blinq_avatar_variant") || "a",
+  avatarChoice: localStorage.getItem("blinq_avatar_choice") || "",
+  authConfig: null,
+  authenticated: false,
 };
 
 const $ = (id) => document.getElementById(id);
@@ -160,7 +163,7 @@ function calibrationTable(metrics) {
 }
 
 async function getJSON(url) {
-  const response = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store" });
+  const response = await fetch(url, { headers: { Accept: "application/json", ...(window.BLINQ_AUTH?.authorizationHeader?.() || {}) }, cache: "no-store" });
   let data = null;
   try { data = await response.json(); } catch { data = null; }
   if (!response.ok) throw new Error(data?.error || `HTTP ${response.status}`);
@@ -237,13 +240,143 @@ async function loadUiConfig() {
     state.ui = { account: {}, navigation: { main: [], learn: [], admin: [] }, banner_zones: {}, header_zone: { count: 0, items: [] }, sidebar_zone: { count: 0, items: [] }, banner_registry: { version: 1, total_slots: 14, slots: [] }, plans: [] };
   }
   ensureAccessRegistry();
-  startPublicSession();
-  renderBranding();
-  renderNavigation();
-  renderHeaderSponsor();
-  renderBannerZones();
-  renderPlanGrid();
-  applyManagedPanelVisibility();
+}
+
+function authMessage(message = "", type = "") {
+  const box = $("authMessage");
+  if (!box) return;
+  box.hidden = !message;
+  box.className = `auth-message${type ? ` ${type}` : ""}`;
+  box.textContent = message || "";
+}
+
+function showAuthMode(mode = "signin", message = "", type = "") {
+  $("authScreen").hidden = false;
+  $("appShell").hidden = true;
+  if ($("authLoading")) $("authLoading").hidden = true;
+  const map = { signin: "authSignIn", signup: "authSignUp", forgot: "authForgot", password: "authNewPassword" };
+  Object.values(map).forEach((id) => { if ($(id)) $(id).hidden = true; });
+  if ($(map[mode] || map.signin)) $(map[mode] || map.signin).hidden = false;
+  authMessage(message, type);
+  applyLanguageChrome();
+}
+
+function showAuthenticatedApp() {
+  if ($("authScreen")) $("authScreen").hidden = true;
+  if ($("appShell")) $("appShell").hidden = false;
+}
+
+function applyAuthenticatedAccount(account) {
+  state.authenticated = true;
+  state.avatarVariant = String(account?.avatarVariant || localStorage.getItem("blinq_avatar_variant") || "a") === "b" ? "b" : "a";
+  state.avatarChoice = String(account?.avatarUrl || localStorage.getItem("blinq_avatar_choice") || "");
+  state.user = {
+    id: account?.id || "",
+    email: account?.email || "",
+    name: account?.name || "BlinQ User",
+    plan: String(account?.plan || "free").toLowerCase(),
+    storedPlan: String(account?.stored_plan || account?.plan || "free").toLowerCase(),
+    planLabel: account?.planLabel || String(account?.plan || "free").toUpperCase(),
+    entitlement: account?.entitlement || "Active",
+    entitlementExpiresAt: account?.entitlement_expires_at || null,
+    avatarUrl: account?.avatarUrl || "",
+    tgHandle: account?.tgHandle || "",
+    authProvider: account?.authProvider || "email",
+    telegramPhotoUrl: account?.telegramPhotoUrl || "",
+    authenticated: true,
+  };
+  $("todayLabel").textContent = fmtToday();
+  renderAccount();
+}
+
+async function initializeIdentity() {
+  const auth = window.BLINQ_AUTH;
+  if (!auth) {
+    startPublicSession();
+    return true;
+  }
+  try {
+    state.authConfig = await auth.init();
+    const telegramEnabled = Boolean(auth.isTelegramEnabled?.());
+    ["telegramSignIn","telegramSignUp","telegramSignInDivider","telegramSignUpDivider"].forEach((id) => { if ($(id)) $(id).hidden = !telegramEnabled; });
+  } catch (error) {
+    showAuthMode("signin", `Authentication service unavailable: ${error.message}`, "error");
+    return false;
+  }
+  if (!auth.isEnabled()) {
+    if (auth.isRequired()) {
+      showAuthMode("signin", "Authentication is not configured on the server yet.", "error");
+      return false;
+    }
+    startPublicSession();
+    return true;
+  }
+  if (auth.isRecovery()) {
+    showAuthMode("password");
+    return false;
+  }
+  const session = await auth.restoreSession();
+  if (!session) {
+    showAuthMode("signin");
+    return false;
+  }
+  try {
+    const result = await auth.me();
+    applyAuthenticatedAccount(result.account || {});
+    return true;
+  } catch (error) {
+    auth.clearSession?.();
+    showAuthMode("signin", error.message === "account_disabled" ? "This account is disabled." : "Your session expired. Please sign in again.", "error");
+    return false;
+  }
+}
+
+function bindAuthEvents() {
+  document.querySelectorAll("[data-auth-mode]").forEach((button) => button.addEventListener("click", () => showAuthMode(button.dataset.authMode || "signin")));
+  ["telegramSignIn","telegramSignUp"].forEach((id) => $(id)?.addEventListener("click", () => {
+    try { window.BLINQ_AUTH.signInWithTelegram(); }
+    catch (error) { authMessage(error.message, "error"); }
+  }));
+  $("signInForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    authMessage("Signing in…");
+    try {
+      const session = await window.BLINQ_AUTH.signIn($("signInEmail").value, $("signInPassword").value);
+      if (!session) throw new Error("No session returned.");
+      location.reload();
+    } catch (error) { authMessage(error.message, "error"); }
+  });
+  $("signUpForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const password = $("signUpPassword").value;
+    if (password !== $("signUpPassword2").value) { authMessage("Passwords do not match.", "error"); return; }
+    authMessage("Creating account…");
+    try {
+      const result = await window.BLINQ_AUTH.signUp($("signUpName").value, $("signUpEmail").value, password);
+      if (result.session) { location.reload(); return; }
+      if (result.confirmationRequired) { showAuthMode("signin", "Account created. Check your email and confirm the address before signing in.", "success"); return; }
+      authMessage("Account created. You can sign in now.", "success");
+    } catch (error) { authMessage(error.message, "error"); }
+  });
+  $("forgotForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    authMessage("Sending reset link…");
+    try {
+      await window.BLINQ_AUTH.requestPasswordReset($("forgotEmail").value);
+      showAuthMode("signin", "Password reset link sent. Check your email.", "success");
+    } catch (error) { authMessage(error.message, "error"); }
+  });
+  $("newPasswordForm")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const password = $("newPassword").value;
+    if (password !== $("newPassword2").value) { authMessage("Passwords do not match.", "error"); return; }
+    authMessage("Saving password…");
+    try {
+      await window.BLINQ_AUTH.updatePassword(password);
+      await window.BLINQ_AUTH.signOut();
+      showAuthMode("signin", "Password updated. Sign in with your new password.", "success");
+    } catch (error) { authMessage(error.message, "error"); }
+  });
 }
 
 function startPublicSession() {
@@ -254,6 +387,10 @@ function startPublicSession() {
     planLabel: account.plan_label || String(account.plan || "free").toUpperCase(),
     entitlement: account.entitlement_text || "",
     avatarUrl: account.avatar_url || "",
+    email: "",
+    tgHandle: "",
+    authProvider: "preview",
+    authenticated: false,
   };
   renderAccount();
   $("todayLabel").textContent = fmtToday();
@@ -268,26 +405,91 @@ function renderBranding() {
 }
 
 
-function currentAvatarOptions(plan = state.user?.plan || "free") {
+const AVATAR_PLAN_ORDER = ["free", "pro", "elite", "legend", "goat", "admin"];
+
+function normalizeAvatarSet(planId) {
+  const normalized = String(planId || "free").toLowerCase();
   const sets = state.ui?.avatar_sets || {};
-  const normalized = String(plan || "free").toLowerCase();
   const rows = Array.isArray(sets[normalized]) ? sets[normalized] : [];
-  if (rows.length) return rows;
-  if (normalized === "goat" || normalized === "admin") return ["/assets/goat.webp"];
-  return [`/assets/${normalized}_a.webp`, `/assets/${normalized}_b.webp`];
+  const fallback = normalized === "goat" || normalized === "admin"
+    ? ["/assets/goat.webp"]
+    : [`/assets/${normalized}_a.webp`, `/assets/${normalized}_b.webp`];
+  return (rows.length ? rows : fallback).map((row, index) => {
+    if (row && typeof row === "object") {
+      return {
+        src: String(row.src || row.url || ""),
+        label: String(row.label || `${normalized.toUpperCase()} ${index === 1 ? "Man" : "Woman"}`),
+        gender: String(row.gender || (index === 1 ? "man" : "woman")),
+        enabled: row.enabled !== false,
+      };
+    }
+    return {
+      src: String(row || ""),
+      label: normalized === "goat" ? "GOAT" : `${normalized.toUpperCase()} ${index === 1 ? "Man" : "Woman"}`,
+      gender: normalized === "goat" ? "goat" : (index === 1 ? "man" : "woman"),
+      enabled: true,
+    };
+  }).filter((row) => row.src && row.enabled !== false);
+}
+
+function unlockedAvatarPlans(plan = state.user?.plan || "free") {
+  const normalized = String(plan || "free").toLowerCase();
+  const limit = Math.max(0, AVATAR_PLAN_ORDER.indexOf(normalized));
+  const sequence = AVATAR_PLAN_ORDER.slice(0, limit + 1).filter((value, index, arr) => arr.indexOf(value) === index);
+  return normalized === "admin" ? ["free", "pro", "elite", "legend", "goat"] : sequence;
+}
+
+function avatarCatalogForPlan(plan = state.user?.plan || "free") {
+  const plans = unlockedAvatarPlans(plan);
+  return plans.flatMap((planId) => normalizeAvatarSet(planId).map((entry, index) => ({
+    key: `${planId}:${entry.src}`,
+    src: entry.src,
+    plan: planId,
+    variant: entry.gender === "man" || index === 1 ? "b" : "a",
+    gender: entry.gender,
+    label: entry.label,
+  })));
+}
+
+function currentAvatarOptions(plan = state.user?.plan || "free") {
+  return avatarCatalogForPlan(plan);
+}
+
+function resolveAvatarChoice(plan = state.user?.plan || "free") {
+  const catalog = avatarCatalogForPlan(plan);
+  if (!catalog.length) return { key: "", src: "", variant: "a", label: "" };
+  const selectedByUrl = catalog.find((entry) => entry.src === state.avatarChoice || entry.key === state.avatarChoice || entry.src === state.user?.avatarUrl);
+  if (selectedByUrl) return selectedByUrl;
+  const currentPlanSet = normalizeAvatarSet(plan);
+  if (currentPlanSet.length > 1 && state.avatarVariant === "b") {
+    const match = catalog.find((entry) => entry.src === currentPlanSet[1].src);
+    if (match) return match;
+  }
+  const firstCurrentPlan = catalog.find((entry) => entry.plan === String(plan || "free").toLowerCase());
+  return firstCurrentPlan || catalog[0];
 }
 
 function currentAvatarUrl() {
-  if (state.user?.avatarUrl) return state.user.avatarUrl;
-  const options = currentAvatarOptions();
-  if (options.length <= 1) return options[0] || "";
-  return state.avatarVariant === "b" ? options[1] : options[0];
+  return resolveAvatarChoice().src || "";
 }
 
-function setAvatarVariant(variant) {
-  const options = currentAvatarOptions();
-  state.avatarVariant = options.length <= 1 ? "a" : (variant === "b" ? "b" : "a");
+function deriveTelegramHandle(user = {}) {
+  const explicit = String(user.tgHandle || user.tg_handle || "").trim();
+  if (explicit) return explicit.startsWith("@") || explicit.startsWith("Telegram #") ? explicit : `@${explicit}`;
+  return String(user.email || "").trim();
+}
+
+function setAvatarChoice(choiceKey) {
+  const catalog = currentAvatarOptions();
+  const selected = catalog.find((entry) => entry.key === choiceKey || entry.src === choiceKey) || resolveAvatarChoice();
+  state.avatarChoice = selected.key || selected.src || "";
+  state.avatarVariant = selected.variant === "b" ? "b" : "a";
+  if (state.user) state.user.avatarUrl = selected.src || state.user.avatarUrl || "";
   localStorage.setItem("blinq_avatar_variant", state.avatarVariant);
+  localStorage.setItem("blinq_avatar_choice", state.avatarChoice);
+  if (state.user?.authenticated && window.BLINQ_AUTH?.updateProfile) {
+    window.BLINQ_AUTH.updateProfile({ avatar_variant: state.avatarVariant, avatar_url: selected.src || "" }).catch(() => {});
+  }
   renderAccount();
   if (state.currentRoute === "account") renderAccountPage();
 }
@@ -295,6 +497,9 @@ function setAvatarVariant(variant) {
 function renderAccount() {
   const user = state.user || {};
   $("profileName").textContent = user.name || "BlinQ User";
+  const handle = deriveTelegramHandle(user);
+  $("profileHandle").textContent = handle;
+  $("profileHandle").hidden = !handle;
   $("profilePlan").textContent = user.planLabel || "Free";
   $("planName").textContent = String(user.planLabel || user.plan || "FREE").toUpperCase();
   $("planEntitlement").textContent = user.entitlement || "Active";
@@ -713,7 +918,7 @@ function renderPlanGrid() {
   const host = $("planGrid");
   if (!host) return;
   host.innerHTML = (state.ui?.plans || []).map((plan) => {
-    const avatars = (state.ui?.avatar_sets?.[String(plan.id || "").toLowerCase()] || []).map((src, index) => `<span class="plan-avatar"><img src="${escapeHtml(src)}" alt="${escapeHtml(plan.label)} avatar ${index === 0 ? "A" : "B"}" loading="lazy" onerror="this.closest('span').style.display='none'" /></span>`).join("");
+    const avatars = normalizeAvatarSet(String(plan.id || "").toLowerCase()).map((entry) => `<span class="plan-avatar"><img src="${escapeHtml(entry.src)}" alt="${escapeHtml(entry.label || plan.label)}" loading="lazy" onerror="this.closest('span').style.display='none'" /></span>`).join("");
     const price = String(plan.price || "").trim();
     const priceHtml = price && price !== "—" ? `<h3>${escapeHtml(price)}</h3>` : `<div class="plan-tier-copy">Access tier</div>`;
     return `<article class="plan-option">
@@ -1226,8 +1431,8 @@ function setRouteHeader(title, subtitle, eyebrow = "TENNIS INTELLIGENCE") {
     "Backtests": "nav.backtests",
     "Account": "nav.account",
   })[title];
-  $("pageTitle").textContent = titleKey ? t(titleKey, title) : title;
-  if (title === "Dashboard") $("pageSubtitle").textContent = t("route.dashboard.subtitle", subtitle);
+  $("pageTitle").textContent = title === "Dashboard" ? "" : (titleKey ? t(titleKey, title) : title);
+  if (title === "Dashboard") $("pageSubtitle").textContent = "";
   else if (title === "BlinQ Prime Picks") $("pageSubtitle").textContent = t("route.prime.subtitle", subtitle);
   else $("pageSubtitle").textContent = subtitle;
   $("pageEyebrow").textContent = eyebrow === "PRE-MATCH ANALYTICS" ? t("route.prime.eyebrow", eyebrow) : eyebrow === "TENNIS INTELLIGENCE" ? t("route.default.eyebrow", eyebrow) : eyebrow;
@@ -1672,30 +1877,43 @@ function renderAccountPage() {
     return `<div class="account-access-row"><span>${escapeHtml(item.label)}</span><strong class="${access.allowed ? "positive" : "neutral"}">${access.allowed ? "Unlocked" : `Requires ${escapeHtml(item.required_label || "upgrade")}`}</strong></div>`;
   }).join("");
   const avatarOptions = currentAvatarOptions();
-  const avatarChoices = avatarOptions.map((src, index) => {
-    const variant = index === 1 ? "b" : "a";
-    const selected = avatarOptions.length === 1 || state.avatarVariant === variant;
-    return `<button class="avatar-choice${selected ? " active" : ""}" type="button" data-avatar-variant="${variant}" ${avatarOptions.length === 1 ? "disabled" : ""}><img src="${escapeHtml(src)}" alt="Avatar ${variant.toUpperCase()}" /></button>`;
+  const activeAvatar = resolveAvatarChoice();
+  const avatarChoices = avatarOptions.map((entry) => {
+    const selected = activeAvatar.src === entry.src;
+    return `<button class="avatar-choice${selected ? " active" : ""}" type="button" data-avatar-choice="${escapeHtml(entry.key)}" ${avatarOptions.length === 1 ? "disabled" : ""}><img src="${escapeHtml(entry.src)}" alt="${escapeHtml(entry.label)}" /><span class="avatar-choice-label">${escapeHtml(entry.label)}</span></button>`;
   }).join("");
   const mainAvatar = currentAvatarUrl();
   const goatLogo = state.ui?.branding?.goat_logo || "/assets/logo_goat.svg";
   const goatFallback = state.ui?.branding?.goat_logo_fallback || "/assets/goat_logo.svg";
   moduleShell("Account", "Plan, access and subscription overview.", `
     <div class="account-page-grid">
-      <article class="account-hero"><div class="avatar avatar-xl account-avatar-img">${mainAvatar ? `<img src="${escapeHtml(mainAvatar)}" alt="" />` : escapeHtml(initials(user.name))}</div><div><small>ACCOUNT</small><h2>${escapeHtml(user.name)}</h2><p>${escapeHtml(user.planLabel)} · ${escapeHtml(user.entitlement || "Active")}</p></div></article>
+      <article class="account-hero"><div class="avatar avatar-xl account-avatar-img">${mainAvatar ? `<img src="${escapeHtml(mainAvatar)}" alt="" />` : escapeHtml(initials(user.name))}</div><div><small>ACCOUNT</small><h2>${escapeHtml(user.name)}</h2><p>${escapeHtml(user.planLabel)} · ${escapeHtml(user.entitlement || "Active")}</p><div class="account-auth-meta"><span>${user.email ? `Signed in as <strong>${escapeHtml(user.email)}</strong>` : "Public preview profile"}</span><span>${user.tgHandle ? `Telegram <strong>${escapeHtml(deriveTelegramHandle(user))}</strong>` : `Login <strong>${escapeHtml(user.email || user.authProvider || "Preview")}</strong>`}</span></div></div></article>
       <article class="access-summary"><h3>Current plan</h3><p>Your plan controls access while every product module remains visible in navigation.</p><div class="account-plan-badge">${escapeHtml(String(user.plan || "free").toUpperCase())}</div><button class="btn btn-primary" data-upgrade type="button">View upgrade options</button></article>
     </div>
+    <section class="performance-section"><div class="section-title-row"><div><span class="module-kicker">IDENTITY</span><h3>Profile & session</h3></div><small>${user.authenticated ? "Supabase Auth" : "Preview"}</small></div><div class="account-profile-editor"><label>Display name<input id="accountDisplayName" value="${escapeHtml(user.name || "BlinQ User")}" maxlength="80"></label><button class="btn btn-ghost" id="saveAccountProfile" type="button">Save profile</button></div>${user.authenticated ? '<button class="btn btn-ghost signout-button" id="signOutButton" type="button">Sign out</button>' : ''}</section>
     <div class="account-settings-grid">
-      <section class="performance-section avatar-settings"><div class="section-title-row"><div><span class="module-kicker">PROFILE</span><h3>Avatar</h3></div><small>${avatarOptions.length > 1 ? "A / B profile choice" : "Plan avatar"}</small></div><div class="avatar-choice-row">${avatarChoices}</div></section>
+      <section class="performance-section avatar-settings"><div class="section-title-row"><div><span class="module-kicker">PROFILE</span><h3>Avatar</h3></div><small>${avatarOptions.length > 1 ? "Unlocked by current plan" : "Plan avatar"}</small></div><div class="avatar-choice-row">${avatarChoices}</div><p class="module-copy">PRO unlocks Free + PRO avatars. Elite adds Elite. Legend adds Legend. GOAT unlocks every previous avatar plus the GOAT profile.</p></section>
       <section class="performance-section engine-summary"><div class="engine-summary-mark"><img src="${escapeHtml(goatLogo)}" data-fallback="${escapeHtml(goatFallback)}" alt="BackstageTalks Statistical Engine" /></div><div><span class="module-kicker">POWERED BY</span><h3>BackstageTalks Statistical Engine</h3><p class="module-copy">BlinQ is the product interface. The statistical engine handles feature construction, model evaluation and prediction generation.</p></div></section>
     </div>
     <section class="performance-section"><div class="section-title-row"><div><span class="module-kicker">ENTITLEMENTS</span><h3>Module access</h3></div></div><div class="account-access-list">${accessRows}</div></section>
     <section class="performance-section admin-access-card"><div class="section-title-row"><div><span class="module-kicker">OWNER TOOLS</span><h3>Admin Studio</h3></div><small>Session-only key</small></div><p class="module-copy">Open persistent Banner Manager, Plan Access and account configuration. The admin key is kept only in sessionStorage for this browser tab/session.</p><button class="btn btn-ghost" id="openAdminStudio" type="button">Open Admin Studio</button></section>
   `);
-  document.querySelectorAll("[data-avatar-variant]").forEach((button) => button.addEventListener("click", () => setAvatarVariant(button.dataset.avatarVariant)));
+  document.querySelectorAll("[data-avatar-choice]").forEach((button) => button.addEventListener("click", () => setAvatarChoice(button.dataset.avatarChoice)));
   const engineImage = document.querySelector(".engine-summary-mark img");
   if (engineImage) engineImage.addEventListener("error", function () { if (this.dataset.fallback && this.src !== this.dataset.fallback) this.src = this.dataset.fallback; });
   $("openAdminStudio")?.addEventListener("click", async () => { if (await unlockAdminSession()) navigate("admin_banners"); });
+  $("saveAccountProfile")?.addEventListener("click", async () => {
+    const value = String($("accountDisplayName")?.value || "").trim();
+    if (!value) return;
+    if (!user.authenticated || !window.BLINQ_AUTH?.updateProfile) { user.name = value; renderAccount(); renderAccountPage(); return; }
+    try {
+      const result = await window.BLINQ_AUTH.updateProfile({ display_name: value, avatar_variant: state.avatarVariant, avatar_url: currentAvatarUrl() });
+      applyAuthenticatedAccount(result.account || {});
+      renderNavigation();
+      renderAccountPage();
+    } catch (error) { alert(`Profile update failed: ${error.message}`); }
+  });
+  $("signOutButton")?.addEventListener("click", async () => { await window.BLINQ_AUTH?.signOut?.(); location.reload(); });
 }
 
 
@@ -1914,10 +2132,123 @@ function bindBannerManager() {
   $("resetBannerConfig")?.addEventListener("click",()=>{localStorage.removeItem("blinq_admin_ui_override");location.reload();});
 }
 
-function renderAdminUsers() {
-  const account = state.ui?.account || {};
-  moduleShell("Account Configuration", "Persistent public account defaults today; structured so real identity/subscription entitlements can replace them later.", `<div class="admin-editor account-admin-editor"><div class="admin-editor-head"><div><span>ACCOUNT DEFAULTS</span><h3>Public session profile</h3></div></div><div class="admin-slot-grid"><article class="admin-slot"><label>Display name<input id="adminDisplayName" value="${escapeHtml(account.display_name || "BlinQ User")}" /></label><label>Plan<select id="adminDefaultPlan">${["free","pro","elite","legend","goat","admin"].map((x)=>`<option value="${x}" ${String(account.plan||"free")===x?"selected":""}>${x.toUpperCase()}</option>`).join("")}</select></label><label>Plan label<input id="adminPlanLabel" value="${escapeHtml(account.plan_label || "Free Trial")}" /></label><label>Entitlement text<input id="adminEntitlement" value="${escapeHtml(account.entitlement_text || "Active")}" /></label><button class="btn btn-primary" id="publishAccountConfig" type="button">Publish account defaults</button></article><article class="admin-slot"><strong>Login / entitlement preparation</strong><p class="module-copy">The UI no longer needs hard-coded plan rules. Once authentication is connected, the same account + allowed_plans contract can be populated per signed-in user instead of using these public defaults.</p><div class="image-property-box"><span>Current auth mode: <strong>${escapeHtml(cfg.authMode || "none")}</strong></span><span>Persistent config: <strong>Supabase app_settings</strong></span><span>Admin writes: <strong>x-admin-key protected</strong></span></div></article></div></div>`);
-  $("publishAccountConfig")?.addEventListener("click", async()=>{try{state.ui.account={...state.ui.account,display_name:$("adminDisplayName").value.trim(),plan:$("adminDefaultPlan").value,plan_label:$("adminPlanLabel").value.trim(),entitlement_text:$("adminEntitlement").value.trim()};await adminRequest("/api/v1/admin/ui-config",{method:"POST",body:JSON.stringify(configForPersistence())});alert("Account defaults published.");}catch(error){alert(`Publish failed: ${error.message}`);}});
+async function renderAdminUsers() {
+  moduleShell("User Management", "Real Supabase Auth accounts and BlinQ plan entitlements.", `<div class="state-card" id="adminUsersState">Loading users…</div>`);
+  const shell = $("moduleView")?.querySelector(".module-card");
+  if (!shell) return;
+  if (!adminKey()) {
+    shell.innerHTML = `<div class="access-manager-intro"><div><span class="module-kicker">SECURE ADMIN</span><h2>User Management</h2><p>Unlock the admin session to manage real account plans and activation status.</p></div><button class="btn btn-primary" id="unlockUsersAdmin" type="button">Unlock Admin</button></div>`;
+    $("unlockUsersAdmin")?.addEventListener("click", async () => { if (await unlockAdminSession()) renderAdminUsers(); });
+    return;
+  }
+  try {
+    const result = await adminRequest("/api/v1/admin/users");
+    const users = Array.isArray(result?.users) ? result.users : [];
+    const rows = users.map((user) => {
+      const expires = user.entitlement_expires_at ? String(user.entitlement_expires_at).slice(0,10) : "";
+      return `<tr data-admin-user="${escapeHtml(user.id)}">
+        <td class="user-email"><strong>${escapeHtml(user.email || "—")}</strong><br><small>${escapeHtml(fmtDate(user.created_at))}</small></td>
+        <td class="user-name"><input data-user-name value="${escapeHtml(user.display_name || "BlinQ User")}" maxlength="80"></td>
+        <td class="user-plan"><select data-user-plan>${ACCESS_PLANS.map((plan)=>`<option value="${plan}" ${String(user.plan||"free")===plan?"selected":""}>${plan.toUpperCase()}</option>`).join("")}</select></td>
+        <td class="user-expiry"><input data-user-expiry type="date" value="${escapeHtml(expires)}"></td>
+        <td><label class="admin-inline-check"><input data-user-active type="checkbox" ${user.is_active !== false ? "checked" : ""}> Active</label></td>
+        <td><span class="user-status-badge ${user.is_active !== false ? "active" : "disabled"}">${user.is_active !== false ? "ACTIVE" : "DISABLED"}</span></td>
+        <td><button class="btn btn-ghost" type="button" data-save-user>Save</button></td>
+      </tr>`;
+    }).join("");
+    shell.innerHTML = `<div class="access-manager-intro"><div><span class="module-kicker">AUTH ACCOUNTS</span><h2>User Management</h2><p>Every registered account starts at FREE. Change plan, expiry and activation here. Access Manager then decides exactly what that level can see and open.</p></div><div class="access-policy-box"><span>REGISTERED USERS</span><strong>${users.length}</strong><small>Supabase Auth + user_profiles</small></div></div>
+      <div class="table-wrap access-manager-wrap"><table class="access-table user-admin-table"><thead><tr><th>User</th><th>Name</th><th>Plan</th><th>Expiry</th><th>Account</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr><td colspan="7">No registered users yet.</td></tr>'}</tbody></table></div>`;
+    shell.querySelectorAll("[data-save-user]").forEach((button)=>button.addEventListener("click", async()=>{
+      const row=button.closest("[data-admin-user]");
+      const userId=row?.dataset.adminUser;
+      if(!userId)return;
+      button.disabled=true; button.textContent="Saving…";
+      try{
+        const expiry=row.querySelector("[data-user-expiry]")?.value || "";
+        const plan=row.querySelector("[data-user-plan]")?.value || "free";
+        await adminRequest(`/api/v1/admin/users/${encodeURIComponent(userId)}`,{method:"POST",body:JSON.stringify({
+          display_name:row.querySelector("[data-user-name]")?.value || "",
+          plan,
+          plan_label: plan === "free" ? "Free" : plan.toUpperCase(),
+          entitlement_expires_at: expiry ? `${expiry}T23:59:59+00:00` : null,
+          is_active:Boolean(row.querySelector("[data-user-active]")?.checked),
+        })});
+        button.textContent="Saved";
+        setTimeout(()=>{button.textContent="Save";button.disabled=false;},900);
+      }catch(error){alert(`User update failed: ${error.message}`);button.textContent="Save";button.disabled=false;}
+    }));
+  } catch (error) {
+    shell.innerHTML = `<div class="state-card error">User Management unavailable.<small>${escapeHtml(error.message)}</small></div>`;
+  }
+}
+
+
+function avatarAdminRows(plan) {
+  const rows = normalizeAvatarSet(plan);
+  return rows.map((entry, index) => `<div class="avatar-admin-row" data-avatar-admin-row data-plan="${escapeHtml(plan)}" data-index="${index}">
+    <div class="avatar-admin-preview"><img src="${escapeHtml(entry.src)}" alt="" /></div>
+    <label>Label<input data-avatar-label value="${escapeHtml(entry.label)}" maxlength="80"></label>
+    <label>Asset URL<input data-avatar-src value="${escapeHtml(entry.src)}" maxlength="500"></label>
+    <label>Type<select data-avatar-gender><option value="woman" ${entry.gender === "woman" ? "selected" : ""}>Woman</option><option value="man" ${entry.gender === "man" ? "selected" : ""}>Man</option><option value="goat" ${entry.gender === "goat" ? "selected" : ""}>GOAT</option><option value="custom" ${!["woman","man","goat"].includes(entry.gender) ? "selected" : ""}>Custom</option></select></label>
+    <button class="btn btn-ghost" type="button" data-remove-avatar>Remove</button>
+  </div>`).join("");
+}
+
+function readAvatarManagerToState() {
+  const sets = {};
+  ["free","pro","elite","legend","goat"].forEach((plan) => {
+    sets[plan] = [...document.querySelectorAll(`[data-avatar-admin-row][data-plan="${plan}"]`)].map((row) => ({
+      src: row.querySelector("[data-avatar-src]")?.value.trim() || "",
+      label: row.querySelector("[data-avatar-label]")?.value.trim() || `${plan.toUpperCase()} avatar`,
+      gender: row.querySelector("[data-avatar-gender]")?.value || "custom",
+      enabled: true,
+    })).filter((entry) => entry.src);
+  });
+  sets.admin = [...(sets.goat || [])];
+  state.ui.avatar_sets = sets;
+}
+
+async function uploadAvatarFile(plan, file, button) {
+  if (!file) return;
+  if (file.size > 1_500_000) throw new Error("Avatar is over 1.5 MB. Optimize it before upload.");
+  const allowed = ["image/png","image/jpeg","image/webp"];
+  if (!allowed.includes(file.type)) throw new Error("Use PNG, JPG or WEBP for avatars.");
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(new Error("Unable to read image."));
+    reader.readAsDataURL(file);
+  });
+  const base64 = dataUrl.split(",", 2)[1] || "";
+  button.disabled = true; button.textContent = "Uploading…";
+  try {
+    const result = await adminRequest("/api/v1/admin/avatar-upload", {
+      method: "POST",
+      body: JSON.stringify({ plan, filename: file.name, content_type: file.type, data_base64: base64 }),
+    });
+    const rows = Array.isArray(state.ui.avatar_sets?.[plan]) ? state.ui.avatar_sets[plan] : [];
+    rows.push({ src: result.url, label: `${plan.toUpperCase()} custom`, gender: "custom", enabled: true });
+    state.ui.avatar_sets[plan] = rows;
+    if (plan === "goat") state.ui.avatar_sets.admin = [...rows];
+    renderAdminAvatars();
+  } finally { button.disabled = false; button.textContent = "Upload"; }
+}
+
+async function renderAdminAvatars() {
+  const plans = ["free","pro","elite","legend","goat"];
+  moduleShell("Avatar Manager", "Manage tier avatar catalog. Higher plans automatically inherit every lower-tier avatar.", `
+    <div class="access-manager-intro"><div><span class="module-kicker">PROFILE ASSETS</span><h2>Avatar Manager</h2><p>FREE sees Free avatars. PRO inherits Free + PRO. Elite inherits all previous, then Legend, and GOAT unlocks the full catalog. Uploads are stored in the public BlinQ asset bucket.</p></div><div class="access-policy-box"><span>INHERITANCE</span><strong>Automatic</strong><small>FREE → PRO → ELITE → LEGEND → GOAT</small></div></div>
+    <div class="avatar-admin-grid">${plans.map((plan) => `<section class="avatar-admin-card" data-avatar-plan-card="${plan}"><div class="section-title-row"><div><span class="module-kicker">${plan.toUpperCase()}</span><h3>${plan === "goat" ? "GOAT" : `${plan.toUpperCase()} avatars`}</h3></div><small>${normalizeAvatarSet(plan).length} assets</small></div><div class="avatar-admin-list">${avatarAdminRows(plan)}</div><div class="avatar-upload-row"><input type="file" accept="image/png,image/jpeg,image/webp" data-avatar-upload-file="${plan}"><button class="btn btn-ghost" type="button" data-avatar-upload="${plan}">Upload</button></div></section>`).join("")}</div>
+    <div class="admin-actions sticky-admin-actions"><button class="btn btn-primary" id="publishAvatarConfig" type="button">Publish avatar catalog</button><button class="btn btn-ghost" id="saveAvatarPreview" type="button">Save browser preview</button></div>
+  `);
+  document.querySelectorAll("[data-remove-avatar]").forEach((button) => button.addEventListener("click", () => { button.closest("[data-avatar-admin-row]")?.remove(); }));
+  document.querySelectorAll("[data-avatar-upload]").forEach((button) => button.addEventListener("click", async () => {
+    const plan = button.dataset.avatarUpload;
+    const file = document.querySelector(`[data-avatar-upload-file="${plan}"]`)?.files?.[0];
+    try { await uploadAvatarFile(plan, file, button); } catch (error) { alert(`Upload failed: ${error.message}`); button.disabled=false; button.textContent="Upload"; }
+  }));
+  $("saveAvatarPreview")?.addEventListener("click", () => { readAvatarManagerToState(); localStorage.setItem("blinq_admin_ui_override", JSON.stringify({ avatar_sets: state.ui.avatar_sets })); alert("Avatar preview saved locally."); });
+  $("publishAvatarConfig")?.addEventListener("click", async () => { try { readAvatarManagerToState(); await publishUiConfig(); alert("Avatar catalog published globally."); } catch (error) { alert(`Publish failed: ${error.message}`); } });
 }
 
 function accessManagerEntries() {
@@ -2149,6 +2480,7 @@ function renderCurrentModule() {
   if (route === "admin_banners") return renderAdminBanners();
   if (route === "admin_users") return renderAdminUsers();
   if (route === "admin_access") return renderAdminAccess();
+  if (route === "admin_avatars") return renderAdminAvatars();
   return moduleShell("Module", "This module is prepared for connection.", '<div class="state-card">Prepared.</div>');
 }
 
@@ -2165,14 +2497,16 @@ function routeFromHash() {
     "responsible-use": "responsible_use",
     "admin-banners": "admin_banners",
     "admin-users": "admin_users",
-    "admin-access": "admin_access"
+    "admin-access": "admin_access",
+    "admin-avatars": "admin_avatars"
   };
   const token = aliases[raw] || raw.replaceAll("-", "_");
   return navItem(token) ? token : "dashboard";
 }
 
 function setupEvents() {
-  $("refreshButton").addEventListener("click", loadPredictions);
+  bindAuthEvents();
+  $("refreshButton")?.addEventListener("click", loadPredictions);
   ["tourFilter", "tournamentFilter", "surfaceFilter", "confidenceFilter"].forEach((id) => $(id).addEventListener("change", () => { state.featuredIndex = 0; state.allPredictions = false; renderPredictions(); }));
   $("searchInput").addEventListener("input", () => { state.featuredIndex = 0; state.allPredictions = false; renderPredictions(); });
   $("prevPick").addEventListener("click", () => { const rows = primeRows(); if (!rows.length) return; state.featuredIndex = (state.featuredIndex - 1 + rows.length) % rows.length; renderPredictions(); });
@@ -2202,8 +2536,17 @@ async function boot() {
   applyLanguageChrome();
   setupEvents();
   await loadUiConfig();
-  state.currentRoute = routeFromHash();
+  const identityReady = await initializeIdentity();
+  if (!identityReady) return;
+  renderBranding();
+  renderHeaderSponsor();
+  renderBannerZones();
+  renderPlanGrid();
+  ensureAccessRegistry();
   renderNavigation();
+  applyManagedPanelVisibility();
+  showAuthenticatedApp();
+  state.currentRoute = routeFromHash();
   navigate(state.currentRoute);
   await loadPredictions();
   setInterval(loadPredictions, Math.max(1, Number(cfg.refreshMinutes || 5)) * 60 * 1000);

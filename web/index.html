@@ -7,10 +7,87 @@
   <link rel="icon" type="image/png" href="/assets/blinq_favicon.png" />
   <link rel="shortcut icon" href="/assets/blinq_favicon.png" />
   <title>BlinQ · Tennis Intelligence</title>
-  <link rel="stylesheet" href="/styles.css?v=20260904-17" />
+  <link rel="stylesheet" href="/styles.css?v=20260905-192" />
 </head>
 <body>
-  <div class="app-shell" id="appShell">
+  <section class="login-screen" id="authScreen" aria-live="polite">
+    <div class="login-glow login-glow-a"></div>
+    <div class="login-glow login-glow-b"></div>
+    <div class="login-card auth-card">
+      <div class="auth-loading" id="authLoading">
+        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
+        <div class="auth-spinner" aria-hidden="true"></div>
+        <p>Checking secure session…</p>
+      </div>
+
+      <div class="auth-panel" id="authSignIn" hidden>
+        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
+        <div class="login-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
+        <h1 data-i18n="auth.title">Welcome to BlinQ</h1>
+        <p data-i18n="auth.subtitle">Sign in to open your tennis intelligence workspace.</p>
+        <button class="btn btn-telegram btn-full" id="telegramSignIn" type="button" hidden><span class="telegram-mark">✈</span><span data-i18n="auth.telegram">Continue with Telegram</span></button>
+        <div class="auth-divider" id="telegramSignInDivider" hidden><span data-i18n="auth.or_email">or use email</span></div>
+        <form id="signInForm">
+          <label><span data-i18n="auth.email">Email</span><input id="signInEmail" type="email" autocomplete="email" required /></label>
+          <label><span data-i18n="auth.password">Password</span><input id="signInPassword" type="password" autocomplete="current-password" minlength="8" required /></label>
+          <button class="btn btn-primary btn-full auth-submit" type="submit" data-i18n="auth.sign_in">Sign in</button>
+        </form>
+        <div class="auth-secondary-actions">
+          <button type="button" class="auth-link" data-auth-mode="signup" data-i18n="auth.create_account">Create account</button>
+          <button type="button" class="auth-link" data-auth-mode="forgot" data-i18n="auth.forgot">Forgot password?</button>
+        </div>
+      </div>
+
+      <div class="auth-panel" id="authSignUp" hidden>
+        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
+        <div class="login-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
+        <h1 data-i18n="auth.signup_title">Create your BlinQ account</h1>
+        <p data-i18n="auth.signup_copy">New accounts start on the Free level. Your plan can be upgraded later.</p>
+        <button class="btn btn-telegram btn-full" id="telegramSignUp" type="button" hidden><span class="telegram-mark">✈</span><span data-i18n="auth.telegram_signup">Create with Telegram</span></button>
+        <div class="auth-divider" id="telegramSignUpDivider" hidden><span data-i18n="auth.or_email">or use email</span></div>
+        <form id="signUpForm">
+          <label><span data-i18n="auth.display_name">Display name</span><input id="signUpName" type="text" autocomplete="name" maxlength="80" required /></label>
+          <label><span data-i18n="auth.email">Email</span><input id="signUpEmail" type="email" autocomplete="email" required /></label>
+          <label><span data-i18n="auth.password">Password</span><input id="signUpPassword" type="password" autocomplete="new-password" minlength="8" required /></label>
+          <label><span data-i18n="auth.password_confirm">Confirm password</span><input id="signUpPassword2" type="password" autocomplete="new-password" minlength="8" required /></label>
+          <button class="btn btn-primary btn-full auth-submit" type="submit" data-i18n="auth.sign_up">Create account</button>
+        </form>
+        <button type="button" class="auth-link auth-back" data-auth-mode="signin" data-i18n="auth.back_sign_in">← Back to sign in</button>
+      </div>
+
+      <div class="auth-panel" id="authForgot" hidden>
+        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
+        <div class="login-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
+        <h1 data-i18n="auth.reset_title">Reset password</h1>
+        <p data-i18n="auth.reset_copy">We will email you a secure password reset link.</p>
+        <form id="forgotForm">
+          <label><span data-i18n="auth.email">Email</span><input id="forgotEmail" type="email" autocomplete="email" required /></label>
+          <button class="btn btn-primary btn-full auth-submit" type="submit" data-i18n="auth.send_reset">Send reset link</button>
+        </form>
+        <button type="button" class="auth-link auth-back" data-auth-mode="signin" data-i18n="auth.back_sign_in">← Back to sign in</button>
+      </div>
+
+      <div class="auth-panel" id="authNewPassword" hidden>
+        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
+        <div class="login-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
+        <h1 data-i18n="auth.new_password_title">Choose a new password</h1>
+        <p data-i18n="auth.new_password_copy">Set a new password for your BlinQ account.</p>
+        <form id="newPasswordForm">
+          <label><span data-i18n="auth.new_password">New password</span><input id="newPassword" type="password" autocomplete="new-password" minlength="8" required /></label>
+          <label><span data-i18n="auth.password_confirm">Confirm password</span><input id="newPassword2" type="password" autocomplete="new-password" minlength="8" required /></label>
+          <button class="btn btn-primary btn-full auth-submit" type="submit" data-i18n="auth.save_password">Save new password</button>
+        </form>
+      </div>
+
+      <div class="auth-message" id="authMessage" hidden></div>
+      <nav class="auth-languages" aria-label="Language versions">
+        <a href="?lang=en" data-lang-choice="en">EN</a><a href="?lang=sk" data-lang-choice="sk">SK</a><a href="?lang=cz" data-lang-choice="cz">CZ</a><a href="?lang=pl" data-lang-choice="pl">PL</a><a href="?lang=hu" data-lang-choice="hu">HU</a><a href="?lang=de" data-lang-choice="de">DE</a><a href="?lang=ua" data-lang-choice="ua">UA</a><a href="?lang=ru" data-lang-choice="ru">RU</a>
+      </nav>
+      <div class="preview-note">Powered by BackstageTalks Statistical Engine</div>
+    </div>
+  </section>
+
+  <div class="app-shell" id="appShell" hidden>
     <aside class="sidebar">
       <a class="engine-brand sidebar-product-brand" href="#dashboard" data-route="dashboard" aria-label="BlinQ · Statistical Engine by BackstageTalks">
         <img src="/assets/blinq_logo.svg" alt="BlinQ" class="sidebar-product-logo" />
@@ -49,20 +126,24 @@
             <div class="eyebrow" id="pageEyebrow">TENNIS INTELLIGENCE</div>
             <div class="title-row compact-title-row">
               <h1 id="pageTitle">Dashboard</h1>
-              <span class="today-label" id="todayLabel"></span>
             </div>
-            <p class="subtitle" id="pageSubtitle">Your strongest current model selections and live tennis intelligence.</p>
+            <p class="subtitle" id="pageSubtitle"></p>
           </div>
         </div>
 
         <section id="headerBannerZone" class="header-banner-zone" data-access-feature="panel.header_banners" data-access-label="Header banners" data-access-group="Dashboard" aria-label="Header promotions"></section>
 
         <div class="topbar-actions account-actions">
-          <div class="plan-chip" id="planChip"><span id="planName">FREE</span><strong id="planEntitlement">23 days left</strong></div>
-          <button class="btn btn-primary upgrade-top" data-upgrade type="button">♛ <span data-i18n="shell.upgrade">Upgrade</span></button>
+          <div class="header-status-stack">
+            <button class="btn btn-primary upgrade-top" data-upgrade type="button">♛ <span data-i18n="shell.upgrade">Upgrade</span></button>
+            <div class="status-meta-row">
+              <div class="plan-chip" id="planChip"><span id="planName">FREE</span><strong id="planEntitlement">23 days left</strong></div>
+              <span class="today-label topbar-date" id="todayLabel"></span>
+            </div>
+          </div>
           <button class="profile-button profile-button-large" id="profileButton" data-route="account" type="button">
             <span class="avatar avatar-large" id="avatar">BU</span>
-            <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small id="profilePlan">Free Trial</small></span>
+            <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small id="profileHandle">@blinquser</small><small id="profilePlan">Free Trial</small></span>
             <span aria-hidden="true">⌄</span>
           </button>
         </div>
@@ -146,8 +227,9 @@
     <div class="plan-grid" id="planGrid"></div>
   </dialog>
 
-  <script src="/i18n.js?v=20260904-17"></script>
+  <script src="/i18n.js?v=20260905-192"></script>
   <script src="/config.js?v=20260904-17"></script>
-  <script src="/app.js?v=20260904-17"></script>
+  <script src="/auth.js?v=20260905-192"></script>
+  <script src="/app.js?v=20260905-192"></script>
 </body>
 </html>

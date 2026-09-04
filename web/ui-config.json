@@ -357,6 +357,15 @@
         "icon": "⌘",
         "order": 203,
         "admin_only": true
+      },
+      {
+        "id": "admin_avatars",
+        "enabled": true,
+        "label": "Avatar Manager",
+        "href": "#admin-avatars",
+        "icon": "◉",
+        "order": 204,
+        "admin_only": true
       }
     ]
   },
@@ -504,26 +513,76 @@
   },
   "avatar_sets": {
     "free": [
-      "/assets/free_a.webp",
-      "/assets/free_b.webp"
+      {
+        "src": "/assets/free_a.webp",
+        "label": "FREE Woman",
+        "gender": "woman",
+        "enabled": true
+      },
+      {
+        "src": "/assets/free_b.webp",
+        "label": "FREE Man",
+        "gender": "man",
+        "enabled": true
+      }
     ],
     "pro": [
-      "/assets/pro_a.webp",
-      "/assets/pro_b.webp"
+      {
+        "src": "/assets/pro_a.webp",
+        "label": "PRO Woman",
+        "gender": "woman",
+        "enabled": true
+      },
+      {
+        "src": "/assets/pro_b.webp",
+        "label": "PRO Man",
+        "gender": "man",
+        "enabled": true
+      }
     ],
     "elite": [
-      "/assets/elite_a.webp",
-      "/assets/elite_b.webp"
+      {
+        "src": "/assets/elite_a.webp",
+        "label": "ELITE Woman",
+        "gender": "woman",
+        "enabled": true
+      },
+      {
+        "src": "/assets/elite_b.webp",
+        "label": "ELITE Man",
+        "gender": "man",
+        "enabled": true
+      }
     ],
     "legend": [
-      "/assets/legend_a.webp",
-      "/assets/legend_b.webp"
+      {
+        "src": "/assets/legend_a.webp",
+        "label": "LEGEND Woman",
+        "gender": "woman",
+        "enabled": true
+      },
+      {
+        "src": "/assets/legend_b.webp",
+        "label": "LEGEND Man",
+        "gender": "man",
+        "enabled": true
+      }
     ],
     "goat": [
-      "/assets/goat.webp"
+      {
+        "src": "/assets/goat.webp",
+        "label": "GOAT",
+        "gender": "goat",
+        "enabled": true
+      }
     ],
     "admin": [
-      "/assets/goat.webp"
+      {
+        "src": "/assets/goat.webp",
+        "label": "GOAT",
+        "gender": "goat",
+        "enabled": true
+      }
     ]
   },
   "header_zone": {
