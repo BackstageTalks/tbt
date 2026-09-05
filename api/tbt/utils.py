@@ -51,33 +51,46 @@ def safe_int(value: Any) -> int | None:
 
 
 def parse_datetime(value: Any) -> datetime:
+    """Parse a required provider timestamp without manufacturing a fallback time."""
     if isinstance(value, datetime):
         dt = value
-    elif isinstance(value, (int, float)):
-        # Provider timestamps may be seconds or milliseconds.
+    elif isinstance(value, (int, float)) and not isinstance(value, bool):
         ts = float(value)
+        if not math.isfinite(ts):
+            raise ValueError(f"Invalid datetime value: {value!r}")
+        # Provider timestamps may be seconds or milliseconds.
         if ts > 10_000_000_000:
             ts /= 1000.0
-        dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        try:
+            dt = datetime.fromtimestamp(ts, tz=timezone.utc)
+        except (OverflowError, OSError, ValueError) as exc:
+            raise ValueError(f"Invalid datetime value: {value!r}") from exc
     elif isinstance(value, str) and value.strip():
         text = value.strip().replace("Z", "+00:00")
+        dt = None
         for candidate in (text, text.replace(" ", "T", 1)):
             try:
                 dt = datetime.fromisoformat(candidate)
                 break
             except ValueError:
-                dt = None
+                continue
         if dt is None:
-            for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%Y/%m/%d", "%Y-%m-%d %H:%M:%S"):
+            for fmt in (
+                "%Y-%m-%d",
+                "%d.%m.%Y",
+                "%Y/%m/%d",
+                "%Y-%m-%d %H:%M:%S",
+            ):
                 try:
                     dt = datetime.strptime(text, fmt)
                     break
                 except ValueError:
                     continue
         if dt is None:
-            dt = datetime.now(timezone.utc)
+            raise ValueError(f"Invalid datetime value: {value!r}")
     else:
-        dt = datetime.now(timezone.utc)
+        raise ValueError("Missing datetime value")
+
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc)
