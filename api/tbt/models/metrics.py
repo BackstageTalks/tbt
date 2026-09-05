@@ -63,8 +63,38 @@ def evaluate_probabilities(y_true: Iterable[int], y_prob: Iterable[float]) -> di
         "mean_confidence": float(np.maximum(p, 1.0 - p).mean()),
     }
     try:
-        metrics["roc_auc"] = float(roc_auc_score(y, p))
+        metrics["roc_auc"] = float(roc_auc_score(y, p)) if len(np.unique(y)) == 2 else math.nan
     except ValueError:
         metrics["roc_auc"] = math.nan
     metrics["calibration_bins"] = calibration_bins(y, p, bins=10)
+    metrics["selective_accuracy"] = selective_accuracy(y, p)
     return metrics
+
+
+def wilson_interval(wins, n):
+    if not n:
+        return None
+    z = 1.959963984540054
+    p = wins / n
+    denominator = 1 + z * z / n
+    center = (p + z * z / (2 * n)) / denominator
+    radius = z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n)) / denominator
+    return [max(0., center - radius), min(1., center + radius)]
+
+
+def selective_accuracy(y_true, y_prob) -> list[dict]:
+    """Fixed diagnostic thresholds, never selected using holdout outcomes."""
+    y, p = np.asarray(y_true), np.asarray(y_prob, dtype=float)
+    if y.shape != p.shape or not np.isfinite(p).all():
+        raise ValueError("Targets/probabilities must align and be finite")
+    confidence = np.maximum(p, 1 - p)
+    rows = []
+    for threshold in (.5, .55, .6, .65, .7, .75, .8, .85, .9):
+        selected = confidence >= threshold
+        count = int(selected.sum())
+        wins = int(((p[selected] >= .5) == y[selected]).sum())
+        rows.append({"threshold": threshold, "n": count, "correct": wins,
+                     "coverage": count / len(y) if len(y) else 0.,
+                     "accuracy_ci95_wilson": wilson_interval(wins, count),
+                     "accuracy": wins / count if count else None})
+    return rows

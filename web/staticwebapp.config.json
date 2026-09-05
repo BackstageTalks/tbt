@@ -1,27 +1,11 @@
 {
-  "routes": [
-    {
-      "route": "/",
-      "redirect": "/follow-the-data/",
-      "statusCode": 301
-    },
-    {
-      "route": "/follow-the-data",
-      "redirect": "/follow-the-data/",
-      "statusCode": 301
-    },
-    {
-      "route": "/follow-the-data/*",
-      "rewrite": "/index.html"
-    }
-  ],
-  "navigationFallback": {
-    "rewrite": "/index.html",
-    "exclude": ["*.css", "*.js", "*.json", "*.png", "*.jpg", "*.jpeg", "*.webp", "*.svg", "*.ico"]
-  },
+  "routes": [{"route": "/follow-the-data", "redirect": "/follow-the-data/", "statusCode": 301}],
+  "navigationFallback": {"rewrite": "/index.html", "exclude": ["/api/*", "/*.css", "/*.js", "/assets/*"]},
+  "platform": {"apiRuntime": "python:3.11"},
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=()"
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://*.supabase.co; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
   }
 }

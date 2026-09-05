@@ -1348,6 +1348,11 @@ class FeatureBuilder:
         float | None,
         float | None,
     ]:
+        # Prefer point-weighted service/return rates from event enrichment.
+        service = stats.get(f"{prefix}_service_points_won")
+        returns = stats.get(f"{prefix}_return_points_won")
+        if service is not None and returns is not None:
+            return service, returns
         # These are intentionally generic. Missing provider stats are
         # not imputed from future data.
         first_win = stats.get(
@@ -1742,6 +1747,8 @@ class FeatureBuilder:
                 rows.append(
                     {
                         **features,
+                        "surface_history_count": min(self._state(oriented, True).surface_matches.get(oriented.surface, 0),
+                                                     self._state(oriented, False).surface_matches.get(oriented.surface, 0)),
                         "target": (
                             target
                         ),
@@ -1797,6 +1804,7 @@ class FeatureBuilder:
         columns = (
             FEATURE_NAMES
             + [
+                "surface_history_count",
                 "target",
                 "match_id",
                 "scheduled_at",

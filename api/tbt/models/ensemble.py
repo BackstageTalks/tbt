@@ -9,12 +9,17 @@ import pandas as pd
 from sklearn.ensemble import HistGradientBoostingClassifier
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import log_loss
+from sklearn.metrics import accuracy_score, log_loss
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from ..utils import clamp, logit
 from .feature_builder import FEATURE_NAMES
+from .symmetry import swap_frame
+
+
+def _logits(p):
+    p = np.clip(np.asarray(p, dtype=float), 1e-6, 1 - 1e-6)
+    return np.log(p / (1 - p)).reshape(-1, 1)
 
 
 @dataclass
@@ -22,590 +27,174 @@ class ProbabilityCalibrator:
     kind: str = "identity"
     model: Any = None
 
-    def predict(
-        self,
-        probabilities: np.ndarray,
-    ) -> np.ndarray:
-        p = np.clip(
-            np.asarray(
-                probabilities,
-                dtype=float,
-            ),
-            1e-6,
-            1 - 1e-6,
-        )
-
-        if (
-            self.kind == "platt"
-            and self.model is not None
-        ):
-            x = np.asarray(
-                [
-                    logit(value)
-                    for value in p
-                ]
-            ).reshape(
-                -1,
-                1,
-            )
-
-            return self.model.predict_proba(
-                x
-            )[:, 1]
-
-        if (
-            self.kind == "isotonic"
-            and self.model is not None
-        ):
-            return np.asarray(
-                self.model.predict(
-                    p
-                ),
-                dtype=float,
-            )
-
+    def predict(self, probabilities: np.ndarray) -> np.ndarray:
+        p = np.clip(np.asarray(probabilities, dtype=float), 1e-6, 1 - 1e-6)
+        if self.kind == "platt" and self.model is not None:
+            return self.model.predict_proba(_logits(p))[:, 1]
+        if self.kind == "isotonic" and self.model is not None:
+            return np.asarray(self.model.predict(p), dtype=float)
         return p
 
 
+def calibration_split(frame: pd.DataFrame) -> int | None:
+    """Never split one UTC day across calibration fitting and selection."""
+    days = pd.to_datetime(frame["scheduled_at"], utc=True).dt.normalize()
+    boundaries = np.flatnonzero(days.ne(days.shift()).to_numpy())
+    valid = [int(i) for i in boundaries if i >= 60 and len(frame) - i >= 40]
+    return min(valid, key=lambda i: abs(i - len(frame) * .55)) if valid else None
+
+
 class TennisEnsemble:
-    """Regularised linear + nonlinear ensemble with out-of-time calibration."""
+    """Symmetric linear/boost/Elo blend selected strictly after training."""
 
-    def __init__(
-        self,
-        feature_names: list[str] | None = None,
-    ) -> None:
-        self.feature_names = list(
-            feature_names
-            if feature_names is not None
-            else FEATURE_NAMES
-        )
-
-        self.linear = Pipeline(
-            [
-                (
-                    "scale",
-                    StandardScaler(),
-                ),
-                (
-                    "model",
-                    LogisticRegression(
-                        C=0.35,
-                        max_iter=2000,
-                        solver="lbfgs",
-                        class_weight=None,
-                    ),
-                ),
-            ]
-        )
-
+    def __init__(self, feature_names: list[str] | None = None, objective: str = "accuracy"):
+        if objective not in {"accuracy", "log_loss"}:
+            raise ValueError("objective must be accuracy or log_loss")
+        self.objective = objective
+        # Archive weather is an observation, not a forecast known before kickoff.
+        # Re-enable only after storing point-in-time forecast provenance.
+        self.excluded_features = {"weather_serve_interaction", "weather_known", "environment_known"}
+        self.feature_names = list(FEATURE_NAMES if feature_names is None else feature_names)
+        unknown = set(self.feature_names) - set(FEATURE_NAMES)
+        if unknown:
+            raise ValueError(f"Features need an explicit swap contract: {sorted(unknown)}")
+        self.linear = Pipeline([
+            ("scale", StandardScaler()),
+            ("model", LogisticRegression(C=.35, max_iter=2000, solver="lbfgs")),
+        ])
+        # Random early-stopping could split opposite orientations of one match.
         self.boost = HistGradientBoostingClassifier(
-            learning_rate=0.04,
-            max_iter=260,
-            max_leaf_nodes=15,
-            min_samples_leaf=28,
-            l2_regularization=3.0,
-            early_stopping=True,
-            validation_fraction=0.12,
+            learning_rate=.04, max_iter=260, max_leaf_nodes=15,
+            min_samples_leaf=56, l2_regularization=3., early_stopping=False,
             random_state=200,
         )
-
-        self.blend_weight = 0.5
+        self.blend_weight = .5
+        self.elo_weight = 0.
         self.calibrator = ProbabilityCalibrator()
-
-        self.version = datetime.now(
-            timezone.utc
-        ).strftime(
-            "v200-%Y%m%dT%H%M%SZ"
-        )
-
-        self.metadata: dict[
-            str,
-            Any,
-        ] = {}
-
+        self.version = datetime.now(timezone.utc).strftime("v201-%Y%m%dT%H%M%S%fZ")
+        self.metadata: dict[str, Any] = {}
         self.fitted = False
 
-    def _matrix(
-        self,
-        frame: pd.DataFrame,
-    ) -> np.ndarray:
-        missing = [
-            feature
-            for feature
-            in self.feature_names
-            if feature
-            not in frame.columns
-        ]
-
+    def _matrix(self, frame):
+        missing = set(self.feature_names) - set(frame.columns)
         if missing:
-            raise ValueError(
-                "Prediction frame is missing model features: "
-                + ", ".join(
-                    missing
-                )
-            )
+            raise ValueError(f"Prediction frame is missing model features: {sorted(missing)}")
+        numeric = frame[self.feature_names].astype(float).fillna(0.).copy()
+        for name in getattr(self, "excluded_features", set()):
+            if name in numeric:
+                numeric[name] = 0.
+        x = numeric.to_numpy()
+        if not np.isfinite(x).all():
+            raise ValueError("Model features must be finite")
+        return x
 
-        return (
-            frame[
-                self.feature_names
-            ]
-            .astype(float)
-            .fillna(0.0)
-            .to_numpy()
-        )
+    def _raw_pair(self, x):
+        return self.linear.predict_proba(x)[:, 1], self.boost.predict_proba(x)[:, 1]
 
-    def _raw_pair(
-        self,
-        x: np.ndarray,
-    ) -> tuple[
-        np.ndarray,
-        np.ndarray,
-    ]:
-        return (
-            self.linear.predict_proba(
-                x
-            )[:, 1],
-            self.boost.predict_proba(
-                x
-            )[:, 1],
-        )
+    def _blend(self, linear_p, boost_p):
+        return self.blend_weight * boost_p + (1 - self.blend_weight) * linear_p
 
-    def _blend(
-        self,
-        linear_p: np.ndarray,
-        boost_p: np.ndarray,
-    ) -> np.ndarray:
-        return (
-            self.blend_weight
-            * boost_p
-            + (
-                1.0
-                - self.blend_weight
-            )
-            * linear_p
-        )
+    def _symmetric_pair(self, frame):
+        linear, boost = self._raw_pair(self._matrix(frame))
+        rl, rb = self._raw_pair(self._matrix(swap_frame(frame)))
+        return .5 * (linear + 1 - rl), .5 * (boost + 1 - rb)
 
-    def fit(
-        self,
-        train_frame: pd.DataFrame,
-        calibration_frame: pd.DataFrame,
-    ) -> "TennisEnsemble":
-        if (
-            len(train_frame)
-            < 300
-        ):
-            raise ValueError(
-                "At least 300 training matches are required"
-            )
+    def _raw(self, frame):
+        linear, boost = self._symmetric_pair(frame)
+        p = self._blend(linear, boost)
+        weight = getattr(self, "elo_weight", 0.)
+        if weight:
+            p = (1 - weight) * p + weight * frame["elo_probability"].to_numpy(dtype=float)
+        return np.clip(p, .01, .99)
 
-        x_train = self._matrix(
-            train_frame
-        )
+    @staticmethod
+    def _calibrated(calibrator, p):
+        return np.clip(.5 * (calibrator.predict(p) + 1 - calibrator.predict(1 - p)), .01, .99)
 
-        y_train = (
-            train_frame[
-                "target"
-            ]
-            .astype(int)
-            .to_numpy()
-        )
-
-        self.linear.fit(
-            x_train,
-            y_train,
-        )
-
-        self.boost.fit(
-            x_train,
-            y_train,
-        )
-
-        if (
-            len(calibration_frame)
-            < 120
-        ):
-            self.blend_weight = 0.5
-
-            self.calibrator = (
-                ProbabilityCalibrator(
-                    "identity",
-                    None,
-                )
-            )
-
-            self.fitted = True
-
-            return self
-
-        x_cal = self._matrix(
-            calibration_frame
-        )
-
-        y_cal = (
-            calibration_frame[
-                "target"
-            ]
-            .astype(int)
-            .to_numpy()
-        )
-
-        (
-            linear_p,
-            boost_p,
-        ) = self._raw_pair(
-            x_cal
-        )
-
-        split = max(
-            60,
-            int(
-                len(y_cal)
-                * 0.55
-            ),
-        )
-
-        split = min(
-            split,
-            len(y_cal) - 40,
-        )
-
-        y_select = y_cal[
-            :split
-        ]
-
-        y_validate = y_cal[
-            split:
-        ]
-
-        lin_select = linear_p[
-            :split
-        ]
-
-        lin_validate = linear_p[
-            split:
-        ]
-
-        boost_select = boost_p[
-            :split
-        ]
-
-        boost_validate = boost_p[
-            split:
-        ]
-
-        best_weight = 0.5
-        best_loss = float(
-            "inf"
-        )
-
-        for weight in np.linspace(
-            0.0,
-            1.0,
-            21,
-        ):
-            candidate = (
-                weight
-                * boost_select
-                + (
-                    1.0
-                    - weight
-                )
-                * lin_select
-            )
-
-            loss = log_loss(
-                y_select,
-                np.clip(
-                    candidate,
-                    1e-6,
-                    1 - 1e-6,
-                ),
-                labels=[
-                    0,
-                    1,
-                ],
-            )
-
-            if loss < best_loss:
-                best_loss = float(
-                    loss
-                )
-
-                best_weight = float(
-                    weight
-                )
-
-        self.blend_weight = (
-            best_weight
-        )
-
-        select_raw = self._blend(
-            lin_select,
-            boost_select,
-        )
-
-        validate_raw = self._blend(
-            lin_validate,
-            boost_validate,
-        )
-
-        full_raw = self._blend(
-            linear_p,
-            boost_p,
-        )
-
-        candidates: list[
-            tuple[
-                str,
-                Any,
-                float,
-            ]
-        ] = [
-            (
-                "identity",
-                None,
-                float(
-                    log_loss(
-                        y_validate,
-                        np.clip(
-                            validate_raw,
-                            1e-6,
-                            1 - 1e-6,
-                        ),
-                        labels=[
-                            0,
-                            1,
-                        ],
-                    )
-                ),
-            )
-        ]
-
-        platt = LogisticRegression(
-            C=10.0,
-            max_iter=1000,
-        )
-
-        platt.fit(
-            np.asarray(
-                [
-                    logit(value)
-                    for value
-                    in select_raw
-                ]
-            ).reshape(
-                -1,
-                1,
-            ),
-            y_select,
-        )
-
-        platt_val = (
-            platt.predict_proba(
-                np.asarray(
-                    [
-                        logit(value)
-                        for value
-                        in validate_raw
-                    ]
-                ).reshape(
-                    -1,
-                    1,
-                )
-            )[:, 1]
-        )
-
-        candidates.append(
-            (
-                "platt",
-                platt,
-                float(
-                    log_loss(
-                        y_validate,
-                        platt_val,
-                        labels=[
-                            0,
-                            1,
-                        ],
-                    )
-                ),
-            )
-        )
-
-        if (
-            len(y_select)
-            >= 350
-            and len(
-                np.unique(
-                    np.round(
-                        select_raw,
-                        3,
-                    )
-                )
-            )
-            >= 20
-        ):
-            iso = IsotonicRegression(
-                out_of_bounds="clip",
-                y_min=0.01,
-                y_max=0.99,
-            )
-
-            iso.fit(
-                select_raw,
-                y_select,
-            )
-
-            iso_val = iso.predict(
-                validate_raw
-            )
-
-            candidates.append(
-                (
-                    "isotonic",
-                    iso,
-                    float(
-                        log_loss(
-                            y_validate,
-                            iso_val,
-                            labels=[
-                                0,
-                                1,
-                            ],
-                        )
-                    ),
-                )
-            )
-
-        (
-            best_kind,
-            _,
-            _,
-        ) = min(
-            candidates,
-            key=lambda item: (
-                item[2]
-            ),
-        )
-
-        if (
-            best_kind
-            == "platt"
-        ):
-            final = LogisticRegression(
-                C=10.0,
-                max_iter=1000,
-            )
-
-            final.fit(
-                np.asarray(
-                    [
-                        logit(value)
-                        for value
-                        in full_raw
-                    ]
-                ).reshape(
-                    -1,
-                    1,
-                ),
-                y_cal,
-            )
-
-            self.calibrator = (
-                ProbabilityCalibrator(
-                    "platt",
-                    final,
-                )
-            )
-
-        elif (
-            best_kind
-            == "isotonic"
-        ):
-            final = IsotonicRegression(
-                out_of_bounds="clip",
-                y_min=0.01,
-                y_max=0.99,
-            )
-
-            final.fit(
-                full_raw,
-                y_cal,
-            )
-
-            self.calibrator = (
-                ProbabilityCalibrator(
-                    "isotonic",
-                    final,
-                )
-            )
-
+    @staticmethod
+    def _fit_calibrator(kind, p, y):
+        probs, targets = np.r_[p, 1 - p], np.r_[y, 1 - y]
+        if kind == "platt":
+            model = LogisticRegression(C=10., max_iter=1000, fit_intercept=False)
+            model.fit(_logits(probs), targets)
+        elif kind == "isotonic":
+            model = IsotonicRegression(out_of_bounds="clip", y_min=.01, y_max=.99)
+            model.fit(probs, targets)
         else:
-            self.calibrator = (
-                ProbabilityCalibrator(
-                    "identity",
-                    None,
-                )
-            )
+            return ProbabilityCalibrator()
+        return ProbabilityCalibrator(kind, model)
 
-        self.metadata[
-            "blend_weight_boost"
-        ] = (
-            self.blend_weight
-        )
-
-        self.metadata[
-            "calibration_method"
-        ] = (
-            self.calibrator.kind
-        )
-
-        self.metadata[
-            "feature_names"
-        ] = list(
-            self.feature_names
-        )
-
+    def fit(self, train_frame, calibration_frame):
+        self.fitted = False
+        if len(train_frame) < 300:
+            raise ValueError("At least 300 training matches are required")
+        train = train_frame.sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
+        cal = calibration_frame.sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
+        for part in (train, cal):
+            if part["match_id"].duplicated().any():
+                raise ValueError("Duplicate match IDs in model partition")
+            if not part["target"].isin([0, 1]).all():
+                raise ValueError("Targets must be binary")
+            if pd.to_datetime(part["scheduled_at"], utc=True).isna().any():
+                raise ValueError("Missing match timestamps")
+        if not cal.empty:
+            train_end = pd.to_datetime(train.scheduled_at, utc=True).max().normalize()
+            cal_start = pd.to_datetime(cal.scheduled_at, utc=True).min().normalize()
+            if train_end >= cal_start or set(train.match_id) & set(cal.match_id):
+                raise ValueError("Training and calibration must be disjoint whole UTC days")
+        augmented = pd.concat([train, swap_frame(train)], ignore_index=True)
+        x, y = self._matrix(augmented), augmented.target.to_numpy(dtype=int)
+        self.linear.fit(x, y)
+        self.boost.fit(x, y)
+        self.blend_weight, self.elo_weight = .5, 0.
+        self.calibrator = ProbabilityCalibrator()
+        split = calibration_split(cal) if len(cal) >= 120 else None
+        self.metadata = {"objective": self.objective, "feature_names": self.feature_names,
+                         "excluded_features": sorted(self.excluded_features),
+                         "symmetric_inference": True, "training_matches": len(train)}
+        if split is not None:
+            linear, boost = self._symmetric_pair(cal)
+            elo = cal.elo_probability.to_numpy(dtype=float)
+            y_cal = cal.target.to_numpy(dtype=int)
+            choices = []
+            for weight in np.linspace(0., 1., 6):
+                for elo_weight in (0., .25, .5, 1.):
+                    p = np.clip((1 - elo_weight) * (weight * boost + (1 - weight) * linear)
+                                + elo_weight * elo, .01, .99)
+                    loss = float(log_loss(y_cal[:split], p[:split], labels=[0, 1]))
+                    accuracy = float(accuracy_score(y_cal[:split], p[:split] >= .5))
+                    score = (-accuracy, loss) if self.objective == "accuracy" else (loss, -accuracy)
+                    choices.append((score, float(weight), elo_weight))
+            _, self.blend_weight, self.elo_weight = min(choices, key=lambda item: item[0])
+            raw = self._raw(cal)
+            kinds = ["identity", "platt"]
+            if split >= 350 and len(np.unique(np.round(raw[:split], 3))) >= 20:
+                kinds.append("isotonic")
+            candidates = []
+            for kind in kinds:
+                calibrator = self._fit_calibrator(kind, raw[:split], y_cal[:split])
+                p = self._calibrated(calibrator, raw[split:])
+                candidates.append((float(log_loss(y_cal[split:], p, labels=[0, 1])), kind))
+            _, kind = min(candidates, key=lambda item: item[0])
+            self.calibrator = self._fit_calibrator(kind, raw, y_cal)
+            self.metadata.update({"calibrator_fit_matches": split,
+                                  "calibrator_selection_matches": len(cal) - split,
+                                  "calibration_candidates": dict((k, v) for v, k in candidates)})
+        else:
+            self.metadata["calibration_fallback"] = "insufficient disjoint calendar days"
+        self.metadata.update({"blend_weight_boost": self.blend_weight,
+                              "elo_weight": self.elo_weight,
+                              "calibration_method": self.calibrator.kind})
         self.fitted = True
-
         return self
 
-    def predict_proba(
-        self,
-        frame: pd.DataFrame,
-    ) -> np.ndarray:
+    def predict_proba(self, frame):
         if not self.fitted:
-            raise RuntimeError(
-                "Model is not fitted"
-            )
-
-        x = self._matrix(
-            frame
-        )
-
-        (
-            linear_p,
-            boost_p,
-        ) = self._raw_pair(
-            x
-        )
-
-        raw = self._blend(
-            linear_p,
-            boost_p,
-        )
-
-        return np.asarray(
-            [
-                clamp(
-                    value,
-                    0.01,
-                    0.99,
-                )
-                for value
-                in self.calibrator.predict(
-                    raw
-                )
-            ],
-            dtype=float,
-        )
+            raise RuntimeError("Model is not fitted")
+        if frame.empty:
+            return np.array([], dtype=float)
+        # Loading an existing champion must not silently change its behaviour.
+        if not self.metadata.get("symmetric_inference", False):
+            linear, boost = self._raw_pair(self._matrix(frame))
+            return np.clip(self.calibrator.predict(self._blend(linear, boost)), .01, .99)
+        return self._calibrated(self.calibrator, self._raw(frame))

@@ -1,35 +1,11 @@
-# Python
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.venv/
-venv/
-
-# Secrets / local settings
 .env
-.env.*
-!.env.example
-api/local.settings.json
-
-# Model artifacts generated locally
-api/artifacts/*.joblib
-api/artifacts/*.json
-!api/artifacts/.gitkeep
-
-# Data / reports
-data/
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+.cache/
 reports/
-*.parquet
-*.feather
-*.csv
-
-# Editors / OS
-.vscode/
-.idea/
-.DS_Store
-Thumbs.db
-
-# Frontend overrides
-web/config.local.js
+api/artifacts/
+api/.python_packages/
+api/data/feed.json
+!api/data/feed.example.json

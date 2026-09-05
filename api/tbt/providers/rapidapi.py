@@ -9,6 +9,7 @@ import httpx
 
 from ..config import Settings, settings
 from ..errors import ConfigurationError, ProviderError
+from .budget import RequestBudgetExceeded
 from ..schemas import MatchRecord
 from ..utils import (
     deterministic_id,
@@ -40,17 +41,21 @@ class RapidTennisClient:
     into historical training data.
     """
 
-    def __init__(self, cfg: Settings = settings) -> None:
+    def __init__(self, cfg: Settings = settings, *, request_budget=None) -> None:
         if not cfg.rapidapi_key:
             raise ConfigurationError(
                 "RAPIDAPI_KEY is required"
             )
 
         self.cfg = cfg
+        self.request_budget = request_budget
         self.client = httpx.Client(
             timeout=cfg.request_timeout_seconds
         )
         self._last_request_at = 0.0
+        self.request_count = 0
+        self.request_limit = 15000
+        self.rate_limit_remaining = None
         self._category_cache: dict[str, list[dict[str, Any]]] = {}
         self._event_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
 
@@ -78,6 +83,8 @@ class RapidTennisClient:
         self,
         path: str,
         params: dict[str, Any] | None = None,
+        *,
+        enrichment: bool = False,
     ) -> Any:
         url = (
             f"{self.cfg.rapidapi_base_url}"
@@ -89,24 +96,30 @@ class RapidTennisClient:
         for attempt in range(5):
             self._throttle()
 
+            # Reserve outside the retry block: budget/storage failures fail closed.
+            if self.request_limit is not None and self.request_count >= self.request_limit:
+                raise RequestBudgetExceeded("Per-run request limit exhausted")
+            if self.rate_limit_remaining == 0:
+                raise RequestBudgetExceeded("Provider reports no remaining requests")
+            if self.request_budget is not None:
+                self.request_budget(self.client, self.cfg, enrichment=enrichment)
+
             try:
+                self._last_request_at = time.monotonic()
+                self.request_count += 1
                 response = self.client.get(
                     url,
                     headers=self.headers,
                     params=params or {},
                 )
 
-                self._last_request_at = (
-                    time.monotonic()
-                )
+                remaining = response.headers.get("x-ratelimit-requests-remaining")
+                if remaining is not None:
+                    self.rate_limit_remaining = safe_int(remaining)
 
                 if response.status_code == 429:
-                    delay = float(
-                        response.headers.get(
-                            "Retry-After",
-                            2 + attempt * 2,
-                        )
-                    )
+                    delay = safe_float(response.headers.get("Retry-After"))
+                    delay = delay if delay is not None else 2 + attempt * 2
 
                     time.sleep(
                         min(
@@ -499,12 +512,7 @@ class RapidTennisClient:
         payload = self._get(
             f"/api/tennis/calendar/{token}/categories"
         )
-        rows = self._named_list(
-            payload,
-            "categories",
-        )
-        if not rows:
-            rows = self._data(payload)
+        rows = self._response_rows(payload, "categories")
 
         self._category_cache[key] = rows
         return rows
@@ -523,15 +531,26 @@ class RapidTennisClient:
         payload = self._get(
             f"/api/tennis/category/{category_id}/events/{token}"
         )
-        rows = self._named_list(
-            payload,
-            "events",
-        )
-        if not rows:
-            rows = self._data(payload)
+        rows = self._response_rows(payload, "events")
 
         self._event_cache[cache_key] = rows
         return rows
+
+    @classmethod
+    def _response_rows(cls, payload, key):
+        """An unknown/error envelope must not masquerade as an empty day."""
+        if isinstance(payload, list):
+            if not all(isinstance(row, dict) for row in payload):
+                raise ProviderError(f"Invalid {key} list entries")
+            return payload
+        if isinstance(payload, dict):
+            if payload.get("error") or payload.get("success") is False:
+                raise ProviderError(f"Provider reported an error for {key}")
+            for name in (key, "data", "result", "results", "response"):
+                value = payload.get(name)
+                if isinstance(value, (list, dict)):
+                    return cls._response_rows(value, key)
+        raise ProviderError(f"Unrecognised {key} response; refusing to mark date complete")
 
     @staticmethod
     def _annotate_event(
@@ -550,6 +569,15 @@ class RapidTennisClient:
         )
         if provider_event_id not in (None, ""):
             event["_tbt_provider_event_id"] = str(provider_event_id)
+            home = raw.get("homeTeam", {})
+            away = raw.get("awayTeam", {})
+            status = raw.get("status", {})
+            if (isinstance(home, dict) and isinstance(away, dict) and
+                    isinstance(status, dict) and home.get("id") and away.get("id") and
+                    status.get("type") == "finished"):
+                event["_tbt_event_identity"] = {
+                    "event_id": str(provider_event_id), "home": str(home["id"]),
+                    "away": str(away["id"]), "status": "finished"}
         return event
 
     def matches_for_day(
@@ -762,6 +790,19 @@ class RapidTennisClient:
             matches[
                 incoming.match_id
             ] = incoming
+
+    def historical_period(self, tour: str, start: date, end: date) -> list[MatchRecord]:
+        """Inclusive bounded results window; category/event caches are shared by tours."""
+        if end < start:
+            raise ValueError("end must be on or after start")
+        rows = {}
+        day = start
+        while day <= end:
+            for match in self.matches_for_day(tour, day, historical=True):
+                if match.is_completed:
+                    rows[match.match_id] = match
+            day += timedelta(days=1)
+        return sorted(rows.values(), key=lambda m: (m.scheduled_at, m.match_id))
 
     def historical_year(
         self,
@@ -1559,6 +1600,8 @@ class RapidTennisClient:
             status=status,
             result_text=result_text,
         )
+        if status not in {"finished", "completed", "ended", "ft"}:
+            winner_id = None
 
         round_obj = first_present(
             raw,

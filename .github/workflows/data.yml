@@ -1,0 +1,88 @@
+name: Tennis data and predictions
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [history, statistics, environment, train, backtest, refresh]
+        default: history
+        required: true
+      start:
+        description: Oldest date (newest days downloaded first)
+        type: string
+        default: ''
+      lookback_days:
+        description: Rolling history window; ignored if start is supplied
+        type: number
+        default: 1095
+      end:
+        description: Newest date; blank means yesterday UTC
+        type: string
+        default: ''
+      max_requests:
+        description: Includes retries. First run 100; then remaining allowance.
+        type: number
+        default: 100
+      promote:
+        description: Publish trained model only if holdout gate passes
+        type: boolean
+        default: false
+  schedule:
+    - cron: '20 1,7,13,19 * * *'
+    - cron: '40 22 * * *'
+permissions:
+  contents: read
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+jobs:
+  pipeline:
+    if: github.event_name == 'workflow_dispatch' || (github.event.schedule == '40 22 * * *' && vars.TBT_AUTO_HISTORY == 'true') || (github.event.schedule == '20 1,7,13,19 * * *' && vars.TBT_AUTO_REFRESH == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 210
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      MODE: ${{ inputs.mode || (github.event.schedule == '40 22 * * *' && 'history' || 'refresh') }}
+      START_DATE: ${{ inputs.start }}
+      LOOKBACK_DAYS: ${{ inputs.lookback_days || 1095 }}
+      END_DATE: ${{ inputs.end }}
+      MAX_REQUESTS: ${{ inputs.max_requests || (github.event.schedule == '40 22 * * *' && 4000 || 750) }}
+      PROMOTE: ${{ inputs.promote }}
+      TBT_WEATHER_RESEARCH: ${{ vars.TBT_WEATHER_RESEARCH }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - run: python -m pip install -r api/requirements-train.txt
+      - name: Execute selected operation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          if [[ "$MODE" == history || "$MODE" == statistics ]]; then
+            args=(--publish --data-repository "$TBT_DATA_REPOSITORY" --mode "$MODE" --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS")
+            if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
+            if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
+            python scripts/download_tennis_history.py "${args[@]}"
+          elif [[ "$MODE" == environment ]]; then
+            python scripts/download_environment.py --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS"
+          else
+            args=("$MODE" --max-requests "$MAX_REQUESTS")
+            if [[ "$PROMOTE" == true ]]; then args+=(--promote); fi
+            python scripts/pipeline.py "${args[@]}"
+          fi
+      - name: Deploy refreshed feed and application
+        if: env.MODE == 'refresh'
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
+          action: upload
+          app_location: web
+          api_location: api
+          output_location: ''
+          skip_app_build: true

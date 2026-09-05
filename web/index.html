@@ -1,235 +1,56 @@
 <!doctype html>
-<html lang="en">
+<html lang="sk">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#050912" />
-  <link rel="icon" type="image/png" href="/assets/blinq_favicon.png" />
-  <link rel="shortcut icon" href="/assets/blinq_favicon.png" />
-  <title>BlinQ · Tennis Intelligence</title>
-  <link rel="stylesheet" href="/styles.css?v=20260905-193" />
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="BlinQ — tenisové predikcie, overiteľné výsledky a analýza modelu.">
+  <meta name="theme-color" content="#0b111b"><title>BlinQ · Tennis intelligence</title>
+  <link rel="icon" href="/assets/blinq_logo.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css">
+  <script src="/auth.js" defer></script><script src="/app.js" defer></script>
 </head>
 <body>
-  <section class="login-screen" id="authScreen" aria-live="polite">
-    <div class="login-glow login-glow-a"></div>
-    <div class="login-glow login-glow-b"></div>
-    <div class="login-card auth-card">
-      <div class="auth-loading" id="authLoading">
-        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
-        <div class="auth-spinner" aria-hidden="true"></div>
-        <p>Checking secure session…</p>
-      </div>
-
-      <div class="auth-panel" id="authSignIn" hidden>
-        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
-        <h1 data-i18n="auth.title">Welcome to BlinQ</h1>
-        <p data-i18n="auth.subtitle">Sign in to open your tennis intelligence workspace.</p>
-        <div class="login-kicker auth-brand-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
-        <button class="btn btn-telegram btn-full" id="telegramSignIn" type="button" hidden><span class="telegram-mark">✈</span><span data-i18n="auth.telegram">Continue with Telegram</span></button>
-        <div class="auth-divider" id="telegramSignInDivider" hidden><span data-i18n="auth.or_email">or use email</span></div>
-        <form id="signInForm">
-          <label><span data-i18n="auth.email">Email</span><input id="signInEmail" type="email" autocomplete="email" required /></label>
-          <label><span data-i18n="auth.password">Password</span><input id="signInPassword" type="password" autocomplete="current-password" minlength="8" required /></label>
-          <button class="btn btn-primary btn-full auth-submit" type="submit" data-i18n="auth.sign_in">Sign in</button>
-        </form>
-        <div class="auth-secondary-actions">
-          <button type="button" class="auth-link" data-auth-mode="signup" data-i18n="auth.create_account">Create account</button>
-          <button type="button" class="auth-link" data-auth-mode="forgot" data-i18n="auth.forgot">Forgot password?</button>
-        </div>
-      </div>
-
-      <div class="auth-panel" id="authSignUp" hidden>
-        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
-        <h1 data-i18n="auth.signup_title">Create your BlinQ account</h1>
-        <p data-i18n="auth.signup_copy">New accounts start on the Free level. Your plan can be upgraded later.</p>
-        <div class="login-kicker auth-brand-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
-        <button class="btn btn-telegram btn-full" id="telegramSignUp" type="button" hidden><span class="telegram-mark">✈</span><span data-i18n="auth.telegram_signup">Create with Telegram</span></button>
-        <div class="auth-divider" id="telegramSignUpDivider" hidden><span data-i18n="auth.or_email">or use email</span></div>
-        <form id="signUpForm">
-          <label class="telegram-account-field"><span class="tg-field-label"><span class="tg-icon" aria-hidden="true" style="display:inline-grid;place-items:center;width:24px;height:24px;border-radius:50%;background:#229ED9;color:#fff;flex:0 0 24px"><svg viewBox="0 0 24 24" width="14" height="14" focusable="false" aria-hidden="true"><path fill="currentColor" d="M20.7 4.2 17.9 19c-.2 1-1 1.2-1.8.8l-4.3-3.2-2.1 2c-.2.2-.4.4-.9.4l.3-4.4 8-7.2c.3-.3-.1-.5-.5-.2l-9.9 6.2-4.3-1.4c-.9-.3-.9-.9.2-1.3L19.4 4c.8-.3 1.5.2 1.3.2Z"/></svg></span><b data-i18n="auth.display_name">Telegram account</b></span><input id="signUpTelegram" type="text" autocomplete="username" inputmode="text" placeholder="@username" pattern="@?[A-Za-z0-9_]{5,32}" maxlength="33" required /></label>
-          <label><span data-i18n="auth.email">Email</span><input id="signUpEmail" type="email" autocomplete="email" required /></label>
-          <label><span data-i18n="auth.password">Password</span><input id="signUpPassword" type="password" autocomplete="new-password" minlength="8" required /></label>
-          <label><span data-i18n="auth.password_confirm">Confirm password</span><input id="signUpPassword2" type="password" autocomplete="new-password" minlength="8" required /></label>
-          <button class="btn btn-primary btn-full auth-submit" type="submit" data-i18n="auth.sign_up">Create account</button>
-        </form>
-        <button type="button" class="auth-link auth-back" data-auth-mode="signin" data-i18n="auth.back_sign_in">← Back to sign in</button>
-      </div>
-
-      <div class="auth-panel" id="authForgot" hidden>
-        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
-        <h1 data-i18n="auth.reset_title">Reset password</h1>
-        <p data-i18n="auth.reset_copy">We will email you a secure password reset link.</p>
-        <div class="login-kicker auth-brand-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
-        <form id="forgotForm">
-          <label><span data-i18n="auth.email">Email</span><input id="forgotEmail" type="email" autocomplete="email" required /></label>
-          <button class="btn btn-primary btn-full auth-submit" type="submit" data-i18n="auth.send_reset">Send reset link</button>
-        </form>
-        <button type="button" class="auth-link auth-back" data-auth-mode="signin" data-i18n="auth.back_sign_in">← Back to sign in</button>
-      </div>
-
-      <div class="auth-panel" id="authNewPassword" hidden>
-        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" />
-        <h1 data-i18n="auth.new_password_title">Choose a new password</h1>
-        <p data-i18n="auth.new_password_copy">Set a new password for your BlinQ account.</p>
-        <div class="login-kicker auth-brand-kicker" data-i18n="auth.kicker">STATISTICAL ENGINE · BACKSTAGETALKS</div>
-        <form id="newPasswordForm">
-          <label><span data-i18n="auth.new_password">New password</span><input id="newPassword" type="password" autocomplete="new-password" minlength="8" required /></label>
-          <label><span data-i18n="auth.password_confirm">Confirm password</span><input id="newPassword2" type="password" autocomplete="new-password" minlength="8" required /></label>
-          <button class="btn btn-primary btn-full auth-submit" type="submit" data-i18n="auth.save_password">Save new password</button>
-        </form>
-      </div>
-
-      <div class="auth-message" id="authMessage" hidden></div>
-      <nav class="auth-languages" aria-label="Language versions">
-        <a href="?lang=en" data-lang-choice="en">EN</a><a href="?lang=sk" data-lang-choice="sk">SK</a><a href="?lang=cz" data-lang-choice="cz">CZ</a><a href="?lang=pl" data-lang-choice="pl">PL</a><a href="?lang=hu" data-lang-choice="hu">HU</a><a href="?lang=de" data-lang-choice="de">DE</a><a href="?lang=ua" data-lang-choice="ua">UA</a><a href="?lang=ru" data-lang-choice="ru">RU</a>
-      </nav>
-      <div class="preview-note">Powered by BackstageTalks Statistical Engine</div>
-    </div>
-  </section>
-
-  <div class="app-shell" id="appShell" hidden>
+  <a class="skip" href="#main">Preskočiť na obsah</a>
+  <div id="demoBanner" class="demo" hidden>UKÁŽKOVÉ DÁTA · Toto nie sú skutočné predikcie.</div>
+  <div class="shell">
     <aside class="sidebar">
-      <a class="engine-brand sidebar-product-brand" href="#dashboard" data-route="dashboard" aria-label="BlinQ · Statistical Engine by BackstageTalks">
-        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="sidebar-product-logo" />
-        <span class="sidebar-engine-copy">
-          <strong data-i18n="shell.stat_engine">STATISTICAL ENGINE</strong>
-          <small data-i18n="shell.by_backstage">by BackstageTalks</small>
-        </span>
-      </a>
-
-      <nav class="nav-section nav-main" aria-label="Product navigation">
-        <div class="nav-items" id="mainNavigation"></div>
+      <a class="brand" href="#overview" aria-label="BlinQ domov"><img src="/assets/blinq_logo.svg" alt="" width="36" height="36"><span>BlinQ<span class="brand-dot">.</span></span></a>
+      <p class="eyebrow side-caption">TENNIS INTELLIGENCE</p>
+      <nav aria-label="Hlavná navigácia">
+        <button data-page="overview" class="nav active"><span aria-hidden="true">◈</span> Prehľad</button>
+        <button data-page="predictions" class="nav"><span aria-hidden="true">↗</span> Predikcie <span id="navCount" class="count">0</span></button>
+        <button data-page="results" class="nav"><span aria-hidden="true">✓</span> Výsledky</button>
+        <button data-page="model" class="nav"><span aria-hidden="true">▥</span> Model</button>
+        <button data-page="account" class="nav"><span aria-hidden="true">○</span> Môj účet</button>
       </nav>
-
-      <div class="nav-divider learn-divider"></div>
-      <details class="learn-group" open hidden>
-        <summary data-i18n="nav.learn">Learn</summary>
-        <nav class="nav-section learn-nav" aria-label="Learn navigation">
-          <div class="nav-items" id="learnNavigation"></div>
-        </nav>
-      </details>
-
-      <section class="admin-nav" id="adminNavigationSection" hidden>
-        <div class="nav-divider"></div>
-        <div class="nav-label">Admin</div>
-        <nav class="nav-section"><div class="nav-items" id="adminNavigation"></div></nav>
-      </section>
-
-      <section id="sidebarBannerZone" class="sidebar-banner-zone" data-access-feature="panel.sidebar_banners" data-access-label="Sidebar banner zone" data-access-group="Dashboard / Sidebar" aria-label="Sidebar promotions"></section>
-      <div class="sidebar-spacer"></div>
+      <div class="sidebar-bottom"><span class="status-dot"></span> Dôvera začína dátami.<p>Predikcie vznikajú pred zápasom.<br>Výsledky hovoria za seba.</p><small>BlinQ / BackstageTalks</small></div>
     </aside>
-
-    <main class="main">
-      <header class="topbar product-topbar">
-        <div class="product-brand-wrap product-brand-wrap-clean">
-          <div class="route-copy route-copy-clean">
-            <div class="eyebrow" id="pageEyebrow">TENNIS INTELLIGENCE</div>
-            <div class="title-row compact-title-row">
-              <h1 id="pageTitle">Dashboard</h1>
-            </div>
-            <p class="subtitle" id="pageSubtitle"></p>
-          </div>
-        </div>
-
-        <section id="headerBannerZone" class="header-banner-zone" data-access-feature="panel.header_banners" data-access-label="Header banners" data-access-group="Dashboard" aria-label="Header promotions"></section>
-
-        <div class="topbar-actions account-actions">
-          <div class="header-status-stack">
-            <button class="btn btn-primary upgrade-top" data-upgrade type="button">♛ <span data-i18n="shell.upgrade">Upgrade</span></button>
-            <div class="status-meta-row">
-              <div class="plan-chip" id="planChip"><span id="planName">FREE</span><strong id="planEntitlement">23 days left</strong></div>
-              <span class="today-label topbar-date" id="todayLabel"></span>
-            </div>
-          </div>
-          <button class="profile-button profile-button-large" id="profileButton" data-route="account" type="button">
-            <span class="avatar avatar-large" id="avatar">BU</span>
-            <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small id="profileHandle">@blinquser</small><small id="profilePlan">Free Trial</small></span>
-            <span aria-hidden="true">⌄</span>
-          </button>
-        </div>
-      </header>
-
-      <section id="dashboardView">
-        <section class="toolbar" id="predictionToolbar" data-access-feature="panel.prediction_filters" data-access-label="Prediction filters" data-access-group="Dashboard" aria-label="Prediction filters">
-          <label><span class="sr-only">Tour</span><select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select></label>
-          <label><span class="sr-only">Tournament</span><select id="tournamentFilter"><option value="">All Tournaments</option></select></label>
-          <label><span class="sr-only">Surface</span><select id="surfaceFilter"><option value="">All Surfaces</option></select></label>
-          <label><span class="sr-only">Confidence</span><select id="confidenceFilter"><option value="">All Confidence</option><option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option></select></label>
-          <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search matches or players…" /></label>
+    <div class="workspace">
+      <header class="topbar"><span id="breadcrumb">Pracovný priestor / Prehľad</span><div><span class="timezone">Časové pásmo zariadenia</span><button id="accountShortcut" class="avatar" aria-label="Otvoriť účet">B</button></div></header>
+      <main id="main" tabindex="-1">
+        <div class="page-title"><div><p class="eyebrow">FOLLOW THE DATA</p><h1 id="pageTitle">Tenis. V súvislostiach.</h1><p id="pageSubtitle" class="muted">Predzápasové pravdepodobnosti a výsledky na jednom mieste.</p></div><button id="refresh" class="button secondary">↻ Obnoviť dáta</button></div>
+        <p id="globalStatus" class="notice" role="status" aria-live="polite" hidden></p>
+        <section id="metrics" class="metrics" aria-label="Prehľad dát"></section>
+        <section id="filters" class="filter-bar" aria-label="Filtrovanie zápasov">
+          <div class="tour-switch" role="group" aria-label="Okruh"><button data-tour="all" class="selected">Všetky</button><button data-tour="ATP">ATP</button><button data-tour="WTA">WTA</button></div>
+          <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Hráč alebo turnaj" aria-label="Vyhľadať hráča alebo turnaj"></label>
+          <select id="surface" aria-label="Povrch"><option value="all">Všetky povrchy</option><option value="hard">Tvrdý</option><option value="clay">Antuka</option><option value="grass">Tráva</option><option value="indoor_hard">Hala</option></select>
+          <select id="confidence" aria-label="Minimálna pravdepodobnosť"><option value="0">Všetky pravdepodobnosti</option><option value="0.65">Aspoň 65 %</option><option value="0.75">Aspoň 75 %</option></select>
         </section>
-
-        <section id="dashboardSnapshot" class="dashboard-snapshot" data-access-feature="panel.dashboard_snapshot" data-access-label="Dashboard snapshot" data-access-group="Dashboard" aria-label="Current prediction board summary"></section>
-
-        <section id="bannerZoneTop" class="banner-zone" data-access-feature="panel.top_banners" data-access-label="Top banner zone" data-access-group="Dashboard" aria-label="Sponsored content"></section>
-
-        <section class="picks-panel prime-panel" id="predictionsPanel">
-          <div class="panel-head picks-head">
-            <div>
-              <div class="section-kicker"><span>✦</span> <span id="picksTitle">BlinQ Prime Picks</span></div>
-              <p id="picksSubtitle">Our strongest model selections based on confidence, data quality and signal agreement.</p>
-            </div>
-            <div class="panel-actions">
-              <span class="feed-status" id="feedStatus"><i></i><span>Checking feed…</span></span><span class="match-count"><strong id="matchCount">0</strong> Prime Picks</span>
-              <button class="btn btn-ghost" id="refreshButton" type="button">↻ Refresh</button>
-              <button class="btn btn-ghost" id="viewAllButton" type="button">All predictions →</button>
-            </div>
-          </div>
-
-          <div class="pick-carousel-shell" id="pickCarouselShell" data-access-feature="panel.prime_picks_board" data-access-label="Prime Picks board" data-access-group="Predictions">
-            <button class="carousel-arrow carousel-arrow-left" id="prevPick" type="button" aria-label="Previous Prime Pick">‹</button>
-            <div class="pick-carousel" id="predictionGrid">
-              <div class="state-card">Loading predictions…</div>
-            </div>
-            <button class="carousel-arrow carousel-arrow-right" id="nextPick" type="button" aria-label="Next Prime Pick">›</button>
-          </div>
-          <div class="carousel-dots" id="carouselDots" aria-label="Prime Pick selector"></div>
-        </section>
-
-        <section id="bannerZoneBottom" class="banner-zone banner-zone-bottom" data-access-feature="panel.bottom_banners" data-access-label="Bottom banner zone" data-access-group="Dashboard" aria-label="Promotions"></section>
-      </section>
-
-      <section id="moduleView" class="module-view" hidden></section>
-
-      <footer class="site-footer">
-        <div class="footer-main">
-          <img class="footer-logo" src="/assets/blinq_logo.svg" alt="BlinQ" />
-          <div>© 2026 BlinQ</div>
-          <a href="#privacy" data-i18n="footer.privacy">Privacy Policy</a>
-          <nav class="footer-learn-links" id="footerLearnNavigation" aria-label="Learn footer links" data-access-feature="panel.footer_learn" data-access-label="Footer Learn links" data-access-group="Footer"></nav>
-        </div>
-        <div class="footer-bottom">
-          <p class="footer-disclaimer" data-i18n="footer.disclaimer">This data is provided for informational and analytical purposes only. Powered by BackstageTalks Statistical Engine.</p>
-          <nav class="footer-languages" aria-label="Language versions" data-access-feature="panel.language_switcher" data-access-label="Language switcher" data-access-group="Footer"><span data-i18n="footer.languages">Language</span><a href="?lang=en#dashboard" data-lang-choice="en">EN</a><a href="?lang=sk#dashboard" data-lang-choice="sk">SK</a><a href="?lang=cz#dashboard" data-lang-choice="cz">CZ</a><a href="?lang=pl#dashboard" data-lang-choice="pl">PL</a><a href="?lang=hu#dashboard" data-lang-choice="hu">HU</a><a href="?lang=de#dashboard" data-lang-choice="de">DE</a><a href="?lang=ua#dashboard" data-lang-choice="ua">UA</a><a href="?lang=ru#dashboard" data-lang-choice="ru">RU</a></nav>
-        </div>
-      </footer>
-    </main>
+        <div id="content"><div class="empty"><span class="empty-symbol">◈</span><h2>Načítavame váš prehľad</h2><p>Pripájame sa k účtu a dostupným predikciám.</p></div></div>
+        <footer><span>BlinQ Tennis Intelligence</span><span>Pravdepodobnosť vyjadruje neistotu, nie záruku výsledku.</span></footer>
+      </main>
+    </div>
   </div>
-
-  <dialog id="matchDialog" class="match-dialog">
-    <button class="dialog-close" data-dialog-close="matchDialog" aria-label="Close">×</button>
-    <div id="dialogContent"></div>
+  <dialog id="authDialog" aria-labelledby="authTitle">
+    <div class="auth-intro"><span class="eyebrow">BLINQ MEMBERS</span><h2 id="authTitle">Vitaj späť.</h2><p id="authSubtitle">Prihlás sa k svojim tenisovým analýzam.</p></div>
+    <form id="authForm">
+      <label id="nameLabel" hidden>Meno<input id="authName" autocomplete="name" maxlength="80"></label>
+      <label id="emailLabel">E-mail<input id="authEmail" type="email" autocomplete="email" required></label>
+      <label id="passwordLabel">Heslo<input id="authPassword" type="password" autocomplete="current-password" required minlength="8"></label>
+      <p id="authMessage" role="status" aria-live="polite"></p>
+      <button id="authSubmit" class="button primary" type="submit">Prihlásiť sa</button>
+    </form>
+    <div class="auth-links"><button id="switchSignup">Vytvoriť účet</button><button id="switchReset">Zabudnuté heslo</button></div>
   </dialog>
-
-  <dialog id="lockedDialog" class="match-dialog access-dialog">
-    <button class="dialog-close" data-dialog-close="lockedDialog" aria-label="Close">×</button>
-    <div class="dialog-eyebrow">PREMIUM MODULE</div>
-    <h2 id="lockedTitle">Upgrade required</h2>
-    <p id="lockedText" class="dialog-copy">This module is visible so you can see what is available on higher plans.</p>
-    <div class="access-required"><span>Required plan</span><strong id="lockedPlan">Legend</strong></div>
-    <button class="btn btn-primary btn-full" data-upgrade type="button">View upgrade options</button>
-  </dialog>
-
-  <dialog id="upgradeDialog" class="match-dialog upgrade-dialog">
-    <button class="dialog-close" data-dialog-close="upgradeDialog" aria-label="Close">×</button>
-    <div class="dialog-eyebrow">BLINQ PLANS</div>
-    <h2 data-i18n="plan.choose">Choose your level</h2>
-    <p class="dialog-copy" data-i18n="plan.copy">Select the BlinQ level that matches the depth of analytics you need.</p>
-    <div class="plan-grid" id="planGrid"></div>
-  </dialog>
-
-  <script src="/i18n.js?v=20260905-193"></script>
-  <script src="/config.js?v=20260904-17"></script>
-  <script src="/auth.js?v=20260905-203"></script>
-  <script src="/app.js?v=20260905-203"></script>
+  <dialog id="matchDialog" aria-labelledby="matchTitle"><button id="closeMatch" class="dialog-close" aria-label="Zavrieť detail">×</button><div id="matchDetail"></div></dialog>
 </body>
 </html>

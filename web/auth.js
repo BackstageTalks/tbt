@@ -1,337 +1,60 @@
 (() => {
-  "use strict";
-
-  const SESSION_KEY = "blinq_auth_session_v1";
-  const EMAIL_HINT_KEY = "blinq_auth_email_hint_v1";
-  const apiBase = () => String(window.BLINQ_CONFIG?.apiBase || "").replace(/\/$/, "");
-  const api = (path) => `${apiBase()}${path}`;
-  let config = null;
-  let recoveryMode = false;
-  let callbackState = { type: "", error: "", message: "" };
-
-  function readSession() {
-    try {
-      const value = JSON.parse(localStorage.getItem(SESSION_KEY) || "null");
-      return value && typeof value === "object" ? value : null;
-    } catch (_) {
-      return null;
-    }
+  'use strict';
+  const KEY = 'blinq_v3_session';
+  let config = null, refreshing = null;
+  let recovery = false;
+  function session() { try { return JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch { return null; } }
+  function clear() { sessionStorage.removeItem(KEY); }
+  function save(value) {
+    const s = value?.session || value;
+    if (!s?.access_token) return null;
+    const normalized = {access_token:s.access_token,refresh_token:s.refresh_token || '',expires_at:Number(s.expires_at) || Math.floor(Date.now()/1000)+Number(s.expires_in || 3600)};
+    sessionStorage.setItem(KEY,JSON.stringify(normalized)); return normalized;
   }
-
-  function normalizeSession(payload) {
-    const source = payload?.session?.access_token ? payload.session : payload;
-    if (!source?.access_token) return null;
-    const expiresIn = Number(source.expires_in || 3600);
-    const expiresAt = Number(source.expires_at || 0) || Math.floor(Date.now() / 1000) + expiresIn;
-    return {
-      access_token: String(source.access_token),
-      refresh_token: String(source.refresh_token || ""),
-      token_type: String(source.token_type || "bearer"),
-      expires_at: expiresAt,
-      user: source.user || payload?.user || null,
-    };
-  }
-
-  function extractUser(payload) {
-    if (payload?.user && typeof payload.user === "object") return payload.user;
-    if (payload?.id && typeof payload === "object") return payload;
-    return null;
-  }
-
-  function redirectBaseUrl() {
-    const pathname = String(location.pathname || "/");
-    const cleanPath = pathname.endsWith("/")
-      ? pathname
-      : pathname.replace(/\/[^/]*$/, "/");
-    return `${location.origin}${cleanPath}`;
-  }
-
-  function cleanAuthCallbackUrl() {
-    return `${location.pathname}${location.search}`;
-  }
-
-  function saveSession(payload) {
-    const session = normalizeSession(payload);
-    if (!session) return null;
-    localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-    return session;
-  }
-
-  function clearSession() {
-    localStorage.removeItem(SESSION_KEY);
-  }
-
-  function rememberEmail(value) {
-    const email = String(value || "").trim();
-    if (email) localStorage.setItem(EMAIL_HINT_KEY, email);
-    return email;
-  }
-
-  function rememberedEmail() {
-    return String(localStorage.getItem(EMAIL_HINT_KEY) || "").trim();
-  }
-
-  async function jsonFetch(url, options = {}) {
-    const response = await fetch(url, {
-      ...options,
-      headers: { Accept: "application/json", "Content-Type": "application/json", ...(options.headers || {}) },
-      cache: "no-store",
-    });
-    let data = null;
-    try { data = await response.json(); } catch (_) { data = null; }
-    if (!response.ok) {
-      const message = data?.msg || data?.message || data?.error_description || data?.error || `HTTP ${response.status}`;
-      const error = new Error(String(message));
-      error.status = response.status;
-      error.payload = data;
-      throw error;
-    }
+  async function json(url, options = {}) {
+    const response = await fetch(url,{...options,headers:{Accept:'application/json','Content-Type':'application/json',...(options.headers || {})},cache:'no-store',signal:AbortSignal.timeout(20000)});
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) { const error = new Error(data.error_description || data.msg || data.message || data.error || `HTTP ${response.status}`); error.status=response.status; throw error; }
     return data;
   }
-
-  function authEndpoint(path) {
-    if (!config?.supabase_url) throw new Error("Authentication is not configured.");
-    return `${String(config.supabase_url).replace(/\/$/, "")}/auth/v1${path}`;
+  function endpoint(path) { if (!config?.enabled) throw new Error('Prihlasovanie zatiaľ nie je nakonfigurované.'); return `${config.supabase_url}/auth/v1${path}`; }
+  const headers = token => ({apikey:config.anon_key,...(token ? {Authorization:`Bearer ${token}`} : {})});
+  const redirect = () => `${location.origin}/follow-the-data/`;
+  async function restore() {
+    let s = session(); if (!s) return null;
+    if (s.expires_at > Date.now()/1000+60) return s;
+    if (!s.refresh_token) { clear(); return null; }
+    if (!refreshing) refreshing = json(endpoint('/token?grant_type=refresh_token'),{method:'POST',headers:headers(),body:JSON.stringify({refresh_token:s.refresh_token})})
+      .then(save).catch(error => {if ([400,401,403].includes(error.status)) clear(); throw error;}).finally(() => {refreshing=null;});
+    return refreshing;
   }
-
-  function authHeaders(session = null) {
-    const headers = { apikey: config?.anon_key || "" };
-    if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
-    return headers;
-  }
-
-  function consumeCallbackFragment() {
-    const raw = String(location.hash || "").replace(/^#/, "");
-    if (!raw) return;
-
-    const params = new URLSearchParams(raw);
-    const error = params.get("error_description") || params.get("error") || "";
-    const errorCode = params.get("error_code") || "";
-
-    if (error || errorCode) {
-      callbackState = {
-        type: String(params.get("type") || ""),
-        error: String(errorCode || "auth_callback_error"),
-        message: String(error || "Authentication link is invalid or expired."),
-      };
-      history.replaceState(null, "", cleanAuthCallbackUrl());
-      return;
-    }
-
-    const accessToken = params.get("access_token");
-    if (!accessToken) return;
-
-    const type = String(params.get("type") || "");
-    const session = saveSession({
-      access_token: accessToken,
-      refresh_token: params.get("refresh_token") || "",
-      token_type: params.get("token_type") || "bearer",
-      expires_in: Number(params.get("expires_in") || 3600),
-      expires_at: Number(params.get("expires_at") || 0),
-    });
-
-    recoveryMode = type === "recovery";
-    callbackState = {
-      type,
-      error: "",
-      message: type === "signup"
-        ? "Email confirmed successfully."
-        : (type === "recovery" ? "Recovery link accepted." : ""),
-    };
-
-    if (session) history.replaceState(null, "", cleanAuthCallbackUrl());
-  }
-
   async function init() {
-    config = await jsonFetch(api("/api/v1/auth/config"));
-    consumeCallbackFragment();
-    return config;
-  }
-
-  function isEnabled() { return Boolean(config?.enabled); }
-
-  function isTelegramEnabled() { return Boolean(config?.telegram_enabled && config?.telegram_provider); }
-  function telegramProvider() { return String(config?.telegram_provider || "custom:telegram"); }
-
-  function signInWithTelegram() {
-    if (!isTelegramEnabled()) throw new Error("Telegram login is not configured yet.");
-    const redirectTo = `${location.origin}${location.pathname}${location.search}`;
-    const params = new URLSearchParams({
-      provider: telegramProvider(),
-      redirect_to: redirectTo,
-    });
-    location.assign(`${authEndpoint("/authorize")}?${params.toString()}`);
-  }
-  function isRequired() { return config?.required !== false; }
-  function isRecovery() { return recoveryMode; }
-  function getCallbackState() { return { ...callbackState }; }
-
-  async function refreshSession() {
-    const current = readSession();
-    if (!current?.refresh_token) return null;
-    try {
-      const data = await jsonFetch(authEndpoint("/token?grant_type=refresh_token"), {
-        method: "POST",
-        headers: authHeaders(),
-        body: JSON.stringify({ refresh_token: current.refresh_token }),
-      });
-      return saveSession(data);
-    } catch (_) {
-      clearSession();
-      return null;
+    config = await json('/api/v1/auth/config');
+    const fragment = new URLSearchParams(location.hash.replace(/^#/,''));
+    if (fragment.has('error_description')) { history.replaceState(null,'',location.pathname); throw new Error(fragment.get('error_description')); }
+    if (fragment.has('access_token')) {
+      save(Object.fromEntries(fragment.entries())); recovery = fragment.get('type')==='recovery';
+      history.replaceState(null,'',location.pathname);
     }
+    return {...config,recovery};
   }
-
-  async function restoreSession() {
-    let session = readSession();
-    if (!session?.access_token) return null;
-    const now = Math.floor(Date.now() / 1000);
-    if (Number(session.expires_at || 0) <= now + 60) session = await refreshSession();
-    return session;
+  async function signIn(email,password) { return save(await json(endpoint('/token?grant_type=password'),{method:'POST',headers:headers(),body:JSON.stringify({email,password})})); }
+  async function signUp(email,password,name) {
+    const data = await json(endpoint(`/signup?redirect_to=${encodeURIComponent(redirect())}`),{method:'POST',headers:headers(),body:JSON.stringify({email,password,data:{display_name:name}})});
+    return save(data);
   }
-
-  async function signIn(email, password) {
-    rememberEmail(email);
-    const data = await jsonFetch(authEndpoint("/token?grant_type=password"), {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ email: String(email || "").trim(), password: String(password || "") }),
-    });
-    return saveSession(data);
+  async function reset(email) { return json(endpoint(`/recover?redirect_to=${encodeURIComponent(redirect())}`),{method:'POST',headers:headers(),body:JSON.stringify({email})}); }
+  async function update(fields) {
+    const s = await restore(); if (!s) throw new Error('Prihlás sa znova.');
+    return json(endpoint('/user'),{method:'PUT',headers:headers(s.access_token),body:JSON.stringify(fields)});
   }
-
-  function normalizeTelegramHandle(value) {
-    const raw = String(value || "").trim().replace(/^@+/, "");
-    if (!/^[A-Za-z0-9_]{5,32}$/.test(raw)) throw new Error("Enter a valid Telegram username, e.g. @backstagetalks.");
-    return `@${raw}`;
-  }
-
-  async function signUp(telegramAccount, email, password) {
-    rememberEmail(email);
-    const redirectTo = redirectBaseUrl();
-    const telegramHandle = normalizeTelegramHandle(telegramAccount);
-    const data = await jsonFetch(`${authEndpoint("/signup")}?redirect_to=${encodeURIComponent(redirectTo)}`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({
-        email: String(email || "").trim(),
-        password: String(password || ""),
-        data: {
-          display_name: telegramHandle,
-          telegram_handle: telegramHandle.replace(/^@/, ""),
-          preferred_username: telegramHandle.replace(/^@/, ""),
-        },
-      }),
-    });
-
-    // GoTrue /signup has two valid success shapes:
-    // 1) AccessTokenResponse when email confirmation is disabled
-    // 2) UserSchema at the top level when confirmation is required
-    const session = saveSession(data);
-    const user = extractUser(data);
-    const confirmationRequired = Boolean(user && !session);
-
-    return {
-      data,
-      user,
-      session,
-      confirmationRequired,
-      telegramHandle,
-    };
-  }
-
-  async function requestPasswordReset(email) {
-    rememberEmail(email);
-    const redirectTo = redirectBaseUrl();
-    await jsonFetch(`${authEndpoint("/recover")}?redirect_to=${encodeURIComponent(redirectTo)}`, {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({ email: String(email || "").trim() }),
-    });
-    return true;
-  }
-
-  async function resendSignupConfirmation(email) {
-    await jsonFetch(authEndpoint("/resend"), {
-      method: "POST",
-      headers: authHeaders(),
-      body: JSON.stringify({
-        email: String(email || "").trim(),
-        type: "signup",
-      }),
-    });
-    return true;
-  }
-
-  async function updatePassword(password) {
-    const session = await restoreSession();
-    if (!session?.access_token) throw new Error("Recovery session expired. Request a new reset link.");
-    await jsonFetch(authEndpoint("/user"), {
-      method: "PUT",
-      headers: authHeaders(session),
-      body: JSON.stringify({ password: String(password || "") }),
-    });
-    recoveryMode = false;
-    return true;
-  }
-
   async function signOut() {
-    const session = readSession();
-    if (session?.access_token) {
-      try {
-        await jsonFetch(authEndpoint("/logout"), {
-          method: "POST",
-          headers: authHeaders(session),
-          body: JSON.stringify({}),
-        });
-      } catch (_) {}
-    }
-    clearSession();
+    const s = session(); clear();
+    if (s) await json(endpoint('/logout'),{method:'POST',headers:headers(s.access_token),body:'{}'}).catch(()=>{});
   }
-
-  function authorizationHeader() {
-    const session = readSession();
-    return session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {};
+  async function feed() {
+    const s = await restore();
+    return json('/api/v1/feed',{headers:s ? {Authorization:`Bearer ${s.access_token}`} : {}});
   }
-
-  async function me() {
-    const session = await restoreSession();
-    if (!session?.access_token) throw new Error("Not signed in.");
-    return jsonFetch(api("/api/v1/auth/me"), { headers: authorizationHeader() });
-  }
-
-  async function updateProfile(fields) {
-    const session = await restoreSession();
-    if (!session?.access_token) throw new Error("Not signed in.");
-    return jsonFetch(api("/api/v1/auth/profile"), {
-      method: "POST",
-      headers: authorizationHeader(),
-      body: JSON.stringify(fields || {}),
-    });
-  }
-
-  window.BLINQ_AUTH = {
-    init,
-    isEnabled,
-    isRequired,
-    isRecovery,
-    getCallbackState,
-    isTelegramEnabled,
-    telegramProvider,
-    signInWithTelegram,
-    restoreSession,
-    refreshSession,
-    signIn,
-    signUp,
-    requestPasswordReset,
-    resendSignupConfirmation,
-    updatePassword,
-    signOut,
-    me,
-    updateProfile,
-    authorizationHeader,
-    clearSession,
-    rememberEmail,
-    rememberedEmail,
-  };
+  window.BlinqAuth={init,restore,signIn,signUp,reset,update,signOut,feed,clear};
 })();

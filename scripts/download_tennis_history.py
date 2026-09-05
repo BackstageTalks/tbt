@@ -1,0 +1,174 @@
+"""Download/resume TennisApi history into private GitHub Release partitions."""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import subprocess
+from collections import Counter
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+
+from _bootstrap import ROOT
+from history_download_budget import LocalRequestBudget, reserve_allocation
+from tbt.config import settings
+from tbt.data.history_snapshot import load_partitions, write_year_partition
+from tbt.data.provider_context import merge_provider_context
+from tbt.providers.budget import RequestBudgetExceeded
+from tbt.providers.rapidapi import RapidTennisClient
+from tbt.services.statistics_enrichment import StatisticsEnricher
+
+
+from release_store import ReleaseStore
+from date_window import history_window
+
+
+def read_json(path, default):
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else default
+
+
+def write_json(path, value):
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2), encoding="utf-8")
+    temporary.replace(path)
+
+
+def merge_match(existing, incoming):
+    if existing is None:
+        return incoming
+    if existing.player1_id == incoming.player2_id and existing.player2_id == incoming.player1_id:
+        existing = existing.swapped()
+    if (existing.player1_id, existing.player2_id) != (incoming.player1_id, incoming.player2_id):
+        raise ValueError("Conflicting players for a canonical match ID")
+    incoming.stats = {**existing.stats, **{k: v for k, v in incoming.stats.items() if v is not None}}
+    incoming.provider_payload = merge_provider_context(existing.provider_payload, incoming.provider_payload)
+    return incoming
+
+
+def download_days(provider, matches, progress, start, end, checkpoint):
+    """Newest first. Mark a day complete only after BOTH tours succeed."""
+    done = set(progress.get("completed_days", []))
+    day = end
+    count = 0
+    while day >= start:
+        if day.isoformat() not in done:
+            rows = []
+            for tour in ("atp", "wta"):
+                rows.extend(provider.matches_for_day(tour, day, historical=True))
+            for match in rows:
+                if match.is_completed:
+                    matches[match.match_id] = merge_match(matches.get(match.match_id), match)
+            done.add(day.isoformat())
+            progress["completed_days"] = sorted(done)
+            count += 1
+            checkpoint({day.year}, count % 7 == 0)
+            print(json.dumps({"completed_day": day.isoformat(), "rows": len(rows),
+                              "requests": provider.request_count}), flush=True)
+        day -= timedelta(days=1)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--start", default=None, help="Optional oldest date; overrides lookback")
+    parser.add_argument("--end", default=None, help="Optional newest date; default yesterday UTC")
+    parser.add_argument("--lookback-days", type=int, default=1095)
+    parser.add_argument("--mode", choices=["history", "statistics"], default="history")
+    parser.add_argument("--max-requests", type=int, default=4000)
+    parser.add_argument("--history-dir", default=str(ROOT / ".cache/tbt/history"))
+    parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", ""))
+    parser.add_argument("--release-tag", default="tbt-data-v1")
+    parser.add_argument("--publish", action="store_true", help="Download/reserve/publish via gh; use the supplied serialized workflow")
+    args = parser.parse_args()
+    try:
+        start, end = history_window(args.start, args.end, args.lookback_days)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if not 1 <= args.max_requests <= 12000:
+        parser.error("max-requests must be 1..12000")
+    if not settings.rapidapi_key:
+        parser.error("Set RAPIDAPI_KEY before starting; no allowance reserved")
+    if settings.rapidapi_host != "tennisapi1.p.rapidapi.com" or settings.rapidapi_base_url != "https://tennisapi1.p.rapidapi.com":
+        parser.error("Downloader requires the subscribed tennisapi1 host and HTTPS base URL")
+    directory = Path(args.history_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    store = None
+    if args.publish:
+        store = ReleaseStore(args.data_repository, args.release_tag, directory)
+        store.download()
+    budget_file = directory / "request_budget.json"
+    allocation = args.max_requests
+    if store:
+        ledger, allocation = reserve_allocation(read_json(budget_file, {}), allocation,
+            run_id=os.getenv("GITHUB_RUN_ID", "manual") + "-" + os.getenv("GITHUB_RUN_ATTEMPT", "1"))
+        if not allocation:
+            print("No download allowance available. Existing reservations are retained after cancellation.")
+            return
+        write_json(budget_file, ledger)
+        # Publication MUST succeed before the first upstream call. Never refund
+        # automatically: cancellation may hide already executed requests.
+        store.upload([budget_file])
+    rows = load_partitions(directory) if list(directory.glob("history-*.parquet")) else []
+    matches = {m.match_id: m for m in rows}
+    progress_file = directory / "download_progress.json"
+    progress = read_json(progress_file, {"schema": 1, "completed_days": []})
+    if progress.get("schema") != 1:
+        raise ValueError("Unsupported download progress schema")
+    pending_years = set()
+
+    def checkpoint(years, publish=False):
+        pending_years.update(years)
+        for year in years:
+            if any(m.scheduled_at.year == year for m in matches.values()):
+                write_year_partition(matches.values(), directory, year,
+                    extra_manifest={"coverage_status": "incremental_download"})
+        progress["updated_at"] = datetime.now(timezone.utc).isoformat()
+        write_json(progress_file, progress)
+        if publish and store:
+            store.upload([directory / f"history-{y}.parquet" for y in sorted(pending_years)])
+            store.upload([directory / "history_manifest.json", progress_file])
+            pending_years.clear()
+
+    local_budget = LocalRequestBudget(directory / "local_request_budget.sqlite")
+    provider = RapidTennisClient(request_budget=local_budget)
+    provider.request_limit = allocation
+    report = Counter()
+    enricher = None
+    try:
+        if args.mode == "history":
+            download_days(provider, matches, progress, start, end, checkpoint)
+        else:
+            enricher = StatisticsEnricher(provider, directory / "statistics_cache.sqlite")
+            changed = set()
+            for match in sorted(matches.values(), key=lambda m: m.scheduled_at, reverse=True):
+                if not start <= match.scheduled_at.date() <= end:
+                    continue
+                status = enricher.enrich(match)
+                report[status] += 1
+                if status in {"enriched", "unavailable"}:
+                    changed.add(match.scheduled_at.year)
+                    pending_years.add(match.scheduled_at.year)
+                    if sum(report.values()) % 50 == 0:
+                        checkpoint(changed, True)
+                        changed.clear()
+            checkpoint(changed, True)
+    except RequestBudgetExceeded as exc:
+        report["budget_stopped"] = 1
+        print(str(exc), flush=True)
+    finally:
+        # Includes partial statistics batches on a budget stop or parser error.
+        checkpoint(set(pending_years), True)
+        report["requests_including_retries"] = provider.request_count
+        report["stored_matches"] = len(matches)
+        report["completed_days"] = len(progress["completed_days"])
+        report["allocated_requests"] = allocation
+        write_json(directory / "download_report.json", dict(report))
+        print(json.dumps(dict(report), indent=2), flush=True)
+        provider.client.close()
+        local_budget.close()
+        if enricher:
+            enricher.close()
+
+
+if __name__ == "__main__":
+    main()

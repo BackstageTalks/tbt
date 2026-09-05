@@ -9,6 +9,8 @@ from ..models.ensemble import TennisEnsemble
 from ..models.feature_builder import FeatureBuilder
 from ..models.metrics import evaluate_probabilities
 from ..schemas import MatchRecord
+from .data_quality import audit_history
+from .prediction_quality import subgroup_report, history_band
 
 
 @dataclass
@@ -322,6 +324,7 @@ def train_from_matches(
     ],
     min_matches: int = 2500,
 ) -> TrainingResult:
+    matches, quality = audit_history(matches)
     builder = FeatureBuilder()
 
     frame = (
@@ -352,6 +355,12 @@ def train_from_matches(
             drop=True
         )
     )
+
+    source = {m.match_id: m for m in matches}
+    frame['competition'] = frame.match_id.map(lambda key: source[key].tournament_level or 'unknown')
+    frame['tournament'] = frame.match_id.map(lambda key: source[key].tournament or 'unknown')
+    frame['history_band'] = frame.data_depth.map(lambda value: history_band(round(float(value) * 50)))
+    frame['surface_history_band'] = frame.surface_history_count.map(history_band)
 
     # -------------------------------------------------
     # Strict out-of-time evaluation
@@ -452,6 +461,7 @@ def train_from_matches(
     }
 
     report = {
+        "data_quality": quality,
         "method": (
             "strict chronological split by "
             "whole UTC calendar days"
@@ -521,12 +531,7 @@ def train_from_matches(
         "delta_vs_elo": (
             holdout_delta
         ),
-        "subgroups": (
-            _group_metrics(
-                test,
-                test_p,
-            )
-        ),
+        "subgroups": subgroup_report(test, test_p),
         "evaluation_model": {
             "blend_weight_boost": (
                 evaluation_model

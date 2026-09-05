@@ -29,6 +29,14 @@ def minimize_provider_payload(
     """
     raw = payload if isinstance(payload, dict) else {}
     out: dict[str, Any] = {}
+    identity = raw.get("_tbt_event_identity")
+    if isinstance(identity, dict):
+        out["_tbt_event_identity"] = {k: identity[k] for k in
+            ("event_id", "home", "away", "status") if k in identity}
+    marker = raw.get("_tbt_statistics")
+    if isinstance(marker, dict):
+        out["_tbt_statistics"] = {k: marker[k] for k in
+            ("schema", "event_id", "source", "fetched_at", "status") if k in marker}
 
     for key in (
         "_tbt_provider_event_id",
