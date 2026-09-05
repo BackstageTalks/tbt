@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import time
 from datetime import date, timedelta
 from typing import Any, Iterable
@@ -643,13 +644,18 @@ class RapidTennisClient:
                     category_id,
                     category_name,
                 )
-                match = self.normalize_match(
-                    event,
-                    tour=tour,
-                    historical=historical,
-                )
-
-                if not match.player1_id or not match.player2_id:
+                try:
+                    match = self.normalize_match(
+                        event,
+                        tour=tour,
+                        historical=historical,
+                    )
+                except ValueError as exc:
+                    logger.warning(
+                        "Skipping %s event with invalid required identity/date: %s",
+                        tour.upper(),
+                        exc,
+                    )
                     continue
 
                 self._keep_richer_match(matches, match)
@@ -1107,18 +1113,18 @@ class RapidTennisClient:
                 or obj
             )
 
-        name = str(
-            name
-            or f"Player {number}"
-        ).strip()
+        def clean_text(value: Any) -> str:
+            if value is None:
+                return ""
+            if isinstance(value, float) and not math.isfinite(value):
+                return ""
+            text = str(value).strip()
+            if text.lower() in {"nan", "none", "null", "<na>", "nat"}:
+                return ""
+            return text
 
-        player_id = str(
-            player_id
-            or (
-                "name:"
-                f"{name.lower()}"
-            )
-        ).strip()
+        name = clean_text(name)
+        player_id = clean_text(player_id)
 
         return (
             player_id,
@@ -1365,6 +1371,11 @@ class RapidTennisClient:
             raw,
             2,
         )
+
+        if not p1_id or not p2_id:
+            raise ValueError("Missing required player identity")
+        if p1_id == p2_id:
+            raise ValueError("Invalid player identity: both sides have the same player ID")
 
         # Historical ranking snapshots from the provider are not trusted
         # unless their point-in-time semantics are explicitly guaranteed.
