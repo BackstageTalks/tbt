@@ -6,6 +6,7 @@
   const api = (path) => `${apiBase()}${path}`;
   let config = null;
   let recoveryMode = false;
+  let callbackState = { type: "", error: "", message: "" };
 
   function readSession() {
     try {
@@ -17,16 +18,35 @@
   }
 
   function normalizeSession(payload) {
-    if (!payload?.access_token) return null;
-    const expiresIn = Number(payload.expires_in || 3600);
-    const expiresAt = Number(payload.expires_at || 0) || Math.floor(Date.now() / 1000) + expiresIn;
+    const source = payload?.session?.access_token ? payload.session : payload;
+    if (!source?.access_token) return null;
+    const expiresIn = Number(source.expires_in || 3600);
+    const expiresAt = Number(source.expires_at || 0) || Math.floor(Date.now() / 1000) + expiresIn;
     return {
-      access_token: String(payload.access_token),
-      refresh_token: String(payload.refresh_token || ""),
-      token_type: String(payload.token_type || "bearer"),
+      access_token: String(source.access_token),
+      refresh_token: String(source.refresh_token || ""),
+      token_type: String(source.token_type || "bearer"),
       expires_at: expiresAt,
-      user: payload.user || null,
+      user: source.user || payload?.user || null,
     };
+  }
+
+  function extractUser(payload) {
+    if (payload?.user && typeof payload.user === "object") return payload.user;
+    if (payload?.id && typeof payload === "object") return payload;
+    return null;
+  }
+
+  function redirectBaseUrl() {
+    const pathname = String(location.pathname || "/");
+    const cleanPath = pathname.endsWith("/")
+      ? pathname
+      : pathname.replace(/\/[^/]*$/, "/");
+    return `${location.origin}${cleanPath}`;
+  }
+
+  function cleanAuthCallbackUrl() {
+    return `${location.pathname}${location.search}`;
   }
 
   function saveSession(payload) {
@@ -71,10 +91,26 @@
 
   function consumeCallbackFragment() {
     const raw = String(location.hash || "").replace(/^#/, "");
-    if (!raw.includes("access_token=")) return;
+    if (!raw) return;
+
     const params = new URLSearchParams(raw);
+    const error = params.get("error_description") || params.get("error") || "";
+    const errorCode = params.get("error_code") || "";
+
+    if (error || errorCode) {
+      callbackState = {
+        type: String(params.get("type") || ""),
+        error: String(errorCode || "auth_callback_error"),
+        message: String(error || "Authentication link is invalid or expired."),
+      };
+      history.replaceState(null, "", cleanAuthCallbackUrl());
+      return;
+    }
+
     const accessToken = params.get("access_token");
     if (!accessToken) return;
+
+    const type = String(params.get("type") || "");
     const session = saveSession({
       access_token: accessToken,
       refresh_token: params.get("refresh_token") || "",
@@ -82,8 +118,17 @@
       expires_in: Number(params.get("expires_in") || 3600),
       expires_at: Number(params.get("expires_at") || 0),
     });
-    recoveryMode = params.get("type") === "recovery";
-    if (session) history.replaceState(null, "", `${location.pathname}${location.search}#dashboard`);
+
+    recoveryMode = type === "recovery";
+    callbackState = {
+      type,
+      error: "",
+      message: type === "signup"
+        ? "Email confirmed successfully."
+        : (type === "recovery" ? "Recovery link accepted." : ""),
+    };
+
+    if (session) history.replaceState(null, "", cleanAuthCallbackUrl());
   }
 
   async function init() {
@@ -108,6 +153,7 @@
   }
   function isRequired() { return config?.required !== false; }
   function isRecovery() { return recoveryMode; }
+  function getCallbackState() { return { ...callbackState }; }
 
   async function refreshSession() {
     const current = readSession();
@@ -149,7 +195,7 @@
   }
 
   async function signUp(telegramAccount, email, password) {
-    const redirectTo = `${location.origin}${location.pathname.replace(/[^/]*$/, "")}`;
+    const redirectTo = redirectBaseUrl();
     const telegramHandle = normalizeTelegramHandle(telegramAccount);
     const data = await jsonFetch(`${authEndpoint("/signup")}?redirect_to=${encodeURIComponent(redirectTo)}`, {
       method: "POST",
@@ -164,19 +210,41 @@
         },
       }),
     });
+
+    // GoTrue /signup has two valid success shapes:
+    // 1) AccessTokenResponse when email confirmation is disabled
+    // 2) UserSchema at the top level when confirmation is required
     const session = saveSession(data);
-    const identities = Array.isArray(data?.user?.identities) ? data.user.identities : null;
-    const existingAccount = Boolean(data?.user && identities && identities.length === 0);
-    const confirmationRequired = Boolean(data?.user && !session && !existingAccount);
-    return { data, session, existingAccount, confirmationRequired, telegramHandle };
+    const user = extractUser(data);
+    const confirmationRequired = Boolean(user && !session);
+
+    return {
+      data,
+      user,
+      session,
+      confirmationRequired,
+      telegramHandle,
+    };
   }
 
   async function requestPasswordReset(email) {
-    const redirectTo = `${location.origin}${location.pathname.replace(/[^/]*$/, "")}`;
+    const redirectTo = redirectBaseUrl();
     await jsonFetch(`${authEndpoint("/recover")}?redirect_to=${encodeURIComponent(redirectTo)}`, {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({ email: String(email || "").trim() }),
+    });
+    return true;
+  }
+
+  async function resendSignupConfirmation(email) {
+    await jsonFetch(authEndpoint("/resend"), {
+      method: "POST",
+      headers: authHeaders(),
+      body: JSON.stringify({
+        email: String(email || "").trim(),
+        type: "signup",
+      }),
     });
     return true;
   }
@@ -233,6 +301,7 @@
     isEnabled,
     isRequired,
     isRecovery,
+    getCallbackState,
     isTelegramEnabled,
     telegramProvider,
     signInWithTelegram,
@@ -241,6 +310,7 @@
     signIn,
     signUp,
     requestPasswordReset,
+    resendSignupConfirmation,
     updatePassword,
     signOut,
     me,

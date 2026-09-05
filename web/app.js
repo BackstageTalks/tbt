@@ -250,6 +250,20 @@ function authMessage(message = "", type = "") {
   box.textContent = message || "";
 }
 
+function friendlyAuthError(error, fallback = "Authentication failed.") {
+  const message = String(error?.message || fallback);
+  if (/email.*not.*confirmed|not.*confirmed/i.test(message)) {
+    return "Email address is not confirmed yet. Open the confirmation email first, then sign in.";
+  }
+  if (/invalid.*login|invalid.*credentials/i.test(message)) {
+    return "Incorrect email or password.";
+  }
+  if (/rate.*limit|too many requests|429/i.test(message)) {
+    return "Too many email/auth requests. Wait a moment and try again.";
+  }
+  return message;
+}
+
 function showAuthMode(mode = "signin", message = "", type = "") {
   $("authScreen").hidden = false;
   $("appShell").hidden = true;
@@ -299,8 +313,14 @@ async function initializeIdentity() {
     state.authConfig = await auth.init();
     const telegramEnabled = Boolean(auth.isTelegramEnabled?.());
     ["telegramSignIn","telegramSignUp","telegramSignInDivider","telegramSignUpDivider"].forEach((id) => { if ($(id)) $(id).hidden = !telegramEnabled; });
+
+    const callback = auth.getCallbackState?.() || {};
+    if (callback.error) {
+      showAuthMode("signin", callback.message || "Authentication link is invalid or expired.", "error");
+      return false;
+    }
   } catch (error) {
-    showAuthMode("signin", `Authentication service unavailable: ${error.message}`, "error");
+    showAuthMode("signin", `Authentication service unavailable: ${friendlyAuthError(error)}`, "error");
     return false;
   }
   if (!auth.isEnabled()) {
@@ -335,7 +355,7 @@ function bindAuthEvents() {
   document.querySelectorAll("[data-auth-mode]").forEach((button) => button.addEventListener("click", () => showAuthMode(button.dataset.authMode || "signin")));
   ["telegramSignIn","telegramSignUp"].forEach((id) => $(id)?.addEventListener("click", () => {
     try { window.BLINQ_AUTH.signInWithTelegram(); }
-    catch (error) { authMessage(error.message, "error"); }
+    catch (error) { authMessage(friendlyAuthError(error), "error"); }
   }));
   $("signInForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -344,7 +364,7 @@ function bindAuthEvents() {
       const session = await window.BLINQ_AUTH.signIn($("signInEmail").value, $("signInPassword").value);
       if (!session) throw new Error("No session returned.");
       location.reload();
-    } catch (error) { authMessage(error.message, "error"); }
+    } catch (error) { authMessage(friendlyAuthError(error), "error"); }
   });
   $("signUpForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -358,7 +378,7 @@ function bindAuthEvents() {
       const result = await window.BLINQ_AUTH.signUp($("signUpTelegram").value, email, password);
       if (result.session) { location.reload(); return; }
 
-      if (!result.confirmationRequired && !result.existingAccount) {
+      if (!result.confirmationRequired) {
         try {
           const session = await window.BLINQ_AUTH.signIn(email, password);
           if (session) { location.reload(); return; }
@@ -369,17 +389,22 @@ function bindAuthEvents() {
       if ($("signUpPassword")) $("signUpPassword").value = "";
       if ($("signUpPassword2")) $("signUpPassword2").value = "";
 
-      if (result.existingAccount) {
-        showAuthMode("signin", "An account for this email may already exist. Try signing in or use Forgot password.", "success");
-        return;
-      }
       if (result.confirmationRequired) {
-        showAuthMode("signin", "Account created. Confirm the email address, then sign in.", "success");
+        showAuthMode(
+          "signin",
+          "Account created. Check your inbox and confirm your email address before signing in.",
+          "success"
+        );
         return;
       }
-      showAuthMode("signin", "Account created. Sign in with your email and password.", "success");
+
+      showAuthMode(
+        "signin",
+        "Account request completed. If sign-in does not work, confirm the email address or use Forgot password.",
+        "success"
+      );
     } catch (error) {
-      authMessage(error.message, "error");
+      authMessage(friendlyAuthError(error), "error");
     } finally {
       if (submit && document.body.contains(submit)) { submit.disabled = false; submit.textContent = t("auth.sign_up", "Create account"); }
     }
@@ -389,8 +414,12 @@ function bindAuthEvents() {
     authMessage("Sending reset link…");
     try {
       await window.BLINQ_AUTH.requestPasswordReset($("forgotEmail").value);
-      showAuthMode("signin", "Password reset link sent. Check your email.", "success");
-    } catch (error) { authMessage(error.message, "error"); }
+      showAuthMode(
+        "signin",
+        "If an account exists for this email, a password reset link has been sent. Check Inbox and Spam.",
+        "success"
+      );
+    } catch (error) { authMessage(friendlyAuthError(error), "error"); }
   });
   $("newPasswordForm")?.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -401,7 +430,7 @@ function bindAuthEvents() {
       await window.BLINQ_AUTH.updatePassword(password);
       await window.BLINQ_AUTH.signOut();
       showAuthMode("signin", "Password updated. Sign in with your new password.", "success");
-    } catch (error) { authMessage(error.message, "error"); }
+    } catch (error) { authMessage(friendlyAuthError(error), "error"); }
   });
 }
 
