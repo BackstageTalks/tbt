@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
@@ -9,29 +10,12 @@ from typing import Any, Iterable
 import pandas as pd
 
 from tbt.schemas import MatchRecord
+from .provider_context import merge_provider_context, minimize_provider_payload
 
 SNAPSHOT_SCHEMA_VERSION = 2
-
-_BASE_COLUMNS = (
-    "match_id",
-    "tour",
-    "scheduled_at",
-    "player1_id",
-    "player1_name",
-    "player2_id",
-    "player2_name",
-    "surface",
-    "tournament",
-    "tournament_id",
-    "tournament_level",
-    "round_name",
-    "player1_rank",
-    "player2_rank",
-    "winner_id",
-    "status",
-    "best_of",
-    "indoor",
-)
+MANIFEST_SCHEMA_VERSION = 1
+PARTITION_PATTERN = re.compile(r"^history-(\d{4})\.parquet$")
+HOT_TIER_START_YEAR = 2025
 
 
 def _json_dumps(value: Any) -> str:
@@ -82,127 +66,6 @@ def _none_if_na(value: Any) -> Any:
     return value
 
 
-def _compact_country(value: Any) -> dict[str, Any] | str | None:
-    if isinstance(value, dict):
-        compact = {
-            key: value.get(key)
-            for key in ("id", "name", "alpha2", "alpha3")
-            if value.get(key) not in (None, "")
-        }
-        return compact or None
-    if value not in (None, ""):
-        return {"name": str(value)}
-    return None
-
-
-def minimize_provider_payload(payload: Any) -> dict[str, Any]:
-    """Keep compact provider context required by identity, environment and features.
-
-    Raw TennisApi payloads are intentionally NOT copied to GitHub.  V2 retains a
-    very small venue/location subset in addition to canonical identity/category
-    fields so old-history environment enrichment can run directly against the
-    GitHub snapshot without round-tripping through Supabase.
-    """
-    raw = payload if isinstance(payload, dict) else {}
-    out: dict[str, Any] = {}
-
-    for key in (
-        "_tbt_provider_event_id",
-        "provider_event_id",
-        "event_id",
-        "eventId",
-        "id",
-        "_tbt_source_category_id",
-        "_tbt_source_category_name",
-    ):
-        if raw.get(key) not in (None, ""):
-            out[key] = raw.get(key)
-
-    event = raw.get("event") if isinstance(raw.get("event"), dict) else {}
-    if event.get("id") not in (None, ""):
-        out["event"] = {"id": event.get("id")}
-
-    tournament = raw.get("tournament") if isinstance(raw.get("tournament"), dict) else {}
-    unique = (
-        tournament.get("uniqueTournament")
-        if isinstance(tournament.get("uniqueTournament"), dict)
-        else {}
-    )
-
-    compact_tournament: dict[str, Any] = {}
-    for key in ("id", "name", "city"):
-        if tournament.get(key) not in (None, ""):
-            compact_tournament[key] = tournament.get(key)
-    tournament_country = _compact_country(tournament.get("country"))
-    if tournament_country is not None:
-        compact_tournament["country"] = tournament_country
-
-    compact_unique: dict[str, Any] = {}
-    for key in ("id", "name", "city"):
-        if unique.get(key) not in (None, ""):
-            compact_unique[key] = unique.get(key)
-    unique_country = _compact_country(unique.get("country"))
-    if unique_country is not None:
-        compact_unique["country"] = unique_country
-    if compact_unique:
-        compact_tournament["uniqueTournament"] = compact_unique
-    if compact_tournament:
-        out["tournament"] = compact_tournament
-
-    venue = raw.get("venue") if isinstance(raw.get("venue"), dict) else {}
-    compact_venue: dict[str, Any] = {}
-    for key in ("id", "name", "city"):
-        if venue.get(key) not in (None, ""):
-            compact_venue[key] = venue.get(key)
-    venue_country = _compact_country(venue.get("country"))
-    if venue_country is not None:
-        compact_venue["country"] = venue_country
-    if venue.get("countryName") not in (None, ""):
-        compact_venue["countryName"] = venue.get("countryName")
-    if compact_venue:
-        out["venue"] = compact_venue
-
-    for key in ("city", "venueCity", "countryName"):
-        if raw.get(key) not in (None, ""):
-            out[key] = raw.get(key)
-    raw_country = _compact_country(raw.get("country"))
-    if raw_country is not None:
-        out["country"] = raw_country
-
-    env = raw.get("_tbt_environment")
-    if isinstance(env, dict) and env:
-        out["_tbt_environment"] = env
-
-    return out
-
-
-def merge_provider_context(existing: Any, incoming: Any) -> dict[str, Any]:
-    """Merge two compact provider payloads without losing existing enrichment."""
-    left = minimize_provider_payload(existing)
-    right = minimize_provider_payload(incoming)
-    merged = dict(left)
-
-    for key, value in right.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            nested = dict(merged[key])
-            nested.update(value)
-            merged[key] = nested
-        elif value not in (None, "", {}):
-            merged[key] = value
-
-    # Environment is expensive to resolve, so an already-resolved value wins.
-    left_env = left.get("_tbt_environment")
-    right_env = right.get("_tbt_environment")
-    if isinstance(left_env, dict) and left_env.get("venue_resolved") is True:
-        merged["_tbt_environment"] = left_env
-    elif isinstance(right_env, dict) and right_env:
-        merged["_tbt_environment"] = right_env
-    elif isinstance(left_env, dict) and left_env:
-        merged["_tbt_environment"] = left_env
-
-    return minimize_provider_payload(merged)
-
-
 def _record_to_row(match: MatchRecord) -> dict[str, Any]:
     return {
         "match_id": str(match.match_id),
@@ -224,9 +87,7 @@ def _record_to_row(match: MatchRecord) -> dict[str, Any]:
         "best_of": match.best_of,
         "indoor": match.indoor,
         "stats_json": _json_dumps(match.stats if isinstance(match.stats, dict) else {}),
-        "provider_context_json": _json_dumps(
-            minimize_provider_payload(match.provider_payload)
-        ),
+        "provider_context_json": _json_dumps(minimize_provider_payload(match.provider_payload)),
     }
 
 
@@ -299,3 +160,358 @@ def load_snapshot(path: str | Path, before: datetime | None = None) -> list[Matc
         )
     matches.sort(key=lambda item: (item.scheduled_at, str(item.match_id)))
     return matches
+
+
+def partition_path(directory: str | Path, year: int) -> Path:
+    return Path(directory) / f"history-{int(year):04d}.parquet"
+
+
+def manifest_path(directory: str | Path) -> Path:
+    return Path(directory) / "history_manifest.json"
+
+
+def list_partition_years(directory: str | Path) -> list[int]:
+    directory = Path(directory)
+    years: list[int] = []
+    if not directory.is_dir():
+        return years
+    for path in directory.iterdir():
+        match = PARTITION_PATTERN.match(path.name)
+        if match and path.is_file() and path.stat().st_size > 0:
+            years.append(int(match.group(1)))
+    return sorted(set(years))
+
+
+def load_manifest(directory: str | Path) -> dict[str, Any]:
+    path = manifest_path(directory)
+    if not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def write_manifest(directory: str | Path, manifest: dict[str, Any]) -> Path:
+    path = manifest_path(directory)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    manifest = dict(manifest)
+    manifest["manifest_schema_version"] = MANIFEST_SCHEMA_VERSION
+    manifest["partition_schema_version"] = SNAPSHOT_SCHEMA_VERSION
+    manifest["generated_at"] = datetime.now(timezone.utc).isoformat()
+    manifest.setdefault("hot_tier_start", "2025-01-01")
+    path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    return path
+
+
+def update_year_manifest(
+    directory: str | Path,
+    year: int,
+    partition_meta: dict[str, Any],
+    *,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    manifest = load_manifest(directory)
+    years = manifest.setdefault("years", {})
+    previous = years.get(str(year), {}) if isinstance(years, dict) else {}
+    entry = dict(previous) if isinstance(previous, dict) else {}
+    entry.update(partition_meta)
+    entry["year"] = int(year)
+    entry["asset"] = partition_path(directory, year).name
+    entry.setdefault(
+        "coverage_status",
+        "authoritative_hot_mirror" if year >= HOT_TIER_START_YEAR else "partial_or_unverified",
+    )
+    if extra:
+        entry.update(extra)
+    years[str(year)] = entry
+    manifest["years"] = years
+    write_manifest(directory, manifest)
+    return manifest
+
+
+def write_year_partition(
+    matches: Iterable[MatchRecord],
+    directory: str | Path,
+    year: int,
+    *,
+    extra_manifest: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    year = int(year)
+    selected = [
+        match
+        for match in matches
+        if match.scheduled_at.astimezone(timezone.utc).year == year
+    ]
+    if not selected:
+        raise ValueError(f"Refusing to write empty history partition for {year}")
+    path = partition_path(directory, year)
+    meta = write_snapshot(selected, path)
+    update_year_manifest(directory, year, meta, extra=extra_manifest)
+    return meta
+
+
+def load_partitions(
+    directory: str | Path,
+    *,
+    years: Iterable[int] | None = None,
+    before: datetime | None = None,
+) -> list[MatchRecord]:
+    directory = Path(directory)
+    selected_years = sorted(set(int(year) for year in years)) if years is not None else list_partition_years(directory)
+    if not selected_years:
+        raise FileNotFoundError(f"No history-YYYY.parquet partitions found in {directory}")
+    matches: list[MatchRecord] = []
+    for year in selected_years:
+        path = partition_path(directory, year)
+        if path.is_file() and path.stat().st_size > 0:
+            matches.extend(load_snapshot(path, before=before))
+    matches.sort(key=lambda item: (item.scheduled_at, str(item.match_id)))
+    return matches
+
+
+def _legacy_meta(legacy_snapshot: str | Path) -> dict[str, Any]:
+    legacy_path = Path(legacy_snapshot)
+    candidates = [
+        legacy_path.with_name(f"{legacy_path.stem}.meta.json"),
+        legacy_path.with_name("training_snapshot.meta.json"),
+    ]
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            value = json.loads(candidate.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if isinstance(value, dict):
+            return value
+    return {}
+
+
+def migrate_legacy_snapshot(
+    legacy_snapshot: str | Path,
+    directory: str | Path,
+) -> dict[str, Any]:
+    """Split the old monolithic snapshot locally without reading Supabase.
+
+    V20.6 also carries the old ``source_updated_at_max`` cursor forward.  Without
+    this, the first hot-tier sync after partitioning would seed from 2025-01-01 and
+    unnecessarily re-read the whole 2025+ operational tier.
+    """
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+
+    legacy_path = Path(legacy_snapshot)
+    matches = load_snapshot(legacy_path)
+    legacy_meta = _legacy_meta(legacy_path)
+
+    by_year: dict[int, list[MatchRecord]] = {}
+    for match in matches:
+        year = match.scheduled_at.astimezone(timezone.utc).year
+        by_year.setdefault(year, []).append(match)
+
+    for year, year_matches in sorted(by_year.items()):
+        path = partition_path(directory, year)
+        existing = load_snapshot(path) if path.is_file() and path.stat().st_size > 0 else []
+        merged = merge_matches(existing, year_matches)
+        write_year_partition(
+            merged,
+            directory,
+            year,
+            extra_manifest={
+                "migration_source": legacy_path.name,
+                "coverage_status": (
+                    "authoritative_hot_mirror"
+                    if year >= HOT_TIER_START_YEAR
+                    else "legacy_snapshot_seed"
+                ),
+            },
+        )
+
+    manifest = load_manifest(directory)
+    source_updated_at_max = legacy_meta.get("source_updated_at_max")
+    if source_updated_at_max:
+        manifest["source_updated_at_max"] = source_updated_at_max
+    manifest["migration"] = {
+        "source": legacy_path.name,
+        "legacy_rows": len(matches),
+        "legacy_sha256": legacy_meta.get("sha256"),
+        "source_updated_at_max": source_updated_at_max,
+        "migrated_at": datetime.now(timezone.utc).isoformat(),
+        "supabase_used": False,
+    }
+    write_manifest(directory, manifest)
+    return manifest
+
+
+def ensure_partitions(
+    directory: str | Path,
+    *,
+    legacy_snapshot: str | Path | None = None,
+) -> dict[str, Any]:
+    if list_partition_years(directory):
+        manifest = load_manifest(directory)
+        if not manifest:
+            manifest = {"years": {}}
+            for year in list_partition_years(directory):
+                matches = load_snapshot(partition_path(directory, year))
+                meta = write_snapshot(matches, partition_path(directory, year))
+                update_year_manifest(directory, year, meta)
+            manifest = load_manifest(directory)
+        return manifest
+    if legacy_snapshot is not None and Path(legacy_snapshot).is_file():
+        return migrate_legacy_snapshot(legacy_snapshot, directory)
+    raise FileNotFoundError(
+        "No partitioned history is available and no legacy training_snapshot.parquet was supplied"
+    )
+
+
+__all__ = [
+    "HOT_TIER_START_YEAR",
+    "MANIFEST_SCHEMA_VERSION",
+    "SNAPSHOT_SCHEMA_VERSION",
+    "ensure_partitions",
+    "list_partition_years",
+    "load_manifest",
+    "load_partitions",
+    "load_snapshot",
+    "merge_matches",
+    "manifest_path",
+    "merge_provider_context",
+    "migrate_legacy_snapshot",
+    "minimize_provider_payload",
+    "partition_path",
+    "update_year_manifest",
+    "write_manifest",
+    "write_snapshot",
+    "write_year_partition",
+]
+
+# ---------------------------------------------------------------------------
+# Canonical merge helpers shared by direct provider bootstrap and hot-tier sync
+# ---------------------------------------------------------------------------
+
+def _provider_event_id(match: MatchRecord) -> str | None:
+    payload = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+    for key in (
+        "_tbt_provider_event_id",
+        "provider_event_id",
+        "event_id",
+        "eventId",
+        "id",
+    ):
+        value = payload.get(key)
+        if value not in (None, ""):
+            return str(value)
+    event = payload.get("event") if isinstance(payload.get("event"), dict) else {}
+    value = event.get("id")
+    return str(value) if value not in (None, "") else None
+
+
+def _signature(match: MatchRecord) -> tuple[str, str, tuple[str, str], str]:
+    return (
+        str(match.tour or "").lower(),
+        match.scheduled_at.astimezone(timezone.utc).date().isoformat(),
+        tuple(sorted((str(match.player1_id or ""), str(match.player2_id or "")))),
+        str(match.round_name or "").strip().lower(),
+    )
+
+
+def _richness(match: MatchRecord) -> tuple[int, int, int, int]:
+    payload = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+    env = payload.get("_tbt_environment")
+    environment_score = 2 if isinstance(env, dict) and env.get("venue_resolved") else int(bool(env))
+    stats = match.stats if isinstance(match.stats, dict) else {}
+    stats_score = sum(value not in (None, "") for value in stats.values())
+    normalized = sum(
+        value not in (None, "", "unknown")
+        for value in (
+            match.tournament,
+            match.tournament_id,
+            match.tournament_level,
+            match.round_name,
+            match.surface,
+            match.status,
+            match.best_of,
+            match.indoor,
+            match.player1_rank,
+            match.player2_rank,
+        )
+    )
+    return (environment_score, stats_score, normalized, len(minimize_provider_payload(payload)))
+
+
+def _merge_record(existing: MatchRecord, incoming: MatchRecord) -> MatchRecord:
+    from copy import deepcopy
+    from dataclasses import replace
+
+    prefer_incoming = _richness(incoming) >= _richness(existing)
+    base = deepcopy(incoming if prefer_incoming else existing)
+    other = existing if prefer_incoming else incoming
+
+    merged_stats = dict(existing.stats or {})
+    for key, value in (incoming.stats or {}).items():
+        if value not in (None, ""):
+            merged_stats[key] = value
+
+    updates: dict[str, Any] = {
+        "provider_payload": merge_provider_context(
+            existing.provider_payload,
+            incoming.provider_payload,
+        ),
+        "stats": merged_stats,
+    }
+    for field_name in (
+        "tournament",
+        "tournament_id",
+        "tournament_level",
+        "round_name",
+        "surface",
+        "status",
+        "player1_rank",
+        "player2_rank",
+        "best_of",
+        "indoor",
+    ):
+        current = getattr(base, field_name)
+        candidate = getattr(other, field_name)
+        if current in (None, "", "unknown") and candidate not in (None, "", "unknown"):
+            updates[field_name] = candidate
+    if not base.winner_id and other.winner_id:
+        updates["winner_id"] = other.winner_id
+    return replace(base, **updates)
+
+
+def merge_matches(*groups: Iterable[MatchRecord]) -> list[MatchRecord]:
+    by_match: dict[str, MatchRecord] = {}
+    for group in groups:
+        for match in group:
+            key = str(match.match_id)
+            by_match[key] = _merge_record(by_match[key], match) if key in by_match else match
+
+    by_provider: dict[str, MatchRecord] = {}
+    without_provider: list[MatchRecord] = []
+    for match in by_match.values():
+        provider_id = _provider_event_id(match)
+        if provider_id:
+            by_provider[provider_id] = (
+                _merge_record(by_provider[provider_id], match)
+                if provider_id in by_provider
+                else match
+            )
+        else:
+            without_provider.append(match)
+
+    by_signature: dict[tuple[str, str, tuple[str, str], str], MatchRecord] = {}
+    for match in list(by_provider.values()) + without_provider:
+        signature = _signature(match)
+        by_signature[signature] = (
+            _merge_record(by_signature[signature], match)
+            if signature in by_signature
+            else match
+        )
+
+    result = list(by_signature.values())
+    result.sort(key=lambda item: (item.scheduled_at, str(item.match_id)))
+    return result
