@@ -9,7 +9,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tbt-prediction-refresh
+  group: tbt-champion-release-v1
   cancel-in-progress: false
 
 jobs:
@@ -18,12 +18,25 @@ jobs:
     timeout-minutes: 30
     env:
       PYTHONPATH: api
-      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || github.repository }}
-      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN || github.token }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_MODEL_RELEASE_TAG: tbt-models-v1
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Preflight private model repository
+        run: |
+          set -euo pipefail
+          test -n "$TBT_DATA_REPOSITORY"
+          test -n "$TBT_DATA_GH_TOKEN"
+          visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
+          test "$visibility" = "PRIVATE" || { echo "Target repo must be PRIVATE; got $visibility"; exit 1; }
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -38,18 +51,43 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt
 
-      - name: Download current champion from GitHub Release
-        shell: bash
+      - name: Download verified champion from private GitHub Release
         run: |
           set -euo pipefail
           mkdir -p api/artifacts
-          gh release download tbt-models \
+          gh release download "$TBT_MODEL_RELEASE_TAG" \
             --repo "$TBT_DATA_REPOSITORY" \
             --pattern 'champion-model.joblib' \
+            --pattern 'champion-model.meta.json' \
             --dir api/artifacts \
             --clobber
+          test -s api/artifacts/champion-model.joblib
+          test -s api/artifacts/champion-model.meta.json
+
+      - name: Verify checksum and champion lifecycle version
+        run: |
+          python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
+          from tbt.models.artifact import load_model
+          from tbt.repositories.supabase import SupabaseRepository
+
+          model_path = Path('api/artifacts/champion-model.joblib')
+          meta = json.loads(Path('api/artifacts/champion-model.meta.json').read_text(encoding='utf-8'))
+          actual_sha = hashlib.sha256(model_path.read_bytes()).hexdigest()
+          if actual_sha != str(meta.get('sha256') or ''):
+              raise SystemExit('Champion model checksum mismatch')
+          model = load_model(model_path)
+          embedded = str(getattr(model, 'version', '') or '')
+          released = str(meta.get('model_version') or '')
+          db_champion = str((SupabaseRepository().champion_model_version() or {}).get('model_version') or '')
+          if not embedded or embedded != released or released != db_champion:
+              raise SystemExit(
+                  f'Champion version mismatch: embedded={embedded!r} release={released!r} db={db_champion!r}'
+              )
+          print(f'Verified champion {embedded} · sha256={actual_sha}')
+          PY
           mv -f api/artifacts/champion-model.joblib api/artifacts/model.joblib
-          test -s api/artifacts/model.joblib
           ls -lh api/artifacts/model.joblib
 
       - name: Refresh upcoming champion predictions
@@ -57,9 +95,6 @@ jobs:
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
           RAPIDAPI_BASE_URL: https://tennisapi1.p.rapidapi.com
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python scripts/refresh_predictions.py
 
       - name: Reconcile recent results
@@ -67,7 +102,4 @@ jobs:
           RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
           RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
           RAPIDAPI_BASE_URL: https://tennisapi1.p.rapidapi.com
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python scripts/settle_results.py

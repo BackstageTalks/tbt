@@ -1,10 +1,10 @@
-name: V20 · Sync history snapshot to GitHub Release
+name: V20.1 · Sync history snapshot to private GitHub Release
 
 on:
   workflow_dispatch:
     inputs:
       full:
-        description: "Force full Supabase bootstrap (use only when necessary)"
+        description: "ONE-TIME bootstrap / disaster recovery full Supabase read"
         required: false
         default: false
         type: boolean
@@ -12,10 +12,10 @@ on:
     - cron: '11 3 * * *'
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
-  group: tbt-history-release-sync
+  group: tbt-history-release-v1
   cancel-in-progress: false
 
 jobs:
@@ -25,8 +25,10 @@ jobs:
     env:
       PYTHONPATH: api
       TBT_ALLOW_SUPABASE_FULL_HISTORY: '1'
-      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || github.repository }}
-      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN || github.token }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_HISTORY_RELEASE_TAG: tbt-data-v1
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
@@ -34,6 +36,16 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Preflight private data repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TBT_DATA_REPOSITORY" || { echo "Missing repository variable TBT_DATA_REPOSITORY"; exit 1; }
+          test -n "$TBT_DATA_GH_TOKEN" || { echo "Missing secret TBT_DATA_GH_TOKEN"; exit 1; }
+          visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
+          test "$visibility" = "PRIVATE" || { echo "Refusing to store TBT history in non-private repo: $visibility"; exit 1; }
+          echo "Target data repository: $TBT_DATA_REPOSITORY ($visibility)"
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -48,42 +60,53 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt
 
-      - name: Download previous normalized snapshot if present
+      - name: Download previous normalized snapshot
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .cache/tbt
-          gh release download tbt-data \
-            --repo "$TBT_DATA_REPOSITORY" \
-            --pattern 'training_snapshot.parquet' \
-            --pattern 'training_snapshot.meta.json' \
-            --dir .cache/tbt \
-            --clobber || true
+          if gh release view "$TBT_HISTORY_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+            gh release download "$TBT_HISTORY_RELEASE_TAG" \
+              --repo "$TBT_DATA_REPOSITORY" \
+              --pattern 'training_snapshot.parquet' \
+              --pattern 'training_snapshot.meta.json' \
+              --dir .cache/tbt \
+              --clobber
+          elif [[ "${{ inputs.full || false }}" == "true" ]]; then
+            echo "No previous release found; explicit full bootstrap was requested."
+          else
+            echo "History release is missing. Refusing implicit full Supabase bootstrap."
+            echo "For the FIRST run only, manually run this workflow with full=true."
+            exit 1
+          fi
 
-      - name: Build incremental snapshot
+      - name: Build normalized snapshot
         shell: bash
         run: |
           set -euo pipefail
-          EXTRA=""
-          if [[ "${{ inputs.full || false }}" == "true" ]]; then EXTRA="--full"; fi
+          EXTRA=()
+          if [[ "${{ inputs.full || false }}" == "true" ]]; then EXTRA+=(--full); fi
           python scripts/history_release.py \
             --snapshot .cache/tbt/training_snapshot.parquet \
             --meta .cache/tbt/training_snapshot.meta.json \
-            $EXTRA
+            "${EXTRA[@]}"
           ls -lh .cache/tbt/training_snapshot.*
 
-      - name: Create data release if missing
+      - name: Create private data release if missing
         shell: bash
         run: |
           set -euo pipefail
-          gh release view tbt-data --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create tbt-data --repo "$TBT_DATA_REPOSITORY" --title 'TBT normalized training data' --notes 'Machine-managed normalized historical snapshot. Raw provider payload is excluded.'
+          gh release view "$TBT_HISTORY_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TBT_HISTORY_RELEASE_TAG" \
+              --repo "$TBT_DATA_REPOSITORY" \
+              --title 'TBT normalized training data v1' \
+              --notes 'Machine-managed normalized historical snapshot. Raw provider payload is excluded.'
 
       - name: Publish snapshot assets
         shell: bash
         run: |
           set -euo pipefail
-          gh release upload tbt-data \
+          gh release upload "$TBT_HISTORY_RELEASE_TAG" \
             .cache/tbt/training_snapshot.parquet \
             .cache/tbt/training_snapshot.meta.json \
             --repo "$TBT_DATA_REPOSITORY" \

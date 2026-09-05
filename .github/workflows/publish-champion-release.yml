@@ -1,10 +1,14 @@
-name: V20 · Publish champion model to GitHub Release
+name: V20.1 · Publish champion model to private GitHub Release
 
 on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: tbt-champion-release-v1
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -12,14 +16,24 @@ jobs:
     timeout-minutes: 20
     env:
       PYTHONPATH: api
-      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || github.repository }}
-      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN || github.token }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_MODEL_RELEASE_TAG: tbt-models-v1
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Preflight private data repository
+        run: |
+          set -euo pipefail
+          test -n "$TBT_DATA_REPOSITORY"
+          test -n "$TBT_DATA_GH_TOKEN"
+          visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
+          test "$visibility" = "PRIVATE" || { echo "Target repo must be PRIVATE; got $visibility"; exit 1; }
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -30,7 +44,6 @@ jobs:
         run: pip install -r api/requirements-train.txt
 
       - name: Download current champion from legacy Supabase Storage once
-        shell: bash
         run: |
           set -euo pipefail
           mkdir -p api/artifacts
@@ -39,7 +52,6 @@ jobs:
           test -s api/artifacts/champion-model.joblib
 
       - name: Verify embedded champion version and write metadata
-        shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -48,6 +60,7 @@ jobs:
           from pathlib import Path
           from tbt.models.artifact import load_model
           from tbt.repositories.supabase import SupabaseRepository
+
           path = Path('api/artifacts/champion-model.joblib')
           model = load_model(path)
           champion = SupabaseRepository().champion_model_version()
@@ -56,23 +69,30 @@ jobs:
           if not expected or actual != expected:
               raise SystemExit(f'Champion mismatch: DB={expected!r}, artifact={actual!r}')
           meta = {
+              'release_schema_version': 1,
               'model_version': actual,
               'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
               'bytes': path.stat().st_size,
               'published_at': datetime.now(timezone.utc).isoformat(),
           }
-          Path('api/artifacts/champion-model.meta.json').write_text(json.dumps(meta, indent=2), encoding='utf-8')
+          Path('api/artifacts/champion-model.meta.json').write_text(
+              json.dumps(meta, indent=2), encoding='utf-8'
+          )
           print(json.dumps(meta, indent=2))
           PY
 
       - name: Create model release if missing
         run: |
-          gh release view tbt-models --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create tbt-models --repo "$TBT_DATA_REPOSITORY" --title 'TBT champion model' --notes 'Machine-managed champion artifact used by prediction refresh workflows.'
+          gh release view "$TBT_MODEL_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TBT_MODEL_RELEASE_TAG" \
+              --repo "$TBT_DATA_REPOSITORY" \
+              --title 'TBT champion model v1' \
+              --notes 'Machine-managed verified champion artifact used by prediction refresh workflows.'
 
       - name: Publish champion assets
         run: |
-          gh release upload tbt-models \
+          set -euo pipefail
+          gh release upload "$TBT_MODEL_RELEASE_TAG" \
             api/artifacts/champion-model.joblib \
             api/artifacts/champion-model.meta.json \
             --repo "$TBT_DATA_REPOSITORY" \

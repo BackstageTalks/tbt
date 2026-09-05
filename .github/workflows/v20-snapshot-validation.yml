@@ -1,4 +1,4 @@
-name: V20 · Validate GitHub history snapshot
+name: V20.1 · Validate private GitHub history snapshot
 
 on:
   workflow_dispatch:
@@ -6,19 +6,34 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tbt-history-release-v1
+  cancel-in-progress: false
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       PYTHONPATH: api
-      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || github.repository }}
-      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN || github.token }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_HISTORY_RELEASE_TAG: tbt-data-v1
       TBT_HISTORY_SNAPSHOT: .cache/tbt/training_snapshot.parquet
+      TBT_HISTORY_META: .cache/tbt/training_snapshot.meta.json
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Preflight private data repository
+        run: |
+          set -euo pipefail
+          test -n "$TBT_DATA_REPOSITORY"
+          test -n "$TBT_DATA_GH_TOKEN"
+          visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
+          test "$visibility" = "PRIVATE" || { echo "Target repo must be PRIVATE; got $visibility"; exit 1; }
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -32,23 +47,42 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt pytest
 
-      - name: Download normalized history from GitHub Release
-        env:
-          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN || github.token }}
+      - name: Download normalized history from private GitHub Release
         run: |
+          set -euo pipefail
           mkdir -p .cache/tbt
-          gh release download tbt-data --repo "$TBT_DATA_REPOSITORY" --pattern 'training_snapshot.parquet' --pattern 'training_snapshot.meta.json' --dir .cache/tbt --clobber
+          gh release download "$TBT_HISTORY_RELEASE_TAG" \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --pattern 'training_snapshot.parquet' \
+            --pattern 'training_snapshot.meta.json' \
+            --dir .cache/tbt \
+            --clobber
           ls -lh .cache/tbt/training_snapshot.*
 
-      - name: Snapshot smoke test
+      - name: Verify checksum, schema and row count
         run: |
           python - <<'PY'
+          import hashlib, json
+          from pathlib import Path
           from tbt.data.history_snapshot import load_snapshot
-          rows = load_snapshot('.cache/tbt/training_snapshot.parquet')
+
+          data = Path('.cache/tbt/training_snapshot.parquet')
+          meta_path = Path('.cache/tbt/training_snapshot.meta.json')
+          meta = json.loads(meta_path.read_text(encoding='utf-8'))
+          actual = hashlib.sha256(data.read_bytes()).hexdigest()
+          expected = str(meta.get('sha256') or '')
+          if actual != expected:
+              raise SystemExit(f'Checksum mismatch: expected={expected} actual={actual}')
+          if int(meta.get('snapshot_schema_version') or 0) != 1:
+              raise SystemExit(f"Unexpected snapshot schema: {meta.get('snapshot_schema_version')}")
+          rows = load_snapshot(data)
           if len(rows) < 1000:
               raise SystemExit(f'Snapshot unexpectedly small: {len(rows)} rows')
-          print(f'Loaded {len(rows):,} normalized completed matches from GitHub Release')
+          if int(meta.get('rows') or -1) != len(rows):
+              raise SystemExit(f"Row count mismatch: meta={meta.get('rows')} loaded={len(rows)}")
+          print(f'Verified {len(rows):,} normalized completed matches')
           print(f'Range: {rows[0].scheduled_at.isoformat()} -> {rows[-1].scheduled_at.isoformat()}')
+          print(f'SHA256: {actual}')
           PY
 
       - name: Compile
