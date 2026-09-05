@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+import os
 
 import pandas as pd
 
@@ -70,10 +71,37 @@ def predict_matches(
         if cutoff.tzinfo is None:
             cutoff = cutoff.replace(tzinfo=timezone.utc)
         cutoff = cutoff.astimezone(timezone.utc)
+
+        # Fail closed if the rolling Supabase buffer no longer overlaps the
+        # checkpoint.  Silent gaps here would corrupt Elo/form/H2H state while
+        # still producing plausible-looking probabilities.
+        eligible_history = [
+            match for match in history if match.scheduled_at < earliest
+        ]
+        if not eligible_history:
+            raise RuntimeError(
+                "No completed hot-buffer history is available after the model "
+                "checkpoint; refusing prediction refresh."
+            )
+        oldest_hot = min(match.scheduled_at for match in eligible_history)
+        try:
+            max_gap_hours = int(os.getenv("TBT_CHECKPOINT_MAX_GAP_HOURS", "72"))
+        except ValueError:
+            max_gap_hours = 72
+        max_gap_hours = min(max(max_gap_hours, 0), 168)
+        if oldest_hot > cutoff + timedelta(hours=max_gap_hours):
+            raise RuntimeError(
+                "Feature-state replay gap detected: "
+                f"checkpoint_cutoff={cutoff.isoformat()} "
+                f"oldest_hot_match={oldest_hot.isoformat()} "
+                f"allowed_gap_hours={max_gap_hours}. "
+                "Restore/extend the rolling Supabase hot buffer before refreshing predictions."
+            )
+
         delta_history = [
             match
-            for match in history
-            if cutoff <= match.scheduled_at < earliest
+            for match in eligible_history
+            if cutoff <= match.scheduled_at
         ]
         builder.replay(delta_history, before=earliest)
     else:
