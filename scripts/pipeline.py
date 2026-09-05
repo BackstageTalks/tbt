@@ -30,6 +30,71 @@ def clean(value):
     return value
 
 
+
+def _promotion_metric_gate(report):
+    """Predeclared probabilistic gate against Elo on the same untouched holdout.
+
+    Lower is better for log loss, Brier and ECE. Accuracy must not regress.
+    At least one probabilistic metric must improve strictly.
+    """
+    holdout = report.get("holdout") or {}
+    delta = report.get("delta_vs_elo") or {}
+
+    required = (
+        "accuracy",
+        "log_loss",
+        "brier_score",
+        "ece_10",
+    )
+    if int(holdout.get("n") or 0) < 200:
+        return False, ["holdout_n_below_200"]
+
+    missing = [
+        key
+        for key in required
+        if delta.get(key) is None
+        or not math.isfinite(float(delta.get(key)))
+    ]
+    if missing:
+        return False, ["missing_or_nonfinite_" + key for key in missing]
+
+    reasons = []
+    if float(delta["accuracy"]) < 0.0:
+        reasons.append("accuracy_worse_than_elo")
+    if float(delta["log_loss"]) > 0.0:
+        reasons.append("log_loss_worse_than_elo")
+    if float(delta["brier_score"]) > 0.0:
+        reasons.append("brier_worse_than_elo")
+    if float(delta["ece_10"]) > 0.0:
+        reasons.append("ece_worse_than_elo")
+
+    probabilistic_improvement = any(
+        float(delta[key]) < 0.0
+        for key in (
+            "log_loss",
+            "brier_score",
+            "ece_10",
+        )
+    )
+    if not probabilistic_improvement:
+        reasons.append("no_probabilistic_improvement_vs_elo")
+
+    return not reasons, reasons
+
+
+def _promotion_history(path):
+    value = read_json(path, [])
+    return value if isinstance(value, list) else []
+
+
+def _holdout_already_used(history, fingerprint):
+    return any(
+        isinstance(row, dict)
+        and row.get("holdout_fingerprint") == fingerprint
+        for row in history
+    )
+
+
 def main():
     parser = argparse.ArgumentParser(description="Offline BlinQ training and prediction publication")
     parser.add_argument("mode", choices=["train", "refresh", "backtest"])
@@ -56,20 +121,100 @@ def main():
     if args.mode == "train":
         result = train_from_matches(matches)
         report = clean(result.report)
-        candidate = ReleaseStore(args.data_repository, "tbt-model-candidate-v1", model_dir)
+
+        candidate = ReleaseStore(
+            args.data_repository,
+            "tbt-model-candidate-v1",
+            model_dir,
+        )
+        candidate.download(extra_names=("promotion_history.json",))
+        promotion_history_path = model_dir / "promotion_history.json"
+        promotion_history = _promotion_history(promotion_history_path)
+
         save_model(result.model, str(model_dir / "model.joblib"))
         write_json(model_dir / "training_report.json", report)
-        candidate.upload([model_dir / "model.joblib", model_dir / "training_report.json"])
-        delta = report["delta_vs_elo"]
-        eligible = (report["holdout"]["n"] >= 200 and delta["log_loss"] <= .01
-                    and delta["accuracy"] >= -.01)
-        print(json.dumps({"candidate": result.model.version, "promotion_gate": eligible,
-                          "holdout": report["holdout"], "delta_vs_elo": delta}, indent=2))
+        candidate.upload(
+            [
+                model_dir / "model.joblib",
+                model_dir / "training_report.json",
+            ]
+        )
+
+        governance = report.get("evaluation_governance") or {}
+        fingerprint = str(governance.get("holdout_fingerprint") or "")
+        metric_gate, gate_reasons = _promotion_metric_gate(report)
+        holdout_reused = (
+            not fingerprint
+            or _holdout_already_used(
+                promotion_history,
+                fingerprint,
+            )
+        )
+        if not fingerprint:
+            gate_reasons.append("missing_holdout_fingerprint")
+        elif holdout_reused:
+            gate_reasons.append("holdout_already_used_for_promotion_decision")
+
+        eligible = metric_gate and not holdout_reused
+
+        print(
+            json.dumps(
+                {
+                    "candidate": result.model.version,
+                    "promotion_gate": eligible,
+                    "promotion_gate_reasons": gate_reasons,
+                    "holdout_reused": holdout_reused,
+                    "holdout_fingerprint": fingerprint or None,
+                    "promotion_reference": governance.get(
+                        "promotion_reference"
+                    ),
+                    "holdout": report["holdout"],
+                    "delta_vs_elo": report["delta_vs_elo"],
+                },
+                indent=2,
+            )
+        )
+
         if args.promote:
             if not eligible:
-                raise SystemExit("Candidate saved. Promotion refused by holdout gate; current champion unchanged.")
-            production = ReleaseStore(args.data_repository, "tbt-model-production-v1", model_dir)
-            production.upload([model_dir / "model.joblib", model_dir / "training_report.json"])
+                raise SystemExit(
+                    "Candidate saved. Promotion refused by governance gate; "
+                    "current champion unchanged."
+                )
+
+            decision = {
+                "holdout_fingerprint": fingerprint,
+                "candidate_version": result.model.version,
+                "decided_at": datetime.now(timezone.utc).isoformat(),
+                "reference": governance.get(
+                    "promotion_reference",
+                    "elo_baseline_on_same_untouched_holdout",
+                ),
+                "holdout_period": (
+                    (report.get("periods") or {}).get("holdout")
+                ),
+                "holdout_metrics": report.get("holdout"),
+                "delta_vs_elo": report.get("delta_vs_elo"),
+            }
+            promotion_history.append(decision)
+            write_json(
+                promotion_history_path,
+                promotion_history,
+            )
+
+            production = ReleaseStore(
+                args.data_repository,
+                "tbt-model-production-v1",
+                model_dir,
+            )
+            production.upload(
+                [
+                    model_dir / "model.joblib",
+                    model_dir / "training_report.json",
+                    promotion_history_path,
+                ]
+            )
+            candidate.upload([promotion_history_path])
         return
     if not settings.rapidapi_key:
         parser.error("RAPIDAPI_KEY is required")
