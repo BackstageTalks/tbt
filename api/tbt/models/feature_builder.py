@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Iterable
 
 import pandas as pd
@@ -11,6 +11,9 @@ import pandas as pd
 from ..schemas import MatchRecord
 from ..utils import clamp, stable_hash
 from .elo import elo_expected, update_elo
+
+
+FEATURE_STATE_SCHEMA_VERSION = 1
 
 
 FEATURE_NAMES = [
@@ -127,6 +130,138 @@ class FeatureBuilder:
         ] = defaultdict(
             lambda: [0, 0]
         )
+
+    @staticmethod
+    def _state_datetime(value: str | datetime | None) -> datetime | None:
+        if value is None or value == "":
+            return None
+        if isinstance(value, datetime):
+            result = value
+        else:
+            result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        if result.tzinfo is None:
+            result = result.replace(tzinfo=timezone.utc)
+        return result.astimezone(timezone.utc)
+
+    def export_state(self) -> dict:
+        """Serialize replay state without pickling defaultdict factories.
+
+        The payload is intentionally plain Python/JSON-compatible data so a model
+        artifact can carry the complete pre-2025 Elo/form/H2H state after cold
+        history has been removed from Supabase.
+        """
+        players: dict[str, dict] = {}
+        for key, state in self.players.items():
+            players[str(key)] = {
+                "overall_elo": float(state.overall_elo),
+                "matches": int(state.matches),
+                "surface_elo": {str(k): float(v) for k, v in state.surface_elo.items()},
+                "surface_matches": {str(k): int(v) for k, v in state.surface_matches.items()},
+                "last_played": (
+                    state.last_played.astimezone(timezone.utc).isoformat()
+                    if state.last_played is not None
+                    else None
+                ),
+                "last_latitude": state.last_latitude,
+                "last_longitude": state.last_longitude,
+                "last_altitude_m": state.last_altitude_m,
+                "recent": [
+                    {
+                        "played_at": item.played_at.astimezone(timezone.utc).isoformat(),
+                        "won": float(item.won),
+                        "expected": float(item.expected),
+                        "surface": str(item.surface),
+                        "serve_quality": item.serve_quality,
+                        "return_quality": item.return_quality,
+                    }
+                    for item in state.recent
+                ],
+            }
+
+        h2h = [
+            {
+                "left": left,
+                "right": right,
+                "wins_left": int(wins[0]),
+                "wins_right": int(wins[1]),
+            }
+            for (left, right), wins in sorted(self.h2h.items())
+        ]
+
+        return {
+            "schema_version": FEATURE_STATE_SCHEMA_VERSION,
+            "players": players,
+            "h2h": h2h,
+        }
+
+    @classmethod
+    def from_state(cls, payload: dict | None) -> "FeatureBuilder":
+        builder = cls()
+        if not isinstance(payload, dict):
+            return builder
+        version = int(payload.get("schema_version") or 0)
+        if version != FEATURE_STATE_SCHEMA_VERSION:
+            raise ValueError(
+                f"Unsupported FeatureBuilder state schema {version}; "
+                f"expected {FEATURE_STATE_SCHEMA_VERSION}"
+            )
+
+        raw_players = payload.get("players")
+        if isinstance(raw_players, dict):
+            for key, raw in raw_players.items():
+                if not isinstance(raw, dict):
+                    continue
+                state = PlayerState(
+                    overall_elo=float(raw.get("overall_elo", 1500.0)),
+                    matches=int(raw.get("matches", 0)),
+                    surface_elo={
+                        str(k): float(v)
+                        for k, v in (raw.get("surface_elo") or {}).items()
+                    },
+                    surface_matches={
+                        str(k): int(v)
+                        for k, v in (raw.get("surface_matches") or {}).items()
+                    },
+                    last_played=cls._state_datetime(raw.get("last_played")),
+                    last_latitude=raw.get("last_latitude"),
+                    last_longitude=raw.get("last_longitude"),
+                    last_altitude_m=raw.get("last_altitude_m"),
+                )
+                recent = raw.get("recent")
+                if isinstance(recent, list):
+                    for item in recent[-80:]:
+                        if not isinstance(item, dict):
+                            continue
+                        played_at = cls._state_datetime(item.get("played_at"))
+                        if played_at is None:
+                            continue
+                        state.recent.append(
+                            RecentPerformance(
+                                played_at=played_at,
+                                won=float(item.get("won", 0.0)),
+                                expected=float(item.get("expected", 0.5)),
+                                surface=str(item.get("surface") or "unknown"),
+                                serve_quality=item.get("serve_quality"),
+                                return_quality=item.get("return_quality"),
+                            )
+                        )
+                builder.players[str(key)] = state
+
+        raw_h2h = payload.get("h2h")
+        if isinstance(raw_h2h, list):
+            for item in raw_h2h:
+                if not isinstance(item, dict):
+                    continue
+                left = str(item.get("left") or "")
+                right = str(item.get("right") or "")
+                if not left or not right:
+                    continue
+                builder.h2h[(left, right)] = [
+                    int(item.get("wins_left", 0)),
+                    int(item.get("wins_right", 0)),
+                ]
+
+        return builder
 
     @staticmethod
     def player_key(
