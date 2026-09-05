@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
+import hashlib
+import json
 from typing import Iterable
 
 import pandas as pd
@@ -318,6 +321,125 @@ def _period(
     }
 
 
+
+def _parse_provenance_datetime(value) -> datetime | None:
+    if value in (None, ""):
+        return None
+    try:
+        result = (
+            value
+            if isinstance(value, datetime)
+            else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        )
+    except (TypeError, ValueError):
+        return None
+    if result.tzinfo is None:
+        result = result.replace(tzinfo=timezone.utc)
+    return result.astimezone(timezone.utc)
+
+
+def _verified_rank_provenance(match: MatchRecord) -> bool:
+    """Historical ranks are usable only with explicit point-in-time provenance.
+
+    Accepted provenance lives in provider_payload["_tbt_rank_provenance"] and must
+    explicitly state point_in_time=True, name a source, and carry an as_of
+    timestamp that is not later than the match start.
+    """
+    payload = (
+        match.provider_payload
+        if isinstance(match.provider_payload, dict)
+        else {}
+    )
+    provenance = payload.get("_tbt_rank_provenance")
+    if not isinstance(provenance, dict):
+        return False
+    if provenance.get("point_in_time") is not True:
+        return False
+    if not str(provenance.get("source") or "").strip():
+        return False
+
+    as_of = _parse_provenance_datetime(provenance.get("as_of"))
+    if as_of is None:
+        return False
+
+    scheduled_at = match.scheduled_at
+    if scheduled_at.tzinfo is None:
+        raise ValueError("Naive historical timestamp")
+    scheduled_at = scheduled_at.astimezone(timezone.utc)
+
+    return as_of <= scheduled_at
+
+
+def _enforce_rank_provenance(
+    matches: Iterable[MatchRecord],
+) -> tuple[list[MatchRecord], dict]:
+    """Strip unverified historical rankings before feature construction."""
+    cleaned: list[MatchRecord] = []
+    rows_with_rank_values = 0
+    verified_rows = 0
+    stripped_rows = 0
+    stripped_values = 0
+    retained_values = 0
+
+    for match in matches:
+        rank_values = (
+            match.player1_rank,
+            match.player2_rank,
+        )
+        present = sum(value is not None for value in rank_values)
+        if present:
+            rows_with_rank_values += 1
+
+        if present and _verified_rank_provenance(match):
+            verified_rows += 1
+            retained_values += present
+            cleaned.append(match)
+            continue
+
+        if present:
+            stripped_rows += 1
+            stripped_values += present
+            cleaned.append(
+                replace(
+                    match,
+                    player1_rank=None,
+                    player2_rank=None,
+                )
+            )
+        else:
+            cleaned.append(match)
+
+    return cleaned, {
+        "policy": "historical_rank_requires_explicit_point_in_time_provenance",
+        "rows_with_rank_values": rows_with_rank_values,
+        "verified_rows": verified_rows,
+        "stripped_rows": stripped_rows,
+        "stripped_values": stripped_values,
+        "retained_values": retained_values,
+    }
+
+
+def _holdout_fingerprint(frame: pd.DataFrame) -> str:
+    """Stable identity for the exact untouched holdout used for a decision."""
+    ordered = frame.sort_values(
+        ["scheduled_at", "match_id"]
+    )
+    payload = [
+        {
+            "match_id": str(row.match_id),
+            "scheduled_at": pd.Timestamp(row.scheduled_at).tz_convert("UTC").isoformat(),
+        }
+        for row in ordered.itertuples(index=False)
+    ]
+    encoded = json.dumps(
+        payload,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
+
+
 def train_from_matches(
     matches: Iterable[
         MatchRecord
@@ -325,6 +447,7 @@ def train_from_matches(
     min_matches: int = 2500,
 ) -> TrainingResult:
     matches, quality = audit_history(matches)
+    matches, rank_provenance = _enforce_rank_provenance(matches)
     builder = FeatureBuilder()
 
     frame = (
@@ -376,6 +499,8 @@ def train_from_matches(
         0.70,
         0.15,
     )
+
+    holdout_fingerprint = _holdout_fingerprint(test)
 
     evaluation_model = (
         TennisEnsemble()
@@ -462,6 +587,15 @@ def train_from_matches(
 
     report = {
         "data_quality": quality,
+        "rank_provenance": rank_provenance,
+        "evaluation_governance": {
+            "holdout_fingerprint": holdout_fingerprint,
+            "holdout_reuse_policy": (
+                "A holdout fingerprint may support at most one production "
+                "promotion decision. Later tuning must use later unseen/live data."
+            ),
+            "promotion_reference": "elo_baseline_on_same_untouched_holdout",
+        },
         "method": (
             "strict chronological split by "
             "whole UTC calendar days"
@@ -637,6 +771,8 @@ def train_from_matches(
                 "end"
             ]
         ),
+        "holdout_fingerprint": holdout_fingerprint,
+        "rank_provenance": rank_provenance,
         "holdout_metrics": (
             holdout_metrics
         ),
