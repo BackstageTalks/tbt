@@ -2,18 +2,27 @@ from __future__ import annotations
 
 import json
 import logging
-import time
+import os
 from datetime import datetime, timezone
 from typing import Any, Iterable
 
 import httpx
 
 from ..config import Settings, settings
+from ..data.provider_context import environment_from_payload, minimize_provider_payload
 from ..errors import ConfigurationError
 from ..schemas import MatchRecord, PredictionRecord
 from ..utils import parse_datetime
 
 logger = logging.getLogger(__name__)
+
+HOT_TIER_START = datetime(2025, 1, 1, tzinfo=timezone.utc)
+
+
+def _allow_cold_read() -> bool:
+    return str(os.getenv("TBT_ALLOW_SUPABASE_COLD_READ") or "").strip().lower() in {
+        "1", "true", "yes", "on"
+    }
 
 
 class SupabaseRepository:
@@ -211,16 +220,49 @@ class SupabaseRepository:
         self,
         matches: Iterable[MatchRecord],
     ) -> int:
-        rows = [m.to_storage_dict() for m in matches]
+        materialized = list(matches)
+        now = datetime.now(timezone.utc).isoformat()
+        rows: list[dict[str, Any]] = []
+        environments: list[dict[str, Any]] = []
 
-        # provider_payload can be large; storing it is intentional
-        # for audit/re-normalisation.
+        for match in materialized:
+            row = match.to_storage_dict()
+            payload = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+            environment = environment_from_payload(payload)
+
+            # V20.5: Supabase is the lean operational tier. Never store the raw
+            # TennisApi response here again; it was the source of the ~1 GB TOAST
+            # growth. Environment has its own table so even compact provider
+            # context stays stable and small.
+            row["provider_payload"] = minimize_provider_payload(
+                payload,
+                include_environment=False,
+            )
+            row["updated_at"] = now
+            rows.append(row)
+
+            if environment:
+                environments.append(
+                    {
+                        "match_id": str(match.match_id),
+                        "scheduled_at": match.scheduled_at.astimezone(timezone.utc).isoformat(),
+                        "environment": environment,
+                        "updated_at": now,
+                    }
+                )
+
         total = 0
-
         for start in range(0, len(rows), 250):
             total += self.upsert(
                 "matches",
                 rows[start : start + 250],
+                "match_id",
+            )
+
+        for start in range(0, len(environments), 250):
+            self.upsert(
+                "match_environment",
+                environments[start : start + 250],
                 "match_id",
             )
 
@@ -278,6 +320,7 @@ class SupabaseRepository:
 
         # Prefer explicit event-id fields.
         for key in (
+            "_tbt_provider_event_id",
             "provider_event_id",
             "event_id",
             "eventId",
@@ -455,6 +498,13 @@ class SupabaseRepository:
         start_utc = start.astimezone(timezone.utc)
         end_utc = end.astimezone(timezone.utc)
 
+        if start_utc < HOT_TIER_START and not _allow_cold_read():
+            raise RuntimeError(
+                "V20.5 egress guard: Supabase match reads before 2025-01-01 are disabled. "
+                "Use private GitHub history partitions. Set TBT_ALLOW_SUPABASE_COLD_READ=1 "
+                "only for explicit disaster recovery."
+            )
+
         if end_utc <= start_utc:
             return []
 
@@ -478,224 +528,175 @@ class SupabaseRepository:
             order="scheduled_at.asc",
         )
 
-        matches = [
-            self._match_from_row(row)
-            for row in rows
-        ]
+        matches = [self._match_from_row(row) for row in rows]
+        matches = self._hydrate_environments(matches)
 
         if completed_only:
-            return self._dedupe_completed_matches(
-                matches
-            )
+            return self._dedupe_completed_matches(matches)
 
         return matches
+
+    def upsert_match_environment(
+        self,
+        match_id: str,
+        scheduled_at: datetime,
+        environment: dict[str, Any],
+    ) -> int:
+        if not isinstance(environment, dict) or not environment:
+            return 0
+        now = datetime.now(timezone.utc).isoformat()
+        return self.upsert(
+            "match_environment",
+            [
+                {
+                    "match_id": str(match_id),
+                    "scheduled_at": scheduled_at.astimezone(timezone.utc).isoformat(),
+                    "environment": environment,
+                    "updated_at": now,
+                }
+            ],
+            "match_id",
+        )
 
     def update_match_provider_payload(
         self,
         match_id: str,
         provider_payload: dict[str, Any],
     ) -> int:
-        return self.update(
+        """Compatibility shim: compact context in matches, environment separately."""
+        environment = environment_from_payload(provider_payload)
+        changed = self.update(
             "matches",
+            {"match_id": f"eq.{match_id}"},
             {
-                "match_id": f"eq.{match_id}",
-            },
-            {
-                "provider_payload": provider_payload,
+                "provider_payload": minimize_provider_payload(
+                    provider_payload,
+                    include_environment=False,
+                ),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             },
         )
+        if environment:
+            rows = self.select_all(
+                "matches",
+                filters={"match_id": f"eq.{match_id}"},
+                select="scheduled_at",
+                max_rows=1,
+                page_size=1,
+            )
+            if rows:
+                self.upsert_match_environment(
+                    match_id,
+                    parse_datetime(rows[0].get("scheduled_at")),
+                    environment,
+                )
+        return changed
 
-    def _select_match_rows_keyset(
+    def _environment_map(self, match_ids: Iterable[str]) -> dict[str, dict[str, Any]]:
+        ids = [str(value) for value in match_ids if value]
+        if not ids:
+            return {}
+        result: dict[str, dict[str, Any]] = {}
+        try:
+            for start in range(0, len(ids), 100):
+                chunk = ids[start : start + 100]
+                rows = self.select_all(
+                    "match_environment",
+                    filters={"match_id": f"in.({','.join(chunk)})"},
+                    select="match_id,environment",
+                    page_size=200,
+                )
+                for row in rows:
+                    env = row.get("environment")
+                    if isinstance(env, dict) and env:
+                        result[str(row.get("match_id") or "")] = env
+        except RuntimeError as exc:
+            # Transitional compatibility while the migration has not yet been run.
+            text = str(exc).lower()
+            if "match_environment" in text or "schema cache" in text:
+                logger.warning("match_environment is not available yet; using embedded environment only")
+                return {}
+            raise
+        return result
+
+    def _hydrate_environments(
         self,
-        *,
-        page_size: int = 1000,
-        max_timeout_retries: int = 5,
-    ) -> list[dict[str, Any]]:
-        """Read the large matches table with primary-key keyset pagination.
-
-        Do not add ``winner_id=not.is.null`` to this full-history query. The
-        production table has already shown that combining that predicate with
-        a large ordered scan can hit PostgreSQL/Supabase SQLSTATE 57014.
-
-        The database query intentionally stays index-friendly:
-        ``match_id > cursor``, ``ORDER BY match_id ASC``, ``LIMIT page_size``.
-        Completion and optional time filtering are applied locally.
-        """
-        if page_size <= 0:
-            raise ValueError("page_size must be positive")
-
-        match_select = ",".join(
-            (
-                "match_id",
-                "tour",
-                "scheduled_at",
-                "player1_id",
-                "player1_name",
-                "player2_id",
-                "player2_name",
-                "surface",
-                "tournament",
-                "tournament_id",
-                "tournament_level",
-                "round_name",
-                "player1_rank",
-                "player2_rank",
-                "winner_id",
-                "status",
-                "best_of",
-                "indoor",
-                "stats",
-                "provider_payload",
+        matches: Iterable[MatchRecord],
+    ) -> list[MatchRecord]:
+        materialized = list(matches)
+        env_map = self._environment_map(str(match.match_id) for match in materialized)
+        for match in materialized:
+            env = env_map.get(str(match.match_id))
+            if not env:
+                continue
+            payload = (
+                dict(match.provider_payload)
+                if isinstance(match.provider_payload, dict)
+                else {}
             )
-        )
-
-        rows: list[dict[str, Any]] = []
-        last_match_id: str | None = None
-        request_page_size = page_size
-        page = 0
-
-        while True:
-            params: dict[str, str] = {
-                "select": match_select,
-                "order": "match_id.asc",
-                "limit": str(request_page_size),
-            }
-
-            if last_match_id is not None:
-                params["match_id"] = f"gt.{last_match_id}"
-
-            timeout_retries = 0
-
-            while True:
-                response = self.client.get(
-                    f"{self.base}/matches",
-                    headers=self._headers(write=False),
-                    params=params,
-                )
-
-                body = response.text or ""
-                is_statement_timeout = (
-                    response.status_code >= 500
-                    and (
-                        '"57014"' in body
-                        or "statement timeout" in body.lower()
-                    )
-                )
-
-                if not is_statement_timeout:
-                    self._raise(response)
-                    break
-
-                timeout_retries += 1
-
-                if request_page_size > 100:
-                    request_page_size = max(
-                        100,
-                        request_page_size // 2,
-                    )
-                    params["limit"] = str(request_page_size)
-
-                if timeout_retries > max_timeout_retries:
-                    self._raise(response)
-
-                wait_seconds = min(2 ** timeout_retries, 8)
-                logger.warning(
-                    "Supabase statement timeout during match keyset scan; "
-                    "cursor=%s limit=%s retry=%s/%s in %ss",
-                    last_match_id,
-                    request_page_size,
-                    timeout_retries,
-                    max_timeout_retries,
-                    wait_seconds,
-                )
-                time.sleep(wait_seconds)
-
-            chunk = response.json()
-
-            if not isinstance(chunk, list):
-                raise RuntimeError(
-                    "Supabase match keyset scan returned a non-list payload"
-                )
-
-            if not chunk:
-                break
-
-            rows.extend(chunk)
-            page += 1
-
-            current_last = str(
-                chunk[-1].get("match_id")
-                or ""
-            )
-
-            if not current_last:
-                raise RuntimeError(
-                    "Keyset pagination received a row without match_id"
-                )
-
-            if (
-                last_match_id is not None
-                and current_last <= last_match_id
-            ):
-                raise RuntimeError(
-                    "Keyset pagination did not advance: "
-                    f"previous={last_match_id!r}, "
-                    f"current={current_last!r}"
-                )
-
-            last_match_id = current_last
-
-            if page % 25 == 0:
-                logger.info(
-                    "Match keyset scan: pages=%d rows=%d last_match_id=%s",
-                    page,
-                    len(rows),
-                    last_match_id,
-                )
-
-            if len(chunk) < request_page_size:
-                break
-
-        return rows
+            payload["_tbt_environment"] = env
+            match.provider_payload = payload
+        return materialized
 
     def get_completed_matches(
         self,
         before: datetime | None = None,
     ) -> list[MatchRecord]:
-        before_utc = (
-            before.astimezone(timezone.utc)
-            if before is not None
-            else None
+        # Production/operational repository reads are intentionally hot-tier only.
+        # Full history belongs to private GitHub partitions; this prevents a forgotten
+        # legacy workflow from downloading the old 1 GB matches table again.
+        filters: dict[str, str] = {
+            "winner_id": "not.is.null",
+            "scheduled_at": f"gte.{HOT_TIER_START.isoformat()}",
+        }
+
+        if before is not None:
+            filters["and"] = (
+                f"(scheduled_at.lt.{before.astimezone(timezone.utc).isoformat()})"
+            )
+
+        rows = self.select_all(
+            "matches",
+            filters=filters,
+            order="scheduled_at.asc",
         )
 
-        matches: list[MatchRecord] = []
+        matches = [self._match_from_row(row) for row in rows]
+        matches = self._hydrate_environments(matches)
+        return self._dedupe_completed_matches(matches)
 
-        for row in self._select_match_rows_keyset():
-            # Preserve the old winner_id=not.is.null semantics, but apply the
-            # predicate locally so the DB scan remains primary-key-only.
-            if row.get("winner_id") is None:
-                continue
-
-            match = self._match_from_row(row)
-
-            if (
-                before_utc is not None
-                and match.scheduled_at >= before_utc
-            ):
-                continue
-
-            matches.append(match)
-
-        # Existing canonical dedupe also restores deterministic chronological
-        # order required by FeatureBuilder and walk-forward evaluation.
-        return self._dedupe_completed_matches(
-            matches
+    def get_completed_matches_since(
+        self,
+        after: datetime,
+        before: datetime | None = None,
+    ) -> list[MatchRecord]:
+        after_utc = after.astimezone(timezone.utc)
+        filters: dict[str, str] = {
+            "winner_id": "not.is.null",
+            "scheduled_at": f"gte.{after_utc.isoformat()}",
+        }
+        if before is not None:
+            filters["and"] = (
+                f"(scheduled_at.lt.{before.astimezone(timezone.utc).isoformat()})"
+            )
+        rows = self.select_all(
+            "matches",
+            filters=filters,
+            order="scheduled_at.asc",
         )
+        matches = [self._match_from_row(row) for row in rows]
+        matches = self._hydrate_environments(matches)
+        return self._dedupe_completed_matches(matches)
 
     def get_matches_for_year(
         self,
         year: int,
     ) -> list[MatchRecord]:
+        if int(year) < 2025 and not _allow_cold_read():
+            raise RuntimeError(
+                "V20.5 egress guard: pre-2025 history is stored in private GitHub partitions, "
+                "not Supabase."
+            )
         start = datetime(
             year,
             1,
@@ -724,14 +725,9 @@ class SupabaseRepository:
             order="scheduled_at.asc",
         )
 
-        matches = [
-            self._match_from_row(row)
-            for row in rows
-        ]
-
-        return self._dedupe_completed_matches(
-            matches
-        )
+        matches = [self._match_from_row(row) for row in rows]
+        matches = self._hydrate_environments(matches)
+        return self._dedupe_completed_matches(matches)
 
     def upsert_predictions(
         self,
