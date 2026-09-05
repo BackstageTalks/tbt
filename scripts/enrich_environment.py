@@ -72,8 +72,8 @@ def _provider_diagnostics(payload: dict[str, Any]) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Backfill Open-Meteo weather/elevation into match provider_payload, "
-            "with detailed venue-resolution diagnostics."
+            "Backfill Open-Meteo weather/elevation into the lean Supabase "
+            "match_environment table, with detailed venue-resolution diagnostics."
         )
     )
     parser.add_argument("--start", required=True)
@@ -172,9 +172,10 @@ def main() -> None:
                         report["unresolved_details"].append(detail)
 
                 if not args.dry_run:
-                    report["updated"] += repo.update_match_provider_payload(
+                    report["updated"] += repo.upsert_match_environment(
                         match.match_id,
-                        payload,
+                        match.scheduled_at,
+                        env,
                     )
 
             except Exception as exc:

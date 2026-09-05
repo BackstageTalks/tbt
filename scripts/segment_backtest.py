@@ -12,7 +12,7 @@ import tbt.models.ensemble as ensemble_module
 from tbt.models.ensemble import TennisEnsemble
 from tbt.models.feature_builder import FeatureBuilder
 from tbt.models.metrics import evaluate_probabilities
-from tbt.repositories.supabase import SupabaseRepository
+from tbt.data.history_source import default_history_dir, load_training_history
 
 
 BASE_FEATURES = [
@@ -190,9 +190,7 @@ def _segment(
 
 
 def main() -> None:
-    repo = SupabaseRepository()
-
-    matches = repo.get_completed_matches()
+    matches = load_training_history(default_history_dir(ROOT), root=ROOT)
 
     print(
         f"Loaded {len(matches)} canonical completed matches"

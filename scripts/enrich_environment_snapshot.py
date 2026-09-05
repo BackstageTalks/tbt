@@ -9,11 +9,16 @@ from pathlib import Path
 from typing import Any
 
 from _bootstrap import ROOT
-from tbt.data.history_snapshot import load_snapshot, write_snapshot
+from tbt.data.history_snapshot import (
+    ensure_partitions,
+    load_manifest,
+    load_partitions,
+    write_manifest,
+    write_year_partition,
+)
 from tbt.services.environment import OpenMeteoClient, environment_payload, location_candidates
 
 logger = logging.getLogger("tbt.enrich_environment_snapshot")
-
 HOT_TIER_START = datetime(2025, 1, 1, tzinfo=timezone.utc)
 
 
@@ -27,22 +32,9 @@ def parse_utc(value: str) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
-def _load_meta(path: Path) -> dict[str, Any]:
-    if not path.is_file():
-        return {}
-    try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-        return value if isinstance(value, dict) else {}
-    except (OSError, ValueError, json.JSONDecodeError):
-        return {}
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description=(
-            "Enrich pre-2025 historical matches inside the GitHub Release snapshot. "
-            "Supabase is deliberately not used."
-        )
+        description="Enrich pre-2025 GitHub year partitions; Supabase is deliberately not used"
     )
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
@@ -51,13 +43,10 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--sleep-ms", type=int, default=50)
     parser.add_argument("--diagnostics-limit", type=int, default=100)
+    parser.add_argument("--history-dir", default=str(ROOT / ".cache" / "tbt" / "history"))
     parser.add_argument(
-        "--snapshot",
+        "--legacy-snapshot",
         default=str(ROOT / ".cache" / "tbt" / "training_snapshot.parquet"),
-    )
-    parser.add_argument(
-        "--meta",
-        default=str(ROOT / ".cache" / "tbt" / "training_snapshot.meta.json"),
     )
     args = parser.parse_args()
 
@@ -66,27 +55,24 @@ def main() -> None:
     if end <= start:
         raise SystemExit("--end must be later than --start")
     if end > HOT_TIER_START:
-        raise SystemExit(
-            "V20.4 safety stop: GitHub historical environment enrichment is restricted "
-            "to dates before 2025-01-01. Use the Supabase hot-tier path for 2025+."
-        )
+        raise SystemExit("V20.5 safety stop: GitHub environment enrichment is pre-2025 only")
 
-    snapshot_path = Path(args.snapshot)
-    meta_path = Path(args.meta)
-    previous_meta = _load_meta(meta_path)
-    matches = load_snapshot(snapshot_path)
+    history_dir = Path(args.history_dir)
+    ensure_partitions(history_dir, legacy_snapshot=args.legacy_snapshot)
+    years = range(start.year, end.year + 1)
+    matches = load_partitions(history_dir, years=years)
     candidates = [
         match
         for match in matches
-        if start <= match.scheduled_at.astimezone(timezone.utc) < end
-        and match.is_completed
+        if start <= match.scheduled_at.astimezone(timezone.utc) < end and match.is_completed
     ]
     if args.limit > 0:
         candidates = candidates[: args.limit]
 
     weather = OpenMeteoClient()
+    changed_years: set[int] = set()
     report: dict[str, Any] = {
-        "target": "github-release-snapshot",
+        "target": "github-release-year-partitions",
         "supabase_used": False,
         "start": start.isoformat(),
         "end": end.isoformat(),
@@ -97,8 +83,8 @@ def main() -> None:
         "updated": 0,
         "errors": 0,
         "dry_run": bool(args.dry_run),
-        "unresolved_details": [],
         "resolved_details": [],
+        "unresolved_details": [],
         "error_details": [],
     }
 
@@ -117,14 +103,8 @@ def main() -> None:
 
             location_options = location_candidates(payload, match.tournament)
             try:
-                env = environment_payload(
-                    weather,
-                    payload,
-                    match.tournament,
-                    match.scheduled_at,
-                )
+                env = environment_payload(weather, payload, match.tournament, match.scheduled_at)
                 payload["_tbt_environment"] = env
-
                 detail = {
                     "match_id": match.match_id,
                     "scheduled_at": match.scheduled_at.astimezone(timezone.utc).isoformat(),
@@ -146,10 +126,11 @@ def main() -> None:
                 if not args.dry_run:
                     match.provider_payload = payload
                     report["updated"] += 1
+                    changed_years.add(match.scheduled_at.astimezone(timezone.utc).year)
             except Exception as exc:
                 report["errors"] += 1
                 logger.warning(
-                    "Snapshot environment enrichment failed match=%s tournament=%r: %s",
+                    "Partition environment enrichment failed match=%s tournament=%r: %s",
                     match.match_id,
                     match.tournament,
                     exc,
@@ -180,50 +161,47 @@ def main() -> None:
     finally:
         weather.close()
 
-    if not args.dry_run and report["updated"] > 0:
-        snapshot_meta = write_snapshot(matches, snapshot_path)
-        snapshot_meta.update(
-            {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-                "mode": "github-history-environment-enrichment",
-                "source": previous_meta.get(
-                    "source",
-                    "normalized private GitHub Release snapshot",
-                ),
-                "source_updated_at_max": previous_meta.get("source_updated_at_max"),
-                "storage_policy": previous_meta.get("storage_policy"),
-                "last_direct_provider_backfill": previous_meta.get(
-                    "last_direct_provider_backfill"
-                ),
-                "completed_direct_provider_months": previous_meta.get(
-                    "completed_direct_provider_months", []
-                ),
-                "last_environment_enrichment": {
-                    "target": "github-release-snapshot",
-                    "start": start.isoformat(),
-                    "end": end.isoformat(),
-                    "updated": report["updated"],
-                    "resolved": report["resolved"],
-                    "unresolved": report["unresolved"],
-                    "completed_at": datetime.now(timezone.utc).isoformat(),
+    if not args.dry_run and changed_years:
+        for year in sorted(changed_years):
+            year_matches = [
+                match
+                for match in matches
+                if match.scheduled_at.astimezone(timezone.utc).year == year
+            ]
+            write_year_partition(
+                year_matches,
+                history_dir,
+                year,
+                extra_manifest={
+                    "last_environment_enrichment": {
+                        "start": start.isoformat(),
+                        "end": end.isoformat(),
+                        "updated": sum(
+                            1
+                            for match in candidates
+                            if match.scheduled_at.astimezone(timezone.utc).year == year
+                            and isinstance((match.provider_payload or {}).get("_tbt_environment"), dict)
+                        ),
+                        "completed_at": datetime.now(timezone.utc).isoformat(),
+                    }
                 },
-            }
-        )
-        # Drop null compatibility keys instead of polluting metadata.
-        snapshot_meta = {key: value for key, value in snapshot_meta.items() if value is not None}
-        meta_path.write_text(
-            json.dumps(snapshot_meta, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        report["snapshot_sha256"] = snapshot_meta["sha256"]
-        report["snapshot_rows"] = snapshot_meta["rows"]
+            )
+        manifest = load_manifest(history_dir)
+        manifest["last_environment_enrichment"] = {
+            "target": "github-release-year-partitions",
+            "start": start.isoformat(),
+            "end": end.isoformat(),
+            "updated": report["updated"],
+            "resolved": report["resolved"],
+            "unresolved": report["unresolved"],
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+        }
+        write_manifest(history_dir, manifest)
 
+    report["changed_years"] = sorted(changed_years)
     print(json.dumps(report, indent=2, ensure_ascii=False, default=str))
 
 
 if __name__ == "__main__":
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-    )
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     main()

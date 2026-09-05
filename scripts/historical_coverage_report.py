@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from _bootstrap import ROOT
-from tbt.repositories.supabase import SupabaseRepository
+from tbt.data.history_source import default_history_dir, load_training_history
 
 
 def _ratio(numerator: int, denominator: int) -> float:
@@ -49,9 +49,7 @@ def _has_weather(payload: Any) -> bool:
 
 
 def main() -> None:
-    repo = SupabaseRepository()
-
-    matches = repo.get_completed_matches()
+    matches = load_training_history(default_history_dir(ROOT), root=ROOT)
 
     by_year: dict[int, list[Any]] = defaultdict(list)
 
