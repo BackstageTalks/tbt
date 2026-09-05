@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
 import httpx
@@ -16,7 +16,18 @@ from ..utils import parse_datetime
 
 logger = logging.getLogger(__name__)
 
-HOT_TIER_START = datetime(2025, 1, 1, tzinfo=timezone.utc)
+def _hot_retention_days() -> int:
+    raw = str(os.getenv("TBT_HOT_RETENTION_DAYS") or "60").strip()
+    try:
+        days = int(raw)
+    except ValueError:
+        days = 60
+    return min(max(days, 14), 180)
+
+
+def _hot_cutoff(now: datetime | None = None) -> datetime:
+    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    return current - timedelta(days=_hot_retention_days())
 
 
 def _allow_cold_read() -> bool:
@@ -498,9 +509,9 @@ class SupabaseRepository:
         start_utc = start.astimezone(timezone.utc)
         end_utc = end.astimezone(timezone.utc)
 
-        if start_utc < HOT_TIER_START and not _allow_cold_read():
+        if start_utc < _hot_cutoff() and not _allow_cold_read():
             raise RuntimeError(
-                "V20.5 egress guard: Supabase match reads before 2025-01-01 are disabled. "
+                "V20.7 egress guard: Supabase match reads outside the rolling hot buffer are disabled. "
                 "Use private GitHub history partitions. Set TBT_ALLOW_SUPABASE_COLD_READ=1 "
                 "only for explicit disaster recovery."
             )
@@ -647,7 +658,7 @@ class SupabaseRepository:
         # legacy workflow from downloading the old 1 GB matches table again.
         filters: dict[str, str] = {
             "winner_id": "not.is.null",
-            "scheduled_at": f"gte.{HOT_TIER_START.isoformat()}",
+            "scheduled_at": f"gte.{_hot_cutoff().isoformat()}",
         }
 
         if before is not None:
@@ -692,10 +703,11 @@ class SupabaseRepository:
         self,
         year: int,
     ) -> list[MatchRecord]:
-        if int(year) < 2025 and not _allow_cold_read():
+        year_start = datetime(int(year), 1, 1, tzinfo=timezone.utc)
+        if year_start < _hot_cutoff() and not _allow_cold_read():
             raise RuntimeError(
-                "V20.5 egress guard: pre-2025 history is stored in private GitHub partitions, "
-                "not Supabase."
+                "V20.7 egress guard: whole-year Supabase reads extend outside the rolling hot buffer. "
+                "Use private GitHub history partitions instead."
             )
         start = datetime(
             year,
