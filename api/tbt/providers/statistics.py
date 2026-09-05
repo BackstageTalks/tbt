@@ -9,6 +9,7 @@ import math
 import re
 
 from ..errors import ProviderError
+from ..utils import normalize_rate
 
 
 def _number(value):
@@ -31,8 +32,10 @@ def _fraction(item, side):
         if total > 0 and won <= total:
             return won / total, won, total
     percent = re.fullmatch(r"(\d+(?:\.\d+)?)\s*%", text)
-    if percent and float(percent.group(1)) <= 100:
-        return float(percent.group(1)) / 100, None, None
+    if percent:
+        value = normalize_rate(percent.group(0))
+        if value is not None:
+            return value, None, None
     return None, None, None
 
 
