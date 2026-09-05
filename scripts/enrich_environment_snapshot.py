@@ -5,18 +5,14 @@ import json
 import logging
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
-from _bootstrap import ROOT  # noqa: F401
+from _bootstrap import ROOT
+from tbt.data.history_snapshot import load_snapshot, write_snapshot
+from tbt.services.environment import OpenMeteoClient, environment_payload, location_candidates
 
-from tbt.repositories.supabase import SupabaseRepository
-from tbt.services.environment import (
-    OpenMeteoClient,
-    environment_payload,
-    location_candidates,
-)
-
-logger = logging.getLogger("tbt.enrich_environment")
+logger = logging.getLogger("tbt.enrich_environment_snapshot")
 
 HOT_TIER_START = datetime(2025, 1, 1, tzinfo=timezone.utc)
 
@@ -31,49 +27,21 @@ def parse_utc(value: str) -> datetime:
     return dt.astimezone(timezone.utc)
 
 
-def _as_dict(value: Any) -> dict[str, Any]:
-    return value if isinstance(value, dict) else {}
-
-
-def _provider_diagnostics(payload: dict[str, Any]) -> dict[str, Any]:
-    tournament = _as_dict(payload.get("tournament"))
-    unique = _as_dict(tournament.get("uniqueTournament"))
-    category = _as_dict(tournament.get("category"))
-    venue = _as_dict(payload.get("venue"))
-    country = _as_dict(tournament.get("country")) or _as_dict(unique.get("country"))
-
-    return {
-        "provider_event_id": payload.get("id"),
-        "provider_tournament": tournament.get("name"),
-        "provider_tournament_id": tournament.get("id"),
-        "provider_unique_tournament": unique.get("name"),
-        "provider_unique_tournament_id": unique.get("id"),
-        "provider_category": category.get("name"),
-        "provider_category_id": category.get("id"),
-        "provider_venue": venue.get("name"),
-        "provider_city": (
-            venue.get("city")
-            or tournament.get("city")
-            or unique.get("city")
-            or payload.get("city")
-            or payload.get("venueCity")
-        ),
-        "provider_country": (
-            _as_dict(venue.get("country")).get("name")
-            or venue.get("countryName")
-            or country.get("name")
-            or payload.get("countryName")
-            or _as_dict(payload.get("country")).get("name")
-        ),
-        "tbt_source_category_id": payload.get("_tbt_source_category_id"),
-    }
+def _load_meta(path: Path) -> dict[str, Any]:
+    if not path.is_file():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        return value if isinstance(value, dict) else {}
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Backfill Open-Meteo weather/elevation into match provider_payload, "
-            "with detailed venue-resolution diagnostics."
+            "Enrich pre-2025 historical matches inside the GitHub Release snapshot. "
+            "Supabase is deliberately not used."
         )
     )
     parser.add_argument("--start", required=True)
@@ -82,11 +50,14 @@ def main() -> None:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--sleep-ms", type=int, default=50)
+    parser.add_argument("--diagnostics-limit", type=int, default=100)
     parser.add_argument(
-        "--diagnostics-limit",
-        type=int,
-        default=100,
-        help="Maximum unresolved/resolved diagnostic rows included in the final JSON report.",
+        "--snapshot",
+        default=str(ROOT / ".cache" / "tbt" / "training_snapshot.parquet"),
+    )
+    parser.add_argument(
+        "--meta",
+        default=str(ROOT / ".cache" / "tbt" / "training_snapshot.meta.json"),
     )
     args = parser.parse_args()
 
@@ -94,15 +65,29 @@ def main() -> None:
     end = parse_utc(args.end)
     if end <= start:
         raise SystemExit("--end must be later than --start")
-    if start < HOT_TIER_START:
+    if end > HOT_TIER_START:
         raise SystemExit(
-            "V20.4 safety stop: refusing to enrich pre-2025 history in Supabase. "
-            "Use scripts/enrich_environment_snapshot.py / the GitHub snapshot route instead."
+            "V20.4 safety stop: GitHub historical environment enrichment is restricted "
+            "to dates before 2025-01-01. Use the Supabase hot-tier path for 2025+."
         )
 
-    repo = SupabaseRepository()
+    snapshot_path = Path(args.snapshot)
+    meta_path = Path(args.meta)
+    previous_meta = _load_meta(meta_path)
+    matches = load_snapshot(snapshot_path)
+    candidates = [
+        match
+        for match in matches
+        if start <= match.scheduled_at.astimezone(timezone.utc) < end
+        and match.is_completed
+    ]
+    if args.limit > 0:
+        candidates = candidates[: args.limit]
+
     weather = OpenMeteoClient()
     report: dict[str, Any] = {
+        "target": "github-release-snapshot",
+        "supabase_used": False,
         "start": start.isoformat(),
         "end": end.isoformat(),
         "inspected": 0,
@@ -118,15 +103,10 @@ def main() -> None:
     }
 
     try:
-        matches = repo.get_matches_between(start, end, completed_only=True)
-        if args.limit > 0:
-            matches = matches[: args.limit]
-
-        for index, match in enumerate(matches, start=1):
+        for index, match in enumerate(candidates, start=1):
             report["inspected"] += 1
             payload = dict(match.provider_payload or {})
             existing = payload.get("_tbt_environment")
-
             if (
                 not args.force
                 and isinstance(existing, dict)
@@ -135,9 +115,7 @@ def main() -> None:
                 report["already_enriched"] += 1
                 continue
 
-            candidates = location_candidates(payload, match.tournament)
-            provider_diag = _provider_diagnostics(payload)
-
+            location_options = location_candidates(payload, match.tournament)
             try:
                 env = environment_payload(
                     weather,
@@ -152,14 +130,8 @@ def main() -> None:
                     "scheduled_at": match.scheduled_at.astimezone(timezone.utc).isoformat(),
                     "tour": match.tour,
                     "tournament": match.tournament,
-                    "tournament_id": match.tournament_id,
-                    "round_name": match.round_name,
-                    "player1": match.player1_name,
-                    "player2": match.player2_name,
-                    "location_candidates": candidates,
-                    **provider_diag,
+                    "location_candidates": location_options,
                 }
-
                 if env.get("venue_resolved"):
                     report["resolved"] += 1
                     detail["resolved_query"] = env.get("location_query")
@@ -172,15 +144,12 @@ def main() -> None:
                         report["unresolved_details"].append(detail)
 
                 if not args.dry_run:
-                    report["updated"] += repo.update_match_provider_payload(
-                        match.match_id,
-                        payload,
-                    )
-
+                    match.provider_payload = payload
+                    report["updated"] += 1
             except Exception as exc:
                 report["errors"] += 1
                 logger.warning(
-                    "Environment enrichment failed match=%s tournament=%r: %s",
+                    "Snapshot environment enrichment failed match=%s tournament=%r: %s",
                     match.match_id,
                     match.tournament,
                     exc,
@@ -192,10 +161,8 @@ def main() -> None:
                             "scheduled_at": match.scheduled_at.astimezone(timezone.utc).isoformat(),
                             "tour": match.tour,
                             "tournament": match.tournament,
-                            "tournament_id": match.tournament_id,
-                            "location_candidates": candidates,
+                            "location_candidates": location_options,
                             "error": f"{type(exc).__name__}: {exc}",
-                            **provider_diag,
                         }
                     )
 
@@ -203,17 +170,53 @@ def main() -> None:
                 logger.info(
                     "Progress %s/%s resolved=%s unresolved=%s errors=%s",
                     index,
-                    len(matches),
+                    len(candidates),
                     report["resolved"],
                     report["unresolved"],
                     report["errors"],
                 )
-
             if args.sleep_ms > 0:
                 time.sleep(args.sleep_ms / 1000.0)
-
     finally:
         weather.close()
+
+    if not args.dry_run and report["updated"] > 0:
+        snapshot_meta = write_snapshot(matches, snapshot_path)
+        snapshot_meta.update(
+            {
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "mode": "github-history-environment-enrichment",
+                "source": previous_meta.get(
+                    "source",
+                    "normalized private GitHub Release snapshot",
+                ),
+                "source_updated_at_max": previous_meta.get("source_updated_at_max"),
+                "storage_policy": previous_meta.get("storage_policy"),
+                "last_direct_provider_backfill": previous_meta.get(
+                    "last_direct_provider_backfill"
+                ),
+                "completed_direct_provider_months": previous_meta.get(
+                    "completed_direct_provider_months", []
+                ),
+                "last_environment_enrichment": {
+                    "target": "github-release-snapshot",
+                    "start": start.isoformat(),
+                    "end": end.isoformat(),
+                    "updated": report["updated"],
+                    "resolved": report["resolved"],
+                    "unresolved": report["unresolved"],
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
+                },
+            }
+        )
+        # Drop null compatibility keys instead of polluting metadata.
+        snapshot_meta = {key: value for key, value in snapshot_meta.items() if value is not None}
+        meta_path.write_text(
+            json.dumps(snapshot_meta, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+        report["snapshot_sha256"] = snapshot_meta["sha256"]
+        report["snapshot_rows"] = snapshot_meta["rows"]
 
     print(json.dumps(report, indent=2, ensure_ascii=False, default=str))
 
