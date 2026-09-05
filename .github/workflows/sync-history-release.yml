@@ -1,13 +1,18 @@
-name: V20.6 · Sync hot tier to private GitHub Release
+name: V20.7 · Archive rolling hot buffer to private GitHub Release
 
 on:
   workflow_dispatch:
     inputs:
       hot_full_refresh:
-        description: "Emergency full refresh of Supabase HOT tier only (2025+)"
+        description: "Emergency refresh of the rolling Supabase HOT buffer only"
         required: false
         default: false
         type: boolean
+      retention_days:
+        description: "Rolling Supabase hot buffer in days"
+        required: false
+        default: "60"
+        type: string
   schedule:
     - cron: '11 3 * * *'
 
@@ -15,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tbt-history-release-v1
+  group: tbt-history-data-writer
   cancel-in-progress: false
 
 jobs:
@@ -32,40 +37,33 @@ jobs:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TBT_HOT_RETENTION_DAYS: ${{ inputs.retention_days || '60' }}
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Preflight private data repository
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$TBT_DATA_REPOSITORY" || { echo "Missing TBT_DATA_REPOSITORY"; exit 1; }
-          test -n "$TBT_DATA_GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          test -n "$TBT_DATA_REPOSITORY"
+          test -n "$TBT_DATA_GH_TOKEN"
           visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
           test "$visibility" = "PRIVATE" || { echo "Refusing non-private data repo: $visibility"; exit 1; }
-          echo "Policy: GitHub year partitions = training history; Supabase = lean 2025+ hot tier only."
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
+          echo "Policy: GitHub = complete history; Supabase = rolling ${TBT_HOT_RETENTION_DAYS}-day operational buffer."
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: api/requirements-train.txt
-
       - name: Install dependencies
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt
           python -m compileall -q api scripts
-
-      - name: Download or migrate partitioned history
-        shell: bash
+      - name: Download partitioned history
         run: bash scripts/download_history_release.sh .cache/tbt
-
-      - name: Merge Supabase hot-tier changes only
+      - name: Merge rolling hot changes into GH history
         shell: bash
         run: |
           set -euo pipefail
@@ -74,11 +72,10 @@ jobs:
           python scripts/history_release.py \
             --history-dir "$TBT_HISTORY_DIR" \
             --legacy-snapshot .cache/tbt/training_snapshot.parquet \
+            --retention-days "$TBT_HOT_RETENTION_DAYS" \
             --overlap-minutes 1440 \
             "${EXTRA[@]}"
-          ls -lh "$TBT_HISTORY_DIR"/
-
-      - name: Publish partition assets and manifest
+      - name: Publish history before any deletion
         shell: bash
         run: |
           set -euo pipefail
@@ -87,3 +84,12 @@ jobs:
             "$TBT_HISTORY_DIR"/history_manifest.json \
             --repo "$TBT_DATA_REPOSITORY" \
             --clobber
+      - name: Trim Supabase outside rolling hot buffer
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/trim_supabase_hot_buffer.py \
+            --history-dir "$TBT_HISTORY_DIR" \
+            --retention-days "$TBT_HOT_RETENTION_DAYS" \
+            --execute \
+            --confirmation "TRIM ROLLING HOT BUFFER"

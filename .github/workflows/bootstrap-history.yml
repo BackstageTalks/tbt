@@ -1,10 +1,10 @@
-name: V20.6 · Backfill cold history directly to GitHub
+name: V20.7 · Backfill archived history directly to GitHub
 
 on:
   workflow_dispatch:
     inputs:
       year:
-        description: "Cold-history year (2024 or older)"
+        description: "Archived-history year (must be outside rolling hot buffer)"
         required: true
         default: "2024"
         type: string
@@ -28,7 +28,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tbt-history-release-v1
+  group: tbt-history-data-writer
   cancel-in-progress: false
 
 jobs:
@@ -56,8 +56,17 @@ jobs:
           [[ "${{ inputs.year }}" =~ ^[0-9]{4}$ ]] || { echo "Invalid year"; exit 1; }
           [[ "${{ inputs.start_month }}" =~ ^([1-9]|1[0-2])$ ]] || { echo "Invalid start_month"; exit 1; }
           [[ "${{ inputs.end_month }}" =~ ^([1-9]|1[0-2])$ ]] || { echo "Invalid end_month"; exit 1; }
-          (( 10#${{ inputs.year }} < 2025 )) || { echo "Cold backfill is 2024 and older only"; exit 1; }
           (( 10#${{ inputs.start_month }} <= 10#${{ inputs.end_month }} )) || { echo "start_month > end_month"; exit 1; }
+          python - <<'PY_CHECK'
+          import calendar
+          from datetime import date, datetime, timedelta, timezone
+          y=int("${{ inputs.year }}"); m=int("${{ inputs.end_month }}")
+          end=date(y,m,calendar.monthrange(y,m)[1])
+          cutoff=(datetime.now(timezone.utc)-timedelta(days=60)).date()
+          if end >= cutoff:
+              raise SystemExit(f"Selected backfill ends {end}, inside rolling hot buffer cutoff {cutoff}")
+          print(f"Archived backfill accepted; rolling cutoff={cutoff}")
+          PY_CHECK
           echo "Supabase is intentionally NOT configured in this flow."
 
       - uses: actions/setup-python@v5

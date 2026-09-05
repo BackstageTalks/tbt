@@ -1,22 +1,12 @@
-name: V20.7 · Preview/trim rolling Supabase hot buffer
+name: V20.7 · Restore rolling Supabase hot buffer from GitHub
 
 on:
   workflow_dispatch:
     inputs:
       retention_days:
-        description: "Rolling hot buffer in days"
-        required: true
-        default: "60"
-        type: string
-      execute_delete:
-        description: "Actually delete rows outside the hot buffer"
-        required: true
-        default: false
-        type: boolean
-      confirmation:
-        description: "For delete, type exactly: TRIM ROLLING HOT BUFFER"
+        description: "Rolling hot buffer in days (default 60)"
         required: false
-        default: ""
+        default: "60"
         type: string
 
 permissions:
@@ -27,19 +17,20 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  trim:
+  restore:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 45
     env:
       PYTHONPATH: api
+      TBT_HISTORY_DIR: .cache/tbt/history
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
       TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_HISTORY_RELEASE_TAG: tbt-data-v1
-      TBT_HISTORY_DIR: .cache/tbt/history
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      TBT_HOT_RETENTION_DAYS: ${{ inputs.retention_days || '60' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -50,17 +41,14 @@ jobs:
           cache-dependency-path: api/requirements-train.txt
       - name: Install dependencies
         run: |
+          set -euo pipefail
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt
           python -m compileall -q api scripts
-      - name: Download authoritative GH history
+      - name: Download private GH history partitions
         run: bash scripts/download_history_release.sh .cache/tbt
-      - name: Preview or execute rolling trim
-        shell: bash
+      - name: Restore rolling hot buffer only
         run: |
-          set -euo pipefail
-          ARGS=(--history-dir "$TBT_HISTORY_DIR" --retention-days "${{ inputs.retention_days }}")
-          if [[ "${{ inputs.execute_delete }}" == "true" ]]; then
-            ARGS+=(--execute --confirmation "${{ inputs.confirmation }}")
-          fi
-          python scripts/trim_supabase_hot_buffer.py "${ARGS[@]}"
+          python scripts/restore_hot_buffer.py \
+            --history-dir "$TBT_HISTORY_DIR" \
+            --retention-days "$TBT_HOT_RETENTION_DAYS"

@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       start:
-        description: "Start UTC (pre-2025 -> GH partition, 2025+ -> Supabase match_environment)"
+        description: "Start UTC (outside rolling hot buffer -> GH; recent -> Supabase)"
         required: true
         default: "2026-08-25"
         type: string
@@ -34,7 +34,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tbt-history-release-v1
+  group: tbt-history-data-writer
   cancel-in-progress: false
 
 jobs:
@@ -69,11 +69,12 @@ jobs:
               return dt.astimezone(timezone.utc)
           start = parse("${{ inputs.start }}")
           end = parse("${{ inputs.end }}")
-          boundary = datetime(2025, 1, 1, tzinfo=timezone.utc)
+          from datetime import timedelta
+          boundary = datetime.now(timezone.utc) - timedelta(days=60)
           if end <= start:
               raise SystemExit("end must be later than start")
           if start < boundary < end:
-              raise SystemExit("Split the run at 2025-01-01; cold and hot storage are intentionally separate")
+              raise SystemExit(f"Split the run at rolling hot cutoff {boundary.isoformat()}")
           print("target=github" if end <= boundary else "target=supabase")
           PY
 
