@@ -15,7 +15,6 @@ from .provider_context import merge_provider_context, minimize_provider_payload
 SNAPSHOT_SCHEMA_VERSION = 2
 MANIFEST_SCHEMA_VERSION = 1
 PARTITION_PATTERN = re.compile(r"^history-(\d{4})\.parquet$")
-HOT_TIER_START_YEAR = 2025
 
 
 def _json_dumps(value: Any) -> str:
@@ -200,7 +199,7 @@ def write_manifest(directory: str | Path, manifest: dict[str, Any]) -> Path:
     manifest["manifest_schema_version"] = MANIFEST_SCHEMA_VERSION
     manifest["partition_schema_version"] = SNAPSHOT_SCHEMA_VERSION
     manifest["generated_at"] = datetime.now(timezone.utc).isoformat()
-    manifest.setdefault("hot_tier_start", "2025-01-01")
+    manifest.setdefault("storage_policy", {"supabase_mode": "rolling_hot_buffer", "year_independent": True})
     path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     return path
 
@@ -221,7 +220,7 @@ def update_year_manifest(
     entry["asset"] = partition_path(directory, year).name
     entry.setdefault(
         "coverage_status",
-        "authoritative_hot_mirror" if year >= HOT_TIER_START_YEAR else "partial_or_unverified",
+        "partitioned_history",
     )
     if extra:
         entry.update(extra)
@@ -296,8 +295,8 @@ def migrate_legacy_snapshot(
     """Split the old monolithic snapshot locally without reading Supabase.
 
     V20.6 also carries the old ``source_updated_at_max`` cursor forward.  Without
-    this, the first hot-tier sync after partitioning would seed from 2025-01-01 and
-    unnecessarily re-read the whole 2025+ operational tier.
+    this, the first hot-tier sync after partitioning could unnecessarily re-read more of the
+    operational buffer than required.
     """
     directory = Path(directory)
     directory.mkdir(parents=True, exist_ok=True)
@@ -322,9 +321,7 @@ def migrate_legacy_snapshot(
             extra_manifest={
                 "migration_source": legacy_path.name,
                 "coverage_status": (
-                    "authoritative_hot_mirror"
-                    if year >= HOT_TIER_START_YEAR
-                    else "legacy_snapshot_seed"
+                    "legacy_snapshot_seed"
                 ),
             },
         )
@@ -368,7 +365,6 @@ def ensure_partitions(
 
 
 __all__ = [
-    "HOT_TIER_START_YEAR",
     "MANIFEST_SCHEMA_VERSION",
     "SNAPSHOT_SCHEMA_VERSION",
     "ensure_partitions",
