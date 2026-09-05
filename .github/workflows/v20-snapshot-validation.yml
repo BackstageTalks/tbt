@@ -1,0 +1,55 @@
+name: V20 · Validate GitHub history snapshot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || github.repository }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN || github.token }}
+      TBT_HISTORY_SNAPSHOT: .cache/tbt/training_snapshot.parquet
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r api/requirements-train.txt pytest
+
+      - name: Download normalized history from GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN || github.token }}
+        run: |
+          mkdir -p .cache/tbt
+          gh release download tbt-data --repo "$TBT_DATA_REPOSITORY" --pattern 'training_snapshot.parquet' --pattern 'training_snapshot.meta.json' --dir .cache/tbt --clobber
+          ls -lh .cache/tbt/training_snapshot.*
+
+      - name: Snapshot smoke test
+        run: |
+          python - <<'PY'
+          from tbt.data.history_snapshot import load_snapshot
+          rows = load_snapshot('.cache/tbt/training_snapshot.parquet')
+          if len(rows) < 1000:
+              raise SystemExit(f'Snapshot unexpectedly small: {len(rows)} rows')
+          print(f'Loaded {len(rows):,} normalized completed matches from GitHub Release')
+          print(f'Range: {rows[0].scheduled_at.isoformat()} -> {rows[-1].scheduled_at.isoformat()}')
+          PY
+
+      - name: Compile
+        run: python -m compileall -q api scripts
