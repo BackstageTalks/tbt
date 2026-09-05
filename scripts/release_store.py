@@ -22,11 +22,40 @@ class ReleaseStore:
         info = json.loads(gh("repo", "view", repository, "--json", "visibility"))
         if info.get("visibility") != "PRIVATE":
             raise ValueError("Training data destination must be PRIVATE")
-        # Listing avoids interpreting arbitrary auth errors as a missing release.
-        releases = json.loads(gh("api", f"repos/{repository}/releases?per_page=100"))
-        if not any(r.get("tag_name") == tag for r in releases):
-            gh("release", "create", tag, "--repo", repository, "--title", "TBT private tennis history",
-               "--notes", "Compact training partitions and resumable download progress. No API credentials.")
+        # Look up the exact tag directly. A long release history must not make
+        # an existing fixed tag look absent merely because it fell off page 1.
+        lookup = subprocess.run(
+            [
+                "gh",
+                "api",
+                f"repos/{repository}/releases/tags/{tag}",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        if lookup.returncode:
+            stderr = lookup.stderr.strip()
+            if (
+                "HTTP 404" in stderr
+                or "Not Found" in stderr
+                or "not found" in stderr.lower()
+            ):
+                gh(
+                    "release",
+                    "create",
+                    tag,
+                    "--repo",
+                    repository,
+                    "--title",
+                    "TBT private tennis history",
+                    "--notes",
+                    "Compact training partitions and resumable download progress. No API credentials.",
+                )
+            else:
+                raise RuntimeError(
+                    "GitHub release lookup failed: "
+                    + stderr[:500]
+                )
         self.directory.mkdir(parents=True, exist_ok=True)
 
     BUNDLE_MANIFEST = "_tbt_bundle_manifest.json"
