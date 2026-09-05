@@ -45,18 +45,28 @@ def main() -> None:
         overlap_days = int(os.getenv("TBT_HOT_RETENTION_DAYS", "60"))
     except ValueError:
         overlap_days = 60
-    overlap_days = min(max(overlap_days, 14), 180)
-    cutoff = latest_history - timedelta(days=overlap_days)
+    retention_days = min(max(overlap_days, 14), 180)
+    # Keep the checkpoint *inside* the rolling Supabase hot window, not at its
+    # oldest edge.  This leaves an overlap margin so clock drift, ingestion lag,
+    # or a restore performed a day or two later cannot create a silent replay gap.
+    try:
+        checkpoint_overlap_days = int(os.getenv("TBT_CHECKPOINT_OVERLAP_DAYS", "14"))
+    except ValueError:
+        checkpoint_overlap_days = 14
+    checkpoint_overlap_days = min(max(checkpoint_overlap_days, 3), retention_days - 1)
+    checkpoint_age_days = retention_days - checkpoint_overlap_days
+    generated_at = datetime.now(timezone.utc)
+    rolling_cutoff = generated_at - timedelta(days=checkpoint_age_days)
+    cutoff = min(latest_history, rolling_cutoff)
     replay = FeatureBuilder()
     replay.replay(matches, before=cutoff)
-    generated_at = datetime.now(timezone.utc)
-
     md = dict(result.model.metadata or {})
     md["history_source"] = "private GitHub Release year partitions + rolling Supabase delta"
     md["feature_state_cutoff"] = cutoff.astimezone(timezone.utc).isoformat()
     md["feature_state_generated_at"] = generated_at.isoformat()
     md["feature_state_artifact_version"] = 3
-    md["feature_state_overlap_days"] = overlap_days
+    md["feature_state_hot_retention_days"] = retention_days
+    md["feature_state_overlap_days"] = checkpoint_overlap_days
     result.model.metadata = md
 
     # Save only after metadata is final so the artifact and registry describe the
@@ -73,7 +83,8 @@ def main() -> None:
     report["history_source"] = "private GitHub Release year partitions + rolling Supabase delta"
     report["history_rows_loaded"] = len(matches)
     report["feature_state_cutoff"] = cutoff.astimezone(timezone.utc).isoformat()
-    report["feature_state_overlap_days"] = overlap_days
+    report["feature_state_hot_retention_days"] = retention_days
+    report["feature_state_overlap_days"] = checkpoint_overlap_days
 
     report_path = Path(args.report)
     report_path.parent.mkdir(parents=True, exist_ok=True)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -29,11 +30,22 @@ def main() -> None:
         raise SystemExit("No history available for feature-state checkpoint")
 
     latest_history = max(match.scheduled_at for match in matches)
-    overlap_days = 60
-    cutoff = latest_history - timedelta(days=overlap_days)
+    try:
+        retention_days = int(os.getenv("TBT_HOT_RETENTION_DAYS", "60"))
+    except ValueError:
+        retention_days = 60
+    retention_days = min(max(retention_days, 14), 180)
+    try:
+        checkpoint_overlap_days = int(os.getenv("TBT_CHECKPOINT_OVERLAP_DAYS", "14"))
+    except ValueError:
+        checkpoint_overlap_days = 14
+    checkpoint_overlap_days = min(max(checkpoint_overlap_days, 3), retention_days - 1)
+    generated_at = datetime.now(timezone.utc)
+    checkpoint_age_days = retention_days - checkpoint_overlap_days
+    rolling_cutoff = generated_at - timedelta(days=checkpoint_age_days)
+    cutoff = min(latest_history, rolling_cutoff)
     builder = FeatureBuilder()
     builder.replay(matches, before=cutoff)
-    generated_at = datetime.now(timezone.utc)
 
     md = dict(getattr(model, "metadata", {}) or {})
     md.update(
@@ -42,7 +54,8 @@ def main() -> None:
             "feature_state_cutoff": cutoff.astimezone(timezone.utc).isoformat(),
             "feature_state_generated_at": generated_at.isoformat(),
             "feature_state_artifact_version": 3,
-            "feature_state_overlap_days": overlap_days,
+            "feature_state_hot_retention_days": retention_days,
+            "feature_state_overlap_days": checkpoint_overlap_days,
             "artifact_upgrade": "weights/version unchanged; runtime replay checkpoint added",
         }
     )
@@ -71,7 +84,8 @@ def main() -> None:
                 "artifact_version": upgraded.artifact_version,
                 "history_rows": len(matches),
                 "feature_state_cutoff": upgraded.feature_state_cutoff,
-                "feature_state_overlap_days": overlap_days,
+                "feature_state_hot_retention_days": retention_days,
+            "feature_state_overlap_days": checkpoint_overlap_days,
                 "weights_changed": False,
                 "output": str(Path(args.output)),
             },
