@@ -49,6 +49,6 @@ def feed(req):
         return response(data)
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
-    except (ValueError, OSError, KeyError):
+    except (ValueError, OSError, KeyError, TypeError):
         logging.exception("Serving feed unavailable")
         return response({"error": "feed_unavailable"}, 503)
