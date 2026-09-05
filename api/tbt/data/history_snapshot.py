@@ -148,8 +148,19 @@ def write_snapshot(matches: Iterable[MatchRecord], path: str | Path) -> dict[str
     frame = pd.DataFrame([_record_to_row(match) for match in ordered])
     if frame.empty:
         raise ValueError("Refusing to write an empty training snapshot")
-    frame.to_parquet(path, engine="pyarrow", compression="zstd", index=False)
-    digest = hashlib.sha256(path.read_bytes()).hexdigest()
+    temporary = path.with_name(path.name + ".tmp")
+    try:
+        frame.to_parquet(
+            temporary,
+            engine="pyarrow",
+            compression="zstd",
+            index=False,
+        )
+        digest = hashlib.sha256(temporary.read_bytes()).hexdigest()
+        temporary.replace(path)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
     timestamps = pd.to_datetime(frame["scheduled_at"], utc=True)
     return {
         "snapshot_schema_version": SNAPSHOT_SCHEMA_VERSION,
@@ -266,7 +277,12 @@ def write_manifest(directory: str | Path, manifest: dict[str, Any]) -> Path:
     manifest["partition_schema_version"] = SNAPSHOT_SCHEMA_VERSION
     manifest["generated_at"] = datetime.now(timezone.utc).isoformat()
     manifest.setdefault("storage_policy", {"supabase_mode": "rolling_hot_buffer", "year_independent": True})
-    path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False),
+        encoding="utf-8",
+    )
+    temporary.replace(path)
     return path
 
 
