@@ -41,6 +41,69 @@ def safe_float(value: Any) -> float | None:
         return None
 
 
+RATE_STAT_SUFFIXES = frozenset({
+    "first_serve_win",
+    "second_serve_win",
+    "service_points_won",
+    "ace_rate",
+    "return_points_won",
+    "break_points_won",
+})
+
+
+def is_rate_stat_field(name: Any) -> bool:
+    text = str(name or "").strip().lower()
+    if text.startswith("p1_") or text.startswith("p2_"):
+        text = text[3:]
+    return text in RATE_STAT_SUFFIXES
+
+
+def normalize_rate(value: Any, *, percent_hint: bool = False) -> float | None:
+    """Normalize an explicitly rate-like value without guessing count units.
+
+    Numeric strings and numeric JSON values have identical semantics.
+    - 0..1 is accepted as an already-normalized fraction.
+    - an explicit trailing '%' is accepted as 0..100 percent.
+    - with percent_hint=True, values >1 and <=100 are accepted as percent.
+    - values >1 without an explicit percent signal are rejected rather than guessed.
+    - missing/invalid/non-finite values remain missing.
+    """
+    if value is None or value == "" or isinstance(value, bool):
+        return None
+
+    explicit_percent = False
+    if isinstance(value, str):
+        text = value.strip().replace(",", ".")
+        if not text:
+            return None
+        if text.endswith("%"):
+            explicit_percent = True
+            text = text[:-1].strip()
+        try:
+            result = float(text)
+        except ValueError:
+            return None
+    else:
+        try:
+            result = float(value)
+        except (TypeError, ValueError):
+            return None
+
+    if not math.isfinite(result) or result < 0:
+        return None
+
+    if explicit_percent:
+        return result / 100.0 if result <= 100 else None
+
+    if result <= 1:
+        return result
+
+    if percent_hint and result <= 100:
+        return result / 100.0
+
+    return None
+
+
 def safe_int(value: Any) -> int | None:
     try:
         if value in (None, ""):
