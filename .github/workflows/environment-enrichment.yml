@@ -4,12 +4,12 @@ on:
   workflow_dispatch:
     inputs:
       start:
-        description: "Start date/time UTC (e.g. 2026-08-25)"
+        description: "Start date/time UTC (pre-2025 -> GitHub, 2025+ -> Supabase)"
         required: true
         default: "2026-08-25"
         type: string
       end:
-        description: "Exclusive end date/time UTC (e.g. 2026-09-03)"
+        description: "Exclusive end date/time UTC"
         required: true
         default: "2026-09-03"
         type: string
@@ -35,14 +35,56 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tbt-history-release-v1
+  cancel-in-progress: false
+
 jobs:
   enrich-environment:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_HISTORY_RELEASE_TAG: tbt-data-v1
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Resolve V20.4 storage target
+        id: route
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          from datetime import datetime, timezone
+
+          def parse(value: str) -> datetime:
+              value = value.strip()
+              if len(value) == 10:
+                  value += "T00:00:00+00:00"
+              dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+              if dt.tzinfo is None:
+                  dt = dt.replace(tzinfo=timezone.utc)
+              return dt.astimezone(timezone.utc)
+
+          start = parse("${{ inputs.start }}")
+          end = parse("${{ inputs.end }}")
+          boundary = datetime(2025, 1, 1, tzinfo=timezone.utc)
+          if end <= start:
+              raise SystemExit("end must be later than start")
+          if start < boundary < end:
+              raise SystemExit(
+                  "V20.4 safety stop: enrichment range crosses 2025-01-01. "
+                  "Split it into a pre-2025 GitHub run and a 2025+ Supabase run."
+              )
+          target = "github" if end <= boundary else "supabase"
+          print(f"target={target}")
+          PY
+          echo "Resolved target from date range."
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,10 +99,60 @@ jobs:
           pip install -r api/requirements-train.txt
 
       - name: Syntax check
-        run: |
-          python -m compileall -q api scripts
+        run: python -m compileall -q api scripts
 
-      - name: Run environment enrichment
+      - name: Preflight private GitHub data repository
+        if: steps.route.outputs.target == 'github'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TBT_DATA_REPOSITORY" || { echo "Missing TBT_DATA_REPOSITORY"; exit 1; }
+          test -n "$TBT_DATA_GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
+          test "$visibility" = "PRIVATE" || { echo "Refusing non-private data repo: $visibility"; exit 1; }
+
+      - name: Download GitHub history snapshot
+        if: steps.route.outputs.target == 'github'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt
+          gh release download "$TBT_HISTORY_RELEASE_TAG" \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --pattern 'training_snapshot.parquet' \
+            --pattern 'training_snapshot.meta.json' \
+            --dir .cache/tbt \
+            --clobber
+
+      - name: Enrich historical GitHub snapshot
+        if: steps.route.outputs.target == 'github'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARGS=(
+            --start "${{ inputs.start }}"
+            --end "${{ inputs.end }}"
+            --limit "${{ inputs.limit }}"
+            --snapshot .cache/tbt/training_snapshot.parquet
+            --meta .cache/tbt/training_snapshot.meta.json
+          )
+          if [[ "${{ inputs.mode }}" == "dry-run" ]]; then ARGS+=(--dry-run); fi
+          if [[ "${{ inputs.force }}" == "true" ]]; then ARGS+=(--force); fi
+          python scripts/enrich_environment_snapshot.py "${ARGS[@]}"
+
+      - name: Publish enriched GitHub snapshot
+        if: steps.route.outputs.target == 'github' && inputs.mode == 'write'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release upload "$TBT_HISTORY_RELEASE_TAG" \
+            .cache/tbt/training_snapshot.parquet \
+            .cache/tbt/training_snapshot.meta.json \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --clobber
+
+      - name: Enrich Supabase hot tier
+        if: steps.route.outputs.target == 'supabase'
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
@@ -68,19 +160,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           ARGS=(
             --start "${{ inputs.start }}"
             --end "${{ inputs.end }}"
             --limit "${{ inputs.limit }}"
           )
-
-          if [[ "${{ inputs.mode }}" == "dry-run" ]]; then
-            ARGS+=(--dry-run)
-          fi
-
-          if [[ "${{ inputs.force }}" == "true" ]]; then
-            ARGS+=(--force)
-          fi
-
+          if [[ "${{ inputs.mode }}" == "dry-run" ]]; then ARGS+=(--dry-run); fi
+          if [[ "${{ inputs.force }}" == "true" ]]; then ARGS+=(--force); fi
           python scripts/enrich_environment.py "${ARGS[@]}"

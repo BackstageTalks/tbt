@@ -1,10 +1,10 @@
-name: V20.1 · Sync history snapshot to private GitHub Release
+name: V20.4 · Sync hot tier to private GitHub Release
 
 on:
   workflow_dispatch:
     inputs:
-      full:
-        description: "ONE-TIME bootstrap / disaster recovery full Supabase read"
+      hot_full_refresh:
+        description: "Emergency full refresh of Supabase HOT tier only (2025+)"
         required: false
         default: false
         type: boolean
@@ -24,7 +24,6 @@ jobs:
     timeout-minutes: 60
     env:
       PYTHONPATH: api
-      TBT_ALLOW_SUPABASE_FULL_HISTORY: '1'
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
       TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
@@ -45,7 +44,7 @@ jobs:
           test -n "$TBT_DATA_GH_TOKEN" || { echo "Missing secret TBT_DATA_GH_TOKEN"; exit 1; }
           visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
           test "$visibility" = "PRIVATE" || { echo "Refusing to store TBT history in non-private repo: $visibility"; exit 1; }
-          echo "Target data repository: $TBT_DATA_REPOSITORY ($visibility)"
+          echo "V20.4 policy: Supabase hot tier = 2025+, GitHub cold tier = <2025."
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -60,47 +59,34 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt
 
-      - name: Download previous normalized snapshot
+      - name: Download authoritative private snapshot
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p .cache/tbt
-          if gh release view "$TBT_HISTORY_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
-            gh release download "$TBT_HISTORY_RELEASE_TAG" \
-              --repo "$TBT_DATA_REPOSITORY" \
-              --pattern 'training_snapshot.parquet' \
-              --pattern 'training_snapshot.meta.json' \
-              --dir .cache/tbt \
-              --clobber
-          elif [[ "${{ inputs.full || false }}" == "true" ]]; then
-            echo "No previous release found; explicit full bootstrap was requested."
-          else
-            echo "History release is missing. Refusing implicit full Supabase bootstrap."
-            echo "For the FIRST run only, manually run this workflow with full=true."
+          gh release view "$TBT_HISTORY_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1 || {
+            echo "V20.4 safety stop: history release is missing."
+            echo "Cold history is no longer reconstructable from Supabase by this workflow."
             exit 1
-          fi
+          }
+          gh release download "$TBT_HISTORY_RELEASE_TAG" \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --pattern 'training_snapshot.parquet' \
+            --pattern 'training_snapshot.meta.json' \
+            --dir .cache/tbt \
+            --clobber
 
-      - name: Build normalized snapshot
+      - name: Merge Supabase hot-tier changes only
         shell: bash
         run: |
           set -euo pipefail
           EXTRA=()
-          if [[ "${{ inputs.full || false }}" == "true" ]]; then EXTRA+=(--full); fi
+          if [[ "${{ inputs.hot_full_refresh || false }}" == "true" ]]; then EXTRA+=(--hot-full-refresh); fi
           python scripts/history_release.py \
             --snapshot .cache/tbt/training_snapshot.parquet \
             --meta .cache/tbt/training_snapshot.meta.json \
             "${EXTRA[@]}"
           ls -lh .cache/tbt/training_snapshot.*
-
-      - name: Create private data release if missing
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh release view "$TBT_HISTORY_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create "$TBT_HISTORY_RELEASE_TAG" \
-              --repo "$TBT_DATA_REPOSITORY" \
-              --title 'TBT normalized training data v1' \
-              --notes 'Machine-managed normalized historical snapshot. Raw provider payload is excluded.'
 
       - name: Publish snapshot assets
         shell: bash
