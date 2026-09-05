@@ -101,6 +101,7 @@ def main():
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"))
     parser.add_argument("--max-requests", type=int, default=750)
     parser.add_argument("--promote", action="store_true")
+    parser.add_argument("--bootstrap-predictions", action="store_true")
     args = parser.parse_args()
     if not 1 <= args.max_requests <= 3000:
         parser.error("refresh allowance must be 1..3000")
@@ -133,7 +134,7 @@ def main():
 
         save_model(result.model, str(model_dir / "model.joblib"))
         write_json(model_dir / "training_report.json", report)
-        candidate.upload(
+        candidate.upload_bundle(
             [
                 model_dir / "model.joblib",
                 model_dir / "training_report.json",
@@ -207,58 +208,111 @@ def main():
                 "tbt-model-production-v1",
                 model_dir,
             )
-            production.upload(
+            production.upload_bundle(
                 [
                     model_dir / "model.joblib",
                     model_dir / "training_report.json",
                     promotion_history_path,
                 ]
             )
-            candidate.upload([promotion_history_path])
+            candidate.upload_bundle([promotion_history_path])
         return
     if not settings.rapidapi_key:
         parser.error("RAPIDAPI_KEY is required")
     model_store = ReleaseStore(args.data_repository, "tbt-model-production-v1", model_dir)
-    model_store.download(extra_names=("model.joblib", "training_report.json"))
+    model_store.download(
+        extra_names=("model.joblib", "training_report.json"),
+        required_names=("model.joblib", "training_report.json"),
+    )
     model = load_model(str(model_dir / "model.joblib"))
     report = read_json(model_dir / "training_report.json", {})
     prediction_dir = cache / "predictions"
-    prediction_store = ReleaseStore(args.data_repository, "tbt-predictions-v1", prediction_dir)
-    prediction_store.download(extra_names=("ledger.json",))
+    prediction_store = ReleaseStore(
+        args.data_repository,
+        "tbt-predictions-v1",
+        prediction_dir,
+    )
+    if args.bootstrap_predictions:
+        prediction_store.download(extra_names=("ledger.json",))
+    else:
+        prediction_store.download(
+            extra_names=("ledger.json",),
+            required_names=("ledger.json",),
+        )
     budget_path = history_dir / "request_budget.json"
     ledger, allowance = reserve_allocation(read_json(budget_path, {}), args.max_requests,
         run_id=os.getenv("GITHUB_RUN_ID", "manual"), purpose="refresh")
     if not allowance:
         raise SystemExit("Refresh budget exhausted; previously deployed feed stays available with its timestamp")
     write_json(budget_path, ledger)
-    history_store.upload([budget_path])
+    history_store.upload_bundle([budget_path])
     budget = LocalRequestBudget(history_dir / "local_request_budget.sqlite", duration_seconds=1800)
     provider = RapidTennisClient(request_budget=budget)
     provider.request_limit = allowance
     now = datetime.now(timezone.utc)
     by_id = {m.match_id: m for m in matches}
+    refresh_error = None
+    upcoming = []
     try:
-        upcoming = []
         for tour in ("atp", "wta"):
-            for match in provider.historical_period(tour, now.date() - timedelta(days=7), now.date()):
-                by_id[match.match_id] = merge_match(by_id.get(match.match_id), match)
-            upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
+            for match in provider.historical_period(
+                tour,
+                now.date() - timedelta(days=7),
+                now.date(),
+            ):
+                by_id[match.match_id] = merge_match(
+                    by_id.get(match.match_id),
+                    match,
+                )
+            upcoming.extend(
+                provider.upcoming(
+                    tour,
+                    now.date(),
+                    now.date() + timedelta(days=3),
+                )
+            )
+    except Exception as exc:
+        refresh_error = exc
     finally:
-        provider.client.close()
-        budget.close()
+        try:
+            provider.client.close()
+        finally:
+            budget.close()
+
     matches = list(by_id.values())
-    changed_years = {(now - timedelta(days=d)).year for d in range(8)}
+    changed_years = {
+        (now - timedelta(days=d)).year
+        for d in range(8)
+    }
+    written_history = []
     for year in changed_years:
         if any(m.scheduled_at.year == year for m in matches):
-            write_year_partition(matches, history_dir, year)
-    history_store.upload([history_dir / f"history-{y}.parquet" for y in changed_years])
-    history_store.upload([history_dir / "history_manifest.json"])
+            write_year_partition(
+                matches,
+                history_dir,
+                year,
+            )
+            written_history.append(
+                history_dir / f"history-{year}.parquet"
+            )
+
+    history_bundle = written_history + [
+        history_dir / "history_manifest.json"
+    ]
+    history_store.upload_bundle(history_bundle)
+
+    if refresh_error is not None:
+        # Partial completed history is checkpointed, but no new prediction
+        # feed is published from an incomplete refresh.
+        raise refresh_error
     predictions = predict(model, matches, upcoming, now)
     records = reconcile_ledger(read_json(prediction_dir / "ledger.json", []), predictions, matches, now)
     write_json(prediction_dir / "ledger.json", records)
     feed = clean(serving_feed(records, model, matches, report, upcoming, now))
     write_json(prediction_dir / "feed.json", feed)
-    prediction_store.upload([prediction_dir / "ledger.json", prediction_dir / "feed.json"])
+    prediction_store.upload_bundle(
+        [prediction_dir / "ledger.json", prediction_dir / "feed.json"]
+    )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     write_json(target, feed)

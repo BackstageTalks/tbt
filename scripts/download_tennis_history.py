@@ -107,7 +107,7 @@ def main():
         write_json(budget_file, ledger)
         # Publication MUST succeed before the first upstream call. Never refund
         # automatically: cancellation may hide already executed requests.
-        store.upload([budget_file])
+        store.upload_bundle([budget_file])
     rows = load_partitions(directory) if list(directory.glob("history-*.parquet")) else []
     matches = {m.match_id: m for m in rows}
     progress_file = directory / "download_progress.json"
@@ -125,8 +125,17 @@ def main():
         progress["updated_at"] = datetime.now(timezone.utc).isoformat()
         write_json(progress_file, progress)
         if publish and store:
-            store.upload([directory / f"history-{y}.parquet" for y in sorted(pending_years)])
-            store.upload([directory / "history_manifest.json", progress_file])
+            bundle = [
+                directory / f"history-{y}.parquet"
+                for y in sorted(pending_years)
+            ]
+            bundle.extend(
+                [
+                    directory / "history_manifest.json",
+                    progress_file,
+                ]
+            )
+            store.upload_bundle(bundle)
             pending_years.clear()
 
     local_budget = LocalRequestBudget(directory / "local_request_budget.sqlite")
@@ -156,18 +165,34 @@ def main():
         report["budget_stopped"] = 1
         print(str(exc), flush=True)
     finally:
-        # Includes partial statistics batches on a budget stop or parser error.
-        checkpoint(set(pending_years), True)
-        report["requests_including_retries"] = provider.request_count
-        report["stored_matches"] = len(matches)
-        report["completed_days"] = len(progress["completed_days"])
-        report["allocated_requests"] = allocation
-        write_json(directory / "download_report.json", dict(report))
-        print(json.dumps(dict(report), indent=2), flush=True)
-        provider.client.close()
-        local_budget.close()
-        if enricher:
-            enricher.close()
+        checkpoint_error = None
+        try:
+            # Includes partial statistics/history batches on a budget stop
+            # or parser/provider error.
+            checkpoint(set(pending_years), True)
+        except Exception as exc:
+            checkpoint_error = exc
+            report["checkpoint_failed"] = 1
+        finally:
+            report["requests_including_retries"] = provider.request_count
+            report["stored_matches"] = len(matches)
+            report["completed_days"] = len(progress["completed_days"])
+            report["allocated_requests"] = allocation
+            try:
+                write_json(directory / "download_report.json", dict(report))
+                print(json.dumps(dict(report), indent=2), flush=True)
+            finally:
+                try:
+                    provider.client.close()
+                finally:
+                    try:
+                        local_budget.close()
+                    finally:
+                        if enricher:
+                            enricher.close()
+
+        if checkpoint_error is not None:
+            raise checkpoint_error
 
 
 if __name__ == "__main__":
