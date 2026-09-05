@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -60,9 +60,25 @@ def predict_matches(
 ) -> list[PredictionRecord]:
     if not upcoming:
         return []
-    builder = FeatureBuilder()
     earliest = min(match.scheduled_at for match in upcoming)
-    builder.replay(history, before=earliest)
+
+    feature_state = getattr(model, "feature_state", None)
+    cutoff_raw = getattr(model, "feature_state_cutoff", None)
+    if isinstance(feature_state, dict) and cutoff_raw:
+        builder = FeatureBuilder.from_state(feature_state)
+        cutoff = datetime.fromisoformat(str(cutoff_raw).replace("Z", "+00:00"))
+        if cutoff.tzinfo is None:
+            cutoff = cutoff.replace(tzinfo=timezone.utc)
+        cutoff = cutoff.astimezone(timezone.utc)
+        delta_history = [
+            match
+            for match in history
+            if cutoff <= match.scheduled_at < earliest
+        ]
+        builder.replay(delta_history, before=earliest)
+    else:
+        builder = FeatureBuilder()
+        builder.replay(history, before=earliest)
 
     predictions: list[PredictionRecord] = []
     for match in sorted(upcoming, key=lambda m: (m.scheduled_at, m.match_id)):

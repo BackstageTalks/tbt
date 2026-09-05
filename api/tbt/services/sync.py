@@ -561,10 +561,28 @@ def refresh_predictions(
         upcoming
     )
 
-    history = (
-        repo.get_completed_matches(
-            before=now
+    feature_state = getattr(model, "feature_state", None)
+    feature_state_cutoff_raw = getattr(model, "feature_state_cutoff", None)
+    if not isinstance(feature_state, dict) or not feature_state_cutoff_raw:
+        raise RuntimeError(
+            "V20.5 egress safety stop: champion artifact has no FeatureBuilder "
+            "checkpoint. Retrain from the private GitHub history partitions and "
+            "publish that champion before refreshing predictions. Refusing a full "
+            "Supabase history read."
         )
+
+    feature_state_cutoff = datetime.fromisoformat(
+        str(feature_state_cutoff_raw).replace("Z", "+00:00")
+    )
+    if feature_state_cutoff.tzinfo is None:
+        feature_state_cutoff = feature_state_cutoff.replace(tzinfo=timezone.utc)
+    feature_state_cutoff = feature_state_cutoff.astimezone(timezone.utc)
+
+    # Only replay hot results that happened after the checkpoint embedded in the
+    # champion.  Cold 2021-2024 history no longer needs to exist in Supabase.
+    history = repo.get_completed_matches_since(
+        feature_state_cutoff,
+        before=now,
     )
 
     predictions = (
@@ -632,127 +650,52 @@ def refresh_predictions(
         "stale_future_predictions_removed": (
             stale_predictions_removed
         ),
+        "feature_state_cutoff": feature_state_cutoff.isoformat(),
+        "hot_history_delta_rows": len(history),
+        "history_full_read_from_supabase": False,
     }
 
 
 def sync_current_year_results(
     cfg: Settings = settings,
 ) -> dict:
+    """Reconcile only the previous seven completed UTC days.
+
+    V20.5 deliberately uses the provider's bounded historical_period API.  The
+    old implementation fetched an entire year per tour for a seven-day settle
+    window, wasting RapidAPI quota and making a routine job unexpectedly heavy.
     """
-    Reconcile the previous seven completed UTC days.
-
-    The provider exposes history by year, so the current year is fetched once
-    per tour and then filtered locally to the required date window.
-    """
-
-    provider = RapidTennisClient(
-        cfg
-    )
-
-    repo = SupabaseRepository(
-        cfg
-    )
-
-    today = (
-        datetime.now(
-            timezone.utc
-        ).date()
-    )
-
-    start = (
-        today
-        - timedelta(
-            days=7
-        )
-    )
-
-    end = (
-        today
-        - timedelta(
-            days=1
-        )
-    )
-
-    years = range(
-        start.year,
-        end.year + 1,
-    )
+    provider = RapidTennisClient(cfg)
+    repo = SupabaseRepository(cfg)
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=7)
+    end = today - timedelta(days=1)
 
     try:
         completed = []
-
-        for year in years:
-            for tour in (
-                "atp",
-                "wta",
-            ):
-                matches = (
-                    provider.historical_year(
-                        tour,
-                        year,
-                    )
-                )
-
-                completed.extend(
-                    match
-                    for match
-                    in matches
-                    if (
-                        match.is_completed
-                        and match.winner_id
-                        and start
-                        <= (
-                            match.scheduled_at
-                            .astimezone(
-                                timezone.utc
-                            )
-                            .date()
-                        )
-                        <= end
-                    )
-                )
-
+        for tour in ("atp", "wta"):
+            completed.extend(provider.historical_period(tour, start, end))
+        rapidapi_requests = provider.request_count
+        rapidapi_remaining = provider.rate_limit_remaining
     finally:
-        _close_provider(
-            provider
-        )
+        _close_provider(provider)
 
     completed = list(
         {
             match.match_id: match
-            for match
-            in completed
+            for match in completed
+            if match.is_completed and match.winner_id
         }.values()
     )
 
-    upserted = (
-        repo.upsert_matches(
-            completed
-        )
-    )
-
-    settled = (
-        repo.settle_predictions(
-            completed
-        )
-    )
-
+    upserted = repo.upsert_matches(completed)
+    settled = repo.settle_predictions(completed)
     return {
-        "window_start": (
-            start.isoformat()
-        ),
-        "window_end": (
-            end.isoformat()
-        ),
-        "completed_matches_found": (
-            len(
-                completed
-            )
-        ),
-        "completed_matches_upserted": (
-            upserted
-        ),
-        "predictions_settled": (
-            settled
-        ),
+        "completed_matches_upserted": upserted,
+        "predictions_settled": settled,
+        "rapidapi_requests": rapidapi_requests,
+        "rapidapi_remaining": rapidapi_remaining,
+        "provider_window_days": 7,
+        "provider_full_year_fetch": False,
     }
+
