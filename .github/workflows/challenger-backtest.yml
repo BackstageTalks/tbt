@@ -3,12 +3,16 @@ name: Challenger backtest
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   challenger:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
       PYTHONPATH: api
+      TBT_HISTORY_DIR: .cache/tbt/history
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
       TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
@@ -17,30 +21,28 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt
-
-      - name: Compile
-        run: |
           python -m compileall -q api scripts
-
-      - name: Run challenger backtest
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      - name: Verify private data repository
         run: |
-          python scripts/challenger_backtest.py
-
-      - name: Upload challenger report
+          visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
+          test "$visibility" = "PRIVATE"
+      - name: Download partitioned GitHub history
+        run: bash scripts/download_history_release.sh .cache/tbt
+      - name: Validate history integrity
+        run: python scripts/validate_history_partitions.py --history-dir "$TBT_HISTORY_DIR"
+      - name: Run analysis from GitHub history
+        run: python scripts/challenger_backtest.py
+      - name: Upload report
         uses: actions/upload-artifact@v4
         with:
           name: challenger-backtest-report

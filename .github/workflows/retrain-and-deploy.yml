@@ -8,20 +8,35 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tbt-model-training
+  cancel-in-progress: false
+
 jobs:
   retrain:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
       PYTHONPATH: api
+      TBT_HISTORY_DIR: .cache/tbt/history
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
       TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_HISTORY_RELEASE_TAG: tbt-data-v1
+      TBT_MODEL_ARCHIVE_RELEASE_TAG: tbt-models-v1
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Preflight private data repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TBT_DATA_REPOSITORY" || { echo "Missing TBT_DATA_REPOSITORY"; exit 1; }
+          test -n "$TBT_DATA_GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
+          test "$visibility" = "PRIVATE" || { echo "Refusing non-private data repo: $visibility"; exit 1; }
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -35,78 +50,71 @@ jobs:
           set -euo pipefail
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt pytest
+          python -m compileall -q api scripts
+          pytest -q
 
-      - name: Unit tests
-        run: pytest
+      - name: Download partitioned GitHub history
+        shell: bash
+        run: bash scripts/download_history_release.sh .cache/tbt
 
-      - name: Train production artifact
-        env:
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-          RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
-          RAPIDAPI_BASE_URL: https://tennisapi1.p.rapidapi.com
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          TGBOT: ${{ secrets.TGBOT }}
-          TGCHID: ${{ secrets.TGCHID }}
-        run: python scripts/train.py --output api/artifacts/model.joblib
+      - name: Validate history integrity before training
+        run: python scripts/validate_history_partitions.py --history-dir "$TBT_HISTORY_DIR"
 
-      - name: Walk-forward backtest
+      - name: Train challenger from GitHub history
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/backtest.py
+        run: |
+          python scripts/train.py \
+            --history-dir "$TBT_HISTORY_DIR" \
+            --output api/artifacts/model.joblib
 
-      - name: Verify model artifact
+      - name: Walk-forward backtest from GitHub history
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python scripts/backtest.py --history-dir "$TBT_HISTORY_DIR"
+
+      - name: Resolve challenger version
+        id: model
+        shell: bash
         run: |
           set -euo pipefail
-          test -s api/artifacts/model.joblib
-          ls -lh api/artifacts/model.joblib
+          VERSION="$(python - <<'PY'
+          from tbt.models.artifact import load_model
+          print(load_model('api/artifacts/model.joblib').version)
+          PY
+          )"
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          cp api/artifacts/model.joblib ".cache/tbt/model-${VERSION}.joblib"
+          ls -lh ".cache/tbt/model-${VERSION}.joblib"
 
-      - name: Store production model in Supabase Storage
-        env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/model_store.py upload --file api/artifacts/model.joblib
-
-      - name: Generate fresh production predictions
-        env:
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-          RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
-          RAPIDAPI_BASE_URL: https://tennisapi1.p.rapidapi.com
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/refresh_predictions.py
-
-      - name: Reconcile recent results
-        env:
-          RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
-          RAPIDAPI_HOST: tennisapi1.p.rapidapi.com
-          RAPIDAPI_BASE_URL: https://tennisapi1.p.rapidapi.com
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: python scripts/settle_results.py
+      - name: Archive challenger artifact in private GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TBT_MODEL_ARCHIVE_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TBT_MODEL_ARCHIVE_RELEASE_TAG" \
+              --repo "$TBT_DATA_REPOSITORY" \
+              --title 'TBT model archive v1' \
+              --notes 'Versioned challenger/champion model artifacts. Production publication is separate.'
+          gh release upload "$TBT_MODEL_ARCHIVE_RELEASE_TAG" \
+            ".cache/tbt/model-${{ steps.model.outputs.version }}.joblib" \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --clobber
 
       - name: Upload evaluation reports
         uses: actions/upload-artifact@v4
         with:
-          name: tbt-evaluation
+          name: tbt-evaluation-${{ steps.model.outputs.version }}
           path: reports/
           retention-days: 30
 
-      - name: Remove heavy model from Azure deployment package
-        run: rm -f api/artifacts/model.joblib
-
-      - name: Deploy lightweight BlinQ API to Azure Static Web Apps Free
-        uses: Azure/static-web-apps-deploy@v1
-        with:
-          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          action: upload
-          app_location: web
-          api_location: api
-          output_location: ""
-          skip_app_build: true
+      - name: Production safety summary
+        run: |
+          echo "Challenger ${{ steps.model.outputs.version }} was trained/backtested from GitHub history."
+          echo "It was NOT published as production and did NOT overwrite the current champion."
+          echo "Promote only after evaluation, then run 'V20.5 · Publish champion model to private GitHub Release'."

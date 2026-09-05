@@ -1,0 +1,64 @@
+name: V20.6 · Validate private GitHub history partitions
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: api
+      TBT_HISTORY_DIR: .cache/tbt/history
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_HISTORY_RELEASE_TAG: tbt-data-v1
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+
+      - name: Verify private repository
+        run: |
+          visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
+          test "$visibility" = "PRIVATE"
+
+      - name: Download partitioned history
+        run: bash scripts/download_history_release.sh .cache/tbt
+
+      - name: Download legacy baseline if retained
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/legacy
+          if gh release view "$TBT_HISTORY_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" --json assets -q '.assets[].name' | grep -qx 'training_snapshot.parquet'; then
+            gh release download "$TBT_HISTORY_RELEASE_TAG" \
+              --repo "$TBT_DATA_REPOSITORY" \
+              --pattern 'training_snapshot.parquet' \
+              --dir .cache/tbt/legacy \
+              --clobber
+          fi
+
+      - name: Validate partitions, manifest and legacy coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          ARGS=(--history-dir "$TBT_HISTORY_DIR")
+          if [[ -s .cache/tbt/legacy/training_snapshot.parquet ]]; then
+            ARGS+=(--legacy-snapshot .cache/tbt/legacy/training_snapshot.parquet)
+          fi
+          python scripts/validate_history_partitions.py "${ARGS[@]}"

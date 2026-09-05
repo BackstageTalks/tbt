@@ -1,4 +1,4 @@
-name: V20.4 · Sync hot tier to private GitHub Release
+name: V20.6 · Sync hot tier to private GitHub Release
 
 on:
   workflow_dispatch:
@@ -24,6 +24,7 @@ jobs:
     timeout-minutes: 60
     env:
       PYTHONPATH: api
+      TBT_HISTORY_DIR: .cache/tbt/history
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
       TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
@@ -40,11 +41,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$TBT_DATA_REPOSITORY" || { echo "Missing repository variable TBT_DATA_REPOSITORY"; exit 1; }
-          test -n "$TBT_DATA_GH_TOKEN" || { echo "Missing secret TBT_DATA_GH_TOKEN"; exit 1; }
+          test -n "$TBT_DATA_REPOSITORY" || { echo "Missing TBT_DATA_REPOSITORY"; exit 1; }
+          test -n "$TBT_DATA_GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
           visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
-          test "$visibility" = "PRIVATE" || { echo "Refusing to store TBT history in non-private repo: $visibility"; exit 1; }
-          echo "V20.4 policy: Supabase hot tier = 2025+, GitHub cold tier = <2025."
+          test "$visibility" = "PRIVATE" || { echo "Refusing non-private data repo: $visibility"; exit 1; }
+          echo "Policy: GitHub year partitions = training history; Supabase = lean 2025+ hot tier only."
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
@@ -53,28 +54,16 @@ jobs:
           cache: pip
           cache-dependency-path: api/requirements-train.txt
 
-      - name: Install snapshot dependencies
+      - name: Install dependencies
         run: |
           set -euo pipefail
           python -m pip install --upgrade pip
           pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
 
-      - name: Download authoritative private snapshot
+      - name: Download or migrate partitioned history
         shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p .cache/tbt
-          gh release view "$TBT_HISTORY_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1 || {
-            echo "V20.4 safety stop: history release is missing."
-            echo "Cold history is no longer reconstructable from Supabase by this workflow."
-            exit 1
-          }
-          gh release download "$TBT_HISTORY_RELEASE_TAG" \
-            --repo "$TBT_DATA_REPOSITORY" \
-            --pattern 'training_snapshot.parquet' \
-            --pattern 'training_snapshot.meta.json' \
-            --dir .cache/tbt \
-            --clobber
+        run: bash scripts/download_history_release.sh .cache/tbt
 
       - name: Merge Supabase hot-tier changes only
         shell: bash
@@ -83,17 +72,18 @@ jobs:
           EXTRA=()
           if [[ "${{ inputs.hot_full_refresh || false }}" == "true" ]]; then EXTRA+=(--hot-full-refresh); fi
           python scripts/history_release.py \
-            --snapshot .cache/tbt/training_snapshot.parquet \
-            --meta .cache/tbt/training_snapshot.meta.json \
+            --history-dir "$TBT_HISTORY_DIR" \
+            --legacy-snapshot .cache/tbt/training_snapshot.parquet \
+            --overlap-minutes 1440 \
             "${EXTRA[@]}"
-          ls -lh .cache/tbt/training_snapshot.*
+          ls -lh "$TBT_HISTORY_DIR"/
 
-      - name: Publish snapshot assets
+      - name: Publish partition assets and manifest
         shell: bash
         run: |
           set -euo pipefail
           gh release upload "$TBT_HISTORY_RELEASE_TAG" \
-            .cache/tbt/training_snapshot.parquet \
-            .cache/tbt/training_snapshot.meta.json \
+            "$TBT_HISTORY_DIR"/history-*.parquet \
+            "$TBT_HISTORY_DIR"/history_manifest.json \
             --repo "$TBT_DATA_REPOSITORY" \
             --clobber
