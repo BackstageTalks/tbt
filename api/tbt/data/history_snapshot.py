@@ -47,10 +47,16 @@ def _json_loads(value: Any) -> dict[str, Any]:
 
 
 def _dt(value: Any) -> datetime:
-    if isinstance(value, datetime):
-        result = value
-    else:
-        result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    value = _none_if_na(value)
+    if value in (None, ""):
+        raise ValueError("Missing historical scheduled_at")
+    try:
+        if isinstance(value, datetime):
+            result = value
+        else:
+            result = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Invalid historical scheduled_at: {value!r}") from exc
     if result.tzinfo is None:
         result = result.replace(tzinfo=timezone.utc)
     return result.astimezone(timezone.utc)
@@ -63,6 +69,16 @@ def _none_if_na(value: Any) -> Any:
     except (TypeError, ValueError):
         pass
     return value
+
+
+def _text_or_empty(value: Any) -> str:
+    value = _none_if_na(value)
+    if value in (None, ""):
+        return ""
+    text = str(value).strip()
+    if text.lower() in {"nan", "none", "null", "<na>", "nat"}:
+        return ""
+    return text
 
 
 def _record_to_row(match: MatchRecord) -> dict[str, Any]:
@@ -128,29 +144,38 @@ def load_snapshot(path: str | Path, before: datetime | None = None) -> list[Matc
         frame = frame.loc[scheduled < cutoff]
 
     matches: list[MatchRecord] = []
-    for row in frame.to_dict(orient="records"):
+    for row_number, row in enumerate(frame.to_dict(orient="records"), start=1):
+        scheduled_at = _dt(row.get("scheduled_at"))
+        player1_id = _text_or_empty(row.get("player1_id"))
+        player2_id = _text_or_empty(row.get("player2_id"))
+
+        if not player1_id or not player2_id:
+            raise ValueError(
+                f"Invalid history snapshot row {row_number}: missing player identity"
+            )
+        if player1_id == player2_id:
+            raise ValueError(
+                f"Invalid history snapshot row {row_number}: identical player identities"
+            )
+
         matches.append(
             MatchRecord(
-                match_id=str(row.get("match_id") or ""),
-                tour=str(row.get("tour") or "").lower(),
-                scheduled_at=_dt(row.get("scheduled_at")),
-                player1_id=str(row.get("player1_id") or ""),
-                player1_name=str(row.get("player1_name") or ""),
-                player2_id=str(row.get("player2_id") or ""),
-                player2_name=str(row.get("player2_name") or ""),
-                surface=str(row.get("surface") or "unknown"),
-                tournament=str(row.get("tournament") or ""),
-                tournament_id=str(row.get("tournament_id") or ""),
-                tournament_level=str(row.get("tournament_level") or ""),
-                round_name=str(row.get("round_name") or ""),
+                match_id=_text_or_empty(row.get("match_id")),
+                tour=_text_or_empty(row.get("tour")).lower(),
+                scheduled_at=scheduled_at,
+                player1_id=player1_id,
+                player1_name=_text_or_empty(row.get("player1_name")),
+                player2_id=player2_id,
+                player2_name=_text_or_empty(row.get("player2_name")),
+                surface=_text_or_empty(row.get("surface")) or "unknown",
+                tournament=_text_or_empty(row.get("tournament")),
+                tournament_id=_text_or_empty(row.get("tournament_id")),
+                tournament_level=_text_or_empty(row.get("tournament_level")),
+                round_name=_text_or_empty(row.get("round_name")),
                 player1_rank=_none_if_na(row.get("player1_rank")),
                 player2_rank=_none_if_na(row.get("player2_rank")),
-                winner_id=(
-                    str(row.get("winner_id"))
-                    if _none_if_na(row.get("winner_id")) not in (None, "")
-                    else None
-                ),
-                status=str(row.get("status") or ""),
+                winner_id=_text_or_empty(row.get("winner_id")) or None,
+                status=_text_or_empty(row.get("status")),
                 best_of=_none_if_na(row.get("best_of")),
                 indoor=_none_if_na(row.get("indoor")),
                 stats=_json_loads(row.get("stats_json")),
