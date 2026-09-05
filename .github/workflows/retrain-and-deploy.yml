@@ -19,6 +19,7 @@ jobs:
     env:
       PYTHONPATH: api
       TBT_HOT_RETENTION_DAYS: "60"
+      TBT_CHECKPOINT_OVERLAP_DAYS: "14"
       TBT_HISTORY_DIR: .cache/tbt/history
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
       TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}

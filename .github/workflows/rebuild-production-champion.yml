@@ -1,0 +1,188 @@
+name: V20.8 · Rebuild production champion from GitHub history
+
+on:
+  workflow_dispatch:
+    inputs:
+      hot_retention_days:
+        description: "Rolling Supabase hot-buffer retention"
+        required: false
+        default: "60"
+        type: string
+      checkpoint_overlap_days:
+        description: "Safety overlap inside the hot buffer"
+        required: false
+        default: "14"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-production-model-rebuild
+  cancel-in-progress: false
+
+jobs:
+  rebuild:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONPATH: api
+      TBT_HISTORY_DIR: .cache/tbt/history
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_HISTORY_RELEASE_TAG: tbt-data-v1
+      TBT_MODEL_ARCHIVE_RELEASE_TAG: tbt-models-v1
+      TBT_MODEL_PRODUCTION_RELEASE_TAG: tbt-model-production-v1
+      TBT_HOT_RETENTION_DAYS: ${{ inputs.hot_retention_days }}
+      TBT_CHECKPOINT_OVERLAP_DAYS: ${{ inputs.checkpoint_overlap_days }}
+      TBT_CHECKPOINT_MAX_GAP_HOURS: "72"
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Preflight private data repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$TBT_DATA_REPOSITORY" || { echo "Missing TBT_DATA_REPOSITORY"; exit 1; }
+          test -n "$TBT_DATA_GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
+          test "$visibility" = "PRIVATE" || { echo "Refusing non-private data repo: $visibility"; exit 1; }
+          python - <<'PY'
+          import os
+          retention = int(os.environ["TBT_HOT_RETENTION_DAYS"])
+          overlap = int(os.environ["TBT_CHECKPOINT_OVERLAP_DAYS"])
+          if not 14 <= retention <= 180:
+              raise SystemExit("hot_retention_days must be 14..180")
+          if not 3 <= overlap < retention:
+              raise SystemExit("checkpoint_overlap_days must be >=3 and < hot_retention_days")
+          print(f"Rolling policy: retention={retention}d overlap={overlap}d")
+          PY
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install training dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install --upgrade pip
+          pip install -r api/requirements-train.txt pytest
+          python -m compileall -q api scripts
+          pytest -q
+
+      - name: Download partitioned GitHub history
+        shell: bash
+        run: bash scripts/download_history_release.sh .cache/tbt
+
+      - name: Validate GitHub history integrity
+        run: python scripts/validate_history_partitions.py --history-dir "$TBT_HISTORY_DIR"
+
+      - name: Train fresh V3 challenger from GitHub history
+        run: |
+          python scripts/train.py \
+            --history-dir "$TBT_HISTORY_DIR" \
+            --output .cache/tbt/model.joblib \
+            --report reports/training-v20.8.json
+
+      - name: Walk-forward backtest from GitHub history
+        run: |
+          python scripts/backtest.py \
+            --history-dir "$TBT_HISTORY_DIR" \
+            --report reports/backtest-v20.8.json
+
+      - name: Validate rebuilt artifact and resolve version
+        id: model
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(python - <<'PY'
+          from tbt.models.artifact import load_model
+          m = load_model('.cache/tbt/model.joblib')
+          if int(getattr(m, 'artifact_version', 0) or 0) < 3:
+              raise SystemExit('Expected V3 model artifact')
+          if not getattr(m, 'feature_state', None):
+              raise SystemExit('Missing feature-state checkpoint')
+          if not getattr(m, 'feature_state_cutoff', None):
+              raise SystemExit('Missing feature-state cutoff')
+          print(m.version)
+          PY
+          )"
+          test -n "$VERSION"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          cp .cache/tbt/model.joblib ".cache/tbt/model-${VERSION}.joblib"
+          ls -lh .cache/tbt/model.joblib ".cache/tbt/model-${VERSION}.joblib"
+
+      - name: Archive rebuilt model before promotion
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TBT_MODEL_ARCHIVE_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TBT_MODEL_ARCHIVE_RELEASE_TAG" \
+              --repo "$TBT_DATA_REPOSITORY" \
+              --title 'TBT model archive v1' \
+              --notes 'Versioned challenger/champion model artifacts.'
+          gh release upload "$TBT_MODEL_ARCHIVE_RELEASE_TAG" \
+            ".cache/tbt/model-${{ steps.model.outputs.version }}.joblib" \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --clobber
+
+      - name: Promote rebuilt model in Supabase registry
+        run: |
+          python scripts/promote_rebuilt_champion.py \
+            --file .cache/tbt/model.joblib \
+            --reason "V20.8 fresh production rebuild from private GitHub history; rolling-hot runtime"
+
+      - name: Verify promoted champion and checkpoint
+        run: python scripts/verify_champion_artifact.py --file .cache/tbt/model.joblib --require-state
+
+      - name: Publish production champion to private GitHub Release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$TBT_MODEL_PRODUCTION_RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "$TBT_MODEL_PRODUCTION_RELEASE_TAG" \
+              --repo "$TBT_DATA_REPOSITORY" \
+              --title 'TBT production champion' \
+              --notes 'Machine-managed production champion for rolling-hot runtime.'
+          gh release upload "$TBT_MODEL_PRODUCTION_RELEASE_TAG" \
+            .cache/tbt/model.joblib \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --clobber
+
+      - name: Verify production release is downloadable
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/verify-production
+          gh release download "$TBT_MODEL_PRODUCTION_RELEASE_TAG" \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --pattern 'model.joblib' \
+            --dir .cache/tbt/verify-production \
+            --clobber
+          cmp .cache/tbt/model.joblib .cache/tbt/verify-production/model.joblib
+          python scripts/verify_champion_artifact.py \
+            --file .cache/tbt/verify-production/model.joblib \
+            --require-state
+
+      - name: Upload rebuild reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: tbt-v20.8-rebuild-${{ steps.model.outputs.version }}
+          path: reports/
+          retention-days: 30
+
+      - name: Completion summary
+        run: |
+          echo "Production champion rebuilt from GitHub history: ${{ steps.model.outputs.version }}"
+          echo "Supabase full-history read: false"
+          echo "Runtime policy: checkpoint + rolling Supabase delta"
+          echo "Next step: run 'Refresh TBT predictions'."
