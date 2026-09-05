@@ -3,7 +3,8 @@ from __future__ import annotations
 import logging
 import math
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Iterable
 
 import httpx
@@ -19,7 +20,6 @@ from ..utils import (
     normalize_surface,
     normalize_rate,
     parse_datetime,
-    safe_float,
     safe_int,
 )
 
@@ -81,6 +81,41 @@ class RapidTennisClient:
                 0.66 - elapsed
             )
 
+    @staticmethod
+    def _retry_after_seconds(value: Any) -> float | None:
+        """Parse Retry-After as seconds or an HTTP-date."""
+        if value is None:
+            return None
+
+        text = str(value).strip()
+        if not text:
+            return None
+
+        try:
+            seconds = float(text)
+        except ValueError:
+            seconds = None
+
+        if seconds is not None:
+            if not math.isfinite(seconds) or seconds < 0:
+                return None
+            return seconds
+
+        try:
+            retry_at = parsedate_to_datetime(text)
+        except (TypeError, ValueError, OverflowError):
+            return None
+
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+
+        delay = (
+            retry_at.astimezone(timezone.utc)
+            - datetime.now(timezone.utc)
+        ).total_seconds()
+
+        return max(delay, 0.0)
+
     def _get(
         self,
         path: str,
@@ -120,7 +155,9 @@ class RapidTennisClient:
                     self.rate_limit_remaining = safe_int(remaining)
 
                 if response.status_code == 429:
-                    delay = safe_float(response.headers.get("Retry-After"))
+                    delay = self._retry_after_seconds(
+                        response.headers.get("Retry-After")
+                    )
                     delay = delay if delay is not None else 2 + attempt * 2
 
                     time.sleep(
