@@ -17,6 +17,7 @@ from ..utils import (
     dig,
     first_present,
     normalize_surface,
+    normalize_rate,
     parse_datetime,
     safe_float,
     safe_int,
@@ -1256,6 +1257,18 @@ class RapidTennisClient:
                 ...,
             ],
         ) -> float | None:
+            def normalized(alias: str, value: Any) -> float | None:
+                alias_text = alias.lower()
+                percent_hint = (
+                    "pct" in alias_text
+                    or "percent" in alias_text
+                    or "percentage" in alias_text
+                )
+                return normalize_rate(
+                    value,
+                    percent_hint=percent_hint,
+                )
+
             side_obj = stat.get(
                 side
             )
@@ -1266,11 +1279,14 @@ class RapidTennisClient:
             ):
                 for alias in aliases:
                     if alias in side_obj:
-                        return safe_float(
+                        value = normalized(
+                            alias,
                             side_obj[
                                 alias
-                            ]
+                            ],
                         )
+                        if value is not None:
+                            return value
 
             for alias in aliases:
                 for key in (
@@ -1278,11 +1294,14 @@ class RapidTennisClient:
                     f"{alias}_{side}",
                 ):
                     if key in stat:
-                        return safe_float(
+                        value = normalized(
+                            alias,
                             stat[
                                 key
-                            ]
+                            ],
                         )
+                        if value is not None:
+                            return value
 
             return None
 
