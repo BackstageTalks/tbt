@@ -24,8 +24,8 @@ def minimize_provider_payload(
     """Return the tiny provider context TBT needs after normalisation.
 
     Deliberately drops the raw provider response.  The compact result is safe for
-    the hot Supabase row and for long-lived GitHub Parquet history.  Environment
-    can be omitted when Supabase stores it in ``match_environment``.
+    long-lived GitHub Parquet history and release artifacts. Tennis data is not
+    stored in Supabase; Supabase is reserved for authentication/account data.
     """
     raw = payload if isinstance(payload, dict) else {}
     out: dict[str, Any] = {}

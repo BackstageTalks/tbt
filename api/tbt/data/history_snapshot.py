@@ -276,7 +276,7 @@ def write_manifest(directory: str | Path, manifest: dict[str, Any]) -> Path:
     manifest["manifest_schema_version"] = MANIFEST_SCHEMA_VERSION
     manifest["partition_schema_version"] = SNAPSHOT_SCHEMA_VERSION
     manifest["generated_at"] = datetime.now(timezone.utc).isoformat()
-    manifest.setdefault("storage_policy", {"supabase_mode": "rolling_hot_buffer", "year_independent": True})
+    manifest.setdefault("storage_policy", {"supabase_mode": "auth_only", "year_independent": True})
     temporary = path.with_suffix(path.suffix + ".tmp")
     temporary.write_text(
         json.dumps(manifest, indent=2, ensure_ascii=False),
