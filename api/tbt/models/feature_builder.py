@@ -147,7 +147,7 @@ class FeatureBuilder:
         """Serialize replay state without pickling defaultdict factories.
 
         The payload is intentionally plain Python/JSON-compatible data so a model
-        artifact can carry the complete pre-2025 Elo/form/H2H state after cold
+        artifact can carry the complete archived Elo/form/H2H state after rolling
         history has been removed from Supabase.
         """
         players: dict[str, dict] = {}
