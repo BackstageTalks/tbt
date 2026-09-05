@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from _bootstrap import ROOT
@@ -39,8 +40,11 @@ def main() -> None:
         ),
     )
 
+    parser.add_argument("--history-snapshot", default=os.getenv("TBT_HISTORY_SNAPSHOT", ""), help="Local V20 Parquet history snapshot")
     args = parser.parse_args()
 
+    if args.history_snapshot:
+        os.environ["TBT_HISTORY_SNAPSHOT"] = args.history_snapshot
     repo = SupabaseRepository()
 
     matches = (
