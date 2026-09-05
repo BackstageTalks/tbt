@@ -55,17 +55,16 @@ def _provider_event_id(match) -> str | None:
 
 
 def _merge(existing, changed, repo: SupabaseRepository):
-    # Replace exact match IDs first, then canonical-dedupe provider-event aliases.
     by_match_id = {str(row.match_id): row for row in existing}
     for row in changed:
         row.provider_payload = minimize_provider_payload(row.provider_payload)
         by_match_id[str(row.match_id)] = row
     combined = list(by_match_id.values())
+
     dedupe = getattr(repo, "_dedupe_completed_matches", None)
     if callable(dedupe):
         return dedupe(combined)
 
-    # Conservative fallback for older repository versions.
     by_provider: dict[str, Any] = {}
     without: list[Any] = []
     for row in sorted(combined, key=lambda item: (item.scheduled_at, str(item.match_id))):
@@ -83,7 +82,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Build/update the normalized TBT GitHub Release history snapshot")
     parser.add_argument("--snapshot", default=str(ROOT / ".cache" / "tbt" / "training_snapshot.parquet"))
     parser.add_argument("--meta", default=str(ROOT / ".cache" / "tbt" / "training_snapshot.meta.json"))
-    parser.add_argument("--full", action="store_true", help="Force one full canonical Supabase read")
+    parser.add_argument("--full", action="store_true", help="Explicitly allow a full canonical Supabase bootstrap")
     parser.add_argument("--overlap-minutes", type=int, default=10)
     args = parser.parse_args()
 
@@ -91,6 +90,7 @@ def main() -> None:
     meta_path = Path(args.meta)
     meta_path.parent.mkdir(parents=True, exist_ok=True)
     repo = SupabaseRepository()
+
     existing = []
     previous_meta: dict[str, Any] = {}
     if snapshot_path.is_file() and not args.full:
@@ -101,8 +101,8 @@ def main() -> None:
             except (ValueError, json.JSONDecodeError):
                 previous_meta = {}
 
-    if not existing or args.full:
-        print("V20 history sync: bootstrap/full mode — one canonical Supabase history read")
+    if args.full:
+        print("V20.1 history sync: EXPLICIT bootstrap/full mode — one canonical Supabase history read")
         matches = repo.get_completed_matches()
         for row in matches:
             row.provider_payload = minimize_provider_payload(row.provider_payload)
@@ -110,11 +110,21 @@ def main() -> None:
         changed_count = len(matches)
         mode = "full"
     else:
+        if not existing:
+            raise SystemExit(
+                "V20.1 safety stop: no existing GitHub snapshot was downloaded. "
+                "Refusing an implicit full Supabase history read. Re-run the workflow manually with full=true "
+                "only for the one-time bootstrap or an intentional disaster recovery rebuild."
+            )
+
         cursor = _parse_dt(previous_meta.get("source_updated_at_max"))
         if cursor is None:
-            cursor = datetime.now(timezone.utc) - timedelta(days=2)
+            raise SystemExit(
+                "V20.1 safety stop: previous snapshot metadata has no valid source_updated_at_max. "
+                "Refusing to guess a cursor and refusing a hidden full read."
+            )
         cursor = cursor - timedelta(minutes=max(0, args.overlap_minutes))
-        print(f"V20 history sync: incremental mode from updated_at > {cursor.isoformat()}")
+        print(f"V20.1 history sync: incremental mode from updated_at > {cursor.isoformat()}")
         raw_rows = repo.select_all(
             "matches",
             filters={"winner_id": "not.is.null", "updated_at": f"gt.{cursor.isoformat()}"},
@@ -136,7 +146,7 @@ def main() -> None:
             "mode": mode,
             "changed_rows_read_from_supabase": changed_count,
             "source_updated_at_max": source_updated_at_max,
-            "source": "Supabase operational DB -> normalized GitHub Release snapshot",
+            "source": "Supabase operational DB -> normalized private GitHub Release snapshot",
         }
     )
     meta_path.write_text(json.dumps(snapshot_meta, indent=2, ensure_ascii=False), encoding="utf-8")
