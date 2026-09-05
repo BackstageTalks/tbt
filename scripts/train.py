@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -40,14 +41,18 @@ def main() -> None:
     # even after 2021-2024 rows are deleted from Supabase.  The checkpoint lives in
     # the model artifact and only post-cutoff hot results are replayed later.
     latest_history = max(match.scheduled_at for match in matches)
-    overlap_days = 60
+    try:
+        overlap_days = int(os.getenv("TBT_HOT_RETENTION_DAYS", "60"))
+    except ValueError:
+        overlap_days = 60
+    overlap_days = min(max(overlap_days, 14), 180)
     cutoff = latest_history - timedelta(days=overlap_days)
     replay = FeatureBuilder()
     replay.replay(matches, before=cutoff)
     generated_at = datetime.now(timezone.utc)
 
     md = dict(result.model.metadata or {})
-    md["history_source"] = "private GitHub Release yearly Parquet partitions"
+    md["history_source"] = "private GitHub Release year partitions + rolling Supabase delta"
     md["feature_state_cutoff"] = cutoff.astimezone(timezone.utc).isoformat()
     md["feature_state_generated_at"] = generated_at.isoformat()
     md["feature_state_artifact_version"] = 3
@@ -65,7 +70,7 @@ def main() -> None:
     )
 
     report = dict(result.report)
-    report["history_source"] = "private GitHub Release yearly Parquet partitions"
+    report["history_source"] = "private GitHub Release year partitions + rolling Supabase delta"
     report["history_rows_loaded"] = len(matches)
     report["feature_state_cutoff"] = cutoff.astimezone(timezone.utc).isoformat()
     report["feature_state_overlap_days"] = overlap_days

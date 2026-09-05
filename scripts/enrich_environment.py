@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from _bootstrap import ROOT  # noqa: F401
@@ -18,7 +19,13 @@ from tbt.services.environment import (
 
 logger = logging.getLogger("tbt.enrich_environment")
 
-HOT_TIER_START = datetime(2025, 1, 1, tzinfo=timezone.utc)
+def _hot_cutoff() -> datetime:
+    try:
+        days = int(os.getenv("TBT_HOT_RETENTION_DAYS", "60"))
+    except ValueError:
+        days = 60
+    days = min(max(days, 14), 180)
+    return datetime.now(timezone.utc) - timedelta(days=days)
 
 
 def parse_utc(value: str) -> datetime:
@@ -94,10 +101,10 @@ def main() -> None:
     end = parse_utc(args.end)
     if end <= start:
         raise SystemExit("--end must be later than --start")
-    if start < HOT_TIER_START:
+    if start < _hot_cutoff():
         raise SystemExit(
-            "V20.4 safety stop: refusing to enrich pre-2025 history in Supabase. "
-            "Use scripts/enrich_environment_snapshot.py / the GitHub snapshot route instead."
+            "V20.7 safety stop: refusing to enrich data outside the rolling hot buffer in Supabase. "
+            "Use the GitHub snapshot route instead."
         )
 
     repo = SupabaseRepository()

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -19,7 +20,13 @@ from tbt.data.history_snapshot import (
 from tbt.services.environment import OpenMeteoClient, environment_payload, location_candidates
 
 logger = logging.getLogger("tbt.enrich_environment_snapshot")
-HOT_TIER_START = datetime(2025, 1, 1, tzinfo=timezone.utc)
+def _hot_cutoff() -> datetime:
+    try:
+        days = int(os.getenv("TBT_HOT_RETENTION_DAYS", "60"))
+    except ValueError:
+        days = 60
+    days = min(max(days, 14), 180)
+    return datetime.now(timezone.utc) - timedelta(days=days)
 
 
 def parse_utc(value: str) -> datetime:
@@ -34,7 +41,7 @@ def parse_utc(value: str) -> datetime:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Enrich pre-2025 GitHub year partitions; Supabase is deliberately not used"
+        description="Enrich archived GitHub history partitions; Supabase is deliberately not used"
     )
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
@@ -54,8 +61,8 @@ def main() -> None:
     end = parse_utc(args.end)
     if end <= start:
         raise SystemExit("--end must be later than --start")
-    if end > HOT_TIER_START:
-        raise SystemExit("V20.5 safety stop: GitHub environment enrichment is pre-2025 only")
+    if end > _hot_cutoff():
+        raise SystemExit("V20.7 safety stop: GitHub environment enrichment must stay outside the rolling hot buffer")
 
     history_dir = Path(args.history_dir)
     ensure_partitions(history_dir, legacy_snapshot=args.legacy_snapshot)

@@ -71,7 +71,7 @@ def _period(range_start: date, range_end: date):
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Fetch pre-2025 tennis history directly from RapidAPI into one private "
+            "Fetch archived tennis history directly from RapidAPI into one private "
             "GitHub Release year partition. Supabase is never used."
         )
     )
