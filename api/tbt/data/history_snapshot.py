@@ -10,6 +10,7 @@ from typing import Any, Iterable
 import pandas as pd
 
 from tbt.schemas import MatchRecord
+from tbt.utils import is_rate_stat_field
 from .provider_context import merge_provider_context, minimize_provider_payload
 
 SNAPSHOT_SCHEMA_VERSION = 2
@@ -27,7 +28,12 @@ def _json_dumps(value: Any) -> str:
     )
 
 
-def _json_loads(value: Any) -> dict[str, Any]:
+def _json_loads(
+    value: Any,
+    *,
+    field: str = "json",
+    strict: bool = False,
+) -> dict[str, Any]:
     if isinstance(value, dict):
         return value
     if value is None:
@@ -39,11 +45,40 @@ def _json_loads(value: Any) -> dict[str, Any]:
         pass
     if value == "":
         return {}
+
     try:
         loaded = json.loads(str(value))
-        return loaded if isinstance(loaded, dict) else {}
-    except (TypeError, ValueError, json.JSONDecodeError):
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
+        if strict:
+            raise ValueError(f"Malformed {field}") from exc
         return {}
+
+    if not isinstance(loaded, dict):
+        if strict:
+            raise ValueError(f"Invalid {field}: expected JSON object")
+        return {}
+    return loaded
+
+
+def _validate_stats(stats: dict[str, Any]) -> dict[str, Any]:
+    """Validate stored canonical statistics without imputing missing values."""
+    import math
+    from numbers import Real
+
+    validated: dict[str, Any] = {}
+    for key, value in stats.items():
+        if value in (None, ""):
+            validated[key] = None
+            continue
+        if isinstance(value, bool) or not isinstance(value, Real):
+            raise ValueError(f"Invalid statistic value for {key}: {value!r}")
+        numeric = float(value)
+        if not math.isfinite(numeric):
+            raise ValueError(f"Non-finite statistic value for {key}: {value!r}")
+        if is_rate_stat_field(key) and not 0.0 <= numeric <= 1.0:
+            raise ValueError(f"Rate statistic out of range for {key}: {value!r}")
+        validated[key] = numeric
+    return validated
 
 
 def _dt(value: Any) -> datetime:
@@ -178,7 +213,13 @@ def load_snapshot(path: str | Path, before: datetime | None = None) -> list[Matc
                 status=_text_or_empty(row.get("status")),
                 best_of=_none_if_na(row.get("best_of")),
                 indoor=_none_if_na(row.get("indoor")),
-                stats=_json_loads(row.get("stats_json")),
+                stats=_validate_stats(
+                    _json_loads(
+                        row.get("stats_json"),
+                        field="stats_json",
+                        strict=True,
+                    )
+                ),
                 provider_payload=_json_loads(row.get("provider_context_json")),
             )
         )
