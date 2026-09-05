@@ -2,6 +2,7 @@
   "use strict";
 
   const SESSION_KEY = "blinq_auth_session_v1";
+  const EMAIL_HINT_KEY = "blinq_auth_email_hint_v1";
   const apiBase = () => String(window.BLINQ_CONFIG?.apiBase || "").replace(/\/$/, "");
   const api = (path) => `${apiBase()}${path}`;
   let config = null;
@@ -58,6 +59,16 @@
 
   function clearSession() {
     localStorage.removeItem(SESSION_KEY);
+  }
+
+  function rememberEmail(value) {
+    const email = String(value || "").trim();
+    if (email) localStorage.setItem(EMAIL_HINT_KEY, email);
+    return email;
+  }
+
+  function rememberedEmail() {
+    return String(localStorage.getItem(EMAIL_HINT_KEY) || "").trim();
   }
 
   async function jsonFetch(url, options = {}) {
@@ -180,6 +191,7 @@
   }
 
   async function signIn(email, password) {
+    rememberEmail(email);
     const data = await jsonFetch(authEndpoint("/token?grant_type=password"), {
       method: "POST",
       headers: authHeaders(),
@@ -195,6 +207,7 @@
   }
 
   async function signUp(telegramAccount, email, password) {
+    rememberEmail(email);
     const redirectTo = redirectBaseUrl();
     const telegramHandle = normalizeTelegramHandle(telegramAccount);
     const data = await jsonFetch(`${authEndpoint("/signup")}?redirect_to=${encodeURIComponent(redirectTo)}`, {
@@ -228,6 +241,7 @@
   }
 
   async function requestPasswordReset(email) {
+    rememberEmail(email);
     const redirectTo = redirectBaseUrl();
     await jsonFetch(`${authEndpoint("/recover")}?redirect_to=${encodeURIComponent(redirectTo)}`, {
       method: "POST",
@@ -317,5 +331,7 @@
     updateProfile,
     authorizationHeader,
     clearSession,
+    rememberEmail,
+    rememberedEmail,
   };
 })();

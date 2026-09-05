@@ -264,13 +264,37 @@ function friendlyAuthError(error, fallback = "Authentication failed.") {
   return message;
 }
 
+function currentAuthEmailHint() {
+  const ids = ["signInEmail", "signUpEmail", "forgotEmail"];
+  for (const id of ids) {
+    const value = String($(id)?.value || "").trim();
+    if (value) {
+      window.BLINQ_AUTH?.rememberEmail?.(value);
+      return value;
+    }
+  }
+  return String(window.BLINQ_AUTH?.rememberedEmail?.() || "").trim();
+}
+
+function syncAuthEmailFields(preferred = "") {
+  const email = String(preferred || currentAuthEmailHint() || "").trim();
+  if (!email) return;
+  window.BLINQ_AUTH?.rememberEmail?.(email);
+  ["signInEmail", "signUpEmail", "forgotEmail"].forEach((id) => {
+    const input = $(id);
+    if (input && !String(input.value || "").trim()) input.value = email;
+  });
+}
+
 function showAuthMode(mode = "signin", message = "", type = "") {
+  syncAuthEmailFields();
   $("authScreen").hidden = false;
   $("appShell").hidden = true;
   if ($("authLoading")) $("authLoading").hidden = true;
   const map = { signin: "authSignIn", signup: "authSignUp", forgot: "authForgot", password: "authNewPassword" };
   Object.values(map).forEach((id) => { if ($(id)) $(id).hidden = true; });
   if ($(map[mode] || map.signin)) $(map[mode] || map.signin).hidden = false;
+  syncAuthEmailFields();
   authMessage(message, type);
   applyLanguageChrome();
 }
@@ -345,14 +369,39 @@ async function initializeIdentity() {
     applyAuthenticatedAccount(result.account || {});
     return true;
   } catch (error) {
+    const callback = auth.getCallbackState?.() || {};
     auth.clearSession?.();
-    showAuthMode("signin", error.message === "account_disabled" ? "This account is disabled." : "Your session expired. Please sign in again.", "error");
+
+    if (callback.type === "signup" && !callback.error) {
+      syncAuthEmailFields(auth.rememberedEmail?.());
+      showAuthMode(
+        "signin",
+        "Email confirmed successfully. Sign in with your email and password to continue.",
+        "success"
+      );
+      return false;
+    }
+
+    showAuthMode(
+      "signin",
+      error.message === "account_disabled"
+        ? "This account is disabled."
+        : "Your session expired. Please sign in again.",
+      "error"
+    );
     return false;
   }
 }
 
 function bindAuthEvents() {
-  document.querySelectorAll("[data-auth-mode]").forEach((button) => button.addEventListener("click", () => showAuthMode(button.dataset.authMode || "signin")));
+  ["signInEmail", "signUpEmail", "forgotEmail"].forEach((id) => {
+    $(id)?.addEventListener("input", (event) => window.BLINQ_AUTH?.rememberEmail?.(event.target.value));
+  });
+  syncAuthEmailFields();
+  document.querySelectorAll("[data-auth-mode]").forEach((button) => button.addEventListener("click", () => {
+    syncAuthEmailFields();
+    showAuthMode(button.dataset.authMode || "signin");
+  }));
   ["telegramSignIn","telegramSignUp"].forEach((id) => $(id)?.addEventListener("click", () => {
     try { window.BLINQ_AUTH.signInWithTelegram(); }
     catch (error) { authMessage(friendlyAuthError(error), "error"); }
@@ -371,6 +420,7 @@ function bindAuthEvents() {
     const submit = event.submitter || event.currentTarget.querySelector('button[type="submit"]');
     const password = $("signUpPassword").value;
     const email = String($("signUpEmail").value || "").trim();
+    window.BLINQ_AUTH?.rememberEmail?.(email);
     if (password !== $("signUpPassword2").value) { authMessage("Passwords do not match.", "error"); return; }
     if (submit) { submit.disabled = true; submit.textContent = "Creating…"; }
     authMessage("Creating account…");
@@ -413,6 +463,7 @@ function bindAuthEvents() {
     event.preventDefault();
     authMessage("Sending reset link…");
     try {
+      window.BLINQ_AUTH?.rememberEmail?.($("forgotEmail").value);
       await window.BLINQ_AUTH.requestPasswordReset($("forgotEmail").value);
       showAuthMode(
         "signin",
