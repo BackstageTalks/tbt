@@ -98,23 +98,33 @@ def reconcile_ledger(ledger, predictions, history, now=None):
             # deployment confirms that they were actually available pre-match.
             continue
 
+        existing_result = row.get("result")
+        corrected_result = None
+        if existing_result is not None:
+            corrected_result = {
+                **existing_result,
+                "winner_id": match.winner_id,
+                "correct": row["winner_id"] == match.winner_id,
+                "scheduled_at": match.scheduled_at.isoformat(),
+            }
+            if (
+                existing_result.get("winner_id") != match.winner_id
+                or existing_result.get("correct")
+                != (row["winner_id"] == match.winner_id)
+            ):
+                corrected_result["corrected_at"] = now.isoformat()
+
         if datetime.fromisoformat(issued_at) >= match.scheduled_at:
             row["excluded_reason"] = "issued_after_actual_start"
-            if row.get("result") is not None:
-                row["result"] = {
-                    **row["result"],
-                    "scheduled_at": match.scheduled_at.isoformat(),
-                }
+            if corrected_result is not None:
+                row["result"] = corrected_result
             continue
 
         if row.get("excluded_reason") == "issued_after_actual_start":
             row.pop("excluded_reason", None)
 
-        if row.get("result") is not None:
-            row["result"] = {
-                **row["result"],
-                "scheduled_at": match.scheduled_at.isoformat(),
-            }
+        if corrected_result is not None:
+            row["result"] = corrected_result
             continue
 
         row["result"] = {
