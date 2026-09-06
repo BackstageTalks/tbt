@@ -14,6 +14,8 @@ def test_release_reservation_precedes_calls_and_parquet_is_saved(monkeypatch, ma
             pass
         def download(self):
             pass
+        def upload_bundle(self, paths):
+            self.upload(paths)
         def upload(self, paths):
             for path in paths:
                 assert path.is_file()
