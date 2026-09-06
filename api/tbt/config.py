@@ -13,6 +13,8 @@ class Settings:
     request_timeout_seconds: int = 30
     supabase_url: str = os.getenv("SUPABASE_URL", "").rstrip("/")
     supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "")
+    supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
+    blinq_admin_emails: str = os.getenv("BLINQ_ADMIN_EMAILS", "")
     model_artifact: str = str(Path(__file__).resolve().parents[1] / "artifacts/model.joblib")
     min_train_matches: int = 2500
 
