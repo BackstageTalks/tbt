@@ -48,7 +48,7 @@ def predict(model, history, upcoming, now=None):
             "player2": {"id": match.player2_id, "name": match.player2_name, "probability": 1 - p},
             "winner_id": winner, "confidence": max(p, 1 - p), "data_depth": f["data_depth"],
             "stats_available": bool(f["stats_known_both"]), "signals": signals,
-            "model_version": model.version, "issued_at": now.isoformat(), "result": None})
+            "model_version": model.version, "issued_at": None, "result": None})
     return rows
 
 
@@ -57,7 +57,10 @@ def reconcile_ledger(ledger, predictions, history, now=None):
     stored = {row["event_id"]: dict(row) for row in ledger}
     for row in predictions:
         # Freeze the first prediction. Never rewrite history after learning result.
-        stored.setdefault(row["event_id"], row)
+        if datetime.fromisoformat(row["scheduled_at"]) <= now:
+            continue
+        if row["event_id"] not in stored:
+            stored[row["event_id"]] = {**row, "issued_at": now.isoformat()}
         existing = stored[row["event_id"]]
         if {existing["player1"]["id"], existing["player2"]["id"]} != {row["player1"]["id"], row["player2"]["id"]}:
             raise ValueError("Prediction identity mismatch")

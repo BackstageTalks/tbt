@@ -440,11 +440,35 @@ def _holdout_fingerprint(frame: pd.DataFrame) -> str:
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _eligible_evaluation(test, production_model=None, promotion_history=()):
+    """Only later whole days unseen by the champion and previous decisions."""
+    cutoffs = []
+    if production_model is not None:
+        metadata = getattr(production_model, "metadata", {}) or {}
+        cutoff = _parse_provenance_datetime(metadata.get("history_end"))
+        if cutoff is None:
+            return test.iloc[:0].copy(), "production_history_cutoff_unknown"
+        cutoffs.append(pd.Timestamp(cutoff).normalize())
+    for decision in promotion_history:
+        period = decision.get("holdout_period") if isinstance(decision, dict) else None
+        cutoff = _parse_provenance_datetime((period or {}).get("end"))
+        if cutoff is None:
+            return test.iloc[:0].copy(), "previous_decision_cutoff_unknown"
+        cutoffs.append(pd.Timestamp(cutoff).normalize())
+    if cutoffs:
+        days = pd.to_datetime(test.scheduled_at, utc=True).dt.normalize()
+        test = test.loc[days > max(cutoffs)].copy()
+    return test, None if len(test) else "no_eligible_unseen_evaluation_rows"
+
+
 def train_from_matches(
     matches: Iterable[
         MatchRecord
     ],
     min_matches: int = 2500,
+    *,
+    production_model=None,
+    promotion_history=(),
 ) -> TrainingResult:
     matches, quality = audit_history(matches)
     matches, rank_provenance = _enforce_rank_provenance(matches)
@@ -500,7 +524,8 @@ def train_from_matches(
         0.15,
     )
 
-    holdout_fingerprint = _holdout_fingerprint(test)
+    test, eligibility_reason = _eligible_evaluation(test, production_model, promotion_history)
+    holdout_fingerprint = _holdout_fingerprint(test) if len(test) else ""
 
     evaluation_model = (
         TennisEnsemble()
@@ -585,7 +610,17 @@ def train_from_matches(
         ),
     }
 
+    production_metrics = (
+        evaluate_probabilities(test["target"], production_model.predict_proba(test))
+        if production_model is not None and len(test) else {}
+    )
+    delta_vs_production = {
+        key: _metric_delta(holdout_metrics, production_metrics, key)
+        for key in ("accuracy", "roc_auc", "log_loss", "brier_score", "ece_10")
+    }
     report = {
+        "production_holdout": production_metrics,
+        "delta_vs_production": delta_vs_production,
         "data_quality": quality,
         "rank_provenance": rank_provenance,
         "evaluation_governance": {
@@ -594,7 +629,10 @@ def train_from_matches(
                 "A holdout fingerprint may support at most one production "
                 "promotion decision. Later tuning must use later unseen/live data."
             ),
-            "promotion_reference": "elo_baseline_on_same_untouched_holdout",
+            "promotion_reference": "production_and_elo_on_same_eligible_unseen_set",
+            "production_version": getattr(production_model, "version", None),
+            "production_present": production_model is not None,
+            "eligibility_reason": eligibility_reason,
         },
         "method": (
             "strict chronological split by "
@@ -679,61 +717,8 @@ def train_from_matches(
         },
     }
 
-    # -------------------------------------------------
-    # Production/challenger fit
-    # -------------------------------------------------
-    #
-    # The holdout above remains untouched and is used only for the
-    # evaluation report.
-    #
-    # Once evaluation is complete, the model intended for inference
-    # can use the entire available history. We retain the newest
-    # portion as calibration data, with all earlier data used for
-    # fitting the base models.
-    #
-    # This does not modify the already-computed holdout metrics.
-    # -------------------------------------------------
-
-    (
-        production_train,
-        production_calibration,
-        production_tail,
-    ) = _split_by_date(
-        frame,
-        0.84,
-        0.15,
-    )
-
-    # _split_by_date deliberately leaves the newest ~1% as a third
-    # partition. For the final inference model there is no further
-    # evaluation performed on this data, so it can safely become part
-    # of the newest calibration period.
-    production_calibration = (
-        pd.concat(
-            [
-                production_calibration,
-                production_tail,
-            ],
-            ignore_index=True,
-        )
-        .sort_values(
-            [
-                "scheduled_at",
-                "match_id",
-            ]
-        )
-        .reset_index(
-            drop=True
-        )
-    )
-
-    production_model = (
-        TennisEnsemble()
-        .fit(
-            production_train,
-            production_calibration,
-        )
-    )
+    production_model = evaluation_model
+    production_train, production_calibration = train, calibration
 
     production_model.metadata = {
         "model_version": (
@@ -764,13 +749,8 @@ def train_from_matches(
                 "start"
             ]
         ),
-        "history_end": (
-            report[
-                "data"
-            ][
-                "end"
-            ]
-        ),
+        "history_end": _period(calibration)["end"],
+        "evaluation_end": _period(test)["end"],
         "holdout_fingerprint": holdout_fingerprint,
         "rank_provenance": rank_provenance,
         "holdout_metrics": (

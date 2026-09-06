@@ -9,6 +9,8 @@ from ..models.ensemble import TennisEnsemble
 from ..models.feature_builder import FeatureBuilder
 from ..models.metrics import evaluate_probabilities
 from ..schemas import MatchRecord
+from .data_quality import audit_history
+from .training import _enforce_rank_provenance
 
 
 def _calendar_safe_split(
@@ -181,6 +183,8 @@ def walk_forward_backtest(
     min_training_rows: int = 1200,
     first_test_year: int | None = None,
 ) -> dict:
+    matches, quality = audit_history(matches)
+    matches, rank_provenance = _enforce_rank_provenance(matches)
     frame = (
         FeatureBuilder()
         .build_training_frame(
@@ -494,6 +498,8 @@ def walk_forward_backtest(
     )
 
     return {
+        "data_quality": quality,
+        "rank_provenance": rank_provenance,
         "method": (
             "calendar-year walk-forward; "
             "every test year is strictly later "
