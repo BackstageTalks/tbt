@@ -812,3 +812,62 @@ def test_refresh_loader_rejects_feed_ledger_pick_mismatch(tmp_path):
 
     with pytest.raises(RuntimeError, match="feed/ledger mismatch"):
         pipeline._load_prediction_ledger(Store())
+
+
+def test_history_integrity_repair_rebuilds_legacy_checksum_coverage(monkeypatch, tmp_path):
+    import repair_history_bundle_integrity as integrity_repair
+
+    store, assets = fake_release(monkeypatch, tmp_path)
+    history_manifest = {
+        "years": {
+            "2024": {"asset": "history-2024.parquet"},
+            "2025": {"asset": "history-2025.parquet"},
+        }
+    }
+    assets["history_manifest.json"] = json.dumps(history_manifest).encode()
+    assets["history-2024.parquet"] = b"2024-data"
+    assets["history-2025.parquet"] = b"2025-data"
+    assets["download_progress.json"] = b'{"schema":1}'
+    # Legacy committed manifest intentionally lacks 2025 coverage.
+    assets[store.BUNDLE_MANIFEST] = json.dumps({
+        "schema": 1,
+        "files": {
+            "history_manifest.json": {
+                "sha256": hashlib.sha256(assets["history_manifest.json"]).hexdigest()
+            },
+            "history-2024.parquet": {
+                "sha256": hashlib.sha256(assets["history-2024.parquet"]).hexdigest()
+            },
+        },
+    }).encode()
+
+    before = {name: value for name, value in assets.items() if name != store.BUNDLE_MANIFEST}
+    repaired = integrity_repair.repair_bundle_manifest(store)
+
+    assert set(repaired["files"]) == set(before)
+    assert {name: value for name, value in assets.items() if name != store.BUNDLE_MANIFEST} == before
+    for name, payload in before.items():
+        assert repaired["files"][name]["sha256"] == hashlib.sha256(payload).hexdigest()
+    # A normal fail-closed reader now accepts the repaired release metadata.
+    store.download()
+
+
+def test_history_integrity_repair_refuses_manifest_remote_partition_mismatch(monkeypatch, tmp_path):
+    import repair_history_bundle_integrity as integrity_repair
+
+    store, assets = fake_release(monkeypatch, tmp_path)
+    assets["history_manifest.json"] = json.dumps({
+        "years": {"2024": {"asset": "history-2024.parquet"}}
+    }).encode()
+    assets["history-2024.parquet"] = b"2024-data"
+    assets["history-2025.parquet"] = b"undeclared"
+
+    with pytest.raises(RuntimeError, match="not declared"):
+        integrity_repair.repair_bundle_manifest(store)
+
+
+def test_data_workflow_exposes_explicit_history_integrity_repair_only():
+    root = Path(__file__).resolve().parents[1]
+    data = (root / ".github/workflows/data.yml").read_text()
+    assert "history-integrity-repair" in data
+    assert "repair_history_bundle_integrity.py" in data
