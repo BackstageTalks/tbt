@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [history, statistics, history-audit, history-repair, train, backtest, refresh]
+        options: [history, statistics, history-audit, history-integrity-repair, history-repair, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -71,6 +71,8 @@ jobs:
             python scripts/download_tennis_history.py "${args[@]}"
           elif [[ "$MODE" == history-audit ]]; then
             python scripts/audit_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
+          elif [[ "$MODE" == history-integrity-repair ]]; then
+            python scripts/repair_history_bundle_integrity.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == history-repair ]]; then
             python scripts/repair_history_self_match.py --data-repository "$TBT_DATA_REPOSITORY"
           else
