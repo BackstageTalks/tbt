@@ -8,11 +8,11 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from _bootstrap import ROOT
-from download_tennis_history import read_json, write_json, merge_match
+from download_tennis_history import read_json, write_json
 from history_download_budget import LocalRequestBudget, reserve_allocation
 from release_store import ReleaseStore
 from tbt.config import settings
-from tbt.data.history_snapshot import load_partitions, write_year_partition
+from tbt.data.history_snapshot import load_partitions, write_year_partition, merge_matches
 from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.engine import predict, reconcile_ledger, serving_feed
@@ -79,12 +79,30 @@ def _promotion_metric_gate(report):
     if not probabilistic_improvement:
         reasons.append("no_probabilistic_improvement_vs_elo")
 
+    governance = report.get("evaluation_governance") or {}
+    if governance.get("eligibility_reason"):
+        reasons.append(governance["eligibility_reason"])
+    if governance.get("production_present"):
+        champion_delta = report.get("delta_vs_production") or {}
+        if int((report.get("production_holdout") or {}).get("n") or 0) != int(holdout["n"]):
+            reasons.append("production_evaluation_set_mismatch")
+        for key in required:
+            value = champion_delta.get(key)
+            if value is None or not math.isfinite(float(value)):
+                reasons.append("missing_production_" + key)
+            elif (float(value) < 0 if key == "accuracy" else float(value) > 0):
+                reasons.append(key + "_worse_than_production")
+        if not any(champion_delta.get(key) is not None and float(champion_delta[key]) < 0
+                   for key in ("log_loss", "brier_score", "ece_10")):
+            reasons.append("no_probabilistic_improvement_vs_production")
     return not reasons, reasons
 
 
 def _promotion_history(path):
     value = read_json(path, [])
-    return value if isinstance(value, list) else []
+    if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
+        raise ValueError("Invalid promotion history; refusing to forget previous decisions")
+    return value
 
 
 def _holdout_already_used(history, fingerprint):
@@ -93,6 +111,44 @@ def _holdout_already_used(history, fingerprint):
         and row.get("holdout_fingerprint") == fingerprint
         for row in history
     )
+
+
+def _refresh_history(provider, matches, history_dir, history_store, start, end):
+    day = start
+    while day <= end:
+        for tour in ("atp", "wta"):
+            incoming = [m for m in provider.matches_for_day(tour, day, historical=True) if m.is_completed]
+            matches = merge_matches(matches, incoming)
+            written = []
+            for year in sorted({m.scheduled_at.year for m in incoming}):
+                write_year_partition(matches, history_dir, year)
+                written.append(history_dir / f"history-{year}.parquet")
+            if written:
+                history_store.upload_bundle(written + [history_dir / "history_manifest.json"])
+        day += timedelta(days=1)
+    return matches
+
+
+def _publish_predictions(store, ledger, predictions, matches, model, report, upcoming):
+    # Finish metrics/formatting before the publication boundary. The store reads
+    # its remote manifest before invoking commit, so network preparation cannot
+    # backdate issuance or bypass the final start-time check.
+    prepared = reconcile_ledger(ledger, predictions, matches)
+    feed = clean(serving_feed(prepared, model, matches, report, upcoming))
+    visible = {row["event_id"] for row in feed["upcoming"]}
+
+    def commit():
+        now = datetime.now(timezone.utc)
+        records = reconcile_ledger(ledger, predictions, matches, now)
+        feed["generated_at"] = now.isoformat()
+        feed["upcoming"] = [row for row in records if row["event_id"] in visible
+                            and datetime.fromisoformat(row["scheduled_at"]) > now]
+        write_json(store.directory / "ledger.json", records)
+        write_json(store.directory / "feed.json", feed)
+
+    store.upload_bundle([store.directory / "ledger.json", store.directory / "feed.json"],
+                        before_upload=commit)
+    return feed
 
 
 def main():
@@ -120,102 +176,70 @@ def main():
         print(json.dumps(report.get("overall", report.get("metrics", {})), indent=2))
         return
     if args.mode == "train":
-        result = train_from_matches(matches)
-        report = clean(result.report)
-
-        candidate = ReleaseStore(
-            args.data_repository,
-            "tbt-model-candidate-v1",
-            model_dir,
+        candidate = ReleaseStore(args.data_repository, "tbt-model-candidate-v1", model_dir)
+        candidate_assets = candidate._asset_names()
+        candidate.download(
+            extra_names=("promotion_history.json",),
+            required_names=("promotion_history.json",) if "promotion_history.json" in candidate_assets else (),
         )
-        candidate.download(extra_names=("promotion_history.json",))
         promotion_history_path = model_dir / "promotion_history.json"
-        promotion_history = _promotion_history(promotion_history_path)
-
-        save_model(result.model, str(model_dir / "model.joblib"))
-        write_json(model_dir / "training_report.json", report)
-        candidate.upload_bundle(
-            [
-                model_dir / "model.joblib",
-                model_dir / "training_report.json",
-            ]
-        )
-
+        promotion_history = (_promotion_history(promotion_history_path)
+                             if "promotion_history.json" in candidate_assets else [])
+        production_dir = cache / "production"
+        production = ReleaseStore(args.data_repository, "tbt-model-production-v1", production_dir)
+        production_assets = production._asset_names()
+        champion = None
+        if production_assets:
+            production.download(
+                extra_names=("model.joblib", "training_report.json", "promotion_history.json"),
+                required_names=("model.joblib", "training_report.json") +
+                    (("promotion_history.json",) if "promotion_history.json" in production_assets else ()),
+            )
+            champion = load_model(str(production_dir / "model.joblib"))
+            for decision in (_promotion_history(production_dir / "promotion_history.json")
+                             if "promotion_history.json" in production_assets else []):
+                if decision not in promotion_history:
+                    promotion_history.append(decision)
+        result = train_from_matches(matches, production_model=champion,
+                                    promotion_history=promotion_history)
+        report = clean(result.report)
         governance = report.get("evaluation_governance") or {}
         fingerprint = str(governance.get("holdout_fingerprint") or "")
-        metric_gate, gate_reasons = _promotion_metric_gate(report)
-        holdout_reused = (
-            not fingerprint
-            or _holdout_already_used(
-                promotion_history,
-                fingerprint,
-            )
-        )
-        if not fingerprint:
-            gate_reasons.append("missing_holdout_fingerprint")
-        elif holdout_reused:
-            gate_reasons.append("holdout_already_used_for_promotion_decision")
-
-        eligible = metric_gate and not holdout_reused
-
-        print(
-            json.dumps(
-                {
-                    "candidate": result.model.version,
-                    "promotion_gate": eligible,
-                    "promotion_gate_reasons": gate_reasons,
-                    "holdout_reused": holdout_reused,
-                    "holdout_fingerprint": fingerprint or None,
-                    "promotion_reference": governance.get(
-                        "promotion_reference"
-                    ),
-                    "holdout": report["holdout"],
-                    "delta_vs_elo": report["delta_vs_elo"],
-                },
-                indent=2,
-            )
-        )
-
+        eligible, gate_reasons = _promotion_metric_gate(report)
+        if not fingerprint or _holdout_already_used(promotion_history, fingerprint):
+            eligible = False
+            gate_reasons.append("missing_or_reused_holdout_fingerprint")
+        decision = {
+            "holdout_fingerprint": fingerprint,
+            "candidate_version": result.model.version,
+            "production_version": getattr(champion, "version", None),
+            "decided_at": datetime.now(timezone.utc).isoformat(),
+            "reference": governance.get("promotion_reference"),
+            "holdout_period": (report.get("periods") or {}).get("holdout"),
+            "holdout_metrics": report.get("holdout"),
+            "production_metrics": report.get("production_holdout"),
+            "delta_vs_elo": report.get("delta_vs_elo"),
+            "delta_vs_production": report.get("delta_vs_production"),
+            "eligible": eligible,
+            "promotion_requested": args.promote,
+            "decision": "approved" if eligible and args.promote else "rejected" if not eligible else "not_requested",
+            "reasons": gate_reasons,
+        }
+        # Persist every holdout-based decision before returning or rejecting,
+        # including a gate computed without --promote.
+        if fingerprint:
+            promotion_history.append(decision)
+        save_model(result.model, str(model_dir / "model.joblib"))
+        write_json(model_dir / "training_report.json", report)
+        write_json(promotion_history_path, promotion_history)
+        candidate.upload_bundle([model_dir / "model.joblib", model_dir / "training_report.json",
+                                 promotion_history_path])
+        print(json.dumps(decision, indent=2))
         if args.promote:
             if not eligible:
-                raise SystemExit(
-                    "Candidate saved. Promotion refused by governance gate; "
-                    "current champion unchanged."
-                )
-
-            decision = {
-                "holdout_fingerprint": fingerprint,
-                "candidate_version": result.model.version,
-                "decided_at": datetime.now(timezone.utc).isoformat(),
-                "reference": governance.get(
-                    "promotion_reference",
-                    "elo_baseline_on_same_untouched_holdout",
-                ),
-                "holdout_period": (
-                    (report.get("periods") or {}).get("holdout")
-                ),
-                "holdout_metrics": report.get("holdout"),
-                "delta_vs_elo": report.get("delta_vs_elo"),
-            }
-            promotion_history.append(decision)
-            write_json(
-                promotion_history_path,
-                promotion_history,
-            )
-
-            production = ReleaseStore(
-                args.data_repository,
-                "tbt-model-production-v1",
-                model_dir,
-            )
-            production.upload_bundle(
-                [
-                    model_dir / "model.joblib",
-                    model_dir / "training_report.json",
-                    promotion_history_path,
-                ]
-            )
-            candidate.upload_bundle([promotion_history_path])
+                raise SystemExit("Candidate saved. Promotion refused by governance gate; current champion unchanged.")
+            production.upload_bundle([model_dir / "model.joblib", model_dir / "training_report.json",
+                                      promotion_history_path])
         return
     if not settings.rapidapi_key:
         parser.error("RAPIDAPI_KEY is required")
@@ -250,27 +274,13 @@ def main():
     provider = RapidTennisClient(request_budget=budget)
     provider.request_limit = allowance
     now = datetime.now(timezone.utc)
-    by_id = {m.match_id: m for m in matches}
     refresh_error = None
     upcoming = []
     try:
+        matches = _refresh_history(provider, matches, history_dir, history_store,
+                                   now.date() - timedelta(days=7), now.date())
         for tour in ("atp", "wta"):
-            for match in provider.historical_period(
-                tour,
-                now.date() - timedelta(days=7),
-                now.date(),
-            ):
-                by_id[match.match_id] = merge_match(
-                    by_id.get(match.match_id),
-                    match,
-                )
-            upcoming.extend(
-                provider.upcoming(
-                    tour,
-                    now.date(),
-                    now.date() + timedelta(days=3),
-                )
-            )
+            upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
     except Exception as exc:
         refresh_error = exc
     finally:
@@ -279,40 +289,13 @@ def main():
         finally:
             budget.close()
 
-    matches = list(by_id.values())
-    changed_years = {
-        (now - timedelta(days=d)).year
-        for d in range(8)
-    }
-    written_history = []
-    for year in changed_years:
-        if any(m.scheduled_at.year == year for m in matches):
-            write_year_partition(
-                matches,
-                history_dir,
-                year,
-            )
-            written_history.append(
-                history_dir / f"history-{year}.parquet"
-            )
-
-    history_bundle = written_history + [
-        history_dir / "history_manifest.json"
-    ]
-    history_store.upload_bundle(history_bundle)
-
     if refresh_error is not None:
         # Partial completed history is checkpointed, but no new prediction
         # feed is published from an incomplete refresh.
         raise refresh_error
-    predictions = predict(model, matches, upcoming, now)
-    records = reconcile_ledger(read_json(prediction_dir / "ledger.json", []), predictions, matches, now)
-    write_json(prediction_dir / "ledger.json", records)
-    feed = clean(serving_feed(records, model, matches, report, upcoming, now))
-    write_json(prediction_dir / "feed.json", feed)
-    prediction_store.upload_bundle(
-        [prediction_dir / "ledger.json", prediction_dir / "feed.json"]
-    )
+    predictions = predict(model, matches, upcoming)
+    feed = _publish_predictions(prediction_store, read_json(prediction_dir / "ledger.json", []),
+                                predictions, matches, model, report, upcoming)
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     write_json(target, feed)

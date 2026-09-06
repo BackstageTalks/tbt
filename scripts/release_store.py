@@ -2,6 +2,7 @@ import hashlib
 import json
 import re
 import subprocess
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -124,7 +125,7 @@ class ReleaseStore:
                 self.directory,
                 "--clobber",
             )
-        elif require_bundle_manifest:
+        elif require_bundle_manifest or required:
             raise FileNotFoundError(
                 f"Required release bundle manifest is missing: {self.BUNDLE_MANIFEST}"
             )
@@ -133,7 +134,8 @@ class ReleaseStore:
             name
             for name in assets
             if (
-                name in extra_names
+                name in required
+                or name in extra_names
                 or name in {
                     "history_manifest.json",
                     "download_progress.json",
@@ -157,7 +159,15 @@ class ReleaseStore:
                 "--clobber",
             )
 
-        manifest = self._read_local_bundle_manifest()
+        manifest = self._read_local_bundle_manifest() if self.BUNDLE_MANIFEST in assets else {}
+        manifest_files = manifest.get("files", {})
+        uncovered = [name for name in required if not (
+            isinstance(manifest_files, dict)
+            and isinstance(manifest_files.get(name), dict)
+            and re.fullmatch(r"[0-9a-f]{64}", str(manifest_files[name].get("sha256", "")))
+        )]
+        if uncovered:
+            raise RuntimeError("Required assets lack checksum coverage: " + ", ".join(sorted(uncovered)))
         files = manifest.get("files") if isinstance(manifest, dict) else None
         if isinstance(files, dict):
             for name, meta in files.items():
@@ -193,13 +203,34 @@ class ReleaseStore:
                 "--clobber",
             )
 
-    def upload_bundle(self, paths):
+    def _remote_bundle_files(self):
+        assets = self._asset_names()
+        if self.BUNDLE_MANIFEST not in assets:
+            return {}
+        # Read this release's committed manifest, never another tag's local cache.
+        with tempfile.TemporaryDirectory(dir=self.directory) as temporary:
+            gh("release", "download", self.tag, "--repo", self.repository,
+               "--pattern", self.BUNDLE_MANIFEST, "--dir", temporary, "--clobber")
+            value = json.loads((Path(temporary) / self.BUNDLE_MANIFEST).read_text(encoding="utf-8"))
+        files = value.get("files")
+        if not isinstance(files, dict):
+            raise ValueError("Invalid committed bundle manifest")
+        return {name: meta for name, meta in files.items() if name in assets}
+
+    def upload_bundle(self, paths, *, before_upload=None):
         """Upload related assets, then commit their checksums last.
 
         Readers that see a partial overwrite will fail checksum verification
         instead of silently consuming a mixed generation.
         """
-        files = [Path(p) for p in paths if Path(p).is_file()]
+        files = [Path(p) for p in paths]
+        previous = self._remote_bundle_files()
+        if before_upload is not None:
+            before_upload()
+        if any(not path.is_file() for path in files):
+            raise FileNotFoundError("Bundle asset is missing")
+        if len({path.name for path in files}) != len(files):
+            raise ValueError("Duplicate bundle asset names")
         if not files:
             return
 
@@ -207,11 +238,11 @@ class ReleaseStore:
             "schema": 1,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "files": {
-                path.name: {
+                **previous,
+                **{path.name: {
                     "sha256": self._sha256(path),
                     "bytes": int(path.stat().st_size),
-                }
-                for path in files
+                } for path in files},
             },
         }
 
@@ -225,5 +256,4 @@ class ReleaseStore:
         )
         temporary.replace(manifest_path)
         self.upload([manifest_path])
-
 

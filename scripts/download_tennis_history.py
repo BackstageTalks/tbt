@@ -13,7 +13,7 @@ from pathlib import Path
 from _bootstrap import ROOT
 from history_download_budget import LocalRequestBudget, reserve_allocation
 from tbt.config import settings
-from tbt.data.history_snapshot import load_partitions, write_year_partition
+from tbt.data.history_snapshot import load_partitions, write_year_partition, _merge_record
 from tbt.data.provider_context import merge_provider_context
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
@@ -37,13 +37,8 @@ def write_json(path, value):
 def merge_match(existing, incoming):
     if existing is None:
         return incoming
-    if existing.player1_id == incoming.player2_id and existing.player2_id == incoming.player1_id:
-        existing = existing.swapped()
-    if (existing.player1_id, existing.player2_id) != (incoming.player1_id, incoming.player2_id):
-        raise ValueError("Conflicting players for a canonical match ID")
-    incoming.stats = {**existing.stats, **{k: v for k, v in incoming.stats.items() if v is not None}}
-    incoming.provider_payload = merge_provider_context(existing.provider_payload, incoming.provider_payload)
-    return incoming
+    merged = _merge_record(existing, incoming)
+    return merged if merged.player1_id == incoming.player1_id else merged.swapped()
 
 
 def download_days(provider, matches, progress, start, end, checkpoint):
