@@ -54,7 +54,7 @@
   }
   async function feed() {
     const s = await restore();
-    return json('/api/v1/feed',{headers:s ? {Authorization:`Bearer ${s.access_token}`} : {}});
+    return json('/api/v1/feed',{headers:s ? {'X-Blinq-Access-Token':s.access_token} : {}});
   }
   window.BlinqAuth={init,restore,signIn,signUp,reset,update,signOut,feed,clear};
 })();
