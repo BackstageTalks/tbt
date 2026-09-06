@@ -380,3 +380,124 @@ def test_history_rejects_missing_match_identity(match_factory):
     broken = replace(match_factory('x', 'A', 'B', 'A'), match_id='')
     with pytest.raises(ValueError, match='match identity'):
         training.audit_history([broken])
+
+
+
+def test_provider_daily_dedupe_preserves_conflicting_provider_events(monkeypatch, match_factory):
+    client = RapidTennisClient.__new__(RapidTennisClient)
+    client.calendar_categories = lambda day: [{"id": 3, "name": "ATP"}]
+    client._category_id = lambda category: 3
+    client._category_tour = lambda category: "atp"
+    client.category_events = lambda category_id, day: [
+        {"id": 101, "homeTeam": {"id": "A", "name": "A"}, "awayTeam": {"id": "B", "name": "B"}},
+        {"id": 202, "homeTeam": {"id": "A", "name": "A"}, "awayTeam": {"id": "B", "name": "B"}},
+    ]
+    client._is_singles_event = lambda raw: True
+    client._event_tour = lambda raw, category_id, category_name: "atp"
+    base = match_factory("collision", "A", "B", "A")
+
+    def normalize(raw, tour, historical):
+        provider_id = str(raw["_tbt_provider_event_id"])
+        return replace(
+            base,
+            tournament="One" if provider_id == "101" else "Two",
+            scheduled_at=base.scheduled_at + (timedelta(hours=0) if provider_id == "101" else timedelta(hours=3)),
+            provider_payload={"_tbt_provider_event_id": provider_id},
+        )
+
+    client.normalize_match = normalize
+    rows = client.matches_for_day("atp", base.scheduled_at.date(), historical=True)
+    assert len(rows) == 2
+    assert {row.provider_payload["_tbt_provider_event_id"] for row in rows} == {"101", "202"}
+
+
+def test_release_download_fails_when_history_manifest_partition_is_missing(monkeypatch, tmp_path):
+    store, assets = fake_release(monkeypatch, tmp_path)
+    history_manifest = {
+        "years": {
+            "2024": {"asset": "history-2024.parquet"},
+            "2025": {"asset": "history-2025.parquet"},
+        }
+    }
+    assets["history_manifest.json"] = json.dumps(history_manifest).encode()
+    assets["history-2024.parquet"] = b"present"
+    bundle_manifest = {
+        "files": {
+            "history_manifest.json": {"sha256": hashlib.sha256(assets["history_manifest.json"]).hexdigest()},
+            "history-2024.parquet": {"sha256": hashlib.sha256(assets["history-2024.parquet"]).hexdigest()},
+        }
+    }
+    assets[store.BUNDLE_MANIFEST] = json.dumps(bundle_manifest).encode()
+    with pytest.raises(FileNotFoundError, match="history-2025.parquet"):
+        store.download()
+
+
+def test_load_partitions_fails_closed_when_manifest_requires_missing_year(tmp_path):
+    (tmp_path / "history_manifest.json").write_text(json.dumps({
+        "years": {"2024": {"asset": "history-2024.parquet"}, "2025": {"asset": "history-2025.parquet"}}
+    }))
+    with pytest.raises(FileNotFoundError, match="history-2024.parquet"):
+        load_partitions(tmp_path)
+
+
+def test_live_prediction_rejects_duplicate_provider_event_history(match_factory):
+    start = datetime(2025, 1, 3, 12, tzinfo=timezone.utc)
+    historical = replace(
+        match_factory("a", "A", "B", "A", day=1),
+        provider_payload={"id": 77},
+    )
+    duplicate = replace(historical, match_id="b")
+    future = replace(match_factory("future", "A", "B", None, day=4), scheduled_at=start + timedelta(hours=1))
+    model = SimpleNamespace(version="test", predict_proba=lambda frame: np.full(len(frame), .7))
+    with pytest.raises(ValueError, match="Duplicate"):
+        predict(model, [historical, duplicate], [future], start)
+
+
+def test_empty_first_history_download_publishes_progress_without_missing_bundle(monkeypatch, tmp_path):
+    uploaded = []
+
+    class Store:
+        def __init__(self, *args):
+            pass
+        def download(self):
+            pass
+        def upload_bundle(self, paths):
+            paths = list(paths)
+            assert all(path.is_file() for path in paths)
+            uploaded.append([path.name for path in paths])
+
+    class Provider:
+        def __init__(self, request_budget):
+            assert request_budget is None
+            self.request_count = 0
+            self.request_limit = None
+            self.client = SimpleNamespace(close=lambda: None)
+        def matches_for_day(self, tour, day, historical):
+            self.request_count += 1
+            return []
+
+    import download_tennis_history as downloader
+    monkeypatch.setattr(downloader, "ReleaseStore", Store)
+    monkeypatch.setattr(downloader, "RapidTennisClient", Provider)
+    monkeypatch.setattr(downloader, "settings", replace(downloader.settings, rapidapi_key="test"))
+    monkeypatch.setattr("sys.argv", ["download", "--start", "2025-01-01", "--end", "2025-01-01",
+        "--history-dir", str(tmp_path), "--max-requests", "10", "--publish", "--data-repository", "test/private"])
+    downloader.main()
+    assert uploaded
+    assert all("history-2025.parquet" not in batch for batch in uploaded)
+    assert all("history_manifest.json" not in batch for batch in uploaded)
+    assert "download_progress.json" in uploaded[-1]
+
+
+def test_workflows_confirm_publication_and_share_deploy_lock():
+    root = Path(__file__).resolve().parents[1]
+    data = (root / ".github/workflows/data.yml").read_text()
+    ci = (root / ".github/workflows/ci.yml").read_text()
+    assert "download_environment.py" not in data
+    assert "backfill_venue_context.py" not in data
+    assert data.count("group: tbt-history-data-writer") >= 1
+    assert ci.count("group: tbt-history-data-writer") >= 1
+    assert "confirm_prediction_publication.py" in data
+    assert "confirm_prediction_publication.py" in ci
+    assert "--deployed-feed api/data/feed.json" in data
+    assert "--deployed-feed api/data/feed.json" in ci
