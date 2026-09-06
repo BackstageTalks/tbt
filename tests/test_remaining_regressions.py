@@ -639,3 +639,46 @@ def test_workflows_confirm_publication_and_share_deploy_lock():
     assert "python -m compileall -q api scripts" in ci
     setup_block = ci.split("- name: Set up Python", 1)[1].split("- name: Compile API and scripts", 1)[0]
     assert "github.event_name != 'workflow_dispatch'" not in setup_block
+
+
+
+def test_refresh_prediction_release_bootstraps_only_when_truly_empty(tmp_path):
+    class Store:
+        def __init__(self, assets):
+            self.assets = set(assets)
+            self.directory = tmp_path
+            self.download_calls = []
+        def _asset_names(self):
+            return set(self.assets)
+        def download(self, extra_names=(), required_names=()):
+            self.download_calls.append((set(extra_names), set(required_names)))
+            (self.directory / "feed.json").write_text("{}")
+            (self.directory / "ledger.json").write_text('[{"event_id":"old"}]')
+
+    empty = Store(set())
+    assert pipeline._load_prediction_ledger(empty) == []
+    assert empty.download_calls == []
+
+    half = Store({"feed.json"})
+    with pytest.raises(FileNotFoundError, match="ledger.json"):
+        pipeline._load_prediction_ledger(half)
+    assert half.download_calls == []
+
+    complete = Store({"feed.json", "ledger.json", "_tbt_bundle_manifest.json"})
+    assert pipeline._load_prediction_ledger(complete) == [{"event_id": "old"}]
+    assert complete.download_calls == [
+        ({"feed.json", "ledger.json"}, {"feed.json", "ledger.json"})
+    ]
+
+
+def test_refresh_prediction_release_rejects_invalid_downloaded_ledger(tmp_path):
+    class Store:
+        directory = tmp_path
+        def _asset_names(self):
+            return {"feed.json", "ledger.json", "_tbt_bundle_manifest.json"}
+        def download(self, **kwargs):
+            (tmp_path / "feed.json").write_text("{}")
+            (tmp_path / "ledger.json").write_text("{}")
+
+    with pytest.raises(ValueError, match="Invalid prediction ledger"):
+        pipeline._load_prediction_ledger(Store())

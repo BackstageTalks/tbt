@@ -58,3 +58,39 @@ def test_public_data_repository_is_rejected(monkeypatch, tmp_path):
     with pytest.raises(ValueError, match="PRIVATE"):
         downloader.ReleaseStore("test/public", "tbt-data-v1", tmp_path)
 
+
+
+def test_primary_provider_error_survives_final_checkpoint_failure(monkeypatch, tmp_path):
+    class Store:
+        def __init__(self, *args):
+            pass
+        def download(self):
+            pass
+        def upload_bundle(self, paths):
+            raise RuntimeError("checkpoint-upload-failed")
+
+    class Provider:
+        def __init__(self, request_budget):
+            self.request_count = 1
+            self.request_limit = None
+            self.client = SimpleNamespace(close=lambda: None)
+
+    def fail_download(*args, **kwargs):
+        raise RuntimeError("provider-primary-error")
+
+    monkeypatch.setattr(downloader, "ReleaseStore", Store)
+    monkeypatch.setattr(downloader, "RapidTennisClient", Provider)
+    monkeypatch.setattr(downloader, "download_days", fail_download)
+    monkeypatch.setattr(downloader, "settings", replace(downloader.settings, rapidapi_key="test"))
+    monkeypatch.setattr("sys.argv", [
+        "download", "--start", "2025-01-01", "--end", "2025-01-01",
+        "--history-dir", str(tmp_path), "--max-requests", "100",
+        "--publish", "--data-repository", "test/private",
+    ])
+
+    with pytest.raises(RuntimeError, match="provider-primary-error") as caught:
+        downloader.main()
+    assert isinstance(caught.value.__cause__, RuntimeError)
+    assert "checkpoint-upload-failed" in str(caught.value.__cause__)
+    report = json.loads((tmp_path / "download_report.json").read_text())
+    assert report["checkpoint_failed"] == 1
