@@ -73,19 +73,22 @@
   function renderNavigationGroup(items, containerId) {
     const host=$(containerId); host.innerHTML='';
     [...(items||[])].filter(x=>x.enabled!==false).sort((a,b)=>Number(a.order||0)-Number(b.order||0)).forEach(item=>{
-      const a=document.createElement('a'); a.href=item.href||`#${item.id}`; a.dataset.route=item.id||'';
+      const href=item.href||`#${item.id}`;
+      const direct=href.startsWith('/')||/^https?:\/\//i.test(href);
+      const a=document.createElement('a'); a.href=href;
+      if(!direct&&item.id) a.dataset.route=item.id;
       if(item.element_id) a.dataset.uiElement=item.element_id;
       a.className=`nav-link${state.route===item.id?' active':''}`;
-      a.innerHTML=`<span class="nav-icon">${escapeHtml(item.icon||'•')}</span><span>${escapeHtml(item.label||item.id)}</span>`;
+      a.innerHTML=`<span class="nav-icon">${escapeHtml(item.icon||'•')}</span><span>${escapeHtml(item.label||item.id)}${item.beta?' <em class="nav-beta">BETA</em>':''}</span>`;
       host.appendChild(a);
     });
   }
 
   function renderNavigation(){
     const main=elementList('navigation').map(item=>({
-      id:item.content?.route||'', href:`#${item.content?.route||''}`, icon:item.content?.icon||'•',
+      id:item.content?.route||'', href:item.content?.href||`#${item.content?.route||''}`, icon:item.content?.icon||'•', beta:Boolean(item.content?.beta),
       label:item.content?.label||item.label||item.id, order:item.order, enabled:true, element_id:item.id,
-    })).filter(item=>item.id);
+    })).filter(item=>item.id||item.href);
     if(isAdminAccount()) main.push({id:'admin',href:'#admin',icon:'⚙',label:'Admin',order:90,enabled:true});
     renderNavigationGroup(main,'mainNavigation');
     const footer=$('footerLearnNavigation');
@@ -171,15 +174,20 @@
     '1+1+2':[[0,1],[1,1],[2,2]],
     '4':[[0,4]],
   };
+  const contentRowZones=['content_top','content_mid','content_bottom'];
+  function rowConfig(zone){ return state.ui?.content_rows?.[zone]||{}; }
+  function rowEnabled(zone){ return rowConfig(zone).enabled!==false; }
   function rowPreset(zone){
-    const preset=String(state.ui?.content_rows?.[zone]?.preset||'1+1+1+1');
+    const preset=String(rowConfig(zone).preset||'1+1+1+1');
     return rowPresetMap[preset]?preset:'1+1+1+1';
   }
   function rowItems(zone){
+    if(!rowEnabled(zone))return [];
     const all=elementList('large_banner',zone);
     const slots=[0,1,2,3].map(index=>all.find(item=>Number(item.order||0)%10===index+1)||all[index]).filter(Boolean);
     return rowPresetMap[rowPreset(zone)].map(([start,span])=>({item:slots[start],span,start})).filter(entry=>entry.item);
   }
+
   function bannerAttrs(item,content){
     const slot=String(item.id||'');
     const campaign=String(content?.campaign_id||slot);
@@ -189,8 +197,15 @@
   function bannerImageHtml(content,span=1){
     const variants=content?.images&&typeof content.images==='object'?content.images:{};
     const raw=variants[String(span)]||variants[span]||content?.image_url||'';
+    const mobileRaw=content?.mobile_image_url||'';
     const src=safeLink(raw,'');
-    return src&&!src.startsWith('#')?`<img class="promo-image" src="${escapeHtml(src)}" alt="" loading="lazy">`:'<div class="promo-art" aria-hidden="true"></div>';
+    const mobile=safeLink(mobileRaw,'');
+    const fit=['cover','contain'].includes(String(content?.image_fit||'cover'))?String(content.image_fit||'cover'):'cover';
+    const position=['center','left','right','top','bottom'].includes(String(content?.image_position||'center'))?String(content.image_position||'center'):'center';
+    if(!src||src.startsWith('#'))return '<div class="promo-art" aria-hidden="true"></div>';
+    const image=`<img class="promo-image fit-${escapeHtml(fit)} pos-${escapeHtml(position)}" src="${escapeHtml(src)}" alt="" loading="lazy">`;
+    if(mobile&&!mobile.startsWith('#'))return `<picture class="promo-picture"><source media="(max-width: 700px)" srcset="${escapeHtml(mobile)}">${image}</picture>`;
+    return image;
   }
   function headerSlotHtml(item,index=0){
     const c=resolvedBannerContent(item,index),route=c.route||'',href=safeLink(c.link,route?`#${route}`:'#predictions'),external=isExternalLink(href);
@@ -215,9 +230,14 @@
     return `<a class="promo-banner promo-card theme-${theme} span-${span}${fullCreative?' creative-full':''}${showCopy?'':' no-copy'}" href="${escapeHtml(href)}" ${target} ${attrs}>${sponsored}${bannerImageHtml(c,span)}${showCopy?`<div class="promo-copy"><span class="promo-eyebrow">${escapeHtml(c.eyebrow||'BLINQ')}</span><strong>${escapeHtml(c.headline||'')}</strong><p>${escapeHtml(c.text||'')}</p><span class="promo-cta">${escapeHtml(c.button_text||'Open')}</span></div>`:''}${watermarkHtml(item)}</a>`;
   }
   function renderBanners(){
-    const top=$('bannerTop'),bottom=$('bannerBottom');
-    if(top){const rows=rowItems('content_top');top.dataset.layout=rowPreset('content_top');top.hidden=!rows.length;top.innerHTML=rows.map((entry,index)=>bannerHtml(entry.item,false,index,entry.span)).join('');installBannerTracking(top);}
-    if(bottom){const rows=rowItems('content_bottom');bottom.dataset.layout=rowPreset('content_bottom');bottom.hidden=!rows.length;bottom.innerHTML=rows.map((entry,index)=>bannerHtml(entry.item,false,index+4,entry.span)).join('');installBannerTracking(bottom);}
+    const hosts={content_top:$('bannerTop'),content_mid:$('bannerMid'),content_bottom:$('bannerBottom')};
+    let offset=0;
+    contentRowZones.forEach(zone=>{
+      const host=hosts[zone]; if(!host)return;
+      const rows=rowItems(zone); host.dataset.layout=rowPreset(zone); host.dataset.rowEnabled=rowEnabled(zone)?'true':'false'; host.hidden=!rowEnabled(zone)||!rows.length;
+      host.innerHTML=rows.map((entry,index)=>bannerHtml(entry.item,false,index+offset,entry.span)).join('');
+      if(!host.hidden)installBannerTracking(host); offset+=4;
+    });
   }
   function renderSidebarPromos(){
     const host=$('sidebarPromoZone'); if(!host)return;
@@ -281,7 +301,7 @@
       node.setAttribute('aria-disabled',mode==='active'?'false':'true');
     });
   }
-  function renderAllUiContent(){ if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); renderHeaderSlots(); renderBanners(); renderSidebarPromos(); applyAccessStates(); }
+  function renderAllUiContent(){ if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); renderHeaderSlots(); renderBanners(); renderSidebarPromos(); renderMarketSections(); applyAccessStates(); }
 
   function auth(mode='login'){
     state.authMode=mode; $('authMessage').textContent='';
@@ -328,43 +348,66 @@
     const host=$('dashboardSnapshot'); if(!host) return;
     const rows=(state.feed.upcoming||[]).map(normalize);
     const top=rows.length?Math.max(...rows.map(x=>Number(x.probability)||0)):null;
-    const elite=rows.filter(x=>x.probability>=.80).length;
-    const high=rows.filter(x=>x.probability>=.70).length;
+    const primeThreshold=Number(state.ui?.market_rules?.prime?.min_win_probability)||.70;
+    const prime=rows.filter(x=>x.probability>=primeThreshold).length;
+    const daily=marketRows('top_daily').length;
     const tournaments=new Set(rows.map(x=>x.tournament).filter(Boolean)).size;
     const history=state.feed?.history?.matches;
     const cards=[
       ['UPCOMING',String(rows.length),'current board'],
       ['TOP PROBABILITY',top!=null?pct(top):'—','highest current pick'],
-      ['≥ 80%',String(elite),'elite confidence'],
-      ['HIGH CONFIDENCE',String(high),'70%+ candidates'],
+      ['PRIME PICKS',String(prime),`${Math.round(primeThreshold*100)}%+ Match Winner`],
+      ['TOP 10 DAILY',daily?String(Math.min(10,daily)):'—','daily betting shortlist'],
       ['TOURNAMENTS',String(tournaments),'active in feed'],
       ['HISTORY DEPTH',compactCount(history),'serving metadata']
     ];
     host.innerHTML=cards.map(([label,value,note])=>`<div class="snapshot-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note)}</span></div>`).join('');
   }
   function rankedPredictions(){
-    return (state.feed.upcoming||[]).map(normalize).sort((a,b)=>b.probability-a.probability || new Date(a.date)-new Date(b.date)).map((m,index)=>({...m,accessIndex:index}));
+    const threshold=Number(state.ui?.market_rules?.prime?.min_win_probability)||.70;
+    return (state.feed.upcoming||[]).map(normalize).filter(m=>m.probability>=threshold).sort((a,b)=>b.probability-a.probability || new Date(a.date)-new Date(b.date)).map((m,index)=>({...m,accessIndex:index}));
   }
-  function filtered(){ const rows=rankedPredictions(),tour=$('tourFilter').value,tournament=$('tournamentFilter').value,surface=$('surfaceFilter').value,confidence=$('confidenceFilter').value,q=$('searchInput').value.trim().toLowerCase(); return rows.filter(m=>{ if(tour&&m.tour!==tour)return false;if(tournament&&m.tournament!==tournament)return false;if(surface&&m.surface!==surface)return false;if(confidence&&m.confidence!==confidence)return false;if(q&&!`${m.p1} ${m.p2} ${m.tournament}`.toLowerCase().includes(q))return false;return true; }); }
+  function filtered(){ const rows=rankedPredictions(),tour=$('tourFilter')?.value||'',tournament=$('tournamentFilter')?.value||'',surface=$('surfaceFilter')?.value||'',confidence=$('confidenceFilter')?.value||'',q=($('searchInput')?.value||'').trim().toLowerCase(); return rows.filter(m=>{ if(tour&&m.tour!==tour)return false;if(tournament&&m.tournament!==tournament)return false;if(surface&&m.surface!==surface)return false;if(confidence&&m.confidence!==confidence)return false;if(q&&!`${m.p1} ${m.p2} ${m.tournament}`.toLowerCase().includes(q))return false;return true; }); }
+
+  function marketRows(key){
+    const candidates={top_daily:['top_daily_picks','top_daily','daily_picks'],value:['value_picks','value'],ace:['ace_picks','aces','ace_markets'],sg:['sg_picks','sets_games','set_game_picks']}[key]||[];
+    for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return value;}
+    const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return markets[key];
+    return [];
+  }
+  function marketProbability(row){const raw=row?.probability??row?.win_probability??row?.model_probability??row?.confidence_probability;const value=Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;}
+  function marketPreviewCard(row,key){
+    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);const pick=row?.pick||row?.selection||row?.prediction||'—';const odds=Number(row?.odds),edge=Number(row?.edge);
+    const meta=[Number.isFinite(odds)?`Odds ${odds.toFixed(2)}`:'',Number.isFinite(edge)?`Edge ${edge>0?'+':''}${(edge*(Math.abs(edge)<=1?100:1)).toFixed(1)}%`:''].filter(Boolean).join(' · ');const badge=probability==null?'MODEL':confidenceBand(probability).replace('-',' ').toUpperCase();
+    return `<article class="prediction-card featured market-card"><div class="card-meta"><span class="tour">${escapeHtml(String(row?.tour||'').toUpperCase())} ${escapeHtml(row?.tournament||row?.competition||'')}</span><span class="time">${escapeHtml(fmtTime(row?.scheduled_at||row?.date))}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row"><div class="player"><span class="player-avatar">${escapeHtml(initials(p1.name||row?.player1_name||'P1'))}</span><strong class="player-name">${escapeHtml(p1.name||row?.player1_name||'Player 1')}</strong><small class="player-rank">${p1.rank?`#${escapeHtml(p1.rank)}`:''}</small></div><div class="vs">VS</div><div class="player"><span class="player-avatar">${escapeHtml(initials(p2.name||row?.player2_name||'P2'))}</span><strong class="player-name">${escapeHtml(p2.name||row?.player2_name||'Player 2')}</strong><small class="player-rank">${p2.rank?`#${escapeHtml(p2.rank)}`:''}</small></div></div><div class="pick-row"><div><small>${escapeHtml(key==='value'?'Value Pick':key==='ace'?'Ace / DF Pick':key==='sg'?'Set / Game Pick':'BlinQ Pick')}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="probability">${probability==null?'—':pct(probability)}</div><span class="confidence ${probability==null?'low':confidenceBand(probability)}">${escapeHtml(badge)}</span></div><div class="market-card-meta">${escapeHtml(meta||row?.market||row?.market_type||'')}</div></article>`;
+  }
+  function renderMarketSection(key,hostId,emptyText){const host=$(hostId);if(!host)return;let rows=marketRows(key);const limit=Number(state.ui?.market_rules?.[key]?.limit)||10;if(key==='top_daily')rows=rows.slice(0,10);else if(['ace','sg'].includes(key))rows=rows.slice(0,Math.min(10,limit));host.innerHTML=rows.length?rows.slice(0,4).map(row=>marketPreviewCard(row,key)).join(''):`<div class="state-card market-empty">${escapeHtml(emptyText)}</div>`;}
+  function renderMarketSections(){renderMarketSection('top_daily','topDailyGrid','Top 10 Daily selector output is not published yet.');renderMarketSection('value','valueGrid','Value selector output is not published yet.');renderMarketSection('ace','aceGrid','Aces / Double Faults model output is not published yet.');renderMarketSection('sg','sgGrid','Sets / Games model output is not published yet.');}
 
   function signalMeta(signal,m){ const id=String(signal?.player_id ?? signal?.favours_player_id ?? ''); const favours=id===String(m.pickId); const label=signal?.label||signal?.factor||'Model signal'; return {label,favours}; }
   function renderSignal(signal,m){ const s=signalMeta(signal,m); return `<div class="signal-row"><span>${escapeHtml(s.label)}</span><div class="signal-meter"><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i></i><i></i></div></div>`; }
   function renderCard(m, slotIndex=0){ const template=$('predictionTemplate').content.cloneNode(true),card=template.querySelector('.prediction-card'); card.dataset.id=m.id; card.dataset.uiElement=slotIndex<8?`TOP_PICK_${slotIndex+1}`:'TOP_PICK_MORE'; card.classList.add('featured'); card.querySelector('.tour').textContent=`${m.tour} ${m.tournament}${m.round?` · ${m.round}`:''}`; card.querySelector('.time').textContent=fmtTime(m.date); card.querySelector('.surface').textContent=String(m.surface).replaceAll('_',' ').toUpperCase(); const players=[['.player-a',m.p1,m.p1Prob],['.player-b',m.p2,m.p2Prob]]; players.forEach(([sel,name,prob])=>{const box=card.querySelector(sel);box.querySelector('.player-avatar').textContent=initials(name);box.querySelector('.player-name').textContent=name;box.querySelector('.player-rank').textContent=pct(prob)}); card.querySelector('.pick-name').textContent=m.pick; card.querySelector('.probability').textContent=pct(m.probability); const conf=card.querySelector('.confidence'); conf.textContent=m.confidence==='very-high'?'VERY HIGH':m.confidence.toUpperCase(); conf.classList.add(m.confidence); const signals=card.querySelector('.signals'); signals.innerHTML=m.signals.length?m.signals.slice(0,4).map(s=>renderSignal(s,m)).join(''):'<div class="signal-empty">No strong secondary signal is available.</div>'; card.querySelector('.analysis-link').onclick=()=>openMatch(m); return template; }
 
-  function renderDots(pageCount){ const host=$('carouselDots'); host.innerHTML=''; if(state.showAll||pageCount<=1)return; for(let i=0;i<pageCount;i++){const b=document.createElement('button');b.type='button';b.className=i===state.page?'active':'';b.setAttribute('aria-label',`Show picks page ${i+1}`);b.onclick=()=>{state.page=i;renderPredictions()};host.appendChild(b)} }
-  function renderPredictions(){ const rows=filtered(),grid=$('predictionGrid'),size=pageSize(); $('matchCount').textContent=rows.length; const pageCount=Math.max(1,Math.ceil(rows.length/size)); state.page=Math.min(state.page,pageCount-1); const start=state.showAll?0:state.page*size; let visible=state.showAll?rows:rows.slice(start,start+size); grid.classList.toggle('show-all',state.showAll); grid.innerHTML=''; if(!visible.length){grid.innerHTML='<div class="state-card">No upcoming published predictions match the current filters.</div>';} else visible.forEach((m,index)=>grid.appendChild(renderCard(m,Number.isInteger(m.accessIndex)?m.accessIndex:start+index))); $('prevPick').hidden=state.showAll||pageCount<=1; $('nextPick').hidden=state.showAll||pageCount<=1; $('prevPick').disabled=state.page<=0; $('nextPick').disabled=state.page>=pageCount-1; $('viewAllButton').textContent=state.showAll?'Featured picks ←':'View all matches →'; renderDots(pageCount); applyAccessStates(grid); }
+  function renderDots(pageCount){ const host=$('carouselDots'); if(!host)return; host.innerHTML=''; if(pageCount<=1)return; for(let i=0;i<pageCount;i++){const b=document.createElement('button');b.type='button';b.className=i===state.page?'active':'';b.setAttribute('aria-label',`Show Prime Picks page ${i+1}`);b.onclick=()=>{state.page=i;renderPredictions()};host.appendChild(b)} }
+  function renderPredictions(){ const rows=filtered(),grid=$('predictionGrid'),size=pageSize(); if(!grid)return; $('matchCount').textContent=rows.length; const pageCount=Math.max(1,Math.ceil(rows.length/size)); state.page=Math.min(state.page,pageCount-1); const start=state.page*size; const visible=rows.slice(start,start+size); grid.classList.remove('show-all'); grid.innerHTML=''; if(!visible.length){const threshold=Math.round((Number(state.ui?.market_rules?.prime?.min_win_probability)||.70)*100);grid.innerHTML=`<div class="state-card">No Prime Picks above ${threshold}% match the current filters.</div>`;} else visible.forEach((m,index)=>grid.appendChild(renderCard(m,Number.isInteger(m.accessIndex)?m.accessIndex:start+index))); $('prevPick').hidden=pageCount<=1; $('nextPick').hidden=pageCount<=1; $('prevPick').disabled=state.page<=0; $('nextPick').disabled=state.page>=pageCount-1; renderDots(pageCount); applyAccessStates(grid); }
 
   function openMatch(m){ const signalRows=m.signals.length?m.signals.map(s=>{const meta=signalMeta(s,m);const favoursId=String(s?.player_id??s?.favours_player_id??'');const favours=favoursId===String(m.p1Id)?m.p1:favoursId===String(m.p2Id)?m.p2:'—';return `<div class="dialog-signal"><span>${escapeHtml(meta.label)}</span><strong>${escapeHtml(favours)}</strong><small>${meta.favours?'supports pick':'counter-signal'}</small></div>`}).join(''):'<p class="signal-empty">No secondary signals are available.</p>'; $('dialogContent').innerHTML=`<div class="dialog-eyebrow">${escapeHtml(m.tour)} · ${escapeHtml(m.tournament)}</div><h2>${escapeHtml(m.p1)} <span>vs</span> ${escapeHtml(m.p2)}</h2><div class="dialog-pick"><div><small>BlinQ Pick</small><strong>${escapeHtml(m.pick)}</strong></div><div class="dialog-prob">${pct(m.probability)} <span class="confidence ${m.confidence}">${m.confidence==='very-high'?'VERY HIGH':m.confidence.toUpperCase()}</span></div></div><div class="dialog-section"><h3>Model signals</h3>${signalRows}</div><div class="dialog-meta"><span>${escapeHtml(String(m.surface).replaceAll('_',' '))}</span><span>${fmtDate(m.date)} · ${fmtTime(m.date)}</span><span>Model ${escapeHtml(m.model||'—')}</span></div>`; $('matchDialog').showModal(); }
 
   const routeMeta={
-    predictions:['TENNIS INTELLIGENCE','Dashboard','Recommended Prime Picks and current tennis intelligence from the published production feed.'],
+    predictions:['TENNIS INTELLIGENCE','Dashboard','Prime Picks, daily selections, market picks and current BlinQ intelligence.'],
+    prime:['MATCH WINNER','Prime Picks','All Match Winner predictions above the configured win-probability threshold.'],
+    top_daily:['DAILY SHORTLIST','Top 10 Daily Picks','The ten best betting selections of the BlinQ betting day across supported tennis markets.'],
+    value:['VALUE ENGINE','Value Picks','Largest model-versus-bookmaker edges that satisfy the configured odds guardrails.'],
+    ace:['ACES + DOUBLE FAULTS','Ace Picks','Top Aces and Double Faults market selections.'],
+    sg:['SETS + GAMES','S/G Picks','Top Sets and Games market selections.'],
+    results:['SETTLED PICKS','Results','Settled selections, hit rate, ROI, units and related performance statistics.'],
     tournaments:['TOURNAMENT VIEW','Tournaments','Current tournament coverage derived from published upcoming matches.'],
     players:['PLAYER VIEW','Players','Current players appearing in the published prediction feed.'],
     stats:['PERFORMANCE','Stats & Insights','Observed model performance from settled published predictions.'],
     model:['MODEL TRANSPARENCY','Model Performance','Current production model metadata and evaluation report.'],
     backtests:['VALIDATION','Backtests','Out-of-time evaluation information published with the production model.'],
     account:['BLINQ MEMBERS','Account','Manage your profile and access.'],
-    admin:['BLINQ CONTROL','Admin Control Center','Configure fixed page slots, plan presentation and manually assign account access.'],
+    admin:['BLINQ CONTROL','Admin Control Center','Configure fixed page slots, banner rows, access, campaigns and account access.'],
     how_blinq_works:['LEARN','How BlinQ Works','How the BlinQ workflow turns point-in-time tennis data into probabilities.'],
     methodology:['LEARN','Methodology','The principles used to keep predictions point-in-time and auditable.'],
     model_data:['LEARN','Model & Data','What the published feed exposes about data and model state.'],
@@ -372,7 +415,7 @@
     responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.']
   };
 
-  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; if(route==='admin') state.previewPlan=null; state.route=route; state.page=0; const meta=routeMeta[route]; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; $('predictionsView').hidden=route!=='predictions'; $('routePanel').hidden=route==='predictions'; renderNavigation(); if(route==='predictions'){renderPredictions();applyAccessStates();} else renderRoute(route); if(push) history.replaceState(null,'',`#${route}`); }
+  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; if(route==='admin') state.previewPlan=null; state.route=route; state.page=0; const meta=routeMeta[route]; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; $('predictionsView').hidden=route!=='predictions'; $('routePanel').hidden=route==='predictions'; renderNavigation(); if(route==='predictions'){renderPredictions();renderMarketSections();applyAccessStates();} else renderRoute(route); if(push) history.replaceState(null,'',`#${route}`); }
 
   function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
   function renderResults(){ const rows=state.feed.results||[]; const html=rows.slice(0,100).map(r=>{const p1=r.player1||{},p2=r.player2||{},winner=r.result?.winner_id,correct=r.result?.correct;return `<div class="result-row"><small>${fmtDate(r.scheduled_at)} · ${escapeHtml(r.tour||'')}</small><strong>${escapeHtml(p1.name||'Player 1')} vs ${escapeHtml(p2.name||'Player 2')}</strong><span>Winner: ${escapeHtml(winner===p1.id?p1.name:winner===p2.id?p2.name:'—')}</span><b class="${correct?'correct':'wrong'}">${correct===true?'✓ Correct':correct===false?'× Miss':'—'}</b></div>`}).join(''); return html||'<div class="state-card">No settled published predictions are available yet.</div>'; }
@@ -405,32 +448,25 @@
     const mode=elementAccess(id,state.adminPlan); const selected=state.selectedElement===id?' selected':'';
     return `<button type="button" class="admin-mini-block ${compact?'compact ':''}${extraClass}state-${mode}${selected}" data-admin-element="${escapeHtml(id)}"><small>${escapeHtml(customSmall||id)}</small><strong>${escapeHtml(item.label||id)}</strong><span>${mode.toUpperCase()}</span></button>`;
   }
+  function rowPrefix(zone){ return zone==='content_top'?'CONTENT_TOP_':zone==='content_mid'?'CONTENT_MID_':'CONTENT_BOTTOM_'; }
   function adminRowHtml(zone){
-    const prefix=zone==='content_top'?'CONTENT_TOP_':'CONTENT_BOTTOM_';
-    return rowItems(zone).map(entry=>{
-      const covered=entry.span>1?` · spans ${Array.from({length:entry.span},(_,i)=>`${prefix}${entry.start+i+1}`).join(' + ')}`:'';
-      return adminMiniBlock(entry.item.id,false,`grid-span-${entry.span} `,`${entry.item.id}${covered}`);
-    }).join('');
+    const prefix=rowPrefix(zone);
+    return rowItems(zone).map(entry=>{const covered=entry.span>1?` · spans ${Array.from({length:entry.span},(_,i)=>`${prefix}${entry.start+i+1}`).join(' + ')}`:'';return adminMiniBlock(entry.item.id,false,`grid-span-${entry.span} `,`${entry.item.id}${covered} · ${creativeSpecText(entry.item,entry.span)}`);}).join('');
   }
+  function rowCreativeSummary(zone){if(!rowEnabled(zone))return 'ROW OFF';return rowItems(zone).map(entry=>`${entry.span} col: ${creativeSpecText(entry.item,entry.span)}`).join(' · ');}
+
   function renderAdminCanvas(){
-    const nav=elementList('navigation').map(x=>adminMiniBlock(x.id,true)).join('');
-    const promos=elementList('sidebar_promo','sidebar').map(x=>adminMiniBlock(x.id,true)).join('');
-    const top=adminRowHtml('content_top');
-    const bottom=adminRowHtml('content_bottom');
-    const picks=[...Array(8)].map((_,i)=>adminMiniBlock(`TOP_PICK_${i+1}`,true)).join('')+adminMiniBlock('TOP_PICK_MORE',true);
-    const features=elementList('feature','features').map(x=>adminMiniBlock(x.id,true)).join('');
-    return `<div class="admin-canvas">
-      <div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>FIXED</small></div><div class="admin-header-slots">${adminMiniBlock('HEADER_BANNER_1')}${adminMiniBlock('HEADER_BANNER_2')}${adminMiniBlock('HEADER_BANNER_3')}</div></div>
-      <div class="admin-canvas-body"><aside class="admin-canvas-sidebar"><b>SIDEBAR</b>${nav}<div class="admin-canvas-divider"></div>${promos}${features?`<div class="admin-canvas-divider"></div><b>FEATURE FLAGS</b>${features}`:''}</aside>
-      <main class="admin-canvas-main"><div class="admin-functional-row">${adminMiniBlock('PREDICTION_TOOLBAR')}${adminMiniBlock('DASHBOARD_SNAPSHOT')}</div><div class="admin-row-caption"><span>TOP CONTENT ROW</span><b>${escapeHtml(rowPreset('content_top'))}</b></div><div class="admin-slot-row four preset-${escapeHtml(rowPreset('content_top').replaceAll('+','-'))}">${top}</div><div class="admin-prime-map"><div>${adminMiniBlock('PRIME_PICKS_PANEL')}</div><div class="admin-pick-strip">${picks}</div></div><div class="admin-row-caption"><span>BOTTOM CONTENT ROW</span><b>${escapeHtml(rowPreset('content_bottom'))}</b></div><div class="admin-slot-row four preset-${escapeHtml(rowPreset('content_bottom').replaceAll('+','-'))}">${bottom}</div>${adminMiniBlock('FOOTER_SYSTEM')}</main></div>
-    </div>`;
+    const nav=elementList('navigation').map(x=>adminMiniBlock(x.id,true)).join('');const promos=elementList('sidebar_promo','sidebar').map(x=>adminMiniBlock(x.id,true)).join('');const picks=[...Array(8)].map((_,i)=>adminMiniBlock(`TOP_PICK_${i+1}`,true)).join('')+adminMiniBlock('TOP_PICK_MORE',true);const features=elementList('feature','features').map(x=>adminMiniBlock(x.id,true)).join('');
+    const rowBlock=(zone,title)=>`<div class="admin-row-caption"><span>${escapeHtml(title)}</span><b>${escapeHtml(rowPreset(zone))} · ${escapeHtml(rowCreativeSummary(zone))}</b></div><div class="admin-slot-row four preset-${escapeHtml(rowPreset(zone).replaceAll('+','-'))}${rowEnabled(zone)?'':' row-off'}">${adminRowHtml(zone)||'<div class="admin-row-off-label">ROW OFF</div>'}</div>`;
+    return `<div class="admin-canvas"><div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>FIXED</small></div><div class="admin-header-slots">${adminMiniBlock('HEADER_BANNER_1')}${adminMiniBlock('HEADER_BANNER_2')}${adminMiniBlock('HEADER_BANNER_3')}</div></div><div class="admin-canvas-body"><aside class="admin-canvas-sidebar"><b>SIDEBAR</b>${nav}<div class="admin-canvas-divider"></div><b>3 PROMO SLOTS</b>${promos}${features?`<div class="admin-canvas-divider"></div><b>FEATURE FLAGS</b>${features}`:''}</aside><main class="admin-canvas-main"><div class="admin-functional-row">${adminMiniBlock('DASHBOARD_SNAPSHOT')}${adminMiniBlock('PREDICTION_TOOLBAR')}</div>${rowBlock('content_top','AD ROW · ABOVE PRIME PICKS')}<div class="admin-prime-map"><div>${adminMiniBlock('PRIME_PICKS_PANEL')}${adminMiniBlock('TOP_DAILY_PANEL')}</div><div class="admin-pick-strip">${picks}</div></div>${rowBlock('content_mid','AD ROW · TOP 10 DAILY → VALUE')}<div class="admin-functional-row">${adminMiniBlock('VALUE_PICKS_PANEL')}${adminMiniBlock('ACE_PICKS_PANEL')}</div>${rowBlock('content_bottom','AD ROW · ACE → S/G')}<div class="admin-functional-row">${adminMiniBlock('SG_PICKS_PANEL')}${adminMiniBlock('BTTS_BONUS_PANEL')}</div>${adminMiniBlock('FOOTER_SYSTEM')}</main></div></div>`;
   }
+
   function campaignOptions(selected=''){
     const rows=Object.entries(state.ui?.campaigns||{}).sort((a,b)=>String(a[1]?.name||a[0]).localeCompare(String(b[1]?.name||b[0])));
     return `<option value="">Inline / no campaign</option>`+rows.map(([id,c])=>`<option value="${escapeHtml(id)}"${id===selected?' selected':''}>${escapeHtml(c.name||id)}</option>`).join('');
   }
   function spanForElement(id){
-    for(const zone of ['content_top','content_bottom']){
+    for(const zone of contentRowZones){
       const entry=rowItems(zone).find(row=>row.item?.id===id);
       if(entry)return entry.span;
     }
@@ -448,7 +484,7 @@
   }
   function creativeSpecText(item,spanOverride=null){
     const spec=creativeSpecForItem(item,spanOverride);
-    const parts=[spec.aspect_ratio?`ratio ${spec.aspect_ratio}`:'',spec.recommended?`recommended ${spec.recommended}`:''].filter(Boolean);
+    const parts=[spec.aspect_ratio?`ratio ${spec.aspect_ratio}`:'',spec.recommended?`recommended ${spec.recommended}`:'',spec.minimum?`min ${spec.minimum}`:'',spec.safe_area?`safe ${spec.safe_area}`:''].filter(Boolean);
     return parts.join(' · ')||'fixed BlinQ creative format';
   }
   function contentEditor(item){
@@ -468,7 +504,10 @@
       <label>CTA text<input data-admin-content="button_text" value="${escapeHtml(c.button_text||'')}"></label>
       <label>Link<input data-admin-content="link" value="${escapeHtml(c.link||'')}"></label>
       <label>Route<input data-admin-content="route" value="${escapeHtml(c.route||'')}"></label>
-      <label class="span-2">Image path / URL<input data-admin-content="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/banner-fallback/... or https://..."></label>
+      <label class="span-2">Desktop image path / URL<input data-admin-content="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/... or https://..."></label>
+      <label class="span-2">Mobile image (optional)<input data-admin-content="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="Optional mobile-specific creative"></label>
+      <label>Image fit<select data-admin-content="image_fit"><option value="cover"${(c.image_fit||'cover')==='cover'?' selected':''}>Cover · fill slot</option><option value="contain"${c.image_fit==='contain'?' selected':''}>Contain · show whole image</option></select></label>
+      <label>Image position<select data-admin-content="image_position">${['center','left','right','top','bottom'].map(v=>`<option value="${v}"${v===(c.image_position||'center')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label>
       <label>Active from<input data-admin-content="active_from" type="datetime-local" value="${escapeHtml(c.active_from||'')}"></label>
       <label>Active until<input data-admin-content="active_until" type="datetime-local" value="${escapeHtml(c.active_until||'')}"></label>
       <label>When ads are hidden<select data-admin-content="ad_hidden_fallback">${['auto','rss','image','internal'].map(v=>`<option value="${v}"${v===(c.ad_hidden_fallback||'auto')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label>
@@ -490,12 +529,11 @@
     </aside>`;
   }
   function renderAdminLayout(){
-    const planOptions=accessContexts.map(id=>`<option value="${id}"${state.adminPlan===id?' selected':''}>${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</option>`).join('');
-    const copyOptions=accessContexts.filter(id=>id!==state.adminPlan).map(id=>`<option value="${id}">${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</option>`).join('');
-    const presets=state.ui?.admin?.row_presets||Object.keys(rowPresetMap);
-    const presetOptions=zone=>presets.map(id=>`<option value="${escapeHtml(id)}"${rowPreset(zone)===id?' selected':''}>${escapeHtml(id)}</option>`).join('');
-    return `<div class="admin-toolbar"><label>Editing access for<select id="adminPlanSelect">${planOptions}</select></label><label>Copy all access from<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Copy → ${escapeHtml(accessLabel(state.adminPlan))}</button><label>Top row layout<select id="adminTopRowPreset">${presetOptions('content_top')}</select></label><label>Bottom row layout<select id="adminBottomRowPreset">${presetOptions('content_bottom')}</select></label><span class="admin-toolbar-spacer"></span><button class="btn btn-ghost" type="button" data-admin-action="preview">Preview as ${escapeHtml(accessLabel(state.adminPlan))}</button><button class="btn btn-ghost" type="button" data-admin-action="clear-preview">Exit preview</button><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Save browser draft</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publish changes</button><button class="btn btn-ghost" type="button" data-admin-action="export">Export JSON</button><button class="btn btn-ghost" type="button" data-admin-action="reset">Reset</button></div><div class="admin-editor-grid"><div>${renderAdminCanvas()}</div>${renderAdminInspector()}</div>`;
+    const planOptions=accessContexts.map(id=>`<option value="${id}"${state.adminPlan===id?' selected':''}>${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</option>`).join('');const copyOptions=accessContexts.filter(id=>id!==state.adminPlan).map(id=>`<option value="${id}">${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</option>`).join('');const presets=state.ui?.admin?.row_presets||Object.keys(rowPresetMap);
+    const rowControls=contentRowZones.map(zone=>{const row=rowConfig(zone);const options=presets.map(id=>`<option value="${escapeHtml(id)}"${rowPreset(zone)===id?' selected':''}>${escapeHtml(id)}</option>`).join('');return `<div class="admin-row-control"><label class="check-field"><input type="checkbox" data-admin-row-enabled="${escapeHtml(zone)}" ${rowEnabled(zone)?'checked':''}> ${escapeHtml(row.label||zone)}</label><label>Division<select data-admin-row-preset="${escapeHtml(zone)}">${options}</select></label><small>${escapeHtml(rowCreativeSummary(zone))}</small></div>`}).join('');
+    return `<div class="admin-toolbar"><label>Editing access for<select id="adminPlanSelect">${planOptions}</select></label><label>Copy all access from<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Copy → ${escapeHtml(accessLabel(state.adminPlan))}</button><span class="admin-toolbar-spacer"></span><button class="btn btn-ghost" type="button" data-admin-action="preview">Preview as ${escapeHtml(accessLabel(state.adminPlan))}</button><button class="btn btn-ghost" type="button" data-admin-action="clear-preview">Exit preview</button><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Save browser draft</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publish changes</button><button class="btn btn-ghost" type="button" data-admin-action="export">Export JSON</button><button class="btn btn-ghost" type="button" data-admin-action="reset">Reset</button></div><div class="admin-row-controls">${rowControls}</div><div class="admin-editor-grid"><div>${renderAdminCanvas()}</div>${renderAdminInspector()}</div>`;
   }
+
   function renderAdminPlans(){
     const plans=Object.entries(state.ui?.plans||{}).filter(([id])=>!['trial','expired'].includes(id));
     return `<div class="admin-note"><strong>Plan catalogue</strong><span>Plan defaults come from this JSON/runtime configuration. Account activation remains manual.</span></div><div class="admin-plan-grid">${plans.map(([id,p])=>`<article class="admin-plan-card ${p.enabled===false?'disabled':''}" data-plan-card="${escapeHtml(id)}"><div class="admin-plan-head"><small>${escapeHtml(id)}</small><input data-plan-field="label" value="${escapeHtml(p.label||id.toUpperCase())}"><label class="check-field"><input type="checkbox" data-plan-field="enabled" ${p.enabled!==false?'checked':''}> Enabled</label></div><div class="admin-field-grid"><label>Price<input data-plan-field="price" value="${escapeHtml(p.price||'')}"></label><label>Currency<input data-plan-field="currency" value="${escapeHtml(p.currency||'EUR')}"></label><label>Billing<input data-plan-field="billing" value="${escapeHtml(p.billing||'')}"></label><label>Default duration (days)<input data-plan-field="duration_days" type="number" min="1" value="${p.duration_days??''}" ${p.lifetime?'disabled':''}></label><label class="check-field"><input type="checkbox" data-plan-field="lifetime" ${p.lifetime?'checked':''}> Unlimited / lifetime</label><label class="check-field"><input type="checkbox" ${p.hide_ads_allowed?'checked':''} disabled> Hide Ads eligibility</label><label class="span-2">Payment link<input data-plan-field="payment_link" value="${escapeHtml(p.payment_link||'')}" placeholder="https://..."></label><label class="span-2">Note<textarea data-plan-field="note" rows="2">${escapeHtml(p.note||'')}</textarea></label></div><div class="admin-plan-term"><span>Default account term</span><strong>${escapeHtml(planTermLabel(id))}</strong></div></article>`).join('')}</div><div class="admin-actions-row"><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Save browser draft</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publish plan changes</button><button class="btn btn-ghost" type="button" data-admin-action="export">Export ui-config.json</button></div>`;
@@ -531,7 +569,7 @@
     const images=selected?.images&&typeof selected.images==='object'?selected.images:{};
     const specs=state.ui?.creative_specs||{};
     const spec1=specs.large_1||{},spec2=specs.large_2||{},spec4=specs.large_4||{};
-    const editor=selected?`<form id="adminCampaignForm" class="campaign-editor"><div class="admin-inspector-head"><small>${escapeHtml(state.adminCampaignId)}</small><h3>${escapeHtml(selected.name||state.adminCampaignId)}</h3><span>Campaign creative and scheduling</span></div><div class="admin-field-grid"><label>Name<input data-campaign-field="name" value="${escapeHtml(selected.name||'')}"></label><label>Advertiser<select data-campaign-field="advertiser_id">${advertiserOptions(String(selected.advertiser_id||''))}</select></label><label class="check-field"><input type="checkbox" data-campaign-field="enabled" ${selected.enabled!==false?'checked':''}> Enabled</label><label class="check-field"><input type="checkbox" data-campaign-field="sponsored" ${selected.sponsored!==false?'checked':''}> Sponsored label</label><label>Creative mode<select data-campaign-field="creative_mode"><option value="full"${(selected.creative_mode||'full')==='full'?' selected':''}>Full image banner</option><option value="split"${selected.creative_mode==='split'?' selected':''}>Image + BlinQ text</option></select></label><label class="check-field"><input type="checkbox" data-campaign-field="show_copy" ${selected.show_copy!==false?'checked':''}> Show headline / CTA over creative</label><label>Theme<select data-campaign-field="theme">${['violet','blue','purple','green'].map(v=>`<option value="${v}"${v===(selected.theme||'violet')?' selected':''}>${v}</option>`).join('')}</select></label><label>Eyebrow<input data-campaign-field="eyebrow" value="${escapeHtml(selected.eyebrow||'SPONSORED')}"></label><label class="span-2">Headline<input data-campaign-field="headline" value="${escapeHtml(selected.headline||'')}"></label><label class="span-2">Text<textarea data-campaign-field="text" rows="3">${escapeHtml(selected.text||'')}</textarea></label><label>CTA text<input data-campaign-field="button_text" value="${escapeHtml(selected.button_text||'Open')}"></label><label>Destination URL<input data-campaign-field="link" value="${escapeHtml(selected.link||'')}"></label><div class="field-hint-box">Use the variant that matches the active row preset. BlinQ keeps the slot geometry fixed and selects 1/2/4-column creative automatically.</div><label class="span-2">1-column image · ${escapeHtml(spec1.aspect_ratio||'4:3')} · ${escapeHtml(spec1.recommended||'1200 × 900 px')}<input data-campaign-image="1" value="${escapeHtml(images['1']||'')}" placeholder="/assets/... or https://..."></label><label class="span-2">2-column image · ${escapeHtml(spec2.aspect_ratio||'8:3')} · ${escapeHtml(spec2.recommended||'2400 × 900 px')}<input data-campaign-image="2" value="${escapeHtml(images['2']||'')}" placeholder="/assets/... or https://..."></label><label class="span-2">4-column image · ${escapeHtml(spec4.aspect_ratio||'16:3')} · ${escapeHtml(spec4.recommended||'2400 × 450 px')}<input data-campaign-image="4" value="${escapeHtml(images['4']||'')}" placeholder="/assets/... or https://..."></label><label class="span-2">Fallback image path / URL<input data-campaign-field="image_url" value="${escapeHtml(selected.image_url||'')}" placeholder="Used when a size-specific image is empty"></label><label>Active from<input data-campaign-field="active_from" type="datetime-local" value="${escapeHtml(selected.active_from||'')}"></label><label>Active until<input data-campaign-field="active_until" type="datetime-local" value="${escapeHtml(selected.active_until||'')}"></label></div><div class="admin-actions-row"><button class="btn btn-ghost danger" type="button" data-admin-action="delete-campaign" data-entity-id="${escapeHtml(state.adminCampaignId)}">Delete campaign</button></div></form>`:'<div class="admin-user-empty">Create a campaign, then assign it to any fixed content slot.</div>';
+    const editor=selected?`<form id="adminCampaignForm" class="campaign-editor"><div class="admin-inspector-head"><small>${escapeHtml(state.adminCampaignId)}</small><h3>${escapeHtml(selected.name||state.adminCampaignId)}</h3><span>Campaign creative and scheduling</span></div><div class="admin-field-grid"><label>Name<input data-campaign-field="name" value="${escapeHtml(selected.name||'')}"></label><label>Advertiser<select data-campaign-field="advertiser_id">${advertiserOptions(String(selected.advertiser_id||''))}</select></label><label class="check-field"><input type="checkbox" data-campaign-field="enabled" ${selected.enabled!==false?'checked':''}> Enabled</label><label class="check-field"><input type="checkbox" data-campaign-field="sponsored" ${selected.sponsored!==false?'checked':''}> Sponsored label</label><label>Creative mode<select data-campaign-field="creative_mode"><option value="full"${(selected.creative_mode||'full')==='full'?' selected':''}>Full image banner</option><option value="split"${selected.creative_mode==='split'?' selected':''}>Image + BlinQ text</option></select></label><label class="check-field"><input type="checkbox" data-campaign-field="show_copy" ${selected.show_copy!==false?'checked':''}> Show headline / CTA over creative</label><label>Theme<select data-campaign-field="theme">${['violet','blue','purple','green'].map(v=>`<option value="${v}"${v===(selected.theme||'violet')?' selected':''}>${v}</option>`).join('')}</select></label><label>Eyebrow<input data-campaign-field="eyebrow" value="${escapeHtml(selected.eyebrow||'SPONSORED')}"></label><label class="span-2">Headline<input data-campaign-field="headline" value="${escapeHtml(selected.headline||'')}"></label><label class="span-2">Text<textarea data-campaign-field="text" rows="3">${escapeHtml(selected.text||'')}</textarea></label><label>CTA text<input data-campaign-field="button_text" value="${escapeHtml(selected.button_text||'Open')}"></label><label>Destination URL<input data-campaign-field="link" value="${escapeHtml(selected.link||'')}"></label><div class="field-hint-box">Prepare the formats shown below. BlinQ keeps the page structure fixed, centers the creative automatically and selects the 1/2/4-column image for the active row division.</div><label class="span-2">1-column · ${escapeHtml(spec1.aspect_ratio||'4:1')} · rec ${escapeHtml(spec1.recommended||'1200 × 300 px')} · min ${escapeHtml(spec1.minimum||'800 × 200 px')} · safe ${escapeHtml(spec1.safe_area||'center 80%')}<input data-campaign-image="1" value="${escapeHtml(images['1']||'')}" placeholder="/assets/... or https://..."></label><label class="span-2">2-column · ${escapeHtml(spec2.aspect_ratio||'8:1')} · rec ${escapeHtml(spec2.recommended||'2400 × 300 px')} · min ${escapeHtml(spec2.minimum||'1600 × 200 px')} · safe ${escapeHtml(spec2.safe_area||'center 85%')}<input data-campaign-image="2" value="${escapeHtml(images['2']||'')}" placeholder="/assets/... or https://..."></label><label class="span-2">Full row · ${escapeHtml(spec4.aspect_ratio||'16:1')} · rec ${escapeHtml(spec4.recommended||'2400 × 150 px')} · min ${escapeHtml(spec4.minimum||'1600 × 100 px')} · safe ${escapeHtml(spec4.safe_area||'center 90%')}<input data-campaign-image="4" value="${escapeHtml(images['4']||'')}" placeholder="/assets/... or https://..."></label><label class="span-2">Fallback desktop image<input data-campaign-field="image_url" value="${escapeHtml(selected.image_url||'')}" placeholder="Used when a size-specific image is empty"></label><label class="span-2">Mobile image (optional)<input data-campaign-field="mobile_image_url" value="${escapeHtml(selected.mobile_image_url||'')}" placeholder="Optional mobile creative"></label><label>Image fit<select data-campaign-field="image_fit"><option value="cover"${(selected.image_fit||'cover')==='cover'?' selected':''}>Cover · centered crop</option><option value="contain"${selected.image_fit==='contain'?' selected':''}>Contain · full image</option></select></label><label>Image position<select data-campaign-field="image_position">${['center','left','right','top','bottom'].map(v=>`<option value="${v}"${v===(selected.image_position||'center')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label><label>Active from<input data-campaign-field="active_from" type="datetime-local" value="${escapeHtml(selected.active_from||'')}"></label><label>Active until<input data-campaign-field="active_until" type="datetime-local" value="${escapeHtml(selected.active_until||'')}"></label></div><div class="admin-actions-row"><button class="btn btn-ghost danger" type="button" data-admin-action="delete-campaign" data-entity-id="${escapeHtml(state.adminCampaignId)}">Delete campaign</button></div></form>`:'<div class="admin-user-empty">Create a campaign, then assign it to any fixed content slot.</div>';
     return `<div class="admin-toolbar"><button class="btn btn-ghost" type="button" data-admin-action="add-advertiser">+ Advertiser</button><button class="btn btn-primary" type="button" data-admin-action="add-campaign">+ Campaign</button><span class="admin-toolbar-spacer"></span><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Save browser draft</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publish changes</button></div><div class="campaign-admin-grid"><section><div class="admin-section-title"><strong>Advertisers</strong><span>Partner identity is separate from campaign history.</span></div><div class="entity-grid">${advertiserCards}</div></section><section><div class="admin-section-title"><strong>Campaigns</strong><span>Campaigns can move between slots without losing analytics.</span></div><div class="campaign-workspace"><div class="campaign-list">${campaignRows}</div>${editor}</div></section></div>`;
   }
   function renderAdminFeeds(){
@@ -604,7 +642,7 @@
       else if(action==='clear-preview'){state.previewPlan=null;renderAllUiContent();rerenderAdmin();showStatus('Admin preview disabled.');}
       else if(action==='add-advertiser'){state.ui.advertisers=state.ui.advertisers||{};const id=nextEntityId('advertiser',state.ui.advertisers);state.ui.advertisers[id]={name:`Advertiser ${Object.keys(state.ui.advertisers).length+1}`,website:'',note:''};rerenderAdmin();}
       else if(action==='delete-advertiser'){const id=String(actionNode.dataset.entityId||'');const used=Object.values(state.ui?.campaigns||{}).some(c=>String(c?.advertiser_id||'')===id);if(used){showStatus('Advertiser is still assigned to a campaign. Reassign the campaign first.');}else if(id&&state.ui?.advertisers?.[id]){delete state.ui.advertisers[id];rerenderAdmin();}}
-      else if(action==='add-campaign'){state.ui.campaigns=state.ui.campaigns||{};const id=nextEntityId('campaign',state.ui.campaigns);state.ui.campaigns[id]={name:`Campaign ${Object.keys(state.ui.campaigns).length+1}`,advertiser_id:'',enabled:true,sponsored:true,creative_mode:'full',show_copy:false,theme:'violet',eyebrow:'SPONSORED',headline:'',text:'',button_text:'Open',link:'',image_url:'',images:{'1':'','2':'','4':''},active_from:'',active_until:''};state.adminCampaignId=id;rerenderAdmin();}
+      else if(action==='add-campaign'){state.ui.campaigns=state.ui.campaigns||{};const id=nextEntityId('campaign',state.ui.campaigns);state.ui.campaigns[id]={name:`Campaign ${Object.keys(state.ui.campaigns).length+1}`,advertiser_id:'',enabled:true,sponsored:true,creative_mode:'full',show_copy:false,theme:'violet',eyebrow:'SPONSORED',headline:'',text:'',button_text:'Open',link:'',image_url:'',mobile_image_url:'',image_fit:'cover',image_position:'center',images:{'1':'','2':'','4':''},active_from:'',active_until:''};state.adminCampaignId=id;rerenderAdmin();}
       else if(action==='delete-campaign'){const id=String(actionNode.dataset.entityId||state.adminCampaignId||'');if(id&&state.ui?.campaigns?.[id]){delete state.ui.campaigns[id];Object.values(elements()).forEach(item=>{if(item?.content?.campaign_id===id)item.content.campaign_id='';});state.adminCampaignId=null;renderAllUiContent();rerenderAdmin();}}
       else if(action==='add-rss-source'){state.ui.rss=state.ui.rss||{enabled:true,sources:[]};state.ui.rss.sources=Array.isArray(state.ui.rss.sources)?state.ui.rss.sources:[];const max=Math.max(1,Number(state.ui?.admin?.max_rss_sources)||8);if(state.ui.rss.sources.length>=max){showStatus(`Maximum ${max} RSS sources.`);}else{const used=new Set(state.ui.rss.sources.map(x=>x.id));let n=1;while(used.has(`rss-${n}`))n++;state.ui.rss.sources.push({id:`rss-${n}`,name:`RSS source ${n}`,url:'',enabled:false,priority:0});rerenderAdmin();}}
       else if(action==='delete-rss-source'){const index=Number(actionNode.dataset.sourceIndex);if(Number.isInteger(index)&&index>=0&&index<(state.ui?.rss?.sources||[]).length){state.ui.rss.sources.splice(index,1);rerenderAdmin();}}
@@ -614,8 +652,8 @@
     host.onchange=event=>{
       const t=event.target;
       if(t.id==='adminPlanSelect'){state.adminPlan=t.value;rerenderAdmin();return;}
-      if(t.id==='adminTopRowPreset'){state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows.content_top=state.ui.content_rows.content_top||{};state.ui.content_rows.content_top.preset=t.value;renderAllUiContent();rerenderAdmin();return;}
-      if(t.id==='adminBottomRowPreset'){state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows.content_bottom=state.ui.content_rows.content_bottom||{};state.ui.content_rows.content_bottom.preset=t.value;renderAllUiContent();rerenderAdmin();return;}
+      if(t.dataset.adminRowEnabled){const zone=t.dataset.adminRowEnabled;state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows[zone]=state.ui.content_rows[zone]||{};state.ui.content_rows[zone].enabled=t.checked;renderAllUiContent();rerenderAdmin();return;}
+      if(t.dataset.adminRowPreset){const zone=t.dataset.adminRowPreset;state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows[zone]=state.ui.content_rows[zone]||{};state.ui.content_rows[zone].preset=t.value;renderAllUiContent();rerenderAdmin();return;}
       if(t.id==='adminUserPlan'){setAdminPlanDefaults(t.value);return;}
       if(t.id==='adminUserStatus'){const expiry=$('adminUserExpires');if(expiry){expiry.disabled=t.value==='lifetime';if(t.value==='lifetime')expiry.value='';}return;}
       if(t.dataset.adminAccess){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.access[t.dataset.adminAccess]=t.value;if(t.dataset.adminAccess==='rookie')item.access.trial=t.value;rerenderAdmin();}return;}
@@ -635,9 +673,32 @@
     const plans=Object.entries(state.ui?.plans||{}).filter(([id,p])=>!['trial','expired'].includes(id)&&p.enabled!==false);
     return `<div class="account-plan-grid">${plans.map(([id,p])=>`<article><small>${escapeHtml(p.label||id.toUpperCase())}</small><strong>${escapeHtml(p.price?`${p.price} ${p.currency||'EUR'}`:'Price on request')}</strong><span>${escapeHtml(p.billing||'')}</span><p>${escapeHtml(p.note||'')}</p>${p.payment_link?`<a class="btn btn-primary" href="${escapeHtml(p.payment_link)}" target="_blank" rel="noopener">Payment link</a>`:'<button class="btn btn-ghost" type="button" disabled>Payment link not set</button>'}</article>`).join('')}</div>`;
   }
+  function primeTableRows(){ return rankedPredictions(); }
+  function genericTable(rows,key){
+    if(!rows.length)return '<div class="state-card">No published data are available for this section yet.</div>';
+    const body=rows.map(row=>{
+      const p1=row?.p1||row?.player1?.name||row?.player1_name||'Player 1',p2=row?.p2||row?.player2?.name||row?.player2_name||'Player 2';
+      const rawProb=row?.probability!=null?Number(row.probability):marketProbability(row); const probability=Number.isFinite(rawProb)?(rawProb>1?rawProb/100:rawProb):null; const pick=row?.pick||row?.selection||row?.prediction||'—';
+      const odds=Number(row?.odds),edge=Number(row?.edge);
+      return `<tr><td>${escapeHtml(fmtDate(row?.date||row?.scheduled_at))}<small>${escapeHtml(fmtTime(row?.date||row?.scheduled_at))}</small></td><td><strong>${escapeHtml(p1)}</strong><small>vs ${escapeHtml(p2)}</small></td><td>${escapeHtml(row?.tournament||row?.competition||'—')}</td><td>${escapeHtml(pick)}</td><td>${probability==null?'—':pct(probability)}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>${Number.isFinite(edge)?`${edge>0?'+':''}${(edge*(Math.abs(edge)<=1?100:1)).toFixed(1)}%`:'—'}</td></tr>`;
+    }).join('');
+    return `<div class="admin-table-wrap picks-table-wrap"><table class="admin-analytics-table picks-table"><thead><tr><th>Date</th><th>Match</th><th>Tournament</th><th>Pick</th><th>Probability</th><th>Odds</th><th>Edge</th></tr></thead><tbody>${body}</tbody></table></div>`;
+  }
+  function resultsSummary(){
+    const rows=state.feed.results||[],performance=state.feed.performance||{}; const correct=rows.filter(r=>r?.result?.correct===true).length,settled=rows.filter(r=>typeof r?.result?.correct==='boolean').length;
+    const hit=settled?correct/settled:null; const roi=performance.roi??performance.ROI; const units=performance.units??performance.profit_units;
+    return metricCards([['Settled',String(settled),'published selections'],['Hit rate',hit==null?'—':pct(hit),'correct / settled'],['ROI',roi==null?'—':pct(roi),'requires settled odds'],['Units',units==null?'—':number(units,2),'requires stake model']]);
+  }
+
   function renderRoute(route){
     const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body='';
     if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='analytics')loadBannerAnalytics();return;}
+    if(route==='prime'){body=`<div class="route-sub route-rules"><strong>Prime rule</strong><span>Match Winner · ${Math.round((Number(state.ui?.market_rules?.prime?.min_win_probability)||.70)*100)}%+ win probability · no odds requirement · no count limit.</span></div>${genericTable(primeTableRows(),'prime')}`;}
+    else if(route==='top_daily'){body=`<div class="route-sub route-rules"><strong>Top 10 rule</strong><span>Maximum 10 daily selections across supported tennis markets; odds are part of the selector.</span></div>${genericTable(marketRows('top_daily').slice(0,10),'top_daily')}`;}
+    else if(route==='value'){const r=state.ui?.market_rules?.value||{};body=`<div class="route-sub route-rules"><strong>Value rule</strong><span>Odds &gt; ${Number(r.min_odds||1.7).toFixed(2)} · max implied-probability gap ${Math.round(Number(r.max_implied_probability_gap||.15)*100)}% · ranked by edge.</span></div>${genericTable(marketRows('value'),'value')}`;}
+    else if(route==='ace'){body=`<div class="route-sub route-rules"><strong>Aces / Double Faults</strong><span>Top ${Number(state.ui?.market_rules?.ace?.limit)||10} published selections.</span></div>${genericTable(marketRows('ace').slice(0,Number(state.ui?.market_rules?.ace?.limit)||10),'ace')}`;}
+    else if(route==='sg'){body=`<div class="route-sub route-rules"><strong>Sets / Games</strong><span>Top ${Number(state.ui?.market_rules?.sg?.limit)||10} published selections.</span></div>${genericTable(marketRows('sg').slice(0,Number(state.ui?.market_rules?.sg?.limit)||10),'sg')}`;}
+    else if(route==='results'){body=resultsSummary()+`<div class="route-sub"><h3>Settled predictions</h3>${renderResults()}</div>`;}
     if(route==='tournaments'){const names=[...new Set((feed.upcoming||[]).map(x=>x.tournament).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):'No upcoming tournament coverage is currently published.'}</div>`;}
     else if(route==='players'){const names=[...new Set((feed.upcoming||[]).flatMap(x=>[x.player1?.name,x.player2?.name]).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):'No upcoming players are currently published.'}</div>`;}
     else if(route==='stats'){body=metricCards([['Settled predictions',String(p.n??0),'Published and scored'],['Accuracy',p.accuracy!=null?pct(p.accuracy):'—','Observed results'],['Log loss',number(p.log_loss),'Lower is better'],['Brier score',number(p.brier_score),'Probability quality']])+`<div class="route-sub"><h3>Results</h3>${renderResults()}</div>`;}
@@ -671,14 +732,14 @@
   function setupEvents(){
     $('authDialog').addEventListener('cancel',e=>e.preventDefault()); $('authForm').addEventListener('submit',handleAuthSubmit); $('switchSignup').onclick=()=>auth(state.authMode==='login'?'signup':'login'); $('switchReset').onclick=()=>auth('reset');
     $('refreshButton').onclick=()=>loadFeed(); ['tourFilter','tournamentFilter','surfaceFilter','confidenceFilter'].forEach(id=>$(id).addEventListener('change',()=>{state.page=0;state.showAll=false;renderPredictions()})); $('searchInput').addEventListener('input',()=>{state.page=0;state.showAll=false;renderPredictions()});
-    $('prevPick').onclick=()=>{state.page=Math.max(0,state.page-1);renderPredictions()}; $('nextPick').onclick=()=>{state.page+=1;renderPredictions()}; $('viewAllButton').onclick=()=>{state.showAll=!state.showAll;state.page=0;renderPredictions()}; $('dialogClose').onclick=()=>$('matchDialog').close(); $('matchDialog').addEventListener('click',e=>{if(e.target===$('matchDialog'))$('matchDialog').close()}); $('profileButton').onclick=()=>setRoute('account');
+    $('prevPick').onclick=()=>{state.page=Math.max(0,state.page-1);renderPredictions()}; $('nextPick').onclick=()=>{state.page+=1;renderPredictions()}; $('dialogClose').onclick=()=>$('matchDialog').close(); $('matchDialog').addEventListener('click',e=>{if(e.target===$('matchDialog'))$('matchDialog').close()}); $('profileButton').onclick=()=>setRoute('account');
     document.addEventListener('click',e=>{
       const restricted=e.target.closest('[data-ui-element].ui-state-locked,[data-ui-element].ui-state-blurred,[data-ui-element].ui-state-hidden');
       if(restricted&&state.route!=='admin'){e.preventDefault();e.stopPropagation();showStatus(`${restricted.dataset.uiStateLabel||'Locked'} — change plan access in BlinQ Admin.`);return;}
       const banner=e.target.closest('[data-banner-slot]');if(banner)trackBanner(banner,'click');
       const target=e.target.closest('[data-route]');if(!target)return;const route=target.dataset.route;if(!routeMeta[route])return;e.preventDefault();setRoute(route);
     });
-    let resizeTimer; window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.route==='predictions'&&!state.showAll){state.page=0;renderPredictions();}},120)});
+    let resizeTimer; window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.route==='predictions'){state.page=0;renderPredictions();}},120)});
   }
 
   async function boot(){ setupEvents(); await loadUiConfig(); const hash=location.hash.replace(/^#/,''); if(routeMeta[hash])state.route=hash; try{const cfg=await BlinqAuth.init();state.authEnabled=Boolean(cfg.enabled);if(cfg.recovery){auth('recovery');return;}const session=await BlinqAuth.restore();if(session)await loadFeed();else auth('login');}catch(error){showStatus(error.message);auth('login');} }

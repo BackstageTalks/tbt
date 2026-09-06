@@ -57,50 +57,77 @@
       <section id="staleNotice" class="inline-notice" hidden></section>
 
       <div id="predictionsView">
-        <section class="toolbar dashboard-toolbar" id="predictionToolbar" data-ui-element="PREDICTION_TOOLBAR" aria-label="Prediction filters">
-          <label><span class="sr-only">Tour</span><select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select></label>
-          <label><span class="sr-only">Tournament</span><select id="tournamentFilter"><option value="">All Tournaments</option></select></label>
-          <label><span class="sr-only">Surface</span><select id="surfaceFilter"><option value="">All Surfaces</option></select></label>
-          <label><span class="sr-only">Confidence</span><select id="confidenceFilter"><option value="">All Confidence</option><option value="very-high">Very High · 80%+</option><option value="high">High · 70–80%</option><option value="medium">Medium · 60–70%</option><option value="low">Low · &lt;60%</option></select></label>
-          <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search matches or players…" /></label>
-        </section>
-
         <section id="dashboardSnapshot" class="dashboard-snapshot" data-ui-element="DASHBOARD_SNAPSHOT" aria-label="Current prediction board summary">
           <div class="snapshot-card"><small>UPCOMING</small><strong>—</strong><span>current board</span></div>
           <div class="snapshot-card"><small>TOP PROBABILITY</small><strong>—</strong><span>highest current pick</span></div>
-          <div class="snapshot-card"><small>≥ 80%</small><strong>—</strong><span>elite confidence</span></div>
-          <div class="snapshot-card"><small>HIGH CONFIDENCE</small><strong>—</strong><span>70%+ candidates</span></div>
+          <div class="snapshot-card"><small>PRIME PICKS</small><strong>—</strong><span>above configured threshold</span></div>
+          <div class="snapshot-card"><small>TOP 10 DAILY</small><strong>—</strong><span>daily betting shortlist</span></div>
           <div class="snapshot-card"><small>TOURNAMENTS</small><strong>—</strong><span>active in feed</span></div>
           <div class="snapshot-card"><small>HISTORY DEPTH</small><strong>—</strong><span>serving metadata</span></div>
         </section>
 
-        <section id="bannerTop" class="promo-grid promo-grid-top" aria-label="BlinQ content slots"></section>
+        <section id="bannerTop" class="promo-grid ad-row" aria-label="Advertising row above Prime Picks"></section>
 
         <section class="picks-panel prime-panel" id="predictionsPanel" data-ui-element="PRIME_PICKS_PANEL">
           <div class="panel-head picks-head">
             <div>
-              <div class="section-kicker"><span>✦</span> BlinQ Prime Picks</div>
-              <p>Live model probabilities from the currently published production feed.</p>
+              <div class="section-kicker"><span>✦</span> Prime Picks</div>
+              <p>All Match Winner predictions above the configured Prime probability threshold.</p>
             </div>
             <div class="panel-actions">
               <span class="feed-status"><i></i><span>Live · updated <strong id="updatedAt">—</strong></span></span>
-              <span class="match-count"><strong id="matchCount">0</strong> matches</span>
+              <span class="match-count"><strong id="matchCount">0</strong> picks</span>
               <button class="btn btn-ghost" id="refreshButton" type="button">↻ Refresh</button>
-              <button class="btn btn-ghost" id="viewAllButton" type="button">View all matches →</button>
+              <a class="btn btn-ghost see-all-link" id="viewAllButton" href="#prime" data-route="prime">See all →</a>
             </div>
           </div>
+
+          <section class="toolbar dashboard-toolbar prime-toolbar" id="predictionToolbar" data-ui-element="PREDICTION_TOOLBAR" aria-label="Prime Picks filters">
+            <label><span class="sr-only">Tour</span><select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select></label>
+            <label><span class="sr-only">Tournament</span><select id="tournamentFilter"><option value="">All Tournaments</option></select></label>
+            <label><span class="sr-only">Surface</span><select id="surfaceFilter"><option value="">All Surfaces</option></select></label>
+            <label><span class="sr-only">Confidence</span><select id="confidenceFilter"><option value="">All Confidence</option><option value="very-high">Very High · 80%+</option><option value="high">High · 70–80%</option><option value="medium">Medium · 60–70%</option><option value="low">Low · &lt;60%</option></select></label>
+            <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search players, matches or tournaments…" /></label>
+          </section>
 
           <div class="pick-carousel-shell" id="pickCarouselShell">
-            <button class="carousel-arrow carousel-arrow-left" id="prevPick" type="button" aria-label="Previous featured picks">‹</button>
+            <button class="carousel-arrow carousel-arrow-left" id="prevPick" type="button" aria-label="Previous Prime Picks">‹</button>
             <div class="pick-carousel" id="predictionGrid">
-              <div class="state-card">Loading predictions…</div>
+              <div class="state-card">Loading Prime Picks…</div>
             </div>
-            <button class="carousel-arrow carousel-arrow-right" id="nextPick" type="button" aria-label="Next featured picks">›</button>
+            <button class="carousel-arrow carousel-arrow-right" id="nextPick" type="button" aria-label="Next Prime Picks">›</button>
           </div>
-          <div class="carousel-dots" id="carouselDots" aria-label="Pick carousel pages"></div>
+          <div class="carousel-dots" id="carouselDots" aria-label="Prime Picks carousel pages"></div>
         </section>
 
-        <section id="bannerBottom" class="promo-grid promo-grid-bottom" aria-label="BlinQ content slots"></section>
+        <section class="picks-panel market-panel" id="topDailyPanel" data-ui-element="TOP_DAILY_PANEL">
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>★</span> Top 10 Daily Picks</div><p>Final daily shortlist of the best betting picks across supported tennis markets.</p></div><a class="btn btn-ghost see-all-link" href="#top_daily" data-route="top_daily">See all →</a></div>
+          <div class="market-preview-grid" id="topDailyGrid"><div class="state-card">Top 10 Daily selector output is not published yet.</div></div>
+        </section>
+
+        <section id="bannerMid" class="promo-grid ad-row" aria-label="Advertising row between Top 10 Daily and Value Picks"></section>
+
+        <section class="picks-panel market-panel" id="valuePanel" data-ui-element="VALUE_PICKS_PANEL">
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>◇</span> Value Picks</div><p>Largest model-versus-bookmaker edges that pass the configured odds guardrails.</p></div><a class="btn btn-ghost see-all-link" href="#value" data-route="value">See all →</a></div>
+          <div class="market-preview-grid" id="valueGrid"><div class="state-card">Value selector output is not published yet.</div></div>
+        </section>
+
+        <section class="picks-panel market-panel" id="acePanel" data-ui-element="ACE_PICKS_PANEL">
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>♠</span> Ace Picks</div><p>Top Aces and Double Faults market selections.</p></div><a class="btn btn-ghost see-all-link" href="#ace" data-route="ace">See all →</a></div>
+          <div class="market-preview-grid" id="aceGrid"><div class="state-card">Aces / Double Faults model output is not published yet.</div></div>
+        </section>
+
+        <section id="bannerBottom" class="promo-grid ad-row" aria-label="Advertising row between Ace Picks and S/G Picks"></section>
+
+        <section class="picks-panel market-panel" id="sgPanel" data-ui-element="SG_PICKS_PANEL">
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>▥</span> S/G Picks</div><p>Top Sets and Games market selections.</p></div><a class="btn btn-ghost see-all-link" href="#sg" data-route="sg">See all →</a></div>
+          <div class="market-preview-grid" id="sgGrid"><div class="state-card">Sets / Games model output is not published yet.</div></div>
+        </section>
+
+        <section class="picks-panel market-panel btts-panel" id="bttsBonusPanel" data-ui-element="BTTS_BONUS_PANEL">
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>⚽</span> BTTS Bonus <em class="beta-tag">BETA</em></div><p>Football bonus: both teams to score. This product is served separately from the tennis engine.</p></div><a class="btn btn-ghost see-all-link" href="/btts">Open /btts →</a></div>
+          <a class="btts-teaser" href="/btts"><span>FOOTBALL · BETA</span><strong>Both Teams To Score</strong><small>Open the dedicated BTTS page →</small></a>
+        </section>
       </div>
 
       <section id="routePanel" class="route-panel" hidden></section>

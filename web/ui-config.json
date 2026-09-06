@@ -142,7 +142,10 @@
         "enabled": true,
         "active_from": "",
         "active_until": "",
-        "image_url": ""
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
@@ -177,7 +180,10 @@
         "enabled": true,
         "active_from": "",
         "active_until": "",
-        "image_url": ""
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
@@ -212,257 +218,13 @@
         "enabled": true,
         "active_from": "",
         "active_until": "",
-        "image_url": ""
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "active",
-        "expired": "active",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_PREDICTIONS": {
-      "label": "Dashboard",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 1,
-      "content": {
-        "label": "Dashboard",
-        "route": "predictions",
-        "icon": "⌂"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "active",
-        "expired": "locked",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_TOURNAMENTS": {
-      "label": "Tournaments",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 2,
-      "content": {
-        "label": "Tournaments",
-        "route": "tournaments",
-        "icon": "♕"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "active",
-        "elite": "active",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_PLAYERS": {
-      "label": "Players",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 3,
-      "content": {
-        "label": "Players",
-        "route": "players",
-        "icon": "♙"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "locked",
-        "elite": "locked",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_STATS": {
-      "label": "Stats & Insights",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 4,
-      "content": {
-        "label": "Stats & Insights",
-        "route": "stats",
-        "icon": "▥"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "locked",
-        "elite": "locked",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_MODEL": {
-      "label": "Model Performance",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 5,
-      "content": {
-        "label": "Model Performance",
-        "route": "model",
-        "icon": "↗"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "locked",
-        "elite": "locked",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_BACKTESTS": {
-      "label": "Backtests",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 6,
-      "content": {
-        "label": "Backtests",
-        "route": "backtests",
-        "icon": "◴"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "locked",
-        "elite": "locked",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_ACCOUNT": {
-      "label": "Account",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 7,
-      "content": {
-        "label": "Account",
-        "route": "account",
-        "icon": "◉"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "active",
-        "expired": "active",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_PROMO_1": {
-      "label": "Sidebar internal promo 1",
-      "zone": "sidebar",
-      "kind": "sidebar_promo",
-      "order": 20,
-      "content": {
-        "eyebrow": "BLINQ",
-        "headline": "Internal promo",
-        "text": "Reserved for BlinQ content.",
-        "button_text": "Open",
-        "link": "#account",
-        "route": "account",
-        "theme": "violet",
-        "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "auto",
-        "enabled": true,
-        "active_from": "",
-        "active_until": "",
-        "image_url": ""
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "active",
-        "expired": "active",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_PROMO_2": {
-      "label": "Sidebar internal promo 2",
-      "zone": "sidebar",
-      "kind": "sidebar_promo",
-      "order": 21,
-      "content": {
-        "eyebrow": "BLINQ",
-        "headline": "Internal promo",
-        "text": "Reserved for future internal content.",
-        "button_text": "Open",
-        "link": "#account",
-        "route": "account",
-        "theme": "blue",
-        "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "auto",
-        "enabled": true,
-        "active_from": "",
-        "active_until": "",
-        "image_url": ""
-      },
-      "watermark": {
-        "enabled": true,
         "text": "COMING SOON",
         "preset": "default"
       },
@@ -540,7 +302,10 @@
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss"
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
@@ -579,7 +344,10 @@
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss"
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
@@ -618,7 +386,10 @@
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss"
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
@@ -657,7 +428,10 @@
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss"
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
@@ -679,7 +453,9 @@
       "zone": "predictions",
       "kind": "panel",
       "order": 50,
-      "content": {},
+      "content": {
+        "label": "Prime Picks panel"
+      },
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
@@ -906,7 +682,10 @@
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss"
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
@@ -945,7 +724,10 @@
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss"
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
@@ -984,7 +766,10 @@
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss"
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
@@ -1023,7 +808,10 @@
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss"
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
       },
       "watermark": {
         "enabled": false,
@@ -1106,6 +894,761 @@
         "goat": "active",
         "legend": "active"
       }
+    },
+    "SIDEBAR_PREDICTIONS": {
+      "label": "Dashboard",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 1,
+      "content": {
+        "label": "Dashboard",
+        "route": "predictions",
+        "icon": "⌂"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "locked",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_PRIME": {
+      "label": "BlinQ Prime Picks",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 2,
+      "content": {
+        "label": "BlinQ Prime Picks",
+        "route": "prime",
+        "icon": "✦"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "locked",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_TOP_DAILY": {
+      "label": "Top 10 Daily Picks",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 3,
+      "content": {
+        "label": "Top 10 Daily Picks",
+        "route": "top_daily",
+        "icon": "★"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_VALUE": {
+      "label": "Value Picks",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 4,
+      "content": {
+        "label": "Value Picks",
+        "route": "value",
+        "icon": "◇"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_ACE": {
+      "label": "Ace Picks",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 5,
+      "content": {
+        "label": "Ace Picks",
+        "route": "ace",
+        "icon": "♠"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_SG": {
+      "label": "S/G Picks",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 6,
+      "content": {
+        "label": "S/G Picks",
+        "route": "sg",
+        "icon": "▥"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_RESULTS": {
+      "label": "Results",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 7,
+      "content": {
+        "label": "Results",
+        "route": "results",
+        "icon": "✓"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_TOURNAMENTS": {
+      "label": "Tournaments",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 10,
+      "content": {
+        "label": "Tournaments",
+        "route": "tournaments",
+        "icon": "♕"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_PLAYERS": {
+      "label": "Players",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 11,
+      "content": {
+        "label": "Players",
+        "route": "players",
+        "icon": "♙"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "locked",
+        "elite": "locked",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_STATS": {
+      "label": "Stats & Insights",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 12,
+      "content": {
+        "label": "Stats & Insights",
+        "route": "stats",
+        "icon": "▥"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "locked",
+        "elite": "locked",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_MODEL": {
+      "label": "Model Performance",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 13,
+      "content": {
+        "label": "Model Performance",
+        "route": "model",
+        "icon": "↗"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "locked",
+        "elite": "locked",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_BACKTESTS": {
+      "label": "Backtests",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 14,
+      "content": {
+        "label": "Backtests",
+        "route": "backtests",
+        "icon": "◴"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "locked",
+        "elite": "locked",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_BTTS": {
+      "label": "BTTS Bonus",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 15,
+      "content": {
+        "label": "BTTS Bonus",
+        "route": "btts",
+        "icon": "⚽",
+        "href": "/btts",
+        "beta": true
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_ACCOUNT": {
+      "label": "Account",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 20,
+      "content": {
+        "label": "Account",
+        "route": "account",
+        "icon": "◉"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_PROMO_1": {
+      "label": "VIP Telegram",
+      "zone": "sidebar",
+      "kind": "sidebar_promo",
+      "order": 20,
+      "content": {
+        "type": "internal",
+        "eyebrow": "VIP",
+        "headline": "VIP Telegram",
+        "text": "Exclusive picks & live updates.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "blue",
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "auto",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "mobile_image_url": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_PROMO_2": {
+      "label": "Football by BlinQ",
+      "zone": "sidebar",
+      "kind": "sidebar_promo",
+      "order": 21,
+      "content": {
+        "type": "internal",
+        "eyebrow": "BLINQ FOOTBALL",
+        "headline": "Football by BlinQ",
+        "text": "Same intelligence. More sports.",
+        "button_text": "Preview",
+        "link": "/btts",
+        "route": "",
+        "theme": "purple",
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "auto",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "mobile_image_url": ""
+      },
+      "watermark": {
+        "enabled": true,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SIDEBAR_PROMO_3": {
+      "label": "Upgrade to Elite",
+      "zone": "sidebar",
+      "kind": "sidebar_promo",
+      "order": 22,
+      "content": {
+        "type": "promo",
+        "eyebrow": "ELITE",
+        "headline": "Upgrade to Elite",
+        "text": "Unlock premium picks and analytics.",
+        "button_text": "Upgrade",
+        "link": "#account",
+        "route": "account",
+        "theme": "violet",
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "auto",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "mobile_image_url": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "TOP_DAILY_PANEL": {
+      "label": "Top 10 Daily Picks panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 60,
+      "content": {
+        "label": "Top 10 Daily Picks panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "VALUE_PICKS_PANEL": {
+      "label": "Value Picks panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 70,
+      "content": {
+        "label": "Value Picks panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "ACE_PICKS_PANEL": {
+      "label": "Ace Picks panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 80,
+      "content": {
+        "label": "Ace Picks panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "SG_PICKS_PANEL": {
+      "label": "S/G Picks panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 90,
+      "content": {
+        "label": "S/G Picks panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "BTTS_BONUS_PANEL": {
+      "label": "BTTS Bonus BETA panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 100,
+      "content": {
+        "label": "BTTS Bonus BETA panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "CONTENT_MID_1": {
+      "label": "Middle external slot 1",
+      "zone": "content_mid",
+      "kind": "large_banner",
+      "order": 61,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "Middle external slot 1",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "blue",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "span": 1,
+        "type": "rss"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "CONTENT_MID_2": {
+      "label": "Middle external slot 2",
+      "zone": "content_mid",
+      "kind": "large_banner",
+      "order": 62,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "Middle external slot 2",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "purple",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "span": 1,
+        "type": "rss"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "CONTENT_MID_3": {
+      "label": "Middle external slot 3",
+      "zone": "content_mid",
+      "kind": "large_banner",
+      "order": 63,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "Middle external slot 3",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "green",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "span": 1,
+        "type": "rss"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
+    },
+    "CONTENT_MID_4": {
+      "label": "Middle external slot 4",
+      "zone": "content_mid",
+      "kind": "large_banner",
+      "order": 64,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "Middle external slot 4",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "violet",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "span": 1,
+        "type": "rss"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
     }
   },
   "admin": {
@@ -1142,11 +1685,18 @@
   },
   "content_rows": {
     "content_top": {
-      "label": "Top external row",
+      "label": "AD ROW · above Prime Picks",
+      "enabled": true,
+      "preset": "1+1+1+1"
+    },
+    "content_mid": {
+      "label": "AD ROW · between Top 10 Daily and Value",
+      "enabled": true,
       "preset": "1+1+1+1"
     },
     "content_bottom": {
-      "label": "Bottom external row",
+      "label": "AD ROW · between Ace Picks and S/G Picks",
+      "enabled": true,
       "preset": "1+1+1+1"
     }
   },
@@ -1177,23 +1727,78 @@
   "creative_specs": {
     "header_slot": {
       "aspect_ratio": "3:1",
-      "recommended": "900 × 300 px"
+      "recommended": "900 × 300 px",
+      "minimum": "600 × 200 px",
+      "safe_area": "center 80%"
     },
     "sidebar_promo": {
-      "aspect_ratio": "4:3",
-      "recommended": "800 × 600 px"
+      "aspect_ratio": "3:1",
+      "recommended": "900 × 300 px",
+      "minimum": "600 × 200 px",
+      "safe_area": "center 80%"
     },
     "large_1": {
-      "aspect_ratio": "4:3",
-      "recommended": "1200 × 900 px"
+      "aspect_ratio": "4:1",
+      "recommended": "1200 × 300 px",
+      "minimum": "800 × 200 px",
+      "safe_area": "center 80%"
     },
     "large_2": {
-      "aspect_ratio": "8:3",
-      "recommended": "2400 × 900 px"
+      "aspect_ratio": "8:1",
+      "recommended": "2400 × 300 px",
+      "minimum": "1600 × 200 px",
+      "safe_area": "center 85%"
     },
     "large_4": {
-      "aspect_ratio": "16:3",
-      "recommended": "2400 × 450 px"
+      "aspect_ratio": "16:1",
+      "recommended": "2400 × 150 px",
+      "minimum": "1600 × 100 px",
+      "safe_area": "center 90%"
+    }
+  },
+  "market_rules": {
+    "prime": {
+      "market": "match_winner",
+      "min_win_probability": 0.7,
+      "limit": null,
+      "use_dashboard_filters": true
+    },
+    "top_daily": {
+      "label": "Top 10 Daily Picks",
+      "limit": 10,
+      "markets": [
+        "match_winner",
+        "aces",
+        "double_faults",
+        "sets",
+        "games"
+      ],
+      "requires_odds": true
+    },
+    "value": {
+      "limit": null,
+      "min_odds": 1.7,
+      "max_implied_probability_gap": 0.15,
+      "sort": "edge_desc"
+    },
+    "ace": {
+      "limit": 10,
+      "markets": [
+        "aces",
+        "double_faults"
+      ]
+    },
+    "sg": {
+      "limit": 10,
+      "markets": [
+        "sets",
+        "games"
+      ]
+    },
+    "btts": {
+      "beta": true,
+      "sport": "football",
+      "href": "/btts"
     }
   }
 }
