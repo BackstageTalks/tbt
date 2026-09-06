@@ -345,14 +345,31 @@ def load_partitions(
     before: datetime | None = None,
 ) -> list[MatchRecord]:
     directory = Path(directory)
-    selected_years = sorted(set(int(year) for year in years)) if years is not None else list_partition_years(directory)
+    manifest = load_manifest(directory)
+    manifest_years = manifest.get("years") if isinstance(manifest, dict) else None
+
+    if years is not None:
+        selected_years = sorted(set(int(year) for year in years))
+    elif isinstance(manifest_years, dict) and manifest_years:
+        try:
+            selected_years = sorted(int(year) for year in manifest_years)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid history manifest year key") from exc
+    else:
+        selected_years = list_partition_years(directory)
+
     if not selected_years:
         raise FileNotFoundError(f"No history-YYYY.parquet partitions found in {directory}")
+
     matches: list[MatchRecord] = []
     for year in selected_years:
         path = partition_path(directory, year)
-        if path.is_file() and path.stat().st_size > 0:
-            matches.extend(load_snapshot(path, before=before))
+        if not path.is_file() or path.stat().st_size <= 0:
+            raise FileNotFoundError(
+                f"History manifest/selection requires missing partition: {path.name}"
+            )
+        matches.extend(load_snapshot(path, before=before))
+
     matches.sort(key=lambda item: (item.scheduled_at, str(item.match_id)))
     return matches
 
