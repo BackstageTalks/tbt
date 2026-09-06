@@ -725,6 +725,11 @@ class FeatureBuilder:
             match
         )
 
+        if env.get(
+            "training_eligible_weather"
+        ) is not True:
+            return {}
+
         weather = env.get(
             "weather"
         )
