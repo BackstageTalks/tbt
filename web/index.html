@@ -25,6 +25,7 @@
         <div class="nav-items" id="mainNavigation"></div>
       </nav>
 
+      <section class="sidebar-promo-zone" id="sidebarPromoZone" aria-label="BlinQ sidebar content slots"></section>
       <div class="sidebar-spacer"></div>
       <div class="sidebar-system-note"><span>●</span><div><strong>Live model</strong><small id="sidebarModelState">Production feed</small></div></div>
     </aside>
@@ -40,11 +41,7 @@
           <p class="subtitle" id="pageSubtitle">Recommended Prime Picks and current tennis intelligence.</p>
         </div>
 
-        <section class="header-feature-strip" aria-label="BlinQ access overview">
-          <article><small>PRIME PICKS + TOURNAMENTS</small><strong>Focused daily board</strong><span>Current model selections and tournament context.</span></article>
-          <article><small>PLAYER INTELLIGENCE</small><strong>Deeper match context</strong><span>Player, matchup and model-signal views.</span></article>
-          <article><small>MODEL ANALYTICS</small><strong>Transparent performance</strong><span>Backtests, calibration and published results.</span></article>
-        </section>
+        <section class="header-feature-strip" id="headerFeatureStrip" aria-label="BlinQ header content slots"></section>
 
         <div class="topbar-actions dashboard-account-actions">
           <div class="member-chip"><span>MEMBER</span><strong id="memberStatus">Active</strong></div>
@@ -60,15 +57,15 @@
       <section id="staleNotice" class="inline-notice" hidden></section>
 
       <div id="predictionsView">
-        <section class="toolbar dashboard-toolbar" id="predictionToolbar" aria-label="Prediction filters">
+        <section class="toolbar dashboard-toolbar" id="predictionToolbar" data-ui-element="PREDICTION_TOOLBAR" aria-label="Prediction filters">
           <label><span class="sr-only">Tour</span><select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select></label>
           <label><span class="sr-only">Tournament</span><select id="tournamentFilter"><option value="">All Tournaments</option></select></label>
           <label><span class="sr-only">Surface</span><select id="surfaceFilter"><option value="">All Surfaces</option></select></label>
-          <label><span class="sr-only">Confidence</span><select id="confidenceFilter"><option value="">All Confidence</option><option value="elite">Elite · 80%+</option><option value="high">High · 70–80%</option><option value="medium">Medium · 60–70%</option><option value="low">Low · &lt;60%</option></select></label>
+          <label><span class="sr-only">Confidence</span><select id="confidenceFilter"><option value="">All Confidence</option><option value="very-high">Very High · 80%+</option><option value="high">High · 70–80%</option><option value="medium">Medium · 60–70%</option><option value="low">Low · &lt;60%</option></select></label>
           <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search matches or players…" /></label>
         </section>
 
-        <section id="dashboardSnapshot" class="dashboard-snapshot" aria-label="Current prediction board summary">
+        <section id="dashboardSnapshot" class="dashboard-snapshot" data-ui-element="DASHBOARD_SNAPSHOT" aria-label="Current prediction board summary">
           <div class="snapshot-card"><small>UPCOMING</small><strong>—</strong><span>current board</span></div>
           <div class="snapshot-card"><small>TOP PROBABILITY</small><strong>—</strong><span>highest current pick</span></div>
           <div class="snapshot-card"><small>≥ 80%</small><strong>—</strong><span>elite confidence</span></div>
@@ -79,7 +76,7 @@
 
         <section id="bannerTop" class="promo-grid promo-grid-top" aria-label="BlinQ content slots"></section>
 
-        <section class="picks-panel prime-panel" id="predictionsPanel">
+        <section class="picks-panel prime-panel" id="predictionsPanel" data-ui-element="PRIME_PICKS_PANEL">
           <div class="panel-head picks-head">
             <div>
               <div class="section-kicker"><span>✦</span> BlinQ Prime Picks</div>
@@ -108,7 +105,7 @@
 
       <section id="routePanel" class="route-panel" hidden></section>
 
-      <footer class="site-footer">
+      <footer class="site-footer" data-ui-element="FOOTER_SYSTEM">
         <div class="footer-main-row">
           <a class="footer-logo-link" href="#predictions" data-route="predictions" aria-label="BlinQ home"><img src="/assets/blinq_logo.svg" alt="BlinQ" class="footer-logo" /></a>
           <span>© 2026 BlinQ</span>

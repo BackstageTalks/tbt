@@ -129,6 +129,49 @@
     const s = await restore();
     return json('/api/v1/feed', {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
   }
+  async function adminUsers(page = 1, perPage = 100) {
+    const s = await restore();
+    if (!s) throw new Error('Prihlás sa znova.');
+    return json(`/api/v1/admin/users?page=${encodeURIComponent(page)}&per_page=${encodeURIComponent(perPage)}`, {
+      headers: {'X-Blinq-Access-Token': s.access_token},
+    });
+  }
+  async function adminUpdateAccess(userId, payload) {
+    const s = await restore();
+    if (!s) throw new Error('Prihlás sa znova.');
+    return json(`/api/v1/admin/users/${encodeURIComponent(userId)}/access`, {
+      method: 'PUT',
+      headers: {'X-Blinq-Access-Token': s.access_token},
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async function runtimeUiConfig() {
+    return json('/api/v1/ui-config');
+  }
+  async function contentNews() {
+    return json('/api/v1/content/news');
+  }
+  async function bannerEvent(payload, keepalive = false) {
+    return json('/api/v1/banner-events', {
+      method: 'POST', keepalive, body: JSON.stringify(payload || {}),
+    });
+  }
+  async function adminSaveUiConfig(payload) {
+    const s = await restore();
+    if (!s) throw new Error('Prihlás sa znova.');
+    return json('/api/v1/admin/ui-config', {
+      method: 'PUT',
+      headers: {'X-Blinq-Access-Token': s.access_token},
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async function adminBannerAnalytics(days = 30) {
+    const s = await restore();
+    if (!s) throw new Error('Prihlás sa znova.');
+    return json(`/api/v1/admin/banner-analytics?days=${encodeURIComponent(days)}`, {
+      headers: {'X-Blinq-Access-Token': s.access_token},
+    });
+  }
 
-  window.BlinqAuth = {init, restore, signIn, signUp, reset, update, signOut, feed, clear};
+  window.BlinqAuth = {init, restore, signIn, signUp, reset, update, signOut, feed, adminUsers, adminUpdateAccess, runtimeUiConfig, contentNews, bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear};
 })();
