@@ -24,12 +24,14 @@ jobs:
       # A manual workflow_dispatch is the explicit web deploy path, so an
       # unrelated backend/history test cannot block publishing web changes.
       - name: Set up Python
-        if: github.event_name != 'workflow_dispatch'
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: pip
           cache-dependency-path: api/requirements-train.txt
+
+      - name: Compile API and scripts
+        run: python -m compileall -q api scripts
 
       - name: Install backend test dependencies
         if: github.event_name != 'workflow_dispatch'
@@ -55,6 +57,9 @@ jobs:
           test -s web/index.html
           test -s web/styles.css
           test -s web/staticwebapp.config.json
+          test -s api/function_app.py
+          test -s api/requirements.txt
+          test -s scripts/prepare_feed.py
 
   deploy:
     needs: checks
