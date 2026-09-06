@@ -86,3 +86,6 @@ jobs:
           api_location: api
           output_location: ''
           skip_app_build: true
+      - name: Confirm prediction publication
+        if: env.MODE == 'refresh'
+        run: python scripts/confirm_prediction_publication.py --data-repository "$TBT_DATA_REPOSITORY"
