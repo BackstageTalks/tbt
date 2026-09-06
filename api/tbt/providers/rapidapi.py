@@ -691,6 +691,11 @@ class RapidTennisClient:
                         historical=historical,
                     )
                 except ValueError as exc:
+                    if historical:
+                        raise ProviderError(
+                            "Incomplete historical day: invalid required "
+                            f"identity/date in {tour.upper()} event"
+                        ) from exc
                     logger.warning(
                         "Skipping %s event with invalid required identity/date: %s",
                         tour.upper(),
