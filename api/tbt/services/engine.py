@@ -8,6 +8,8 @@ import pandas as pd
 from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES
 from ..models.metrics import evaluate_probabilities
 from .prediction_quality import coverage, subgroup_report
+from .data_quality import audit_history
+from .training import _enforce_rank_provenance
 
 
 def event_id(match):
@@ -18,9 +20,14 @@ def event_id(match):
 def predict(model, history, upcoming, now=None):
     now = now or datetime.now(timezone.utc)
     # Match completion timestamps are unavailable. Use previous UTC days only,
-    # matching the conservative whole-day training protocol.
+    # matching the conservative whole-day training protocol. Validate the exact
+    # replay slice with the same history/ranking policy used by training/backtest.
+    cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    replay_history = [match for match in history if match.scheduled_at < cutoff]
+    replay_history, _ = audit_history(replay_history, now=now)
+    replay_history, _ = _enforce_rank_provenance(replay_history)
     builder = FeatureBuilder()
-    builder.replay(history, before=now.replace(hour=0, minute=0, second=0, microsecond=0))
+    builder.replay(replay_history, before=cutoff)
     future = sorted((m for m in upcoming if not m.is_completed and m.scheduled_at > now
                      and m.status in {"upcoming", "notstarted", "scheduled"}), key=lambda m: (m.scheduled_at, m.match_id))
     if not future:
