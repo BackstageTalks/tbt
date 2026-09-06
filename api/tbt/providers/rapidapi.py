@@ -160,12 +160,13 @@ class RapidTennisClient:
                     )
                     delay = delay if delay is not None else 2 + attempt * 2
 
-                    time.sleep(
-                        min(
-                            max(delay, 1.0),
-                            30.0,
-                        )
-                    )
+                    # Honor the entire server delay, including long HTTP-date
+                    # delays. Chunking keeps waits interruptible without retrying.
+                    remaining_delay = max(delay, 1.0)
+                    while remaining_delay > 0:
+                        pause = min(remaining_delay, 60.0)
+                        time.sleep(pause)
+                        remaining_delay -= pause
                     continue
 
                 if response.status_code >= 500:
