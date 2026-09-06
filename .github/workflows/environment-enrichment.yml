@@ -13,11 +13,6 @@ on:
         required: true
         default: "2024-01-08"
         type: string
-      max_requests:
-        description: "Maximum Open-Meteo requests for this run (1-500)"
-        required: true
-        default: "100"
-        type: string
       limit:
         description: "Maximum matches to inspect (0 = all in range)"
         required: true
@@ -45,7 +40,7 @@ concurrency:
 jobs:
   enrich-environment:
     runs-on: ubuntu-latest
-    timeout-minutes: 210
+    timeout-minutes: 360
     env:
       PYTHONPATH: api
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
@@ -83,7 +78,6 @@ jobs:
           ARGS=(
             --start "${{ inputs.start }}"
             --end "${{ inputs.end }}"
-            --max-requests "${{ inputs.max_requests }}"
             --limit "${{ inputs.limit }}"
             --data-repository "$TBT_DATA_REPOSITORY"
           )
