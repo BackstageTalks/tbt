@@ -15,8 +15,13 @@ def test_admin_layout_has_fixed_slot_inventory_and_access_states():
     elements = cfg["elements"]
     assert {f"HEADER_BANNER_{i}" for i in range(1, 4)} <= set(elements)
     assert {f"CONTENT_TOP_{i}" for i in range(1, 5)} <= set(elements)
+    assert {f"CONTENT_MID_{i}" for i in range(1, 5)} <= set(elements)
     assert {f"CONTENT_BOTTOM_{i}" for i in range(1, 5)} <= set(elements)
-    assert {"SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "PRIME_PICKS_PANEL", "FOOTER_SYSTEM"} <= set(elements)
+    assert {
+        "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3",
+        "PRIME_PICKS_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
+        "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "BTTS_BONUS_PANEL", "FOOTER_SYSTEM",
+    } <= set(elements)
     contexts = {"trial", "expired", "rookie", "pro", "elite", "goat", "legend"}
     valid = {"active", "locked", "blurred", "hidden"}
     for element in elements.values():
@@ -47,7 +52,11 @@ def test_hide_ads_and_fallback_inventory_are_configured_without_collapsing_layou
     assert cfg["plans"]["goat"]["hide_ads_allowed"] is True
     assert cfg["ad_fallbacks"]["mode"] == "mixed"
     assert isinstance(cfg["ad_fallbacks"]["fallback_images"], list)
-    for slot in [*(f"CONTENT_TOP_{i}" for i in range(1, 5)), *(f"CONTENT_BOTTOM_{i}" for i in range(1, 5))]:
+    for slot in [
+        *(f"CONTENT_TOP_{i}" for i in range(1, 5)),
+        *(f"CONTENT_MID_{i}" for i in range(1, 5)),
+        *(f"CONTENT_BOTTOM_{i}" for i in range(1, 5)),
+    ]:
         content = cfg["elements"][slot]["content"]
         assert "campaign_id" in content
         assert "advertiser_id" in content
@@ -96,13 +105,14 @@ def test_rss_sources_live_in_backend_json_and_are_empty_until_owner_configures_t
 
 def test_large_content_rows_use_only_fixed_supported_merge_presets():
     cfg = _cfg()
-    assert cfg["content_rows"]["content_top"]["preset"] == "1+1+1+1"
-    assert cfg["content_rows"]["content_bottom"]["preset"] == "1+1+1+1"
+    assert set(cfg["content_rows"]) == {"content_top", "content_mid", "content_bottom"}
+    assert all(cfg["content_rows"][zone]["preset"] == "1+1+1+1" for zone in cfg["content_rows"])
+    assert all(cfg["content_rows"][zone]["enabled"] is True for zone in cfg["content_rows"])
     assert set(cfg["admin"]["row_presets"]) == {"1+1+1+1", "2+2", "2+1+1", "1+1+2", "4"}
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "rowPresetMap" in app_js
-    assert "adminTopRowPreset" in app_js
-    assert "adminBottomRowPreset" in app_js
+    assert "data-admin-row-enabled" in app_js
+    assert "data-admin-row-preset" in app_js
 
 
 def test_campaigns_advertisers_and_rss_are_separate_runtime_entities():
@@ -139,9 +149,11 @@ def test_rookie_pick_entitlement_is_stable_across_filters():
 def test_campaign_manager_supports_fixed_size_creative_variants():
     cfg = _cfg()
     specs = cfg["creative_specs"]
-    assert specs["large_1"]["recommended"] == "1200 × 900 px"
-    assert specs["large_2"]["recommended"] == "2400 × 900 px"
-    assert specs["large_4"]["recommended"] == "2400 × 450 px"
+    assert specs["large_1"]["recommended"] == "1200 × 300 px"
+    assert specs["large_2"]["recommended"] == "2400 × 300 px"
+    assert specs["large_4"]["recommended"] == "2400 × 150 px"
+    assert specs["large_1"]["minimum"] == "800 × 200 px"
+    assert specs["large_4"]["safe_area"] == "center 90%"
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "data-campaign-image" in app_js
     assert "creative_mode:'full'" in app_js
@@ -150,3 +162,39 @@ def test_campaign_manager_supports_fixed_size_creative_variants():
     css = (ROOT / "web" / "styles.css").read_text(encoding="utf-8")
     assert ".promo-card.creative-full .promo-image" in css
     assert ".promo-card.no-copy .promo-copy" in css
+
+
+def test_dashboard_market_structure_matches_approved_order_and_rules():
+    cfg = _cfg()
+    rules = cfg["market_rules"]
+    assert rules["prime"]["market"] == "match_winner"
+    assert rules["prime"]["min_win_probability"] == 0.70
+    assert rules["prime"]["limit"] is None
+    assert rules["top_daily"]["limit"] == 10
+    assert rules["value"]["min_odds"] == 1.70
+    assert rules["value"]["max_implied_probability_gap"] == 0.15
+    assert set(rules["ace"]["markets"]) == {"aces", "double_faults"}
+    assert set(rules["sg"]["markets"]) == {"sets", "games"}
+    assert rules["btts"]["href"] == "/btts"
+    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    order = [
+        'id="bannerTop"', 'id="predictionsPanel"', 'id="topDailyPanel"',
+        'id="bannerMid"', 'id="valuePanel"', 'id="acePanel"',
+        'id="bannerBottom"', 'id="sgPanel"', 'id="bttsBonusPanel"',
+    ]
+    positions = [html.index(token) for token in order]
+    assert positions == sorted(positions)
+
+
+def test_banner_adaptation_and_watermark_controls_are_exposed_in_admin():
+    cfg = _cfg()
+    app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "styles.css").read_text(encoding="utf-8")
+    assert "mobile_image_url" in app_js
+    assert "image_fit" in app_js
+    assert "image_position" in app_js
+    assert "data-admin-watermark" in app_js
+    assert "COMING SOON" in app_js
+    assert ".promo-image.fit-cover" in css
+    assert ".promo-image.pos-center" in css
+    assert cfg["elements"]["SIDEBAR_PROMO_2"]["watermark"]["text"] == "COMING SOON"
