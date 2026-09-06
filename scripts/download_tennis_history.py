@@ -113,13 +113,12 @@ def main():
             bundle = [
                 directory / f"history-{y}.parquet"
                 for y in sorted(pending_years)
+                if (directory / f"history-{y}.parquet").is_file()
             ]
-            bundle.extend(
-                [
-                    directory / "history_manifest.json",
-                    progress_file,
-                ]
-            )
+            manifest_file = directory / "history_manifest.json"
+            if manifest_file.is_file():
+                bundle.append(manifest_file)
+            bundle.append(progress_file)
             store.upload_bundle(bundle)
             pending_years.clear()
 

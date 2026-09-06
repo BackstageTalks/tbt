@@ -159,6 +159,49 @@ class ReleaseStore:
                 "--clobber",
             )
 
+        # history_manifest.json is the authoritative partition inventory.
+        # A missing remote partition must fail closed instead of silently
+        # shrinking the training corpus to the assets that happen to exist.
+        if "history_manifest.json" in assets:
+            history_manifest_path = self.directory / "history_manifest.json"
+            try:
+                history_manifest = json.loads(
+                    history_manifest_path.read_text(encoding="utf-8")
+                )
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                raise ValueError("Invalid history manifest") from exc
+
+            years = history_manifest.get("years")
+            if not isinstance(years, dict):
+                raise ValueError("Invalid history manifest: missing years map")
+
+            expected_history_assets = set()
+            for year, metadata in years.items():
+                if not isinstance(metadata, dict):
+                    raise ValueError(f"Invalid history manifest entry for year {year}")
+                asset = str(metadata.get("asset") or f"history-{int(year):04d}.parquet")
+                if not re.fullmatch(r"history-\d{4}\.parquet", asset):
+                    raise ValueError(f"Invalid history partition asset in manifest: {asset}")
+                expected_history_assets.add(asset)
+
+            missing_history = sorted(expected_history_assets - assets)
+            if missing_history:
+                raise FileNotFoundError(
+                    "History manifest references missing release assets: "
+                    + ", ".join(missing_history)
+                )
+
+            missing_local_history = sorted(
+                name
+                for name in expected_history_assets
+                if not (self.directory / name).is_file()
+            )
+            if missing_local_history:
+                raise FileNotFoundError(
+                    "History download is incomplete: "
+                    + ", ".join(missing_local_history)
+                )
+
         manifest = self._read_local_bundle_manifest() if self.BUNDLE_MANIFEST in assets else {}
         manifest_files = manifest.get("files", {})
         uncovered = [name for name in required if not (

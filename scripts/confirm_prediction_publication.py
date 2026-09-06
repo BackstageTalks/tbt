@@ -18,6 +18,11 @@ def main():
         "--data-repository",
         default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"),
     )
+    parser.add_argument(
+        "--deployed-feed",
+        default=None,
+        help="Local feed file that was just deployed; must match the private candidate exactly.",
+    )
     args = parser.parse_args()
 
     directory = ROOT / ".cache/tbt/predictions-confirm"
@@ -30,7 +35,19 @@ def main():
     feed = read_json(directory / "feed.json", {})
     if not isinstance(ledger, list) or not isinstance(feed, dict):
         raise ValueError("Invalid prediction publication artifacts")
-    upcoming = feed.get("upcoming")
+
+    deployed_feed = feed
+    if args.deployed_feed:
+        deployed_feed = read_json(args.deployed_feed, None)
+        if not isinstance(deployed_feed, dict):
+            raise ValueError("Invalid deployed feed")
+        if deployed_feed != feed:
+            raise RuntimeError(
+                "Deployed feed does not match the current private publication candidate; "
+                "refusing to confirm issuance"
+            )
+
+    upcoming = deployed_feed.get("upcoming")
     if not isinstance(upcoming, list):
         raise ValueError("Invalid deployed feed")
     published_ids = {
