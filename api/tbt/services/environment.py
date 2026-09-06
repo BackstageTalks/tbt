@@ -54,17 +54,17 @@ class OpenMeteoClient:
         self,
         timeout_seconds: float = 25.0,
         *,
-        request_limit: int = 500,
+        request_limit: int | None = None,
         min_interval_seconds: float = 0.75,
         client: httpx.Client | None = None,
     ) -> None:
-        if request_limit < 1:
-            raise ValueError("request_limit must be positive")
+        if request_limit is not None and request_limit < 1:
+            raise ValueError("request_limit must be positive when set")
         self.client = client or httpx.Client(
             timeout=timeout_seconds,
             headers={"User-Agent": "TBT environment-enrichment"},
         )
-        self.request_limit = int(request_limit)
+        self.request_limit = int(request_limit) if request_limit is not None else None
         self.request_count = 0
         self.min_interval_seconds = max(0.0, float(min_interval_seconds))
         self._last_request = 0.0
@@ -73,7 +73,7 @@ class OpenMeteoClient:
         self.client.close()
 
     def _get(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
-        if self.request_count >= self.request_limit:
+        if self.request_limit is not None and self.request_count >= self.request_limit:
             raise OpenMeteoBudgetExceeded("Open-Meteo request cap reached")
         delay = self.min_interval_seconds - (time.monotonic() - self._last_request)
         if delay > 0:
