@@ -408,7 +408,142 @@ def test_provider_daily_dedupe_preserves_conflicting_provider_events(monkeypatch
     client.normalize_match = normalize
     rows = client.matches_for_day("atp", base.scheduled_at.date(), historical=True)
     assert len(rows) == 2
+    assert len({row.match_id for row in rows}) == 2
+    assert all(row.provider_payload["_tbt_canonical_match_id"] == "collision" for row in rows)
     assert {row.provider_payload["_tbt_provider_event_id"] for row in rows} == {"101", "202"}
+    accepted, _ = training.audit_history(rows, now=base.scheduled_at + timedelta(days=1))
+    assert len(accepted) == 2
+
+
+
+def test_proven_distinct_collision_ids_are_stable_across_incremental_merge(match_factory):
+    base = match_factory("collision", "A", "B", "A")
+    one = replace(
+        base,
+        tournament="One Open",
+        provider_payload={"_tbt_provider_event_id": "101"},
+    )
+    two = replace(
+        base,
+        tournament="Two Open",
+        scheduled_at=base.scheduled_at + timedelta(hours=3),
+        provider_payload={"_tbt_provider_event_id": "202"},
+    )
+    first = merge_matches([one, two])
+    first_ids = {row.provider_payload["_tbt_provider_event_id"]: row.match_id for row in first}
+    assert len(set(first_ids.values())) == 2
+    assert all(row.provider_payload["_tbt_canonical_match_id"] == "collision" for row in first)
+
+    # A later incremental fetch may contain only one side of the original
+    # collision. Provider identity + persisted canonical marker must merge it
+    # back into the same stored record instead of creating a third match.
+    again = merge_matches(first, [one])
+    again_ids = {row.provider_payload["_tbt_provider_event_id"]: row.match_id for row in again}
+    assert again_ids == first_ids
+    assert len(again) == 2
+
+
+def test_history_downloader_refuses_ambiguous_synthetic_id_collision(match_factory):
+    import download_tennis_history as downloader
+
+    base = match_factory("collision", "A", "B", "A")
+    a = replace(base, provider_payload={"_tbt_provider_event_id": "101"})
+    b = replace(base, provider_payload={"_tbt_provider_event_id": "202"})
+
+    class Provider:
+        request_count = 0
+        def matches_for_day(self, tour, day, historical):
+            return [a, b] if tour == "atp" else []
+
+    with pytest.raises(ValueError, match="Ambiguous match identity collision"):
+        downloader.download_days(
+            Provider(), [], {"completed_days": []},
+            base.scheduled_at.date(), base.scheduled_at.date(),
+            lambda years, publish=False: None,
+        )
+
+
+def test_history_downloader_persists_proven_distinct_synthetic_id_collisions(
+    monkeypatch, match_factory, tmp_path
+):
+    import download_tennis_history as downloader
+
+    base = match_factory("collision", "A", "B", "A")
+
+    class Provider:
+        def __init__(self, request_budget):
+            assert request_budget is None
+            self.request_count = 0
+            self.request_limit = None
+            self.client = SimpleNamespace(close=lambda: None)
+
+        def matches_for_day(self, tour, day, historical):
+            self.request_count += 1
+            if tour == "wta":
+                return []
+            one = replace(
+                base,
+                tournament="One Open",
+                provider_payload={"_tbt_provider_event_id": "101"},
+            )
+            two = replace(
+                base,
+                tournament="Two Open",
+                scheduled_at=base.scheduled_at + timedelta(hours=3),
+                provider_payload={"_tbt_provider_event_id": "202"},
+            )
+            return merge_matches([one, two])
+
+    monkeypatch.setattr(downloader, "RapidTennisClient", Provider)
+    monkeypatch.setattr(
+        downloader,
+        "settings",
+        replace(downloader.settings, rapidapi_key="test"),
+    )
+    monkeypatch.setattr(
+        "sys.argv",
+        [
+            "download",
+            "--start", "2025-01-01",
+            "--end", "2025-01-01",
+            "--history-dir", str(tmp_path),
+            "--max-requests", "10",
+        ],
+    )
+    downloader.main()
+    restored = load_partitions(tmp_path)
+    assert len(restored) == 2
+    assert len({row.match_id for row in restored}) == 2
+    assert {row.tournament for row in restored} == {"One Open", "Two Open"}
+
+
+def test_settlement_rechecks_corrected_actual_start_after_result_exists(match_factory):
+    start = datetime(2025, 1, 1, tzinfo=timezone.utc)
+    fixture = replace(
+        match_factory("event", "A", "B", None),
+        scheduled_at=start + timedelta(hours=2),
+        provider_payload={"id": "event"},
+    )
+    model = SimpleNamespace(
+        version="test",
+        predict_proba=lambda frame: np.full(len(frame), .7),
+    )
+    ledger = reconcile_ledger([], predict(model, [], [fixture], start), [], start)
+    issued = start + timedelta(minutes=30)
+    ledger = confirm_publication(ledger, {"event"}, issued)
+
+    completed = replace(fixture, winner_id="A", status="finished")
+    settled = reconcile_ledger(ledger, [], [completed], start + timedelta(hours=3))
+    assert settled[0]["result"] is not None
+
+    corrected = replace(completed, scheduled_at=start + timedelta(minutes=15))
+    corrected_ledger = reconcile_ledger(
+        settled, [], [corrected], start + timedelta(hours=4)
+    )
+    row = corrected_ledger[0]
+    assert row["scheduled_at"] == corrected.scheduled_at.isoformat()
+    assert row["result"]["scheduled_at"] == corrected.scheduled_at.isoformat()
+    assert row["excluded_reason"] == "issued_after_actual_start"
 
 
 def test_release_download_fails_when_history_manifest_partition_is_missing(monkeypatch, tmp_path):
@@ -501,3 +636,6 @@ def test_workflows_confirm_publication_and_share_deploy_lock():
     assert "confirm_prediction_publication.py" in ci
     assert "--deployed-feed api/data/feed.json" in data
     assert "--deployed-feed api/data/feed.json" in ci
+    assert "python -m compileall -q api scripts" in ci
+    setup_block = ci.split("- name: Set up Python", 1)[1].split("- name: Compile API and scripts", 1)[0]
+    assert "github.event_name != 'workflow_dispatch'" not in setup_block
