@@ -192,9 +192,14 @@ def load_snapshot(path: str | Path, before: datetime | None = None) -> list[Matc
     matches: list[MatchRecord] = []
     for row_number, row in enumerate(frame.to_dict(orient="records"), start=1):
         scheduled_at = _dt(row.get("scheduled_at"))
+        match_id = _text_or_empty(row.get("match_id"))
         player1_id = _text_or_empty(row.get("player1_id"))
         player2_id = _text_or_empty(row.get("player2_id"))
 
+        if not match_id:
+            raise ValueError(
+                f"Invalid history snapshot row {row_number}: missing match identity"
+            )
         if not player1_id or not player2_id:
             raise ValueError(
                 f"Invalid history snapshot row {row_number}: missing player identity"
@@ -206,7 +211,7 @@ def load_snapshot(path: str | Path, before: datetime | None = None) -> list[Matc
 
         matches.append(
             MatchRecord(
-                match_id=_text_or_empty(row.get("match_id")),
+                match_id=match_id,
                 tour=_text_or_empty(row.get("tour")).lower(),
                 scheduled_at=scheduled_at,
                 player1_id=player1_id,
@@ -588,22 +593,30 @@ def _compatible_players(left, right):
             and {left.player1_id, left.player2_id} == {right.player1_id, right.player2_id})
 
 
-def _merge_identity(left, right, *, fallback=False):
-    if not _compatible_players(left, right):
-        return False
-    a, b = _provider_event_id(left), _provider_event_id(right)
-    if a and b and a != b:
-        return False
-    if not fallback:
-        return bool((a and a == b) or (left.match_id and left.match_id == right.match_id))
-    # Missing identities require exact time plus positive tournament agreement.
-    # Do not guess a reschedule from players/day/round alone.
+def _fallback_identity_agrees(left, right):
+    # Synthetic match IDs intentionally omit tournament/time detail, so they are
+    # never sufficient on their own. Missing provider IDs require exact time
+    # plus positive tournament agreement.
     if left.scheduled_at != right.scheduled_at or _signature(left) != _signature(right):
         return False
     if left.tournament_id and right.tournament_id:
         return str(left.tournament_id) == str(right.tournament_id)
-    a, b = left.tournament.strip().casefold(), right.tournament.strip().casefold()
-    return bool(a and a != "unknown" and a == b)
+    left_name = str(left.tournament or "").strip().casefold()
+    right_name = str(right.tournament or "").strip().casefold()
+    return bool(left_name and left_name != "unknown" and left_name == right_name)
+
+
+def _merge_identity(left, right, *, fallback=False):
+    if not _compatible_players(left, right):
+        return False
+    a, b = _provider_event_id(left), _provider_event_id(right)
+    if a and b:
+        return a == b
+    if fallback:
+        return _fallback_identity_agrees(left, right)
+    if left.match_id and left.match_id == right.match_id:
+        return _fallback_identity_agrees(left, right)
+    return False
 
 
 def merge_matches(*groups: Iterable[MatchRecord]) -> list[MatchRecord]:
