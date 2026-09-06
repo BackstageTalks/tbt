@@ -11,7 +11,6 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 from _bootstrap import ROOT
-from history_download_budget import LocalRequestBudget, reserve_allocation
 from tbt.config import settings
 from tbt.data.history_snapshot import load_partitions, write_year_partition, _merge_record
 from tbt.data.provider_context import merge_provider_context
@@ -73,7 +72,7 @@ def main():
     parser.add_argument("--history-dir", default=str(ROOT / ".cache/tbt/history"))
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", ""))
     parser.add_argument("--release-tag", default="tbt-data-v1")
-    parser.add_argument("--publish", action="store_true", help="Download/reserve/publish via gh; use the supplied serialized workflow")
+    parser.add_argument("--publish", action="store_true", help="Download/publish via gh; use the supplied serialized workflow")
     args = parser.parse_args()
     try:
         start, end = history_window(args.start, args.end, args.lookback_days)
@@ -82,7 +81,7 @@ def main():
     if not 1 <= args.max_requests <= 12000:
         parser.error("max-requests must be 1..12000")
     if not settings.rapidapi_key:
-        parser.error("Set RAPIDAPI_KEY before starting; no allowance reserved")
+        parser.error("Set RAPIDAPI_KEY before starting")
     if settings.rapidapi_host != "tennisapi1.p.rapidapi.com" or settings.rapidapi_base_url != "https://tennisapi1.p.rapidapi.com":
         parser.error("Downloader requires the subscribed tennisapi1 host and HTTPS base URL")
     directory = Path(args.history_dir)
@@ -91,18 +90,9 @@ def main():
     if args.publish:
         store = ReleaseStore(args.data_repository, args.release_tag, directory)
         store.download()
-    budget_file = directory / "request_budget.json"
+    # The operator-supplied --max-requests value is the only local request cap.
+    # No rolling reservation ledger is used for history/statistics downloads.
     allocation = args.max_requests
-    if store:
-        ledger, allocation = reserve_allocation(read_json(budget_file, {}), allocation,
-            run_id=os.getenv("GITHUB_RUN_ID", "manual") + "-" + os.getenv("GITHUB_RUN_ATTEMPT", "1"))
-        if not allocation:
-            print("No download allowance available. Existing reservations are retained after cancellation.")
-            return
-        write_json(budget_file, ledger)
-        # Publication MUST succeed before the first upstream call. Never refund
-        # automatically: cancellation may hide already executed requests.
-        store.upload_bundle([budget_file])
     rows = load_partitions(directory) if list(directory.glob("history-*.parquet")) else []
     matches = {m.match_id: m for m in rows}
     progress_file = directory / "download_progress.json"
@@ -133,8 +123,7 @@ def main():
             store.upload_bundle(bundle)
             pending_years.clear()
 
-    local_budget = LocalRequestBudget(directory / "local_request_budget.sqlite")
-    provider = RapidTennisClient(request_budget=local_budget)
+    provider = RapidTennisClient(request_budget=None)
     provider.request_limit = allocation
     report = Counter()
     enricher = None
@@ -180,11 +169,8 @@ def main():
                 try:
                     provider.client.close()
                 finally:
-                    try:
-                        local_budget.close()
-                    finally:
-                        if enricher:
-                            enricher.close()
+                    if enricher:
+                        enricher.close()
 
         if checkpoint_error is not None:
             raise checkpoint_error
