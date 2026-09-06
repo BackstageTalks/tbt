@@ -12,7 +12,6 @@ from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions, write_year_partition
 from tbt.services.environment import (
-    OpenMeteoBudgetExceeded,
     OpenMeteoClient,
     environment_payload,
     location_candidates,
@@ -50,7 +49,6 @@ def main() -> None:
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True, help="Exclusive UTC end")
     parser.add_argument("--limit", type=int, default=0, help="0 = all matches in range")
-    parser.add_argument("--max-requests", type=int, default=500)
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--diagnostics-limit", type=int, default=100)
@@ -67,8 +65,6 @@ def main() -> None:
 
     if os.getenv("TBT_WEATHER_RESEARCH") != "true":
         parser.error("Set TBT_WEATHER_RESEARCH=true only for evaluation/noncommercial use")
-    if not 1 <= args.max_requests <= 500:
-        parser.error("max-requests must be 1..500")
     if args.limit < 0:
         parser.error("limit must be >= 0")
 
@@ -115,7 +111,7 @@ def main() -> None:
         "error_details": [],
     }
 
-    client = OpenMeteoClient(request_limit=args.max_requests)
+    client = OpenMeteoClient(request_limit=None)
     changed_years: set[int] = set()
     published_years: set[int] = set()
     dirty_since_checkpoint = 0
@@ -181,9 +177,6 @@ def main() -> None:
                     match.scheduled_at,
                     include_weather=(match.indoor is not True),
                 )
-            except OpenMeteoBudgetExceeded:
-                report["budget_stopped"] = True
-                break
             except Exception as exc:
                 report["errors"] += 1
                 if len(report["error_details"]) < args.diagnostics_limit:
