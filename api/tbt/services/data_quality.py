@@ -73,6 +73,8 @@ def audit_history(matches, now=None):
 
         if m.scheduled_at.tzinfo is None:
             raise ValueError("Naive historical timestamp")
+        if not str(m.match_id or "").strip():
+            raise ValueError("Missing match identity in history")
 
         if not m.is_completed:
             rejected["missing_result"] += 1

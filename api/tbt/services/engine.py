@@ -48,7 +48,8 @@ def predict(model, history, upcoming, now=None):
             "player2": {"id": match.player2_id, "name": match.player2_name, "probability": 1 - p},
             "winner_id": winner, "confidence": max(p, 1 - p), "data_depth": f["data_depth"],
             "stats_available": bool(f["stats_known_both"]), "signals": signals,
-            "model_version": model.version, "issued_at": None, "result": None})
+            "model_version": model.version, "created_at": now.isoformat(),
+            "issued_at": None, "publication_status": "pending", "result": None})
     return rows
 
 
@@ -60,7 +61,11 @@ def reconcile_ledger(ledger, predictions, history, now=None):
         if datetime.fromisoformat(row["scheduled_at"]) <= now:
             continue
         if row["event_id"] not in stored:
-            stored[row["event_id"]] = {**row, "issued_at": now.isoformat()}
+            stored[row["event_id"]] = {
+                **row,
+                "issued_at": None,
+                "publication_status": "pending",
+            }
         existing = stored[row["event_id"]]
         if {existing["player1"]["id"], existing["player2"]["id"]} != {row["player1"]["id"], row["player2"]["id"]}:
             raise ValueError("Prediction identity mismatch")
@@ -74,15 +79,46 @@ def reconcile_ledger(ledger, predictions, history, now=None):
             continue
         if {row["player1"]["id"], row["player2"]["id"]} != {match.player1_id, match.player2_id}:
             raise ValueError("Settlement identity mismatch")
+        issued_at = row.get("issued_at")
+        if not issued_at:
+            # Pending predictions are never scored until a successful public
+            # deployment confirms that they were actually available pre-match.
+            continue
         # If the provider moves a start earlier than issuance, exclude that record
         # from live performance rather than claiming a pre-match prediction.
-        if datetime.fromisoformat(row["issued_at"]) >= match.scheduled_at:
+        if datetime.fromisoformat(issued_at) >= match.scheduled_at:
             row["excluded_reason"] = "issued_after_actual_start"
             continue
         row["result"] = {"winner_id": match.winner_id, "correct": row["winner_id"] == match.winner_id,
                          "settled_at": now.isoformat()}
     return sorted(stored.values(), key=lambda r: r["scheduled_at"])
 
+
+
+def confirm_publication(ledger, published_event_ids, now=None):
+    """Confirm first public availability after a successful deployment.
+
+    Only event IDs present in the deployed feed are eligible for confirmation.
+    Confirmation is conservative: if the match has already started, the record
+    is excluded rather than backdated. Existing issued_at values are immutable.
+    """
+    now = now or datetime.now(timezone.utc)
+    published = {str(value) for value in published_event_ids}
+    confirmed = []
+    for source in ledger:
+        row = dict(source)
+        if row.get("issued_at") or row.get("event_id") not in published:
+            confirmed.append(row)
+            continue
+        scheduled_at = datetime.fromisoformat(row["scheduled_at"])
+        if scheduled_at <= now:
+            row["publication_status"] = "expired_unpublished"
+            row["excluded_reason"] = "not_confirmed_before_start"
+        else:
+            row["issued_at"] = now.isoformat()
+            row["publication_status"] = "published"
+        confirmed.append(row)
+    return sorted(confirmed, key=lambda r: r["scheduled_at"])
 
 def serving_feed(ledger, model, history, report, upcoming, now=None):
     now = now or datetime.now(timezone.utc)
