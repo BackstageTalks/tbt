@@ -1704,7 +1704,7 @@ class FeatureBuilder:
                 if match.is_completed
             ),
             key=lambda match: (
-                match.event_date,
+                match.scheduled_at,
                 match.match_id,
             ),
         )
