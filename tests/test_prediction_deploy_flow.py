@@ -13,22 +13,45 @@ from tbt.services.feed import empty_feed
 
 
 def _valid_feed(event_id="event-1"):
-    future = (datetime.now(timezone.utc) + timedelta(days=2)).isoformat()
+    now = datetime.now(timezone.utc)
+    future = (now + timedelta(days=2)).isoformat()
+    row = {
+        "id": "match-1",
+        "event_id": event_id,
+        "tour": "ATP",
+        "scheduled_at": future,
+        "tournament": "Test Open",
+        "surface": "hard",
+        "round": "R1",
+        "competition": "atp",
+        "quality": {},
+        "player1": {"id": "A", "name": "A", "probability": 0.7},
+        "player2": {"id": "B", "name": "B", "probability": 0.3},
+        "winner_id": "A",
+        "confidence": 0.7,
+        "data_depth": 10,
+        "stats_available": False,
+        "signals": [],
+        "model_version": "test",
+        "created_at": now.isoformat(),
+        "issued_at": None,
+        "publication_status": "pending",
+        "result": None,
+    }
     return {
         "schema": 1,
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": now.isoformat(),
         "model": {"version": "test"},
-        "upcoming": [{
-            "event_id": event_id,
-            "scheduled_at": future,
-            "player1": {"id": "A"},
-            "player2": {"id": "B"},
-        }],
+        "upcoming": [row],
         "results": [],
         "performance": {},
         "history": {},
         "ready": True,
     }
+
+
+def _ledger_for_feed(feed):
+    return [dict(row) for row in feed["upcoming"]]
 
 
 def test_prepare_feed_with_no_candidate_overwrites_stale_checked_in_feed(monkeypatch, tmp_path):
@@ -60,8 +83,9 @@ def test_prepare_feed_requires_prediction_asset_pair_and_keeps_ledger_out_of_api
         def download(self, extra_names=(), required_names=()):
             assert set(required_names) == {"feed.json", "ledger.json"}
             self.directory.mkdir(parents=True, exist_ok=True)
-            (self.directory / "feed.json").write_text(json.dumps(_valid_feed()))
-            (self.directory / "ledger.json").write_text("[]")
+            feed = _valid_feed()
+            (self.directory / "feed.json").write_text(json.dumps(feed))
+            (self.directory / "ledger.json").write_text(json.dumps(_ledger_for_feed(feed)))
 
     monkeypatch.setattr(prepare_feed, "ROOT", tmp_path)
     monkeypatch.setattr(prepare_feed, "ReleaseStore", Store)
@@ -107,13 +131,7 @@ def test_confirm_no_candidate_is_noop_only_for_empty_deployment(monkeypatch, tmp
 
 def test_confirm_complete_candidate_requires_exact_deployed_feed(monkeypatch, tmp_path):
     feed = _valid_feed()
-    scheduled = feed["upcoming"][0]["scheduled_at"]
-    ledger = [{
-        "event_id": "event-1",
-        "scheduled_at": scheduled,
-        "issued_at": None,
-        "publication_status": "pending",
-    }]
+    ledger = _ledger_for_feed(feed)
     uploaded = []
 
     class Store:
@@ -142,3 +160,56 @@ def test_confirm_complete_candidate_requires_exact_deployed_feed(monkeypatch, tm
     deployed.write_text(json.dumps(changed))
     with pytest.raises(RuntimeError, match="does not match"):
         confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed)])
+
+
+def test_prepare_feed_rejects_same_event_with_different_pick(monkeypatch, tmp_path):
+    feed = _valid_feed()
+    ledger = _ledger_for_feed(feed)
+    ledger[0]["winner_id"] = "B"
+    ledger[0]["player1"] = {**ledger[0]["player1"], "probability": 0.2}
+    ledger[0]["player2"] = {**ledger[0]["player2"], "probability": 0.8}
+
+    class Store:
+        def __init__(self, repository, tag, directory):
+            self.directory = Path(directory)
+        def _asset_names(self):
+            return {"feed.json", "ledger.json", "_tbt_bundle_manifest.json"}
+        def download(self, **kwargs):
+            self.directory.mkdir(parents=True, exist_ok=True)
+            (self.directory / "feed.json").write_text(json.dumps(feed))
+            (self.directory / "ledger.json").write_text(json.dumps(ledger))
+
+    monkeypatch.setattr(prepare_feed, "ROOT", tmp_path)
+    monkeypatch.setattr(prepare_feed, "ReleaseStore", Store)
+    monkeypatch.setenv("GH_TOKEN", "token")
+    with pytest.raises(RuntimeError, match="feed/ledger mismatch"):
+        prepare_feed.main()
+
+
+def test_confirm_rejects_same_event_with_different_ledger_pick(monkeypatch, tmp_path):
+    feed = _valid_feed()
+    ledger = _ledger_for_feed(feed)
+    ledger[0]["winner_id"] = "B"
+    ledger[0]["player1"] = {**ledger[0]["player1"], "probability": 0.2}
+    ledger[0]["player2"] = {**ledger[0]["player2"], "probability": 0.8}
+    uploaded = []
+
+    class Store:
+        def __init__(self, repository, tag, directory):
+            self.directory = Path(directory)
+        def _asset_names(self):
+            return {"feed.json", "ledger.json", "_tbt_bundle_manifest.json"}
+        def download(self, **kwargs):
+            self.directory.mkdir(parents=True, exist_ok=True)
+            (self.directory / "feed.json").write_text(json.dumps(feed))
+            (self.directory / "ledger.json").write_text(json.dumps(ledger))
+        def upload_bundle(self, paths):
+            uploaded.extend(paths)
+
+    monkeypatch.setattr(confirm, "ROOT", tmp_path)
+    monkeypatch.setattr(confirm, "ReleaseStore", Store)
+    deployed = tmp_path / "deployed.json"
+    deployed.write_text(json.dumps(feed))
+    with pytest.raises(RuntimeError, match="feed/ledger mismatch"):
+        confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed)])
+    assert uploaded == []

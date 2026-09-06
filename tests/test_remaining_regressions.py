@@ -134,12 +134,12 @@ def test_prediction_requires_post_deploy_confirmation(match_factory):
     records = reconcile_ledger([], drafts, [], start)
     assert all(row['issued_at'] is None for row in records)
     publication = start + timedelta(seconds=10)
-    confirmed = confirm_publication(records, {'soon', 'later'}, publication)
+    confirmed = confirm_publication(records, copy.deepcopy(records), publication)
     by_id = {row['id']: row for row in confirmed}
     assert by_id['soon']['issued_at'] is None
     assert by_id['soon']['excluded_reason'] == 'not_confirmed_before_start'
     assert by_id['later']['issued_at'] == publication.isoformat()
-    again = confirm_publication(confirmed, {'later'}, publication + timedelta(seconds=5))
+    again = confirm_publication(confirmed, [copy.deepcopy(next(row for row in records if row['id'] == 'later'))], publication + timedelta(seconds=5))
     assert next(row for row in again if row['id'] == 'later')['issued_at'] == publication.isoformat()
 
 
@@ -530,7 +530,7 @@ def test_settlement_rechecks_corrected_actual_start_after_result_exists(match_fa
     )
     ledger = reconcile_ledger([], predict(model, [], [fixture], start), [], start)
     issued = start + timedelta(minutes=30)
-    ledger = confirm_publication(ledger, {"event"}, issued)
+    ledger = confirm_publication(ledger, copy.deepcopy(ledger), issued)
 
     completed = replace(fixture, winner_id="A", status="finished")
     settled = reconcile_ledger(ledger, [], [completed], start + timedelta(hours=3))
@@ -637,6 +637,9 @@ def test_workflows_confirm_publication_and_share_deploy_lock():
     assert "--deployed-feed api/data/feed.json" in data
     assert "--deployed-feed api/data/feed.json" in ci
     assert "python -m compileall -q api scripts" in ci
+    docs = (root / "docs/DNES_STIAHNUT_DATA.md").read_text()
+    assert "žiadna rolling rezervácia histórie sa neudržiava" in docs
+    assert "rezervácia zostane blokovaná" not in docs
     setup_block = ci.split("- name: Set up Python", 1)[1].split("- name: Compile API and scripts", 1)[0]
     assert "github.event_name != 'workflow_dispatch'" not in setup_block
 
@@ -652,7 +655,7 @@ def test_refresh_prediction_release_bootstraps_only_when_truly_empty(tmp_path):
             return set(self.assets)
         def download(self, extra_names=(), required_names=()):
             self.download_calls.append((set(extra_names), set(required_names)))
-            (self.directory / "feed.json").write_text("{}")
+            (self.directory / "feed.json").write_text('{"upcoming": []}')
             (self.directory / "ledger.json").write_text('[{"event_id":"old"}]')
 
     empty = Store(set())
@@ -681,4 +684,134 @@ def test_refresh_prediction_release_rejects_invalid_downloaded_ledger(tmp_path):
             (tmp_path / "ledger.json").write_text("{}")
 
     with pytest.raises(ValueError, match="Invalid prediction ledger"):
+        pipeline._load_prediction_ledger(Store())
+
+
+def test_release_download_requires_history_manifest_when_bundle_proves_history(monkeypatch, tmp_path):
+    store, assets = fake_release(monkeypatch, tmp_path)
+    assets["history-2024.parquet"] = b"2024"
+    bundle_manifest = {
+        "files": {
+            "history_manifest.json": {"sha256": "0" * 64},
+            "history-2024.parquet": {"sha256": hashlib.sha256(b"2024").hexdigest()},
+            "history-2025.parquet": {"sha256": hashlib.sha256(b"2025").hexdigest()},
+        }
+    }
+    assets[store.BUNDLE_MANIFEST] = json.dumps(bundle_manifest).encode()
+    with pytest.raises(FileNotFoundError, match="history manifest"):
+        store.download()
+
+
+def test_load_partitions_requires_manifest_even_when_partition_file_exists(tmp_path):
+    (tmp_path / "history-2024.parquet").write_bytes(b"not-read-because-manifest-is-required")
+    with pytest.raises(FileNotFoundError, match="history manifest"):
+        load_partitions(tmp_path)
+
+
+def test_richer_old_history_cannot_hide_corrected_start_from_performance(match_factory):
+    start = datetime(2025, 1, 1, 9, tzinfo=timezone.utc)
+    fixture = replace(
+        match_factory("event", "A", "B", None),
+        scheduled_at=start + timedelta(hours=3),
+        provider_payload={"_tbt_provider_event_id": "event"},
+    )
+    model = SimpleNamespace(
+        version="test",
+        predict_proba=lambda frame: np.full(len(frame), .7),
+    )
+    ledger = reconcile_ledger([], predict(model, [], [fixture], start), [], start)
+    issued = start + timedelta(hours=2)
+    ledger = confirm_publication(ledger, copy.deepcopy(ledger), issued)
+
+    old_completed = replace(
+        fixture,
+        winner_id="A",
+        status="finished",
+        stats={"p1_aces": 12},
+        provider_payload={
+            "_tbt_provider_event_id": "event",
+            "_tbt_environment": {"venue_resolved": True},
+        },
+    )
+    settled = reconcile_ledger(ledger, [], [old_completed], start + timedelta(hours=4))
+    assert settled[0]["result"] is not None
+
+    corrected = replace(
+        old_completed,
+        scheduled_at=start + timedelta(hours=1),
+        stats={},
+        provider_payload={"_tbt_provider_event_id": "event"},
+    )
+    merged = merge_matches([old_completed], [corrected])
+    assert len(merged) == 1
+    assert merged[0].scheduled_at == corrected.scheduled_at
+    assert merged[0].stats["p1_aces"] == 12
+
+    reconciled = reconcile_ledger(settled, [], merged, start + timedelta(hours=5))
+    assert reconciled[0]["excluded_reason"] == "issued_after_actual_start"
+    feed = __import__("tbt.services.engine", fromlist=["serving_feed"]).serving_feed(
+        reconciled, model, merged, {}, [], start + timedelta(hours=5)
+    )
+    assert feed["performance"] == {}
+
+
+def test_primary_provider_error_survives_report_and_cleanup_failures(monkeypatch, tmp_path):
+    import download_tennis_history as downloader
+
+    original_write_json = downloader.write_json
+
+    class Provider:
+        def __init__(self, request_budget):
+            self.request_count = 1
+            self.request_limit = None
+            self.client = SimpleNamespace(close=lambda: (_ for _ in ()).throw(RuntimeError("close-failed")))
+
+    def fail_download(*args, **kwargs):
+        raise RuntimeError("provider-primary-error")
+
+    def write_json(path, value):
+        if Path(path).name == "download_report.json":
+            raise OSError("disk-full-report")
+        return original_write_json(path, value)
+
+    monkeypatch.setattr(downloader, "RapidTennisClient", Provider)
+    monkeypatch.setattr(downloader, "download_days", fail_download)
+    monkeypatch.setattr(downloader, "write_json", write_json)
+    monkeypatch.setattr(downloader, "settings", replace(downloader.settings, rapidapi_key="test"))
+    monkeypatch.setattr("sys.argv", [
+        "download", "--start", "2025-01-01", "--end", "2025-01-01",
+        "--history-dir", str(tmp_path), "--max-requests", "10",
+    ])
+
+    with pytest.raises(RuntimeError, match="provider-primary-error") as caught:
+        downloader.main()
+    assert isinstance(caught.value.__cause__, OSError)
+    assert "disk-full-report" in str(caught.value.__cause__)
+    assert any("close-failed" in note for note in getattr(caught.value, "__notes__", []))
+
+
+def test_refresh_loader_rejects_feed_ledger_pick_mismatch(tmp_path):
+    now = datetime.now(timezone.utc)
+    row = {
+        "id": "m", "event_id": "event", "scheduled_at": (now + timedelta(days=1)).isoformat(),
+        "model_version": "test", "created_at": now.isoformat(),
+        "player1": {"id": "A", "probability": .7},
+        "player2": {"id": "B", "probability": .3},
+        "winner_id": "A", "confidence": .7,
+    }
+    feed = {"upcoming": [row]}
+    ledger = [copy.deepcopy(row)]
+    ledger[0]["winner_id"] = "B"
+    ledger[0]["player1"]["probability"] = .2
+    ledger[0]["player2"]["probability"] = .8
+
+    class Store:
+        directory = tmp_path
+        def _asset_names(self):
+            return {"feed.json", "ledger.json", "_tbt_bundle_manifest.json"}
+        def download(self, **kwargs):
+            (tmp_path / "feed.json").write_text(json.dumps(feed))
+            (tmp_path / "ledger.json").write_text(json.dumps(ledger))
+
+    with pytest.raises(RuntimeError, match="feed/ledger mismatch"):
         pipeline._load_prediction_ledger(Store())

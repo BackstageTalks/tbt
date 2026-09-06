@@ -26,7 +26,7 @@ def test_prediction_is_frozen_and_settles_against_player_identity(match_factory)
     ledger = reconcile_ledger(ledger, changed, [], now)
     assert ledger[0]['player1']['probability'] == .7
     assert ledger[0]['scheduled_at'] == changed[0]['scheduled_at']
-    ledger = confirm_publication(ledger, {'123'}, now + timedelta(minutes=1))
+    ledger = confirm_publication(ledger, [copy.deepcopy(ledger[0])], now + timedelta(minutes=1))
     completed = replace(fixture.swapped(), winner_id='A')
     settled = reconcile_ledger(ledger, [], [completed], now + timedelta(days=3))
     assert settled[0]['result']['correct'] is True
