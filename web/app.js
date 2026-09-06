@@ -3,7 +3,7 @@
 
   const $ = id => document.getElementById(id);
   const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false };
-  const PAGE_SIZE = 4;
+  const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   const pct = value => `${(Number(value || 0) * (Number(value || 0) <= 1 ? 100 : 1)).toFixed(1)}%`;
   const number = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
@@ -35,16 +35,35 @@
       host.appendChild(a);
     });
   }
-  function renderNavigation(){ renderNavigationGroup(state.ui?.navigation?.main,'mainNavigation'); renderNavigationGroup(state.ui?.navigation?.learn,'learnNavigation'); }
+  function renderNavigation(){
+    renderNavigationGroup(state.ui?.navigation?.main,'mainNavigation');
+    const footer=$('footerLearnNavigation');
+    if(footer){
+      footer.innerHTML='';
+      [...(state.ui?.navigation?.learn||[])].filter(x=>x.enabled!==false).sort((a,b)=>Number(a.order||0)-Number(b.order||0)).forEach(item=>{
+        const a=document.createElement('a');
+        a.href=item.href||`#${item.id}`;
+        a.dataset.route=item.id||'';
+        a.textContent=item.label||item.id;
+        footer.appendChild(a);
+      });
+    }
+  }
 
   function renderBanners(){
-    const banners=state.ui?.banners||{};
-    Object.values(banners).forEach(b=>{
-      const host=$(b.target); if(!host) return;
-      if(b.enabled===false){host.hidden=true;host.innerHTML='';return;}
-      host.hidden=false;
-      host.innerHTML=`<a class="promo-banner" href="${escapeHtml(b.link||'#account')}" data-route="account"><div class="promo-overlay"></div><div class="promo-copy"><span class="promo-eyebrow">${escapeHtml(b.eyebrow||'BLINQ')}</span><strong>${escapeHtml(b.headline||'')}</strong><p>${escapeHtml(b.text||'')}</p></div><span class="promo-cta">${escapeHtml(b.button_text||'Open')} →</span></a>`;
-    });
+    const banners=Object.values(state.ui?.banners||{}).filter(b=>b&&b.enabled!==false);
+    const targets=new Set(banners.map(b=>b.target).filter(Boolean));
+    for(const target of targets){
+      const host=$(target); if(!host) continue;
+      const rows=banners.filter(b=>b.target===target);
+      host.hidden=!rows.length;
+      host.innerHTML=rows.map(b=>{
+        const route=b.route||'account';
+        const theme=String(b.theme||'violet').replace(/[^a-z0-9_-]/gi,'');
+        return `<a class="promo-banner promo-card theme-${theme}" href="${escapeHtml(b.link||'#account')}" data-route="${escapeHtml(route)}"><div class="promo-art" aria-hidden="true"></div><div class="promo-copy"><span class="promo-eyebrow">${escapeHtml(b.eyebrow||'BLINQ')}</span><strong>${escapeHtml(b.headline||'')}</strong><p>${escapeHtml(b.text||'')}</p><span class="promo-cta">${escapeHtml(b.button_text||'Open')}</span></div></a>`;
+      }).join('');
+    }
+    ['bannerTop','bannerBottom'].forEach(target=>{const host=$(target);if(host&&!targets.has(target)){host.hidden=true;host.innerHTML='';}});
   }
 
   function auth(mode='login'){
@@ -87,6 +106,25 @@
 
   function populateSelect(id,values,label){ const select=$(id),selected=select.value; select.innerHTML=`<option value="">${label}</option>`; [...values].filter(Boolean).sort().forEach(value=>{const opt=document.createElement('option');opt.value=value;opt.textContent=String(value).replaceAll('_',' ');select.appendChild(opt)}); if([...select.options].some(o=>o.value===selected)) select.value=selected; }
   function populateFilters(){ const rows=(state.feed.upcoming||[]).map(normalize); populateSelect('tournamentFilter',new Set(rows.map(x=>x.tournament)),'All Tournaments'); populateSelect('surfaceFilter',new Set(rows.map(x=>x.surface)),'All Surfaces'); }
+  function compactCount(value){ const n=Number(value); if(!Number.isFinite(n)) return '—'; if(n>=1000000) return `${(n/1000000).toFixed(n>=10000000?0:1)}M`; if(n>=1000) return `${(n/1000).toFixed(n>=100000?0:1)}K`; return String(Math.round(n)); }
+  function renderSnapshot(){
+    const host=$('dashboardSnapshot'); if(!host) return;
+    const rows=(state.feed.upcoming||[]).map(normalize);
+    const top=rows.length?Math.max(...rows.map(x=>Number(x.probability)||0)):null;
+    const elite=rows.filter(x=>x.probability>=.80).length;
+    const high=rows.filter(x=>x.probability>=.70).length;
+    const tournaments=new Set(rows.map(x=>x.tournament).filter(Boolean)).size;
+    const history=state.feed?.history?.matches;
+    const cards=[
+      ['UPCOMING',String(rows.length),'current board'],
+      ['TOP PROBABILITY',top!=null?pct(top):'—','highest current pick'],
+      ['≥ 80%',String(elite),'elite confidence'],
+      ['HIGH CONFIDENCE',String(high),'70%+ candidates'],
+      ['TOURNAMENTS',String(tournaments),'active in feed'],
+      ['HISTORY DEPTH',compactCount(history),'serving metadata']
+    ];
+    host.innerHTML=cards.map(([label,value,note])=>`<div class="snapshot-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note)}</span></div>`).join('');
+  }
   function filtered(){ const rows=(state.feed.upcoming||[]).map(normalize),tour=$('tourFilter').value,tournament=$('tournamentFilter').value,surface=$('surfaceFilter').value,confidence=$('confidenceFilter').value,q=$('searchInput').value.trim().toLowerCase(); return rows.filter(m=>{ if(tour&&m.tour!==tour)return false;if(tournament&&m.tournament!==tournament)return false;if(surface&&m.surface!==surface)return false;if(confidence&&m.confidence!==confidence)return false;if(q&&!`${m.p1} ${m.p2} ${m.tournament}`.toLowerCase().includes(q))return false;return true; }).sort((a,b)=>b.probability-a.probability || new Date(a.date)-new Date(b.date)); }
 
   function signalMeta(signal,m){ const id=String(signal?.player_id ?? signal?.favours_player_id ?? ''); const favours=id===String(m.pickId); const label=signal?.label||signal?.factor||'Model signal'; return {label,favours}; }
@@ -94,12 +132,12 @@
   function renderCard(m){ const template=$('predictionTemplate').content.cloneNode(true),card=template.querySelector('.prediction-card'); card.dataset.id=m.id; card.classList.add('featured'); card.querySelector('.tour').textContent=`${m.tour} ${m.tournament}${m.round?` · ${m.round}`:''}`; card.querySelector('.time').textContent=fmtTime(m.date); card.querySelector('.surface').textContent=String(m.surface).replaceAll('_',' ').toUpperCase(); const players=[['.player-a',m.p1,m.p1Prob],['.player-b',m.p2,m.p2Prob]]; players.forEach(([sel,name,prob])=>{const box=card.querySelector(sel);box.querySelector('.player-avatar').textContent=initials(name);box.querySelector('.player-name').textContent=name;box.querySelector('.player-rank').textContent=pct(prob)}); card.querySelector('.pick-name').textContent=m.pick; card.querySelector('.probability').textContent=pct(m.probability); const conf=card.querySelector('.confidence'); conf.textContent=m.confidence.toUpperCase(); conf.classList.add(m.confidence); const signals=card.querySelector('.signals'); signals.innerHTML=m.signals.length?m.signals.slice(0,4).map(s=>renderSignal(s,m)).join(''):'<div class="signal-empty">No strong secondary signal is available.</div>'; card.querySelector('.analysis-link').onclick=()=>openMatch(m); return template; }
 
   function renderDots(pageCount){ const host=$('carouselDots'); host.innerHTML=''; if(state.showAll||pageCount<=1)return; for(let i=0;i<pageCount;i++){const b=document.createElement('button');b.type='button';b.className=i===state.page?'active':'';b.setAttribute('aria-label',`Show picks page ${i+1}`);b.onclick=()=>{state.page=i;renderPredictions()};host.appendChild(b)} }
-  function renderPredictions(){ const rows=filtered(),grid=$('predictionGrid'); $('matchCount').textContent=rows.length; const pageCount=Math.max(1,Math.ceil(rows.length/PAGE_SIZE)); state.page=Math.min(state.page,pageCount-1); let visible=state.showAll?rows:rows.slice(state.page*PAGE_SIZE,state.page*PAGE_SIZE+PAGE_SIZE); grid.classList.toggle('show-all',state.showAll); grid.innerHTML=''; if(!visible.length){grid.innerHTML='<div class="state-card">No upcoming published predictions match the current filters.</div>';} else visible.forEach(m=>grid.appendChild(renderCard(m))); $('prevPick').hidden=state.showAll||pageCount<=1; $('nextPick').hidden=state.showAll||pageCount<=1; $('prevPick').disabled=state.page<=0; $('nextPick').disabled=state.page>=pageCount-1; $('viewAllButton').textContent=state.showAll?'Featured picks ←':'View all matches →'; renderDots(pageCount); }
+  function renderPredictions(){ const rows=filtered(),grid=$('predictionGrid'),size=pageSize(); $('matchCount').textContent=rows.length; const pageCount=Math.max(1,Math.ceil(rows.length/size)); state.page=Math.min(state.page,pageCount-1); let visible=state.showAll?rows:rows.slice(state.page*size,state.page*size+size); grid.classList.toggle('show-all',state.showAll); grid.innerHTML=''; if(!visible.length){grid.innerHTML='<div class="state-card">No upcoming published predictions match the current filters.</div>';} else visible.forEach(m=>grid.appendChild(renderCard(m))); $('prevPick').hidden=state.showAll||pageCount<=1; $('nextPick').hidden=state.showAll||pageCount<=1; $('prevPick').disabled=state.page<=0; $('nextPick').disabled=state.page>=pageCount-1; $('viewAllButton').textContent=state.showAll?'Featured picks ←':'View all matches →'; renderDots(pageCount); }
 
   function openMatch(m){ const signalRows=m.signals.length?m.signals.map(s=>{const meta=signalMeta(s,m);const favoursId=String(s?.player_id??s?.favours_player_id??'');const favours=favoursId===String(m.p1Id)?m.p1:favoursId===String(m.p2Id)?m.p2:'—';return `<div class="dialog-signal"><span>${escapeHtml(meta.label)}</span><strong>${escapeHtml(favours)}</strong><small>${meta.favours?'supports pick':'counter-signal'}</small></div>`}).join(''):'<p class="signal-empty">No secondary signals are available.</p>'; $('dialogContent').innerHTML=`<div class="dialog-eyebrow">${escapeHtml(m.tour)} · ${escapeHtml(m.tournament)}</div><h2>${escapeHtml(m.p1)} <span>vs</span> ${escapeHtml(m.p2)}</h2><div class="dialog-pick"><div><small>BlinQ Pick</small><strong>${escapeHtml(m.pick)}</strong></div><div class="dialog-prob">${pct(m.probability)} <span class="confidence ${m.confidence}">${m.confidence.toUpperCase()}</span></div></div><div class="dialog-section"><h3>Model signals</h3>${signalRows}</div><div class="dialog-meta"><span>${escapeHtml(String(m.surface).replaceAll('_',' '))}</span><span>${fmtDate(m.date)} · ${fmtTime(m.date)}</span><span>Model ${escapeHtml(m.model||'—')}</span></div>`; $('matchDialog').showModal(); }
 
   const routeMeta={
-    predictions:['PRE-MATCH ANALYTICS',"Today's Predictions",'Live model output from the currently published BlinQ feed.'],
+    predictions:['TENNIS INTELLIGENCE','Dashboard','Recommended Prime Picks and current tennis intelligence from the published production feed.'],
     tournaments:['TOURNAMENT VIEW','Tournaments','Current tournament coverage derived from published upcoming matches.'],
     players:['PLAYER VIEW','Players','Current players appearing in the published prediction feed.'],
     stats:['PERFORMANCE','Stats & Insights','Observed model performance from settled published predictions.'],
@@ -121,7 +159,7 @@
 
   function wireAccount(){ $('profileForm').onsubmit=async e=>{e.preventDefault();const msg=$('profileMessage');msg.textContent='Saving…';try{await BlinqAuth.update({data:{display_name:$('profileDisplayName').value.trim()}});await loadFeed(false);setRoute('account',false);$('profileMessage').textContent='Profile saved.';}catch(err){msg.textContent=err.message;}}; $('passwordResetButton').onclick=async()=>{const email=state.feed.account?.email;if(!email)return;const msg=$('profileMessage');msg.textContent='Sending…';try{await BlinqAuth.reset(email);msg.textContent='Recovery email requested.';}catch(err){msg.textContent=err.message;}}; $('logoutButton').onclick=async()=>{await BlinqAuth.signOut();state.feed={upcoming:[],results:[],performance:{},history:{},model:null};auth('login');}; }
 
-  async function loadFeed(showLoading=true){ if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML='<div class="state-card">Loading current model predictions…</div>'; try{const feed=await BlinqAuth.feed();state.feed=feed||{};state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[];state.feed.results=Array.isArray(feed?.results)?feed.results:[];populateFilters();const a=feed.account||{};$('profileName').textContent=a.name||a.email||'BlinQ User';$('profilePlan').textContent='Member';$('avatar').textContent=initials(a.name||a.email||'B');$('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—';$('todayLabel').textContent=fmtToday();$('staleNotice').hidden=!feed.stale;$('staleNotice').textContent=feed.stale?'Published data is older than 12 hours. Check prediction creation times before evaluating them.':'';$('appShell').hidden=false;if($('authDialog').open)$('authDialog').close();setRoute(state.route,false);}catch(error){if(error.status===401){BlinqAuth.clear();auth('login');return;}showStatus('Data could not be loaded. Try again shortly.');throw error;} }
+  async function loadFeed(showLoading=true){ if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML='<div class="state-card">Loading current model predictions…</div>'; try{const feed=await BlinqAuth.feed();state.feed=feed||{};state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[];state.feed.results=Array.isArray(feed?.results)?feed.results:[];populateFilters();renderSnapshot();const a=feed.account||{};$('profileName').textContent=a.name||a.email||'BlinQ User';$('profilePlan').textContent='Member';$('avatar').textContent=initials(a.name||a.email||'B');$('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—';$('todayLabel').textContent=fmtToday();const sidebarModel=$('sidebarModelState');if(sidebarModel)sidebarModel.textContent=feed?.model?.version?`Model ${feed.model.version}`:'Production feed';$('staleNotice').hidden=!feed.stale;$('staleNotice').textContent=feed.stale?'Published data is older than 12 hours. Check prediction creation times before evaluating them.':'';$('appShell').hidden=false;if($('authDialog').open)$('authDialog').close();setRoute(state.route,false);}catch(error){if(error.status===401){BlinqAuth.clear();auth('login');return;}showStatus('Data could not be loaded. Try again shortly.');throw error;} }
   function showStatus(message){const n=$('statusBanner');n.textContent=message;n.hidden=!message;if(message)setTimeout(()=>{n.hidden=true},5000)}
 
   function setupEvents(){
@@ -129,6 +167,7 @@
     $('refreshButton').onclick=()=>loadFeed(); ['tourFilter','tournamentFilter','surfaceFilter','confidenceFilter'].forEach(id=>$(id).addEventListener('change',()=>{state.page=0;state.showAll=false;renderPredictions()})); $('searchInput').addEventListener('input',()=>{state.page=0;state.showAll=false;renderPredictions()});
     $('prevPick').onclick=()=>{state.page=Math.max(0,state.page-1);renderPredictions()}; $('nextPick').onclick=()=>{state.page+=1;renderPredictions()}; $('viewAllButton').onclick=()=>{state.showAll=!state.showAll;state.page=0;renderPredictions()}; $('dialogClose').onclick=()=>$('matchDialog').close(); $('matchDialog').addEventListener('click',e=>{if(e.target===$('matchDialog'))$('matchDialog').close()}); $('profileButton').onclick=()=>setRoute('account');
     document.addEventListener('click',e=>{const target=e.target.closest('[data-route]');if(!target)return;const route=target.dataset.route;if(!routeMeta[route])return;e.preventDefault();setRoute(route)});
+    let resizeTimer; window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.route==='predictions'&&!state.showAll){state.page=0;renderPredictions();}},120)});
   }
 
   async function boot(){ setupEvents(); await loadUiConfig(); const hash=location.hash.replace(/^#/,''); if(routeMeta[hash])state.route=hash; try{const cfg=await BlinqAuth.init();state.authEnabled=Boolean(cfg.enabled);if(cfg.recovery){auth('recovery');return;}const session=await BlinqAuth.restore();if(session)await loadFeed();else auth('login');}catch(error){showStatus(error.message);auth('login');} }

@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <meta name="theme-color" content="#050912" />
-  <meta name="description" content="BlinQ Tennis Intelligence — pre-match probabilities, results and model analytics." />
+  <meta name="description" content="BlinQ Tennis Intelligence — live pre-match probabilities, results and model analytics." />
   <title>BlinQ · Tennis Intelligence</title>
   <link rel="icon" href="/assets/blinq_logo.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/styles.css" />
@@ -14,48 +14,43 @@
 <body>
   <div id="statusBanner" class="status-banner" hidden></div>
 
-  <div class="app-shell" id="appShell" hidden>
-    <aside class="sidebar">
-      <a class="brand brand-image" href="#predictions" data-route="predictions" aria-label="BlinQ home">
+  <div class="app-shell dashboard-shell" id="appShell" hidden>
+    <aside class="sidebar dashboard-sidebar">
+      <a class="brand brand-image engine-brand" href="#predictions" data-route="predictions" aria-label="BlinQ home">
         <img src="/assets/blinq_logo.svg" alt="BlinQ" class="brand-logo" />
+        <span class="engine-copy"><strong>STATISTICAL ENGINE</strong><small>by BackstageTalks</small></span>
       </a>
 
-      <nav class="nav-section" aria-label="Main navigation">
+      <nav class="nav-section nav-main" aria-label="Main navigation">
         <div class="nav-items" id="mainNavigation"></div>
       </nav>
 
-      <div class="nav-divider"></div>
-      <div class="nav-label">Learn</div>
-      <nav class="nav-section learn-nav" aria-label="Learn navigation">
-        <div class="nav-items" id="learnNavigation"></div>
-      </nav>
-
       <div class="sidebar-spacer"></div>
-      <section class="upgrade-card" id="sidebarPromo">
-        <div class="upgrade-icon">♛</div>
-        <strong>Unlock full power</strong>
-        <p>Advanced analytics, player insights and deeper model context.</p>
-        <button class="btn btn-primary btn-full" data-route="account" type="button">Account & access</button>
-      </section>
+      <div class="sidebar-system-note"><span>●</span><div><strong>Live model</strong><small id="sidebarModelState">Production feed</small></div></div>
     </aside>
 
-    <main class="main">
-      <header class="topbar">
-        <div class="topbar-copy">
-          <div class="eyebrow" id="pageEyebrow">PRE-MATCH ANALYTICS</div>
+    <main class="main dashboard-main">
+      <header class="topbar dashboard-topbar">
+        <div class="topbar-copy dashboard-title-block">
+          <div class="eyebrow" id="pageEyebrow">TENNIS INTELLIGENCE</div>
           <div class="title-row">
-            <h1 id="pageTitle">Today's Predictions</h1>
+            <h1 id="pageTitle">Dashboard</h1>
             <span class="today-label" id="todayLabel"></span>
           </div>
-          <p class="subtitle" id="pageSubtitle">Live model output from the currently published BlinQ feed.</p>
+          <p class="subtitle" id="pageSubtitle">Recommended Prime Picks and current tennis intelligence.</p>
         </div>
 
-        <div class="topbar-actions">
-          <div class="last-update">Last update: <strong id="updatedAt">—</strong></div>
-          <div class="trial-chip"><span>MEMBER</span><strong id="memberStatus">Active</strong></div>
-          <button class="btn btn-primary" data-route="account" type="button">♛ Upgrade</button>
-          <button class="profile-button" id="profileButton" type="button" aria-label="Open account">
-            <span class="avatar" id="avatar">B</span>
+        <section class="header-feature-strip" aria-label="BlinQ access overview">
+          <article><small>PRIME PICKS + TOURNAMENTS</small><strong>Focused daily board</strong><span>Current model selections and tournament context.</span></article>
+          <article><small>PLAYER INTELLIGENCE</small><strong>Deeper match context</strong><span>Player, matchup and model-signal views.</span></article>
+          <article><small>MODEL ANALYTICS</small><strong>Transparent performance</strong><span>Backtests, calibration and published results.</span></article>
+        </section>
+
+        <div class="topbar-actions dashboard-account-actions">
+          <div class="member-chip"><span>MEMBER</span><strong id="memberStatus">Active</strong></div>
+          <button class="btn btn-primary top-upgrade" data-route="account" type="button">♛ Upgrade</button>
+          <button class="profile-button profile-button-large" id="profileButton" type="button" aria-label="Open account">
+            <span class="avatar avatar-large" id="avatar">B</span>
             <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small id="profilePlan">Member</small></span>
             <span aria-hidden="true">⌄</span>
           </button>
@@ -65,7 +60,7 @@
       <section id="staleNotice" class="inline-notice" hidden></section>
 
       <div id="predictionsView">
-        <section class="toolbar" id="predictionToolbar" aria-label="Prediction filters">
+        <section class="toolbar dashboard-toolbar" id="predictionToolbar" aria-label="Prediction filters">
           <label><span class="sr-only">Tour</span><select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select></label>
           <label><span class="sr-only">Tournament</span><select id="tournamentFilter"><option value="">All Tournaments</option></select></label>
           <label><span class="sr-only">Surface</span><select id="surfaceFilter"><option value="">All Surfaces</option></select></label>
@@ -73,15 +68,25 @@
           <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search matches or players…" /></label>
         </section>
 
-        <section id="bannerTop" class="banner-slot" hidden></section>
+        <section id="dashboardSnapshot" class="dashboard-snapshot" aria-label="Current prediction board summary">
+          <div class="snapshot-card"><small>UPCOMING</small><strong>—</strong><span>current board</span></div>
+          <div class="snapshot-card"><small>TOP PROBABILITY</small><strong>—</strong><span>highest current pick</span></div>
+          <div class="snapshot-card"><small>≥ 80%</small><strong>—</strong><span>elite confidence</span></div>
+          <div class="snapshot-card"><small>HIGH CONFIDENCE</small><strong>—</strong><span>70%+ candidates</span></div>
+          <div class="snapshot-card"><small>TOURNAMENTS</small><strong>—</strong><span>active in feed</span></div>
+          <div class="snapshot-card"><small>HISTORY DEPTH</small><strong>—</strong><span>serving metadata</span></div>
+        </section>
 
-        <section class="picks-panel" id="predictionsPanel">
+        <section id="bannerTop" class="promo-grid promo-grid-top" aria-label="BlinQ content slots"></section>
+
+        <section class="picks-panel prime-panel" id="predictionsPanel">
           <div class="panel-head picks-head">
             <div>
-              <div class="section-kicker"><span>✦</span> AI Top Picks</div>
-              <p>Highest-confidence matches in the current view. Only currently published pre-match records are shown.</p>
+              <div class="section-kicker"><span>✦</span> BlinQ Prime Picks</div>
+              <p>Live model probabilities from the currently published production feed.</p>
             </div>
             <div class="panel-actions">
+              <span class="feed-status"><i></i><span>Live · updated <strong id="updatedAt">—</strong></span></span>
               <span class="match-count"><strong id="matchCount">0</strong> matches</span>
               <button class="btn btn-ghost" id="refreshButton" type="button">↻ Refresh</button>
               <button class="btn btn-ghost" id="viewAllButton" type="button">View all matches →</button>
@@ -98,39 +103,22 @@
           <div class="carousel-dots" id="carouselDots" aria-label="Pick carousel pages"></div>
         </section>
 
-        <section id="bannerMiddle" class="banner-slot" hidden></section>
-
-        <section class="lower-grid">
-          <section class="learn-panel" id="howBlinqWorks">
-            <div class="panel-head compact"><div><h2>How BlinQ Works</h2><p>Advanced AI. Real data. Transparent model output.</p></div></div>
-            <div class="steps-grid">
-              <article><span>◫</span><strong>1. Real Data</strong><p>Historical results and pre-match information are processed point-in-time.</p></article>
-              <article><span>◎</span><strong>2. AI Model</strong><p>The model combines strength, surface, form, workload and matchup signals.</p></article>
-              <article><span>↗</span><strong>3. Predictions</strong><p>Each match receives a calibrated probability and confidence band.</p></article>
-              <article><span>⌕</span><strong>4. Insights</strong><p>Key factors show which side each available model signal favours.</p></article>
-              <article><span>♕</span><strong>5. Better Decisions</strong><p>Use probabilities and model context instead of a single opaque pick.</p></article>
-            </div>
-          </section>
-
-          <aside class="lower-side">
-            <section class="trial-card" id="trialCard">
-              <div><span class="trial-eyebrow">BLINQ MEMBER</span><h2>Your workspace</h2><p>Predictions, verified results and model transparency in one place.</p>
-                <ul><li>Current predictions</li><li>Verified results</li><li>Model performance</li><li>Account access</li></ul>
-              </div>
-              <button class="btn btn-primary btn-full" data-route="account" type="button">Open account</button>
-              <div class="trial-racket" aria-hidden="true"></div>
-            </section>
-          </aside>
-        </section>
+        <section id="bannerBottom" class="promo-grid promo-grid-bottom" aria-label="BlinQ content slots"></section>
       </div>
 
       <section id="routePanel" class="route-panel" hidden></section>
 
-      <footer>
-        <div class="footer-brand">Blin<span>Q</span></div><div>© 2026 BlinQ</div>
-        <a href="#methodology" data-route="methodology">Methodology</a>
-        <a href="#responsible-use" data-route="responsible_use">Responsible Use</a>
-        <span class="footer-note">Probabilities express uncertainty, not guarantees.</span>
+      <footer class="site-footer">
+        <div class="footer-main-row">
+          <a class="footer-logo-link" href="#predictions" data-route="predictions" aria-label="BlinQ home"><img src="/assets/blinq_logo.svg" alt="BlinQ" class="footer-logo" /></a>
+          <span>© 2026 BlinQ</span>
+          <nav class="footer-learn-nav" id="footerLearnNavigation" aria-label="Learn navigation"></nav>
+          <a href="#account" data-route="account">Account</a>
+        </div>
+        <div class="footer-bottom-row">
+          <p>Probabilities express uncertainty, not guarantees. Published predictions remain auditable against real outcomes.</p>
+          <nav class="footer-languages" aria-label="Language versions"><span>LANGUAGE</span><a href="?lang=sk#predictions">SK</a><a href="?lang=cz#predictions">CZ</a><a href="?lang=pl#predictions">PL</a><a href="?lang=hu#predictions">HU</a><a href="?lang=de#predictions">DE</a><a href="?lang=ua#predictions">UA</a><a href="?lang=ru#predictions">RU</a></nav>
+        </div>
       </footer>
     </main>
   </div>
