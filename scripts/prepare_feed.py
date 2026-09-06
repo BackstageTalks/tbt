@@ -8,6 +8,7 @@ from pathlib import Path
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.services.feed import empty_feed, read_feed
+from tbt.services.publication import validate_publication_candidate
 
 
 PREDICTION_ASSETS = {"feed.json", "ledger.json"}
@@ -45,6 +46,8 @@ def main() -> None:
                 required_names=("feed.json", "ledger.json"),
             )
             payload = read_feed(cache / "feed.json")
+            ledger = json.loads((cache / "ledger.json").read_text(encoding="utf-8"))
+            validate_publication_candidate(payload, ledger)
 
     # If no private prediction candidate exists, overwrite any checked-in stale
     # snapshot with an honest empty feed instead of silently deploying it.

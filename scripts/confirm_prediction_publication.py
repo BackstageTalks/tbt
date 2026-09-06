@@ -10,7 +10,7 @@ from pathlib import Path
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.services.feed import empty_feed
-from tbt.services.publication import confirm_publication
+from tbt.services.publication import confirm_publication, validate_publication_candidate
 
 
 PREDICTION_ASSETS = {"feed.json", "ledger.json"}
@@ -99,17 +99,14 @@ def main(argv=None):
     upcoming = deployed_feed.get("upcoming")
     if not isinstance(upcoming, list):
         raise ValueError("Invalid deployed feed")
-    published_ids = {
-        str(row.get("event_id"))
-        for row in upcoming
-        if isinstance(row, dict) and row.get("event_id")
-    }
+    validate_publication_candidate(deployed_feed, ledger)
+    published_rows = upcoming
     before = sum(1 for row in ledger if isinstance(row, dict) and row.get("issued_at"))
-    confirmed = confirm_publication(ledger, published_ids, datetime.now(timezone.utc))
+    confirmed = confirm_publication(ledger, published_rows, datetime.now(timezone.utc))
     after = sum(1 for row in confirmed if isinstance(row, dict) and row.get("issued_at"))
     write_json(directory / "ledger.json", confirmed)
     store.upload_bundle([directory / "ledger.json"])
-    print(json.dumps({"status": "confirmed", "newly_confirmed": after - before, "published_ids": len(published_ids)}))
+    print(json.dumps({"status": "confirmed", "newly_confirmed": after - before, "published_ids": len(published_rows)}))
 
 
 if __name__ == "__main__":

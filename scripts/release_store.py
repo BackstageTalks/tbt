@@ -112,6 +112,8 @@ class ReleaseStore:
                 "Required release assets are missing: " + ", ".join(missing)
             )
 
+        bundle_manifest = {}
+        bundle_files = {}
         if self.BUNDLE_MANIFEST in assets:
             gh(
                 "release",
@@ -125,9 +127,41 @@ class ReleaseStore:
                 self.directory,
                 "--clobber",
             )
+            try:
+                bundle_manifest = json.loads(
+                    (self.directory / self.BUNDLE_MANIFEST).read_text(encoding="utf-8")
+                )
+            except (OSError, ValueError, json.JSONDecodeError) as exc:
+                raise ValueError("Invalid committed bundle manifest") from exc
+            if not isinstance(bundle_manifest, dict):
+                raise ValueError("Invalid committed bundle manifest")
+            bundle_files = bundle_manifest.get("files")
+            if not isinstance(bundle_files, dict):
+                raise ValueError("Invalid committed bundle manifest")
         elif require_bundle_manifest or required:
             raise FileNotFoundError(
                 f"Required release bundle manifest is missing: {self.BUNDLE_MANIFEST}"
+            )
+
+        history_pattern = re.compile(r"history-\d{4}\.parquet")
+        remote_history_assets = {name for name in assets if history_pattern.fullmatch(name)}
+        committed_history_assets = {
+            name for name in bundle_files if history_pattern.fullmatch(str(name))
+        }
+        history_evidence = bool(
+            remote_history_assets
+            or committed_history_assets
+            or "history_manifest.json" in bundle_files
+        )
+        if history_evidence and "history_manifest.json" not in assets:
+            raise FileNotFoundError(
+                "Required history manifest is missing: history_manifest.json"
+            )
+        missing_committed_history = sorted(committed_history_assets - assets)
+        if missing_committed_history:
+            raise FileNotFoundError(
+                "Committed history bundle references missing release assets: "
+                + ", ".join(missing_committed_history)
             )
 
         selected = {
@@ -202,9 +236,13 @@ class ReleaseStore:
                     + ", ".join(missing_local_history)
                 )
 
-        manifest = self._read_local_bundle_manifest() if self.BUNDLE_MANIFEST in assets else {}
-        manifest_files = manifest.get("files", {})
-        uncovered = [name for name in required if not (
+        manifest = bundle_manifest if self.BUNDLE_MANIFEST in assets else {}
+        manifest_files = bundle_files if isinstance(bundle_files, dict) else {}
+        integrity_required = set(required)
+        if history_evidence:
+            integrity_required.add("history_manifest.json")
+            integrity_required.update(remote_history_assets)
+        uncovered = [name for name in integrity_required if not (
             isinstance(manifest_files, dict)
             and isinstance(manifest_files.get(name), dict)
             and re.fullmatch(r"[0-9a-f]{64}", str(manifest_files[name].get("sha256", "")))
@@ -258,7 +296,7 @@ class ReleaseStore:
         files = value.get("files")
         if not isinstance(files, dict):
             raise ValueError("Invalid committed bundle manifest")
-        return {name: meta for name, meta in files.items() if name in assets}
+        return dict(files)
 
     def upload_bundle(self, paths, *, before_upload=None):
         """Upload related assets, then commit their checksums last.

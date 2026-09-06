@@ -16,6 +16,7 @@ from tbt.data.history_snapshot import load_partitions, write_year_partition, mer
 from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.engine import predict, reconcile_ledger, serving_feed
+from tbt.services.publication import validate_publication_candidate
 from tbt.services.training import train_from_matches
 from tbt.services.backtest_service import walk_forward_backtest
 
@@ -157,8 +158,10 @@ def _load_prediction_ledger(store):
         required_names=("feed.json", "ledger.json"),
     )
     ledger = read_json(store.directory / "ledger.json", None)
+    feed = read_json(store.directory / "feed.json", None)
     if not isinstance(ledger, list):
         raise ValueError("Invalid prediction ledger")
+    validate_publication_candidate(feed, ledger)
     return ledger
 
 def _publish_predictions(store, ledger, predictions, matches, model, report, upcoming):

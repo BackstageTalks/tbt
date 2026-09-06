@@ -147,7 +147,7 @@ def main():
     enricher = None
     primary_error = None
     primary_traceback = None
-    checkpoint_error = None
+    secondary_errors = []
     try:
         if args.mode == "history":
             download_days(provider, matches, progress, start, end, checkpoint)
@@ -170,9 +170,9 @@ def main():
         report["budget_stopped"] = 1
         print(str(exc), flush=True)
     except Exception as exc:
-        # Preserve the real provider/parser failure even if the best-effort
-        # final checkpoint also fails. The checkpoint error is chained below
-        # for diagnostics, but must never replace the primary cause.
+        # Preserve the real provider/parser failure even if best-effort
+        # checkpoint/report/cleanup work also fails. Secondary failures are
+        # chained/noted below but must never replace the primary cause.
         primary_error = exc
         primary_traceback = exc.__traceback__
     finally:
@@ -181,35 +181,48 @@ def main():
             # or parser/provider error.
             checkpoint(set(pending_years), True)
         except Exception as exc:
-            checkpoint_error = exc
             report["checkpoint_failed"] = 1
-        finally:
-            report["requests_including_retries"] = provider.request_count
-            report["stored_matches"] = len(matches)
-            report["completed_days"] = len(progress["completed_days"])
-            report["allocated_requests"] = allocation
+            secondary_errors.append(("final checkpoint", exc))
+
+        report["requests_including_retries"] = provider.request_count
+        report["stored_matches"] = len(matches)
+        report["completed_days"] = len(progress["completed_days"])
+        report["allocated_requests"] = allocation
+        try:
+            write_json(directory / "download_report.json", dict(report))
+            print(json.dumps(dict(report), indent=2), flush=True)
+        except Exception as exc:
+            secondary_errors.append(("download report", exc))
+
+        try:
+            provider.client.close()
+        except Exception as exc:
+            secondary_errors.append(("provider cleanup", exc))
+        if enricher:
             try:
-                write_json(directory / "download_report.json", dict(report))
-                print(json.dumps(dict(report), indent=2), flush=True)
-            finally:
-                try:
-                    provider.client.close()
-                finally:
-                    if enricher:
-                        enricher.close()
+                enricher.close()
+            except Exception as exc:
+                secondary_errors.append(("statistics cleanup", exc))
 
     if primary_error is not None:
-        if checkpoint_error is not None:
+        for label, error in secondary_errors:
             try:
-                primary_error.add_note(
-                    f"Final checkpoint also failed: {checkpoint_error!r}"
-                )
+                primary_error.add_note(f"Secondary {label} failure: {error!r}")
             except AttributeError:
                 pass
-            raise primary_error.with_traceback(primary_traceback) from checkpoint_error
+        cause = secondary_errors[0][1] if secondary_errors else None
+        if cause is not None:
+            raise primary_error.with_traceback(primary_traceback) from cause
         raise primary_error.with_traceback(primary_traceback)
-    if checkpoint_error is not None:
-        raise checkpoint_error
+
+    if secondary_errors:
+        label, first_error = secondary_errors[0]
+        for extra_label, error in secondary_errors[1:]:
+            try:
+                first_error.add_note(f"Secondary {extra_label} failure: {error!r}")
+            except AttributeError:
+                pass
+        raise first_error
 
 
 if __name__ == "__main__":
