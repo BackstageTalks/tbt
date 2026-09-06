@@ -33,6 +33,12 @@ def minimize_provider_payload(
     if isinstance(identity, dict):
         out["_tbt_event_identity"] = {k: identity[k] for k in
             ("event_id", "home", "away", "status") if k in identity}
+    provenance = raw.get("_tbt_rank_provenance")
+    if isinstance(provenance, dict):
+        out["_tbt_rank_provenance"] = {
+            key: provenance[key] for key in ("point_in_time", "source", "as_of")
+            if key in provenance
+        }
     marker = raw.get("_tbt_statistics")
     if isinstance(marker, dict):
         out["_tbt_statistics"] = {k: marker[k] for k in
@@ -116,7 +122,10 @@ def merge_provider_context(existing: Any, incoming: Any) -> dict[str, Any]:
     merged = dict(left)
 
     for key, value in right.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+        if key == "_tbt_rank_provenance":
+            # A provenance claim is atomic; never assemble one from two sources.
+            merged[key] = dict(value)
+        elif isinstance(value, dict) and isinstance(merged.get(key), dict):
             nested = dict(merged[key])
             nested.update(value)
             merged[key] = nested

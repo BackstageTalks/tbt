@@ -524,7 +524,17 @@ def _merge_record(existing: MatchRecord, incoming: MatchRecord) -> MatchRecord:
     from copy import deepcopy
     from dataclasses import replace
 
+    if not _compatible_players(existing, incoming):
+        raise ValueError("Cannot merge incompatible player/tour identities")
+    if (_provider_event_id(existing) and _provider_event_id(incoming)
+            and _provider_event_id(existing) != _provider_event_id(incoming)):
+        raise ValueError("Cannot merge conflicting provider event identities")
     prefer_incoming = _richness(incoming) >= _richness(existing)
+    if existing.player1_id != incoming.player1_id:
+        if prefer_incoming:
+            existing = existing.swapped()
+        else:
+            incoming = incoming.swapped()
     base = deepcopy(incoming if prefer_incoming else existing)
     other = existing if prefer_incoming else incoming
 
@@ -558,38 +568,84 @@ def _merge_record(existing: MatchRecord, incoming: MatchRecord) -> MatchRecord:
             updates[field_name] = candidate
     if not base.winner_id and other.winner_id:
         updates["winner_id"] = other.winner_id
+    # A rank filled from the other record must not inherit the base's claim.
+    claims = []
+    for name in ("player1_rank", "player2_rank"):
+        source = other if name in updates else base
+        if getattr(source, name) is not None:
+            claims.append((source.provider_payload or {}).get("_tbt_rank_provenance"))
+    context = updates["provider_payload"]
+    context.pop("_tbt_rank_provenance", None)
+    if claims and isinstance(claims[0], dict) and all(c == claims[0] for c in claims):
+        context["_tbt_rank_provenance"] = deepcopy(claims[0])
     return replace(base, **updates)
 
 
+def _compatible_players(left, right):
+    return (str(left.tour).lower() == str(right.tour).lower()
+            and bool(left.player1_id) and bool(left.player2_id)
+            and left.player1_id != left.player2_id
+            and {left.player1_id, left.player2_id} == {right.player1_id, right.player2_id})
+
+
+def _merge_identity(left, right, *, fallback=False):
+    if not _compatible_players(left, right):
+        return False
+    a, b = _provider_event_id(left), _provider_event_id(right)
+    if a and b and a != b:
+        return False
+    if not fallback:
+        return bool((a and a == b) or (left.match_id and left.match_id == right.match_id))
+    # Missing identities require exact time plus positive tournament agreement.
+    # Do not guess a reschedule from players/day/round alone.
+    if left.scheduled_at != right.scheduled_at or _signature(left) != _signature(right):
+        return False
+    if left.tournament_id and right.tournament_id:
+        return str(left.tournament_id) == str(right.tournament_id)
+    a, b = left.tournament.strip().casefold(), right.tournament.strip().casefold()
+    return bool(a and a != "unknown" and a == b)
+
+
 def merge_matches(*groups: Iterable[MatchRecord]) -> list[MatchRecord]:
-    by_match: dict[str, MatchRecord] = {}
+    records = []
+    by_match, by_provider = {}, {}
     for group in groups:
         for match in group:
-            key = str(match.match_id)
-            by_match[key] = _merge_record(by_match[key], match) if key in by_match else match
+            provider = _provider_event_id(match)
+            indices = set(by_match.get(str(match.match_id), []))
+            if provider:
+                indices.update(by_provider.get(provider, []))
+            candidates = [i for i in indices if _merge_identity(records[i], match)]
+            if len(candidates) == 1:
+                index = candidates[0]
+                records[index] = _merge_record(records[index], match)
+            else:
+                index = len(records)
+                records.append(match)
+            by_match.setdefault(str(match.match_id), []).append(index)
+            if provider:
+                by_provider.setdefault(provider, []).append(index)
 
-    by_provider: dict[str, MatchRecord] = {}
-    without_provider: list[MatchRecord] = []
-    for match in by_match.values():
-        provider_id = _provider_event_id(match)
-        if provider_id:
-            by_provider[provider_id] = (
-                _merge_record(by_provider[provider_id], match)
-                if provider_id in by_provider
-                else match
-            )
-        else:
-            without_provider.append(match)
-
-    by_signature: dict[tuple[str, str, tuple[str, str], str], MatchRecord] = {}
-    for match in list(by_provider.values()) + without_provider:
-        signature = _signature(match)
-        by_signature[signature] = (
-            _merge_record(by_signature[signature], match)
-            if signature in by_signature
-            else match
-        )
-
-    result = list(by_signature.values())
-    result.sort(key=lambda item: (item.scheduled_at, str(item.match_id)))
-    return result
+    buckets = {}
+    for i, match in enumerate(records):
+        buckets.setdefault(_signature(match), []).append(i)
+    neighbors = {i: [] for i in range(len(records))}
+    for indices in buckets.values():
+        for offset, i in enumerate(indices):
+            for j in indices[offset + 1:]:
+                if _merge_identity(records[i], records[j], fallback=True):
+                    neighbors[i].append(j)
+                    neighbors[j].append(i)
+    # Only mutually unambiguous pairs qualify. A missing-ID record between two
+    # conflicting provider events must not be assigned by input order.
+    consumed, result = set(), []
+    for i, match in enumerate(records):
+        if i in consumed:
+            continue
+        choices = neighbors[i]
+        if len(choices) == 1 and neighbors[choices[0]] == [i]:
+            j = choices[0]
+            match = _merge_record(match, records[j])
+            consumed.add(j)
+        result.append(match)
+    return sorted(result, key=lambda item: (item.scheduled_at, str(item.match_id)))
