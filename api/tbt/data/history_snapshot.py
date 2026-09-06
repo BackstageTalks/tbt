@@ -338,6 +338,51 @@ def write_year_partition(
     return meta
 
 
+def sync_year_partition(
+    matches: Iterable[MatchRecord],
+    directory: str | Path,
+    year: int,
+    *,
+    extra_manifest: dict[str, Any] | None = None,
+) -> tuple[Path | None, bool]:
+    """Persist exactly one UTC-year partition, removing it when now empty.
+
+    Returns ``(path, removed)``.  ``path`` is the written partition when the
+    year still contains rows.  ``removed`` is true only when an existing local
+    partition or manifest entry had to be removed.  This is used when a provider
+    correction moves the last match across a UTC year boundary.
+    """
+    year = int(year)
+    selected = [
+        match
+        for match in matches
+        if match.scheduled_at.astimezone(timezone.utc).year == year
+    ]
+    if selected:
+        write_year_partition(
+            selected,
+            directory,
+            year,
+            extra_manifest=extra_manifest,
+        )
+        return partition_path(directory, year), False
+
+    path = partition_path(directory, year)
+    manifest = load_manifest(directory)
+    years = manifest.get("years") if isinstance(manifest, dict) else None
+    had_manifest_entry = isinstance(years, dict) and str(year) in years
+    had_file = path.is_file()
+
+    if had_file:
+        path.unlink()
+    if had_manifest_entry:
+        years.pop(str(year), None)
+        manifest["years"] = years
+        write_manifest(directory, manifest)
+
+    return None, bool(had_file or had_manifest_entry)
+
+
 def load_partitions(
     directory: str | Path,
     *,
@@ -515,6 +560,7 @@ __all__ = [
     "write_manifest",
     "write_snapshot",
     "write_year_partition",
+    "sync_year_partition",
 ]
 
 # ---------------------------------------------------------------------------
@@ -628,7 +674,12 @@ def _merge_record(existing: MatchRecord, incoming: MatchRecord) -> MatchRecord:
         candidate = getattr(other, field_name)
         if current in (None, "", "unknown") and candidate not in (None, "", "unknown"):
             updates[field_name] = candidate
-    if not base.winner_id and other.winner_id:
+    # Result precedence follows provider observation order, not data richness.
+    # A newer completed observation may legitimately correct a previously
+    # published winner while an older row still carries richer statistics.
+    if incoming.is_completed:
+        updates["winner_id"] = incoming.winner_id
+    elif not base.winner_id and other.winner_id:
         updates["winner_id"] = other.winner_id
     # A rank filled from the other record must not inherit the base's claim.
     claims = []
