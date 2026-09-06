@@ -345,30 +345,59 @@ def load_partitions(
     before: datetime | None = None,
 ) -> list[MatchRecord]:
     directory = Path(directory)
+    manifest_file = manifest_path(directory)
+    if not manifest_file.is_file():
+        raise FileNotFoundError(
+            f"Required history manifest is missing: {manifest_file.name}"
+        )
+
     manifest = load_manifest(directory)
     manifest_years = manifest.get("years") if isinstance(manifest, dict) else None
+    if not isinstance(manifest_years, dict) or not manifest_years:
+        raise ValueError("Invalid history manifest: missing years map")
 
-    if years is not None:
-        selected_years = sorted(set(int(year) for year in years))
-    elif isinstance(manifest_years, dict) and manifest_years:
-        try:
-            selected_years = sorted(int(year) for year in manifest_years)
-        except (TypeError, ValueError) as exc:
-            raise ValueError("Invalid history manifest year key") from exc
-    else:
-        selected_years = list_partition_years(directory)
+    expected_years = set()
+    try:
+        for year_key, metadata in manifest_years.items():
+            year = int(year_key)
+            if not isinstance(metadata, dict):
+                raise ValueError(f"Invalid history manifest entry for year {year}")
+            asset = str(metadata.get("asset") or f"history-{year:04d}.parquet")
+            expected_asset = partition_path(directory, year).name
+            if asset != expected_asset:
+                raise ValueError(
+                    f"Invalid history manifest asset for {year}: {asset}"
+                )
+            expected_years.add(year)
+    except (TypeError, ValueError) as exc:
+        if isinstance(exc, ValueError) and str(exc).startswith("Invalid history manifest"):
+            raise
+        raise ValueError("Invalid history manifest year key") from exc
 
-    if not selected_years:
-        raise FileNotFoundError(f"No history-YYYY.parquet partitions found in {directory}")
-
-    matches: list[MatchRecord] = []
-    for year in selected_years:
+    # Validate the complete manifest inventory before honoring a narrower caller
+    # selection. A partially downloaded corpus must never look valid merely
+    # because the caller happened to request a surviving year.
+    for year in sorted(expected_years):
         path = partition_path(directory, year)
         if not path.is_file() or path.stat().st_size <= 0:
             raise FileNotFoundError(
-                f"History manifest/selection requires missing partition: {path.name}"
+                f"History manifest requires missing partition: {path.name}"
             )
-        matches.extend(load_snapshot(path, before=before))
+
+    if years is not None:
+        selected_years = sorted(set(int(year) for year in years))
+        missing_from_manifest = sorted(set(selected_years) - expected_years)
+        if missing_from_manifest:
+            raise FileNotFoundError(
+                "History manifest does not contain requested partition(s): "
+                + ", ".join(f"history-{year:04d}.parquet" for year in missing_from_manifest)
+            )
+    else:
+        selected_years = sorted(expected_years)
+
+    matches: list[MatchRecord] = []
+    for year in selected_years:
+        matches.extend(load_snapshot(partition_path(directory, year), before=before))
 
     matches.sort(key=lambda item: (item.scheduled_at, str(item.match_id)))
     return matches
@@ -577,6 +606,11 @@ def _merge_record(existing: MatchRecord, incoming: MatchRecord) -> MatchRecord:
             incoming.provider_payload,
         ),
         "stats": merged_stats,
+        # merge_matches(existing, incoming) is precedence ordered: the incoming
+        # record is the newer provider observation. Schedule is mutable provider
+        # state and must not be selected by data richness, otherwise an enriched
+        # old row can hide a corrected actual start time.
+        "scheduled_at": incoming.scheduled_at,
     }
     for field_name in (
         "tournament",
