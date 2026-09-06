@@ -130,24 +130,14 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
 
 
 def _publish_predictions(store, ledger, predictions, matches, model, report, upcoming):
-    # Finish metrics/formatting before the publication boundary. The store reads
-    # its remote manifest before invoking commit, so network preparation cannot
-    # backdate issuance or bypass the final start-time check.
-    prepared = reconcile_ledger(ledger, predictions, matches)
-    feed = clean(serving_feed(prepared, model, matches, report, upcoming))
-    visible = {row["event_id"] for row in feed["upcoming"]}
-
-    def commit():
-        now = datetime.now(timezone.utc)
-        records = reconcile_ledger(ledger, predictions, matches, now)
-        feed["generated_at"] = now.isoformat()
-        feed["upcoming"] = [row for row in records if row["event_id"] in visible
-                            and datetime.fromisoformat(row["scheduled_at"]) > now]
-        write_json(store.directory / "ledger.json", records)
-        write_json(store.directory / "feed.json", feed)
-
-    store.upload_bundle([store.directory / "ledger.json", store.directory / "feed.json"],
-                        before_upload=commit)
+    # This stage publishes a pending deployment candidate. `issued_at` stays
+    # empty until the workflow confirms a successful public Azure deployment.
+    now = datetime.now(timezone.utc)
+    records = reconcile_ledger(ledger, predictions, matches, now)
+    feed = clean(serving_feed(records, model, matches, report, upcoming, now))
+    write_json(store.directory / "ledger.json", records)
+    write_json(store.directory / "feed.json", feed)
+    store.upload_bundle([store.directory / "ledger.json", store.directory / "feed.json"])
     return feed
 
 
