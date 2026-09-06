@@ -1,0 +1,21 @@
+# BlinQ web/admin v2 — implemented changes
+
+- ROOKIE 5.99 €/month with automatic 72-hour Rookie trial.
+- PRO 14.99 €/month, ELITE 99 €/year, GOAT 199 € lifetime.
+- LEGEND retained as hidden/disabled reserve; ADMIN is a separate role.
+- Fixed UI access engine: ACTIVE / LOCKED / BLURRED / HIDDEN per stable element ID.
+- Trial always inherits Rookie rules; expired state remains separately controllable.
+- Rookie default shows exactly three stable Prime Picks; filters cannot reveal extra picks by reshuffling card positions.
+- Three independent header content slots stay present responsively; header/logo shell remains fixed.
+- Two fixed external 4-unit rows with only allowed presets: 1+1+1+1, 2+2, 2+1+1, 1+1+2, 4.
+- Large slots default to RSS fallback; paid campaign creatives override RSS when assigned.
+- Separate logical advertisers, campaigns and physical slots.
+- Campaign manager, RSS feed manager, plan editor, account editor and analytics in Admin.
+- Watermark toggle + editable text on every banner/content slot.
+- ELITE/GOAT Hide Ads replaces ads with RSS/image/internal content without collapsing layout.
+- Banner analytics: viewport-qualified impressions, unique views, clicks, unique clicks and CTR by campaign.
+- Runtime UI config stored in Azure Table Storage and merged over repository defaults.
+- RSS runtime config can be edited from Admin and is consumed by the backend aggregator.
+- Added deferred player-enrichment endpoint note for photo/ranking/flags.
+- Advertiser campaigns now support fixed 1-column, 2-column and 4-column creative variants; the active row preset selects the matching image automatically.
+- Campaign creative can be full-image or image + BlinQ copy. The fixed slot dimensions never follow the uploaded/linked creative.
