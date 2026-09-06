@@ -1773,13 +1773,17 @@ class FeatureBuilder:
                 )
 
         for match in completed:
+            match_utc_date = (
+                match.scheduled_at
+                .astimezone(timezone.utc)
+                .date()
+            )
+
             if current_date is None:
-                current_date = (
-                    match.event_date
-                )
+                current_date = match_utc_date
 
             if (
-                match.event_date
+                match_utc_date
                 != current_date
             ):
                 process_batch(
@@ -1788,9 +1792,7 @@ class FeatureBuilder:
 
                 batch = []
 
-                current_date = (
-                    match.event_date
-                )
+                current_date = match_utc_date
 
             batch.append(
                 match
