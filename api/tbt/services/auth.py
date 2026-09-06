@@ -8,6 +8,14 @@ class AuthUnavailable(RuntimeError):
     pass
 
 
+def request_authorization(headers):
+    """Return the user bearer token without trusting SWA's rewritten Authorization header."""
+    custom = str(headers.get("X-Blinq-Access-Token") or "").strip()
+    if custom:
+        return custom if custom.lower().startswith("bearer ") else f"Bearer {custom}"
+    return headers.get("Authorization")
+
+
 def verify_user(authorization, cfg, client=None):
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
