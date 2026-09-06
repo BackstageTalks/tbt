@@ -12,8 +12,7 @@ from pathlib import Path
 
 from _bootstrap import ROOT
 from tbt.config import settings
-from tbt.data.history_snapshot import load_partitions, write_year_partition, _merge_record
-from tbt.data.provider_context import merge_provider_context
+from tbt.data.history_snapshot import load_partitions, merge_matches, write_year_partition
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.statistics_enrichment import StatisticsEnricher
@@ -33,11 +32,31 @@ def write_json(path, value):
     temporary.replace(path)
 
 
+
 def merge_match(existing, incoming):
+    """Compatibility helper for one unambiguous logical match."""
     if existing is None:
         return incoming
-    merged = _merge_record(existing, incoming)
-    return merged if merged.player1_id == incoming.player1_id else merged.swapped()
+    merged = merge_matches([existing], [incoming])
+    if len(merged) != 1:
+        raise ValueError("Cannot merge conflicting match identities")
+    result = merged[0]
+    return result if result.player1_id == incoming.player1_id else result.swapped()
+
+
+def _merge_completed_rows(matches, completed_rows):
+    current = list(matches.values()) if isinstance(matches, dict) else list(matches)
+    merged = merge_matches(current, completed_rows)
+    ids = [str(match.match_id) for match in merged]
+    if len(ids) != len(set(ids)):
+        raise ValueError(
+            "Ambiguous match identity collision; refusing to checkpoint history"
+        )
+    if isinstance(matches, dict):
+        matches.clear()
+        matches.update({match.match_id: match for match in merged})
+    else:
+        matches[:] = merged
 
 
 def download_days(provider, matches, progress, start, end, checkpoint):
@@ -50,9 +69,9 @@ def download_days(provider, matches, progress, start, end, checkpoint):
             rows = []
             for tour in ("atp", "wta"):
                 rows.extend(provider.matches_for_day(tour, day, historical=True))
-            for match in rows:
-                if match.is_completed:
-                    matches[match.match_id] = merge_match(matches.get(match.match_id), match)
+            completed_rows = [match for match in rows if match.is_completed]
+            if completed_rows:
+                _merge_completed_rows(matches, completed_rows)
             done.add(day.isoformat())
             progress["completed_days"] = sorted(done)
             count += 1
@@ -94,7 +113,7 @@ def main():
     # No rolling reservation ledger is used for history/statistics downloads.
     allocation = args.max_requests
     rows = load_partitions(directory) if list(directory.glob("history-*.parquet")) else []
-    matches = {m.match_id: m for m in rows}
+    matches = list(rows)
     progress_file = directory / "download_progress.json"
     progress = read_json(progress_file, {"schema": 1, "completed_days": []})
     if progress.get("schema") != 1:
@@ -104,8 +123,8 @@ def main():
     def checkpoint(years, publish=False):
         pending_years.update(years)
         for year in years:
-            if any(m.scheduled_at.year == year for m in matches.values()):
-                write_year_partition(matches.values(), directory, year,
+            if any(m.scheduled_at.year == year for m in matches):
+                write_year_partition(matches, directory, year,
                     extra_manifest={"coverage_status": "incremental_download"})
         progress["updated_at"] = datetime.now(timezone.utc).isoformat()
         write_json(progress_file, progress)
@@ -132,7 +151,7 @@ def main():
         else:
             enricher = StatisticsEnricher(provider, directory / "statistics_cache.sqlite")
             changed = set()
-            for match in sorted(matches.values(), key=lambda m: m.scheduled_at, reverse=True):
+            for match in sorted(matches, key=lambda m: m.scheduled_at, reverse=True):
                 if not start <= match.scheduled_at.date() <= end:
                     continue
                 status = enricher.enrich(match)

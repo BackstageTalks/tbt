@@ -119,6 +119,11 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
         for tour in ("atp", "wta"):
             incoming = [m for m in provider.matches_for_day(tour, day, historical=True) if m.is_completed]
             matches = merge_matches(matches, incoming)
+            ids = [str(match.match_id) for match in matches]
+            if len(ids) != len(set(ids)):
+                raise ValueError(
+                    "Ambiguous match identity collision; refusing to refresh history"
+                )
             written = []
             for year in sorted({m.scheduled_at.year for m in incoming}):
                 write_year_partition(matches, history_dir, year)
