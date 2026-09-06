@@ -134,6 +134,33 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
     return matches
 
 
+
+
+def _load_prediction_ledger(store):
+    """Load a complete prior prediction generation, or bootstrap only if absent.
+
+    An entirely empty prediction release is the only bootstrap state. If either
+    feed.json or ledger.json exists, both are required and checksum-verified.
+    """
+    required = {"feed.json", "ledger.json"}
+    assets = store._asset_names()
+    present = required & assets
+    if not present:
+        return []
+    if present != required:
+        missing = sorted(required - present)
+        raise FileNotFoundError(
+            "Prediction release is incomplete; missing assets: " + ", ".join(missing)
+        )
+    store.download(
+        extra_names=("feed.json", "ledger.json"),
+        required_names=("feed.json", "ledger.json"),
+    )
+    ledger = read_json(store.directory / "ledger.json", None)
+    if not isinstance(ledger, list):
+        raise ValueError("Invalid prediction ledger")
+    return ledger
+
 def _publish_predictions(store, ledger, predictions, matches, model, report, upcoming):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -152,7 +179,6 @@ def main():
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"))
     parser.add_argument("--max-requests", type=int, default=750)
     parser.add_argument("--promote", action="store_true")
-    parser.add_argument("--bootstrap-predictions", action="store_true")
     args = parser.parse_args()
     if not 1 <= args.max_requests <= 3000:
         parser.error("refresh allowance must be 1..3000")
@@ -251,13 +277,7 @@ def main():
         "tbt-predictions-v1",
         prediction_dir,
     )
-    if args.bootstrap_predictions:
-        prediction_store.download(extra_names=("ledger.json",))
-    else:
-        prediction_store.download(
-            extra_names=("ledger.json",),
-            required_names=("ledger.json",),
-        )
+    prediction_ledger = _load_prediction_ledger(prediction_store)
     budget_path = history_dir / "request_budget.json"
     ledger, allowance = reserve_allocation(read_json(budget_path, {}), args.max_requests,
         run_id=os.getenv("GITHUB_RUN_ID", "manual"), purpose="refresh")
@@ -289,7 +309,7 @@ def main():
         # feed is published from an incomplete refresh.
         raise refresh_error
     predictions = predict(model, matches, upcoming)
-    feed = _publish_predictions(prediction_store, read_json(prediction_dir / "ledger.json", []),
+    feed = _publish_predictions(prediction_store, prediction_ledger,
                                 predictions, matches, model, report, upcoming)
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)

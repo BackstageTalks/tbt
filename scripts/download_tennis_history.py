@@ -145,6 +145,9 @@ def main():
     provider.request_limit = allocation
     report = Counter()
     enricher = None
+    primary_error = None
+    primary_traceback = None
+    checkpoint_error = None
     try:
         if args.mode == "history":
             download_days(provider, matches, progress, start, end, checkpoint)
@@ -166,8 +169,13 @@ def main():
     except RequestBudgetExceeded as exc:
         report["budget_stopped"] = 1
         print(str(exc), flush=True)
+    except Exception as exc:
+        # Preserve the real provider/parser failure even if the best-effort
+        # final checkpoint also fails. The checkpoint error is chained below
+        # for diagnostics, but must never replace the primary cause.
+        primary_error = exc
+        primary_traceback = exc.__traceback__
     finally:
-        checkpoint_error = None
         try:
             # Includes partial statistics/history batches on a budget stop
             # or parser/provider error.
@@ -190,8 +198,18 @@ def main():
                     if enricher:
                         enricher.close()
 
+    if primary_error is not None:
         if checkpoint_error is not None:
-            raise checkpoint_error
+            try:
+                primary_error.add_note(
+                    f"Final checkpoint also failed: {checkpoint_error!r}"
+                )
+            except AttributeError:
+                pass
+            raise primary_error.with_traceback(primary_traceback) from checkpoint_error
+        raise primary_error.with_traceback(primary_traceback)
+    if checkpoint_error is not None:
+        raise checkpoint_error
 
 
 if __name__ == "__main__":
