@@ -41,15 +41,29 @@
     </div>
   </div>
   <dialog id="authDialog" aria-labelledby="authTitle">
-    <div class="auth-intro"><span class="eyebrow">BLINQ MEMBERS</span><h2 id="authTitle">Vitaj späť.</h2><p id="authSubtitle">Prihlás sa k svojim tenisovým analýzam.</p></div>
+    <div class="auth-brand">
+      <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo">
+    </div>
+    <div class="auth-intro">
+      <h2 id="authTitle">Vitaj späť.</h2>
+      <p id="authSubtitle">Prihlás sa k svojim tenisovým analýzam.</p>
+      <span class="auth-engine">STATISTICAL ENGINE · BACKSTAGETALKS</span>
+    </div>
     <form id="authForm">
-      <label id="nameLabel" hidden>Meno<input id="authName" autocomplete="name" maxlength="80"></label>
-      <label id="emailLabel">E-mail<input id="authEmail" type="email" autocomplete="email" required></label>
-      <label id="passwordLabel">Heslo<input id="authPassword" type="password" autocomplete="current-password" required minlength="8"></label>
+      <label id="nameLabel" hidden>Meno
+        <span class="auth-field"><span class="auth-field-icon" aria-hidden="true">○</span><input id="authName" autocomplete="name" maxlength="80"></span>
+      </label>
+      <label id="emailLabel">E-mail
+        <span class="auth-field"><span class="auth-field-icon" aria-hidden="true">✉</span><input id="authEmail" type="email" autocomplete="email" required placeholder="Zadaj svoj e-mail"></span>
+      </label>
+      <label id="passwordLabel">Heslo
+        <span class="auth-field"><span class="auth-field-icon" aria-hidden="true">⌑</span><input id="authPassword" type="password" autocomplete="current-password" required minlength="8" placeholder="Zadaj svoje heslo"></span>
+      </label>
       <p id="authMessage" role="status" aria-live="polite"></p>
       <button id="authSubmit" class="button primary" type="submit">Prihlásiť sa</button>
     </form>
     <div class="auth-links"><button id="switchSignup">Vytvoriť účet</button><button id="switchReset">Zabudnuté heslo</button></div>
+    <div class="auth-footer">Powered by BackstageTalks Statistical Engine</div>
   </dialog>
   <dialog id="matchDialog" aria-labelledby="matchTitle"><button id="closeMatch" class="dialog-close" aria-label="Zavrieť detail">×</button><div id="matchDetail"></div></dialog>
 </body>
