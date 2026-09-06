@@ -4,7 +4,7 @@ import logging
 import azure.functions as func
 
 from tbt.config import settings
-from tbt.services.auth import AuthUnavailable, public_account, verify_user
+from tbt.services.auth import AuthUnavailable, public_account, request_authorization, verify_user
 from tbt.services.feed import read_feed, visible_feed
 import json
 
@@ -32,7 +32,7 @@ def auth_config(req):
 @app.route(route="v1/auth/me", methods=["GET"])
 def account(req):
     try:
-        user = verify_user(req.headers.get("Authorization"), settings)
+        user = verify_user(request_authorization(req.headers), settings)
         return response(public_account(user)) if user else response({"error": "unauthorized"}, 401)
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
@@ -41,7 +41,7 @@ def account(req):
 @app.route(route="v1/feed", methods=["GET"])
 def feed(req):
     try:
-        user = verify_user(req.headers.get("Authorization"), settings)
+        user = verify_user(request_authorization(req.headers), settings)
         if not user:
             return response({"error": "unauthorized"}, 401)
         data = visible_feed(read_feed(FEED))
