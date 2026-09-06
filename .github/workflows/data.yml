@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [history, statistics, environment, venue, history-audit, history-repair, train, backtest, refresh]
+        options: [history, statistics, history-audit, history-repair, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -69,13 +69,6 @@ jobs:
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             python scripts/download_tennis_history.py "${args[@]}"
-          elif [[ "$MODE" == environment ]]; then
-            python scripts/download_environment.py --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS"
-          elif [[ "$MODE" == venue ]]; then
-            args=(--data-repository "$TBT_DATA_REPOSITORY" --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS")
-            if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
-            if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
-            python scripts/backfill_venue_context.py "${args[@]}"
           elif [[ "$MODE" == history-audit ]]; then
             python scripts/audit_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == history-repair ]]; then
