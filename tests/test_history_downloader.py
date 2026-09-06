@@ -1,3 +1,4 @@
+from dataclasses import replace
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
@@ -58,6 +59,46 @@ def test_incomplete_day_is_retried_without_duplicate_rows(match_factory):
     calls = provider.request_count
     download_days(provider, matches, progress, day, day, lambda *a: None)
     assert provider.request_count == calls
+
+
+def test_cross_year_provider_correction_checkpoints_both_partitions(match_factory):
+    old_time = datetime(2024, 12, 31, 23, tzinfo=timezone.utc)
+    new_time = datetime(2025, 1, 1, 1, tzinfo=timezone.utc)
+    old = replace(
+        match_factory("old", "A", "B", "A"),
+        scheduled_at=old_time,
+        provider_payload={"_tbt_provider_event_id": "event-123"},
+    )
+    incoming = replace(
+        old,
+        match_id="new",
+        scheduled_at=new_time,
+        provider_payload={"_tbt_provider_event_id": "event-123"},
+    )
+
+    class Provider:
+        request_count = 0
+        def matches_for_day(self, tour, day, historical):
+            self.request_count += 1
+            return [incoming] if tour == "atp" else []
+
+    matches = {old.match_id: old}
+    progress = {"completed_days": []}
+    checkpoints = []
+    download_days(
+        Provider(),
+        matches,
+        progress,
+        new_time.date(),
+        new_time.date(),
+        lambda years, publish=False: checkpoints.append((set(years), publish)),
+    )
+
+    assert checkpoints[0][0] == {2024, 2025}
+    assert len(matches) == 1
+    only = next(iter(matches.values()))
+    assert only.scheduled_at == new_time
+    assert progress["completed_days"] == ["2025-01-01"]
 
 
 def test_merge_preserves_statistics_when_provider_changes_orientation(match_factory):

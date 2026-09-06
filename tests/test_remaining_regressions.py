@@ -14,10 +14,18 @@ import pytest
 
 import pipeline
 import release_store
-from tbt.data.history_snapshot import merge_matches, _merge_record, write_snapshot, load_snapshot, load_partitions
+from tbt.data.history_snapshot import (
+    merge_matches,
+    _merge_record,
+    write_snapshot,
+    load_snapshot,
+    load_partitions,
+    load_manifest,
+)
 from tbt.data.provider_context import minimize_provider_payload, merge_provider_context
 from tbt.models.feature_builder import FeatureBuilder
 from tbt.providers.rapidapi import RapidTennisClient
+from tbt.errors import ProviderError
 from tbt.services import backtest_service, training
 from tbt.services.engine import predict, reconcile_ledger, confirm_publication
 
@@ -69,6 +77,29 @@ def test_reversed_merge_keeps_statistics_and_ranks_with_player(match_factory, in
     assert a.stats['p1_aces'] == 10
     with pytest.raises(ValueError, match='incompatible'):
         _merge_record(a, replace(b, player2_id='C'))
+
+
+def test_newer_winner_correction_overrides_richer_old_result(match_factory):
+    old = replace(
+        match_factory("winner-correction", "A", "B", "A"),
+        stats={"p1_aces": 12, "p2_aces": 3},
+        provider_payload={"_tbt_provider_event_id": "event-1"},
+    )
+    corrected = replace(
+        old.swapped(),
+        winner_id="B",
+        stats={},
+        provider_payload={"_tbt_provider_event_id": "event-1"},
+    )
+
+    merged = merge_matches([old], [corrected])
+    assert len(merged) == 1
+    assert merged[0].winner_id == "B"
+    aces = {
+        merged[0].player1_id: merged[0].stats["p1_aces"],
+        merged[0].player2_id: merged[0].stats["p2_aces"],
+    }
+    assert aces == {"A": 12, "B": 3}
 
 
 def test_rank_provenance_survives_parquet_and_does_not_certify_other_ranks(match_factory, tmp_path):
@@ -161,6 +192,78 @@ def test_refresh_checkpoints_before_next_day_failure(match_factory, tmp_path):
     assert 'history_manifest.json' in published[-1]
 
 
+@pytest.mark.parametrize(
+    "old_time,new_time",
+    [
+        (
+            datetime(2024, 12, 31, 23, tzinfo=timezone.utc),
+            datetime(2025, 1, 1, 1, tzinfo=timezone.utc),
+        ),
+        (
+            datetime(2025, 1, 1, 1, tzinfo=timezone.utc),
+            datetime(2024, 12, 31, 23, tzinfo=timezone.utc),
+        ),
+    ],
+)
+def test_refresh_moves_provider_event_across_year_without_stale_partition(
+    match_factory, tmp_path, old_time, new_time
+):
+    old = replace(
+        match_factory("old-id", "A", "B", "A"),
+        scheduled_at=old_time,
+        provider_payload={"_tbt_provider_event_id": "event-123"},
+    )
+    incoming = replace(
+        old,
+        match_id="new-id",
+        scheduled_at=new_time,
+        provider_payload={"_tbt_provider_event_id": "event-123"},
+    )
+
+    # Seed the exact old on-disk state.
+    from tbt.data.history_snapshot import write_year_partition
+    write_year_partition([old], tmp_path, old_time.year)
+
+    class Provider:
+        def matches_for_day(self, tour, day, historical):
+            return [incoming] if tour == "atp" else []
+
+    uploads = []
+
+    class Store:
+        def upload_bundle(self, paths, **kwargs):
+            uploads.append(
+                (
+                    [Path(path).name for path in paths],
+                    tuple(kwargs.get("remove_names", ())),
+                )
+            )
+
+    merged = pipeline._refresh_history(
+        Provider(),
+        [old],
+        tmp_path,
+        Store(),
+        new_time.date(),
+        new_time.date(),
+    )
+
+    assert len(merged) == 1
+    assert merged[0].scheduled_at == new_time
+    assert not (tmp_path / f"history-{old_time.year}.parquet").exists()
+    assert (tmp_path / f"history-{new_time.year}.parquet").is_file()
+    reloaded = load_partitions(tmp_path)
+    assert len(reloaded) == 1
+    assert reloaded[0].scheduled_at == new_time
+    manifest = load_manifest(tmp_path)
+    assert str(old_time.year) not in manifest["years"]
+    assert str(new_time.year) in manifest["years"]
+    assert any(
+        f"history-{old_time.year}.parquet" in removed
+        for _, removed in uploads
+    )
+
+
 def fake_release(monkeypatch, tmp_path):
     assets = {}
     def gh(*args):
@@ -175,6 +278,8 @@ def fake_release(monkeypatch, tmp_path):
             for path in args[3:args.index('--repo')]:
                 path = Path(path)
                 assets[path.name] = path.read_bytes()
+        elif args[:2] == ('release', 'delete-asset'):
+            assets.pop(str(args[3]), None)
         else:
             raise AssertionError(args)
         return ''
@@ -201,6 +306,29 @@ def test_partial_bundle_preserves_remote_checksums_and_required_download(monkeyp
     assets['model.joblib'] = b'corrupt'
     with pytest.raises(RuntimeError, match='checksum mismatch'):
         store.download(required_names=('model.joblib',))
+
+
+def test_bundle_removal_deletes_remote_asset_and_checksum_entry(monkeypatch, tmp_path):
+    store, assets = fake_release(monkeypatch, tmp_path)
+    old_partition = tmp_path / "history-2024.parquet"
+    manifest_file = tmp_path / "history_manifest.json"
+    old_partition.write_bytes(b"old")
+    manifest_file.write_text('{"years":{"2024":{"asset":"history-2024.parquet"}}}')
+    store.upload_bundle([old_partition, manifest_file])
+
+    old_partition.unlink()
+    manifest_file.write_text('{"years":{"2025":{"asset":"history-2025.parquet"}}}')
+    new_partition = tmp_path / "history-2025.parquet"
+    new_partition.write_bytes(b"new")
+    store.upload_bundle(
+        [new_partition, manifest_file],
+        remove_names=("history-2024.parquet",),
+    )
+
+    assert "history-2024.parquet" not in assets
+    bundle = json.loads(assets[store.BUNDLE_MANIFEST])
+    assert "history-2024.parquet" not in bundle["files"]
+    assert "history-2025.parquet" in bundle["files"]
 
 
 @pytest.mark.parametrize('manifest', [None, {'files': {}}, {'files': {'model.joblib': {'sha256': ''}}}])
@@ -381,6 +509,40 @@ def test_history_rejects_missing_match_identity(match_factory):
     with pytest.raises(ValueError, match='match identity'):
         training.audit_history([broken])
 
+
+
+def test_historical_day_with_invalid_required_event_fails_instead_of_completing(
+    match_factory,
+):
+    client = RapidTennisClient.__new__(RapidTennisClient)
+    client.calendar_categories = lambda day: [{"id": 3, "name": "ATP"}]
+    client._category_id = lambda category: 3
+    client._category_tour = lambda category: "atp"
+    client.category_events = lambda category_id, day: [
+        {"id": 101},
+        {"id": 202},
+    ]
+    client._is_singles_event = lambda raw: True
+    client._event_tour = lambda raw, category_id, category_name: "atp"
+    valid = match_factory("valid", "A", "B", "A")
+
+    def normalize(raw, tour, historical):
+        if str(raw["_tbt_provider_event_id"]) == "202":
+            raise ValueError("TennisApi event has no startTimestamp")
+        return replace(
+            valid,
+            provider_payload={
+                "_tbt_provider_event_id": str(raw["_tbt_provider_event_id"])
+            },
+        )
+
+    client.normalize_match = normalize
+    with pytest.raises(ProviderError, match="Incomplete historical day"):
+        client.matches_for_day("atp", valid.scheduled_at.date(), historical=True)
+
+    # Live discovery stays tolerant: malformed upcoming events are skipped.
+    live = client.matches_for_day("atp", valid.scheduled_at.date(), historical=False)
+    assert len(live) == 1
 
 
 def test_provider_daily_dedupe_preserves_conflicting_provider_events(monkeypatch, match_factory):
@@ -750,6 +912,47 @@ def test_richer_old_history_cannot_hide_corrected_start_from_performance(match_f
         reconciled, model, merged, {}, [], start + timedelta(hours=5)
     )
     assert feed["performance"] == {}
+
+
+def test_settlement_reconciles_corrected_winner_without_rewriting_prediction(
+    match_factory,
+):
+    start = datetime(2025, 1, 1, 9, tzinfo=timezone.utc)
+    fixture = replace(
+        match_factory("winner-fix", "A", "B", None),
+        scheduled_at=start + timedelta(hours=3),
+        provider_payload={"_tbt_provider_event_id": "winner-fix"},
+    )
+    model = SimpleNamespace(
+        version="test",
+        predict_proba=lambda frame: np.full(len(frame), .7),
+    )
+    ledger = reconcile_ledger([], predict(model, [], [fixture], start), [], start)
+    ledger = confirm_publication(
+        ledger, copy.deepcopy(ledger), start + timedelta(minutes=5)
+    )
+    issued_at = ledger[0]["issued_at"]
+    probability = ledger[0]["player1"]["probability"]
+
+    first_result = replace(fixture, winner_id="A", status="finished")
+    settled = reconcile_ledger(
+        ledger, [], [first_result], start + timedelta(hours=4)
+    )
+    original_settled_at = settled[0]["result"]["settled_at"]
+    assert settled[0]["result"]["correct"] is True
+
+    corrected = replace(first_result, winner_id="B")
+    reconciled = reconcile_ledger(
+        settled, [], [corrected], start + timedelta(hours=5)
+    )
+    assert reconciled[0]["issued_at"] == issued_at
+    assert reconciled[0]["player1"]["probability"] == probability
+    assert reconciled[0]["result"]["winner_id"] == "B"
+    assert reconciled[0]["result"]["correct"] is False
+    assert reconciled[0]["result"]["settled_at"] == original_settled_at
+    assert reconciled[0]["result"]["corrected_at"] == (
+        start + timedelta(hours=5)
+    ).isoformat()
 
 
 def test_primary_provider_error_survives_report_and_cleanup_failures(monkeypatch, tmp_path):
