@@ -298,13 +298,16 @@ class ReleaseStore:
             raise ValueError("Invalid committed bundle manifest")
         return dict(files)
 
-    def upload_bundle(self, paths, *, before_upload=None):
+    def upload_bundle(self, paths, *, before_upload=None, remove_names=()):
         """Upload related assets, then commit their checksums last.
 
         Readers that see a partial overwrite will fail checksum verification
-        instead of silently consuming a mixed generation.
+        instead of silently consuming a mixed generation.  Removals are applied
+        before the replacement manifest is committed so a reader can fail closed,
+        but can never silently consume a stale deleted partition.
         """
         files = [Path(p) for p in paths]
+        removals = {str(name) for name in remove_names}
         previous = self._remote_bundle_files()
         if before_upload is not None:
             before_upload()
@@ -312,14 +315,35 @@ class ReleaseStore:
             raise FileNotFoundError("Bundle asset is missing")
         if len({path.name for path in files}) != len(files):
             raise ValueError("Duplicate bundle asset names")
-        if not files:
+        if any(not re.fullmatch(r"[A-Za-z0-9_.-]+", name) for name in removals):
+            raise ValueError("Invalid release asset name")
+        if removals & {path.name for path in files}:
+            raise ValueError("Cannot upload and remove the same bundle asset")
+        if not files and not removals:
             return
 
+        remote_assets = self._asset_names() if removals else set()
+        for name in sorted(removals & remote_assets):
+            gh(
+                "release",
+                "delete-asset",
+                self.tag,
+                name,
+                "--repo",
+                self.repository,
+                "--yes",
+            )
+
+        retained = {
+            name: meta
+            for name, meta in previous.items()
+            if name not in removals
+        }
         manifest = {
             "schema": 1,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "files": {
-                **previous,
+                **retained,
                 **{path.name: {
                     "sha256": self._sha256(path),
                     "bytes": int(path.stat().st_size),

@@ -12,7 +12,12 @@ from download_tennis_history import read_json, write_json
 from history_download_budget import LocalRequestBudget, reserve_allocation
 from release_store import ReleaseStore
 from tbt.config import settings
-from tbt.data.history_snapshot import load_partitions, write_year_partition, merge_matches
+from tbt.data.history_snapshot import (
+    load_partitions,
+    merge_matches,
+    sync_year_partition,
+    _provider_event_id,
+)
 from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.engine import predict, reconcile_ledger, serving_feed
@@ -115,22 +120,59 @@ def _holdout_already_used(history, fingerprint):
 
 
 def _refresh_history(provider, matches, history_dir, history_store, start, end):
+    provider_years = {
+        provider_id: match.scheduled_at.astimezone(timezone.utc).year
+        for match in matches
+        if (provider_id := _provider_event_id(match)) is not None
+    }
     day = start
     while day <= end:
         for tour in ("atp", "wta"):
-            incoming = [m for m in provider.matches_for_day(tour, day, historical=True) if m.is_completed]
+            incoming = [
+                match
+                for match in provider.matches_for_day(
+                    tour, day, historical=True
+                )
+                if match.is_completed
+            ]
+            affected_years = {
+                match.scheduled_at.astimezone(timezone.utc).year
+                for match in incoming
+            }
+            for match in incoming:
+                provider_id = _provider_event_id(match)
+                if provider_id is not None and provider_id in provider_years:
+                    affected_years.add(provider_years[provider_id])
+
             matches = merge_matches(matches, incoming)
             ids = [str(match.match_id) for match in matches]
             if len(ids) != len(set(ids)):
                 raise ValueError(
                     "Ambiguous match identity collision; refusing to refresh history"
                 )
+
             written = []
-            for year in sorted({m.scheduled_at.year for m in incoming}):
-                write_year_partition(matches, history_dir, year)
-                written.append(history_dir / f"history-{year}.parquet")
-            if written:
-                history_store.upload_bundle(written + [history_dir / "history_manifest.json"])
+            removed = []
+            for year in sorted(affected_years):
+                path, was_removed = sync_year_partition(matches, history_dir, year)
+                if path is not None:
+                    written.append(path)
+                elif was_removed:
+                    removed.append(f"history-{year}.parquet")
+
+            if written or removed:
+                bundle = written + [history_dir / "history_manifest.json"]
+                if removed:
+                    history_store.upload_bundle(bundle, remove_names=removed)
+                else:
+                    history_store.upload_bundle(bundle)
+
+            for match in incoming:
+                provider_id = _provider_event_id(match)
+                if provider_id is not None:
+                    provider_years[provider_id] = (
+                        match.scheduled_at.astimezone(timezone.utc).year
+                    )
         day += timedelta(days=1)
     return matches
 

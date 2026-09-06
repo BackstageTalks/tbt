@@ -12,7 +12,12 @@ from pathlib import Path
 
 from _bootstrap import ROOT
 from tbt.config import settings
-from tbt.data.history_snapshot import load_partitions, merge_matches, write_year_partition
+from tbt.data.history_snapshot import (
+    load_partitions,
+    merge_matches,
+    sync_year_partition,
+    _provider_event_id,
+)
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.statistics_enrichment import StatisticsEnricher
@@ -44,7 +49,16 @@ def merge_match(existing, incoming):
     return result if result.player1_id == incoming.player1_id else result.swapped()
 
 
-def _merge_completed_rows(matches, completed_rows):
+def _merge_completed_rows(matches, completed_rows, provider_years):
+    affected_years = {
+        match.scheduled_at.astimezone(timezone.utc).year
+        for match in completed_rows
+    }
+    for match in completed_rows:
+        provider_id = _provider_event_id(match)
+        if provider_id is not None and provider_id in provider_years:
+            affected_years.add(provider_years[provider_id])
+
     current = list(matches.values()) if isinstance(matches, dict) else list(matches)
     merged = merge_matches(current, completed_rows)
     ids = [str(match.match_id) for match in merged]
@@ -58,10 +72,24 @@ def _merge_completed_rows(matches, completed_rows):
     else:
         matches[:] = merged
 
+    for match in completed_rows:
+        provider_id = _provider_event_id(match)
+        if provider_id is not None:
+            provider_years[provider_id] = (
+                match.scheduled_at.astimezone(timezone.utc).year
+            )
+    return affected_years
+
 
 def download_days(provider, matches, progress, start, end, checkpoint):
     """Newest first. Mark a day complete only after BOTH tours succeed."""
     done = set(progress.get("completed_days", []))
+    current = list(matches.values()) if isinstance(matches, dict) else list(matches)
+    provider_years = {
+        provider_id: match.scheduled_at.astimezone(timezone.utc).year
+        for match in current
+        if (provider_id := _provider_event_id(match)) is not None
+    }
     day = end
     count = 0
     while day >= start:
@@ -70,12 +98,15 @@ def download_days(provider, matches, progress, start, end, checkpoint):
             for tour in ("atp", "wta"):
                 rows.extend(provider.matches_for_day(tour, day, historical=True))
             completed_rows = [match for match in rows if match.is_completed]
+            affected_years = set()
             if completed_rows:
-                _merge_completed_rows(matches, completed_rows)
+                affected_years = _merge_completed_rows(
+                    matches, completed_rows, provider_years
+                )
             done.add(day.isoformat())
             progress["completed_days"] = sorted(done)
             count += 1
-            checkpoint({day.year}, count % 7 == 0)
+            checkpoint(affected_years, count % 7 == 0)
             print(json.dumps({"completed_day": day.isoformat(), "rows": len(rows),
                               "requests": provider.request_count}), flush=True)
         day -= timedelta(days=1)
@@ -119,13 +150,22 @@ def main():
     if progress.get("schema") != 1:
         raise ValueError("Unsupported download progress schema")
     pending_years = set()
+    pending_removals = set()
 
     def checkpoint(years, publish=False):
         pending_years.update(years)
-        for year in years:
-            if any(m.scheduled_at.year == year for m in matches):
-                write_year_partition(matches, directory, year,
-                    extra_manifest={"coverage_status": "incremental_download"})
+        for year in sorted(years):
+            path, was_removed = sync_year_partition(
+                matches,
+                directory,
+                year,
+                extra_manifest={"coverage_status": "incremental_download"},
+            )
+            asset_name = f"history-{int(year):04d}.parquet"
+            if path is not None:
+                pending_removals.discard(asset_name)
+            elif was_removed:
+                pending_removals.add(asset_name)
         progress["updated_at"] = datetime.now(timezone.utc).isoformat()
         write_json(progress_file, progress)
         if publish and store:
@@ -138,8 +178,17 @@ def main():
             if manifest_file.is_file():
                 bundle.append(manifest_file)
             bundle.append(progress_file)
-            store.upload_bundle(bundle)
+            removals = sorted(
+                name
+                for name in pending_removals
+                if not (directory / name).is_file()
+            )
+            if removals:
+                store.upload_bundle(bundle, remove_names=removals)
+            else:
+                store.upload_bundle(bundle)
             pending_years.clear()
+            pending_removals.clear()
 
     provider = RapidTennisClient(request_budget=None)
     provider.request_limit = allocation
