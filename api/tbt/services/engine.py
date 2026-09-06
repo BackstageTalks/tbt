@@ -82,22 +82,46 @@ def reconcile_ledger(ledger, predictions, history, now=None):
     completed = {event_id(m): m for m in history if m.is_completed}
     for key, row in stored.items():
         match = completed.get(key)
-        if match is None or row.get("result") is not None:
+        if match is None:
             continue
         if {row["player1"]["id"], row["player2"]["id"]} != {match.player1_id, match.player2_id}:
             raise ValueError("Settlement identity mismatch")
+
+        # The provider may correct the actual start after settlement. Scheduled
+        # time is mutable, but the published probability/issuance timestamp is not.
+        row.setdefault("original_scheduled_at", row["scheduled_at"])
+        row["scheduled_at"] = match.scheduled_at.isoformat()
         issued_at = row.get("issued_at")
         if not issued_at:
             # Pending predictions are never scored until a successful public
             # deployment confirms that they were actually available pre-match.
             continue
-        # If the provider moves a start earlier than issuance, exclude that record
-        # from live performance rather than claiming a pre-match prediction.
+
         if datetime.fromisoformat(issued_at) >= match.scheduled_at:
             row["excluded_reason"] = "issued_after_actual_start"
+            if row.get("result") is not None:
+                row["result"] = {
+                    **row["result"],
+                    "scheduled_at": match.scheduled_at.isoformat(),
+                }
             continue
-        row["result"] = {"winner_id": match.winner_id, "correct": row["winner_id"] == match.winner_id,
-                         "settled_at": now.isoformat()}
+
+        if row.get("excluded_reason") == "issued_after_actual_start":
+            row.pop("excluded_reason", None)
+
+        if row.get("result") is not None:
+            row["result"] = {
+                **row["result"],
+                "scheduled_at": match.scheduled_at.isoformat(),
+            }
+            continue
+
+        row["result"] = {
+            "winner_id": match.winner_id,
+            "correct": row["winner_id"] == match.winner_id,
+            "settled_at": now.isoformat(),
+            "scheduled_at": match.scheduled_at.isoformat(),
+        }
     return sorted(stored.values(), key=lambda r: r["scheduled_at"])
 
 
