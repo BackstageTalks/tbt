@@ -104,7 +104,7 @@
   async function load() {
     $('refresh').disabled=true;
     try{data=await BlinqAuth.feed();demo=Boolean(data.demo);$('demoBanner').hidden=!demo;$('accountShortcut').textContent=(data.account?.name||'B').slice(0,1).toUpperCase();notice(data.stale?'Dáta sú staršie než 12 hodín. Pri hodnotení predikcií skontroluj čas ich vytvorenia.':'');render();}
-    catch(error){if(error.status===401){auth();notice('Pre zobrazenie predikcií sa prihlás.');}else notice('Dáta sa nepodarilo načítať. Skús obnovenie o chvíľu.');}
+    catch(error){if(error.status===401){BlinqAuth.clear();auth();notice('Pre zobrazenie predikcií sa prihlás.');}else notice('Dáta sa nepodarilo načítať. Skús obnovenie o chvíľu.');}
     finally{$('refresh').disabled=false;}
   }
   (async()=>{try{const cfg=await BlinqAuth.init();enabled=cfg.enabled;demo=Boolean(cfg.demo);const hash=location.hash.slice(1);if(titles[hash])page=hash;if(cfg.recovery){auth('recovery');return;}if(demo||await BlinqAuth.restore())await load();else{render();auth();}}catch(error){notice(error.message);render();auth();}})();

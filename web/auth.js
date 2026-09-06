@@ -3,13 +3,13 @@
   const KEY = 'blinq_v3_session';
   let config = null, refreshing = null;
   let recovery = false;
-  function session() { try { return JSON.parse(sessionStorage.getItem(KEY) || 'null'); } catch { return null; } }
-  function clear() { sessionStorage.removeItem(KEY); }
+  function session() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } }
+  function clear() { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); }
   function save(value) {
     const s = value?.session || value;
     if (!s?.access_token) return null;
     const normalized = {access_token:s.access_token,refresh_token:s.refresh_token || '',expires_at:Number(s.expires_at) || Math.floor(Date.now()/1000)+Number(s.expires_in || 3600)};
-    sessionStorage.setItem(KEY,JSON.stringify(normalized)); return normalized;
+    localStorage.setItem(KEY,JSON.stringify(normalized)); return normalized;
   }
   async function json(url, options = {}) {
     const response = await fetch(url,{...options,headers:{Accept:'application/json','Content-Type':'application/json',...(options.headers || {})},cache:'no-store',signal:AbortSignal.timeout(20000)});
@@ -25,7 +25,7 @@
     if (s.expires_at > Date.now()/1000+60) return s;
     if (!s.refresh_token) { clear(); return null; }
     if (!refreshing) refreshing = json(endpoint('/token?grant_type=refresh_token'),{method:'POST',headers:headers(),body:JSON.stringify({refresh_token:s.refresh_token})})
-      .then(save).catch(error => {if ([400,401,403].includes(error.status)) clear(); throw error;}).finally(() => {refreshing=null;});
+      .then(save).catch(error => {if ([400,401,403].includes(error.status)){clear();return null;} throw error;}).finally(() => {refreshing=null;});
     return refreshing;
   }
   async function init() {
