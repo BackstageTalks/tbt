@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [history, statistics, environment, history-audit, train, backtest, refresh]
+        options: [history, statistics, environment, history-audit, history-repair, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -73,6 +73,8 @@ jobs:
             python scripts/download_environment.py --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS"
           elif [[ "$MODE" == history-audit ]]; then
             python scripts/audit_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
+          elif [[ "$MODE" == history-repair ]]; then
+            python scripts/repair_history_self_match.py --data-repository "$TBT_DATA_REPOSITORY"
           else
             args=("$MODE" --max-requests "$MAX_REQUESTS")
             if [[ "$PROMOTE" == true ]]; then args+=(--promote); fi
