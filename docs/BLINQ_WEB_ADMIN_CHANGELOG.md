@@ -19,3 +19,14 @@
 - Added deferred player-enrichment endpoint note for photo/ranking/flags.
 - Advertiser campaigns now support fixed 1-column, 2-column and 4-column creative variants; the active row preset selects the matching image automatically.
 - Campaign creative can be full-image or image + BlinQ copy. The fixed slot dimensions never follow the uploaded/linked creative.
+
+## 2026-09-07 — dashboard/ad-row v3
+- Added three independent AD ROW bands with whole-row ON/OFF controls and fixed merge presets.
+- Added CONTENT_MID_1..4 while preserving existing top/bottom slot identities.
+- Moved Prime filters directly into the Prime Picks panel.
+- Added fixed dashboard sections: Prime, Top 10 Daily, Value, Ace, S/G, BTTS Bonus BETA.
+- Added dedicated sidebar routes for those sections plus Results and `/btts`.
+- Added third sidebar promo slot.
+- Added compact horizontal banner creative specs, minimum sizes, safe areas, mobile creative, fit and positioning controls.
+- Retained per-banner editable watermark overlay (`COMING SOON` by default).
+- Added market rule configuration for Prime threshold, Top 10 limit, Value odds/gap guardrails, Ace/DF and Sets/Games limits.

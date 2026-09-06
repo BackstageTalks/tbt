@@ -22,7 +22,7 @@ The page layout does not move according to plan. Every functional area has a sta
 - `blurred`
 - `hidden` (geometry remains reserved)
 
-The header shell/logo remain fixed. The three small header slots are separately configurable. The two external content rows each consist of four physical units.
+The header shell/logo remain fixed. The three small header slots are separately configurable. The dashboard has three optional external advertising rows. Each row is a fixed four-unit band: above Prime Picks, between Top 10 Daily Picks and Value Picks, and between Ace Picks and S/G Picks. The whole row is switched ON/OFF first; when enabled, its division is selected from the fixed presets.
 
 Allowed row presets are deliberately limited to:
 
@@ -79,8 +79,26 @@ The repository `web/ui-config.json` is the safe default/bootstrap configuration.
 
 Campaigns can store separate creative URLs/paths for the three supported large-slot widths. The frontend automatically chooses the variant matching the current fixed row preset:
 
-- 1-column: 4:3, recommended 1200 × 900 px
-- 2-column: 8:3, recommended 2400 × 900 px
-- 4-column: 16:3, recommended 2400 × 450 px
+- 1-column: 4:1, recommended 1200 × 300 px, minimum 800 × 200 px, center safe area 80%
+- 2-column: 8:1, recommended 2400 × 300 px, minimum 1600 × 200 px, center safe area 85%
+- 4-column/full row: 16:1, recommended 2400 × 150 px, minimum 1600 × 100 px, center safe area 90%
+
+Creatives default to `cover + center`, so compliant artwork fills and centers automatically. Admin can switch to `contain` and choose center/left/right/top/bottom alignment. An optional mobile image can override the desktop creative. The page geometry remains fixed.
 
 A fallback image can also be supplied. Campaigns support a full-image mode (useful for advertiser-supplied finished banners) and a split mode where BlinQ headline/text/CTA may be rendered over or alongside the creative. The creative never changes the slot geometry.
+
+## Dashboard market structure
+
+The fixed dashboard order is:
+
+1. AD ROW
+2. Prime Picks
+3. Top 10 Daily Picks
+4. AD ROW
+5. Value Picks
+6. Ace Picks
+7. AD ROW
+8. S/G Picks
+9. BTTS Bonus BETA
+
+Prime Picks are all Match Winner predictions above the configured probability threshold (default 70%), with no odds or count requirement. Top 10 Daily is a future daily betting shortlist across supported tennis markets. Value defaults to odds > 1.70 and maximum 15% implied-probability gap. Ace Picks cover Aces/Double Faults, S/G covers Sets/Games, and BTTS links to the separate football `/btts` product.
