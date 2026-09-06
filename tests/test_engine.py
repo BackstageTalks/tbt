@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import httpx
 
-from tbt.services.engine import predict, reconcile_ledger, serving_feed
+from tbt.services.engine import predict, reconcile_ledger, serving_feed, confirm_publication
 from tbt.services.data_quality import audit_history
 from tbt.services.auth import verify_user, AuthUnavailable
 from tbt.services.feed import visible_feed, empty_feed
@@ -26,6 +26,7 @@ def test_prediction_is_frozen_and_settles_against_player_identity(match_factory)
     ledger = reconcile_ledger(ledger, changed, [], now)
     assert ledger[0]['player1']['probability'] == .7
     assert ledger[0]['scheduled_at'] == changed[0]['scheduled_at']
+    ledger = confirm_publication(ledger, {'123'}, now + timedelta(minutes=1))
     completed = replace(fixture.swapped(), winner_id='A')
     settled = reconcile_ledger(ledger, [], [completed], now + timedelta(days=3))
     assert settled[0]['result']['correct'] is True

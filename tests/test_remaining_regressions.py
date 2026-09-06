@@ -19,7 +19,7 @@ from tbt.data.provider_context import minimize_provider_payload, merge_provider_
 from tbt.models.feature_builder import FeatureBuilder
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services import backtest_service, training
-from tbt.services.engine import predict, reconcile_ledger
+from tbt.services.engine import predict, reconcile_ledger, confirm_publication
 
 
 def test_conflicting_provider_events_never_collapse(match_factory):
@@ -29,6 +29,16 @@ def test_conflicting_provider_events_never_collapse(match_factory):
     for right in (b, c, replace(b, match_id=a.match_id)):
         for order in permutations([a, right]):
             assert len(merge_matches(order)) == 2
+
+
+def test_synthetic_match_id_never_overrides_time_or_tournament_conflict(match_factory):
+    base = match_factory('collision', 'A', 'B', 'A')
+    other = replace(base, tournament='Other Open',
+                    scheduled_at=base.scheduled_at + timedelta(hours=3),
+                    provider_payload={})
+    assert len(merge_matches([base, other])) == 2
+    known = replace(other, provider_payload={'id': 222})
+    assert len(merge_matches([base, known])) == 2
 
 
 def test_fallback_requires_time_tournament_and_unique_match(match_factory):
@@ -115,19 +125,22 @@ def test_backtest_enforces_training_eligibility_and_rank_policy(monkeypatch, mat
         backtest_service.walk_forward_backtest([a, b, c])
 
 
-def test_prediction_is_issued_at_publication_and_start_rechecked(match_factory):
+def test_prediction_requires_post_deploy_confirmation(match_factory):
     start = datetime(2025, 1, 1, tzinfo=timezone.utc)
     soon = replace(match_factory('soon', 'A', 'B', None), scheduled_at=start + timedelta(seconds=5))
     later = replace(soon, match_id='later', scheduled_at=start + timedelta(hours=1))
     model = SimpleNamespace(version='test', predict_proba=lambda frame: np.full(len(frame), .7))
     drafts = predict(model, [], [soon, later], start)
-    assert all(row['issued_at'] is None for row in drafts)
+    records = reconcile_ledger([], drafts, [], start)
+    assert all(row['issued_at'] is None for row in records)
     publication = start + timedelta(seconds=10)
-    records = reconcile_ledger([], drafts, [], publication)
-    assert len(records) == 1 and records[0]['id'] == 'later'
-    assert records[0]['issued_at'] == publication.isoformat()
-    again = reconcile_ledger(records, drafts, [], publication + timedelta(seconds=5))
-    assert again[0]['issued_at'] == publication.isoformat()
+    confirmed = confirm_publication(records, {'soon', 'later'}, publication)
+    by_id = {row['id']: row for row in confirmed}
+    assert by_id['soon']['issued_at'] is None
+    assert by_id['soon']['excluded_reason'] == 'not_confirmed_before_start'
+    assert by_id['later']['issued_at'] == publication.isoformat()
+    again = confirm_publication(confirmed, {'later'}, publication + timedelta(seconds=5))
+    assert next(row for row in again if row['id'] == 'later')['issued_at'] == publication.isoformat()
 
 
 def test_refresh_checkpoints_before_next_day_failure(match_factory, tmp_path):
@@ -288,30 +301,17 @@ def test_all_holdout_decisions_persist_before_promotion(monkeypatch, tmp_path, p
     assert len(published) == (2 if promote and passing else 1)
 
 
-def test_publication_clock_runs_after_remote_manifest_read(monkeypatch, tmp_path, match_factory):
-    import tbt.services.engine as engine
-    clock = [datetime(2025, 1, 1, tzinfo=timezone.utc)]
-    class Clock(datetime):
-        @classmethod
-        def now(cls, tz=None):
-            return clock[0]
-    monkeypatch.setattr(pipeline, 'datetime', Clock)
-    monkeypatch.setattr(engine, 'datetime', Clock)
-    soon = replace(match_factory('soon', 'A', 'B', None), scheduled_at=clock[0] + timedelta(seconds=5))
-    later = replace(soon, match_id='later', scheduled_at=clock[0] + timedelta(hours=1))
+def test_release_upload_does_not_backdate_issuance(monkeypatch, tmp_path, match_factory):
+    start = datetime.now(timezone.utc)
+    later = replace(match_factory('later', 'A', 'B', None), scheduled_at=start + timedelta(hours=1))
     model = SimpleNamespace(version='test', predict_proba=lambda frame: np.full(len(frame), .7))
-    drafts = predict(model, [], [soon, later], clock[0])
+    drafts = predict(model, [], [later], start)
     store, assets = fake_release(monkeypatch, tmp_path)
-    def remote_manifest():
-        clock[0] += timedelta(seconds=10)
-        return {}
-    monkeypatch.setattr(store, '_remote_bundle_files', remote_manifest)
-    feed = pipeline._publish_predictions(store, [], drafts, [], model, {}, [soon, later])
+    feed = pipeline._publish_predictions(store, [], drafts, [], model, {}, [later])
     records = json.loads(assets['ledger.json'])
-    assert [row['id'] for row in records] == ['later']
-    assert records[0]['issued_at'] == clock[0].isoformat()
-    assert feed['upcoming'] == records
-    assert json.loads(assets['feed.json'])['generated_at'] == clock[0].isoformat()
+    assert records[0]['issued_at'] is None
+    assert records[0]['publication_status'] == 'pending'
+    assert feed['upcoming'][0]['issued_at'] is None
 
 
 def test_candidate_and_production_score_identical_unseen_rows_without_refit(monkeypatch, match_factory):
@@ -374,3 +374,9 @@ def test_no_unseen_rows_refuses_promotion_without_scoring_champion(monkeypatch, 
     result = training.train_from_matches(matches, min_matches=1000, production_model=Champion())
     assert result.report['holdout'] == {}
     assert not pipeline._promotion_metric_gate(result.report)[0]
+
+
+def test_history_rejects_missing_match_identity(match_factory):
+    broken = replace(match_factory('x', 'A', 'B', 'A'), match_id='')
+    with pytest.raises(ValueError, match='match identity'):
+        training.audit_history([broken])
