@@ -1,70 +1,181 @@
 <!doctype html>
-<html lang="sk">
+<html lang="en">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="BlinQ — tenisové predikcie, overiteľné výsledky a analýza modelu.">
-  <meta name="theme-color" content="#0b111b"><title>BlinQ · Tennis intelligence</title>
-  <link rel="icon" href="/assets/blinq_logo.svg" type="image/svg+xml"><link rel="stylesheet" href="/styles.css">
-  <script src="/auth.js" defer></script><script src="/app.js" defer></script>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="theme-color" content="#050912" />
+  <meta name="description" content="BlinQ Tennis Intelligence — pre-match probabilities, results and model analytics." />
+  <title>BlinQ · Tennis Intelligence</title>
+  <link rel="icon" href="/assets/blinq_logo.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/styles.css" />
+  <script src="/auth.js" defer></script>
+  <script src="/app.js" defer></script>
 </head>
 <body>
-  <a class="skip" href="#main">Preskočiť na obsah</a>
-  <div id="demoBanner" class="demo" hidden>UKÁŽKOVÉ DÁTA · Toto nie sú skutočné predikcie.</div>
-  <div class="shell">
+  <div id="statusBanner" class="status-banner" hidden></div>
+
+  <div class="app-shell" id="appShell" hidden>
     <aside class="sidebar">
-      <a class="brand" href="#overview" aria-label="BlinQ domov"><img src="/assets/blinq_logo.svg" alt="" width="36" height="36"><span>BlinQ<span class="brand-dot">.</span></span></a>
-      <p class="eyebrow side-caption">TENNIS INTELLIGENCE</p>
-      <nav aria-label="Hlavná navigácia">
-        <button data-page="overview" class="nav active"><span aria-hidden="true">◈</span> Prehľad</button>
-        <button data-page="predictions" class="nav"><span aria-hidden="true">↗</span> Predikcie <span id="navCount" class="count">0</span></button>
-        <button data-page="results" class="nav"><span aria-hidden="true">✓</span> Výsledky</button>
-        <button data-page="model" class="nav"><span aria-hidden="true">▥</span> Model</button>
-        <button data-page="account" class="nav"><span aria-hidden="true">○</span> Môj účet</button>
+      <a class="brand brand-image" href="#predictions" data-route="predictions" aria-label="BlinQ home">
+        <img src="/assets/blinq_logo.svg" alt="BlinQ" class="brand-logo" />
+      </a>
+
+      <nav class="nav-section" aria-label="Main navigation">
+        <div class="nav-items" id="mainNavigation"></div>
       </nav>
-      <div class="sidebar-bottom"><span class="status-dot"></span> Dôvera začína dátami.<p>Predikcie vznikajú pred zápasom.<br>Výsledky hovoria za seba.</p><small>BlinQ / BackstageTalks</small></div>
+
+      <div class="nav-divider"></div>
+      <div class="nav-label">Learn</div>
+      <nav class="nav-section learn-nav" aria-label="Learn navigation">
+        <div class="nav-items" id="learnNavigation"></div>
+      </nav>
+
+      <div class="sidebar-spacer"></div>
+      <section class="upgrade-card" id="sidebarPromo">
+        <div class="upgrade-icon">♛</div>
+        <strong>Unlock full power</strong>
+        <p>Advanced analytics, player insights and deeper model context.</p>
+        <button class="btn btn-primary btn-full" data-route="account" type="button">Account & access</button>
+      </section>
     </aside>
-    <div class="workspace">
-      <header class="topbar"><span id="breadcrumb">Pracovný priestor / Prehľad</span><div><span class="timezone">Časové pásmo zariadenia</span><button id="accountShortcut" class="avatar" aria-label="Otvoriť účet">B</button></div></header>
-      <main id="main" tabindex="-1">
-        <div class="page-title"><div><p class="eyebrow">FOLLOW THE DATA</p><h1 id="pageTitle">Tenis. V súvislostiach.</h1><p id="pageSubtitle" class="muted">Predzápasové pravdepodobnosti a výsledky na jednom mieste.</p></div><button id="refresh" class="button secondary">↻ Obnoviť dáta</button></div>
-        <p id="globalStatus" class="notice" role="status" aria-live="polite" hidden></p>
-        <section id="metrics" class="metrics" aria-label="Prehľad dát"></section>
-        <section id="filters" class="filter-bar" aria-label="Filtrovanie zápasov">
-          <div class="tour-switch" role="group" aria-label="Okruh"><button data-tour="all" class="selected">Všetky</button><button data-tour="ATP">ATP</button><button data-tour="WTA">WTA</button></div>
-          <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Hráč alebo turnaj" aria-label="Vyhľadať hráča alebo turnaj"></label>
-          <select id="surface" aria-label="Povrch"><option value="all">Všetky povrchy</option><option value="hard">Tvrdý</option><option value="clay">Antuka</option><option value="grass">Tráva</option><option value="indoor_hard">Hala</option></select>
-          <select id="confidence" aria-label="Minimálna pravdepodobnosť"><option value="0">Všetky pravdepodobnosti</option><option value="0.65">Aspoň 65 %</option><option value="0.75">Aspoň 75 %</option></select>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-copy">
+          <div class="eyebrow" id="pageEyebrow">PRE-MATCH ANALYTICS</div>
+          <div class="title-row">
+            <h1 id="pageTitle">Today's Predictions</h1>
+            <span class="today-label" id="todayLabel"></span>
+          </div>
+          <p class="subtitle" id="pageSubtitle">Live model output from the currently published BlinQ feed.</p>
+        </div>
+
+        <div class="topbar-actions">
+          <div class="last-update">Last update: <strong id="updatedAt">—</strong></div>
+          <div class="trial-chip"><span>MEMBER</span><strong id="memberStatus">Active</strong></div>
+          <button class="btn btn-primary" data-route="account" type="button">♛ Upgrade</button>
+          <button class="profile-button" id="profileButton" type="button" aria-label="Open account">
+            <span class="avatar" id="avatar">B</span>
+            <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small id="profilePlan">Member</small></span>
+            <span aria-hidden="true">⌄</span>
+          </button>
+        </div>
+      </header>
+
+      <section id="staleNotice" class="inline-notice" hidden></section>
+
+      <div id="predictionsView">
+        <section class="toolbar" id="predictionToolbar" aria-label="Prediction filters">
+          <label><span class="sr-only">Tour</span><select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select></label>
+          <label><span class="sr-only">Tournament</span><select id="tournamentFilter"><option value="">All Tournaments</option></select></label>
+          <label><span class="sr-only">Surface</span><select id="surfaceFilter"><option value="">All Surfaces</option></select></label>
+          <label><span class="sr-only">Confidence</span><select id="confidenceFilter"><option value="">All Confidence</option><option value="elite">Elite · 80%+</option><option value="high">High · 70–80%</option><option value="medium">Medium · 60–70%</option><option value="low">Low · &lt;60%</option></select></label>
+          <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search matches or players…" /></label>
         </section>
-        <div id="content"><div class="empty"><span class="empty-symbol">◈</span><h2>Načítavame váš prehľad</h2><p>Pripájame sa k účtu a dostupným predikciám.</p></div></div>
-        <footer><span>BlinQ Tennis Intelligence</span><span>Pravdepodobnosť vyjadruje neistotu, nie záruku výsledku.</span></footer>
-      </main>
-    </div>
+
+        <section id="bannerTop" class="banner-slot" hidden></section>
+
+        <section class="picks-panel" id="predictionsPanel">
+          <div class="panel-head picks-head">
+            <div>
+              <div class="section-kicker"><span>✦</span> AI Top Picks</div>
+              <p>Highest-confidence matches in the current view. Only currently published pre-match records are shown.</p>
+            </div>
+            <div class="panel-actions">
+              <span class="match-count"><strong id="matchCount">0</strong> matches</span>
+              <button class="btn btn-ghost" id="refreshButton" type="button">↻ Refresh</button>
+              <button class="btn btn-ghost" id="viewAllButton" type="button">View all matches →</button>
+            </div>
+          </div>
+
+          <div class="pick-carousel-shell" id="pickCarouselShell">
+            <button class="carousel-arrow carousel-arrow-left" id="prevPick" type="button" aria-label="Previous featured picks">‹</button>
+            <div class="pick-carousel" id="predictionGrid">
+              <div class="state-card">Loading predictions…</div>
+            </div>
+            <button class="carousel-arrow carousel-arrow-right" id="nextPick" type="button" aria-label="Next featured picks">›</button>
+          </div>
+          <div class="carousel-dots" id="carouselDots" aria-label="Pick carousel pages"></div>
+        </section>
+
+        <section id="bannerMiddle" class="banner-slot" hidden></section>
+
+        <section class="lower-grid">
+          <section class="learn-panel" id="howBlinqWorks">
+            <div class="panel-head compact"><div><h2>How BlinQ Works</h2><p>Advanced AI. Real data. Transparent model output.</p></div></div>
+            <div class="steps-grid">
+              <article><span>◫</span><strong>1. Real Data</strong><p>Historical results and pre-match information are processed point-in-time.</p></article>
+              <article><span>◎</span><strong>2. AI Model</strong><p>The model combines strength, surface, form, workload and matchup signals.</p></article>
+              <article><span>↗</span><strong>3. Predictions</strong><p>Each match receives a calibrated probability and confidence band.</p></article>
+              <article><span>⌕</span><strong>4. Insights</strong><p>Key factors show which side each available model signal favours.</p></article>
+              <article><span>♕</span><strong>5. Better Decisions</strong><p>Use probabilities and model context instead of a single opaque pick.</p></article>
+            </div>
+          </section>
+
+          <aside class="lower-side">
+            <section class="trial-card" id="trialCard">
+              <div><span class="trial-eyebrow">BLINQ MEMBER</span><h2>Your workspace</h2><p>Predictions, verified results and model transparency in one place.</p>
+                <ul><li>Current predictions</li><li>Verified results</li><li>Model performance</li><li>Account access</li></ul>
+              </div>
+              <button class="btn btn-primary btn-full" data-route="account" type="button">Open account</button>
+              <div class="trial-racket" aria-hidden="true"></div>
+            </section>
+          </aside>
+        </section>
+      </div>
+
+      <section id="routePanel" class="route-panel" hidden></section>
+
+      <footer>
+        <div class="footer-brand">Blin<span>Q</span></div><div>© 2026 BlinQ</div>
+        <a href="#methodology" data-route="methodology">Methodology</a>
+        <a href="#responsible-use" data-route="responsible_use">Responsible Use</a>
+        <span class="footer-note">Probabilities express uncertainty, not guarantees.</span>
+      </footer>
+    </main>
   </div>
-  <dialog id="authDialog" aria-labelledby="authTitle">
-    <div class="auth-brand">
-      <img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo">
-    </div>
+
+  <dialog id="authDialog" class="auth-dialog" aria-labelledby="authTitle">
+    <div class="auth-brand"><img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" /></div>
     <div class="auth-intro">
-      <h2 id="authTitle">Vitaj späť.</h2>
-      <p id="authSubtitle">Prihlás sa k svojim tenisovým analýzam.</p>
+      <h2 id="authTitle">Welcome back.</h2>
+      <p id="authSubtitle">Sign in to your tennis intelligence workspace.</p>
       <span class="auth-engine">STATISTICAL ENGINE · BACKSTAGETALKS</span>
     </div>
     <form id="authForm">
-      <label id="nameLabel" hidden>Meno
-        <span class="auth-field"><span class="auth-field-icon" aria-hidden="true">○</span><input id="authName" autocomplete="name" maxlength="80"></span>
+      <label id="nameLabel" hidden>Display name
+        <span class="auth-field"><span class="auth-field-icon" aria-hidden="true">○</span><input id="authName" autocomplete="name" maxlength="80" /></span>
       </label>
-      <label id="emailLabel">E-mail
-        <span class="auth-field"><span class="auth-field-icon" aria-hidden="true">✉</span><input id="authEmail" type="email" autocomplete="email" required placeholder="Zadaj svoj e-mail"></span>
+      <label id="emailLabel">Email
+        <span class="auth-field"><span class="auth-field-icon" aria-hidden="true">✉</span><input id="authEmail" type="email" autocomplete="email" required placeholder="Enter your email" /></span>
       </label>
-      <label id="passwordLabel">Heslo
-        <span class="auth-field"><span class="auth-field-icon" aria-hidden="true">⌑</span><input id="authPassword" type="password" autocomplete="current-password" required minlength="8" placeholder="Zadaj svoje heslo"></span>
+      <label id="passwordLabel">Password
+        <span class="auth-field"><span class="auth-field-icon" aria-hidden="true">⌑</span><input id="authPassword" type="password" autocomplete="current-password" required minlength="8" placeholder="Enter your password" /></span>
       </label>
       <p id="authMessage" role="status" aria-live="polite"></p>
-      <button id="authSubmit" class="button primary" type="submit">Prihlásiť sa</button>
+      <button id="authSubmit" class="btn btn-primary btn-full" type="submit">Sign in</button>
     </form>
-    <div class="auth-links"><button id="switchSignup">Vytvoriť účet</button><button id="switchReset">Zabudnuté heslo</button></div>
+    <div class="auth-links"><button id="switchSignup" type="button">Create account</button><button id="switchReset" type="button">Forgot password</button></div>
     <div class="auth-footer">Powered by BackstageTalks Statistical Engine</div>
   </dialog>
-  <dialog id="matchDialog" aria-labelledby="matchTitle"><button id="closeMatch" class="dialog-close" aria-label="Zavrieť detail">×</button><div id="matchDetail"></div></dialog>
+
+  <dialog id="matchDialog" class="match-dialog">
+    <button class="dialog-close" id="dialogClose" aria-label="Close">×</button>
+    <div id="dialogContent"></div>
+  </dialog>
+
+  <template id="predictionTemplate">
+    <article class="prediction-card">
+      <div class="card-meta"><span class="tour"></span><span class="time"></span><span class="surface"></span></div>
+      <div class="players-row">
+        <div class="player player-a"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div>
+        <div class="vs">VS</div>
+        <div class="player player-b"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div>
+      </div>
+      <div class="pick-row"><div><small>BlinQ Pick</small><strong class="pick-name"></strong></div><div class="probability"></div><span class="confidence"></span></div>
+      <div class="signals"></div>
+      <button class="analysis-link" type="button">View analysis →</button>
+    </article>
+  </template>
 </body>
 </html>

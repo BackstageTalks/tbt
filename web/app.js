@@ -1,111 +1,136 @@
 (() => {
   'use strict';
+
   const $ = id => document.getElementById(id);
-  const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const percent = n => `${(100 * Number(n || 0)).toFixed(1).replace('.',',')} %`;
-  const date = (stamp, time=false) => stamp ? new Date(stamp).toLocaleString('sk-SK',time ? {day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'} : {day:'numeric',month:'short'}) : '—';
-  const time = stamp => new Date(stamp).toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'});
-  const surfaceNames = {hard:'Tvrdý',clay:'Antuka',grass:'Tráva',indoor_hard:'Hala',unknown:'Povrch neurčený'};
-  const titles = {overview:['Tenis. V súvislostiach.','Predzápasové pravdepodobnosti a výsledky na jednom mieste.'],predictions:['Každý zápas má príbeh.','Porovnaj hráčov, pravdepodobnosti a dostupné dáta.'],results:['Výsledky bez prikrášlenia.','Záznamy vytvorené pred zápasom. Úspešné aj neúspešné.'],model:['Poznaj svoj model.','Ako sa darilo na neskorších dátach, ktoré model pri tréningu nevidel.'],account:['Tvoj priestor.','Spravuj svoj profil a prístup k BlinQ.']};
-  const names = {overview:'Prehľad',predictions:'Predikcie',results:'Výsledky',model:'Model',account:'Môj účet'};
-  let data={upcoming:[],results:[],performance:{},history:{},model:null}, page='overview', tour='all', authMode='login', enabled=false, demo=false, limit=50;
-  function notice(message='') { $('globalStatus').textContent=message; $('globalStatus').hidden=!message; }
-  function empty(title,body) { return `<div class="empty"><span class="empty-symbol">◈</span><h2>${escape(title)}</h2><p>${escape(body)}</p></div>`; }
-  function auth(mode='login') {
-    authMode=mode; $('authMessage').textContent='';
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false };
+  const PAGE_SIZE = 4;
+  const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+  const pct = value => `${(Number(value || 0) * (Number(value || 0) <= 1 ? 100 : 1)).toFixed(1)}%`;
+  const number = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
+  const fmtTime = value => value ? new Intl.DateTimeFormat(undefined,{hour:'2-digit',minute:'2-digit'}).format(new Date(value)) : 'TBA';
+  const fmtDate = value => value ? new Intl.DateTimeFormat(undefined,{day:'2-digit',month:'short',year:'numeric'}).format(new Date(value)) : '—';
+  const fmtToday = () => new Intl.DateTimeFormat(undefined,{weekday:'long',day:'2-digit',month:'short',year:'numeric'}).format(new Date());
+  const initials = name => String(name || 'B').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
+  const confidenceBand = p => p >= .80 ? 'elite' : p >= .70 ? 'high' : p >= .60 ? 'medium' : 'low';
+
+  async function getJSON(url) {
+    const response = await fetch(url,{headers:{Accept:'application/json'},cache:'no-store'});
+    const data = await response.json().catch(()=>({}));
+    if(!response.ok) throw new Error(data.error || `HTTP ${response.status}`);
+    return data;
+  }
+
+  async function loadUiConfig() {
+    try { state.ui = await getJSON('/ui-config.json'); }
+    catch { state.ui = {navigation:{main:[],learn:[]},panels:{},banners:{}}; }
+    renderNavigation(); renderBanners();
+  }
+
+  function renderNavigationGroup(items, containerId) {
+    const host=$(containerId); host.innerHTML='';
+    [...(items||[])].filter(x=>x.enabled!==false).sort((a,b)=>Number(a.order||0)-Number(b.order||0)).forEach(item=>{
+      const a=document.createElement('a'); a.href=item.href||`#${item.id}`; a.dataset.route=item.id||'';
+      a.className=`nav-link${state.route===item.id?' active':''}`;
+      a.innerHTML=`<span class="nav-icon">${escapeHtml(item.icon||'•')}</span><span>${escapeHtml(item.label||item.id)}</span>`;
+      host.appendChild(a);
+    });
+  }
+  function renderNavigation(){ renderNavigationGroup(state.ui?.navigation?.main,'mainNavigation'); renderNavigationGroup(state.ui?.navigation?.learn,'learnNavigation'); }
+
+  function renderBanners(){
+    const banners=state.ui?.banners||{};
+    Object.values(banners).forEach(b=>{
+      const host=$(b.target); if(!host) return;
+      if(b.enabled===false){host.hidden=true;host.innerHTML='';return;}
+      host.hidden=false;
+      host.innerHTML=`<a class="promo-banner" href="${escapeHtml(b.link||'#account')}" data-route="account"><div class="promo-overlay"></div><div class="promo-copy"><span class="promo-eyebrow">${escapeHtml(b.eyebrow||'BLINQ')}</span><strong>${escapeHtml(b.headline||'')}</strong><p>${escapeHtml(b.text||'')}</p></div><span class="promo-cta">${escapeHtml(b.button_text||'Open')} →</span></a>`;
+    });
+  }
+
+  function auth(mode='login'){
+    state.authMode=mode; $('authMessage').textContent='';
     $('nameLabel').hidden=mode!=='signup'; $('emailLabel').hidden=mode==='recovery'; $('passwordLabel').hidden=mode==='reset';
     $('authEmail').required=mode!=='recovery'; $('authPassword').required=mode!=='reset'; $('authName').required=mode==='signup';
     $('authPassword').autocomplete=mode==='login'?'current-password':'new-password';
-    $('authTitle').textContent={login:'Vitaj späť.',signup:'Začni sledovať súvislosti.',reset:'Obnoviť prístup.',recovery:'Nastav nové heslo.'}[mode];
-    $('authSubtitle').textContent={login:'Prihlás sa k svojim tenisovým analýzam.',signup:'Vytvor si účet. Existujúci členovia používajú pôvodné prihlásenie.',reset:'Pošleme ti odkaz na obnovenie hesla.',recovery:'Zvoľ heslo s aspoň ôsmimi znakmi.'}[mode];
-    $('authSubmit').textContent={login:'Prihlásiť sa',signup:'Vytvoriť účet',reset:'Poslať odkaz',recovery:'Uložiť heslo'}[mode];
-    $('switchSignup').textContent=mode==='login'?'Vytvoriť účet':'Späť na prihlásenie';
-    $('switchReset').hidden=mode!=='login'; $('authSubmit').disabled=!enabled;
-    if (!enabled) $('authMessage').textContent='Prihlasovanie sa pripravuje. Skús to neskôr.';
-    if (!$('authDialog').open) $('authDialog').showModal();
+    $('authTitle').textContent={login:'Welcome back.',signup:'Create your BlinQ account.',reset:'Restore access.',recovery:'Set a new password.'}[mode];
+    $('authSubtitle').textContent={login:'Sign in to your tennis intelligence workspace.',signup:'Create an account to access your BlinQ workspace.',reset:'We will send a password recovery link to your email.',recovery:'Choose a password with at least eight characters.'}[mode];
+    $('authSubmit').textContent={login:'Sign in',signup:'Create account',reset:'Send recovery link',recovery:'Save password'}[mode];
+    $('switchSignup').textContent=mode==='login'?'Create account':'Back to sign in'; $('switchReset').hidden=mode!=='login';
+    $('authSubmit').disabled=!state.authEnabled;
+    if(!state.authEnabled) $('authMessage').textContent='Authentication is temporarily unavailable.';
+    $('appShell').hidden=true;
+    if(!$('authDialog').open) $('authDialog').showModal();
   }
-  $('authDialog').addEventListener('cancel',event=>event.preventDefault());
-  $('switchSignup').onclick=()=>auth(authMode==='login'?'signup':'login');
-  $('switchReset').onclick=()=>auth('reset');
-  $('authForm').onsubmit=async event=>{
-    event.preventDefault(); const button=$('authSubmit'); button.disabled=true; $('authMessage').textContent='Spracúvame…';
+
+  async function handleAuthSubmit(event){
+    event.preventDefault(); const button=$('authSubmit'); button.disabled=true; $('authMessage').textContent='Working…';
     const email=$('authEmail').value.trim(), password=$('authPassword').value;
-    try {
-      if(authMode==='reset'){await BlinqAuth.reset(email);$('authMessage').textContent='Ak účet existuje, odkaz príde na tvoj e-mail.';return;}
-      if(authMode==='recovery') await BlinqAuth.update({password});
-      else if(authMode==='signup') {const session=await BlinqAuth.signUp(email,password,$('authName').value.trim());if(!session){$('authMessage').textContent='Skontroluj e-mail a potvrď registráciu. Potom sa prihlás.';return;}}
-      else await BlinqAuth.signIn(email,password);
-      $('authPassword').value='';$('authDialog').close();await load();
-    } catch(error){$('authMessage').textContent=error.status===400?'Skontroluj údaje a prípadné potvrdenie e-mailu.':error.message;}
-    finally{button.disabled=false;}
+    try{
+      if(state.authMode==='reset'){ await BlinqAuth.reset(email); $('authMessage').textContent='If the account exists, check your email for the recovery link.'; return; }
+      if(state.authMode==='recovery') await BlinqAuth.update({password});
+      else if(state.authMode==='signup'){
+        const session=await BlinqAuth.signUp(email,password,$('authName').value.trim());
+        if(!session){ $('authMessage').textContent='Check your email and confirm registration, then sign in.'; return; }
+      } else await BlinqAuth.signIn(email,password);
+      $('authPassword').value=''; if($('authDialog').open) $('authDialog').close(); await loadFeed();
+    } catch(error){ $('authMessage').textContent=error.status===400?'Check your credentials and email confirmation.':error.message; }
+    finally{ button.disabled=false; }
+  }
+
+  function normalize(row){
+    const p1=Number(row?.player1?.probability||0), p2=Number(row?.player2?.probability||0);
+    const winnerId=String(row?.winner_id || (p1>=p2?row?.player1?.id:row?.player2?.id) || '');
+    const winner=winnerId===String(row?.player1?.id)?row?.player1:row?.player2;
+    const probability=Math.max(p1,p2);
+    return {id:row?.event_id||row?.id,date:row?.scheduled_at,tour:String(row?.tour||'').toUpperCase(),tournament:row?.tournament||'Tournament',surface:row?.surface||'unknown',round:row?.round||'',p1:row?.player1?.name||'Player 1',p2:row?.player2?.name||'Player 2',p1Id:row?.player1?.id,p2Id:row?.player2?.id,p1Prob:p1,p2Prob:p2,pick:winner?.name||'—',pickId:winnerId,probability,confidence:confidenceBand(probability),signals:Array.isArray(row?.signals)?row.signals:[],model:row?.model_version||state.feed?.model?.version||'',raw:row};
+  }
+
+  function populateSelect(id,values,label){ const select=$(id),selected=select.value; select.innerHTML=`<option value="">${label}</option>`; [...values].filter(Boolean).sort().forEach(value=>{const opt=document.createElement('option');opt.value=value;opt.textContent=String(value).replaceAll('_',' ');select.appendChild(opt)}); if([...select.options].some(o=>o.value===selected)) select.value=selected; }
+  function populateFilters(){ const rows=(state.feed.upcoming||[]).map(normalize); populateSelect('tournamentFilter',new Set(rows.map(x=>x.tournament)),'All Tournaments'); populateSelect('surfaceFilter',new Set(rows.map(x=>x.surface)),'All Surfaces'); }
+  function filtered(){ const rows=(state.feed.upcoming||[]).map(normalize),tour=$('tourFilter').value,tournament=$('tournamentFilter').value,surface=$('surfaceFilter').value,confidence=$('confidenceFilter').value,q=$('searchInput').value.trim().toLowerCase(); return rows.filter(m=>{ if(tour&&m.tour!==tour)return false;if(tournament&&m.tournament!==tournament)return false;if(surface&&m.surface!==surface)return false;if(confidence&&m.confidence!==confidence)return false;if(q&&!`${m.p1} ${m.p2} ${m.tournament}`.toLowerCase().includes(q))return false;return true; }).sort((a,b)=>b.probability-a.probability || new Date(a.date)-new Date(b.date)); }
+
+  function signalMeta(signal,m){ const id=String(signal?.player_id ?? signal?.favours_player_id ?? ''); const favours=id===String(m.pickId); const label=signal?.label||signal?.factor||'Model signal'; return {label,favours}; }
+  function renderSignal(signal,m){ const s=signalMeta(signal,m); return `<div class="signal-row"><span>${escapeHtml(s.label)}</span><div class="signal-meter"><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i></i><i></i></div></div>`; }
+  function renderCard(m){ const template=$('predictionTemplate').content.cloneNode(true),card=template.querySelector('.prediction-card'); card.dataset.id=m.id; card.classList.add('featured'); card.querySelector('.tour').textContent=`${m.tour} ${m.tournament}${m.round?` · ${m.round}`:''}`; card.querySelector('.time').textContent=fmtTime(m.date); card.querySelector('.surface').textContent=String(m.surface).replaceAll('_',' ').toUpperCase(); const players=[['.player-a',m.p1,m.p1Prob],['.player-b',m.p2,m.p2Prob]]; players.forEach(([sel,name,prob])=>{const box=card.querySelector(sel);box.querySelector('.player-avatar').textContent=initials(name);box.querySelector('.player-name').textContent=name;box.querySelector('.player-rank').textContent=pct(prob)}); card.querySelector('.pick-name').textContent=m.pick; card.querySelector('.probability').textContent=pct(m.probability); const conf=card.querySelector('.confidence'); conf.textContent=m.confidence.toUpperCase(); conf.classList.add(m.confidence); const signals=card.querySelector('.signals'); signals.innerHTML=m.signals.length?m.signals.slice(0,4).map(s=>renderSignal(s,m)).join(''):'<div class="signal-empty">No strong secondary signal is available.</div>'; card.querySelector('.analysis-link').onclick=()=>openMatch(m); return template; }
+
+  function renderDots(pageCount){ const host=$('carouselDots'); host.innerHTML=''; if(state.showAll||pageCount<=1)return; for(let i=0;i<pageCount;i++){const b=document.createElement('button');b.type='button';b.className=i===state.page?'active':'';b.setAttribute('aria-label',`Show picks page ${i+1}`);b.onclick=()=>{state.page=i;renderPredictions()};host.appendChild(b)} }
+  function renderPredictions(){ const rows=filtered(),grid=$('predictionGrid'); $('matchCount').textContent=rows.length; const pageCount=Math.max(1,Math.ceil(rows.length/PAGE_SIZE)); state.page=Math.min(state.page,pageCount-1); let visible=state.showAll?rows:rows.slice(state.page*PAGE_SIZE,state.page*PAGE_SIZE+PAGE_SIZE); grid.classList.toggle('show-all',state.showAll); grid.innerHTML=''; if(!visible.length){grid.innerHTML='<div class="state-card">No upcoming published predictions match the current filters.</div>';} else visible.forEach(m=>grid.appendChild(renderCard(m))); $('prevPick').hidden=state.showAll||pageCount<=1; $('nextPick').hidden=state.showAll||pageCount<=1; $('prevPick').disabled=state.page<=0; $('nextPick').disabled=state.page>=pageCount-1; $('viewAllButton').textContent=state.showAll?'Featured picks ←':'View all matches →'; renderDots(pageCount); }
+
+  function openMatch(m){ const signalRows=m.signals.length?m.signals.map(s=>{const meta=signalMeta(s,m);const favoursId=String(s?.player_id??s?.favours_player_id??'');const favours=favoursId===String(m.p1Id)?m.p1:favoursId===String(m.p2Id)?m.p2:'—';return `<div class="dialog-signal"><span>${escapeHtml(meta.label)}</span><strong>${escapeHtml(favours)}</strong><small>${meta.favours?'supports pick':'counter-signal'}</small></div>`}).join(''):'<p class="signal-empty">No secondary signals are available.</p>'; $('dialogContent').innerHTML=`<div class="dialog-eyebrow">${escapeHtml(m.tour)} · ${escapeHtml(m.tournament)}</div><h2>${escapeHtml(m.p1)} <span>vs</span> ${escapeHtml(m.p2)}</h2><div class="dialog-pick"><div><small>BlinQ Pick</small><strong>${escapeHtml(m.pick)}</strong></div><div class="dialog-prob">${pct(m.probability)} <span class="confidence ${m.confidence}">${m.confidence.toUpperCase()}</span></div></div><div class="dialog-section"><h3>Model signals</h3>${signalRows}</div><div class="dialog-meta"><span>${escapeHtml(String(m.surface).replaceAll('_',' '))}</span><span>${fmtDate(m.date)} · ${fmtTime(m.date)}</span><span>Model ${escapeHtml(m.model||'—')}</span></div>`; $('matchDialog').showModal(); }
+
+  const routeMeta={
+    predictions:['PRE-MATCH ANALYTICS',"Today's Predictions",'Live model output from the currently published BlinQ feed.'],
+    tournaments:['TOURNAMENT VIEW','Tournaments','Current tournament coverage derived from published upcoming matches.'],
+    players:['PLAYER VIEW','Players','Current players appearing in the published prediction feed.'],
+    stats:['PERFORMANCE','Stats & Insights','Observed model performance from settled published predictions.'],
+    model:['MODEL TRANSPARENCY','Model Performance','Current production model metadata and evaluation report.'],
+    backtests:['VALIDATION','Backtests','Out-of-time evaluation information published with the production model.'],
+    account:['BLINQ MEMBERS','Account','Manage your profile and access.'],
+    how_blinq_works:['LEARN','How BlinQ Works','How the BlinQ workflow turns point-in-time tennis data into probabilities.'],
+    methodology:['LEARN','Methodology','The principles used to keep predictions point-in-time and auditable.'],
+    model_data:['LEARN','Model & Data','What the published feed exposes about data and model state.'],
+    faq:['LEARN','FAQ','Common questions about probabilities, results and model output.'],
+    responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.']
   };
-  function metrics() {
-    const p=data.performance || {}, rows=data.upcoming || [];
-    const cells=[['Nadchádzajúce zápasy',rows.length,'ATP + WTA / najbližšie dni'],['Pravdepodobnosť ≥ 75 %',rows.filter(r=>r.confidence>=.75).length,'Podiel podľa aktuálneho modelu'],['Úspešnosť zverejnených',p.n?percent(p.accuracy):'—',p.n?`${p.n} vyhodnotených predikcií`:'Zatiaľ bez vyhodnotených predikcií'],['Posledná aktualizácia',data.generated_at?time(data.generated_at):'—',data.generated_at?date(data.generated_at):'Čakáme na prvé dáta']];
-    $('metrics').innerHTML=cells.map((c,i)=>`<div class="metric ${i===2?'accent':''}"><span>${c[0]}</span><strong>${escape(c[1])}</strong><small>${escape(c[2])}</small></div>`).join('');
-    $('navCount').textContent=rows.length;
-  }
-  function filtered(rows) {
-    const query=$('search').value.trim().toLocaleLowerCase('sk'), surface=$('surface').value, confidence=Number($('confidence').value);
-    return rows.filter(r=>(tour==='all'||r.tour===tour)&&(surface==='all'||r.surface===surface)&&r.confidence>=confidence&&`${r.player1.name} ${r.player2.name} ${r.tournament}`.toLocaleLowerCase('sk').includes(query));
-  }
-  function player(row,who) {const p=row[who];return `<div class="player-row ${p.id===row.winner_id?'winner':''}"><span class="player-name"><span class="initial" aria-hidden="true">${escape(p.name.slice(0,1))}</span>${escape(p.name)}</span><strong>${percent(p.probability)}</strong></div>`;}
-  function card(row) {return `<article class="match-card"><div class="match-meta"><span class="pill">${escape(row.tour)}</span><span>${escape(surfaceNames[row.surface]||row.surface)}</span><time datetime="${escape(row.scheduled_at)}">${escape(date(row.scheduled_at,true))}</time></div><div class="tournament">${escape(row.tournament)}</div>${player(row,'player1')}${player(row,'player2')}<div class="probability-bar" aria-hidden="true"><span style="width:${Math.max(0,Math.min(100,Number(row.player1.probability)*100))}%"></span></div><div class="card-foot"><span><i class="quality"></i>${row.data_depth>=.6?'Širšia história hráčov':'Obmedzená história'}</span><button data-match="${escape(row.id)}">Detail zápasu ↗</button></div></article>`;}
-  function matches() {
-    const rows=filtered(data.upcoming || []), shown=page==='overview'?rows.slice(0,9):rows.slice(0,limit);
-    if(!rows.length) return empty(data.ready?'Momentálne bez zápasov vo výbere.':'Prvé predikcie sa pripravujú.',data.ready?'Skús upraviť filtre alebo sa vráť po ďalšej aktualizácii.':'Keď bude model overený a budú dostupné zápasy, nájdeš ich tu.');
-    const strip=page==='overview'?`<div class="summary-strip"><div><strong>Čísla s kontextom.</strong><p>Pri každom zápase sleduj aj hĺbku histórie a dostupnosť štatistík.</p></div><button class="button secondary" data-open="model">Ako čítať model ↗</button></div>`:'';
-    return `${strip}<div class="section-head"><h2>${page==='overview'?'Najbližšie na kurte':'Predzápasový prehľad'}</h2><span>${rows.length} zápasov</span></div><div class="cards">${shown.map(card).join('')}</div>${rows.length>shown.length?'<button class="button secondary more" id="more">Zobraziť ďalšie zápasy</button>':''}`;
-  }
-  function results() {
-    const rows=filtered(data.results || []);
-    if(!rows.length)return empty('Príbeh výsledkov sa ešte píše.','Tu uvidíš vyhodnotené predikcie vrátane tých, ktoré nevyšli.');
-    return `<div class="section-head"><h2>Zverejnené pred zápasom</h2><span>${rows.length} záznamov vo výbere</span></div><div class="result-list">${rows.slice(0,limit).map(r=>`<article class="result-row"><div class="result-date">${escape(date(r.scheduled_at))}<small>${escape(r.tour)}</small></div><div>${escape(r.player1.name)} — ${escape(r.player2.name)}<small>${escape(r.tournament)}</small></div><div>${percent(r.confidence)}<small>Pred zápasom</small></div><strong class="${r.result.correct?'result-good':'result-bad'}">${r.result.correct?'✓ Úspešná':'× Neúspešná'}</strong></article>`).join('')}</div>${rows.length>limit?'<button class="button secondary more" id="more">Ďalšie výsledky</button>':''}`;
-  }
-  const decimal = v=>Number.isFinite(v)?v.toFixed(3):'—';
 
-  function qualityTables(report,title) {
-    if(!report || !Object.keys(report).length)return '';
-    const labels={surface:'Povrch',competition:'Súťaž',tournament:'Turnaj',history_band:'História oboch hráčov',surface_history_band:'História na povrchu',tour:'Okruh'};
-    return `<section class="panel"><h2>${escape(title)}</h2><p class="muted">Skupiny s menej než 100 zápasmi majú malú vzorku. Interval je orientačný; väčšia história sama osebe nezaručuje správny tip.</p>${Object.entries(report).map(([dimension,groups])=>`<details><summary>${escape(labels[dimension]||dimension)}</summary><div class="table-wrap"><table><thead><tr><th>Skupina</th><th>Zápasy</th><th>Úspešnosť</th><th>95 % interval</th><th>Log loss</th><th>Vzorka</th></tr></thead><tbody>${Object.entries(groups).map(([name,m])=>`<tr><td>${escape(surfaceNames[name]||name)}</td><td>${m.n}</td><td>${percent(m.accuracy)}</td><td>${m.accuracy_ci95_wilson?.map(percent).join(' – ')||'—'}</td><td>${decimal(m.log_loss)}</td><td>${m.small_sample?'Malá':'100+ zápasov'}</td></tr>`).join('')}</tbody></table></div></details>`).join('')}</section>`;
+  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; state.route=route; state.page=0; const meta=routeMeta[route]; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; $('predictionsView').hidden=route!=='predictions'; $('routePanel').hidden=route==='predictions'; renderNavigation(); if(route==='predictions') renderPredictions(); else renderRoute(route); if(push) history.replaceState(null,'',`#${route}`); }
+
+  function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
+  function renderResults(){ const rows=state.feed.results||[]; const html=rows.slice(0,100).map(r=>{const p1=r.player1||{},p2=r.player2||{},winner=r.result?.winner_id,correct=r.result?.correct;return `<div class="result-row"><small>${fmtDate(r.scheduled_at)} · ${escapeHtml(r.tour||'')}</small><strong>${escapeHtml(p1.name||'Player 1')} vs ${escapeHtml(p2.name||'Player 2')}</strong><span>Winner: ${escapeHtml(winner===p1.id?p1.name:winner===p2.id?p2.name:'—')}</span><b class="${correct?'correct':'wrong'}">${correct===true?'✓ Correct':correct===false?'× Miss':'—'}</b></div>`}).join(''); return html||'<div class="state-card">No settled published predictions are available yet.</div>'; }
+  function renderRoute(route){ const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body=''; if(route==='tournaments'){const names=[...new Set((feed.upcoming||[]).map(x=>x.tournament).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):'No upcoming tournament coverage is currently published.'}</div>`;} else if(route==='players'){const names=[...new Set((feed.upcoming||[]).flatMap(x=>[x.player1?.name,x.player2?.name]).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):'No upcoming players are currently published.'}</div>`;} else if(route==='stats'){body=metricCards([['Settled predictions',String(p.n??0),'Published and scored'],['Accuracy',p.accuracy!=null?pct(p.accuracy):'—','Observed results'],['Log loss',number(p.log_loss),'Lower is better'],['Brier score',number(p.brier_score),'Probability quality']])+`<div class="route-sub"><h3>Results</h3>${renderResults()}</div>`;} else if(route==='model'||route==='backtests'){const h=report.holdout||{},delta=report.delta_vs_elo||{};body=metricCards([['Model',String(feed.model?.version||'—'),'Production artifact'],['Holdout n',String(h.n??'—'),'Chronological holdout'],['Holdout accuracy',h.accuracy!=null?pct(h.accuracy):'—','Evaluation report'],['Δ log loss vs Elo',delta.log_loss!=null?number(delta.log_loss):'—','Negative is better']])+`<div class="route-sub static-copy"><h3>Data window</h3><p>${escapeHtml(history.start?fmtDate(history.start):'—')} → ${escapeHtml(history.end?fmtDate(history.end):'—')} · ${escapeHtml(String(history.matches??'—'))} historical matches in the current serving metadata.</p><p>No result here is presented as a guarantee. Holdout metrics describe a specific historical evaluation period.</p></div>`;} else if(route==='account'){const a=feed.account||{};body=`<div class="account-grid"><form id="profileForm" class="account-panel"><label>Email<input value="${escapeHtml(a.email||'')}" disabled /></label><label>Display name<input id="profileDisplayName" maxlength="80" value="${escapeHtml(a.name||'')}" /></label><p id="profileMessage" class="form-message"></p><div class="account-actions"><button class="btn btn-primary" type="submit">Save profile</button><button class="btn btn-ghost" id="passwordResetButton" type="button">Reset password</button><button class="btn btn-ghost" id="logoutButton" type="button">Sign out</button></div></form><aside class="account-side"><small class="trial-eyebrow">BLINQ MEMBERS</small><strong>${escapeHtml(a.name||'BlinQ Member')}</strong><p>${escapeHtml(a.email||'')}</p><p>Authentication is handled by the connected identity service. Tennis data is not stored in the account profile.</p></aside></div>`;} else {const copy={how_blinq_works:'BlinQ processes point-in-time tennis history, builds model features without using future results, publishes pre-match probabilities, and later evaluates those same published records against real outcomes.',methodology:'The core rules are chronological evaluation, immutable first-published probabilities, explicit missing-data handling, and honest probability metrics. A prediction is informative only when it existed before the match.',model_data:`Current serving metadata reports ${history.matches??'—'} historical matches. The web application reads only the authenticated published serving feed; it does not fabricate missing tennis data.`,faq:'Probabilities are not certainties. Confidence is derived from the model probability, and performance should always be read together with sample size and coverage.',responsible_use:'Use BlinQ as analytical information. Do not treat any probability as a guaranteed outcome, and do not infer certainty from a high-confidence label.'};body=`<div class="static-copy"><p>${escapeHtml(copy[route]||'This section is available in the BlinQ workspace.')}</p></div>`;} host.innerHTML=`<div class="route-card"><h2>${escapeHtml(routeMeta[route][1])}</h2><p>${escapeHtml(routeMeta[route][2])}</p>${body}</div>`; if(route==='account') wireAccount(); }
+
+  function wireAccount(){ $('profileForm').onsubmit=async e=>{e.preventDefault();const msg=$('profileMessage');msg.textContent='Saving…';try{await BlinqAuth.update({data:{display_name:$('profileDisplayName').value.trim()}});await loadFeed(false);setRoute('account',false);$('profileMessage').textContent='Profile saved.';}catch(err){msg.textContent=err.message;}}; $('passwordResetButton').onclick=async()=>{const email=state.feed.account?.email;if(!email)return;const msg=$('profileMessage');msg.textContent='Sending…';try{await BlinqAuth.reset(email);msg.textContent='Recovery email requested.';}catch(err){msg.textContent=err.message;}}; $('logoutButton').onclick=async()=>{await BlinqAuth.signOut();state.feed={upcoming:[],results:[],performance:{},history:{},model:null};auth('login');}; }
+
+  async function loadFeed(showLoading=true){ if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML='<div class="state-card">Loading current model predictions…</div>'; try{const feed=await BlinqAuth.feed();state.feed=feed||{};state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[];state.feed.results=Array.isArray(feed?.results)?feed.results:[];populateFilters();const a=feed.account||{};$('profileName').textContent=a.name||a.email||'BlinQ User';$('profilePlan').textContent='Member';$('avatar').textContent=initials(a.name||a.email||'B');$('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—';$('todayLabel').textContent=fmtToday();$('staleNotice').hidden=!feed.stale;$('staleNotice').textContent=feed.stale?'Published data is older than 12 hours. Check prediction creation times before evaluating them.':'';$('appShell').hidden=false;if($('authDialog').open)$('authDialog').close();setRoute(state.route,false);}catch(error){if(error.status===401){BlinqAuth.clear();auth('login');return;}showStatus('Data could not be loaded. Try again shortly.');throw error;} }
+  function showStatus(message){const n=$('statusBanner');n.textContent=message;n.hidden=!message;if(message)setTimeout(()=>{n.hidden=true},5000)}
+
+  function setupEvents(){
+    $('authDialog').addEventListener('cancel',e=>e.preventDefault()); $('authForm').addEventListener('submit',handleAuthSubmit); $('switchSignup').onclick=()=>auth(state.authMode==='login'?'signup':'login'); $('switchReset').onclick=()=>auth('reset');
+    $('refreshButton').onclick=()=>loadFeed(); ['tourFilter','tournamentFilter','surfaceFilter','confidenceFilter'].forEach(id=>$(id).addEventListener('change',()=>{state.page=0;state.showAll=false;renderPredictions()})); $('searchInput').addEventListener('input',()=>{state.page=0;state.showAll=false;renderPredictions()});
+    $('prevPick').onclick=()=>{state.page=Math.max(0,state.page-1);renderPredictions()}; $('nextPick').onclick=()=>{state.page+=1;renderPredictions()}; $('viewAllButton').onclick=()=>{state.showAll=!state.showAll;state.page=0;renderPredictions()}; $('dialogClose').onclick=()=>$('matchDialog').close(); $('matchDialog').addEventListener('click',e=>{if(e.target===$('matchDialog'))$('matchDialog').close()}); $('profileButton').onclick=()=>setRoute('account');
+    document.addEventListener('click',e=>{const target=e.target.closest('[data-route]');if(!target)return;const route=target.dataset.route;if(!routeMeta[route])return;e.preventDefault();setRoute(route)});
   }
 
-  function model() {
-    const r=data.model?.report,h=r?.holdout,b=r?.elo_baseline_holdout;
-    if(!h)return empty('Model sa pripravuje.','Po overení tu uvidíš výsledky testovania, porovnanie so základným modelom aj kvalitu pravdepodobností.');
-    const bins=h.calibration_bins || [], selective=h.selective_accuracy || [];
-    return `<div class="model-grid"><section class="panel"><p class="eyebrow">CHRONOLOGICKÉ TESTOVANIE</p><h2>Výkon na neskorších zápasoch</h2><p class="muted">${h.n} testovacích zápasov. Historický test sa odlišuje od priebežných výsledkov zverejnených predikcií.</p><table><thead><tr><th>Metrika</th><th>BlinQ</th><th>Elo základ</th></tr></thead><tbody><tr><td>Úspešnosť</td><td>${percent(h.accuracy)}</td><td>${percent(b?.accuracy)}</td></tr><tr><td>Log loss · menej je lepšie</td><td>${decimal(h.log_loss)}</td><td>${decimal(b?.log_loss)}</td></tr><tr><td>Brier skóre · menej je lepšie</td><td>${decimal(h.brier_score)}</td><td>${decimal(b?.brier_score)}</td></tr></tbody></table></section><section class="panel"><h2>Zodpovedajú percentá výsledkom?</h2><p class="muted">Porovnanie predpokladanej a skutočnej frekvencie výhier v jednotlivých pásmach.</p><div class="calibration" role="img" aria-label="Graf kalibrácie; presné hodnoty sú uvedené v tabuľke nižšie">${bins.map(v=>`<div><span style="height:${Math.max(0,Math.min(100,v.mean_probability*100))}%"></span><i style="height:${Math.max(0,Math.min(100,v.actual_win_rate*100))}%"></i><small>${Math.round(v.mean_probability*100)} %</small></div>`).join('')}</div><div class="legend"><b>Predikcia</b><em>Skutočnosť</em></div><details><summary class="muted">Presné hodnoty</summary><table><tbody>${bins.map(v=>`<tr><td>${percent(v.mean_probability)}</td><td>${percent(v.actual_win_rate)}</td><td>${v.count} zápasov</td></tr>`).join('')}</tbody></table></details></section></div><section class="panel"><h2>Vyššia istota, menší výber</h2><p class="muted">Pri vyššom prahu zostáva menej zápasov. Prahy sú pevné; nejde o odporúčanie vybrané podľa najlepšieho výsledku testu.</p><div class="table-wrap"><table><thead><tr><th>Minimálna pravdepodobnosť</th><th>Zápasy</th><th>Podiel všetkých</th><th>Úspešnosť</th></tr></thead><tbody>${selective.map(s=>`<tr><td>${percent(s.threshold)}</td><td>${s.n}</td><td>${percent(s.coverage)}</td><td>${s.n?percent(s.accuracy):'—'}</td></tr>`).join('')}</tbody></table></div></section>${qualityTables(r.subgroups,"Kvalita podľa skupín · historický test")}${qualityTables(data.performance_subgroups,"Kvalita podľa skupín · vydané predikcie")}<p class="detail-note">Verzia: ${escape(data.model.version)} · História: ${Number(data.history?.matches || 0).toLocaleString('sk-SK')} zápasov · ${escape(date(data.history?.start))} – ${escape(date(data.history?.end))}</p>`;
-  }
-  function account() {return `<section class="panel account-card"><p class="eyebrow">BLINQ MEMBERS</p><h2>${escape(data.account?.name || 'Môj účet')}</h2><form id="profileForm"><label>E-mail<input type="email" value="${escape(data.account?.email || '')}" disabled></label><label>Zobrazované meno<input id="profileName" value="${escape(data.account?.name || '')}" maxlength="80" required autocomplete="name"></label><button class="button primary" type="submit" ${demo?'disabled':''}>Uložiť profil</button><p id="profileMessage" role="status" class="muted"></p></form><div class="account-actions"><button id="resetFromAccount" class="button secondary" ${demo?'disabled':''}>Obnoviť heslo</button><button id="logout" class="button secondary">Odhlásiť sa</button></div></section>`;}
-  function render() {
-    metrics(); $('pageTitle').textContent=titles[page][0];$('pageSubtitle').textContent=titles[page][1];$('breadcrumb').textContent=`Pracovný priestor / ${names[page]}`;
-    $('filters').hidden=!['overview','predictions','results'].includes(page);$('metrics').hidden=page==='account';
-    document.querySelectorAll('[data-page]').forEach(b=>{b.classList.toggle('active',b.dataset.page===page);b.setAttribute('aria-current',b.dataset.page===page?'page':'false');});
-    $('content').innerHTML=page==='results'?results():page==='model'?model():page==='account'?account():matches();
-    $('content').querySelectorAll('[data-match]').forEach(b=>b.onclick=()=>detail(b.dataset.match));
-    $('content').querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>navigate(b.dataset.open));
-    if($('more'))$('more').onclick=()=>{if(page==='overview')navigate('predictions');else{limit+=50;render();}};
-    if($('logout'))$('logout').onclick=async()=>{if(demo){notice('Ukážkový režim nemá prihlásený účet.');return;}await BlinqAuth.signOut();data={upcoming:[],results:[],performance:{}};render();auth();};
-    if($('resetFromAccount'))$('resetFromAccount').onclick=async()=>{try{await BlinqAuth.reset(data.account.email);$('profileMessage').textContent='Odkaz na obnovenie bol odoslaný.';}catch(e){$('profileMessage').textContent=e.message;}};
-    if($('profileForm'))$('profileForm').onsubmit=async e=>{e.preventDefault();const b=e.target.querySelector('button');b.disabled=true;try{await BlinqAuth.update({data:{display_name:$('profileName').value.trim()}});await load();$('profileMessage').textContent='Profil bol uložený.';}catch(error){$('profileMessage').textContent=error.message;}finally{b.disabled=false;}};
-  }
-  function navigate(next) {page=next;limit=50;render();history.replaceState(null,'',`#${page}`);}
-  function detail(id) {
-    const row=data.upcoming.find(r=>r.id===id);if(!row)return;
-    $('matchDetail').innerHTML=`<p class="eyebrow">${escape(row.tour)} · ${escape(surfaceNames[row.surface]||row.surface)}</p><h2 id="matchTitle">${escape(row.tournament)}</h2><p class="muted">${escape(date(row.scheduled_at,true))} · ${escape(row.round||'')}</p>${['player1','player2'].map(key=>`<div class="detail-player"><span>${escape(row[key].name)}</span><strong>${percent(row[key].probability)}</strong></div>`).join('')}${row.quality?`<h3>História dostupná pri predikcii</h3><p class="muted">Súťaž: ${escape(row.competition||'Neznáma')}<br>${escape(row.player1.name)}: ${Number(row.quality.player1.matches)} zápasov, na povrchu ${Number(row.quality.player1.surface_matches)}<br>${escape(row.player2.name)}: ${Number(row.quality.player2.matches)} zápasov, na povrchu ${Number(row.quality.player2.surface_matches)}<br>Počty opisujú uloženú históriu, nie všetky kariérne zápasy.</p>`:''}<h3>Súvislosti v dátach</h3><ul class="signals">${row.signals.length?row.signals.map(s=>`<li><span>${escape(s.label)}</span>${escape(row.player1.id===s.player_id?row.player1.name:row.player2.name)}</li>`).join(''):'<li>Model nemá dostatočne výrazný čiastkový signál.</li>'}</ul><p class="detail-note">${row.stats_available?'Štatistiky servisu a returnu sú dostupné pre oboch hráčov.':'Detailné štatistiky nie sú dostupné pre oboch hráčov.'}<br>Vytvorené ${escape(date(row.issued_at||row.created_at,true))}<br>Model ${escape(row.model_version)}</p>`;
-    $('matchDialog').showModal();
-  }
-  $('closeMatch').onclick=()=>$('matchDialog').close();
-  document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>navigate(b.dataset.page));
-  document.querySelectorAll('[data-tour]').forEach(b=>b.onclick=()=>{tour=b.dataset.tour;document.querySelectorAll('[data-tour]').forEach(x=>x.classList.toggle('selected',x===b));render();});
-  ['search','surface','confidence'].forEach(id=>$(id).addEventListener(id==='search'?'input':'change',()=>{limit=50;render();}));
-  $('accountShortcut').onclick=()=>navigate('account');
-  $('refresh').onclick=()=>load();
-  async function load() {
-    $('refresh').disabled=true;
-    try{data=await BlinqAuth.feed();demo=Boolean(data.demo);$('demoBanner').hidden=!demo;$('accountShortcut').textContent=(data.account?.name||'B').slice(0,1).toUpperCase();notice(data.stale?'Dáta sú staršie než 12 hodín. Pri hodnotení predikcií skontroluj čas ich vytvorenia.':'');render();}
-    catch(error){if(error.status===401){BlinqAuth.clear();auth();notice('Pre zobrazenie predikcií sa prihlás.');}else notice('Dáta sa nepodarilo načítať. Skús obnovenie o chvíľu.');}
-    finally{$('refresh').disabled=false;}
-  }
-  (async()=>{try{const cfg=await BlinqAuth.init();enabled=cfg.enabled;demo=Boolean(cfg.demo);const hash=location.hash.slice(1);if(titles[hash])page=hash;if(cfg.recovery){auth('recovery');return;}if(demo||await BlinqAuth.restore())await load();else{render();auth();}}catch(error){notice(error.message);render();auth();}})();
+  async function boot(){ setupEvents(); await loadUiConfig(); const hash=location.hash.replace(/^#/,''); if(routeMeta[hash])state.route=hash; try{const cfg=await BlinqAuth.init();state.authEnabled=Boolean(cfg.enabled);if(cfg.recovery){auth('recovery');return;}const session=await BlinqAuth.restore();if(session)await loadFeed();else auth('login');}catch(error){showStatus(error.message);auth('login');} }
+  boot();
 })();
