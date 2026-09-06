@@ -9,7 +9,7 @@ import httpx
 
 from tbt.services.engine import predict, reconcile_ledger, serving_feed, confirm_publication
 from tbt.services.data_quality import audit_history
-from tbt.services.auth import verify_user, AuthUnavailable
+from tbt.services.auth import verify_user, request_authorization, AuthUnavailable
 from tbt.services.feed import visible_feed, empty_feed
 
 
@@ -51,6 +51,15 @@ def test_duplicate_provider_event_stops_training(match_factory):
     b = replace(a, match_id='different-round-id')
     with pytest.raises(ValueError, match='Duplicate'):
         audit_history([a, b])
+
+
+def test_auth_prefers_custom_client_token_over_swa_authorization():
+    headers = {
+        "Authorization": "Bearer swa-overwritten-token",
+        "X-Blinq-Access-Token": "supabase-user-token",
+    }
+    assert request_authorization(headers) == "Bearer supabase-user-token"
+    assert request_authorization({"Authorization": "Bearer direct-token"}) == "Bearer direct-token"
 
 
 def test_auth_rejects_expired_and_unavailable_identity_service():
