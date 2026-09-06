@@ -638,8 +638,9 @@ def test_workflows_confirm_publication_and_share_deploy_lock():
     assert "--deployed-feed api/data/feed.json" in ci
     assert "python -m compileall -q api scripts" in ci
     docs = (root / "docs/DNES_STIAHNUT_DATA.md").read_text()
-    assert "žiadna rolling rezervácia histórie sa neudržiava" in docs
-    assert "rezervácia zostane blokovaná" not in docs
+    docs_lower = docs.lower()
+    assert "žiadna rolling rezervácia histórie sa neudržiava" in docs_lower
+    assert "rezervácia zostane blokovaná" not in docs_lower
     setup_block = ci.split("- name: Set up Python", 1)[1].split("- name: Compile API and scripts", 1)[0]
     assert "github.event_name != 'workflow_dispatch'" not in setup_block
 
