@@ -10,6 +10,7 @@ from typing import Any, Iterable
 import httpx
 
 from ..config import Settings, settings
+from ..data.history_snapshot import merge_matches
 from ..errors import ConfigurationError, ProviderError
 from .budget import RequestBudgetExceeded
 from ..schemas import MatchRecord
@@ -630,7 +631,7 @@ class RapidTennisClient:
         if tour not in {"atp", "wta"}:
             raise ValueError("tour must be atp or wta")
 
-        matches: dict[str, MatchRecord] = {}
+        matches: list[MatchRecord] = []
 
         for category in self.calendar_categories(day):
             category_id = self._category_id(category)
@@ -697,12 +698,9 @@ class RapidTennisClient:
                     )
                     continue
 
-                self._keep_richer_match(matches, match)
+                matches.append(match)
 
-        return sorted(
-            matches.values(),
-            key=lambda match: (match.scheduled_at, match.match_id),
-        )
+        return merge_matches(matches)
 
     def upcoming(
         self,
@@ -714,21 +712,19 @@ class RapidTennisClient:
         if end < start:
             raise ValueError("end must be on or after start")
 
-        matches: dict[str, MatchRecord] = {}
+        matches: list[MatchRecord] = []
         day = start
         while day <= end:
-            for match in self.matches_for_day(
-                tour,
-                day,
-                historical=False,
-            ):
-                self._keep_richer_match(matches, match)
+            matches.extend(
+                self.matches_for_day(
+                    tour,
+                    day,
+                    historical=False,
+                )
+            )
             day += timedelta(days=1)
 
-        return sorted(
-            matches.values(),
-            key=lambda match: (match.scheduled_at, match.match_id),
-        )
+        return merge_matches(matches)
 
     @staticmethod
     def _match_richness_score(
@@ -840,14 +836,16 @@ class RapidTennisClient:
         """Inclusive bounded results window; category/event caches are shared by tours."""
         if end < start:
             raise ValueError("end must be on or after start")
-        rows = {}
+        rows: list[MatchRecord] = []
         day = start
         while day <= end:
-            for match in self.matches_for_day(tour, day, historical=True):
-                if match.is_completed:
-                    rows[match.match_id] = match
+            rows.extend(
+                match
+                for match in self.matches_for_day(tour, day, historical=True)
+                if match.is_completed
+            )
             day += timedelta(days=1)
-        return sorted(rows.values(), key=lambda m: (m.scheduled_at, m.match_id))
+        return merge_matches(rows)
 
     def historical_year(
         self,
@@ -871,7 +869,7 @@ class RapidTennisClient:
         if start > today:
             return []
 
-        matches: dict[str, MatchRecord] = {}
+        matches: list[MatchRecord] = []
         day = start
         days_checked = 0
         days_with_categories = 0
@@ -905,7 +903,7 @@ class RapidTennisClient:
             for match in daily:
                 if not match.is_completed or not match.winner_id:
                     continue
-                self._keep_richer_match(matches, match)
+                matches.append(match)
 
             day += timedelta(days=1)
 
@@ -917,7 +915,7 @@ class RapidTennisClient:
             days_checked,
             days_with_categories,
             normalized_matches,
-            len(matches),
+            len(merge_matches(matches)),
         )
 
         if not matches:
@@ -930,10 +928,7 @@ class RapidTennisClient:
                 "Refusing to report a successful empty bootstrap."
             )
 
-        return sorted(
-            matches.values(),
-            key=lambda match: (match.scheduled_at, match.match_id),
-        )
+        return merge_matches(matches)
 
     @classmethod
     def _walk_match_nodes(
