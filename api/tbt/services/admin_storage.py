@@ -86,8 +86,11 @@ def validate_ui_config(payload: object) -> dict:
     required_elements = {
         *(f"HEADER_BANNER_{i}" for i in range(1, 4)),
         *(f"CONTENT_TOP_{i}" for i in range(1, 5)),
+        *(f"CONTENT_MID_{i}" for i in range(1, 5)),
         *(f"CONTENT_BOTTOM_{i}" for i in range(1, 5)),
-        "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "PRIME_PICKS_PANEL", "FOOTER_SYSTEM",
+        "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3",
+        "PRIME_PICKS_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
+        "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "BTTS_BONUS_PANEL", "FOOTER_SYSTEM",
     }
     if not required_elements.issubset(elements):
         raise ValueError("UI configuration would change the fixed slot inventory")
@@ -95,10 +98,12 @@ def validate_ui_config(payload: object) -> dict:
     contexts = {"trial", "expired", "rookie", "pro", "elite", "goat", "legend"}
     row_presets = {"1+1+1+1", "2+2", "2+1+1", "1+1+2", "4"}
     content_rows = payload.get("content_rows") or {}
-    for zone in ("content_top", "content_bottom"):
+    for zone in ("content_top", "content_mid", "content_bottom"):
         row = content_rows.get(zone)
         if not isinstance(row, dict) or str(row.get("preset") or "") not in row_presets:
             raise ValueError(f"Invalid fixed row preset for {zone}")
+        if "enabled" in row and not isinstance(row.get("enabled"), bool):
+            raise ValueError(f"Invalid enabled flag for {zone}")
 
     advertisers = payload.get("advertisers") or {}
     campaigns = payload.get("campaigns") or {}
@@ -116,10 +121,16 @@ def validate_ui_config(payload: object) -> dict:
         creative_mode = str(campaign.get("creative_mode") or "full").lower()
         if creative_mode not in {"full", "split"}:
             raise ValueError(f"Campaign {campaign_id} has an invalid creative mode")
+        image_fit = str(campaign.get("image_fit") or "cover").lower()
+        image_position = str(campaign.get("image_position") or "center").lower()
+        if image_fit not in {"cover", "contain"}:
+            raise ValueError(f"Campaign {campaign_id} has an invalid image fit")
+        if image_position not in {"center", "left", "right", "top", "bottom"}:
+            raise ValueError(f"Campaign {campaign_id} has an invalid image position")
         images = campaign.get("images") or {}
         if not isinstance(images, dict) or any(str(key) not in {"1", "2", "4"} for key in images):
             raise ValueError(f"Campaign {campaign_id} has an invalid creative inventory")
-        for value in [campaign.get("image_url"), *images.values()]:
+        for value in [campaign.get("image_url"), campaign.get("mobile_image_url"), *images.values()]:
             url = str(value or "").strip()
             if url and not (url.startswith("https://") or url.startswith("http://") or url.startswith("/")):
                 raise ValueError(f"Campaign {campaign_id} creative must be an HTTP(S) URL or an absolute web path")
