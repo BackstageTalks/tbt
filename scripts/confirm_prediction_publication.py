@@ -5,11 +5,21 @@ import argparse
 import json
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 
 from _bootstrap import ROOT
-from download_tennis_history import read_json, write_json
 from release_store import ReleaseStore
-from tbt.services.engine import confirm_publication
+from tbt.services.publication import confirm_publication
+
+
+def read_json(path: Path, default):
+    return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else default
+
+
+def write_json(path: Path, value) -> None:
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(value, indent=2), encoding="utf-8")
+    temporary.replace(path)
 
 
 def main():
@@ -38,7 +48,7 @@ def main():
 
     deployed_feed = feed
     if args.deployed_feed:
-        deployed_feed = read_json(args.deployed_feed, None)
+        deployed_feed = read_json(Path(args.deployed_feed), None)
         if not isinstance(deployed_feed, dict):
             raise ValueError("Invalid deployed feed")
         if deployed_feed != feed:
