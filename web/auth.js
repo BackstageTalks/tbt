@@ -1,16 +1,17 @@
 (() => {
   'use strict';
   const KEY = 'blinq_v3_session';
-  let config = null, refreshing = null;
+  let config = null, refreshing = null, sessionGeneration = 0;
   let recovery = false;
   function session() { try { return JSON.parse(localStorage.getItem(KEY) || 'null'); } catch { return null; } }
-  function clear() { localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); }
+  function clear() { sessionGeneration += 1; localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); }
   function save(value) {
     const s = value?.session || value;
     if (!s?.access_token) return null;
     const normalized = {access_token:s.access_token,refresh_token:s.refresh_token || '',expires_at:Number(s.expires_at) || Math.floor(Date.now()/1000)+Number(s.expires_in || 3600)};
     localStorage.setItem(KEY,JSON.stringify(normalized)); return normalized;
   }
+  function replaceSession(value) { sessionGeneration += 1; return save(value); }
   async function json(url, options = {}) {
     const response = await fetch(url,{...options,headers:{Accept:'application/json','Content-Type':'application/json',...(options.headers || {})},cache:'no-store',signal:AbortSignal.timeout(20000)});
     const data = await response.json().catch(() => ({}));
@@ -24,8 +25,13 @@
     let s = session(); if (!s) return null;
     if (s.expires_at > Date.now()/1000+60) return s;
     if (!s.refresh_token) { clear(); return null; }
-    if (!refreshing) refreshing = json(endpoint('/token?grant_type=refresh_token'),{method:'POST',headers:headers(),body:JSON.stringify({refresh_token:s.refresh_token})})
-      .then(save).catch(error => {if ([400,401,403].includes(error.status)){clear();return null;} throw error;}).finally(() => {refreshing=null;});
+    if (!refreshing) {
+      const generation = sessionGeneration;
+      refreshing = json(endpoint('/token?grant_type=refresh_token'),{method:'POST',headers:headers(),body:JSON.stringify({refresh_token:s.refresh_token})})
+        .then(value => generation === sessionGeneration ? save(value) : null)
+        .catch(error => {if ([400,401,403].includes(error.status)){if (generation === sessionGeneration) clear();return null;} throw error;})
+        .finally(() => {refreshing=null;});
+    }
     return refreshing;
   }
   async function init() {
@@ -33,15 +39,15 @@
     const fragment = new URLSearchParams(location.hash.replace(/^#/,''));
     if (fragment.has('error_description')) { history.replaceState(null,'',location.pathname); throw new Error(fragment.get('error_description')); }
     if (fragment.has('access_token')) {
-      save(Object.fromEntries(fragment.entries())); recovery = fragment.get('type')==='recovery';
+      replaceSession(Object.fromEntries(fragment.entries())); recovery = fragment.get('type')==='recovery';
       history.replaceState(null,'',location.pathname);
     }
     return {...config,recovery};
   }
-  async function signIn(email,password) { return save(await json(endpoint('/token?grant_type=password'),{method:'POST',headers:headers(),body:JSON.stringify({email,password})})); }
+  async function signIn(email,password) { return replaceSession(await json(endpoint('/token?grant_type=password'),{method:'POST',headers:headers(),body:JSON.stringify({email,password})})); }
   async function signUp(email,password,name) {
     const data = await json(endpoint(`/signup?redirect_to=${encodeURIComponent(redirect())}`),{method:'POST',headers:headers(),body:JSON.stringify({email,password,data:{display_name:name}})});
-    return save(data);
+    return replaceSession(data);
   }
   async function reset(email) { return json(endpoint(`/recover?redirect_to=${encodeURIComponent(redirect())}`),{method:'POST',headers:headers(),body:JSON.stringify({email})}); }
   async function update(fields) {
