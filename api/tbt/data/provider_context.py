@@ -45,6 +45,7 @@ def minimize_provider_payload(
             ("schema", "event_id", "source", "fetched_at", "status") if k in marker}
 
     for key in (
+        "_tbt_canonical_match_id",
         "_tbt_provider_event_id",
         "provider_event_id",
         "event_id",

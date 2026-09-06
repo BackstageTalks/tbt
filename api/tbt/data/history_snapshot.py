@@ -10,7 +10,7 @@ from typing import Any, Iterable
 import pandas as pd
 
 from tbt.schemas import MatchRecord
-from tbt.utils import is_rate_stat_field
+from tbt.utils import deterministic_id, is_rate_stat_field
 from .provider_context import merge_provider_context, minimize_provider_payload
 
 SNAPSHOT_SCHEMA_VERSION = 2
@@ -492,6 +492,12 @@ __all__ = [
 # Canonical merge helpers shared by direct provider bootstrap and hot-tier sync
 # ---------------------------------------------------------------------------
 
+def _canonical_match_id(match: MatchRecord) -> str:
+    payload = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+    value = payload.get("_tbt_canonical_match_id")
+    return str(value) if value not in (None, "") else str(match.match_id or "")
+
+
 def _provider_event_id(match: MatchRecord) -> str | None:
     payload = match.provider_payload if isinstance(match.provider_payload, dict) else {}
     for key in (
@@ -631,9 +637,82 @@ def _merge_identity(left, right, *, fallback=False):
         return a == b
     if fallback:
         return _fallback_identity_agrees(left, right)
-    if left.match_id and left.match_id == right.match_id:
+    if _canonical_match_id(left) and _canonical_match_id(left) == _canonical_match_id(right):
         return _fallback_identity_agrees(left, right)
     return False
+
+
+def _collision_tournament_token(match: MatchRecord) -> str:
+    return " ".join(str(match.tournament or "").strip().casefold().split())
+
+
+def _disambiguate_proven_distinct_collisions(records: list[MatchRecord]) -> list[MatchRecord]:
+    """Give stable IDs only to collisions that are positively distinct.
+
+    The provider's canonical match id intentionally survives schedule/provider-id
+    corrections.  Therefore a synthetic-id collision is split only when every
+    record has a unique provider event id, tournament label and exact timestamp.
+    Ambiguous collisions fail closed instead of being silently merged or counted
+    twice.
+    """
+    from dataclasses import replace
+
+    by_canonical: dict[str, list[int]] = {}
+    for index, match in enumerate(records):
+        by_canonical.setdefault(_canonical_match_id(match), []).append(index)
+
+    resolved = list(records)
+    for canonical, indices in by_canonical.items():
+        if len(indices) < 2:
+            continue
+
+        providers = [_provider_event_id(records[index]) for index in indices]
+        tournaments = [_collision_tournament_token(records[index]) for index in indices]
+        timestamps = [
+            records[index].scheduled_at.astimezone(timezone.utc).isoformat()
+            for index in indices
+        ]
+
+        proven_distinct = (
+            canonical
+            and all(providers)
+            and len(set(providers)) == len(indices)
+            and all(tournaments)
+            and len(set(tournaments)) == len(indices)
+            and len(set(timestamps)) == len(indices)
+        )
+        if not proven_distinct:
+            # Preserve both records, but deliberately restore the shared canonical
+            # ID so storage writers can fail closed instead of silently counting
+            # an unresolved collision as two independent matches.
+            for index in indices:
+                match = records[index]
+                context = merge_provider_context(
+                    match.provider_payload,
+                    {"_tbt_canonical_match_id": canonical},
+                )
+                resolved[index] = replace(
+                    match,
+                    match_id=canonical,
+                    provider_payload=context,
+                )
+            continue
+
+        for index, tournament_token in zip(indices, tournaments):
+            match = records[index]
+            context = merge_provider_context(
+                match.provider_payload,
+                {"_tbt_canonical_match_id": canonical},
+            )
+            resolved[index] = replace(
+                match,
+                match_id=deterministic_id(
+                    ["canonical-collision-v1", canonical, tournament_token]
+                ),
+                provider_payload=context,
+            )
+
+    return resolved
 
 
 def merge_matches(*groups: Iterable[MatchRecord]) -> list[MatchRecord]:
@@ -642,7 +721,8 @@ def merge_matches(*groups: Iterable[MatchRecord]) -> list[MatchRecord]:
     for group in groups:
         for match in group:
             provider = _provider_event_id(match)
-            indices = set(by_match.get(str(match.match_id), []))
+            canonical = _canonical_match_id(match)
+            indices = set(by_match.get(canonical, []))
             if provider:
                 indices.update(by_provider.get(provider, []))
             candidates = [i for i in indices if _merge_identity(records[i], match)]
@@ -652,7 +732,7 @@ def merge_matches(*groups: Iterable[MatchRecord]) -> list[MatchRecord]:
             else:
                 index = len(records)
                 records.append(match)
-            by_match.setdefault(str(match.match_id), []).append(index)
+            by_match.setdefault(canonical, []).append(index)
             if provider:
                 by_provider.setdefault(provider, []).append(index)
 
@@ -678,4 +758,5 @@ def merge_matches(*groups: Iterable[MatchRecord]) -> list[MatchRecord]:
             match = _merge_record(match, records[j])
             consumed.add(j)
         result.append(match)
+    result = _disambiguate_proven_distinct_collisions(result)
     return sorted(result, key=lambda item: (item.scheduled_at, str(item.match_id)))
