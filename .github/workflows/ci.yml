@@ -48,6 +48,7 @@ jobs:
         run: |
           node --check web/app.js
           node --check web/auth.js
+          node tests/test_auth_refresh_race.js
 
       - name: Check required web files
         run: |
@@ -61,7 +62,7 @@ jobs:
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && vars.TBT_DEPLOY_ENABLED == 'true')
     concurrency:
-      group: blinq-production-deploy
+      group: tbt-history-data-writer
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -95,3 +96,14 @@ jobs:
           api_location: api
           output_location: ''
           skip_app_build: true
+
+      - name: Confirm deployed prediction publication
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          python scripts/confirm_prediction_publication.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --deployed-feed api/data/feed.json
