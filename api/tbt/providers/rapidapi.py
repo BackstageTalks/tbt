@@ -283,6 +283,45 @@ class RapidTennisClient:
         """Current presentation image for a player/team id."""
         return self._get_bytes(f"/api/tennis/player/{player_id}/image", enrichment=True)
 
+    def rankings(self, tour: str) -> list[dict[str, Any]]:
+        """Current ATP/WTA ranking snapshot for presentation/enrichment only.
+
+        The provider does not expose a historical as-of parameter here, so callers
+        must never use these rows retrospectively in backtests or training history.
+        """
+        tour = str(tour or "").strip().lower()
+        if tour not in {"atp", "wta"}:
+            raise ValueError("tour must be atp or wta")
+        payload = self._get(
+            f"/api/tennis/rankings/{tour}/",
+            enrichment=True,
+        )
+        return self._data(payload)
+
+    def player_rankings(self, player_id: str | int) -> Any:
+        """Current ranking record(s) for one provider player/team id."""
+        return self._get(
+            f"/api/tennis/player/{player_id}/rankings",
+            enrichment=True,
+        )
+
+    def event_statistics(self, event_id: str | int) -> Any:
+        """Post-match event statistics; coverage is provider/event dependent."""
+        return self._get(
+            f"/api/tennis/event/{event_id}/statistics",
+            enrichment=True,
+        )
+
+    def event_odds(self, event_id: str | int, provider_id: int = 1) -> Any:
+        """Pre-match event markets for a concrete TennisApi odds provider."""
+        provider_id = int(provider_id)
+        if provider_id < 1:
+            raise ValueError("provider_id must be >= 1")
+        return self._get(
+            f"/api/tennis/event/{event_id}/odds/{provider_id}/all",
+            enrichment=True,
+        )
+
     @staticmethod
     def _data(
         payload: Any,
@@ -312,6 +351,7 @@ class RapidTennisClient:
             "results",
             "events",
             "categories",
+            "rankings",
             "fixtures",
             "matches",
         ):
