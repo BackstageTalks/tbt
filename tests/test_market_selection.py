@@ -101,3 +101,24 @@ def test_top_daily_and_value_rules_are_distinct():
     value_ids = {x['event_id'] for x in sections['value_picks']}
     assert daily_ids == {'a', 'b', 'd'}
     assert value_ids == {'b', 'c'}
+
+
+def test_market_publication_candidates_track_section_membership_without_leaking_into_cards():
+    from tbt.services.market_selection import annotate_market_publication_candidates
+
+    rows = [
+        row('a', .72, 1.65, .62, depth=.9, gap=.08),
+        row('b', .66, 1.90, .56, depth=.8, gap=.10),
+    ]
+    annotated = annotate_market_publication_candidates(rows)
+    by_id = {item['event_id']: item for item in annotated}
+    assert {p['section'] for p in by_id['a']['market_publication_candidates']} == {'top_daily'}
+    assert {p['section'] for p in by_id['b']['market_publication_candidates']} == {'top_daily', 'value'}
+    for publication in by_id['b']['market_publication_candidates']:
+        assert publication['issued_at'] is None
+        assert publication['publication_status'] == 'pending'
+        assert publication['selection_key'].startswith('match_winner:2026-09-07:b:')
+
+    sections = select_market_sections(annotated)
+    assert all('market_publication_candidates' not in card for card in sections['top_daily_picks'])
+    assert all('market_publication_candidates' not in card for card in sections['value_picks'])
