@@ -179,3 +179,18 @@ def test_admin_update_preserves_unrelated_app_metadata_and_records_manual_paymen
     assert app["blinq_status"] == "active"
     assert app["blinq_payment_reference"] == "manual-link-payment-42"
     assert app["blinq_access_updated_by"] == "admin-1"
+
+
+def test_avatar_variant_is_user_controlled_presentation_metadata_only():
+    account = public_account(
+        user(user_metadata={"display_name": "Member", "blinq_avatar_variant": "w"}),
+        cfg=cfg(),
+        now=NOW,
+    )
+    invalid = public_account(
+        user(user_metadata={"display_name": "Member", "blinq_avatar_variant": "other"}),
+        cfg=cfg(),
+        now=NOW,
+    )
+    assert account["avatar_variant"] == "w"
+    assert invalid["avatar_variant"] == ""
