@@ -13,6 +13,7 @@ from ..config import Settings, settings
 from ..data.history_snapshot import merge_matches
 from ..errors import ConfigurationError, ProviderError
 from .budget import RequestBudgetExceeded
+from .score import parse_event_score
 from ..schemas import MatchRecord
 from ..utils import (
     deterministic_id,
@@ -1903,6 +1904,19 @@ class RapidTennisClient:
         ):
             indoor = True
 
+        normalized_stats = cls._stats(raw)
+        # Category/event payloads often already contain structured per-set scores.
+        # Persist them immediately when unambiguous so future S/G projections do
+        # not require a second event-detail call. Unsupported score shapes never
+        # make the fixture itself disappear.
+        try:
+            normalized_stats = {
+                **normalized_stats,
+                **parse_event_score(raw, home_is_player1=True, best_of=best_of),
+            }
+        except ProviderError:
+            pass
+
         return MatchRecord(
             match_id=match_id,
             tour=tour.lower(),
@@ -1934,8 +1948,6 @@ class RapidTennisClient:
             status=status,
             best_of=best_of,
             indoor=indoor,
-            stats=cls._stats(
-                raw
-            ),
+            stats=normalized_stats,
             provider_payload=raw,
         )
