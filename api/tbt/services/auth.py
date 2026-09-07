@@ -169,11 +169,15 @@ def public_account(user, *, cfg=None, now=None):
     access = account_access(user, cfg=cfg, now=now)
     hide_ads_allowed = access.get("plan") in {"elite", "goat"} and access.get("status") in {"active", "lifetime"}
     hide_ads = bool(metadata.get("blinq_hide_ads")) and hide_ads_allowed
+    avatar_variant = str(metadata.get("blinq_avatar_variant") or "").strip().lower()
+    if avatar_variant not in {"m", "w"}:
+        avatar_variant = ""
     return {
         "id": user["id"],
         "email": user.get("email", ""),
         "name": str(metadata.get("display_name") or metadata.get("name") or "Člen BlinQ")[:80],
         **access,
+        "avatar_variant": avatar_variant,
         "hide_ads_allowed": hide_ads_allowed,
         "hide_ads": hide_ads,
     }
