@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [history, statistics, ace-statistics, history-audit, history-integrity-repair, history-repair, train, backtest, refresh]
+        options: [history, statistics, ace-statistics, sg-scores, history-audit, history-integrity-repair, history-repair, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -39,6 +39,14 @@ on:
         description: Maximum history window for targeted Aces/DF statistics
         type: number
         default: 550
+      sg_target_samples:
+        description: Target recent structured score samples per current upcoming player
+        type: number
+        default: 24
+      sg_lookback_days:
+        description: Maximum history window for targeted Sets/Games score samples
+        type: number
+        default: 730
       promote:
         description: Publish trained model only if holdout gate passes
         type: boolean
@@ -69,6 +77,8 @@ jobs:
       BETTING_DAY_START_HOUR: ${{ inputs.betting_day_start_hour || 6 }}
       ACE_TARGET_SAMPLES: ${{ inputs.ace_target_samples || 18 }}
       ACE_LOOKBACK_DAYS: ${{ inputs.ace_lookback_days || 550 }}
+      SG_TARGET_SAMPLES: ${{ inputs.sg_target_samples || 24 }}
+      SG_LOOKBACK_DAYS: ${{ inputs.sg_lookback_days || 730 }}
       PROMOTE: ${{ inputs.promote }}
       TBT_WEATHER_RESEARCH: ${{ vars.TBT_WEATHER_RESEARCH }}
     steps:
@@ -94,6 +104,12 @@ jobs:
               --data-repository "$TBT_DATA_REPOSITORY" \
               --lookback-days "$ACE_LOOKBACK_DAYS" \
               --target-samples "$ACE_TARGET_SAMPLES" \
+              --max-requests "$MAX_REQUESTS"
+          elif [[ "$MODE" == sg-scores ]]; then
+            python scripts/enrich_sg_history.py \
+              --data-repository "$TBT_DATA_REPOSITORY" \
+              --lookback-days "$SG_LOOKBACK_DAYS" \
+              --target-samples "$SG_TARGET_SAMPLES" \
               --max-requests "$MAX_REQUESTS"
           elif [[ "$MODE" == history-audit ]]; then
             python scripts/audit_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
