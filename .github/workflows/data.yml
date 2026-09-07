@@ -80,6 +80,17 @@ jobs:
             if [[ "$PROMOTE" == true ]]; then args+=(--promote); fi
             python scripts/pipeline.py "${args[@]}"
           fi
+      - name: Prepare refreshed serving feed and cached player assets
+        if: env.MODE == 'refresh'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # pipeline refresh commits the immutable prediction candidate first.
+          # Rebuild the deploy snapshot from that release and attach optional
+          # presentation-only player rank/country/photo metadata.
+          python scripts/prepare_feed.py
+          test -s api/data/feed.json
+
       - name: Deploy refreshed feed and application
         if: env.MODE == 'refresh'
         uses: Azure/static-web-apps-deploy@v1
