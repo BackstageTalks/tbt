@@ -310,3 +310,7 @@ body{background:var(--dash-bg)}
 .results-filter-bar + .metric-cards{grid-template-columns:repeat(6,minmax(0,1fr));margin-bottom:14px}
 @media(max-width:1400px){.results-filter-bar + .metric-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:760px){.results-filter-bar + .metric-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* v5.3 Aces / Double Faults projection cards */
+.market-card.projection-card .probability small{display:block;font-size:.52em;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted,#7f93aa);line-height:1.05}
+.market-card.projection-card .market-card-meta{white-space:normal;line-height:1.35}
