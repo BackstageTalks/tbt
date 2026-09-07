@@ -25,6 +25,7 @@ from tbt.services.publication import (
     validate_market_publication_candidate,
     validate_publication_candidate,
 )
+from tbt.services.ace_selection import select_ace_picks
 from tbt.services.market_selection import (
     annotate_market_publication_candidates,
     attach_market_sections_to_feed,
@@ -218,7 +219,7 @@ def _load_prediction_ledger(store):
 
 def _publish_predictions(
     store, ledger, predictions, matches, model, report, upcoming,
-    *, odds_report=None,
+    *, odds_report=None, ace_picks=None, ace_report=None,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -232,7 +233,10 @@ def _publish_predictions(
     feed = serving_feed(records, model, matches, report, upcoming, now)
     # Market presentation fields are derived from current odds-backed predictions
     # and never alter the immutable Match Winner probability commitment.
-    feed = attach_market_sections_to_feed(feed, predictions, odds_report=odds_report)
+    feed = attach_market_sections_to_feed(
+        feed, predictions, odds_report=odds_report,
+        ace_picks=ace_picks, ace_report=ace_report,
+    )
     feed = clean(feed)
     write_json(store.directory / "ledger.json", records)
     write_json(store.directory / "feed.json", feed)
@@ -375,6 +379,8 @@ def main():
     refresh_error = None
     upcoming = []
     odds_report = None
+    ace_picks = []
+    ace_report = None
     try:
         matches = _refresh_history(provider, matches, history_dir, history_store,
                                    now.date() - timedelta(days=7), now.date())
@@ -395,6 +401,10 @@ def main():
                 timezone_name="Europe/Bratislava",
                 start_hour=args.betting_day_start_hour,
             )
+        # Aces / Double Faults use only already-stored historical post-match
+        # counts. This consumes no additional provider requests and remains
+        # projection-only until a real pre-match price/line source is verified.
+        ace_picks, ace_report = select_ace_picks(matches, predictions, now=now)
     except Exception as exc:
         refresh_error = exc
     finally:
@@ -409,7 +419,8 @@ def main():
         raise refresh_error
     feed = _publish_predictions(
         prediction_store, prediction_ledger,
-        predictions, matches, model, report, upcoming, odds_report=odds_report,
+        predictions, matches, model, report, upcoming,
+        odds_report=odds_report, ace_picks=ace_picks, ace_report=ace_report,
     )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -419,6 +430,8 @@ def main():
         "upcoming": len(feed["upcoming"]),
         "top_daily": len(feed.get("top_daily_picks", [])),
         "value": len(feed.get("value_picks", [])),
+        "ace": len(feed.get("ace_picks", [])),
+        "ace_projection": ace_report or {},
         "odds": odds_report or {},
         "settled": len(feed["results"]),
         "model": model.version,
