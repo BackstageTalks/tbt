@@ -22,6 +22,10 @@ from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.engine import predict, reconcile_ledger, serving_feed
 from tbt.services.publication import validate_publication_candidate
+from tbt.services.market_selection import (
+    attach_market_sections_to_feed,
+    enrich_current_betting_day_odds,
+)
 from tbt.services.training import train_from_matches
 from tbt.services.backtest_service import walk_forward_backtest
 
@@ -206,12 +210,19 @@ def _load_prediction_ledger(store):
     validate_publication_candidate(feed, ledger)
     return ledger
 
-def _publish_predictions(store, ledger, predictions, matches, model, report, upcoming):
+def _publish_predictions(
+    store, ledger, predictions, matches, model, report, upcoming,
+    *, odds_report=None,
+):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
     now = datetime.now(timezone.utc)
     records = reconcile_ledger(ledger, predictions, matches, now)
-    feed = clean(serving_feed(records, model, matches, report, upcoming, now))
+    feed = serving_feed(records, model, matches, report, upcoming, now)
+    # Market presentation fields are derived from current odds-backed predictions
+    # and never alter the immutable Match Winner probability commitment.
+    feed = attach_market_sections_to_feed(feed, predictions, odds_report=odds_report)
+    feed = clean(feed)
     write_json(store.directory / "ledger.json", records)
     write_json(store.directory / "feed.json", feed)
     store.upload_bundle([store.directory / "ledger.json", store.directory / "feed.json"])
@@ -223,10 +234,26 @@ def main():
     parser.add_argument("mode", choices=["train", "refresh", "backtest"])
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"))
     parser.add_argument("--max-requests", type=int, default=750)
+    parser.add_argument(
+        "--market-odds-max-events",
+        type=int,
+        default=150,
+        help="Maximum provider-1 odds calls for the current BlinQ betting day",
+    )
+    parser.add_argument(
+        "--betting-day-start-hour",
+        type=int,
+        default=6,
+        help="Europe/Bratislava local hour that starts the BlinQ betting day",
+    )
     parser.add_argument("--promote", action="store_true")
     args = parser.parse_args()
     if not 1 <= args.max_requests <= 3000:
         parser.error("refresh allowance must be 1..3000")
+    if args.market_odds_max_events < 0:
+        parser.error("market-odds-max-events must be >= 0")
+    if not 0 <= args.betting_day_start_hour <= 23:
+        parser.error("betting-day-start-hour must be 0..23")
     cache = ROOT / ".cache/tbt"
     history_dir = cache / "history"
     history_store = ReleaseStore(args.data_repository, "tbt-data-v1", history_dir)
@@ -336,11 +363,27 @@ def main():
     now = datetime.now(timezone.utc)
     refresh_error = None
     upcoming = []
+    odds_report = None
     try:
         matches = _refresh_history(provider, matches, history_dir, history_store,
                                    now.date() - timedelta(days=7), now.date())
         for tour in ("atp", "wta"):
             upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
+
+        # Generate the model probabilities first, then spend additional provider
+        # calls only on the current BlinQ betting day. No odds are required for
+        # Prime Picks; they only power Top 10 Daily and Value Picks.
+        predictions = predict(model, matches, upcoming)
+        if args.market_odds_max_events:
+            predictions, odds_report = enrich_current_betting_day_odds(
+                provider,
+                predictions,
+                now=now,
+                max_events=args.market_odds_max_events,
+                provider_id=1,
+                timezone_name="Europe/Bratislava",
+                start_hour=args.betting_day_start_hour,
+            )
     except Exception as exc:
         refresh_error = exc
     finally:
@@ -353,14 +396,22 @@ def main():
         # Partial completed history is checkpointed, but no new prediction
         # feed is published from an incomplete refresh.
         raise refresh_error
-    predictions = predict(model, matches, upcoming)
-    feed = _publish_predictions(prediction_store, prediction_ledger,
-                                predictions, matches, model, report, upcoming)
+    feed = _publish_predictions(
+        prediction_store, prediction_ledger,
+        predictions, matches, model, report, upcoming, odds_report=odds_report,
+    )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     write_json(target, feed)
-    print(json.dumps({"requests": provider.request_count, "upcoming": len(feed["upcoming"]),
-                      "settled": len(feed["results"]), "model": model.version}))
+    print(json.dumps({
+        "requests": provider.request_count,
+        "upcoming": len(feed["upcoming"]),
+        "top_daily": len(feed.get("top_daily_picks", [])),
+        "value": len(feed.get("value_picks", [])),
+        "odds": odds_report or {},
+        "settled": len(feed["results"]),
+        "model": model.version,
+    }))
 
 
 if __name__ == "__main__":

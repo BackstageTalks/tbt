@@ -50,6 +50,14 @@ def main() -> None:
     parser.add_argument("--end", required=True, help="Exclusive UTC end")
     parser.add_argument("--limit", type=int, default=0, help="0 = all matches in range")
     parser.add_argument("--force", action="store_true")
+    parser.add_argument(
+        "--retry-unresolved",
+        action="store_true",
+        help=(
+            "Process only rows with an existing unresolved environment record. "
+            "Default mode processes only rows with no environment record at all."
+        ),
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--diagnostics-limit", type=int, default=100)
     parser.add_argument("--checkpoint-every", type=int, default=250)
@@ -67,6 +75,8 @@ def main() -> None:
         parser.error("Set TBT_WEATHER_RESEARCH=true only for evaluation/noncommercial use")
     if args.limit < 0:
         parser.error("limit must be >= 0")
+    if args.force and args.retry_unresolved:
+        parser.error("--force and --retry-unresolved are mutually exclusive")
 
     start = parse_utc(args.start)
     end = parse_utc(args.end)
@@ -104,6 +114,11 @@ def main() -> None:
         "updated": 0,
         "errors": 0,
         "dry_run": bool(args.dry_run),
+        "resume_mode": (
+            "force_all" if args.force else
+            "retry_unresolved" if args.retry_unresolved else
+            "missing_only"
+        ),
         "weather_policy": "historical_archive_posthoc_research_only",
         "training_eligible_weather": False,
         "resolved_details": [],
@@ -153,13 +168,19 @@ def main() -> None:
             report["inspected"] += 1
             payload = dict(match.provider_payload or {})
             existing = payload.get("_tbt_environment")
-            if (
-                not args.force
-                and isinstance(existing, dict)
-                and existing.get("venue_resolved") is True
-            ):
-                report["already_enriched"] += 1
-                continue
+            has_existing = isinstance(existing, dict) and bool(existing)
+            if not args.force:
+                if args.retry_unresolved:
+                    # Second-pass mode: only retry rows that were actually attempted
+                    # and failed venue resolution. Missing rows wait for the normal pass.
+                    if not has_existing or existing.get("venue_resolved") is True:
+                        report["already_enriched"] += 1
+                        continue
+                elif has_existing:
+                    # Default resume mode never wastes another six-hour run retrying
+                    # rows that already have a resolved OR unresolved environment result.
+                    report["already_enriched"] += 1
+                    continue
 
             detail = {
                 "match_id": match.match_id,
