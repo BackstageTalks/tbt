@@ -11,7 +11,10 @@ from pathlib import Path
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.services.feed import empty_feed, read_feed
-from tbt.services.publication import validate_publication_candidate
+from tbt.services.publication import (
+    validate_market_publication_candidate,
+    validate_publication_candidate,
+)
 
 
 PREDICTION_ASSETS = {"feed.json", "ledger.json"}
@@ -239,6 +242,8 @@ def main() -> None:
             payload = read_feed(cache / "feed.json")
             ledger = json.loads((cache / "ledger.json").read_text(encoding="utf-8"))
             validate_publication_candidate(payload, ledger)
+            if (payload.get("market_selection") or {}).get("publication_schema") == 1:
+                validate_market_publication_candidate(payload, ledger)
             payload = _attach_player_assets(payload, repository)
 
     # If no private prediction candidate exists, overwrite any checked-in stale

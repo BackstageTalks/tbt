@@ -10,7 +10,12 @@ from pathlib import Path
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.services.feed import empty_feed
-from tbt.services.publication import confirm_publication, validate_publication_candidate
+from tbt.services.publication import (
+    confirm_market_publications,
+    confirm_publication,
+    validate_market_publication_candidate,
+    validate_publication_candidate,
+)
 
 
 PREDICTION_ASSETS = {"feed.json", "ledger.json"}
@@ -100,13 +105,25 @@ def main(argv=None):
     if not isinstance(upcoming, list):
         raise ValueError("Invalid deployed feed")
     validate_publication_candidate(deployed_feed, ledger)
+    market_schema = (deployed_feed.get("market_selection") or {}).get("publication_schema")
+    if market_schema == 1:
+        validate_market_publication_candidate(deployed_feed, ledger)
     published_rows = upcoming
     before = sum(1 for row in ledger if isinstance(row, dict) and row.get("issued_at"))
-    confirmed = confirm_publication(ledger, published_rows, datetime.now(timezone.utc))
+    now = datetime.now(timezone.utc)
+    confirmed = confirm_publication(ledger, published_rows, now)
+    market_new = 0
+    if market_schema == 1:
+        confirmed, market_new = confirm_market_publications(confirmed, deployed_feed, now)
     after = sum(1 for row in confirmed if isinstance(row, dict) and row.get("issued_at"))
     write_json(directory / "ledger.json", confirmed)
     store.upload_bundle([directory / "ledger.json"])
-    print(json.dumps({"status": "confirmed", "newly_confirmed": after - before, "published_ids": len(published_rows)}))
+    print(json.dumps({
+        "status": "confirmed",
+        "newly_confirmed": after - before,
+        "market_newly_confirmed": market_new,
+        "published_ids": len(published_rows),
+    }))
 
 
 if __name__ == "__main__":

@@ -21,8 +21,12 @@ from tbt.data.history_snapshot import (
 from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.engine import predict, reconcile_ledger, serving_feed
-from tbt.services.publication import validate_publication_candidate
+from tbt.services.publication import (
+    validate_market_publication_candidate,
+    validate_publication_candidate,
+)
 from tbt.services.market_selection import (
+    annotate_market_publication_candidates,
     attach_market_sections_to_feed,
     enrich_current_betting_day_odds,
 )
@@ -208,6 +212,8 @@ def _load_prediction_ledger(store):
     if not isinstance(ledger, list):
         raise ValueError("Invalid prediction ledger")
     validate_publication_candidate(feed, ledger)
+    if (feed.get("market_selection") or {}).get("publication_schema") == 1:
+        validate_market_publication_candidate(feed, ledger)
     return ledger
 
 def _publish_predictions(
@@ -217,6 +223,11 @@ def _publish_predictions(
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
     now = datetime.now(timezone.utc)
+    # Betting sections have their own publication lifecycle. The Match Winner
+    # probability may already be public before provider odds arrive, so freeze
+    # pending Top 10 / Value candidates independently and confirm them only
+    # after the exact feed is deployed.
+    predictions = annotate_market_publication_candidates(predictions)
     records = reconcile_ledger(ledger, predictions, matches, now)
     feed = serving_feed(records, model, matches, report, upcoming, now)
     # Market presentation fields are derived from current odds-backed predictions
