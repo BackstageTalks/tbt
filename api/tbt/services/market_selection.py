@@ -401,6 +401,7 @@ def select_market_sections(
     predictions: list[dict[str, Any]],
     *,
     ace_picks: list[dict[str, Any]] | None = None,
+    sg_picks: list[dict[str, Any]] | None = None,
     top_daily_limit: int = 10,
     top_daily_min_probability: float = 0.60,
     top_daily_min_edge: float = 0.0,
@@ -455,12 +456,24 @@ def select_market_sections(
         "top_daily_picks": daily,
         "value_picks": value,
         "ace_picks": deepcopy(ace_picks or []),
-        "sg_picks": [],
+        "sg_picks": deepcopy(sg_picks or []),
         "market_selection": {
-            "schema": 2,
-            "current_outputs": ["match_winner"] + (["aces_projection", "double_faults_projection"] if ace_picks else []),
-            "pending_outputs": ["aces_odds", "double_faults_odds", "sets", "games"],
+            "schema": 3,
+            "current_outputs": (
+                ["match_winner"]
+                + (["aces_projection", "double_faults_projection"] if ace_picks else [])
+                + (["sets_projection", "games_projection"] if sg_picks else [])
+            ),
+            "pending_outputs": ["aces_odds", "double_faults_odds", "sets_odds", "games_odds"],
+            # Legacy flag remains true because Match Winner / Top10 / Value are
+            # odds-backed. The explicit lists below prevent projection-only
+            # Ace/S-G outputs from being mistaken for priced selections.
             "odds_backed": True,
+            "odds_backed_outputs": ["match_winner"],
+            "projection_only_outputs": (
+                (["aces_projection", "double_faults_projection"] if ace_picks else [])
+                + (["sets_projection", "games_projection"] if sg_picks else [])
+            ),
             "top_daily_rule": {
                 "limit": int(top_daily_limit),
                 "min_probability": top_daily_min_probability,
@@ -560,6 +573,8 @@ def attach_market_sections_to_feed(
     *,
     ace_picks: list[dict[str, Any]] | None = None,
     ace_report: dict[str, Any] | None = None,
+    sg_picks: list[dict[str, Any]] | None = None,
+    sg_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach live market presentation without changing prediction commitments."""
     result = deepcopy(feed)
@@ -579,7 +594,9 @@ def attach_market_sections_to_feed(
         upcoming.append(row)
     result["upcoming"] = upcoming
 
-    sections = select_market_sections(enriched_predictions, ace_picks=ace_picks)
+    sections = select_market_sections(
+        enriched_predictions, ace_picks=ace_picks, sg_picks=sg_picks
+    )
     result.update(sections)
     result["market_selection"] = {
         **result.get("market_selection", {}),
@@ -594,5 +611,10 @@ def attach_market_sections_to_feed(
         result["market_selection"] = {
             **result.get("market_selection", {}),
             "ace_projection_report": deepcopy(ace_report),
+        }
+    if sg_report is not None:
+        result["market_selection"] = {
+            **result.get("market_selection", {}),
+            "sg_projection_report": deepcopy(sg_report),
         }
     return result

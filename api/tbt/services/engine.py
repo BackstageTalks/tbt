@@ -51,6 +51,7 @@ def predict(model, history, upcoming, now=None):
         rows.append({"id": match.match_id, "event_id": event_id(match), "tour": match.tour.upper(),
             "scheduled_at": match.scheduled_at.isoformat(), "tournament": match.tournament,
             "surface": match.surface, "round": match.round_name,
+            "best_of": match.best_of,
             "competition": match.tournament_level or "unknown", "quality": coverage(builder, match),
             "player1": {
                 "id": match.player1_id, "name": match.player1_name,
@@ -234,6 +235,10 @@ def reconcile_ledger(ledger, predictions, history, now=None):
             raise ValueError("Prediction identity mismatch")
         _merge_market_publication_candidates(existing, row)
         if existing.get("result") is None:
+            # Safe fixture metadata may be filled after the original probability
+            # commitment. This never changes the published winner probability.
+            if existing.get("best_of") in (None, "") and row.get("best_of") in {3, 5}:
+                existing["best_of"] = row.get("best_of")
             existing.setdefault("original_scheduled_at", existing["scheduled_at"])
             existing["scheduled_at"] = row["scheduled_at"]
     completed = {event_id(m): m for m in history if m.is_completed}
