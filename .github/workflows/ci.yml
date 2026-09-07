@@ -66,8 +66,11 @@ jobs:
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' && vars.TBT_DEPLOY_ENABLED == 'true')
+    # Web/API deployment only reads committed prediction/player-asset releases.
+    # It must not queue behind long-running history/environment writers.
+    # Keep production deployments serialized only against other deployments.
     concurrency:
-      group: tbt-history-data-writer
+      group: tbt-production-deploy
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 45
