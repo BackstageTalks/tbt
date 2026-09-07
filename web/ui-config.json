@@ -1806,5 +1806,34 @@
       "sport": "football",
       "href": "/btts"
     }
+  },
+  "assets": {
+    "favicon": "/assets/blinq_favi.png",
+    "background": "/assets/blinq_background.png",
+    "player_fallback": {
+      "atp": "/assets/missing_foto_m.png",
+      "wta": "/assets/missing_foto_w.png"
+    },
+    "account_avatars": {
+      "rookie": {
+        "m": "/assets/rookie_m.webp",
+        "w": "/assets/rookie_w.webp"
+      },
+      "pro": {
+        "m": "/assets/pro_m.webp",
+        "w": "/assets/pro_w.webp"
+      },
+      "elite": {
+        "m": "/assets/elite_m.webp",
+        "w": "/assets/elite_w.webp"
+      },
+      "legend": {
+        "m": "/assets/legend_m.webp",
+        "w": "/assets/legend_w.webp"
+      },
+      "goat": {
+        "default": "/assets/goat.webp"
+      }
+    }
   }
 }
