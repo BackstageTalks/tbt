@@ -400,6 +400,7 @@ def _market_card(row: dict[str, Any]) -> dict[str, Any] | None:
 def select_market_sections(
     predictions: list[dict[str, Any]],
     *,
+    ace_picks: list[dict[str, Any]] | None = None,
     top_daily_limit: int = 10,
     top_daily_min_probability: float = 0.60,
     top_daily_min_edge: float = 0.0,
@@ -453,12 +454,12 @@ def select_market_sections(
     return {
         "top_daily_picks": daily,
         "value_picks": value,
-        "ace_picks": [],
+        "ace_picks": deepcopy(ace_picks or []),
         "sg_picks": [],
         "market_selection": {
-            "schema": 1,
-            "current_outputs": ["match_winner"],
-            "pending_outputs": ["aces", "double_faults", "sets", "games"],
+            "schema": 2,
+            "current_outputs": ["match_winner"] + (["aces_projection", "double_faults_projection"] if ace_picks else []),
+            "pending_outputs": ["aces_odds", "double_faults_odds", "sets", "games"],
             "odds_backed": True,
             "top_daily_rule": {
                 "limit": int(top_daily_limit),
@@ -556,6 +557,9 @@ def attach_market_sections_to_feed(
     feed: dict[str, Any],
     enriched_predictions: list[dict[str, Any]],
     odds_report: dict[str, Any] | None = None,
+    *,
+    ace_picks: list[dict[str, Any]] | None = None,
+    ace_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach live market presentation without changing prediction commitments."""
     result = deepcopy(feed)
@@ -575,7 +579,7 @@ def attach_market_sections_to_feed(
         upcoming.append(row)
     result["upcoming"] = upcoming
 
-    sections = select_market_sections(enriched_predictions)
+    sections = select_market_sections(enriched_predictions, ace_picks=ace_picks)
     result.update(sections)
     result["market_selection"] = {
         **result.get("market_selection", {}),
@@ -585,5 +589,10 @@ def attach_market_sections_to_feed(
         result["market_selection"] = {
             **result.get("market_selection", {}),
             "odds_report": deepcopy(odds_report),
+        }
+    if ace_report is not None:
+        result["market_selection"] = {
+            **result.get("market_selection", {}),
+            "ace_projection_report": deepcopy(ace_report),
         }
     return result

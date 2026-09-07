@@ -8,6 +8,9 @@ from ..errors import ProviderError
 from ..providers.statistics import parse_statistics
 
 
+STATISTICS_SCHEMA_VERSION = 2
+
+
 class StatisticsEnricher:
     """Reuse settled statistics and verified identity to avoid redundant calls."""
 
@@ -40,7 +43,7 @@ class StatisticsEnricher:
         if event_id is None or not str(event_id).isascii() or not str(event_id).isdigit():
             return "missing_event_id"
         marker = raw.get("_tbt_statistics", {})
-        if marker.get("schema") == 1 and marker.get("event_id") == str(event_id):
+        if marker.get("schema") == STATISTICS_SCHEMA_VERSION and marker.get("event_id") == str(event_id):
             checked = datetime.fromisoformat(marker["fetched_at"])
             # Completed historical statistics persist in Parquet, not just the
             # ephemeral runner cache. Missing coverage gets a monthly retry.
@@ -64,7 +67,7 @@ class StatisticsEnricher:
         stats = parse_statistics(payload, home_is_player1=home == match.player1_id)
         match.stats = {**match.stats, **stats}
         match.provider_payload = {**raw, "_tbt_statistics": {
-            "schema": 1, "event_id": str(event_id), "source": "tennisapi1",
+            "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id), "source": "tennisapi1",
             "fetched_at": datetime.now(timezone.utc).isoformat(),
             "status": "available" if stats else "unavailable",
         }}
