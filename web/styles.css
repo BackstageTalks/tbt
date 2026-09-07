@@ -285,3 +285,28 @@ body{background:var(--dash-bg)}
 @media (max-width:900px){.data-depth-row{font-size:9px}}
 
 .betting-row{display:flex;align-items:center;justify-content:center;gap:8px;margin:6px 0 0;color:#8f9db0;font-size:7px;font-weight:800;white-space:nowrap}.betting-row[hidden]{display:none}.betting-row .betting-edge{color:#62dc85}.betting-row .betting-ev{color:#56ccea}.dialog-market-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.dialog-market-grid span{border:1px solid #26364b;border-radius:8px;padding:9px;color:#8190a4}.dialog-market-grid strong{display:block;color:#e8eef8;margin-top:3px;font-size:14px}@media(max-width:700px){.dialog-market-grid{grid-template-columns:1fr}}
+
+/* Results workspace */
+.results-filter-bar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 14px;padding:12px;border:1px solid #1d2a3b;border-radius:11px;background:#09111c}
+.results-filter-bar label{display:grid;gap:6px;color:#7f8da0;font-size:9px;text-transform:uppercase;letter-spacing:.08em}
+.results-filter-bar select{height:38px;border:1px solid #263347;border-radius:8px;background:#080f19;color:#eaf0f8;padding:0 10px;outline:none;text-transform:none;letter-spacing:0}
+.results-filter-bar select:focus{border-color:#6448d8}
+.results-section-head>div:first-child{margin-bottom:10px}
+.results-section-head h3{margin-bottom:3px}
+.results-section-head p{margin:0;color:#728096;font-size:10px;line-height:1.55}
+.results-table-wrap{margin-top:10px}
+.results-table td,.results-table th{white-space:nowrap}
+.results-table td:nth-child(3){white-space:normal;min-width:220px}
+.results-table td small{display:block;margin-top:3px;color:#708096;font-size:9px}
+.result-tag{display:inline-flex;align-items:center;margin:2px 4px 2px 0;padding:3px 6px;border:1px solid #2a374a;border-radius:999px;background:#101927;color:#9faabc;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.result-tag.prime{border-color:#315d43;color:#79e78a;background:#0d1c15}
+.result-tag.top_daily{border-color:#4f4083;color:#bda8ff;background:#16112a}
+.result-tag.value{border-color:#3d5f79;color:#8bd7ff;background:#0d1922}
+.result-tag.ace,.result-tag.double_faults{border-color:#6d4d2f;color:#ffc982;background:#20160d}
+.result-tag.sets,.result-tag.games{border-color:#355b5d;color:#91e5df;background:#0d1d1e}
+.results-limit-note{padding:10px 2px 0;color:#6e7d91;font-size:9px}
+@media(max-width:1000px){.results-filter-bar{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:620px){.results-filter-bar{grid-template-columns:1fr}}
+.results-filter-bar + .metric-cards{grid-template-columns:repeat(6,minmax(0,1fr));margin-bottom:14px}
+@media(max-width:1400px){.results-filter-bar + .metric-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){.results-filter-bar + .metric-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}

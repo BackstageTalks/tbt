@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'} };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   const pct = value => `${(Number(value || 0) * (Number(value || 0) <= 1 ? 100 : 1)).toFixed(1)}%`;
@@ -438,7 +438,57 @@
   function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; if(route==='admin') state.previewPlan=null; state.route=route; state.page=0; const meta=routeMeta[route]; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; $('predictionsView').hidden=route!=='predictions'; $('routePanel').hidden=route==='predictions'; renderNavigation(); if(route==='predictions'){renderPredictions();renderMarketSections();applyAccessStates();} else renderRoute(route); if(push) history.replaceState(null,'',`#${route}`); }
 
   function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
-  function renderResults(){ const rows=state.feed.results||[]; const html=rows.slice(0,100).map(r=>{const p1=r.player1||{},p2=r.player2||{},winner=r.result?.winner_id,correct=r.result?.correct;return `<div class="result-row"><small>${fmtDate(r.scheduled_at)} · ${escapeHtml(r.tour||'')}</small><strong>${escapeHtml(p1.name||'Player 1')} vs ${escapeHtml(p2.name||'Player 2')}</strong><span>Winner: ${escapeHtml(winner===p1.id?p1.name:winner===p2.id?p2.name:'—')}</span><b class="${correct?'correct':'wrong'}">${correct===true?'✓ Correct':correct===false?'× Miss':'—'}</b></div>`}).join(''); return html||'<div class="state-card">No settled published predictions are available yet.</div>'; }
+  function issuedMarketPublications(row){
+    return (Array.isArray(row?.market_publications)?row.market_publications:[]).filter(p=>p&&p.issued_at&&p.result&&!p.excluded_reason);
+  }
+  function resultTags(row){
+    const tags=[];const threshold=Number(state.ui?.market_rules?.prime?.min_win_probability)||.70;
+    if(Number(row?.confidence)>=threshold)tags.push('prime');
+    issuedMarketPublications(row).forEach(p=>{const section=String(p.section||'');if(section&&!tags.includes(section))tags.push(section);});
+    return tags;
+  }
+  function resultCategoryLabel(value){return ({all:'All published',prime:'Prime',top_daily:'Top 10 Daily',value:'Value',ace:'Aces',double_faults:'Double Faults',sets:'Sets',games:'Games'})[value]||String(value||'').replaceAll('_',' ');}
+  function resultPublication(row,category='all'){
+    const pubs=issuedMarketPublications(row);
+    const filtered=['top_daily','value','ace','double_faults','sets','games'].includes(category)?pubs.filter(p=>p.section===category):pubs;
+    return filtered.sort((a,b)=>new Date(a.issued_at)-new Date(b.issued_at))[0]||null;
+  }
+  function filteredResults(){
+    const filters=state.resultsFilters||{},now=Date.now(),windowDays=Number(filters.window);
+    return (state.feed.results||[]).filter(row=>{
+      if(filters.tour&&String(row?.tour||'').toUpperCase()!==filters.tour)return false;
+      if(filters.surface&&String(row?.surface||'').toLowerCase()!==filters.surface)return false;
+      if(Number.isFinite(windowDays)&&windowDays>0){const ts=new Date(row?.scheduled_at||0).getTime();if(!Number.isFinite(ts)||ts<now-windowDays*86400000)return false;}
+      const category=filters.category||'all';if(category==='prime'&&!resultTags(row).includes('prime'))return false;
+      if(['top_daily','value','ace','double_faults','sets','games'].includes(category)&&!resultTags(row).includes(category))return false;
+      return typeof row?.result?.correct==='boolean';
+    });
+  }
+  function renderResultsFilters(){
+    const rows=state.feed.results||[],filters=state.resultsFilters||{};
+    const tours=[...new Set(rows.map(r=>String(r?.tour||'').toUpperCase()).filter(Boolean))].sort();
+    const surfaces=[...new Set(rows.map(r=>String(r?.surface||'').toLowerCase()).filter(Boolean))].sort();
+    const option=(value,label,selected)=>`<option value="${escapeHtml(value)}"${value===selected?' selected':''}>${escapeHtml(label)}</option>`;
+    return `<div class="results-filter-bar"><label>Category<select id="resultsCategory">${['all','prime','top_daily','value','ace','double_faults','sets','games'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select></label><label>Tour<select id="resultsTour">${option('','All Tours',filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select></label><label>Surface<select id="resultsSurface">${option('','All Surfaces',filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select></label><label>Period<select id="resultsWindow">${[['all','All time'],['7','7 days'],['30','30 days'],['90','90 days']].map(([v,l])=>option(v,l,filters.window||'all')).join('')}</select></label></div>`;
+  }
+  function localResultMetrics(rows,category){
+    const coreWins=rows.filter(r=>r?.result?.correct===true).length;
+    const publications=rows.map(r=>resultPublication(r,category)).filter(Boolean);
+    const unique=new Map();publications.forEach(p=>{const key=String(p.selection_key||p.publication_key||'');if(!key)return;if(!unique.has(key)||new Date(p.issued_at)<new Date(unique.get(key).issued_at))unique.set(key,p);});
+    const bets=[...unique.values()].filter(p=>p?.result&&typeof p.result.correct==='boolean');
+    const betWins=bets.filter(p=>p.result.correct===true).length,profit=bets.reduce((sum,p)=>sum+Number(p.result.profit_units||0),0),stake=bets.reduce((sum,p)=>sum+Number(p.result.staked_units||0),0),odds=bets.map(p=>Number(p.odds)).filter(Number.isFinite);
+    const categoryIsBet=['top_daily','value','ace','double_faults','sets','games'].includes(category);const wins=categoryIsBet?betWins:coreWins;const sample=categoryIsBet?bets.length:rows.length;
+    return {wins,losses:Math.max(0,sample-wins),sample,hit:sample?wins/sample:null,avgOdds:odds.length?odds.reduce((a,b)=>a+b,0)/odds.length:null,roi:stake?profit/stake:null,profit,oddsSample:bets.length};
+  }
+  function renderResults(){
+    const rows=filteredResults(),category=state.resultsFilters?.category||'all';
+    if(!rows.length)return '<div class="state-card">No settled published predictions match these filters yet.</div>';
+    const body=rows.slice(0,250).map(r=>{const p1=r.player1||{},p2=r.player2||{},publication=resultPublication(r,category),marketMode=Boolean(publication&&['top_daily','value','ace','double_faults','sets','games'].includes(category));const correct=marketMode?publication?.result?.correct:r?.result?.correct;const pickId=marketMode?publication?.selection_id:r?.winner_id;const pickName=marketMode?(publication?.selection||'—'):(pickId===p1.id?p1.name:pickId===p2.id?p2.name:'—');const probability=marketMode?Number(publication?.model_probability):Number(r?.confidence);const odds=Number(publication?.odds),units=Number(publication?.result?.profit_units);const tags=resultTags(r).map(t=>`<span class="result-tag ${escapeHtml(t)}">${escapeHtml(resultCategoryLabel(t))}</span>`).join('');return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags||'<span class="result-tag">Model</span>'}</td><td><strong>${escapeHtml(p1.name||'Player 1')}</strong><small>vs ${escapeHtml(p2.name||'Player 2')} · ${escapeHtml(r.tournament||'')}</small></td><td>${escapeHtml(pickName)}</td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td><b class="${correct?'correct':'wrong'}">${correct===true?'✓ WON':correct===false?'× LOST':'—'}</b></td><td class="${Number.isFinite(units)&&units>=0?'correct':'wrong'}">${Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`}).join('');
+    return `<div class="admin-table-wrap results-table-wrap"><table class="admin-analytics-table results-table"><thead><tr><th>Date</th><th>Category</th><th>Match</th><th>Pick</th><th>Probability</th><th>Odds</th><th>Result</th><th>Units</th></tr></thead><tbody>${body}</tbody></table></div>${rows.length>250?`<div class="results-limit-note">Showing latest 250 of ${rows.length} matching settled rows in the serving snapshot.</div>`:''}`;
+  }
+  function wireResultsFilters(){
+    [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface'],['resultsWindow','window']].forEach(([id,key])=>{const el=$(id);if(el)el.onchange=()=>{state.resultsFilters[key]=el.value;renderRoute('results');};});
+  }
 
   function planSelectOptions(selected='', includeBlank=true){
     const rows=Object.entries(state.ui?.plans||{}).filter(([id,p])=>!['trial','expired'].includes(id)&&(p.enabled!==false||id===selected));
@@ -705,9 +755,8 @@
     return `<div class="admin-table-wrap picks-table-wrap"><table class="admin-analytics-table picks-table"><thead><tr><th>Date</th><th>Match</th><th>Tournament</th><th>Pick</th><th>Probability</th><th>Odds</th><th>Edge</th><th>EV</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }
   function resultsSummary(){
-    const rows=state.feed.results||[],performance=state.feed.performance||{}; const correct=rows.filter(r=>r?.result?.correct===true).length,settled=rows.filter(r=>typeof r?.result?.correct==='boolean').length;
-    const hit=settled?correct/settled:null; const roi=performance.roi??performance.ROI; const units=performance.units??performance.profit_units;
-    return metricCards([['Settled',String(settled),'published selections'],['Hit rate',hit==null?'—':pct(hit),'correct / settled'],['ROI',roi==null?'—':pct(roi),'requires settled odds'],['Units',units==null?'—':number(units,2),'requires stake model']]);
+    const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category);
+    return metricCards([['Record',`${m.wins}-${m.losses}`,'wins - losses'],['Hit Rate',m.hit==null?'—':pct(m.hit),'filtered settled sample'],['Avg Odds',m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?`${m.oddsSample} odds-backed picks`:'no issued odds'],['ROI',m.roi==null?'—':pct(m.roi),'flat 1u on issued odds'],['Units',m.oddsSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—','profit · flat 1u stake'],['Sample',String(m.sample),'settled published rows']]);
   }
 
   function renderRoute(route){
@@ -718,14 +767,14 @@
     else if(route==='value'){const r=state.ui?.market_rules?.value||{};body=`<div class="route-sub route-rules"><strong>Value rule</strong><span>Odds &gt; ${Number(r.min_odds||1.7).toFixed(2)} · max implied-probability gap ${Math.round(Number(r.max_implied_probability_gap||.15)*100)}% · ranked by edge.</span></div>${genericTable(marketRows('value'),'value')}`;}
     else if(route==='ace'){body=`<div class="route-sub route-rules"><strong>Aces / Double Faults</strong><span>Top ${Number(state.ui?.market_rules?.ace?.limit)||10} published selections.</span></div>${genericTable(marketRows('ace').slice(0,Number(state.ui?.market_rules?.ace?.limit)||10),'ace')}`;}
     else if(route==='sg'){body=`<div class="route-sub route-rules"><strong>Sets / Games</strong><span>Top ${Number(state.ui?.market_rules?.sg?.limit)||10} published selections.</span></div>${genericTable(marketRows('sg').slice(0,Number(state.ui?.market_rules?.sg?.limit)||10),'sg')}`;}
-    else if(route==='results'){body=resultsSummary()+`<div class="route-sub"><h3>Settled predictions</h3>${renderResults()}</div>`;}
+    else if(route==='results'){body=renderResultsFilters()+resultsSummary()+`<div class="route-sub results-section-head"><div><h3>Settled predictions</h3><p>Only successfully published pre-match records are graded. ROI uses the odds snapshot that was actually published and a flat 1u stake.</p></div>${renderResults()}</div>`;}
     if(route==='tournaments'){const names=[...new Set((feed.upcoming||[]).map(x=>x.tournament).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):'No upcoming tournament coverage is currently published.'}</div>`;}
     else if(route==='players'){const names=[...new Set((feed.upcoming||[]).flatMap(x=>[x.player1?.name,x.player2?.name]).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):'No upcoming players are currently published.'}</div>`;}
     else if(route==='stats'){body=metricCards([['Settled predictions',String(p.n??0),'Published and scored'],['Accuracy',p.accuracy!=null?pct(p.accuracy):'—','Observed results'],['Log loss',number(p.log_loss),'Lower is better'],['Brier score',number(p.brier_score),'Probability quality']])+`<div class="route-sub"><h3>Results</h3>${renderResults()}</div>`;}
     else if(route==='model'||route==='backtests'){const h=report.holdout||{},delta=report.delta_vs_elo||{};body=metricCards([['Model',String(feed.model?.version||'—'),'Production artifact'],['Holdout n',String(h.n??'—'),'Chronological holdout'],['Holdout accuracy',h.accuracy!=null?pct(h.accuracy):'—','Evaluation report'],['Δ log loss vs Elo',delta.log_loss!=null?number(delta.log_loss):'—','Negative is better']])+`<div class="route-sub static-copy"><h3>Data window</h3><p>${escapeHtml(history.start?fmtDate(history.start):'—')} → ${escapeHtml(history.end?fmtDate(history.end):'—')} · ${escapeHtml(String(history.matches??'—'))} historical matches in the current serving metadata.</p><p>No result here is presented as a guarantee. Holdout metrics describe a specific historical evaluation period.</p></div>`;}
     else if(route==='account'){const a=feed.account||{};const adToggle=a.hide_ads_allowed?`<label class="preference-toggle"><span><strong>Hide advertisements</strong><small>Replace external ads with RSS/news, repo images or BlinQ content. Layout stays fixed.</small></span><input id="hideAdsToggle" type="checkbox" ${a.hide_ads?'checked':''}></label>`:'';body=`<div class="account-grid"><form id="profileForm" class="account-panel"><div class="account-access-summary"><small>${escapeHtml(a.plan_label||a.plan||'Member')}</small><strong>${escapeHtml(String(a.status||'active').toUpperCase())}</strong><span>${a.expires_at?`until ${escapeHtml(fmtDate(a.expires_at))}`:a.status==='lifetime'?'no expiry':'managed manually'}</span></div><label>Email<input value="${escapeHtml(a.email||'')}" disabled /></label><label>Display name<input id="profileDisplayName" maxlength="80" value="${escapeHtml(a.name||'')}" /></label>${adToggle}<p id="profileMessage" class="form-message"></p><div class="account-actions"><button class="btn btn-primary" type="submit">Save profile</button><button class="btn btn-ghost" id="passwordResetButton" type="button">Reset password</button><button class="btn btn-ghost" id="logoutButton" type="button">Sign out</button></div></form><aside class="account-side"><small class="trial-eyebrow">BLINQ MEMBERS</small><strong>${escapeHtml(a.name||'BlinQ Member')}</strong><p>${escapeHtml(a.email||'')}</p><p>Role: ${escapeHtml(a.role||'user')} · Plan: ${escapeHtml(a.plan_label||a.plan||'—')}</p><p>Payments are external; access is paired to the account by an administrator.</p></aside></div><div class="route-sub"><h3>Available plans</h3>${renderPlanCardsForAccount()}</div>`;}
     else {const copy={how_blinq_works:'BlinQ processes point-in-time tennis history, builds model features without using future results, publishes pre-match probabilities, and later evaluates those same published records against real outcomes.',methodology:'The core rules are chronological evaluation, immutable first-published probabilities, explicit missing-data handling, and honest probability metrics. A prediction is informative only when it existed before the match.',model_data:`Current serving metadata reports ${history.matches??'—'} historical matches. The web application reads only the authenticated published serving feed; it does not fabricate missing tennis data.`,faq:'Probabilities are not certainties. Confidence is derived from the model probability, and performance should always be read together with sample size and coverage.',responsible_use:'Use BlinQ as analytical information. Do not treat any probability as a guaranteed outcome, and do not infer certainty from a high-confidence label.'};body=`<div class="static-copy"><p>${escapeHtml(copy[route]||'This section is available in the BlinQ workspace.')}</p></div>`;}
-    host.innerHTML=`<div class="route-card"><h2>${escapeHtml(routeMeta[route][1])}</h2><p>${escapeHtml(routeMeta[route][2])}</p>${body}</div>`; if(route==='account')wireAccount(); applyAccessStates(host);
+    host.innerHTML=`<div class="route-card"><h2>${escapeHtml(routeMeta[route][1])}</h2><p>${escapeHtml(routeMeta[route][2])}</p>${body}</div>`; if(route==='account')wireAccount(); if(route==='results')wireResultsFilters(); applyAccessStates(host);
   }
 
   function wireAccount(){
