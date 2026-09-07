@@ -283,3 +283,5 @@ body{background:var(--dash-bg)}
 .player-rank{min-height:12px;letter-spacing:.01em}
 .data-depth-row{margin:-2px 0 8px;text-align:center;color:#718094;font-size:8px;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 @media (max-width:900px){.data-depth-row{font-size:9px}}
+
+.betting-row{display:flex;align-items:center;justify-content:center;gap:8px;margin:6px 0 0;color:#8f9db0;font-size:7px;font-weight:800;white-space:nowrap}.betting-row[hidden]{display:none}.betting-row .betting-edge{color:#62dc85}.betting-row .betting-ev{color:#56ccea}.dialog-market-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.dialog-market-grid span{border:1px solid #26364b;border-radius:8px;padding:9px;color:#8190a4}.dialog-market-grid strong{display:block;color:#e8eef8;margin-top:3px;font-size:14px}@media(max-width:700px){.dialog-market-grid{grid-template-columns:1fr}}

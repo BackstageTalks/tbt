@@ -1773,7 +1773,13 @@
         "sets",
         "games"
       ],
-      "requires_odds": true
+      "requires_odds": true,
+      "min_probability": 0.6,
+      "min_edge": 0.0,
+      "min_data_depth": 0.3,
+      "timezone": "Europe/Bratislava",
+      "betting_day_start_hour": 6,
+      "sort": "expected_value_desc_then_probability_then_data_depth"
     },
     "value": {
       "limit": null,
