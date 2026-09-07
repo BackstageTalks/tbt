@@ -21,6 +21,44 @@ from tbt.services.publication import (
 PREDICTION_ASSETS = {"feed.json", "ledger.json"}
 
 
+_PLAYER_PRESENTATION_KEYS = {
+    "rank",
+    "country_code",
+    "country_code3",
+    "country_name",
+    "photo_url",
+}
+
+
+def _publication_candidate_view(value):
+    """Return a comparison-safe view of a deployed/private feed.
+
+    ``prepare_feed.py`` may attach presentation-only player metadata after the
+    private prediction candidate has already been validated against the ledger.
+    Those fields must not make post-deploy issuance confirmation fail, while all
+    non-presentation feed content (including generated_at, picks, odds sections,
+    model metadata and results) remains exact-match protected.
+    """
+    if isinstance(value, list):
+        return [_publication_candidate_view(item) for item in value]
+    if not isinstance(value, dict):
+        return value
+
+    result = {}
+    for key, item in value.items():
+        if key == "player_assets":
+            continue
+        if key in ("player1", "player2") and isinstance(item, dict):
+            result[key] = {
+                player_key: _publication_candidate_view(player_value)
+                for player_key, player_value in item.items()
+                if player_key not in _PLAYER_PRESENTATION_KEYS
+            }
+            continue
+        result[key] = _publication_candidate_view(item)
+    return result
+
+
 def read_json(path: Path, default):
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else default
 
@@ -95,7 +133,7 @@ def main(argv=None):
 
     if deployed_feed is None:
         deployed_feed = feed
-    elif deployed_feed != feed:
+    elif _publication_candidate_view(deployed_feed) != _publication_candidate_view(feed):
         raise RuntimeError(
             "Deployed feed does not match the current private publication candidate; "
             "refusing to confirm issuance"
