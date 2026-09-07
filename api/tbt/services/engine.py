@@ -52,8 +52,14 @@ def predict(model, history, upcoming, now=None):
             "scheduled_at": match.scheduled_at.isoformat(), "tournament": match.tournament,
             "surface": match.surface, "round": match.round_name,
             "competition": match.tournament_level or "unknown", "quality": coverage(builder, match),
-            "player1": {"id": match.player1_id, "name": match.player1_name, "probability": p},
-            "player2": {"id": match.player2_id, "name": match.player2_name, "probability": 1 - p},
+            "player1": {
+                "id": match.player1_id, "name": match.player1_name,
+                "probability": p, "rank": match.player1_rank,
+            },
+            "player2": {
+                "id": match.player2_id, "name": match.player2_name,
+                "probability": 1 - p, "rank": match.player2_rank,
+            },
             "winner_id": winner, "confidence": max(p, 1 - p), "data_depth": f["data_depth"],
             "stats_available": bool(f["stats_known_both"]), "signals": signals,
             "model_version": model.version, "created_at": now.isoformat(),

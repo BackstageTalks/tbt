@@ -12,6 +12,7 @@ import httpx
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+ENVIRONMENT_SCHEMA_VERSION = 2
 
 
 class OpenMeteoBudgetExceeded(RuntimeError):
@@ -95,7 +96,19 @@ class OpenMeteoClient:
 
         parts = [p.strip() for p in query.split(",") if p.strip()]
         name = parts[0]
-        country_hint = parts[1] if len(parts) >= 2 else ""
+        qualifiers = parts[1:]
+        country_hint = ""
+        region_hint = ""
+        if qualifiers:
+            if len(qualifiers[-1]) == 2 and qualifiers[-1].isalpha():
+                country_hint = qualifiers[-1]
+                if len(qualifiers) >= 2:
+                    region_hint = qualifiers[-2]
+            elif len(qualifiers) == 1:
+                country_hint = qualifiers[0]
+            else:
+                country_hint = qualifiers[-1]
+                region_hint = qualifiers[-2]
 
         params: dict[str, Any] = {
             "name": name,
@@ -122,6 +135,14 @@ class OpenMeteoClient:
                     _normal(row.get("country_code")),
                 }
                 if _normal(country_hint) not in country_values:
+                    continue
+            if region_hint:
+                region_values = {
+                    _normal(row.get("admin1")),
+                    _normal(row.get("admin2")),
+                    _normal(row.get("admin3")),
+                }
+                if _normal(region_hint) not in region_values:
                     continue
             exact.append(row)
 
@@ -250,7 +271,41 @@ _GENERIC_TOURNAMENT_TOKENS = {
     "atp", "wta", "men", "women", "mens", "womens", "qualifying",
     "qualification", "singles", "doubles", "open", "grand slam",
 }
-_LOCATION_ALIASES = {"winston salem": "Winston-Salem"}
+_LOCATION_ALIASES = {
+    "winston salem": "Winston-Salem, North Carolina, US",
+    "winston-salem": "Winston-Salem, North Carolina, US",
+    "miami": "Miami, Florida, US",
+    "miami usa": "Miami, Florida, US",
+    "indian wells": "Indian Wells, California, US",
+    "indian wells usa": "Indian Wells, California, US",
+    "us open": "New York, New York, US",
+    "wimbledon": "London, England, GB",
+    "cincinnati": "Mason, Ohio, US",
+    "dubai": "Dubai, AE",
+    "eastbourne": "Eastbourne, England, GB",
+    "adelaide 2": "Adelaide, South Australia, AU",
+    "adelaide": "Adelaide, South Australia, AU",
+    "washington": "Washington, District of Columbia, US",
+    "kursumlijska banja": "Kuršumlijska Banja, RS",
+}
+
+
+def _tournament_alias(value: Any) -> str | None:
+    """Resolve only high-confidence tennis tournament/location aliases.
+
+    Provider tournament labels frequently add gender/qualifying/ITF suffixes.
+    Matching is deliberately conservative and only covers known location names;
+    unknown labels still go through the normal fail-closed resolver.
+    """
+    text = _normal(_clean_location_token(value))
+    if not text:
+        return None
+    # Exact/starts-with aliases cover labels such as ``US Open, Men`` and
+    # ``Kursumlijska Banja, Singles Qualifying, M-ITF-SRB-...``.
+    for key in sorted(_LOCATION_ALIASES, key=len, reverse=True):
+        if text == key or text.startswith(key + ",") or text.startswith(key + " "):
+            return _LOCATION_ALIASES[key]
+    return None
 
 
 def _clean_location_token(value: Any) -> str:
@@ -343,6 +398,9 @@ def location_candidates(
         tournament,
         unique.get("name"),
     ):
+        alias = _tournament_alias(source_name)
+        if alias:
+            add(alias)
         for parsed in _location_from_tournament_name(source_name):
             add(parsed)
 
@@ -376,6 +434,7 @@ def environment_payload(
 ) -> dict[str, Any]:
     venue, query = resolve_match_venue(client, provider_payload, tournament)
     base = {
+        "schema_version": ENVIRONMENT_SCHEMA_VERSION,
         "venue_resolved": venue is not None,
         "location_query": query,
         "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
