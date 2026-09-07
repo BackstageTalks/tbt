@@ -42,6 +42,41 @@ def test_unknown_and_missing_are_not_zero():
         parse_statistics(raw, home_is_player1=True)
 
 
+
+
+def test_valid_statistics_with_only_unsupported_fields_is_cached_as_unavailable(match_factory, tmp_path):
+    class Provider:
+        calls = []
+        def _get(self, path, **kwargs):
+            self.calls.append(path)
+            if path.endswith("/statistics"):
+                return {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+                    {"name": "Games won", "home": "12", "away": "9"},
+                    {"key": "totalPointsWon", "home": "67", "away": "61"},
+                ]}]}]}
+            return {"event": {
+                "homeTeam": {"id": "A"}, "awayTeam": {"id": "B"},
+                "status": {"type": "finished"},
+            }}
+
+    provider = Provider()
+    match = match_factory("a", "A", "B", "A")
+    match.provider_payload = {"id": "123"}
+    enricher = StatisticsEnricher(provider, tmp_path / "unsupported.sqlite")
+
+    assert enricher.enrich(match) == "unavailable"
+    marker = match.provider_payload["_tbt_statistics"]
+    assert marker["status"] == "unavailable"
+    assert marker["reason"] == "no_supported_fields"
+    assert marker["unsupported_keys"] == ["Games won", "totalPointsWon"]
+    assert match.stats == {}
+
+    # A canonical unavailable marker is retried monthly, not on every run.
+    assert enricher.enrich(match) == "cached"
+    assert provider.calls == ["/api/tennis/event/123", "/api/tennis/event/123/statistics"]
+    enricher.close()
+
+
 def test_enrichment_cache_identity_and_parquet_roundtrip(match_factory, tmp_path):
     class Provider:
         calls = 0
