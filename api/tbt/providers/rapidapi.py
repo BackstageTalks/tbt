@@ -210,6 +210,79 @@ class RapidTennisClient:
             f"{path}: {last_error}"
         )
 
+    def _get_bytes(
+        self,
+        path: str,
+        params: dict[str, Any] | None = None,
+        *,
+        enrichment: bool = True,
+    ) -> tuple[bytes, str] | None:
+        """Fetch a binary provider asset such as a player image.
+
+        204/404 are treated as an unavailable optional asset. Other provider
+        errors still fail closed. The same throttle and request accounting used
+        by JSON endpoints applies here.
+        """
+        url = f"{self.cfg.rapidapi_base_url}{path}"
+        last_error: Exception | None = None
+
+        for attempt in range(5):
+            self._throttle()
+            if self.request_limit is not None and self.request_count >= self.request_limit:
+                raise RequestBudgetExceeded("Per-run request limit exhausted")
+            if self.rate_limit_remaining == 0:
+                raise RequestBudgetExceeded("Provider reports no remaining requests")
+            if self.request_budget is not None:
+                self.request_budget(self.client, self.cfg, enrichment=enrichment)
+
+            headers = dict(self.headers)
+            headers["Accept"] = "image/avif,image/webp,image/png,image/jpeg,image/*,*/*;q=0.8"
+            try:
+                self._last_request_at = time.monotonic()
+                self.request_count += 1
+                response = self.client.get(
+                    url,
+                    headers=headers,
+                    params=params or {},
+                    follow_redirects=True,
+                )
+                remaining = response.headers.get("x-ratelimit-requests-remaining")
+                if remaining is not None:
+                    self.rate_limit_remaining = safe_int(remaining)
+
+                if response.status_code in {204, 404}:
+                    return None
+                if response.status_code == 429:
+                    delay = self._retry_after_seconds(response.headers.get("Retry-After"))
+                    delay = delay if delay is not None else 2 + attempt * 2
+                    remaining_delay = max(delay, 1.0)
+                    while remaining_delay > 0:
+                        pause = min(remaining_delay, 60.0)
+                        time.sleep(pause)
+                        remaining_delay -= pause
+                    continue
+                if response.status_code >= 500:
+                    time.sleep(min(2**attempt, 15))
+                    continue
+                if 400 <= response.status_code < 500:
+                    raise ProviderError(
+                        f"RapidAPI HTTP {response.status_code} for {path}: "
+                        f"{response.text[:300]}"
+                    )
+                response.raise_for_status()
+                if not response.content:
+                    return None
+                return response.content, str(response.headers.get("content-type") or "").split(";", 1)[0].strip().lower()
+            except httpx.HTTPError as exc:
+                last_error = exc
+                time.sleep(min(2**attempt, 10))
+
+        raise ProviderError(f"RapidAPI binary request failed: {path}: {last_error}")
+
+    def player_image(self, player_id: str | int) -> tuple[bytes, str] | None:
+        """Current presentation image for a player/team id."""
+        return self._get_bytes(f"/api/tennis/player/{player_id}/image", enrichment=True)
+
     @staticmethod
     def _data(
         payload: Any,
