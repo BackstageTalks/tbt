@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from ..errors import ProviderError
-from ..providers.statistics import parse_statistics
+from ..providers.statistics import NoSupportedStatisticsError, parse_statistics
 
 
 STATISTICS_SCHEMA_VERSION = 2
@@ -64,7 +64,35 @@ class StatisticsEnricher:
         if {home, away} != {match.player1_id, match.player2_id} or home == away:
             raise ProviderError("Event player identity mismatch; refusing statistics attachment")
         payload = self._get(f"/api/tennis/event/{event_id}/statistics")
-        stats = parse_statistics(payload, home_is_player1=home == match.player1_id)
+        try:
+            stats = parse_statistics(payload, home_is_player1=home == match.player1_id)
+        except NoSupportedStatisticsError:
+            # A completed event can legitimately return HTTP 200 statistics that
+            # contain only fields outside our conservative Aces/DF/serve contract.
+            # That is missing coverage, not a fatal provider/schema error. Preserve
+            # a small key summary so a future adapter extension is diagnosable, and
+            # cache the miss in canonical history for the normal monthly retry.
+            keys = []
+            for period in payload.get("statistics", []) if isinstance(payload, dict) else []:
+                if not isinstance(period, dict) or str(period.get("period", "")).upper() != "ALL":
+                    continue
+                for group in period.get("groups", []) if isinstance(period.get("groups"), list) else []:
+                    if not isinstance(group, dict):
+                        continue
+                    for item in group.get("statisticsItems", []) if isinstance(group.get("statisticsItems"), list) else []:
+                        if not isinstance(item, dict):
+                            continue
+                        value = str(item.get("key") or item.get("name") or "").strip()
+                        if value and value not in keys:
+                            keys.append(value)
+            match.provider_payload = {**raw, "_tbt_statistics": {
+                "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id), "source": "tennisapi1",
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "status": "unavailable", "reason": "no_supported_fields",
+                "unsupported_keys": keys[:40],
+            }}
+            return "unavailable"
+
         match.stats = {**match.stats, **stats}
         match.provider_payload = {**raw, "_tbt_statistics": {
             "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id), "source": "tennisapi1",
