@@ -25,7 +25,12 @@ on:
         type: choice
         options: [dry-run, write]
       force:
-        description: "Re-enrich rows that already have a resolved venue"
+        description: "Re-enrich every row in range (normally leave OFF)"
+        required: true
+        default: false
+        type: boolean
+      retry_unresolved:
+        description: "Second pass: retry only rows with venue_resolved=false"
         required: true
         default: false
         type: boolean
@@ -83,4 +88,5 @@ jobs:
           )
           if [[ "${{ inputs.mode }}" == "dry-run" ]]; then ARGS+=(--dry-run); fi
           if [[ "${{ inputs.force }}" == "true" ]]; then ARGS+=(--force); fi
+          if [[ "${{ inputs.retry_unresolved }}" == "true" ]]; then ARGS+=(--retry-unresolved); fi
           python scripts/enrich_environment_snapshot.py "${ARGS[@]}"
