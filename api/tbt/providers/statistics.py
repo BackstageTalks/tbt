@@ -10,6 +10,11 @@ import math
 import re
 
 from ..errors import ProviderError
+
+
+class NoSupportedStatisticsError(ProviderError):
+    """Valid statistics payload that contains none of the fields we consume."""
+
 from ..utils import normalize_rate
 
 
@@ -131,5 +136,5 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
             values.setdefault(f"{opponent}_return_points_won", 1 - service)
 
     if not values:
-        raise ProviderError("Statistics contain no supported rate/count fields; no imputation performed")
+        raise NoSupportedStatisticsError("Statistics contain no supported rate/count fields; no imputation performed")
     return values
