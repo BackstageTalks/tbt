@@ -26,6 +26,7 @@ from tbt.services.publication import (
     validate_publication_candidate,
 )
 from tbt.services.ace_selection import select_ace_picks
+from tbt.services.sg_selection import select_sg_picks
 from tbt.services.market_selection import (
     annotate_market_publication_candidates,
     attach_market_sections_to_feed,
@@ -220,6 +221,7 @@ def _load_prediction_ledger(store):
 def _publish_predictions(
     store, ledger, predictions, matches, model, report, upcoming,
     *, odds_report=None, ace_picks=None, ace_report=None,
+    sg_picks=None, sg_report=None,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -236,6 +238,7 @@ def _publish_predictions(
     feed = attach_market_sections_to_feed(
         feed, predictions, odds_report=odds_report,
         ace_picks=ace_picks, ace_report=ace_report,
+        sg_picks=sg_picks, sg_report=sg_report,
     )
     feed = clean(feed)
     write_json(store.directory / "ledger.json", records)
@@ -381,6 +384,8 @@ def main():
     odds_report = None
     ace_picks = []
     ace_report = None
+    sg_picks = []
+    sg_report = None
     try:
         matches = _refresh_history(provider, matches, history_dir, history_store,
                                    now.date() - timedelta(days=7), now.date())
@@ -405,6 +410,10 @@ def main():
         # counts. This consumes no additional provider requests and remains
         # projection-only until a real pre-match price/line source is verified.
         ace_picks, ace_report = select_ace_picks(matches, predictions, now=now)
+        # Sets / Games are derived from stored structured historical scores.
+        # They remain projection-only until a calibrated price/line layer is
+        # separately validated and backtested.
+        sg_picks, sg_report = select_sg_picks(matches, predictions, now=now)
     except Exception as exc:
         refresh_error = exc
     finally:
@@ -421,6 +430,7 @@ def main():
         prediction_store, prediction_ledger,
         predictions, matches, model, report, upcoming,
         odds_report=odds_report, ace_picks=ace_picks, ace_report=ace_report,
+        sg_picks=sg_picks, sg_report=sg_report,
     )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -432,6 +442,8 @@ def main():
         "value": len(feed.get("value_picks", [])),
         "ace": len(feed.get("ace_picks", [])),
         "ace_projection": ace_report or {},
+        "sg": len(feed.get("sg_picks", [])),
+        "sg_projection": sg_report or {},
         "odds": odds_report or {},
         "settled": len(feed["results"]),
         "model": model.version,
