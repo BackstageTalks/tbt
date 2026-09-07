@@ -67,6 +67,155 @@ def predict(model, history, upcoming, now=None):
     return rows
 
 
+
+def _publication_key(value):
+    if not isinstance(value, dict):
+        return ""
+    return str(value.get("publication_key") or "").strip()
+
+
+def _merge_market_publication_candidates(existing, candidate_row):
+    """Merge independent betting-section publication candidates into a ledger row.
+
+    Issued records are immutable. Pending records may be refreshed before a
+    successful deployment, because no public betting commitment exists yet.
+    """
+    current = [dict(item) for item in existing.get("market_publications", []) if isinstance(item, dict)]
+    by_key = {_publication_key(item): item for item in current if _publication_key(item)}
+    for source in candidate_row.get("market_publication_candidates", []) or []:
+        if not isinstance(source, dict):
+            continue
+        key = _publication_key(source)
+        if not key:
+            continue
+        prior = by_key.get(key)
+        if prior is None:
+            item = dict(source)
+            current.append(item)
+            by_key[key] = item
+            continue
+        if prior.get("issued_at") or prior.get("publication_status") == "published":
+            continue
+        # No successful public deployment has committed this section yet, so
+        # replace the stale pending snapshot with the current one.
+        preserved_result = prior.get("result")
+        prior.clear()
+        prior.update(dict(source))
+        if preserved_result is not None:
+            prior["result"] = preserved_result
+    existing["market_publications"] = current
+    existing.pop("market_publication_candidates", None)
+
+
+def _settle_match_winner_publications(row, match, now):
+    publications = row.get("market_publications")
+    if not isinstance(publications, list):
+        return
+    for publication in publications:
+        if not isinstance(publication, dict) or publication.get("market") != "match_winner":
+            continue
+        issued_at = publication.get("issued_at")
+        if not issued_at:
+            continue
+        try:
+            issued = datetime.fromisoformat(str(issued_at).replace("Z", "+00:00"))
+        except ValueError:
+            publication["excluded_reason"] = "invalid_issued_at"
+            continue
+        if issued.tzinfo is None:
+            publication["excluded_reason"] = "invalid_issued_at"
+            continue
+        if issued >= match.scheduled_at:
+            publication["excluded_reason"] = "issued_after_actual_start"
+            continue
+        publication.pop("excluded_reason", None)
+        selection_id = str(publication.get("selection_id") or "")
+        correct = selection_id == str(match.winner_id or "")
+        try:
+            odds = float(publication.get("odds"))
+        except (TypeError, ValueError):
+            odds = 0.0
+        if not np.isfinite(odds) or odds <= 1:
+            publication["excluded_reason"] = "invalid_odds"
+            continue
+        profit_units = (odds - 1.0) if correct else -1.0
+        existing = publication.get("result") if isinstance(publication.get("result"), dict) else None
+        settled = {
+            "winner_id": match.winner_id,
+            "correct": correct,
+            "staked_units": 1.0,
+            "return_units": odds if correct else 0.0,
+            "profit_units": profit_units,
+            "settled_at": (existing or {}).get("settled_at") or now.isoformat(),
+            "scheduled_at": match.scheduled_at.isoformat(),
+        }
+        if existing is not None and (
+            existing.get("winner_id") != match.winner_id
+            or existing.get("correct") != correct
+            or abs(float(existing.get("profit_units", profit_units)) - profit_units) > 1e-12
+        ):
+            settled["corrected_at"] = now.isoformat()
+        publication["result"] = settled
+
+
+def _betting_metrics(publications):
+    rows = [p for p in publications if isinstance(p, dict) and isinstance(p.get("result"), dict) and not p.get("excluded_reason")]
+    if not rows:
+        return {
+            "n": 0, "wins": 0, "losses": 0, "hit_rate": None,
+            "avg_odds": None, "staked_units": 0.0, "profit_units": 0.0, "roi": None,
+        }
+    wins = sum(1 for p in rows if p["result"].get("correct") is True)
+    losses = sum(1 for p in rows if p["result"].get("correct") is False)
+    odds = [float(p.get("odds")) for p in rows if p.get("odds") is not None]
+    staked = sum(float(p["result"].get("staked_units") or 0.0) for p in rows)
+    profit = sum(float(p["result"].get("profit_units") or 0.0) for p in rows)
+    return {
+        "n": len(rows),
+        "wins": wins,
+        "losses": losses,
+        "hit_rate": wins / len(rows) if rows else None,
+        "avg_odds": sum(odds) / len(odds) if odds else None,
+        "staked_units": staked,
+        "profit_units": profit,
+        "roi": profit / staked if staked > 0 else None,
+    }
+
+
+def betting_performance(results):
+    """Aggregate settled, actually-issued betting selections with flat 1u stakes."""
+    publications = []
+    for row in results:
+        for publication in row.get("market_publications", []) or []:
+            if isinstance(publication, dict) and publication.get("issued_at"):
+                publications.append(publication)
+
+    # Overall counts each underlying selection only once even when the same bet
+    # was published in both Top 10 Daily and Value. Earliest successful public
+    # publication is the canonical overall snapshot.
+    unique = {}
+    for publication in publications:
+        key = str(publication.get("selection_key") or publication.get("publication_key") or "")
+        if not key:
+            continue
+        prior = unique.get(key)
+        if prior is None or str(publication.get("issued_at") or "") < str(prior.get("issued_at") or ""):
+            unique[key] = publication
+
+    sections = {}
+    for section in ("top_daily", "value", "ace", "double_faults", "sets", "games"):
+        sections[section] = _betting_metrics([p for p in publications if p.get("section") == section])
+    markets = {}
+    for market in sorted({str(p.get("market") or "") for p in publications if p.get("market")}):
+        markets[market] = _betting_metrics([p for p in publications if p.get("market") == market])
+    return {
+        "schema": 1,
+        "stake_model": "flat_1u",
+        "overall": _betting_metrics(list(unique.values())),
+        "sections": sections,
+        "markets": markets,
+    }
+
 def reconcile_ledger(ledger, predictions, history, now=None):
     now = now or datetime.now(timezone.utc)
     stored = {row["event_id"]: dict(row) for row in ledger}
@@ -83,6 +232,7 @@ def reconcile_ledger(ledger, predictions, history, now=None):
         existing = stored[row["event_id"]]
         if {existing["player1"]["id"], existing["player2"]["id"]} != {row["player1"]["id"], row["player2"]["id"]}:
             raise ValueError("Prediction identity mismatch")
+        _merge_market_publication_candidates(existing, row)
         if existing.get("result") is None:
             existing.setdefault("original_scheduled_at", existing["scheduled_at"])
             existing["scheduled_at"] = row["scheduled_at"]
@@ -98,6 +248,7 @@ def reconcile_ledger(ledger, predictions, history, now=None):
         # time is mutable, but the published probability/issuance timestamp is not.
         row.setdefault("original_scheduled_at", row["scheduled_at"])
         row["scheduled_at"] = match.scheduled_at.isoformat()
+        _settle_match_winner_publications(row, match, now)
         issued_at = row.get("issued_at")
         if not issued_at:
             # Pending predictions are never scored until a successful public
@@ -158,11 +309,15 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
         'history_band': r.get('quality', {}).get('history_band', 'unknown'),
         'surface_history_band': r.get('quality', {}).get('surface_history_band', 'unknown')} for r in results])
     quality_report = subgroup_report(quality_frame, [r['player1']['probability'] for r in results]) if results else {}
+    betting = betting_performance(results)
+    result_rows = list(reversed(results))[:1000]
     return {"schema": 1, "ready": True, "generated_at": now.isoformat(),
             "model": {"version": model.version, "report": report, "objective": "accuracy"},
             "upcoming": [r for r in ledger if r["event_id"] in future and r.get("result") is None
                          and datetime.fromisoformat(r["scheduled_at"]) > now and not r.get("excluded_reason")],
-            "results": list(reversed(results))[:1000], "performance": metrics,
+            "results": result_rows, "performance": metrics,
+            "betting_performance": betting,
+            "results_meta": {"settled_total": len(results), "returned": len(result_rows), "limit": 1000},
             "performance_subgroups": quality_report,
             "history": {"matches": len(history), "start": min((m.scheduled_at for m in history), default=now).isoformat(),
                         "end": max((m.scheduled_at for m in history), default=now).isoformat()}}

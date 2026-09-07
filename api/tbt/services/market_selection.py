@@ -381,6 +381,9 @@ def _market_card(row: dict[str, Any]) -> dict[str, Any] | None:
     if betting.get("market") != "match_winner":
         return None
     card = deepcopy(row)
+    # Publication candidates are private ledger state and must never be exposed
+    # in the serving feed.
+    card.pop("market_publication_candidates", None)
     card["market"] = "match_winner"
     card["market_type"] = "Match Winner"
     card["pick"] = betting.get("selection")
@@ -473,6 +476,82 @@ def select_market_sections(
     }
 
 
+
+def annotate_market_publication_candidates(
+    predictions: list[dict[str, Any]],
+    *,
+    top_daily_limit: int = 10,
+    top_daily_min_probability: float = 0.60,
+    top_daily_min_edge: float = 0.0,
+    top_daily_min_data_depth: float = 0.30,
+    value_min_odds: float = 1.70,
+    value_max_implied_gap: float = 0.15,
+) -> list[dict[str, Any]]:
+    """Attach pending section-publication candidates to current market rows.
+
+    The core Match Winner prediction has its own publication lifecycle. Betting
+    sections (Top 10 Daily / Value) may become available later when provider
+    odds arrive, so they need independent publication records. These candidates
+    are only *pending* here; `confirm_prediction_publication.py` stamps issued_at
+    after the exact feed has been deployed successfully.
+
+    One event can legitimately be published in more than one section. Each
+    section gets its own price snapshot, while `selection_key` lets performance
+    reporting deduplicate the same underlying bet for overall ROI.
+    """
+    sections = select_market_sections(
+        predictions,
+        top_daily_limit=top_daily_limit,
+        top_daily_min_probability=top_daily_min_probability,
+        top_daily_min_edge=top_daily_min_edge,
+        top_daily_min_data_depth=top_daily_min_data_depth,
+        value_min_odds=value_min_odds,
+        value_max_implied_gap=value_max_implied_gap,
+    )
+    membership: dict[str, list[str]] = {}
+    for section_name, key in (("top_daily", "top_daily_picks"), ("value", "value_picks")):
+        for row in sections.get(key, []):
+            event_id = str(row.get("event_id") or "").strip()
+            if event_id:
+                membership.setdefault(event_id, []).append(section_name)
+
+    annotated: list[dict[str, Any]] = []
+    for source in predictions:
+        row = deepcopy(source)
+        event_id = str(row.get("event_id") or "").strip()
+        betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+        sections_for_event = membership.get(event_id, [])
+        publications: list[dict[str, Any]] = []
+        if betting.get("market") == "match_winner" and sections_for_event:
+            selection_id = str(betting.get("selection_id") or "").strip()
+            betting_day = str(betting.get("betting_day") or "").strip()
+            if selection_id:
+                selection_key = f"match_winner:{betting_day}:{event_id}:{selection_id}"
+                for section_name in sections_for_event:
+                    publications.append({
+                        "schema": 1,
+                        "publication_key": f"{section_name}:{selection_key}",
+                        "selection_key": selection_key,
+                        "section": section_name,
+                        "market": "match_winner",
+                        "selection": betting.get("selection"),
+                        "selection_id": selection_id,
+                        "odds": betting.get("odds"),
+                        "fair_implied_probability": betting.get("fair_implied_probability"),
+                        "model_probability": betting.get("model_probability"),
+                        "edge": betting.get("edge"),
+                        "expected_value": betting.get("expected_value"),
+                        "provider_id": betting.get("provider_id"),
+                        "captured_at": betting.get("captured_at"),
+                        "betting_day": betting_day or None,
+                        "issued_at": None,
+                        "publication_status": "pending",
+                        "result": None,
+                    })
+        row["market_publication_candidates"] = publications
+        annotated.append(row)
+    return annotated
+
 def attach_market_sections_to_feed(
     feed: dict[str, Any],
     enriched_predictions: list[dict[str, Any]],
@@ -498,6 +577,10 @@ def attach_market_sections_to_feed(
 
     sections = select_market_sections(enriched_predictions)
     result.update(sections)
+    result["market_selection"] = {
+        **result.get("market_selection", {}),
+        "publication_schema": 1,
+    }
     if odds_report is not None:
         result["market_selection"] = {
             **result.get("market_selection", {}),

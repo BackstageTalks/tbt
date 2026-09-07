@@ -19,6 +19,8 @@ def empty_feed():
         "market_selection": {},
         "results": [],
         "performance": {},
+        "betting_performance": {},
+        "results_meta": {"settled_total": 0, "returned": 0, "limit": 1000},
         "history": {},
         "ready": False,
     }
