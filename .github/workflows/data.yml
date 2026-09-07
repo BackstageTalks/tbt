@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [history, statistics, history-audit, history-integrity-repair, history-repair, train, backtest, refresh]
+        options: [history, statistics, ace-statistics, history-audit, history-integrity-repair, history-repair, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -31,6 +31,14 @@ on:
         description: Europe/Bratislava hour that starts the BlinQ betting day
         type: number
         default: 6
+      ace_target_samples:
+        description: Target recent Aces/DF stat samples per current upcoming player
+        type: number
+        default: 18
+      ace_lookback_days:
+        description: Maximum history window for targeted Aces/DF statistics
+        type: number
+        default: 550
       promote:
         description: Publish trained model only if holdout gate passes
         type: boolean
@@ -59,6 +67,8 @@ jobs:
       MAX_REQUESTS: ${{ inputs.max_requests || (github.event.schedule == '40 22 * * *' && 4000 || 750) }}
       MARKET_ODDS_MAX_EVENTS: ${{ inputs.market_odds_max_events || 120 }}
       BETTING_DAY_START_HOUR: ${{ inputs.betting_day_start_hour || 6 }}
+      ACE_TARGET_SAMPLES: ${{ inputs.ace_target_samples || 18 }}
+      ACE_LOOKBACK_DAYS: ${{ inputs.ace_lookback_days || 550 }}
       PROMOTE: ${{ inputs.promote }}
       TBT_WEATHER_RESEARCH: ${{ vars.TBT_WEATHER_RESEARCH }}
     steps:
@@ -79,6 +89,12 @@ jobs:
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             python scripts/download_tennis_history.py "${args[@]}"
+          elif [[ "$MODE" == ace-statistics ]]; then
+            python scripts/enrich_ace_history.py \
+              --data-repository "$TBT_DATA_REPOSITORY" \
+              --lookback-days "$ACE_LOOKBACK_DAYS" \
+              --target-samples "$ACE_TARGET_SAMPLES" \
+              --max-requests "$MAX_REQUESTS"
           elif [[ "$MODE" == history-audit ]]; then
             python scripts/audit_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == history-integrity-repair ]]; then
