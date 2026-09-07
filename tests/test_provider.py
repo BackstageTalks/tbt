@@ -116,3 +116,38 @@ def test_canonical_id_survives_home_away_reordering():
     assert before.match_id == after.match_id
     assert before.winner_id is None
     assert after.winner_id == "20"
+
+
+def test_current_ranking_and_market_enrichment_endpoints(monkeypatch):
+    client = object.__new__(RapidTennisClient)
+    calls = []
+
+    def fake_get(path, params=None, *, enrichment=False):
+        calls.append((path, enrichment))
+        if path == "/api/tennis/rankings/atp/":
+            return {"rankings": [{"team": {"id": 10}, "ranking": 1}]}
+        if path.endswith("/rankings"):
+            return {"rankings": [{"ranking": 7}]}
+        if "/odds/1/all" in path:
+            return {"markets": []}
+        if path.endswith("/statistics"):
+            return {"statistics": []}
+        return {}
+
+    monkeypatch.setattr(client, "_get", fake_get)
+
+    assert client.rankings("atp")[0]["ranking"] == 1
+    assert client.player_rankings(10)["rankings"][0]["ranking"] == 7
+    assert client.event_odds(99, 1) == {"markets": []}
+    assert client.event_statistics(99) == {"statistics": []}
+    assert calls == [
+        ("/api/tennis/rankings/atp/", True),
+        ("/api/tennis/player/10/rankings", True),
+        ("/api/tennis/event/99/odds/1/all", True),
+        ("/api/tennis/event/99/statistics", True),
+    ]
+
+
+def test_data_unwraps_rankings_list():
+    rows = RapidTennisClient._data({"rankings": [{"ranking": 1}, {"ranking": 2}]})
+    assert [row["ranking"] for row in rows] == [1, 2]
