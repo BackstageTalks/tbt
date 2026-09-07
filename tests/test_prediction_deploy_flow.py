@@ -129,7 +129,7 @@ def test_confirm_no_candidate_is_noop_only_for_empty_deployment(monkeypatch, tmp
         confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed)])
 
 
-def test_confirm_complete_candidate_requires_exact_deployed_feed(monkeypatch, tmp_path):
+def test_confirm_complete_candidate_requires_exact_non_presentation_feed(monkeypatch, tmp_path):
     feed = _valid_feed()
     ledger = _ledger_for_feed(feed)
     uploaded = []
@@ -161,6 +161,78 @@ def test_confirm_complete_candidate_requires_exact_deployed_feed(monkeypatch, tm
     with pytest.raises(RuntimeError, match="does not match"):
         confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed)])
 
+
+
+def test_confirm_allows_player_presentation_enrichment_only(monkeypatch, tmp_path):
+    feed = _valid_feed()
+    ledger = _ledger_for_feed(feed)
+    uploaded = []
+
+    class Store:
+        def __init__(self, repository, tag, directory):
+            self.directory = Path(directory)
+        def _asset_names(self):
+            return {"feed.json", "ledger.json", "_tbt_bundle_manifest.json"}
+        def download(self, extra_names=(), required_names=()):
+            self.directory.mkdir(parents=True, exist_ok=True)
+            (self.directory / "feed.json").write_text(json.dumps(feed))
+            (self.directory / "ledger.json").write_text(json.dumps(ledger))
+        def upload_bundle(self, paths):
+            uploaded.extend(Path(p).name for p in paths)
+
+    monkeypatch.setattr(confirm, "ROOT", tmp_path)
+    monkeypatch.setattr(confirm, "ReleaseStore", Store)
+
+    deployed = json.loads(json.dumps(feed))
+    deployed["player_assets"] = {
+        "schema": 1,
+        "profiles_cached": 727,
+        "photos_deployed": 727,
+        "presentation_only": True,
+    }
+    deployed["upcoming"][0]["player1"].update({
+        "rank": 4,
+        "country_code": "US",
+        "country_code3": "USA",
+        "country_name": "United States",
+        "photo_url": "/assets/players/A.webp",
+    })
+    deployed["upcoming"][0]["player2"].update({
+        "rank": 8,
+        "country_code": "ES",
+        "photo_url": "/assets/players/B.webp",
+    })
+
+    deployed_path = tmp_path / "deployed-enriched.json"
+    deployed_path.write_text(json.dumps(deployed))
+    confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed_path)])
+    assert uploaded == ["ledger.json"]
+
+
+def test_confirm_still_rejects_non_presentation_change(monkeypatch, tmp_path):
+    feed = _valid_feed()
+    ledger = _ledger_for_feed(feed)
+
+    class Store:
+        def __init__(self, repository, tag, directory):
+            self.directory = Path(directory)
+        def _asset_names(self):
+            return {"feed.json", "ledger.json", "_tbt_bundle_manifest.json"}
+        def download(self, extra_names=(), required_names=()):
+            self.directory.mkdir(parents=True, exist_ok=True)
+            (self.directory / "feed.json").write_text(json.dumps(feed))
+            (self.directory / "ledger.json").write_text(json.dumps(ledger))
+        def upload_bundle(self, paths):
+            raise AssertionError("mismatched deployment must not be confirmed")
+
+    monkeypatch.setattr(confirm, "ROOT", tmp_path)
+    monkeypatch.setattr(confirm, "ReleaseStore", Store)
+    deployed = json.loads(json.dumps(feed))
+    deployed["upcoming"][0]["tournament"] = "Wrong Open"
+    deployed_path = tmp_path / "deployed-wrong.json"
+    deployed_path.write_text(json.dumps(deployed))
+    with pytest.raises(RuntimeError, match="does not match"):
+        confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed_path)])
 
 def test_prepare_feed_rejects_same_event_with_different_pick(monkeypatch, tmp_path):
     feed = _valid_feed()
