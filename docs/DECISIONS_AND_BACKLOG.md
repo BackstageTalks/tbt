@@ -619,6 +619,7 @@ Production success must be confirmed from actual GitHub/Azure logs, not assumed 
 - v5.5 — asset-linking / plan avatars / fallback photos; assets remain user-replaceable by filename.
 - v5.6 — safe quarantine of ambiguous incoming match identity collisions.
 - v5.7 — publication confirmation corrected for presentation-only serving enrichment.
+- v5.8 — Ace statistics enrichment resilience: valid HTTP 200 statistics with no supported fields are cached as unavailable instead of aborting the run.
 
 Documentation-only addition after v5.7:
 
@@ -696,3 +697,31 @@ Remaining work / hypothesis / risk.
 ```
 
 This preserves enough context to later generate trustworthy technical documentation without reconstructing project history from chat memory.
+
+### 2026-09-07 — Ace statistics enrichment: non-fatal unsupported statistics payloads (v5.8)
+
+**Why**
+The first targeted `ace-statistics` run used `max_requests=3000`, `target_samples=18` and `lookback_days=550`. After roughly 33 minutes it aborted inside `parse_statistics()` with `ProviderError: Statistics contain no supported rate/count fields; no imputation performed`. TennisApi can legitimately return HTTP 200 event-statistics payloads that contain statistics, but none of the conservative Aces/DF/serve fields currently consumed by BlinQ. One such event must not abort the whole targeted enrichment job.
+
+**Decision**
+Keep the statistics parser strict and fail-closed for malformed envelopes, ambiguous/missing `ALL` periods, conflicting values and identity mismatches. Introduce a dedicated `NoSupportedStatisticsError` only for the valid-envelope/no-consumable-fields case. `StatisticsEnricher` catches only that narrow condition, records the event as `unavailable`, and continues. This prevents silent schema corruption while treating provider coverage gaps as normal missing data.
+
+**Implementation**
+- `api/tbt/providers/statistics.py`: added `NoSupportedStatisticsError`, a `ProviderError` subclass; the no-supported-fields condition now raises that subclass.
+- `api/tbt/services/statistics_enrichment.py`: catches only `NoSupportedStatisticsError`; writes `_tbt_statistics.status=unavailable`, `reason=no_supported_fields`, and a bounded `unsupported_keys` summary for later adapter analysis; normal monthly retry policy remains in force.
+- `tests/test_statistics.py`: added regression coverage that a valid `ALL` payload containing only unsupported statistics is marked unavailable, does not populate `match.stats`, and is cached instead of re-requested immediately.
+
+**Data/API impact**
+No new API endpoint. No imputation and no fabricated statistics. Unsupported event-statistics rows become explicit missing coverage instead of fatal run errors. The marker is persisted in canonical history and is eligible for the existing monthly retry behavior.
+
+**Validation**
+- Python `compileall` for the changed statistics/enrichment/Ace script: PASS.
+- Focused Ace/statistics suite excluding the two tests that require local `pyarrow`: 11 PASS.
+- Full `tests/test_statistics.py` was also attempted: the two parquet round-trip tests could not run locally because `pyarrow` is not installed; this is an environment limitation, not a code assertion failure.
+
+**Production result**
+Pending. Re-run `ace-statistics` with the same `3000 / 18 / 550` parameters after deploying v5.8. The failed run's `finally` checkpoint path should have persisted previously changed year partitions before process exit, so the rerun is expected to reuse already-persisted markers/data and continue rather than necessarily starting from zero. Confirm this from the next real run log/report.
+
+**Follow-up**
+- Inspect `unsupported_keys` frequency after the rerun; add aliases only when provider field semantics are verified.
+- Continue the separate backlog experiment comparing event-by-event statistics with `getTeamYearStatistics(player_id, year)` for Ace/DF request efficiency and predictive value.
