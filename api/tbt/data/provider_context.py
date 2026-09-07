@@ -43,6 +43,10 @@ def minimize_provider_payload(
     if isinstance(marker, dict):
         out["_tbt_statistics"] = {k: marker[k] for k in
             ("schema", "event_id", "source", "fetched_at", "status") if k in marker}
+    score_marker = raw.get("_tbt_score")
+    if isinstance(score_marker, dict):
+        out["_tbt_score"] = {k: score_marker[k] for k in
+            ("schema", "event_id", "source", "fetched_at", "status") if k in score_marker}
 
     for key in (
         "_tbt_canonical_match_id",
