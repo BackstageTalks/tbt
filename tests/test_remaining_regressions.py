@@ -1075,3 +1075,56 @@ def test_data_workflow_exposes_explicit_history_integrity_repair_only():
     data = (root / ".github/workflows/data.yml").read_text()
     assert "history-integrity-repair" in data
     assert "repair_history_bundle_integrity.py" in data
+
+
+def test_refresh_quarantines_new_ambiguous_identity_collision(match_factory, tmp_path, capsys):
+    base = match_factory("collision", "A", "B", "A", tour="atp")
+    one = replace(base, provider_payload={"_tbt_provider_event_id": "101"})
+    two = replace(base, provider_payload={"_tbt_provider_event_id": "202"})
+
+    class Provider:
+        def matches_for_day(self, tour, day, historical):
+            return [one, two] if tour == "atp" else []
+
+    uploads = []
+    class Store:
+        def upload_bundle(self, paths, **kwargs):
+            uploads.append([Path(path).name for path in paths])
+
+    merged = pipeline._refresh_history(
+        Provider(), [], tmp_path, Store(),
+        base.scheduled_at.date(), base.scheduled_at.date(),
+    )
+
+    assert merged == []
+    assert uploads == []
+    out = capsys.readouterr().out
+    assert "ambiguous_match_identity_quarantined" in out
+    assert '"rows_skipped": 2' in out
+
+
+def test_refresh_keeps_existing_row_when_ambiguous_new_collision_arrives(match_factory, tmp_path):
+    base = replace(
+        match_factory("collision", "A", "B", "A", tour="atp"),
+        provider_payload={"_tbt_provider_event_id": "101"},
+    )
+    conflicting = replace(
+        base,
+        provider_payload={"_tbt_provider_event_id": "202"},
+    )
+
+    class Provider:
+        def matches_for_day(self, tour, day, historical):
+            return [base, conflicting] if tour == "atp" else []
+
+    class Store:
+        def upload_bundle(self, paths, **kwargs):
+            pass
+
+    merged = pipeline._refresh_history(
+        Provider(), [base], tmp_path, Store(),
+        base.scheduled_at.date(), base.scheduled_at.date(),
+    )
+
+    assert len(merged) == 1
+    assert merged[0].provider_payload.get("_tbt_provider_event_id") == "101"
