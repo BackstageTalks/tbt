@@ -1,4 +1,5 @@
 from dataclasses import replace
+from datetime import datetime, timezone
 
 import pytest
 
@@ -97,4 +98,43 @@ def test_verified_calendar_identity_saves_detail_request_across_runs(match_facto
     match.provider_payload['_tbt_statistics']['fetched_at'] = '2020-01-01T00:00:00+00:00'
     assert enricher.enrich(match) == 'cached'
     assert len(provider.calls) == 1
+    enricher.close()
+
+
+def test_aces_and_double_faults_are_raw_counts_not_rates():
+    raw = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+        {"name": "Aces", "home": "11", "awayValue": 4},
+        {"key": "doubleFaults", "homeValue": 2, "away": "5"},
+    ]}]}]}
+    stats = parse_statistics(raw, home_is_player1=False)
+    assert stats["p2_aces"] == 11
+    assert stats["p1_aces"] == 4
+    assert stats["p2_double_faults"] == 2
+    assert stats["p1_double_faults"] == 5
+
+
+def test_statistics_schema_one_is_revisited_for_new_count_contract(match_factory, tmp_path):
+    class Provider:
+        calls = []
+        def _get(self, path, **kwargs):
+            self.calls.append(path)
+            return {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+                {"name": "Aces", "home": "8", "away": "3"},
+                {"name": "Double faults", "home": "2", "away": "4"},
+            ]}]}]}
+    match = match_factory("a", "A", "B", "A")
+    match.provider_payload = {
+        "id": "123",
+        "_tbt_event_identity": {"event_id": "123", "home": "A", "away": "B", "status": "finished"},
+        "_tbt_statistics": {
+            "schema": 1, "event_id": "123", "source": "tennisapi1",
+            "fetched_at": datetime.now(timezone.utc).isoformat(), "status": "available",
+        },
+    }
+    enricher = StatisticsEnricher(Provider(), tmp_path / "schema2.sqlite")
+    assert enricher.enrich(match) == "enriched"
+    assert match.stats["p1_aces"] == 8
+    assert match.stats["p2_double_faults"] == 4
+    assert match.provider_payload["_tbt_statistics"]["schema"] == 2
+    assert enricher.enrich(match) == "cached"
     enricher.close()
