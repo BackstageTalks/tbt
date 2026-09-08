@@ -24,18 +24,44 @@ MATCH_WINNER_MARKET_NAMES = {
     "moneyline",
 }
 
-# Match Winner selection policy v1. These are intentionally explicit and
-# auditable; they are working production defaults, not claims of guaranteed
-# profitability. Future changes should be promoted only after OOS/live review.
-MAIN_MIN_PROBABILITY = 0.78
-MAIN_MIN_DATA_DEPTH = 0.80
-MAIN_MIN_SURFACE_MATCHES = 5
-DAILY_MIN_ODDS = 1.25
-DAILY_MAX_ODDS = 1.50
-VALUE_MIN_PROBABILITY = 0.60
-VALUE_MIN_DATA_DEPTH = 0.80
-VALUE_MIN_SURFACE_MATCHES = 5
-VALUE_MAX_IMPLIED_GAP = 0.15
+# Match Winner selection policy v2. These are working production defaults,
+# deliberately configurable and auditable. They are not claims of guaranteed
+# profitability; threshold promotion belongs behind OOS/live review.
+#
+# Public sections are mutually exclusive. A selection may qualify internally for
+# more than one strategy, but it is assigned to exactly one primary section in
+# the order below so the same bet never appears twice on the BlinQ dashboard.
+SECTION_PRIORITY = ("prime", "top_daily", "value")
+
+# PRIME = accuracy first. Odds are not a hard band; 1.20-1.50 is merely the
+# preferred product zone. Only materially negative EV is rejected.
+PRIME_MIN_PROBABILITY = 0.85
+PRIME_MIN_DATA_DEPTH = 0.80
+PRIME_MIN_SURFACE_MATCHES = 5
+PRIME_MAX_NEGATIVE_EV = -0.03
+PRIME_PREFERRED_MIN_ODDS = 1.20
+PRIME_PREFERRED_MAX_ODDS = 1.50
+PRIME_LIMIT = 30
+
+# TOP BETS = balance of model strength and price. `top_daily` remains the
+# internal compatibility key used by the existing feed/publication ledger.
+TOP_MIN_PROBABILITY = 0.72
+TOP_MIN_DATA_DEPTH = 0.80
+TOP_MIN_SURFACE_MATCHES = 5
+TOP_MIN_ODDS = 1.50
+TOP_MIN_EDGE = 0.02
+TOP_MIN_EXPECTED_VALUE = 0.03
+TOP_LIMIT = 10
+
+# VALUE = edge/EV first. This branch intentionally accepts lower model win
+# probability than Prime/Top, but demands a stronger price disagreement.
+VALUE_MIN_PROBABILITY = 0.55
+VALUE_MIN_DATA_DEPTH = 0.75
+VALUE_MIN_SURFACE_MATCHES = 3
+VALUE_MIN_ODDS = 1.80
+VALUE_MIN_EDGE = 0.05
+VALUE_MIN_EXPECTED_VALUE = 0.08
+VALUE_LIMIT = 10
 
 
 def _normal(value: Any) -> str:
@@ -367,9 +393,9 @@ def enrich_current_betting_day_odds(
     """Fetch provider-1 odds only for plausible published betting candidates.
 
     Odds calls are intentionally *not* spent on the entire upcoming board.
-    The broad 60/80/5 gate is wide enough to cover both the main Daily/Prime
-    pool and the separate close-market Value discovery branch, while keeping
-    provider usage bounded.
+    The broad Value floor is used for pre-price discovery so odds calls can cover
+    every currently supported Match Winner branch. Final Prime/Top/Value rules
+    remain stricter and are applied after prices are attached.
     """
     start, end, day_key = betting_day_bounds(
         now, timezone_name=timezone_name, start_hour=start_hour
@@ -471,128 +497,229 @@ def _market_card(row: dict[str, Any]) -> dict[str, Any] | None:
     return card
 
 
+def _selection_identity(row: dict[str, Any]) -> str:
+    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    event_id = str(row.get("event_id") or row.get("id") or "").strip()
+    selection_id = str(betting.get("selection_id") or row.get("selection_id") or "").strip()
+    market = str(betting.get("market") or row.get("market") or "match_winner").strip()
+    betting_day = str(betting.get("betting_day") or row.get("betting_day") or "").strip()
+    return f"{market}:{betting_day}:{event_id}:{selection_id}"
+
+
+def _passes_price_guardrails(
+    card: dict[str, Any],
+    *,
+    min_odds: float | None = None,
+    min_edge: float | None = None,
+    min_expected_value: float | None = None,
+    min_expected_value_inclusive: float | None = None,
+) -> bool:
+    odds = _number(card.get("odds"))
+    edge = _number(card.get("edge"))
+    expected_value = _number(card.get("expected_value"))
+    if min_odds is not None and (odds is None or odds < float(min_odds)):
+        return False
+    if min_edge is not None and (edge is None or edge < float(min_edge)):
+        return False
+    if min_expected_value is not None and (
+        expected_value is None or expected_value < float(min_expected_value)
+    ):
+        return False
+    if min_expected_value_inclusive is not None and (
+        expected_value is None
+        or expected_value < float(min_expected_value_inclusive)
+    ):
+        return False
+    return True
+
+
+def _exclusive_section_assignment(
+    qualified: dict[str, list[dict[str, Any]]],
+    *,
+    priority: tuple[str, ...] = SECTION_PRIORITY,
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, int]]:
+    """Assign every underlying selection to at most one public section."""
+    selected = {name: [] for name in qualified}
+    used: set[str] = set()
+    removed = {name: 0 for name in qualified}
+    for section in priority:
+        for card in qualified.get(section, []):
+            identity = _selection_identity(card)
+            if not identity or identity in used:
+                removed[section] = removed.get(section, 0) + 1
+                continue
+            used.add(identity)
+            item = deepcopy(card)
+            item["primary_section"] = section
+            selected.setdefault(section, []).append(item)
+    # Keep forward compatibility if a future caller supplies a section that is
+    # not yet present in SECTION_PRIORITY.
+    for section, cards in qualified.items():
+        if section in priority:
+            continue
+        for card in cards:
+            identity = _selection_identity(card)
+            if not identity or identity in used:
+                removed[section] = removed.get(section, 0) + 1
+                continue
+            used.add(identity)
+            item = deepcopy(card)
+            item["primary_section"] = section
+            selected.setdefault(section, []).append(item)
+    return selected, removed
+
+
 def select_market_sections(
     predictions: list[dict[str, Any]],
     *,
-    ace_picks: list[dict[str, Any]] | None = None,
-    sg_picks: list[dict[str, Any]] | None = None,
-    main_min_probability: float = MAIN_MIN_PROBABILITY,
-    main_min_data_depth: float = MAIN_MIN_DATA_DEPTH,
-    main_min_surface_matches: int = MAIN_MIN_SURFACE_MATCHES,
-    daily_min_odds: float = DAILY_MIN_ODDS,
-    daily_max_odds: float = DAILY_MAX_ODDS,
+    prime_min_probability: float = PRIME_MIN_PROBABILITY,
+    prime_min_data_depth: float = PRIME_MIN_DATA_DEPTH,
+    prime_min_surface_matches: int = PRIME_MIN_SURFACE_MATCHES,
+    prime_max_negative_ev: float = PRIME_MAX_NEGATIVE_EV,
+    prime_limit: int | None = PRIME_LIMIT,
+    top_min_probability: float = TOP_MIN_PROBABILITY,
+    top_min_data_depth: float = TOP_MIN_DATA_DEPTH,
+    top_min_surface_matches: int = TOP_MIN_SURFACE_MATCHES,
+    top_min_odds: float = TOP_MIN_ODDS,
+    top_min_edge: float = TOP_MIN_EDGE,
+    top_min_expected_value: float = TOP_MIN_EXPECTED_VALUE,
+    top_limit: int | None = TOP_LIMIT,
     value_min_probability: float = VALUE_MIN_PROBABILITY,
     value_min_data_depth: float = VALUE_MIN_DATA_DEPTH,
     value_min_surface_matches: int = VALUE_MIN_SURFACE_MATCHES,
-    value_max_implied_gap: float = VALUE_MAX_IMPLIED_GAP,
+    value_min_odds: float = VALUE_MIN_ODDS,
+    value_min_edge: float = VALUE_MIN_EDGE,
+    value_min_expected_value: float = VALUE_MIN_EXPECTED_VALUE,
+    value_limit: int | None = VALUE_LIMIT,
+    section_priority: tuple[str, ...] = SECTION_PRIORITY,
+    ace_picks: list[dict[str, Any]] | None = None,
+    sg_picks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    main_candidates = [
-        row for row in predictions
-        if _passes_candidate_gate(
-            row,
-            min_probability=main_min_probability,
-            min_data_depth=main_min_data_depth,
-            min_surface_matches=main_min_surface_matches,
-        )
-    ]
-    value_candidates = [
-        row for row in predictions
-        if _passes_candidate_gate(
-            row,
-            min_probability=value_min_probability,
-            min_data_depth=value_min_data_depth,
-            min_surface_matches=value_min_surface_matches,
-        )
-    ]
     cards = [card for row in predictions if (card := _market_card(row)) is not None]
 
-    # One common quality pool first; odds only decide which presentation bucket
-    # a qualified Match Winner pick belongs to. Edge/EV remain diagnostics and
-    # are deliberately not hard gates for Daily or Prime.
-    main_pool = [
-        card for card in cards
+    prime_qualified = []
+    top_qualified = []
+    value_qualified = []
+
+    for card in cards:
         if _passes_candidate_gate(
             card,
-            min_probability=main_min_probability,
-            min_data_depth=main_min_data_depth,
-            min_surface_matches=main_min_surface_matches,
-        )
-    ]
+            min_probability=prime_min_probability,
+            min_data_depth=prime_min_data_depth,
+            min_surface_matches=prime_min_surface_matches,
+        ) and _passes_price_guardrails(
+            card,
+            min_expected_value_inclusive=prime_max_negative_ev,
+        ):
+            prime_qualified.append(card)
 
-    daily = []
-    prime = []
-    for card in main_pool:
-        odds = _number(card.get("odds"))
-        if odds is None:
-            continue
-        if float(daily_min_odds) <= odds <= float(daily_max_odds):
-            daily.append(card)
-        elif odds > float(daily_max_odds):
-            prime.append(card)
+        if _passes_candidate_gate(
+            card,
+            min_probability=top_min_probability,
+            min_data_depth=top_min_data_depth,
+            min_surface_matches=top_min_surface_matches,
+        ) and _passes_price_guardrails(
+            card,
+            min_odds=top_min_odds,
+            min_edge=top_min_edge,
+            min_expected_value=top_min_expected_value,
+        ):
+            top_qualified.append(card)
 
-    daily.sort(
-        key=lambda card: (
-            _number(card.get("probability")) or 0.0,
-            _depth(card),
-            -(_number(card.get("odds")) or 999.0),
-        ),
-        reverse=True,
-    )
-    prime.sort(
-        key=lambda card: (
-            _number(card.get("probability")) or 0.0,
-            _depth(card),
-            _number(card.get("odds")) or 0.0,
-        ),
-        reverse=True,
-    )
-
-    value = []
-    for card in cards:
-        if not _passes_candidate_gate(
+        if _passes_candidate_gate(
             card,
             min_probability=value_min_probability,
             min_data_depth=value_min_data_depth,
             min_surface_matches=value_min_surface_matches,
+        ) and _passes_price_guardrails(
+            card,
+            min_odds=value_min_odds,
+            min_edge=value_min_edge,
+            min_expected_value=value_min_expected_value,
         ):
-            continue
-        market = card.get("match_winner_market") if isinstance(card.get("match_winner_market"), dict) else {}
-        p1_market = _number(market.get("player1_implied_probability"))
-        p2_market = _number(market.get("player2_implied_probability"))
-        if p1_market is None or p2_market is None:
-            continue
-        gap = abs(p1_market - p2_market)
-        if gap > value_max_implied_gap:
-            continue
-        card = deepcopy(card)
-        card["implied_probability_gap"] = gap
-        card["close_market"] = True
-        value.append(card)
-    value.sort(
+            value_qualified.append(card)
+
+    # Strategy-specific ranking happens before exclusivity. Priority then decides
+    # the public home for a selection that qualifies for multiple strategies.
+    prime_qualified.sort(
         key=lambda card: (
             _number(card.get("probability")) or 0.0,
             _depth(card),
-            -(_number(card.get("implied_probability_gap")) or 1.0),
+            _number(card.get("expected_value")) or -999.0,
+        ),
+        reverse=True,
+    )
+    top_qualified.sort(
+        key=lambda card: (
+            _number(card.get("expected_value")) or -999.0,
+            _number(card.get("probability")) or 0.0,
+            _number(card.get("edge")) or -999.0,
+            _depth(card),
+        ),
+        reverse=True,
+    )
+    value_qualified.sort(
+        key=lambda card: (
+            _number(card.get("expected_value")) or -999.0,
+            _number(card.get("edge")) or -999.0,
+            _number(card.get("probability")) or 0.0,
+            _depth(card),
         ),
         reverse=True,
     )
 
+    qualified = {
+        "prime": prime_qualified,
+        "top_daily": top_qualified,
+        "value": value_qualified,
+    }
+    exclusive, duplicate_removed = _exclusive_section_assignment(
+        qualified,
+        priority=tuple(section_priority),
+    )
+    prime = exclusive.get("prime", [])
+    top = exclusive.get("top_daily", [])
+    value = exclusive.get("value", [])
+
+    if prime_limit is not None and prime_limit >= 0:
+        prime = prime[: int(prime_limit)]
+    if top_limit is not None and top_limit >= 0:
+        top = top[: int(top_limit)]
+    if value_limit is not None and value_limit >= 0:
+        value = value[: int(value_limit)]
+
+    selected_identities = [
+        _selection_identity(card)
+        for card in (prime + top + value)
+    ]
+    if len(selected_identities) != len(set(selected_identities)):
+        raise ValueError("Market section exclusivity invariant failed")
+
     return {
-        "top_daily_picks": daily,
+        # Keep `top_daily_picks` as the stable feed key. Product label is Top Bets.
+        "top_daily_picks": top,
         "prime_picks": prime,
         "value_picks": value,
         "ace_picks": deepcopy(ace_picks or []),
         "sg_picks": deepcopy(sg_picks or []),
         "market_selection": {
-            "schema": 4,
+            "schema": 5,
+            "selection_policy": "prime_top_value_v2_exclusive",
             "selection_counts": {
-                "main_candidates_before_odds": len(main_candidates),
-                "value_candidates_before_odds": len(value_candidates),
                 "priced_match_winner_rows": len(cards),
-                "priced_main_quality_pool": len(main_pool),
-                "daily": len(daily),
+                "prime_qualified_before_exclusivity": len(prime_qualified),
+                "top_qualified_before_exclusivity": len(top_qualified),
+                "value_qualified_before_exclusivity": len(value_qualified),
                 "prime": len(prime),
+                "top_daily": len(top),
                 "value": len(value),
+                "duplicates_removed": sum(duplicate_removed.values()),
+            },
+            "exclusive_assignment": {
+                "enabled": True,
+                "priority": list(section_priority),
+                "dedupe_key": "market:betting_day:event_id:selection_id",
+                "duplicates_removed_by_section": duplicate_removed,
             },
             "current_outputs": (
                 ["match_winner"]
@@ -600,53 +727,54 @@ def select_market_sections(
                 + (["sets_projection", "games_projection"] if sg_picks else [])
             ),
             "pending_outputs": ["aces_odds", "double_faults_odds", "sets_odds", "games_odds"],
-            # Legacy flag remains true because Match Winner / Daily / Prime / Value are
-            # odds-backed. The explicit lists below prevent projection-only
-            # Ace/S-G outputs from being mistaken for priced selections.
             "odds_backed": True,
             "odds_backed_outputs": ["match_winner"],
             "projection_only_outputs": (
                 (["aces_projection", "double_faults_projection"] if ace_picks else [])
                 + (["sets_projection", "games_projection"] if sg_picks else [])
             ),
+            # Compatibility metadata retained for older clients that still read
+            # `main_candidate_rule` / `top_daily_rule`.
             "main_candidate_rule": {
-                "min_probability": float(main_min_probability),
-                "min_data_depth": float(main_min_data_depth),
-                "min_surface_matches_each": int(main_min_surface_matches),
+                "min_probability": float(prime_min_probability),
+                "min_data_depth": float(prime_min_data_depth),
+                "min_surface_matches_each": int(prime_min_surface_matches),
                 "edge_filter": False,
-            },
-            "daily_rule": {
-                "min_odds": float(daily_min_odds),
-                "max_odds": float(daily_max_odds),
-                "sort": "probability_desc_then_data_depth",
-            },
-            # Backward-compatible metadata key for older clients. The section
-            # is now product-labelled Daily Picks and has no artificial top-10
-            # truncation.
-            "top_daily_rule": {
-                "limit": None,
-                "min_probability": float(main_min_probability),
-                "min_data_depth": float(main_min_data_depth),
-                "min_surface_matches_each": int(main_min_surface_matches),
-                "min_odds": float(daily_min_odds),
-                "max_odds": float(daily_max_odds),
-                "edge_filter": False,
-                "sort": "probability_desc_then_data_depth",
             },
             "prime_rule": {
-                "min_odds_exclusive": float(daily_max_odds),
-                "max_odds": None,
-                "sort": "probability_desc_then_data_depth",
+                "objective": "accuracy_first",
+                "min_probability": float(prime_min_probability),
+                "min_data_depth": float(prime_min_data_depth),
+                "min_surface_matches_each": int(prime_min_surface_matches),
+                "preferred_min_odds": float(PRIME_PREFERRED_MIN_ODDS),
+                "preferred_max_odds": float(PRIME_PREFERRED_MAX_ODDS),
+                "max_negative_expected_value": float(prime_max_negative_ev),
+                "hard_odds_band": False,
+                "limit": prime_limit,
+                "sort": "probability_desc_then_data_depth_then_ev",
+            },
+            "top_daily_rule": {
+                "product_label": "Top Bets",
+                "objective": "accuracy_plus_ev",
+                "min_probability": float(top_min_probability),
+                "min_data_depth": float(top_min_data_depth),
+                "min_surface_matches_each": int(top_min_surface_matches),
+                "min_odds": float(top_min_odds),
+                "min_edge": float(top_min_edge),
+                "min_expected_value": float(top_min_expected_value),
+                "limit": top_limit,
+                "sort": "ev_desc_then_probability_then_edge",
             },
             "value_rule": {
-                "selection_mode": "close_market_model_winner",
+                "objective": "edge_ev_first",
                 "min_probability": float(value_min_probability),
                 "min_data_depth": float(value_min_data_depth),
                 "min_surface_matches_each": int(value_min_surface_matches),
-                "max_implied_probability_gap": float(value_max_implied_gap),
-                "edge_filter": False,
-                "edge_display_only": True,
-                "sort": "probability_desc_then_data_depth_then_market_closeness",
+                "min_odds": float(value_min_odds),
+                "min_edge": float(value_min_edge),
+                "min_expected_value": float(value_min_expected_value),
+                "limit": value_limit,
+                "sort": "ev_desc_then_edge_then_probability",
             },
         },
     }
@@ -655,88 +783,66 @@ def select_market_sections(
 
 def annotate_market_publication_candidates(
     predictions: list[dict[str, Any]],
-    *,
-    main_min_probability: float = MAIN_MIN_PROBABILITY,
-    main_min_data_depth: float = MAIN_MIN_DATA_DEPTH,
-    main_min_surface_matches: int = MAIN_MIN_SURFACE_MATCHES,
-    daily_min_odds: float = DAILY_MIN_ODDS,
-    daily_max_odds: float = DAILY_MAX_ODDS,
-    value_min_probability: float = VALUE_MIN_PROBABILITY,
-    value_min_data_depth: float = VALUE_MIN_DATA_DEPTH,
-    value_min_surface_matches: int = VALUE_MIN_SURFACE_MATCHES,
-    value_max_implied_gap: float = VALUE_MAX_IMPLIED_GAP,
+    **selection_kwargs: Any,
 ) -> list[dict[str, Any]]:
-    """Attach pending section-publication candidates to current market rows.
+    """Attach one pending betting-section publication per underlying pick.
 
-    The core Match Winner prediction has its own publication lifecycle. Betting
-    sections (Daily / Prime / Value) may become available later when provider
-    odds arrive, so they need independent publication records. These candidates
-    are only *pending* here; `confirm_prediction_publication.py` stamps issued_at
-    after the exact feed has been deployed successfully.
-
-    One event can legitimately be published in more than one section. Each
-    section gets its own price snapshot, while `selection_key` lets performance
-    reporting deduplicate the same underlying bet for overall ROI.
+    A Match Winner selection can qualify for several internal strategies, but
+    `select_market_sections()` resolves it to a single primary public section.
+    The ledger therefore mirrors the dashboard: one selection, one offer.
     """
-    sections = select_market_sections(
-        predictions,
-        main_min_probability=main_min_probability,
-        main_min_data_depth=main_min_data_depth,
-        main_min_surface_matches=main_min_surface_matches,
-        daily_min_odds=daily_min_odds,
-        daily_max_odds=daily_max_odds,
-        value_min_probability=value_min_probability,
-        value_min_data_depth=value_min_data_depth,
-        value_min_surface_matches=value_min_surface_matches,
-        value_max_implied_gap=value_max_implied_gap,
-    )
-    membership: dict[str, list[str]] = {}
+    sections = select_market_sections(predictions, **selection_kwargs)
+    membership: dict[str, str] = {}
     for section_name, key in (
-        ("top_daily", "top_daily_picks"),
         ("prime", "prime_picks"),
+        ("top_daily", "top_daily_picks"),
         ("value", "value_picks"),
     ):
-        for row in sections.get(key, []):
-            event_id = str(row.get("event_id") or "").strip()
-            if event_id:
-                membership.setdefault(event_id, []).append(section_name)
+        for item in sections.get(key, []):
+            identity = _selection_identity(item)
+            if identity:
+                if identity in membership:
+                    raise ValueError("Selection assigned to multiple public market sections")
+                membership[identity] = section_name
 
     annotated: list[dict[str, Any]] = []
     for source in predictions:
         row = deepcopy(source)
-        event_id = str(row.get("event_id") or "").strip()
         betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
-        sections_for_event = membership.get(event_id, [])
         publications: list[dict[str, Any]] = []
-        if betting.get("market") == "match_winner" and sections_for_event:
+        identity = _selection_identity(row)
+        section_name = membership.get(identity)
+        if betting.get("market") == "match_winner" and section_name:
+            event_id = str(row.get("event_id") or "").strip()
             selection_id = str(betting.get("selection_id") or "").strip()
             betting_day = str(betting.get("betting_day") or "").strip()
-            if selection_id:
+            if event_id and selection_id:
                 selection_key = f"match_winner:{betting_day}:{event_id}:{selection_id}"
-                for section_name in sections_for_event:
-                    publications.append({
-                        "schema": 1,
-                        "publication_key": f"{section_name}:{selection_key}",
-                        "selection_key": selection_key,
-                        "section": section_name,
-                        "market": "match_winner",
-                        "selection": betting.get("selection"),
-                        "selection_id": selection_id,
-                        "odds": betting.get("odds"),
-                        "fair_implied_probability": betting.get("fair_implied_probability"),
-                        "model_probability": betting.get("model_probability"),
-                        "edge": betting.get("edge"),
-                        "expected_value": betting.get("expected_value"),
-                        "provider_id": betting.get("provider_id"),
-                        "captured_at": betting.get("captured_at"),
-                        "betting_day": betting_day or None,
-                        "issued_at": None,
-                        "publication_status": "pending",
-                        "result": None,
-                    })
+                publications.append({
+                    "schema": 1,
+                    "publication_key": f"{section_name}:{selection_key}",
+                    "selection_key": selection_key,
+                    "section": section_name,
+                    "primary_section": section_name,
+                    "market": "match_winner",
+                    "selection": betting.get("selection"),
+                    "selection_id": selection_id,
+                    "odds": betting.get("odds"),
+                    "fair_implied_probability": betting.get("fair_implied_probability"),
+                    "model_probability": betting.get("model_probability"),
+                    "edge": betting.get("edge"),
+                    "expected_value": betting.get("expected_value"),
+                    "provider_id": betting.get("provider_id"),
+                    "captured_at": betting.get("captured_at"),
+                    "betting_day": betting_day or None,
+                    "issued_at": None,
+                    "publication_status": "pending",
+                    "result": None,
+                })
         row["market_publication_candidates"] = publications
         annotated.append(row)
     return annotated
+
 
 def attach_market_sections_to_feed(
     feed: dict[str, Any],
