@@ -946,12 +946,12 @@
       }
     },
     "SIDEBAR_TOP_DAILY": {
-      "label": "Top 10 Daily Picks",
+      "label": "Daily Picks",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 3,
       "content": {
-        "label": "Top 10 Daily Picks",
+        "label": "Daily Picks",
         "route": "top_daily",
         "icon": "★"
       },
@@ -1368,12 +1368,12 @@
       }
     },
     "TOP_DAILY_PANEL": {
-      "label": "Top 10 Daily Picks panel",
+      "label": "Daily Picks panel",
       "zone": "predictions",
       "kind": "panel",
       "order": 60,
       "content": {
-        "label": "Top 10 Daily Picks panel"
+        "label": "Daily Picks panel"
       },
       "watermark": {
         "enabled": false,
@@ -1690,7 +1690,7 @@
       "preset": "1+1+1+1"
     },
     "content_mid": {
-      "label": "AD ROW · between Top 10 Daily and Value",
+      "label": "AD ROW · between Daily Picks and Value",
       "enabled": true,
       "preset": "1+1+1+1"
     },
@@ -1759,33 +1759,44 @@
   "market_rules": {
     "prime": {
       "market": "match_winner",
-      "min_win_probability": 0.7,
+      "min_win_probability": 0.78,
+      "min_data_depth": 0.8,
+      "min_surface_matches": 5,
+      "min_odds_exclusive": 1.5,
+      "max_odds": null,
       "limit": null,
-      "use_dashboard_filters": true
+      "use_dashboard_filters": true,
+      "edge_filter": false,
+      "sort": "probability_desc_then_data_depth"
     },
     "top_daily": {
-      "label": "Top 10 Daily Picks",
-      "limit": 10,
+      "label": "Daily Picks",
+      "limit": null,
       "markets": [
-        "match_winner",
-        "aces",
-        "double_faults",
-        "sets",
-        "games"
+        "match_winner"
       ],
       "requires_odds": true,
-      "min_probability": 0.6,
-      "min_edge": 0.0,
-      "min_data_depth": 0.3,
+      "min_probability": 0.78,
+      "min_data_depth": 0.8,
+      "min_surface_matches": 5,
+      "min_odds": 1.25,
+      "max_odds": 1.5,
       "timezone": "Europe/Bratislava",
       "betting_day_start_hour": 6,
-      "sort": "expected_value_desc_then_probability_then_data_depth"
+      "edge_filter": false,
+      "sort": "probability_desc_then_data_depth"
     },
     "value": {
+      "label": "Value Picks",
       "limit": null,
-      "min_odds": 1.7,
+      "selection_mode": "close_market_model_winner",
+      "min_probability": 0.6,
+      "min_data_depth": 0.8,
+      "min_surface_matches": 5,
       "max_implied_probability_gap": 0.15,
-      "sort": "edge_desc"
+      "edge_filter": false,
+      "edge_display_only": true,
+      "sort": "probability_desc_then_data_depth_then_market_closeness"
     },
     "ace": {
       "limit": 10,
