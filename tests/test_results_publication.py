@@ -67,13 +67,13 @@ def test_market_section_publication_is_confirmed_only_from_matching_deployed_fee
         'value_picks': sections['value_picks'],
         'market_selection': {'publication_schema': 1},
     }
-    assert validate_market_publication_candidate(feed, ledger) == 2
+    assert validate_market_publication_candidate(feed, ledger) == 1
     confirmed, count = confirm_market_publications(
         ledger,
         feed,
         datetime(2026, 9, 7, 9, 0, tzinfo=timezone.utc),
     )
-    assert count == 2
+    assert count == 1
     assert all(p['issued_at'] for p in confirmed[0]['market_publications'])
     assert all(p['publication_status'] == 'published' for p in confirmed[0]['market_publications'])
 
@@ -82,8 +82,8 @@ def test_settled_market_publications_produce_real_flat_unit_roi(match_factory):
     row = _market_row()
     annotated = annotate_market_publication_candidates([row])[0]
     publications = annotated['market_publication_candidates']
-    # Prime and Value represent the same underlying selection. They were
-    # published simultaneously, so overall ROI must deduplicate the bet.
+    # v6 assigns an underlying Match Winner selection to exactly one public
+    # offer, so no cross-section ROI deduplication is needed for new picks.
     for publication in publications:
         publication['issued_at'] = '2026-09-07T09:00:00+00:00'
         publication['publication_status'] = 'published'
@@ -113,7 +113,7 @@ def test_settled_market_publications_produce_real_flat_unit_roi(match_factory):
     assert overall['n'] == 1
     assert overall['wins'] == 1
     assert abs(overall['roi'] - .90) < 1e-12
-    assert feed['betting_performance']['sections']['top_daily']['n'] == 0
-    assert feed['betting_performance']['sections']['prime']['n'] == 1
-    assert feed['betting_performance']['sections']['value']['n'] == 1
+    assert feed['betting_performance']['sections']['top_daily']['n'] == 1
+    assert feed['betting_performance']['sections']['prime']['n'] == 0
+    assert feed['betting_performance']['sections']['value']['n'] == 0
     assert feed['results_meta']['settled_total'] == 1

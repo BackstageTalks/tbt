@@ -108,76 +108,87 @@ def test_betting_day_uses_six_am_bratislava_boundary():
     assert end.isoformat() == '2026-09-07T04:00:00+00:00'
 
 
-def test_daily_and_prime_are_one_quality_pool_split_only_by_price():
+def test_prime_top_and_value_follow_distinct_working_policy():
     rows = [
-        row('daily', .84, 1.42, .70, depth=.9, surface1=18, surface2=9),
-        row('prime', .81, 1.65, .60, depth=.8, surface1=5, surface2=8),
-        row('too-cheap', .91, 1.20, .82, depth=1.0, surface1=30, surface2=30),
-        row('probability-fail', .77, 1.45, .68, depth=1.0, surface1=20, surface2=20),
-        row('depth-fail', .88, 1.40, .76, depth=.79, surface1=20, surface2=20),
+        row('prime-safe', .90, 1.35, .76, depth=.9, surface1=18, surface2=9),
+        row('top-balanced', .78, 1.62, .60, depth=.9, surface1=12, surface2=8),
+        row('value-edge', .64, 1.95, .52, depth=.8, surface1=5, surface2=5),
+        row('prime-negative-ev', .90, 1.05, .82, depth=1.0, surface1=30, surface2=30),
+        row('top-probability-fail', .71, 1.75, .58, depth=1.0, surface1=20, surface2=20),
+        row('depth-fail', .90, 1.40, .76, depth=.79, surface1=20, surface2=20),
         row('surface-fail', .90, 1.55, .74, depth=1.0, surface1=4, surface2=20),
     ]
     sections = select_market_sections(rows)
-    assert [x['event_id'] for x in sections['top_daily_picks']] == ['daily']
-    assert [x['event_id'] for x in sections['prime_picks']] == ['prime']
-    assert sections['market_selection']['main_candidate_rule'] == {
-        'min_probability': .78,
-        'min_data_depth': .8,
-        'min_surface_matches_each': 5,
-        'edge_filter': False,
-    }
+    assert [x['event_id'] for x in sections['prime_picks']] == ['prime-safe']
+    assert [x['event_id'] for x in sections['top_daily_picks']] == ['top-balanced']
+    assert [x['event_id'] for x in sections['value_picks']] == ['value-edge']
+    assert sections['market_selection']['prime_rule']['min_probability'] == .85
+    assert sections['market_selection']['prime_rule']['hard_odds_band'] is False
+    assert sections['market_selection']['top_daily_rule']['product_label'] == 'Top Bets'
+    assert sections['market_selection']['top_daily_rule']['min_odds'] == 1.50
+    assert sections['market_selection']['value_rule']['min_odds'] == 1.80
 
 
-def test_daily_boundary_is_125_through_150_and_prime_starts_above_150():
+def test_sections_are_mutually_exclusive_with_prime_then_top_then_value_priority():
     rows = [
-        row('low', .85, 1.249, .78),
-        row('daily-min', .85, 1.25, .78),
-        row('daily-max', .85, 1.50, .70),
-        row('prime-min', .85, 1.5001, .70),
-        row('prime-high', .85, 2.40, .45),
+        row('qualifies-all', .90, 2.00, .50, depth=1.0, surface1=20, surface2=20),
+        row('top-and-value', .80, 1.90, .50, depth=1.0, surface1=20, surface2=20),
+        row('value-only', .65, 1.95, .50, depth=.9, surface1=10, surface2=10),
     ]
     sections = select_market_sections(rows)
-    assert {x['event_id'] for x in sections['top_daily_picks']} == {'daily-min', 'daily-max'}
-    assert {x['event_id'] for x in sections['prime_picks']} == {'prime-min', 'prime-high'}
+    assert {x['event_id'] for x in sections['prime_picks']} == {'qualifies-all'}
+    assert {x['event_id'] for x in sections['top_daily_picks']} == {'top-and-value'}
+    assert {x['event_id'] for x in sections['value_picks']} == {'value-only'}
+
+    all_rows = sections['prime_picks'] + sections['top_daily_picks'] + sections['value_picks']
+    identities = {(x['event_id'], x['betting']['selection_id']) for x in all_rows}
+    assert len(all_rows) == len(identities)
+    assignment = sections['market_selection']['exclusive_assignment']
+    assert assignment['enabled'] is True
+    assert assignment['priority'] == ['prime', 'top_daily', 'value']
+    assert sections['market_selection']['selection_counts']['duplicates_removed'] == 3
 
 
-def test_value_is_close_market_analysis_and_edge_is_display_only():
+def test_value_requires_price_edge_and_ev_not_market_closeness():
     rows = [
-        row('close', .64, 1.92, .51, depth=.9, gap=.10),
-        row('close-negative-stored-edge', .62, 1.88, .52, depth=.9, gap=.08, edge=-.07),
-        row('not-close', .70, 1.75, .55, depth=.9, gap=.16),
-        row('weak-model', .59, 1.95, .50, depth=.9, gap=.04),
-        row('poor-surface', .70, 1.90, .52, depth=.9, gap=.06, surface1=4, surface2=30),
+        row('good', .60, 2.00, .50, depth=.9, surface1=8, surface2=8),
+        row('low-odds', .60, 1.79, .50, depth=.9, surface1=8, surface2=8),
+        row('low-edge', .60, 2.00, .57, depth=.9, surface1=8, surface2=8),
+        row('low-ev', .59, 1.80, .53, depth=.9, surface1=8, surface2=8),
+        row('weak-model', .54, 2.10, .45, depth=.9, surface1=8, surface2=8),
+        row('poor-depth', .65, 2.00, .50, depth=.74, surface1=8, surface2=8),
+        row('poor-surface', .65, 2.00, .50, depth=.9, surface1=2, surface2=30),
     ]
     sections = select_market_sections(rows)
-    value_ids = {x['event_id'] for x in sections['value_picks']}
-    assert value_ids == {'close', 'close-negative-stored-edge'}
-    by_id = {x['event_id']: x for x in sections['value_picks']}
-    assert by_id['close-negative-stored-edge']['edge'] == -.07
-    assert by_id['close-negative-stored-edge']['close_market'] is True
+    assert {x['event_id'] for x in sections['value_picks']} == {'good'}
     rule = sections['market_selection']['value_rule']
-    assert rule['edge_filter'] is False
-    assert rule['edge_display_only'] is True
-    assert rule['max_implied_probability_gap'] == .15
+    assert rule['min_probability'] == .55
+    assert rule['min_data_depth'] == .75
+    assert rule['min_surface_matches_each'] == 3
+    assert rule['min_edge'] == .05
+    assert rule['min_expected_value'] == .08
 
 
-def test_market_publication_candidates_track_daily_prime_value_membership_without_leaking_into_cards():
+def test_market_publication_candidates_have_exactly_one_primary_section_and_do_not_leak_into_cards():
     from tbt.services.market_selection import annotate_market_publication_candidates
 
     rows = [
-        row('daily', .84, 1.42, .70, gap=.30),  # Daily only
-        row('prime-value', .81, 1.70, .55, gap=.10),  # Prime + close-market Value
-        row('value-only', .65, 1.90, .52, gap=.08),  # Below main 78%, still Value
+        row('qualifies-all', .90, 2.00, .50),
+        row('top-value', .80, 1.90, .50),
+        row('value-only', .65, 1.95, .50),
     ]
     annotated = annotate_market_publication_candidates(rows)
     by_id = {item['event_id']: item for item in annotated}
-    assert {p['section'] for p in by_id['daily']['market_publication_candidates']} == {'top_daily'}
-    assert {p['section'] for p in by_id['prime-value']['market_publication_candidates']} == {'prime', 'value'}
-    assert {p['section'] for p in by_id['value-only']['market_publication_candidates']} == {'value'}
-    for publication in by_id['prime-value']['market_publication_candidates']:
-        assert publication['issued_at'] is None
-        assert publication['publication_status'] == 'pending'
-        assert publication['selection_key'].startswith('match_winner:2026-09-07:prime-value:')
+    assert [p['section'] for p in by_id['qualifies-all']['market_publication_candidates']] == ['prime']
+    assert [p['section'] for p in by_id['top-value']['market_publication_candidates']] == ['top_daily']
+    assert [p['section'] for p in by_id['value-only']['market_publication_candidates']] == ['value']
+    for item in annotated:
+        assert len(item['market_publication_candidates']) <= 1
+        for publication in item['market_publication_candidates']:
+            assert publication['issued_at'] is None
+            assert publication['publication_status'] == 'pending'
+            assert publication['primary_section'] == publication['section']
+            assert publication['selection_key'].startswith(f"match_winner:2026-09-07:{item['event_id']}:")
 
     sections = select_market_sections(annotated)
     for key in ('top_daily_picks', 'prime_picks', 'value_picks'):
@@ -201,7 +212,7 @@ class _OddsProvider:
         }
 
 
-def test_odds_enrichment_spends_calls_only_on_broad_60_80_5_candidate_gate():
+def test_odds_enrichment_uses_broad_value_floor_before_final_section_rules():
     provider = _OddsProvider()
     rows = [
         row('eligible', .61, 1.60, .60, depth=.8, surface1=5, surface2=5),
@@ -219,13 +230,16 @@ def test_odds_enrichment_spends_calls_only_on_broad_60_80_5_candidate_gate():
         now=datetime(2026, 9, 7, 8, 0, tzinfo=timezone.utc),
         max_events=150,
     )
-    assert provider.called == [('eligible', 1)]
-    assert report['candidates'] == 1
-    assert report['odds_requested'] == 1
+    assert provider.called == [('surface', 1), ('shallow', 1), ('eligible', 1), ('weak', 1)]
+    assert report['candidates'] == 4
+    assert report['odds_requested'] == 4
     assert report['candidate_gate'] == {
-        'min_probability': .60,
-        'min_data_depth': .80,
-        'min_surface_matches_each': 5,
+        'min_probability': .55,
+        'min_data_depth': .75,
+        'min_surface_matches_each': 3,
     }
-    assert next(x for x in enriched if x['event_id'] == 'eligible').get('betting')
-    assert not next(x for x in enriched if x['event_id'] == 'weak').get('betting')
+    assert all(next(x for x in enriched if x['event_id'] == event_id).get('betting') for event_id in ('eligible','weak','shallow','surface'))
+    final_sections = select_market_sections(enriched)
+    assert final_sections['prime_picks'] == []
+    assert final_sections['top_daily_picks'] == []
+    assert final_sections['value_picks'] == []
