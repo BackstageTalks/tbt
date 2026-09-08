@@ -168,11 +168,21 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     cfg = _cfg()
     rules = cfg["market_rules"]
     assert rules["prime"]["market"] == "match_winner"
-    assert rules["prime"]["min_win_probability"] == 0.70
+    assert rules["prime"]["min_win_probability"] == 0.78
+    assert rules["prime"]["min_data_depth"] == 0.80
+    assert rules["prime"]["min_surface_matches"] == 5
+    assert rules["prime"]["min_odds_exclusive"] == 1.50
+    assert rules["prime"]["edge_filter"] is False
     assert rules["prime"]["limit"] is None
-    assert rules["top_daily"]["limit"] == 10
-    assert rules["value"]["min_odds"] == 1.70
+    assert rules["top_daily"]["limit"] is None
+    assert rules["top_daily"]["min_odds"] == 1.25
+    assert rules["top_daily"]["max_odds"] == 1.50
+    assert rules["top_daily"]["min_probability"] == 0.78
+    assert rules["value"]["selection_mode"] == "close_market_model_winner"
+    assert rules["value"]["min_probability"] == 0.60
     assert rules["value"]["max_implied_probability_gap"] == 0.15
+    assert rules["value"]["edge_filter"] is False
+    assert rules["value"]["edge_display_only"] is True
     assert set(rules["ace"]["markets"]) == {"aces", "double_faults"}
     assert set(rules["sg"]["markets"]) == {"sets", "games"}
     assert rules["btts"]["href"] == "/btts"
