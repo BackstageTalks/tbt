@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'} };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,ace:0,sg:0} };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   const pct = value => `${(Number(value || 0) * (Number(value || 0) <= 1 ? 100 : 1)).toFixed(1)}%`;
@@ -114,12 +114,22 @@
   }
 
   function renderNavigation(){
-    const main=elementList('navigation').map(item=>({
-      id:item.content?.route||'', href:item.content?.href||`#${item.content?.route||''}`, icon:item.content?.icon||'•', beta:Boolean(item.content?.beta),
-      label:item.content?.label||item.label||item.id, order:item.order, enabled:true, element_id:item.id,
-    })).filter(item=>item.id||item.href);
-    if(isAdminAccount()) main.push({id:'admin',href:'#admin',icon:'⚙',label:'Admin',order:90,enabled:true});
+    const primaryNav=[
+      ['predictions','Dashboard','⌂'],['prime','Prime Picks','✦'],['top_daily','Top Bets','★'],
+      ['value','Value Picks','◇'],['ace','Ace Picks','♠'],['sg','S/G Picks','▥'],
+      ['doubles','Doubles','◈'],['results','Results','✓'],['btts','BTTS Bonus','⚽'],
+    ];
+    const configNav=elementList('navigation');
+    const main=primaryNav.map(([id,label,icon],index)=>{
+      const item=configNav.find(entry=>entry.content?.route===id);
+      return {id,label,icon,order:index+1,enabled:true,beta:id==='btts',href:id==='btts'?'/btts':`#${id}`,element_id:item?.id||''};
+    });
     renderNavigationGroup(main,'mainNavigation');
+    const adminWrap=$('adminNavigationWrap');
+    if(adminWrap){
+      adminWrap.hidden=!isAdminAccount();
+      renderNavigationGroup(isAdminAccount()?[{id:'admin',href:'#admin',icon:'⚙',label:'Admin',order:1,enabled:true}]:[],'adminNavigation');
+    }
     const footer=$('footerLearnNavigation');
     if(footer){
       footer.innerHTML='';
@@ -378,7 +388,6 @@
   function renderSnapshot(){
     const host=$('dashboardSnapshot'); if(!host) return;
     const rows=(state.feed.upcoming||[]).map(normalize);
-    const top=rows.length?Math.max(...rows.map(x=>Number(x.probability)||0)):null;
     const prime=marketRows('prime').length;
     const daily=marketRows('top_daily').length;
     const tournaments=new Set(rows.map(x=>x.tournament).filter(Boolean)).size;
@@ -387,11 +396,9 @@
     const oddsAvailable=Number(oddsReport.odds_available);
     const oddsCoverage=Number.isFinite(oddsRequested)&&oddsRequested>0&&Number.isFinite(oddsAvailable)?oddsAvailable/oddsRequested:null;
     const cards=[
-      ['UPCOMING',String(rows.length),'current board'],
-      ['TOP PROBABILITY',top!=null?pct(top):'—','highest current pick'],
-      ['PRIME PICKS',prime?String(prime):'—','qualified picks · odds > 1.50'],
-      ['TOP BETS',daily?String(daily):'—','balanced probability + positive EV'],
-      ['TOURNAMENTS',String(tournaments),'active in feed'],
+      ["TODAY'S MATCHES",String(rows.length),tournaments?`${tournaments} tournaments`:'current board'],
+      ['PRIME PICKS',String(prime),'85%+ accuracy-first'],
+      ['TOP BETS',String(daily),'75 → 72 → 70 → 68 cascade'],
       ['ODDS COVERAGE',oddsCoverage==null?'—':pct(oddsCoverage),oddsRequested?`${oddsAvailable}/${oddsRequested} betting-day events`:'next refresh']
     ];
     host.innerHTML=cards.map(([label,value,note])=>`<div class="snapshot-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note)}</span></div>`).join('');
@@ -402,7 +409,7 @@
   function filtered(){ const rows=rankedPredictions(),tour=$('tourFilter')?.value||'',tournament=$('tournamentFilter')?.value||'',surface=$('surfaceFilter')?.value||'',confidence=$('confidenceFilter')?.value||'',q=($('searchInput')?.value||'').trim().toLowerCase(); return rows.filter(m=>{ if(tour&&m.tour!==tour)return false;if(tournament&&m.tournament!==tournament)return false;if(surface&&m.surface!==surface)return false;if(confidence&&m.confidence!==confidence)return false;if(q&&!`${m.p1} ${m.p2} ${m.tournament}`.toLowerCase().includes(q))return false;return true; }); }
 
   function marketRows(key){
-    const candidates={prime:['prime_picks','prime'],top_daily:['top_daily_picks','daily_picks','top_daily'],value:['value_picks','value'],ace:['ace_picks','aces','ace_markets'],sg:['sg_picks','sets_games','set_game_picks']}[key]||[];
+    const candidates={prime:['prime_picks','prime'],top_daily:['top_daily_picks','daily_picks','top_daily'],value:['value_picks','value'],ace:['ace_picks','aces','ace_markets'],sg:['sg_picks','sets_games','set_game_picks'],doubles:['doubles_picks','doubles']}[key]||[];
     for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return value;}
     const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return markets[key];
     return [];
@@ -427,8 +434,23 @@
     return `<article class="prediction-card featured market-card${projectionOnly?' projection-card':''}"><div class="card-meta"><span class="tour">${escapeHtml(String(row?.tour||'').toUpperCase())} ${escapeHtml(row?.tournament||row?.competition||'')}</span><span class="time">${escapeHtml(fmtTime(row?.scheduled_at||row?.date))}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row"><div class="player">${avatar(p1Photo,p1Name)}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${escapeHtml(playerMetaLabel(p1.rank,p1.country_code))}</small></div><div class="vs">VS</div><div class="player">${avatar(p2Photo,p2Name)}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${escapeHtml(playerMetaLabel(p2.rank,p2.country_code))}</small></div></div><div class="pick-row"><div><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div><div class="market-card-meta">${escapeHtml(meta||row?.market||row?.market_type||'')}</div></article>`;
   }
 
-  function renderMarketSection(key,hostId,emptyText){const host=$(hostId);if(!host)return;let rows=marketRows(key);const limit=Number(state.ui?.market_rules?.[key]?.limit)||10;if(['ace','sg'].includes(key))rows=rows.slice(0,Math.min(10,limit));host.innerHTML=rows.length?rows.slice(0,5).map(row=>marketPreviewCard(row,key)).join(''):`<div class="state-card market-empty">${escapeHtml(emptyText)}</div>`;}
-  function renderMarketSections(){renderMarketSection('top_daily','topDailyGrid','No Top Bets pass the current 68% probability and data-quality floor.');renderMarketSection('value','valueGrid','No Value Picks pass the current odds, edge and EV guardrails.');renderMarketSection('ace','aceGrid','No Aces / Double Faults projections pass the current data-depth and gap guardrails yet.');renderMarketSection('sg','sgGrid','No Sets / Games projections pass the current data-depth and signal guardrails yet.');}
+  function renderMarketSection(key,hostId,emptyText){
+    const host=$(hostId);if(!host)return;
+    const rows=marketRows(key);
+    const previewLimit=Math.max(1,Number(state.ui?.market_rules?.[key]?.presentation_preview_limit)||10);
+    const perPage=Math.min(5,pageSize());
+    const preview=rows.slice(0,previewLimit);
+    const pageCount=Math.max(1,Math.ceil(preview.length/perPage));
+    state.marketPage[key]=Math.min(Number(state.marketPage[key]||0),pageCount-1);
+    const start=state.marketPage[key]*perPage;
+    const visible=preview.slice(start,start+perPage);
+    host.innerHTML=visible.length?visible.map(row=>marketPreviewCard(row,key)).join(''):`<div class="state-card market-empty">${escapeHtml(emptyText)}</div>`;
+    const count=$(key==='top_daily'?'topDailyCount':`${key}Count`);if(count)count.textContent=`${rows.length} ${rows.length===1?'pick':'picks'}`;
+    const see=$(key==='top_daily'?'topDailySeeAll':`${key}SeeAll`);if(see)see.hidden=rows.length<=previewLimit;
+    const shell=host.closest('.market-carousel-shell');
+    if(shell){const prev=shell.querySelector('[data-market-prev]'),next=shell.querySelector('[data-market-next]');if(prev){prev.hidden=pageCount<=1;prev.disabled=state.marketPage[key]<=0;}if(next){next.hidden=pageCount<=1;next.disabled=state.marketPage[key]>=pageCount-1;}}
+  }
+  function renderMarketSections(){renderMarketSection('top_daily','topDailyGrid','No Top Bets pass the adaptive 75 → 72 → 70 → 68 confidence cascade.');renderMarketSection('value','valueGrid','No Value Picks pass the current odds, edge and EV guardrails.');renderMarketSection('ace','aceGrid','No Aces / Double Faults projections pass the current data-depth and gap guardrails yet.');renderMarketSection('sg','sgGrid','No Sets / Games projections pass the current data-depth and signal guardrails yet.');const dc=$('doublesCount');if(dc)dc.textContent=`${marketRows('doubles').length} picks`;const ds=$('doublesSeeAll');if(ds)ds.hidden=true;}
 
   function signalMeta(signal,m){ const id=String(signal?.player_id ?? signal?.favours_player_id ?? ''); const favours=id===String(m.pickId); const label=signal?.label||signal?.factor||'Model signal'; return {label,favours}; }
   function renderSignal(signal,m){ const s=signalMeta(signal,m); return `<div class="signal-row"><span>${escapeHtml(s.label)}</span><div class="signal-meter"><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i></i><i></i></div></div>`; }
@@ -444,7 +466,7 @@
 
 
   function renderDots(pageCount){ const host=$('carouselDots'); if(!host)return; host.innerHTML=''; if(pageCount<=1)return; for(let i=0;i<pageCount;i++){const b=document.createElement('button');b.type='button';b.className=i===state.page?'active':'';b.setAttribute('aria-label',`Show Prime Picks page ${i+1}`);b.onclick=()=>{state.page=i;renderPredictions()};host.appendChild(b)} }
-  function renderPredictions(){ const rows=filtered(),grid=$('predictionGrid'),size=pageSize(); if(!grid)return; $('matchCount').textContent=rows.length; const pageCount=Math.max(1,Math.ceil(rows.length/size)); state.page=Math.min(state.page,pageCount-1); const start=state.page*size; const visible=rows.slice(start,start+size); grid.classList.remove('show-all'); grid.innerHTML=''; if(!visible.length){grid.innerHTML='<div class="state-card">No Prime Picks pass the current accuracy/data-quality and EV guardrails.</div>';} else visible.forEach((m,index)=>grid.appendChild(renderCard(m,Number.isInteger(m.accessIndex)?m.accessIndex:start+index))); $('prevPick').hidden=pageCount<=1; $('nextPick').hidden=pageCount<=1; $('prevPick').disabled=state.page<=0; $('nextPick').disabled=state.page>=pageCount-1; renderDots(pageCount); applyAccessStates(grid); }
+  function renderPredictions(){ const allRows=rankedPredictions(),rows=allRows.slice(0,10),grid=$('predictionGrid'),size=Math.min(5,pageSize()); if(!grid)return; $('matchCount').textContent=allRows.length; const see=$('viewAllButton');if(see)see.hidden=allRows.length<=10; const pageCount=Math.max(1,Math.ceil(rows.length/size)); state.page=Math.min(state.page,pageCount-1); const start=state.page*size; const visible=rows.slice(start,start+size); grid.classList.remove('show-all'); grid.innerHTML=''; if(!visible.length){grid.innerHTML='<div class="state-card">No Prime Picks pass the current accuracy/data-quality guardrails.</div>';} else visible.forEach((m,index)=>grid.appendChild(renderCard(m,Number.isInteger(m.accessIndex)?m.accessIndex:start+index))); $('prevPick').hidden=pageCount<=1; $('nextPick').hidden=pageCount<=1; $('prevPick').disabled=state.page<=0; $('nextPick').disabled=state.page>=pageCount-1; renderDots(pageCount); applyAccessStates(grid); }
 
   function openMatch(m){ const signalRows=m.signals.length?m.signals.map(s=>{const meta=signalMeta(s,m);const favoursId=String(s?.player_id??s?.favours_player_id??'');const favours=favoursId===String(m.p1Id)?m.p1:favoursId===String(m.p2Id)?m.p2:'—';return `<div class="dialog-signal"><span>${escapeHtml(meta.label)}</span><strong>${escapeHtml(favours)}</strong><small>${meta.favours?'supports pick':'counter-signal'}</small></div>`}).join(''):'<p class="signal-empty">No secondary signals are available.</p>'; const betting=Number.isFinite(m.odds)&&m.odds>1?`<div class="dialog-section dialog-market"><h3>Current market snapshot</h3><div class="dialog-market-grid"><span>Odds <strong>${m.odds.toFixed(2)}</strong></span><span>Model edge <strong>${Number.isFinite(m.edge)?`${m.edge>=0?'+':''}${(m.edge*100).toFixed(1)} pp`:'—'}</strong></span><span>EV <strong>${Number.isFinite(m.expectedValue)?`${m.expectedValue>=0?'+':''}${(m.expectedValue*100).toFixed(1)}%`:'—'}</strong></span></div></div>`:''; $('dialogContent').innerHTML=`<div class="dialog-eyebrow">${escapeHtml(m.tour)} · ${escapeHtml(m.tournament)}</div><h2>${escapeHtml(m.p1)} <span>vs</span> ${escapeHtml(m.p2)}</h2><div class="dialog-pick"><div><small>BlinQ Pick</small><strong>${escapeHtml(m.pick)}</strong></div><div class="dialog-prob">${pct(m.probability)} <span class="confidence ${m.confidence}">${m.confidence==='very-high'?'VERY HIGH':m.confidence.toUpperCase()}</span></div></div>${betting}<div class="dialog-section"><h3>Model signals</h3>${signalRows}</div><div class="dialog-meta"><span>${escapeHtml(String(m.surface).replaceAll('_',' '))}</span><span>${fmtDate(m.date)} · ${fmtTime(m.date)}</span><span>Model ${escapeHtml(m.model||'—')}</span></div>`; $('matchDialog').showModal(); }
 
@@ -455,14 +477,10 @@
     value:['VALUE EDGE','Value Picks','Higher-priced model-vs-market opportunities with stricter edge and EV guardrails.'],
     ace:['ACES + DOUBLE FAULTS','Ace Picks','Top Aces and Double Faults market selections.'],
     sg:['SETS + GAMES','S/G Picks','Top Sets and Games market selections.'],
+    doubles:['DOUBLES','Doubles','Separate doubles model and team-pair intelligence.'],
     results:['SETTLED PICKS','Results','Settled selections, hit rate, ROI, units and related performance statistics.'],
-    tournaments:['TOURNAMENT VIEW','Tournaments','Current tournament coverage derived from published upcoming matches.'],
-    players:['PLAYER VIEW','Players','Current players appearing in the published prediction feed.'],
-    stats:['PERFORMANCE','Stats & Insights','Observed model performance from settled published predictions.'],
-    model:['MODEL TRANSPARENCY','Model Performance','Current production model metadata and evaluation report.'],
-    backtests:['VALIDATION','Backtests','Out-of-time evaluation information published with the production model.'],
     account:['BLINQ MEMBERS','Account','Manage your profile and access.'],
-    admin:['BLINQ CONTROL','Admin Control Center','Configure fixed page slots, banner rows, access, campaigns and account access.'],
+    admin:['BLINQ CONTROL','Admin Control Center','Internal model performance, backtests, publishing, access and workspace configuration.'],
     how_blinq_works:['LEARN','How BlinQ Works','How the BlinQ workflow turns point-in-time tennis data into probabilities.'],
     methodology:['LEARN','Methodology','The principles used to keep predictions point-in-time and auditable.'],
     model_data:['LEARN','Model & Data','What the published feed exposes about data and model state.'],
@@ -562,7 +580,7 @@
   function renderAdminCanvas(){
     const nav=elementList('navigation').map(x=>adminMiniBlock(x.id,true)).join('');const promos=elementList('sidebar_promo','sidebar').map(x=>adminMiniBlock(x.id,true)).join('');const picks=[...Array(8)].map((_,i)=>adminMiniBlock(`TOP_PICK_${i+1}`,true)).join('')+adminMiniBlock('TOP_PICK_MORE',true);const features=elementList('feature','features').map(x=>adminMiniBlock(x.id,true)).join('');
     const rowBlock=(zone,title)=>`<div class="admin-row-caption"><span>${escapeHtml(title)}</span><b>${escapeHtml(rowPreset(zone))} · ${escapeHtml(rowCreativeSummary(zone))}</b></div><div class="admin-slot-row four preset-${escapeHtml(rowPreset(zone).replaceAll('+','-'))}${rowEnabled(zone)?'':' row-off'}">${adminRowHtml(zone)||'<div class="admin-row-off-label">ROW OFF</div>'}</div>`;
-    return `<div class="admin-canvas"><div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>FIXED</small></div><div class="admin-header-slots">${adminMiniBlock('HEADER_BANNER_1')}${adminMiniBlock('HEADER_BANNER_2')}${adminMiniBlock('HEADER_BANNER_3')}</div></div><div class="admin-canvas-body"><aside class="admin-canvas-sidebar"><b>SIDEBAR</b>${nav}<div class="admin-canvas-divider"></div><b>3 PROMO SLOTS</b>${promos}${features?`<div class="admin-canvas-divider"></div><b>FEATURE FLAGS</b>${features}`:''}</aside><main class="admin-canvas-main"><div class="admin-functional-row">${adminMiniBlock('DASHBOARD_SNAPSHOT')}${adminMiniBlock('PREDICTION_TOOLBAR')}</div>${rowBlock('content_top','AD ROW · ABOVE PRIME PICKS')}<div class="admin-prime-map"><div>${adminMiniBlock('PRIME_PICKS_PANEL')}${adminMiniBlock('TOP_DAILY_PANEL')}</div><div class="admin-pick-strip">${picks}</div></div>${rowBlock('content_mid','AD ROW · TOP 10 DAILY → VALUE')}<div class="admin-functional-row">${adminMiniBlock('VALUE_PICKS_PANEL')}${adminMiniBlock('ACE_PICKS_PANEL')}</div>${rowBlock('content_bottom','AD ROW · ACE → S/G')}<div class="admin-functional-row">${adminMiniBlock('SG_PICKS_PANEL')}${adminMiniBlock('BTTS_BONUS_PANEL')}</div>${adminMiniBlock('FOOTER_SYSTEM')}</main></div></div>`;
+    return `<div class="admin-canvas"><div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>FIXED</small></div><div class="admin-header-slots">${adminMiniBlock('HEADER_BANNER_1')}${adminMiniBlock('HEADER_BANNER_2')}${adminMiniBlock('HEADER_BANNER_3')}</div></div><div class="admin-canvas-body"><aside class="admin-canvas-sidebar"><b>SIDEBAR</b>${nav}<div class="admin-canvas-divider"></div><b>3 PROMO SLOTS</b>${promos}${features?`<div class="admin-canvas-divider"></div><b>FEATURE FLAGS</b>${features}`:''}</aside><main class="admin-canvas-main"><div class="admin-functional-row">${adminMiniBlock('DASHBOARD_SNAPSHOT')}${adminMiniBlock('PREDICTION_TOOLBAR')}</div>${rowBlock('content_top','AD ROW · ABOVE PRIME PICKS')}<div class="admin-prime-map"><div>${adminMiniBlock('PRIME_PICKS_PANEL')}${adminMiniBlock('TOP_DAILY_PANEL')}</div><div class="admin-pick-strip">${picks}</div></div>${rowBlock('content_mid','AD ROW · TOP 10 DAILY → VALUE')}<div class="admin-functional-row">${adminMiniBlock('VALUE_PICKS_PANEL')}${adminMiniBlock('ACE_PICKS_PANEL')}</div>${rowBlock('content_bottom','AD ROW · ACE → S/G')}<div class="admin-functional-row">${adminMiniBlock('SG_PICKS_PANEL')}${adminMiniBlock('DOUBLES_PANEL')}</div><div class="admin-functional-row">${adminMiniBlock('BTTS_BONUS_PANEL')}</div>${adminMiniBlock('FOOTER_SYSTEM')}</main></div></div>`;
   }
 
   function campaignOptions(selected=''){
@@ -698,9 +716,14 @@
     catch(error){state.adminAnalytics={available:false,error:error.message};}
     finally{state.adminAnalyticsLoading=false;rerenderAdmin();}
   }
+  function renderAdminPerformance(){
+    const feed=state.feed||{},p=feed.performance||{},report=feed.model?.report||{},holdout=report.holdout||{},delta=report.delta_vs_elo||{},backtest=report.backtest||report.walk_forward||{};
+    return `<div class="admin-note"><strong>Internal model workspace</strong><span>Live performance, model evaluation and backtests live here; none of these items occupy the public sidebar.</span></div>${metricCards([['Model',String(feed.model?.version||'—'),'production artifact'],['Settled',String(p.n??0),'published results'],['Live accuracy',p.accuracy!=null?pct(p.accuracy):'—','settled feed'],['Holdout n',String(holdout.n??'—'),'chronological evaluation'],['Holdout accuracy',holdout.accuracy!=null?pct(holdout.accuracy):'—','model report'],['Δ log loss vs Elo',delta.log_loss!=null?number(delta.log_loss):'—','negative is better']])}<div class="route-sub static-copy"><h3>Backtests</h3><p>Historical walk-forward validation is retained inside Model Performance. Latest embedded report: ${escapeHtml(backtest.method||report.method||'available when published with the model artifact')}.</p></div>`;
+  }
+
   function renderAdminRoute(){
-    const tabs=[['layout','Layout & slots'],['campaigns','Campaigns'],['feeds','RSS feeds'],['plans','Plans'],['accounts','Accounts'],['analytics','Banner analytics']];
-    const panel=state.adminTab==='layout'?renderAdminLayout():state.adminTab==='campaigns'?renderAdminCampaigns():state.adminTab==='feeds'?renderAdminFeeds():state.adminTab==='plans'?renderAdminPlans():state.adminTab==='accounts'?renderAdminAccounts():renderAdminAnalytics();
+    const tabs=[['layout','Layout & slots'],['performance','Model Performance'],['campaigns','Campaigns'],['feeds','RSS feeds'],['plans','Plans'],['accounts','Accounts'],['analytics','Banner analytics']];
+    const panel=state.adminTab==='layout'?renderAdminLayout():state.adminTab==='performance'?renderAdminPerformance():state.adminTab==='campaigns'?renderAdminCampaigns():state.adminTab==='feeds'?renderAdminFeeds():state.adminTab==='plans'?renderAdminPlans():state.adminTab==='accounts'?renderAdminAccounts():renderAdminAnalytics();
     return `<div class="admin-console"><div class="admin-tabs">${tabs.map(([id,label])=>`<button type="button" class="${state.adminTab===id?'active':''}" data-admin-tab="${id}">${label}</button>`).join('')}</div><div class="admin-panel">${panel}</div></div>`;
   }
   function rerenderAdmin(){ if(state.route!=='admin')return; const host=$('routePanel');host.innerHTML=renderAdminRoute();wireAdmin(); }
@@ -810,10 +833,11 @@
     const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body='';
     if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='analytics')loadBannerAnalytics();return;}
     if(route==='prime'){const r=state.ui?.market_rules?.prime||{};body=`<div class="route-sub route-rules"><strong>Prime rule</strong><span>Accuracy first · model ${Math.round(Number(r.min_win_probability||.85)*100)}%+ · depth ${Math.round(Number(r.min_data_depth||.80)*100)}%+ · surface ${Number(r.min_surface_matches||5)}+/player · preferred odds ${Number(r.preferred_min_odds||1.20).toFixed(2)}–${Number(r.preferred_max_odds||1.50).toFixed(2)}, no hard odds band · reject materially negative EV.</span></div>${genericTable(primeTableRows(),'prime')}`;}
-    else if(route==='top_daily'){const r=state.ui?.market_rules?.top_daily||{};const day=state.feed?.market_selection?.odds_report?.betting_day||'current';body=`<div class="route-sub route-rules"><strong>Top Bets rule</strong><span>BlinQ betting day ${escapeHtml(day)} · target ${Math.round(Number(r.preferred_probability||.72)*100)}%+ · fallback floor ${Math.round(Number(r.min_probability||.68)*100)}% · depth ${Math.round(Number(r.min_data_depth||.80)*100)}%+ · surface ${Number(r.min_surface_matches||5)}+/player · odds sanity floor ${Number(r.min_odds||1.20).toFixed(2)} · ranked probability → depth → surface sample → overall sample → odds · max ${Number(r.limit||10)} picks. Edge/EV are diagnostic only.</span></div>${genericTable(marketRows('top_daily'),'top_daily')}`;}
-    else if(route==='value'){const r=state.ui?.market_rules?.value||{};body=`<div class="route-sub route-rules"><strong>Value rule</strong><span>EV first · model ${Math.round(Number(r.min_probability||.55)*100)}%+ · odds ${Number(r.min_odds||1.80).toFixed(2)}+ · edge ${Math.round(Number(r.min_edge||.05)*100)} pp+ · EV ${Math.round(Number(r.min_expected_value||.08)*100)}%+ · max ${Number(r.limit||10)} picks.</span></div>${genericTable(marketRows('value'),'value')}`;}
-    else if(route==='ace'){body=`<div class="route-sub route-rules"><strong>Aces / Double Faults</strong><span>Top ${Number(state.ui?.market_rules?.ace?.limit)||10} point-in-time count projections from stored event statistics. Projection score is not a calibrated win probability; odds/ROI stay blank until a verified price source exists.</span></div>${genericTable(marketRows('ace').slice(0,Number(state.ui?.market_rules?.ace?.limit)||10),'ace')}`;}
-    else if(route==='sg'){body=`<div class="route-sub route-rules"><strong>Sets / Games</strong><span>Top ${Number(state.ui?.market_rules?.sg?.limit)||10} point-in-time projections from structured historical set/game scores. Sets use long-match probability; Games use projected total versus the ATP/WTA best-of baseline. No odds/ROI are inferred yet.</span></div>${genericTable(marketRows('sg').slice(0,Number(state.ui?.market_rules?.sg?.limit)||10),'sg')}`;}
+    else if(route==='top_daily'){const r=state.ui?.market_rules?.top_daily||{};const day=state.feed?.market_selection?.odds_report?.betting_day||'current';body=`<div class="route-sub route-rules"><strong>Top Bets rule</strong><span>BlinQ betting day ${escapeHtml(day)} · adaptive confidence cascade 75% → 72% → 70% → 68% until at least ${Number(r.target_count||10)} remaining picks qualify · the full qualifying tier stays published · depth ${Math.round(Number(r.min_data_depth||.80)*100)}%+ · surface ${Number(r.min_surface_matches||5)}+/player · odds sanity floor ${Number(r.min_odds||1.20).toFixed(2)} · ranked probability → depth → surface sample → overall sample → odds. Edge/EV are diagnostic only.</span></div>${genericTable(marketRows('top_daily'),'top_daily')}`;}
+    else if(route==='value'){const r=state.ui?.market_rules?.value||{};body=`<div class="route-sub route-rules"><strong>Value rule</strong><span>EV first · model ${Math.round(Number(r.min_probability||.55)*100)}%+ · odds ${Number(r.min_odds||1.80).toFixed(2)}+ · edge ${Math.round(Number(r.min_edge||.05)*100)} pp+ · EV ${Math.round(Number(r.min_expected_value||.08)*100)}%+.</span></div>${genericTable(marketRows('value'),'value')}`;}
+    else if(route==='ace'){body=`<div class="route-sub route-rules"><strong>Aces / Double Faults</strong><span>Top ${Number(state.ui?.market_rules?.ace?.limit)||10} point-in-time count projections from stored event statistics. Projection score is not a calibrated win probability; odds/ROI stay blank until a verified price source exists.</span></div>${genericTable(marketRows('ace'),'ace')}`;}
+    else if(route==='sg'){body=`<div class="route-sub route-rules"><strong>Sets / Games</strong><span>Point-in-time projections from structured historical set/game scores. Sets use long-match probability; Games use projected total versus the ATP/WTA best-of baseline. No odds/ROI are inferred yet.</span></div>${genericTable(marketRows('sg'),'sg')}`;}
+    else if(route==='doubles'){body=`<div class="route-sub route-rules"><strong>Doubles model</strong><span>Separate model branch planned for pair/team identity, pair history, individual strength, surface form and pair chemistry. Singles probabilities are never reused.</span></div><div class="static-copy"><p>Doubles picks are not published yet.</p></div>`;}
     else if(route==='results'){body=renderResultsFilters()+resultsSummary()+`<div class="route-sub results-section-head"><div><h3>Settled predictions</h3><p>Only successfully published pre-match records are graded. ROI uses the odds snapshot that was actually published and a flat 1u stake.</p></div>${renderResults()}</div>`;}
     if(route==='tournaments'){const names=[...new Set((feed.upcoming||[]).map(x=>x.tournament).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):'No upcoming tournament coverage is currently published.'}</div>`;}
     else if(route==='players'){const names=[...new Set((feed.upcoming||[]).flatMap(x=>[x.player1?.name,x.player2?.name]).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):'No upcoming players are currently published.'}</div>`;}
@@ -836,8 +860,21 @@
     try{
       const feed=await BlinqAuth.feed(); state.feed=feed||{}; state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
       await loadNewsPool(); loadAdminDraft(); renderAllUiContent(); populateFilters(); renderSnapshot();
-      const a=feed.account||{}; $('profileName').textContent=a.name||a.email||'BlinQ User'; $('profilePlan').textContent=a.plan_label||a.plan||'Member'; $('memberStatus').textContent=a.status==='trial'?`Trial · ${remainingLabel(a.expires_at)}`:String(a.status||'active').replaceAll('_',' '); setAccountAvatar($('avatar'),a);
-      $('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—'; $('todayLabel').textContent=fmtToday(); const sidebarModel=$('sidebarModelState'); if(sidebarModel)sidebarModel.textContent=feed?.model?.version?`Model ${feed.model.version}`:'Production feed';
+      const a=feed.account||{};
+      $('profileName').textContent=a.name||a.email||'BlinQ User';
+      const resolvedPlan=accountPlan();
+      const planLabel=a.plan_label||state.ui?.plans?.[resolvedPlan]?.label||a.plan||'Member';
+      $('profilePlan').textContent=planLabel;
+      const planIcon={admin:'⚙',rookie:'○',pro:'◇',elite:'✦',goat:'♛',legend:'♛',expired:'○'}[resolvedPlan]||'◇';
+      const planIconHost=$('profilePlanIcon');if(planIconHost)planIconHost.textContent=planIcon;
+      const member=$('memberStatus');
+      if(member){
+        const status=String(a.status||'active').toLowerCase();
+        member.textContent=status==='trial'?`TRIAL · ${remainingLabel(a.expires_at)}`:status==='lifetime'?'LIFETIME':status.toUpperCase();
+      }
+      const profileButton=$('profileButton');if(profileButton)profileButton.dataset.plan=resolvedPlan;
+      setAccountAvatar($('avatar'),a);
+      $('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—'; $('todayLabel').textContent=fmtToday(); const sidebarModel=$('sidebarModelState'); if(sidebarModel)sidebarModel.textContent=feed?.model?.version?`Model ${feed.model.version}`:'Production feed'; const headerModel=$('headerModelState');if(headerModel)headerModel.textContent=feed?.model?.version?String(feed.model.version):'Production';
       $('staleNotice').hidden=!feed.stale; $('staleNotice').textContent=feed.stale?'Published data is older than 12 hours. Check prediction creation times before evaluating them.':''; $('appShell').hidden=false; if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();
     }catch(error){if(error.status===401){BlinqAuth.clear();auth('login');return;}showStatus('Data could not be loaded. Try again shortly.');throw error;}
@@ -853,6 +890,8 @@
       const restricted=e.target.closest('[data-ui-element].ui-state-locked,[data-ui-element].ui-state-blurred,[data-ui-element].ui-state-hidden');
       if(restricted&&state.route!=='admin'){e.preventDefault();e.stopPropagation();showStatus(`${restricted.dataset.uiStateLabel||'Locked'} — change plan access in BlinQ Admin.`);return;}
       const banner=e.target.closest('[data-banner-slot]');if(banner)trackBanner(banner,'click');
+      const prev=e.target.closest('[data-market-prev]');if(prev){const key=prev.dataset.marketPrev;state.marketPage[key]=Math.max(0,Number(state.marketPage[key]||0)-1);renderMarketSections();return;}
+      const next=e.target.closest('[data-market-next]');if(next){const key=next.dataset.marketNext;state.marketPage[key]=Number(state.marketPage[key]||0)+1;renderMarketSections();return;}
       const target=e.target.closest('[data-route]');if(!target)return;const route=target.dataset.route;if(!routeMeta[route])return;e.preventDefault();setRoute(route);
     });
     let resizeTimer; window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.route==='predictions'){state.page=0;renderPredictions();}},120)});

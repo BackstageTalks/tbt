@@ -28,6 +28,9 @@
       <section class="sidebar-promo-zone" id="sidebarPromoZone" aria-label="BlinQ sidebar content slots"></section>
       <div class="sidebar-spacer"></div>
       <div class="sidebar-system-note"><span>●</span><div><strong>Live model</strong><small id="sidebarModelState">Production feed</small></div></div>
+      <nav class="nav-section nav-admin" aria-label="Administration" id="adminNavigationWrap" hidden>
+        <div class="nav-items" id="adminNavigation"></div>
+      </nav>
     </aside>
 
     <main class="main dashboard-main">
@@ -43,13 +46,22 @@
 
         <section class="header-feature-strip" id="headerFeatureStrip" aria-label="BlinQ header content slots"></section>
 
+        <div class="dashboard-live-chip" aria-label="Live model status">
+          <i></i><span>Live intelligence</span><strong id="headerModelState">Production</strong>
+        </div>
+
         <div class="topbar-actions dashboard-account-actions">
-          <div class="member-chip"><span>MEMBER</span><strong id="memberStatus">Active</strong></div>
-          <button class="btn btn-primary top-upgrade" data-route="account" type="button">♛ Upgrade</button>
-          <button class="profile-button profile-button-large" id="profileButton" type="button" aria-label="Open account">
+          <button class="btn top-upgrade" data-route="account" type="button"><span aria-hidden="true">✦</span> Upgrade</button>
+          <button class="profile-button profile-button-large" id="profileButton" type="button" aria-label="Open account and profile">
             <span class="avatar avatar-large" id="avatar">B</span>
-            <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small id="profilePlan">Member</small></span>
-            <span aria-hidden="true">⌄</span>
+            <span class="profile-copy">
+              <span class="profile-name-row"><strong id="profileName">BlinQ User</strong></span>
+              <span class="profile-membership-row">
+                <span class="profile-tier"><span class="profile-tier-icon" id="profilePlanIcon" aria-hidden="true">◇</span><span id="profilePlan">Member</span></span>
+                <span class="profile-status"><i aria-hidden="true"></i><span id="memberStatus">Active</span></span>
+              </span>
+            </span>
+            <span class="profile-chevron" aria-hidden="true">⌄</span>
           </button>
         </div>
       </header>
@@ -58,12 +70,10 @@
 
       <div id="predictionsView">
         <section id="dashboardSnapshot" class="dashboard-snapshot" data-ui-element="DASHBOARD_SNAPSHOT" aria-label="Current prediction board summary">
-          <div class="snapshot-card"><small>UPCOMING</small><strong>—</strong><span>current board</span></div>
-          <div class="snapshot-card"><small>TOP PROBABILITY</small><strong>—</strong><span>highest current pick</span></div>
-          <div class="snapshot-card"><small>PRIME PICKS</small><strong>—</strong><span>above configured threshold</span></div>
-          <div class="snapshot-card"><small>TOP 10 DAILY</small><strong>—</strong><span>daily betting shortlist</span></div>
-          <div class="snapshot-card"><small>TOURNAMENTS</small><strong>—</strong><span>active in feed</span></div>
-          <div class="snapshot-card"><small>HISTORY DEPTH</small><strong>—</strong><span>serving metadata</span></div>
+          <div class="snapshot-card"><small>TODAY'S MATCHES</small><strong>—</strong><span>current board</span></div>
+          <div class="snapshot-card"><small>PRIME PICKS</small><strong>—</strong><span>accuracy-first</span></div>
+          <div class="snapshot-card"><small>TOP BETS</small><strong>—</strong><span>adaptive confidence cascade</span></div>
+          <div class="snapshot-card"><small>ODDS COVERAGE</small><strong>—</strong><span>betting-day market data</span></div>
         </section>
 
         <section id="bannerTop" class="promo-grid ad-row" aria-label="Advertising row above Prime Picks"></section>
@@ -82,12 +92,12 @@
             </div>
           </div>
 
-          <section class="toolbar dashboard-toolbar prime-toolbar" id="predictionToolbar" data-ui-element="PREDICTION_TOOLBAR" aria-label="Prime Picks filters">
-            <label><span class="sr-only">Tour</span><select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select></label>
-            <label><span class="sr-only">Tournament</span><select id="tournamentFilter"><option value="">All Tournaments</option></select></label>
-            <label><span class="sr-only">Surface</span><select id="surfaceFilter"><option value="">All Surfaces</option></select></label>
-            <label><span class="sr-only">Confidence</span><select id="confidenceFilter"><option value="">All Confidence</option><option value="very-high">Very High · 80%+</option><option value="high">High · 70–80%</option><option value="medium">Medium · 60–70%</option><option value="low">Low · &lt;60%</option></select></label>
-            <label class="search-box"><span aria-hidden="true">⌕</span><input id="searchInput" type="search" placeholder="Search players, matches or tournaments…" /></label>
+          <section class="toolbar dashboard-toolbar prime-toolbar" id="predictionToolbar" data-ui-element="PREDICTION_TOOLBAR" aria-label="Prime Picks filters" hidden>
+            <select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select>
+            <select id="tournamentFilter"><option value="">All Tournaments</option></select>
+            <select id="surfaceFilter"><option value="">All Surfaces</option></select>
+            <select id="confidenceFilter"><option value="">All Confidence</option></select>
+            <input id="searchInput" type="search" />
           </section>
 
           <div class="pick-carousel-shell" id="pickCarouselShell">
@@ -101,27 +111,32 @@
         </section>
 
         <section class="picks-panel market-panel" id="topDailyPanel" data-ui-element="TOP_DAILY_PANEL">
-          <div class="panel-head picks-head"><div><div class="section-kicker"><span>★</span> Top Bets</div><p>Strongest remaining Match Winner picks after Prime, ranked by model probability and data quality. Target 72%+, fallback floor 68%; odds only have a 1.20 sanity floor and final tiebreak role.</p></div><a class="btn btn-ghost see-all-link" href="#top_daily" data-route="top_daily">See all →</a></div>
-          <div class="market-preview-grid" id="topDailyGrid"><div class="state-card">Top Bets selector output is not published yet.</div></div>
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>★</span> Top Bets</div><p>Confidence-first Match Winner picks after Prime. Cascade: 75% → 72% → 70% → 68% until the board reaches at least 10; the full qualifying tier stays published.</p></div><div class="section-actions"><span class="section-count" id="topDailyCount">0 picks</span><a class="btn btn-ghost see-all-link" id="topDailySeeAll" href="#top_daily" data-route="top_daily">See all →</a></div></div>
+          <div class="market-carousel-shell"><button class="market-arrow prev" type="button" data-market-prev="top_daily" aria-label="Previous Top Bets">‹</button><div class="market-preview-grid" id="topDailyGrid"><div class="state-card">Top Bets selector output is not published yet.</div></div><button class="market-arrow next" type="button" data-market-next="top_daily" aria-label="Next Top Bets">›</button></div>
         </section>
 
         <section id="bannerMid" class="promo-grid ad-row" aria-label="Advertising row between Top Bets and Value Picks"></section>
 
         <section class="picks-panel market-panel" id="valuePanel" data-ui-element="VALUE_PICKS_PANEL">
-          <div class="panel-head picks-head"><div><div class="section-kicker"><span>◇</span> Value Picks</div><p>Higher-priced opportunities where BlinQ sees a meaningful de-vig market edge and expected value.</p></div><a class="btn btn-ghost see-all-link" href="#value" data-route="value">See all →</a></div>
-          <div class="market-preview-grid" id="valueGrid"><div class="state-card">Value selector output is not published yet.</div></div>
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>◇</span> Value Picks</div><p>Higher-priced opportunities where BlinQ sees a meaningful de-vig market edge and expected value.</p></div><div class="section-actions"><span class="section-count" id="valueCount">0 picks</span><a class="btn btn-ghost see-all-link" id="valueSeeAll" href="#value" data-route="value">See all →</a></div></div>
+          <div class="market-carousel-shell"><button class="market-arrow prev" type="button" data-market-prev="value" aria-label="Previous Value Picks">‹</button><div class="market-preview-grid" id="valueGrid"><div class="state-card">Value selector output is not published yet.</div></div><button class="market-arrow next" type="button" data-market-next="value" aria-label="Next Value Picks">›</button></div>
         </section>
 
         <section class="picks-panel market-panel" id="acePanel" data-ui-element="ACE_PICKS_PANEL">
-          <div class="panel-head picks-head"><div><div class="section-kicker"><span>♠</span> Ace Picks</div><p>Top Aces and Double Faults market selections.</p></div><a class="btn btn-ghost see-all-link" href="#ace" data-route="ace">See all →</a></div>
-          <div class="market-preview-grid" id="aceGrid"><div class="state-card">Aces / Double Faults model output is not published yet.</div></div>
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>♠</span> Ace Picks</div><p>Aces and Double Faults projections from point-in-time player statistics.</p></div><div class="section-actions"><span class="section-count" id="aceCount">0 picks</span><a class="btn btn-ghost see-all-link" id="aceSeeAll" href="#ace" data-route="ace">See all →</a></div></div>
+          <div class="market-carousel-shell"><button class="market-arrow prev" type="button" data-market-prev="ace" aria-label="Previous Ace Picks">‹</button><div class="market-preview-grid" id="aceGrid"><div class="state-card">Aces / Double Faults model output is not published yet.</div></div><button class="market-arrow next" type="button" data-market-next="ace" aria-label="Next Ace Picks">›</button></div>
         </section>
 
         <section id="bannerBottom" class="promo-grid ad-row" aria-label="Advertising row between Ace Picks and S/G Picks"></section>
 
         <section class="picks-panel market-panel" id="sgPanel" data-ui-element="SG_PICKS_PANEL">
-          <div class="panel-head picks-head"><div><div class="section-kicker"><span>▥</span> S/G Picks</div><p>Top Sets and Games market selections.</p></div><a class="btn btn-ghost see-all-link" href="#sg" data-route="sg">See all →</a></div>
-          <div class="market-preview-grid" id="sgGrid"><div class="state-card">Sets / Games model output is not published yet.</div></div>
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>▥</span> S/G Picks</div><p>Sets and Games projections from structured historical score data.</p></div><div class="section-actions"><span class="section-count" id="sgCount">0 picks</span><a class="btn btn-ghost see-all-link" id="sgSeeAll" href="#sg" data-route="sg">See all →</a></div></div>
+          <div class="market-carousel-shell"><button class="market-arrow prev" type="button" data-market-prev="sg" aria-label="Previous S/G Picks">‹</button><div class="market-preview-grid" id="sgGrid"><div class="state-card">Sets / Games model output is not published yet.</div></div><button class="market-arrow next" type="button" data-market-next="sg" aria-label="Next S/G Picks">›</button></div>
+        </section>
+
+        <section class="picks-panel market-panel doubles-panel" id="doublesPanel" data-ui-element="DOUBLES_PANEL">
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>◈</span> Doubles</div><p>Separate doubles model branch. Singles probabilities are never reused for doubles.</p></div><div class="section-actions"><span class="section-count" id="doublesCount">0 picks</span><a class="btn btn-ghost see-all-link" id="doublesSeeAll" href="#doubles" data-route="doubles">See all →</a></div></div>
+          <div class="market-preview-grid"><div class="state-card market-empty">Doubles model is not enabled yet.</div></div>
         </section>
 
         <section class="picks-panel market-panel btts-panel" id="bttsBonusPanel" data-ui-element="BTTS_BONUS_PANEL">
@@ -137,7 +152,6 @@
           <a class="footer-logo-link" href="#predictions" data-route="predictions" aria-label="BlinQ home"><img src="/assets/blinq_logo.svg" alt="BlinQ" class="footer-logo" /></a>
           <span>© 2026 BlinQ</span>
           <nav class="footer-learn-nav" id="footerLearnNavigation" aria-label="Learn navigation"></nav>
-          <a href="#account" data-route="account">Account</a>
         </div>
         <div class="footer-bottom-row">
           <p>Probabilities express uncertainty, not guarantees. Published predictions remain auditable against real outcomes.</p>
