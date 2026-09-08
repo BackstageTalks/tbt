@@ -1779,17 +1779,19 @@
         "match_winner"
       ],
       "requires_odds": true,
-      "objective": "accuracy_plus_ev",
-      "min_probability": 0.72,
+      "objective": "confidence_first",
+      "min_probability": 0.68,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
-      "min_odds": 1.5,
+      "min_odds": 1.2,
       "max_odds": null,
-      "min_edge": 0.02,
-      "min_expected_value": 0.03,
+      "min_edge": null,
+      "min_expected_value": null,
       "timezone": "Europe/Bratislava",
       "betting_day_start_hour": 6,
-      "sort": "ev_desc_then_probability_then_edge"
+      "sort": "probability_desc_then_depth_then_surface_sample_then_overall_sample_then_odds",
+      "preferred_probability": 0.72,
+      "edge_ev_role": "diagnostic_only"
     },
     "value": {
       "label": "Value Picks",
