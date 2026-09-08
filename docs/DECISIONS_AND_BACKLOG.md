@@ -4,8 +4,8 @@
 >
 > **Update rule:** every meaningful implementation, architecture decision, data-source discovery, production incident, validation result, UI/content decision and open hypothesis should be appended here while the work is being done. Do not rewrite history just because the implementation later changes; mark old decisions as superseded and link the replacement.
 
-Last updated: **2026-09-07**
-Current working line: **v5.x**
+Last updated: **2026-09-08**
+Current working line: **v5.9**
 
 ---
 
@@ -135,19 +135,14 @@ Current market process:
 - compare the model-selected side against fair implied probability;
 - store selected odds, fair implied probability, model probability, edge and expected value.
 
-### Top Daily
+### Top Daily / Value rules used through v5.8 — SUPERSEDED by v5.9
 
-- max 10 picks;
-- current betting day only;
-- quality/data-depth guardrails;
-- sorted primarily by expected value and prediction strength.
+Historical v5.x behavior before the 2026-09-08 cascade decision:
 
-### Value
+- Top Daily had a max-10 policy and was ranked primarily by EV / prediction strength;
+- Value used an odds threshold above 1.70 plus a positive-edge requirement.
 
-- odds threshold above 1.70;
-- positive edge required;
-- de-vig implied-probability sanity bound;
-- ranked by edge / EV / model confidence.
+These rules are retained here as history only. **v5.9 replaces them** with one common quality pool for Daily/Prime and a separate close-market Value branch; see the 2026-09-08 engineering entry below.
 
 ### Latest confirmed live state (2026-09-07)
 
@@ -536,14 +531,16 @@ Access Manager and Content Manager are conceptually separate:
 
 ## 16. Dashboard / content decisions
 
-Primary dashboard order:
+Primary dashboard order after the v5.9 Match Winner cascade update:
 
-1. Prime Picks
-2. Top 10 Daily Picks
+1. Daily Picks
+2. Prime Picks
 3. Value Picks
 4. Ace Picks
 5. S/G Picks
 6. BTTS Bonus — BETA
+
+Daily/Prime/Value are quality-driven. There is **no artificial minimum or quota** used to fill dashboard cards; the dashboard may show fewer than five selections when fewer qualify. The first five are presentation only, with See All available when the qualified set is larger.
 
 Ad/content rows are preserved as explicit geometry so missing paid advertising can fall back to news/RSS/BlinQ promo without collapsing the layout.
 
@@ -620,6 +617,8 @@ Production success must be confirmed from actual GitHub/Azure logs, not assumed 
 - v5.6 — safe quarantine of ambiguous incoming match identity collisions.
 - v5.7 — publication confirmation corrected for presentation-only serving enrichment.
 - v5.8 — Ace statistics enrichment resilience: valid HTTP 200 statistics with no supported fields are cached as unavailable instead of aborting the run.
+- v5.9 — Match Winner cascade: shared 78/80/5 quality pool, Daily 1.25–1.50, Prime >1.50, close-market Value branch, edge/EV display-only, and prioritized odds requests. **SUPERSEDED by v6.0.**
+- v6.0 — Prime / Top Bets / Value product policy, explicit EV/edge guardrails and mutually exclusive publication (one underlying pick = one public offer).
 
 Documentation-only addition after v5.7:
 
@@ -631,6 +630,7 @@ Documentation-only addition after v5.7:
 
 ### Data / predictions
 
+- [LOCAL IMPLEMENTED / PROD PENDING] Deploy and confirm v5.9 Match Winner cascade; then monitor Daily/Prime/Value live volume, hit rate and ROI.
 - [RUNNING] Complete Ace statistics enrichment and inspect real coverage.
 - [NEXT] Run `sg-scores` enrichment.
 - [NEXT] Resolve / populate `best_of` for current upcoming events.
@@ -667,7 +667,126 @@ Documentation-only addition after v5.7:
 
 ---
 
-## 22. Entry template for future work
+## 22. 2026-09-08 — Match Winner cascade / Daily + Prime + close-market Value (v5.9)
+
+**Why**
+
+The previous Top Daily and Value selectors mixed price, EV and confidence rules and could spend provider requests on a much wider board than the final betting sections needed. Product direction is now to first identify a genuinely strong Match Winner candidate pool, then let the available market price determine whether the pick is presented as lower-risk Daily or higher-priced Prime. Value is intentionally a different strategy: search close bookmaker markets and let the model choose the side.
+
+**Decision**
+
+Shared Match Winner quality pool for Daily/Prime:
+
+- calibrated winner probability `>= 0.78`;
+- data depth `>= 0.80`;
+- at least `5` surface-history matches for **each** player;
+- missing/invalid surface quality fails closed;
+- no edge or EV hard filter.
+
+Presentation split after a real provider-1 Match Winner price is available:
+
+- **Daily Picks:** decimal odds `1.25 <= odds <= 1.50`;
+- **Prime Picks:** decimal odds `> 1.50`, no artificial upper cap;
+- no forced pick count and no quota filling.
+
+Separate **Value Picks** discovery branch:
+
+- model winner probability `>= 0.60`;
+- data depth `>= 0.80`;
+- surface history `>= 5 / 5`;
+- both Match Winner sides must be available so the two-way market can be de-vigged;
+- absolute difference between the two fair market probabilities `<= 0.15` (15 percentage points);
+- BlinQ keeps the model-selected winner;
+- model-vs-market edge and expected value are calculated and displayed as diagnostics, **not used as selection filters**.
+
+The 15pp close-market boundary and 0.60 Value model threshold are working v1 defaults. They must be monitored/backtested and may be tightened after sufficient OOS/live data; they are not profitability guarantees.
+
+**Implementation**
+
+- `api/tbt/services/market_selection.py` — explicit v5.9 policy constants, fail-closed surface gate, common Daily/Prime pool, close-market Value selector, selection diagnostics and odds-request prefilter.
+- `api/tbt/services/publication.py` — Prime is a first-class odds-backed publication section.
+- `api/tbt/services/engine.py` — Prime betting-performance section while preserving overall deduplication by underlying selection key.
+- `api/tbt/services/feed.py` — serving contract includes `prime_picks`.
+- `scripts/pipeline.py` / `scripts/prepare_feed.py` — pipeline and player-enrichment handling for Prime; canonical legacy `top_daily_picks` feed key is retained internally for publication compatibility while the product label is Daily Picks.
+- `web/app.js`, `web/index.html`, `web/styles.css`, `web/ui-config.json` — Daily/Prime/Value labels, rules, five-card preview geometry, close-market copy and edge shown as `pp`.
+- tests updated for exact odds boundaries, 78/80/5 gating, close-market Value behavior, no edge filter, publication memberships and ROI deduplication.
+
+**Data/API impact**
+
+Provider quota is now protected before odds retrieval. Current betting-day rows must first pass the broad Value-discovery gate (`p >= 0.60`, depth `>= 0.80`, surface `>= 5/5`) before `/odds/1/all` is requested. Candidates are ordered by prediction strength/data depth and remain bounded by the existing per-run `max_events` cap. This broad prefilter covers the stricter 78/80/5 Daily/Prime pool and the close-market Value branch without spending odds requests on the entire board.
+
+Publication/settlement semantics remain immutable: Daily/Prime/Value can tag the same underlying Match Winner selection, but overall betting ROI counts that underlying selection only once. Historical high-confidence predictions are not retroactively relabelled as Prime bets.
+
+**Validation**
+
+Local validation against the reconstructed v5.8 main line:
+
+- `python -m compileall -q api scripts` — PASS;
+- `node --check web/app.js` — PASS;
+- focused Aces/S-G/market/results suite — `18 passed`;
+- focused admin/market/results/deploy-flow suite — `33 passed`;
+- full suite collected `186` tests; `8` parquet/history tests could not run successfully because the local environment does not have `pyarrow`;
+- excluding exactly those pyarrow-dependent tests, the remaining `178` tests passed.
+
+A selector sanity run against the previously captured production feed executed successfully, but that snapshot contains odds for the prior betting day and is **not** treated as a 2026-09-08 volume forecast or production validation.
+
+**Production result**
+
+PENDING. Local code/tests do not prove GitHub/Azure publication success. Confirm from the real refresh/deploy/confirmation logs after v5.9 is applied.
+
+**Open work**
+
+- collect live Daily/Prime/Value hit-rate, odds, units and ROI separately;
+- backtest/monitor the 78/80/5 main gate and Value 60/80/5 + 15pp close-market rule;
+- collect odds snapshots if CLV analysis is promoted;
+- do not turn edge/EV into a hard Value filter unless later OOS evidence supports it.
+
+---
+
+
+## 24. 2026-09-08 — Prime / Top Bets / Value v6.0 + exclusive pick assignment
+
+**Why**
+The v5.9 Daily/Prime price cascade no longer matched the product definition agreed for BlinQ. More importantly, the same underlying Match Winner selection could appear simultaneously in two public offers (for example Prime and Value), which creates a confusing dashboard even though overall ROI was deduplicated later.
+
+**Decision**
+Use three distinct working strategies and make their public assignment mutually exclusive:
+
+- **Prime Picks** — accuracy first: model probability `>= 0.85`, data depth `>= 0.80`, surface history `>= 5/5`; odds `1.20–1.50` are the preferred product zone but not a hard band; materially negative EV below `-3%` is rejected; max 30.
+- **Top Bets** — balance probability + price: model `>= 0.72`, depth `>= 0.80`, surface `>= 5/5`, odds `>= 1.50`, edge `>= 2pp`, EV `>= 3%`; max 10. The canonical feed/publication key remains `top_daily` / `top_daily_picks` for compatibility, but the product label is Top Bets.
+- **Value Picks** — edge/EV first: model `>= 0.55`, depth `>= 0.75`, surface `>= 3/3`, odds `>= 1.80`, edge `>= 5pp`, EV `>= 8%`; max 10.
+
+A pick may qualify for several strategies internally, but it receives exactly one `primary_section`. Default assignment priority follows dashboard order: `Prime -> Top Bets -> Value`. This priority is intentionally explicit/configurable and can later be changed after OOS/live review.
+
+**Implementation**
+- `api/tbt/services/market_selection.py`: v2 policy constants, price/EV guardrails, stable selection identity, exclusive-section assignment, duplicate invariant, strategy-specific ranking and one-publication-per-selection ledger candidate.
+- `web/ui-config.json`, `web/index.html`, `web/app.js`: Top Bets product naming, v6 working thresholds, exclusive-assignment metadata and updated explanatory copy.
+- `scripts/pipeline.py`: wording updated while preserving the canonical `top_daily_picks` compatibility key.
+- tests: old v5.9 cascade assertions replaced with v6 strategy tests plus a regression test that a pick qualifying for multiple strategies is published in only one offer.
+
+**Data/API impact**
+Pre-price odds discovery now uses the broadest current supported final branch (`p >= 0.55`, depth `>= 0.75`, surface `>= 3/3`) so potentially valid Value candidates are not discarded before price is known. The existing `max_events` provider-request cap remains in force. This may increase eligible odds requests versus v5.9 and must be monitored against quota/coverage.
+
+The existing Match Winner market-publication schema remains `1`; v6 adds `primary_section` as backward-compatible metadata and restricts new candidates to one section. Existing historical publications are not rewritten; old duplicated section tags remain historical facts of what was actually published at that time.
+
+**Validation**
+- `python -m compileall -q api scripts` — PASS.
+- `node --check web/app.js` and `node --check web/auth.js` — PASS.
+- focused market/publication/admin suite — 24 PASS.
+- full collection — 186 tests. Exactly 8 parquet/history tests cannot run in the local environment because `pyarrow` is not installed.
+- excluding exactly those 8 pyarrow-dependent tests, the remaining 178 tests PASS.
+- explicit exclusivity regression confirms one underlying Match Winner selection cannot be present in more than one of Prime / Top Bets / Value.
+
+**Production result**
+PENDING. Do not treat local code/tests as proof of live publication until the GitHub/Azure refresh/deploy/confirmation logs succeed.
+
+**Follow-up**
+- monitor actual section volumes, hit rate, average odds, units and ROI;
+- backtest thresholds and assignment priority OOS rather than tuning from a small live sample;
+- monitor provider quota after broadening the pre-price candidate floor;
+- keep one-pick/one-offer as a non-negotiable publication invariant.
+
+## 23. Entry template for future work
 
 Append new entries using this structure where practical:
 
