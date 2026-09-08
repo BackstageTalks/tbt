@@ -285,7 +285,7 @@ def _publish_predictions(
     now = datetime.now(timezone.utc)
     # Betting sections have their own publication lifecycle. The Match Winner
     # probability may already be public before provider odds arrive, so freeze
-    # pending Top 10 / Value candidates independently and confirm them only
+    # pending Daily / Prime / Value candidates independently and confirm them only
     # after the exact feed is deployed.
     predictions = annotate_market_publication_candidates(predictions)
     records = reconcile_ledger(ledger, predictions, matches, now)
@@ -450,8 +450,8 @@ def main():
             upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
 
         # Generate the model probabilities first, then spend additional provider
-        # calls only on the current BlinQ betting day. No odds are required for
-        # Prime Picks; they only power Top 10 Daily and Value Picks.
+        # calls only on the current BlinQ betting day. The odds layer now powers
+        # Daily / Prime price buckets plus close-market Value discovery.
         predictions = predict(model, matches, upcoming)
         if args.market_odds_max_events:
             predictions, odds_report = enrich_current_betting_day_odds(
@@ -495,7 +495,8 @@ def main():
     print(json.dumps({
         "requests": provider.request_count,
         "upcoming": len(feed["upcoming"]),
-        "top_daily": len(feed.get("top_daily_picks", [])),
+        "daily": len(feed.get("top_daily_picks", [])),
+        "prime": len(feed.get("prime_picks", [])),
         "value": len(feed.get("value_picks", [])),
         "ace": len(feed.get("ace_picks", [])),
         "ace_projection": ace_report or {},

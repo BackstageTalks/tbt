@@ -73,6 +73,7 @@ def _feed_player_ids(payload: dict) -> set[str]:
     keys = (
         "upcoming",
         "results",
+        "prime_picks",
         "top_daily_picks",
         "top_daily",
         "daily_picks",
@@ -175,7 +176,7 @@ def _merge_player_profiles(payload: dict, profiles: dict[str, dict], photos: set
                     _merge_player_profile(player, profiles, photos)
 
     for key in (
-        "upcoming", "results", "top_daily_picks", "top_daily", "daily_picks",
+        "upcoming", "results", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
         "value_picks", "value", "ace_picks", "aces", "ace_markets",
         "sg_picks", "sets_games", "set_game_picks",
     ):
