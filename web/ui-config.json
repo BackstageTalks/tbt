@@ -946,12 +946,12 @@
       }
     },
     "SIDEBAR_TOP_DAILY": {
-      "label": "Daily Picks",
+      "label": "Top Bets",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 3,
       "content": {
-        "label": "Daily Picks",
+        "label": "Top Bets",
         "route": "top_daily",
         "icon": "★"
       },
@@ -1368,12 +1368,12 @@
       }
     },
     "TOP_DAILY_PANEL": {
-      "label": "Daily Picks panel",
+      "label": "Top Bets panel",
       "zone": "predictions",
       "kind": "panel",
       "order": 60,
       "content": {
-        "label": "Daily Picks panel"
+        "label": "Top Bets panel"
       },
       "watermark": {
         "enabled": false,
@@ -1690,7 +1690,7 @@
       "preset": "1+1+1+1"
     },
     "content_mid": {
-      "label": "AD ROW · between Daily Picks and Value",
+      "label": "AD ROW · between Top Bets and Value",
       "enabled": true,
       "preset": "1+1+1+1"
     },
@@ -1759,44 +1759,50 @@
   "market_rules": {
     "prime": {
       "market": "match_winner",
-      "min_win_probability": 0.78,
+      "objective": "accuracy_first",
+      "min_win_probability": 0.85,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
-      "min_odds_exclusive": 1.5,
-      "max_odds": null,
-      "limit": null,
+      "preferred_min_odds": 1.2,
+      "preferred_max_odds": 1.5,
+      "hard_odds_band": false,
+      "max_negative_expected_value": -0.03,
+      "limit": 30,
       "use_dashboard_filters": true,
-      "edge_filter": false,
-      "sort": "probability_desc_then_data_depth"
+      "sort": "probability_desc_then_data_depth_then_ev"
     },
     "top_daily": {
-      "label": "Daily Picks",
-      "limit": null,
+      "label": "Top Bets",
+      "internal_key": "top_daily",
+      "limit": 10,
       "markets": [
         "match_winner"
       ],
       "requires_odds": true,
-      "min_probability": 0.78,
+      "objective": "accuracy_plus_ev",
+      "min_probability": 0.72,
       "min_data_depth": 0.8,
       "min_surface_matches": 5,
-      "min_odds": 1.25,
-      "max_odds": 1.5,
+      "min_odds": 1.5,
+      "max_odds": null,
+      "min_edge": 0.02,
+      "min_expected_value": 0.03,
       "timezone": "Europe/Bratislava",
       "betting_day_start_hour": 6,
-      "edge_filter": false,
-      "sort": "probability_desc_then_data_depth"
+      "sort": "ev_desc_then_probability_then_edge"
     },
     "value": {
       "label": "Value Picks",
-      "limit": null,
-      "selection_mode": "close_market_model_winner",
-      "min_probability": 0.6,
-      "min_data_depth": 0.8,
-      "min_surface_matches": 5,
-      "max_implied_probability_gap": 0.15,
-      "edge_filter": false,
-      "edge_display_only": true,
-      "sort": "probability_desc_then_data_depth_then_market_closeness"
+      "limit": 10,
+      "selection_mode": "edge_ev_first",
+      "objective": "edge_ev_first",
+      "min_probability": 0.55,
+      "min_data_depth": 0.75,
+      "min_surface_matches": 3,
+      "min_odds": 1.8,
+      "min_edge": 0.05,
+      "min_expected_value": 0.08,
+      "sort": "ev_desc_then_edge_then_probability"
     },
     "ace": {
       "limit": 10,
@@ -1816,6 +1822,15 @@
       "beta": true,
       "sport": "football",
       "href": "/btts"
+    },
+    "match_winner_assignment": {
+      "exclusive": true,
+      "priority": [
+        "prime",
+        "top_daily",
+        "value"
+      ],
+      "dedupe_key": "market:betting_day:event_id:selection_id"
     }
   },
   "assets": {
