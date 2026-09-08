@@ -23,65 +23,70 @@
       "note": "No active paid access."
     },
     "rookie": {
-      "label": "ROOKIE",
+      "label": "BlinQ ROOKIE",
       "enabled": true,
-      "price": "5.99",
-      "currency": "EUR",
-      "billing": "month",
-      "payment_link": "",
       "note": "Limited daily picks; first 3 days free after registration.",
       "duration_days": 30,
       "trial_hours": 72,
       "lifetime": false,
-      "hide_ads_allowed": false
+      "hide_ads_allowed": false,
+      "description": "Entry access to the BlinQ workspace.",
+      "cta_label": "Open ROOKIE",
+      "url": "",
+      "avatar": "rookie",
+      "order": 1
     },
     "pro": {
-      "label": "PRO",
+      "label": "BlinQ PRO",
       "enabled": true,
-      "price": "14.99",
-      "currency": "EUR",
-      "billing": "month",
-      "payment_link": "",
       "note": "Full core predictions and tournaments.",
       "duration_days": 30,
       "lifetime": false,
-      "hide_ads_allowed": false
+      "hide_ads_allowed": false,
+      "description": "Core predictions, tournaments and the main BlinQ workflow.",
+      "cta_label": "Open PRO",
+      "url": "",
+      "avatar": "pro",
+      "order": 2
     },
     "elite": {
-      "label": "ELITE",
+      "label": "BlinQ ELITE",
       "enabled": true,
-      "price": "99.00",
-      "currency": "EUR",
-      "billing": "year",
-      "payment_link": "",
       "note": "Annual premium access; advanced permissions are configurable in Admin.",
       "duration_days": 365,
       "lifetime": false,
-      "hide_ads_allowed": true
+      "hide_ads_allowed": true,
+      "description": "Expanded access for users who follow more matches and analytics.",
+      "cta_label": "Open ELITE",
+      "url": "",
+      "avatar": "elite",
+      "order": 3
     },
     "goat": {
-      "label": "GOAT",
+      "label": "BlinQ GOAT",
       "enabled": true,
-      "price": "199.00",
-      "currency": "EUR",
-      "billing": "lifetime",
-      "payment_link": "",
       "note": "Lifetime top-tier access; advanced permissions are configurable in Admin.",
       "duration_days": null,
       "lifetime": true,
-      "hide_ads_allowed": true
+      "hide_ads_allowed": true,
+      "description": "Top-tier BlinQ access with the complete enabled workspace.",
+      "cta_label": "Open GOAT",
+      "url": "",
+      "avatar": "goat",
+      "order": 4
     },
     "legend": {
-      "label": "LEGEND",
+      "label": "BlinQ LEGEND",
       "enabled": false,
-      "price": "",
-      "currency": "EUR",
-      "billing": "reserve",
-      "payment_link": "",
       "note": "Hidden reserve plan; not publicly purchasable.",
       "duration_days": 365,
       "lifetime": false,
-      "hide_ads_allowed": false
+      "hide_ads_allowed": false,
+      "description": "Reserved premium level. Enable it in JSON or Admin when needed.",
+      "cta_label": "Open LEGEND",
+      "url": "",
+      "avatar": "legend",
+      "order": 5
     }
   },
   "navigation": {
@@ -260,28 +265,28 @@
       }
     },
     "CONTENT_TOP_1": {
-      "label": "Top external slot 1",
+      "label": "Dashboard banner 1",
       "zone": "content_top",
       "kind": "large_banner",
       "order": 41,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "External content slot 1",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
-        "link": "#account",
-        "route": "account",
+        "eyebrow": "PRIME PICKS",
+        "headline": "Accuracy first",
+        "text": "Open the strongest current model selections.",
+        "button_text": "Prime Picks",
+        "link": "#prime",
+        "route": "prime",
         "theme": "violet",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "rss",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
         "enabled": true,
         "active_from": "",
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss",
+        "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
         "image_position": "center"
@@ -302,28 +307,28 @@
       }
     },
     "CONTENT_TOP_2": {
-      "label": "Top external slot 2",
+      "label": "Dashboard banner 2",
       "zone": "content_top",
       "kind": "large_banner",
       "order": 42,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "External content slot 2",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
-        "link": "#account",
-        "route": "account",
+        "eyebrow": "TOP BETS",
+        "headline": "Confidence board",
+        "text": "Explore the current confidence-ranked Match Winner board.",
+        "button_text": "Top Bets",
+        "link": "#top_daily",
+        "route": "top_daily",
         "theme": "blue",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "rss",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
         "enabled": true,
         "active_from": "",
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss",
+        "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
         "image_position": "center"
@@ -344,28 +349,28 @@
       }
     },
     "CONTENT_TOP_3": {
-      "label": "Top external slot 3",
+      "label": "Dashboard banner 3",
       "zone": "content_top",
       "kind": "large_banner",
       "order": 43,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "External content slot 3",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
-        "link": "#account",
-        "route": "account",
+        "eyebrow": "VALUE PICKS",
+        "headline": "Market edge",
+        "text": "Open higher-priced selections with explicit edge and EV guardrails.",
+        "button_text": "Value Picks",
+        "link": "#value",
+        "route": "value",
         "theme": "purple",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "rss",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
         "enabled": true,
         "active_from": "",
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss",
+        "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
         "image_position": "center"
@@ -386,28 +391,28 @@
       }
     },
     "CONTENT_TOP_4": {
-      "label": "Top external slot 4",
+      "label": "Dashboard banner 4",
       "zone": "content_top",
       "kind": "large_banner",
       "order": 44,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "External content slot 4",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
-        "link": "#account",
-        "route": "account",
+        "eyebrow": "RESULTS",
+        "headline": "Track the record",
+        "text": "Review settled picks, hit rate, ROI and published outcomes.",
+        "button_text": "Results",
+        "link": "#results",
+        "route": "results",
         "theme": "green",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "rss",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
         "enabled": true,
         "active_from": "",
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss",
+        "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
         "image_position": "center"
@@ -1524,6 +1529,27 @@
         "goat": "active",
         "legend": "active"
       }
+    },
+    "RESULTS_PANEL": {
+      "label": "Results preview panel",
+      "zone": "dashboard",
+      "kind": "panel",
+      "order": 95,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
     }
   },
   "admin": {
@@ -1560,17 +1586,17 @@
   },
   "content_rows": {
     "content_top": {
-      "label": "AD ROW · above Prime Picks",
+      "label": "BANNER ROW · above Prime Picks",
       "enabled": true,
       "preset": "1+1+1+1"
     },
     "content_mid": {
-      "label": "AD ROW · between Top Bets and Value",
+      "label": "BANNER ROW · between Top Bets and Value",
       "enabled": true,
       "preset": "1+1+1+1"
     },
     "content_bottom": {
-      "label": "AD ROW · between Ace Picks and S/G Picks",
+      "label": "BANNER ROW · between Ace Picks and S/G Picks",
       "enabled": true,
       "preset": "1+1+1+1"
     }
@@ -1753,7 +1779,8 @@
       "goat": {
         "default": "/assets/goat.webp"
       }
-    }
+    },
+    "admin_avatar_plan": "goat"
   },
   "dashboard": {
     "show_header_feature_strip": false,
@@ -1763,5 +1790,6 @@
       "top_daily",
       "odds_coverage"
     ]
-  }
+  },
+  "ui_revision": "6.3.0"
 }
