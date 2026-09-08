@@ -451,7 +451,7 @@ def main():
 
         # Generate the model probabilities first, then spend additional provider
         # calls only on the current BlinQ betting day. The odds layer now powers
-        # Daily / Prime price buckets plus close-market Value discovery.
+        # Prime / Top Bets / Value discovery with mutually exclusive public assignment.
         predictions = predict(model, matches, upcoming)
         if args.market_odds_max_events:
             predictions, odds_report = enrich_current_betting_day_odds(
