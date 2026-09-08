@@ -19,6 +19,8 @@ def row(
     gap=.10,
     surface1=12,
     surface2=12,
+    matches1=50,
+    matches2=50,
     edge=None,
 ):
     p1 = probability
@@ -43,8 +45,8 @@ def row(
         'confidence': model_probability,
         'data_depth': depth,
         'quality': {
-            'player1': {'matches': 50, 'surface_matches': surface1},
-            'player2': {'matches': 50, 'surface_matches': surface2},
+            'player1': {'matches': matches1, 'surface_matches': surface1},
+            'player2': {'matches': matches2, 'surface_matches': surface2},
             'surface_known': True,
         },
         'betting': {
@@ -114,18 +116,24 @@ def test_prime_top_and_value_follow_distinct_working_policy():
         row('top-balanced', .78, 1.62, .60, depth=.9, surface1=12, surface2=8),
         row('value-edge', .64, 1.95, .52, depth=.8, surface1=5, surface2=5),
         row('prime-negative-ev', .90, 1.05, .82, depth=1.0, surface1=30, surface2=30),
-        row('top-probability-fail', .71, 1.75, .58, depth=1.0, surface1=20, surface2=20),
+        row('top-floor-pass', .71, 1.35, .75, depth=1.0, surface1=20, surface2=20),
+        row('top-probability-fail', .67, 2.20, .40, depth=1.0, surface1=20, surface2=20),
         row('depth-fail', .90, 1.40, .76, depth=.79, surface1=20, surface2=20),
         row('surface-fail', .90, 1.55, .74, depth=1.0, surface1=4, surface2=20),
     ]
     sections = select_market_sections(rows)
     assert [x['event_id'] for x in sections['prime_picks']] == ['prime-safe']
-    assert [x['event_id'] for x in sections['top_daily_picks']] == ['top-balanced']
-    assert [x['event_id'] for x in sections['value_picks']] == ['value-edge']
+    assert [x['event_id'] for x in sections['top_daily_picks']] == ['top-balanced', 'top-floor-pass']
+    assert [x['event_id'] for x in sections['value_picks']] == ['top-probability-fail', 'value-edge']
     assert sections['market_selection']['prime_rule']['min_probability'] == .85
     assert sections['market_selection']['prime_rule']['hard_odds_band'] is False
     assert sections['market_selection']['top_daily_rule']['product_label'] == 'Top Bets'
-    assert sections['market_selection']['top_daily_rule']['min_odds'] == 1.50
+    assert sections['market_selection']['top_daily_rule']['preferred_probability'] == .72
+    assert sections['market_selection']['top_daily_rule']['min_probability'] == .68
+    assert sections['market_selection']['top_daily_rule']['min_odds'] == 1.20
+    assert sections['market_selection']['top_daily_rule']['min_edge'] is None
+    assert sections['market_selection']['top_daily_rule']['min_expected_value'] is None
+    assert sections['market_selection']['top_daily_rule']['edge_ev_role'] == 'diagnostic_only'
     assert sections['market_selection']['value_rule']['min_odds'] == 1.80
 
 
@@ -147,6 +155,63 @@ def test_sections_are_mutually_exclusive_with_prime_then_top_then_value_priority
     assert assignment['enabled'] is True
     assert assignment['priority'] == ['prime', 'top_daily', 'value']
     assert sections['market_selection']['selection_counts']['duplicates_removed'] == 3
+
+
+def test_top_bets_rank_probability_first_and_ignore_edge_ev_for_eligibility():
+    rows = [
+        # Lower probability has spectacular edge/EV, but must not outrank 71%.
+        row('p68-big-value', .68, 2.40, .40, depth=1.0, surface1=20, surface2=20),
+        row('p71-low-price', .71, 1.28, .82, depth=.90, surface1=8, surface2=8),
+        row('p70', .70, 1.55, .75, depth=.95, surface1=15, surface2=15),
+        row('p69', .69, 1.90, .55, depth=1.0, surface1=25, surface2=25),
+    ]
+    sections = select_market_sections(rows)
+    assert [x['event_id'] for x in sections['top_daily_picks']] == [
+        'p71-low-price', 'p70', 'p69', 'p68-big-value'
+    ]
+
+
+def test_top_bets_use_data_quality_then_odds_only_as_tiebreakers():
+    rows = [
+        row('depth-low', .70, 2.20, .50, depth=.81, surface1=30, surface2=30, matches1=100, matches2=100),
+        row('depth-high', .70, 1.25, .80, depth=.95, surface1=6, surface2=6, matches1=30, matches2=30),
+        row('surface-high', .69, 1.30, .80, depth=.90, surface1=20, surface2=18, matches1=40, matches2=40),
+        row('surface-low', .69, 2.50, .40, depth=.90, surface1=8, surface2=8, matches1=100, matches2=100),
+        row('overall-high', .68, 1.25, .80, depth=.90, surface1=10, surface2=10, matches1=80, matches2=75),
+        row('overall-low', .68, 2.50, .40, depth=.90, surface1=10, surface2=10, matches1=30, matches2=30),
+    ]
+    sections = select_market_sections(rows)
+    assert [x['event_id'] for x in sections['top_daily_picks']] == [
+        'depth-high', 'depth-low', 'surface-high', 'surface-low', 'overall-high', 'overall-low'
+    ]
+
+
+def test_top_bets_fill_to_ten_from_68_floor_without_lower_probability_displacing_higher():
+    rows = [
+        row(f'p{i}', prob, 1.20 + i * .05, .80, depth=.9, surface1=10, surface2=10)
+        for i, prob in enumerate([.76, .74, .73, .72, .715, .71, .705, .70, .69, .68, .675])
+    ]
+    sections = select_market_sections(rows)
+    probs = [x['probability'] for x in sections['top_daily_picks']]
+    assert len(probs) == 10
+    assert probs == sorted(probs, reverse=True)
+    assert probs[-1] == .68
+
+
+def test_section_limits_do_not_reserve_unpublished_rows_from_lower_priority_sections():
+    rows = [
+        row(f'top-value-{i}', .80 - i * .01, 2.00, .50, depth=.95, surface1=20, surface2=20)
+        for i in range(11)
+    ]
+    sections = select_market_sections(rows, top_limit=10, prime_min_probability=.99)
+    assert len(sections['top_daily_picks']) == 10
+    assert len(sections['value_picks']) == 1
+    assert sections['value_picks'][0]['event_id'] == 'top-value-10'
+    all_rows = sections['top_daily_picks'] + sections['value_picks']
+    assert len({(x['event_id'], x['betting']['selection_id']) for x in all_rows}) == 11
+    assignment = sections['market_selection']['exclusive_assignment']
+    assert assignment['limit_aware'] is True
+    assert assignment['limited_out_by_section']['top_daily'] == 1
 
 
 def test_value_requires_price_edge_and_ev_not_market_closeness():

@@ -179,11 +179,14 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["prime"]["limit"] == 30
     assert rules["top_daily"]["label"] == "Top Bets"
     assert rules["top_daily"]["limit"] == 10
-    assert rules["top_daily"]["min_odds"] == 1.50
+    assert rules["top_daily"]["preferred_probability"] == 0.72
+    assert rules["top_daily"]["min_probability"] == 0.68
+    assert rules["top_daily"]["min_odds"] == 1.20
     assert rules["top_daily"]["max_odds"] is None
-    assert rules["top_daily"]["min_probability"] == 0.72
-    assert rules["top_daily"]["min_edge"] == 0.02
-    assert rules["top_daily"]["min_expected_value"] == 0.03
+    assert rules["top_daily"]["min_edge"] is None
+    assert rules["top_daily"]["min_expected_value"] is None
+    assert rules["top_daily"]["edge_ev_role"] == "diagnostic_only"
+    assert rules["top_daily"]["objective"] == "confidence_first"
     assert rules["value"]["selection_mode"] == "edge_ev_first"
     assert rules["value"]["min_probability"] == 0.55
     assert rules["value"]["min_data_depth"] == 0.75
