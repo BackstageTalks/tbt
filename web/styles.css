@@ -438,3 +438,54 @@ body{background:var(--dash-bg)}
   .profile-button-large{padding:3px;border-radius:50%}
   .profile-chevron{display:none}
 }
+
+
+/* BlinQ v6.2.2 — lean dashboard chrome + stacked engine signature */
+.engine-brand{
+  display:block;
+  padding:2px 7px 15px;
+}
+.engine-brand .brand-logo{
+  display:block;
+  width:128px;
+  max-width:100%;
+}
+.engine-copy{
+  display:grid;
+  justify-items:start;
+  gap:1px;
+  margin-top:4px;
+  padding-left:2px;
+  line-height:1.12;
+}
+.engine-copy strong{
+  color:#8f6cff;
+  font-size:6.8px;
+  font-weight:950;
+  letter-spacing:.105em;
+  text-transform:uppercase;
+}
+.engine-copy small{
+  color:#d9dfE8;
+  font-size:6.2px;
+  font-weight:650;
+  letter-spacing:.01em;
+}
+
+/* Dashboard is now pick-first: no title block and no summary KPI strip. */
+.dashboard-topbar.overview-mode{
+  grid-template-columns:1fr auto;
+  grid-template-areas:"empty actions";
+  min-height:72px;
+  padding:8px 0;
+}
+.dashboard-topbar.overview-mode .dashboard-account-actions{
+  grid-area:actions;
+}
+
+@media(max-width:820px){
+  .engine-brand{display:flex;align-items:center;justify-content:space-between;padding:0}
+  .engine-brand .brand-logo{width:110px}
+  .engine-copy{display:none}
+  .dashboard-topbar.overview-mode{grid-template-columns:1fr auto;grid-template-areas:"empty actions";min-height:64px}
+}

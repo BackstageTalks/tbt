@@ -259,27 +259,6 @@
         "legend": "active"
       }
     },
-    "DASHBOARD_SNAPSHOT": {
-      "label": "Dashboard summary",
-      "zone": "dashboard",
-      "kind": "panel",
-      "order": 31,
-      "content": {},
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "active",
-        "expired": "blurred",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
     "CONTENT_TOP_1": {
       "label": "Top external slot 1",
       "zone": "content_top",
@@ -921,12 +900,12 @@
       }
     },
     "SIDEBAR_PRIME": {
-      "label": "BlinQ Prime Picks",
+      "label": "Prime Picks",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 2,
       "content": {
-        "label": "BlinQ Prime Picks",
+        "label": "Prime Picks",
         "route": "prime",
         "icon": "✦"
       },
@@ -1049,7 +1028,7 @@
       "label": "Results",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 7,
+      "order": 8,
       "content": {
         "label": "Results",
         "route": "results",
@@ -1070,142 +1049,17 @@
         "legend": "active"
       }
     },
-    "SIDEBAR_TOURNAMENTS": {
-      "label": "Tournaments",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 10,
-      "content": {
-        "label": "Tournaments",
-        "route": "tournaments",
-        "icon": "♕"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "active",
-        "elite": "active",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_PLAYERS": {
-      "label": "Players",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 11,
-      "content": {
-        "label": "Players",
-        "route": "players",
-        "icon": "♙"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "locked",
-        "elite": "locked",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_STATS": {
-      "label": "Stats & Insights",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 12,
-      "content": {
-        "label": "Stats & Insights",
-        "route": "stats",
-        "icon": "▥"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "locked",
-        "elite": "locked",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_MODEL": {
-      "label": "Model Performance",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 13,
-      "content": {
-        "label": "Model Performance",
-        "route": "model",
-        "icon": "↗"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "locked",
-        "elite": "locked",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_BACKTESTS": {
-      "label": "Backtests",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 14,
-      "content": {
-        "label": "Backtests",
-        "route": "backtests",
-        "icon": "◴"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "locked",
-        "elite": "locked",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
     "SIDEBAR_BTTS": {
       "label": "BTTS Bonus",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 15,
+      "order": 9,
       "content": {
         "label": "BTTS Bonus",
         "route": "btts",
         "icon": "⚽",
-        "href": "/btts",
-        "beta": true
+        "beta": true,
+        "href": "/btts"
       },
       "watermark": {
         "enabled": false,
@@ -1216,31 +1070,6 @@
         "trial": "locked",
         "expired": "locked",
         "rookie": "locked",
-        "pro": "active",
-        "elite": "active",
-        "goat": "active",
-        "legend": "active"
-      }
-    },
-    "SIDEBAR_ACCOUNT": {
-      "label": "Account",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 20,
-      "content": {
-        "label": "Account",
-        "route": "account",
-        "icon": "◉"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "active",
-        "expired": "active",
-        "rookie": "active",
         "pro": "active",
         "elite": "active",
         "goat": "active",
@@ -1649,6 +1478,52 @@
         "goat": "active",
         "legend": "active"
       }
+    },
+    "SIDEBAR_DOUBLES": {
+      "zone": "sidebar",
+      "kind": "navigation",
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      },
+      "label": "Doubles",
+      "order": 7,
+      "content": {
+        "label": "Doubles",
+        "route": "doubles",
+        "icon": "◈"
+      }
+    },
+    "DOUBLES_PANEL": {
+      "label": "Doubles Picks panel",
+      "zone": "dashboard",
+      "kind": "panel",
+      "order": 75,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
     }
   },
   "admin": {
@@ -1768,13 +1643,14 @@
       "hard_odds_band": false,
       "max_negative_expected_value": -0.03,
       "limit": 30,
-      "use_dashboard_filters": true,
-      "sort": "probability_desc_then_data_depth_then_ev"
+      "use_dashboard_filters": false,
+      "sort": "probability_desc_then_data_depth_then_ev",
+      "presentation_preview_limit": 10
     },
     "top_daily": {
       "label": "Top Bets",
       "internal_key": "top_daily",
-      "limit": 10,
+      "limit": null,
       "markets": [
         "match_winner"
       ],
@@ -1790,12 +1666,17 @@
       "timezone": "Europe/Bratislava",
       "betting_day_start_hour": 6,
       "sort": "probability_desc_then_depth_then_surface_sample_then_overall_sample_then_odds",
-      "preferred_probability": 0.72,
-      "edge_ev_role": "diagnostic_only"
+      "preferred_probability": 0.75,
+      "edge_ev_role": "diagnostic_only",
+      "secondary_probability": 0.72,
+      "standard_probability": 0.7,
+      "target_count": 10,
+      "presentation_preview_limit": 10,
+      "cascade": "75_then_72_then_70_then_68_until_at_least_10_keep_full_tier"
     },
     "value": {
       "label": "Value Picks",
-      "limit": 10,
+      "limit": null,
       "selection_mode": "edge_ev_first",
       "objective": "edge_ev_first",
       "min_probability": 0.55,
@@ -1804,21 +1685,24 @@
       "min_odds": 1.8,
       "min_edge": 0.05,
       "min_expected_value": 0.08,
-      "sort": "ev_desc_then_edge_then_probability"
+      "sort": "ev_desc_then_edge_then_probability",
+      "presentation_preview_limit": 10
     },
     "ace": {
       "limit": 10,
       "markets": [
         "aces",
         "double_faults"
-      ]
+      ],
+      "presentation_preview_limit": 10
     },
     "sg": {
       "limit": 10,
       "markets": [
         "sets",
         "games"
-      ]
+      ],
+      "presentation_preview_limit": 10
     },
     "btts": {
       "beta": true,
@@ -1833,6 +1717,13 @@
         "value"
       ],
       "dedupe_key": "market:betting_day:event_id:selection_id"
+    },
+    "doubles": {
+      "label": "Doubles",
+      "model_branch": "separate",
+      "enabled": false,
+      "presentation_preview_limit": 10,
+      "note": "Separate doubles model; singles predictions are never reused."
     }
   },
   "assets": {
@@ -1863,5 +1754,14 @@
         "default": "/assets/goat.webp"
       }
     }
+  },
+  "dashboard": {
+    "show_header_feature_strip": false,
+    "snapshot_cards": [
+      "matches",
+      "prime",
+      "top_daily",
+      "odds_coverage"
+    ]
   }
 }

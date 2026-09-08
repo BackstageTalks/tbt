@@ -385,24 +385,6 @@
   function populateSelect(id,values,label){ const select=$(id),selected=select.value; select.innerHTML=`<option value="">${label}</option>`; [...values].filter(Boolean).sort().forEach(value=>{const opt=document.createElement('option');opt.value=value;opt.textContent=String(value).replaceAll('_',' ');select.appendChild(opt)}); if([...select.options].some(o=>o.value===selected)) select.value=selected; }
   function populateFilters(){ const rows=(state.feed.upcoming||[]).map(normalize); populateSelect('tournamentFilter',new Set(rows.map(x=>x.tournament)),'All Tournaments'); populateSelect('surfaceFilter',new Set(rows.map(x=>x.surface)),'All Surfaces'); }
   function compactCount(value){ const n=Number(value); if(!Number.isFinite(n)) return '—'; if(n>=1000000) return `${(n/1000000).toFixed(n>=10000000?0:1)}M`; if(n>=1000) return `${(n/1000).toFixed(n>=100000?0:1)}K`; return String(Math.round(n)); }
-  function renderSnapshot(){
-    const host=$('dashboardSnapshot'); if(!host) return;
-    const rows=(state.feed.upcoming||[]).map(normalize);
-    const prime=marketRows('prime').length;
-    const daily=marketRows('top_daily').length;
-    const tournaments=new Set(rows.map(x=>x.tournament).filter(Boolean)).size;
-    const oddsReport=state.feed?.market_selection?.odds_report||{};
-    const oddsRequested=Number(oddsReport.odds_requested);
-    const oddsAvailable=Number(oddsReport.odds_available);
-    const oddsCoverage=Number.isFinite(oddsRequested)&&oddsRequested>0&&Number.isFinite(oddsAvailable)?oddsAvailable/oddsRequested:null;
-    const cards=[
-      ["TODAY'S MATCHES",String(rows.length),tournaments?`${tournaments} tournaments`:'current board'],
-      ['PRIME PICKS',String(prime),'85%+ accuracy-first'],
-      ['TOP BETS',String(daily),'75 → 72 → 70 → 68 cascade'],
-      ['ODDS COVERAGE',oddsCoverage==null?'—':pct(oddsCoverage),oddsRequested?`${oddsAvailable}/${oddsRequested} betting-day events`:'next refresh']
-    ];
-    host.innerHTML=cards.map(([label,value,note])=>`<div class="snapshot-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note)}</span></div>`).join('');
-  }
   function rankedPredictions(){
     return marketRows('prime').map(normalize).sort((a,b)=>b.probability-a.probability || new Date(a.date)-new Date(b.date)).map((m,index)=>({...m,accessIndex:index}));
   }
@@ -488,7 +470,7 @@
     responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.']
   };
 
-  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; if(route==='admin') state.previewPlan=null; state.route=route; state.page=0; const meta=routeMeta[route]; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; $('predictionsView').hidden=route!=='predictions'; $('routePanel').hidden=route==='predictions'; renderNavigation(); if(route==='predictions'){renderPredictions();renderMarketSections();applyAccessStates();} else renderRoute(route); if(push) history.replaceState(null,'',`#${route}`); }
+  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; if(route==='admin') state.previewPlan=null; state.route=route; state.page=0; const meta=routeMeta[route]; const overview=route==='predictions'; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; const titleBlock=document.querySelector('.dashboard-title-block'); if(titleBlock) titleBlock.hidden=overview; const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();applyAccessStates();} else renderRoute(route); if(push) history.replaceState(null,'',`#${route}`); }
 
   function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
   function issuedMarketPublications(row){
@@ -580,7 +562,7 @@
   function renderAdminCanvas(){
     const nav=elementList('navigation').map(x=>adminMiniBlock(x.id,true)).join('');const promos=elementList('sidebar_promo','sidebar').map(x=>adminMiniBlock(x.id,true)).join('');const picks=[...Array(8)].map((_,i)=>adminMiniBlock(`TOP_PICK_${i+1}`,true)).join('')+adminMiniBlock('TOP_PICK_MORE',true);const features=elementList('feature','features').map(x=>adminMiniBlock(x.id,true)).join('');
     const rowBlock=(zone,title)=>`<div class="admin-row-caption"><span>${escapeHtml(title)}</span><b>${escapeHtml(rowPreset(zone))} · ${escapeHtml(rowCreativeSummary(zone))}</b></div><div class="admin-slot-row four preset-${escapeHtml(rowPreset(zone).replaceAll('+','-'))}${rowEnabled(zone)?'':' row-off'}">${adminRowHtml(zone)||'<div class="admin-row-off-label">ROW OFF</div>'}</div>`;
-    return `<div class="admin-canvas"><div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>FIXED</small></div><div class="admin-header-slots">${adminMiniBlock('HEADER_BANNER_1')}${adminMiniBlock('HEADER_BANNER_2')}${adminMiniBlock('HEADER_BANNER_3')}</div></div><div class="admin-canvas-body"><aside class="admin-canvas-sidebar"><b>SIDEBAR</b>${nav}<div class="admin-canvas-divider"></div><b>3 PROMO SLOTS</b>${promos}${features?`<div class="admin-canvas-divider"></div><b>FEATURE FLAGS</b>${features}`:''}</aside><main class="admin-canvas-main"><div class="admin-functional-row">${adminMiniBlock('DASHBOARD_SNAPSHOT')}${adminMiniBlock('PREDICTION_TOOLBAR')}</div>${rowBlock('content_top','AD ROW · ABOVE PRIME PICKS')}<div class="admin-prime-map"><div>${adminMiniBlock('PRIME_PICKS_PANEL')}${adminMiniBlock('TOP_DAILY_PANEL')}</div><div class="admin-pick-strip">${picks}</div></div>${rowBlock('content_mid','AD ROW · TOP 10 DAILY → VALUE')}<div class="admin-functional-row">${adminMiniBlock('VALUE_PICKS_PANEL')}${adminMiniBlock('ACE_PICKS_PANEL')}</div>${rowBlock('content_bottom','AD ROW · ACE → S/G')}<div class="admin-functional-row">${adminMiniBlock('SG_PICKS_PANEL')}${adminMiniBlock('DOUBLES_PANEL')}</div><div class="admin-functional-row">${adminMiniBlock('BTTS_BONUS_PANEL')}</div>${adminMiniBlock('FOOTER_SYSTEM')}</main></div></div>`;
+    return `<div class="admin-canvas"><div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>FIXED</small></div><div class="admin-header-slots">${adminMiniBlock('HEADER_BANNER_1')}${adminMiniBlock('HEADER_BANNER_2')}${adminMiniBlock('HEADER_BANNER_3')}</div></div><div class="admin-canvas-body"><aside class="admin-canvas-sidebar"><b>SIDEBAR</b>${nav}<div class="admin-canvas-divider"></div><b>3 PROMO SLOTS</b>${promos}${features?`<div class="admin-canvas-divider"></div><b>FEATURE FLAGS</b>${features}`:''}</aside><main class="admin-canvas-main"><div class="admin-functional-row">${adminMiniBlock('PREDICTION_TOOLBAR')}</div>${rowBlock('content_top','AD ROW · ABOVE PRIME PICKS')}<div class="admin-prime-map"><div>${adminMiniBlock('PRIME_PICKS_PANEL')}${adminMiniBlock('TOP_DAILY_PANEL')}</div><div class="admin-pick-strip">${picks}</div></div>${rowBlock('content_mid','AD ROW · TOP 10 DAILY → VALUE')}<div class="admin-functional-row">${adminMiniBlock('VALUE_PICKS_PANEL')}${adminMiniBlock('ACE_PICKS_PANEL')}</div>${rowBlock('content_bottom','AD ROW · ACE → S/G')}<div class="admin-functional-row">${adminMiniBlock('SG_PICKS_PANEL')}${adminMiniBlock('DOUBLES_PANEL')}</div><div class="admin-functional-row">${adminMiniBlock('BTTS_BONUS_PANEL')}</div>${adminMiniBlock('FOOTER_SYSTEM')}</main></div></div>`;
   }
 
   function campaignOptions(selected=''){
@@ -859,7 +841,7 @@
     if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML='<div class="state-card">Loading current model predictions…</div>';
     try{
       const feed=await BlinqAuth.feed(); state.feed=feed||{}; state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
-      await loadNewsPool(); loadAdminDraft(); renderAllUiContent(); populateFilters(); renderSnapshot();
+      await loadNewsPool(); loadAdminDraft(); renderAllUiContent(); populateFilters();
       const a=feed.account||{};
       $('profileName').textContent=a.name||a.email||'BlinQ User';
       const resolvedPlan=accountPlan();
