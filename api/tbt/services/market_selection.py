@@ -43,14 +43,18 @@ PRIME_PREFERRED_MIN_ODDS = 1.20
 PRIME_PREFERRED_MAX_ODDS = 1.50
 PRIME_LIMIT = 30
 
-# TOP BETS = balance of model strength and price. `top_daily` remains the
-# internal compatibility key used by the existing feed/publication ledger.
-TOP_MIN_PROBABILITY = 0.72
+# TOP BETS = strongest remaining model picks after Prime. `top_daily` remains
+# the internal compatibility key used by the existing feed/publication ledger.
+# 72% is the preferred target, but the list may fill down to a hard 68% floor.
+# Edge/EV do not determine eligibility or ranking. A very low-price sanity floor
+# avoids commercially useless bets; after that, odds are only the final tiebreaker.
+TOP_PREFERRED_PROBABILITY = 0.72
+TOP_MIN_PROBABILITY = 0.68
 TOP_MIN_DATA_DEPTH = 0.80
 TOP_MIN_SURFACE_MATCHES = 5
-TOP_MIN_ODDS = 1.50
-TOP_MIN_EDGE = 0.02
-TOP_MIN_EXPECTED_VALUE = 0.03
+TOP_MIN_ODDS: float | None = 1.20
+TOP_MIN_EDGE: float | None = None
+TOP_MIN_EXPECTED_VALUE: float | None = None
 TOP_LIMIT = 10
 
 # VALUE = edge/EV first. This branch intentionally accepts lower model win
@@ -300,6 +304,39 @@ def _surface_samples(row: dict[str, Any]) -> tuple[int, int]:
     return count(p1.get("surface_matches")), count(p2.get("surface_matches"))
 
 
+def _overall_samples(row: dict[str, Any]) -> tuple[int, int]:
+    """Return point-in-time overall match counts for both players."""
+    quality = row.get("quality") if isinstance(row.get("quality"), dict) else {}
+    p1 = quality.get("player1") if isinstance(quality.get("player1"), dict) else {}
+    p2 = quality.get("player2") if isinstance(quality.get("player2"), dict) else {}
+
+    def count(value: Any) -> int:
+        number = _number(value)
+        if number is None or number < 0:
+            return 0
+        return int(number)
+
+    return count(p1.get("matches")), count(p2.get("matches"))
+
+
+def _top_rank_key(card: dict[str, Any]) -> tuple[float, float, int, int, float]:
+    """Confidence-first Top Bets ranking.
+
+    Elo, surface Elo, H2H and form already contribute to model probability.
+    The remaining terms measure how well-supported that probability is; price is
+    deliberately only the final tiebreaker and edge/EV are not ranking inputs.
+    """
+    p1_surface, p2_surface = _surface_samples(card)
+    p1_matches, p2_matches = _overall_samples(card)
+    return (
+        _number(card.get("probability")) or 0.0,
+        _depth(card),
+        min(p1_surface, p2_surface),
+        min(p1_matches, p2_matches),
+        _number(card.get("odds")) or 0.0,
+    )
+
+
 def _passes_candidate_gate(
     row: dict[str, Any],
     *,
@@ -537,36 +574,48 @@ def _exclusive_section_assignment(
     qualified: dict[str, list[dict[str, Any]]],
     *,
     priority: tuple[str, ...] = SECTION_PRIORITY,
-) -> tuple[dict[str, list[dict[str, Any]]], dict[str, int]]:
-    """Assign every underlying selection to at most one public section."""
+    limits: dict[str, int | None] | None = None,
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, int], dict[str, int]]:
+    """Assign every *published* selection to at most one public section.
+
+    Limits are applied during priority assignment, not afterwards. A row that is
+    #11 for Top Bets is therefore not reserved/hidden from Value merely because
+    it qualified for Top; only actually selected public offers consume identity.
+    """
     selected = {name: [] for name in qualified}
     used: set[str] = set()
     removed = {name: 0 for name in qualified}
-    for section in priority:
-        for card in qualified.get(section, []):
-            identity = _selection_identity(card)
-            if not identity or identity in used:
-                removed[section] = removed.get(section, 0) + 1
-                continue
-            used.add(identity)
-            item = deepcopy(card)
-            item["primary_section"] = section
-            selected.setdefault(section, []).append(item)
-    # Keep forward compatibility if a future caller supplies a section that is
-    # not yet present in SECTION_PRIORITY.
-    for section, cards in qualified.items():
-        if section in priority:
-            continue
+    limited_out = {name: 0 for name in qualified}
+    limits = limits or {}
+
+    def assign(section: str, cards: list[dict[str, Any]]) -> None:
+        raw_limit = limits.get(section)
+        limit = None if raw_limit is None or raw_limit < 0 else int(raw_limit)
         for card in cards:
             identity = _selection_identity(card)
             if not identity or identity in used:
                 removed[section] = removed.get(section, 0) + 1
                 continue
+            if limit is not None and len(selected.setdefault(section, [])) >= limit:
+                limited_out[section] = limited_out.get(section, 0) + 1
+                # Do not reserve identity: a lower-priority strategy may still
+                # publish this row if it independently qualifies there.
+                continue
             used.add(identity)
             item = deepcopy(card)
             item["primary_section"] = section
             selected.setdefault(section, []).append(item)
-    return selected, removed
+
+    for section in priority:
+        assign(section, qualified.get(section, []))
+
+    # Keep forward compatibility if a future caller supplies a section that is
+    # not yet present in SECTION_PRIORITY.
+    for section, cards in qualified.items():
+        if section in priority:
+            continue
+        assign(section, cards)
+    return selected, removed, limited_out
 
 
 def select_market_sections(
@@ -580,9 +629,9 @@ def select_market_sections(
     top_min_probability: float = TOP_MIN_PROBABILITY,
     top_min_data_depth: float = TOP_MIN_DATA_DEPTH,
     top_min_surface_matches: int = TOP_MIN_SURFACE_MATCHES,
-    top_min_odds: float = TOP_MIN_ODDS,
-    top_min_edge: float = TOP_MIN_EDGE,
-    top_min_expected_value: float = TOP_MIN_EXPECTED_VALUE,
+    top_min_odds: float | None = TOP_MIN_ODDS,
+    top_min_edge: float | None = TOP_MIN_EDGE,
+    top_min_expected_value: float | None = TOP_MIN_EXPECTED_VALUE,
     top_limit: int | None = TOP_LIMIT,
     value_min_probability: float = VALUE_MIN_PROBABILITY,
     value_min_data_depth: float = VALUE_MIN_DATA_DEPTH,
@@ -649,15 +698,7 @@ def select_market_sections(
         ),
         reverse=True,
     )
-    top_qualified.sort(
-        key=lambda card: (
-            _number(card.get("expected_value")) or -999.0,
-            _number(card.get("probability")) or 0.0,
-            _number(card.get("edge")) or -999.0,
-            _depth(card),
-        ),
-        reverse=True,
-    )
+    top_qualified.sort(key=_top_rank_key, reverse=True)
     value_qualified.sort(
         key=lambda card: (
             _number(card.get("expected_value")) or -999.0,
@@ -673,20 +714,18 @@ def select_market_sections(
         "top_daily": top_qualified,
         "value": value_qualified,
     }
-    exclusive, duplicate_removed = _exclusive_section_assignment(
+    exclusive, duplicate_removed, limited_out = _exclusive_section_assignment(
         qualified,
         priority=tuple(section_priority),
+        limits={
+            "prime": prime_limit,
+            "top_daily": top_limit,
+            "value": value_limit,
+        },
     )
     prime = exclusive.get("prime", [])
     top = exclusive.get("top_daily", [])
     value = exclusive.get("value", [])
-
-    if prime_limit is not None and prime_limit >= 0:
-        prime = prime[: int(prime_limit)]
-    if top_limit is not None and top_limit >= 0:
-        top = top[: int(top_limit)]
-    if value_limit is not None and value_limit >= 0:
-        value = value[: int(value_limit)]
 
     selected_identities = [
         _selection_identity(card)
@@ -703,8 +742,8 @@ def select_market_sections(
         "ace_picks": deepcopy(ace_picks or []),
         "sg_picks": deepcopy(sg_picks or []),
         "market_selection": {
-            "schema": 5,
-            "selection_policy": "prime_top_value_v2_exclusive",
+            "schema": 6,
+            "selection_policy": "prime_top_value_v3_confidence_first_top",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "prime_qualified_before_exclusivity": len(prime_qualified),
@@ -714,12 +753,15 @@ def select_market_sections(
                 "top_daily": len(top),
                 "value": len(value),
                 "duplicates_removed": sum(duplicate_removed.values()),
+                "limited_out": sum(limited_out.values()),
             },
             "exclusive_assignment": {
                 "enabled": True,
                 "priority": list(section_priority),
                 "dedupe_key": "market:betting_day:event_id:selection_id",
                 "duplicates_removed_by_section": duplicate_removed,
+                "limited_out_by_section": limited_out,
+                "limit_aware": True,
             },
             "current_outputs": (
                 ["match_winner"]
@@ -755,15 +797,20 @@ def select_market_sections(
             },
             "top_daily_rule": {
                 "product_label": "Top Bets",
-                "objective": "accuracy_plus_ev",
+                "objective": "confidence_first",
+                "preferred_probability": float(TOP_PREFERRED_PROBABILITY),
                 "min_probability": float(top_min_probability),
                 "min_data_depth": float(top_min_data_depth),
                 "min_surface_matches_each": int(top_min_surface_matches),
-                "min_odds": float(top_min_odds),
-                "min_edge": float(top_min_edge),
-                "min_expected_value": float(top_min_expected_value),
+                "requires_odds": True,
+                "min_odds": None if top_min_odds is None else float(top_min_odds),
+                "min_edge": None if top_min_edge is None else float(top_min_edge),
+                "min_expected_value": (
+                    None if top_min_expected_value is None else float(top_min_expected_value)
+                ),
+                "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
-                "sort": "ev_desc_then_probability_then_edge",
+                "sort": "probability_desc_then_depth_then_surface_sample_then_overall_sample_then_odds",
             },
             "value_rule": {
                 "objective": "edge_ev_first",
