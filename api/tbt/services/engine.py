@@ -192,7 +192,7 @@ def betting_performance(results):
                 publications.append(publication)
 
     # Overall counts each underlying selection only once even when the same bet
-    # was published in both Top 10 Daily and Value. Earliest successful public
+    # was published in multiple Daily / Prime / Value sections. Earliest public
     # publication is the canonical overall snapshot.
     unique = {}
     for publication in publications:
@@ -204,7 +204,7 @@ def betting_performance(results):
             unique[key] = publication
 
     sections = {}
-    for section in ("top_daily", "value", "ace", "double_faults", "sets", "games"):
+    for section in ("top_daily", "prime", "value", "ace", "double_faults", "sets", "games"):
         sections[section] = _betting_metrics([p for p in publications if p.get("section") == section])
     markets = {}
     for market in sorted({str(p.get("market") or "") for p in publications if p.get("market")}):

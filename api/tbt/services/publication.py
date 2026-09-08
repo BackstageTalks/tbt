@@ -161,6 +161,7 @@ def confirm_publication(ledger, published_rows, now=None):
 
 _MARKET_SECTION_KEYS = {
     "top_daily": "top_daily_picks",
+    "prime": "prime_picks",
     "value": "value_picks",
 }
 
@@ -206,7 +207,7 @@ def _market_commitment_from_publication(event_id, publication):
 def validate_market_publication_candidate(feed, ledger):
     """Bind every odds-backed section row to an exact ledger snapshot.
 
-    This prevents a Top 10 / Value row from being deployed with odds or a
+    This prevents a Daily / Prime / Value row from being deployed with odds or a
     selection that are not represented in the private publication ledger.
     """
     if not isinstance(feed, dict) or not isinstance(ledger, list):

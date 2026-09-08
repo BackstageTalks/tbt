@@ -13,6 +13,7 @@ def empty_feed():
         "model": None,
         "upcoming": [],
         "top_daily_picks": [],
+        "prime_picks": [],
         "value_picks": [],
         "ace_picks": [],
         "sg_picks": [],
