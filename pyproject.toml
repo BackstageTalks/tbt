@@ -1,9 +1,0 @@
-[project]
-name = "blinq-tennis"
-version = "3.0.0"
-requires-python = ">=3.11,<3.14"
-
-[tool.pytest.ini_options]
-pythonpath = ["api", "scripts"]
-testpaths = ["tests"]
-addopts = "-q"

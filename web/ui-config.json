@@ -23,65 +23,70 @@
       "note": "No active paid access."
     },
     "rookie": {
-      "label": "ROOKIE",
+      "label": "BlinQ ROOKIE",
       "enabled": true,
-      "price": "5.99",
-      "currency": "EUR",
-      "billing": "month",
-      "payment_link": "",
       "note": "Limited daily picks; first 3 days free after registration.",
       "duration_days": 30,
       "trial_hours": 72,
       "lifetime": false,
-      "hide_ads_allowed": false
+      "hide_ads_allowed": false,
+      "description": "Entry access to the BlinQ workspace.",
+      "cta_label": "Open ROOKIE",
+      "url": "",
+      "avatar": "rookie",
+      "order": 1
     },
     "pro": {
-      "label": "PRO",
+      "label": "BlinQ PRO",
       "enabled": true,
-      "price": "14.99",
-      "currency": "EUR",
-      "billing": "month",
-      "payment_link": "",
       "note": "Full core predictions and tournaments.",
       "duration_days": 30,
       "lifetime": false,
-      "hide_ads_allowed": false
+      "hide_ads_allowed": false,
+      "description": "Core predictions, tournaments and the main BlinQ workflow.",
+      "cta_label": "Open PRO",
+      "url": "",
+      "avatar": "pro",
+      "order": 2
     },
     "elite": {
-      "label": "ELITE",
+      "label": "BlinQ ELITE",
       "enabled": true,
-      "price": "99.00",
-      "currency": "EUR",
-      "billing": "year",
-      "payment_link": "",
       "note": "Annual premium access; advanced permissions are configurable in Admin.",
       "duration_days": 365,
       "lifetime": false,
-      "hide_ads_allowed": true
+      "hide_ads_allowed": true,
+      "description": "Expanded access for users who follow more matches and analytics.",
+      "cta_label": "Open ELITE",
+      "url": "",
+      "avatar": "elite",
+      "order": 3
     },
     "goat": {
-      "label": "GOAT",
+      "label": "BlinQ GOAT",
       "enabled": true,
-      "price": "199.00",
-      "currency": "EUR",
-      "billing": "lifetime",
-      "payment_link": "",
       "note": "Lifetime top-tier access; advanced permissions are configurable in Admin.",
       "duration_days": null,
       "lifetime": true,
-      "hide_ads_allowed": true
+      "hide_ads_allowed": true,
+      "description": "Top-tier BlinQ access with the complete enabled workspace.",
+      "cta_label": "Open GOAT",
+      "url": "",
+      "avatar": "goat",
+      "order": 4
     },
     "legend": {
-      "label": "LEGEND",
+      "label": "BlinQ LEGEND",
       "enabled": false,
-      "price": "",
-      "currency": "EUR",
-      "billing": "reserve",
-      "payment_link": "",
       "note": "Hidden reserve plan; not publicly purchasable.",
       "duration_days": 365,
       "lifetime": false,
-      "hide_ads_allowed": false
+      "hide_ads_allowed": false,
+      "description": "Reserved premium level. Enable it in JSON or Admin when needed.",
+      "cta_label": "Open LEGEND",
+      "url": "",
+      "avatar": "legend",
+      "order": 5
     }
   },
   "navigation": {
@@ -260,28 +265,28 @@
       }
     },
     "CONTENT_TOP_1": {
-      "label": "Top external slot 1",
+      "label": "Dashboard banner 1",
       "zone": "content_top",
       "kind": "large_banner",
       "order": 41,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "External content slot 1",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
+        "eyebrow": "BLINQ PRO",
+        "headline": "Start with Prime",
+        "text": "Unlock more daily picks and the core BlinQ workflow.",
+        "button_text": "See PRO",
         "link": "#account",
         "route": "account",
-        "theme": "violet",
+        "theme": "blue",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "rss",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
         "enabled": true,
         "active_from": "",
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss",
+        "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
         "image_position": "center"
@@ -302,28 +307,28 @@
       }
     },
     "CONTENT_TOP_2": {
-      "label": "Top external slot 2",
+      "label": "Dashboard banner 2",
       "zone": "content_top",
       "kind": "large_banner",
       "order": 42,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "External content slot 2",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
+        "eyebrow": "BLINQ PRO",
+        "headline": "More picks. More context.",
+        "text": "Core daily prediction access.",
+        "button_text": "See PRO",
         "link": "#account",
         "route": "account",
         "theme": "blue",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "rss",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
         "enabled": true,
         "active_from": "",
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss",
+        "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
         "image_position": "center"
@@ -344,28 +349,28 @@
       }
     },
     "CONTENT_TOP_3": {
-      "label": "Top external slot 3",
+      "label": "Dashboard banner 3",
       "zone": "content_top",
       "kind": "large_banner",
       "order": 43,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "External content slot 3",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
+        "eyebrow": "BLINQ ELITE",
+        "headline": "Go deeper",
+        "text": "Expanded access for heavier analytical workflows.",
+        "button_text": "See ELITE",
         "link": "#account",
         "route": "account",
         "theme": "purple",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "rss",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
         "enabled": true,
         "active_from": "",
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss",
+        "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
         "image_position": "center"
@@ -386,28 +391,28 @@
       }
     },
     "CONTENT_TOP_4": {
-      "label": "Top external slot 4",
+      "label": "Dashboard banner 4",
       "zone": "content_top",
       "kind": "large_banner",
       "order": 44,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "External content slot 4",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
+        "eyebrow": "BLINQ GOAT",
+        "headline": "Unlock the full engine",
+        "text": "Top-tier access to the complete enabled BlinQ workspace.",
+        "button_text": "See GOAT",
         "link": "#account",
         "route": "account",
-        "theme": "green",
+        "theme": "gold",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "rss",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
         "enabled": true,
         "active_from": "",
         "active_until": "",
         "image_url": "",
         "span": 1,
-        "type": "rss",
+        "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
         "image_position": "center"
@@ -915,9 +920,9 @@
         "preset": "default"
       },
       "access": {
-        "trial": "active",
+        "trial": "locked",
         "expired": "locked",
-        "rookie": "active",
+        "rookie": "locked",
         "pro": "active",
         "elite": "active",
         "goat": "active",
@@ -1210,9 +1215,9 @@
         "preset": "default"
       },
       "access": {
-        "trial": "locked",
+        "trial": "active",
         "expired": "locked",
-        "rookie": "locked",
+        "rookie": "active",
         "pro": "active",
         "elite": "active",
         "goat": "active",
@@ -1233,9 +1238,9 @@
         "preset": "default"
       },
       "access": {
-        "trial": "locked",
+        "trial": "active",
         "expired": "locked",
-        "rookie": "locked",
+        "rookie": "active",
         "pro": "active",
         "elite": "active",
         "goat": "active",
@@ -1256,9 +1261,9 @@
         "preset": "default"
       },
       "access": {
-        "trial": "locked",
+        "trial": "active",
         "expired": "locked",
-        "rookie": "locked",
+        "rookie": "active",
         "pro": "active",
         "elite": "active",
         "goat": "active",
@@ -1279,9 +1284,9 @@
         "preset": "default"
       },
       "access": {
-        "trial": "locked",
+        "trial": "active",
         "expired": "locked",
-        "rookie": "locked",
+        "rookie": "active",
         "pro": "active",
         "elite": "active",
         "goat": "active",
@@ -1302,9 +1307,9 @@
         "preset": "default"
       },
       "access": {
-        "trial": "locked",
+        "trial": "active",
         "expired": "locked",
-        "rookie": "locked",
+        "rookie": "active",
         "pro": "active",
         "elite": "active",
         "goat": "active",
@@ -1524,6 +1529,27 @@
         "goat": "active",
         "legend": "active"
       }
+    },
+    "RESULTS_PANEL": {
+      "label": "Results preview panel",
+      "zone": "dashboard",
+      "kind": "panel",
+      "order": 95,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "goat": "active",
+        "legend": "active"
+      }
     }
   },
   "admin": {
@@ -1537,7 +1563,15 @@
       "1+1+2",
       "4"
     ],
-    "max_rss_sources": 8
+    "max_rss_sources": 8,
+    "dashboard_preview_choices": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      "ALL"
+    ]
   },
   "ad_fallbacks": {
     "mode": "mixed",
@@ -1560,18 +1594,18 @@
   },
   "content_rows": {
     "content_top": {
-      "label": "AD ROW · above Prime Picks",
+      "label": "DASHBOARD PROMO ROW · top",
       "enabled": true,
-      "preset": "1+1+1+1"
+      "preset": "2+1+1"
     },
     "content_mid": {
-      "label": "AD ROW · between Top Bets and Value",
-      "enabled": true,
+      "label": "OPTIONAL PROMO ROW 2",
+      "enabled": false,
       "preset": "1+1+1+1"
     },
     "content_bottom": {
-      "label": "AD ROW · between Ace Picks and S/G Picks",
-      "enabled": true,
+      "label": "OPTIONAL PROMO ROW 3",
+      "enabled": false,
       "preset": "1+1+1+1"
     }
   },
@@ -1753,7 +1787,8 @@
       "goat": {
         "default": "/assets/goat.webp"
       }
-    }
+    },
+    "admin_avatar_plan": "goat"
   },
   "dashboard": {
     "show_header_feature_strip": false,
@@ -1762,6 +1797,378 @@
       "prime",
       "top_daily",
       "odds_coverage"
-    ]
-  }
+    ],
+    "sections": {
+      "prime": {
+        "label": "Prime Picks",
+        "panel_id": "predictionsPanel",
+        "sidebar_element": "SIDEBAR_PRIME",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 1,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "rookie": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "pro": {
+            "visible_picks": 5,
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          }
+        }
+      },
+      "top_daily": {
+        "label": "Top Bets",
+        "panel_id": "topDailyPanel",
+        "sidebar_element": "SIDEBAR_TOP_DAILY",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 2,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 2,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "rookie": {
+            "visible_picks": 2,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "pro": {
+            "visible_picks": 5,
+            "blur_remaining": true,
+            "see_all": true
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          }
+        }
+      },
+      "value": {
+        "label": "Value Picks",
+        "panel_id": "valuePanel",
+        "sidebar_element": "SIDEBAR_VALUE",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 3,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "rookie": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "pro": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": true
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          }
+        }
+      },
+      "ace": {
+        "label": "Ace Picks",
+        "panel_id": "acePanel",
+        "sidebar_element": "SIDEBAR_ACE",
+        "sidebar_enabled": true,
+        "dashboard_enabled": false,
+        "dashboard_order": 4,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "rookie": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "pro": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": true
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          }
+        }
+      },
+      "sg": {
+        "label": "S/G Picks",
+        "panel_id": "sgPanel",
+        "sidebar_element": "SIDEBAR_SG",
+        "sidebar_enabled": true,
+        "dashboard_enabled": false,
+        "dashboard_order": 5,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "rookie": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "pro": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": true
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          }
+        }
+      },
+      "doubles": {
+        "label": "Doubles",
+        "panel_id": "doublesPanel",
+        "sidebar_element": "SIDEBAR_DOUBLES",
+        "sidebar_enabled": true,
+        "dashboard_enabled": false,
+        "dashboard_order": 6,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "rookie": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "pro": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": true
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          }
+        }
+      },
+      "results": {
+        "label": "Results",
+        "panel_id": "resultsPreviewPanel",
+        "sidebar_element": "SIDEBAR_RESULTS",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 7,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": false
+          },
+          "rookie": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": false
+          },
+          "expired": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": false
+          },
+          "pro": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          }
+        }
+      },
+      "btts": {
+        "label": "BTTS Bonus",
+        "panel_id": "bttsBonusPanel",
+        "sidebar_element": "SIDEBAR_BTTS",
+        "sidebar_enabled": true,
+        "dashboard_enabled": false,
+        "dashboard_order": 8,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 2,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "rookie": {
+            "visible_picks": 2,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false
+          },
+          "pro": {
+            "visible_picks": 5,
+            "blur_remaining": true,
+            "see_all": true
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true
+          }
+        }
+      }
+    },
+    "show_live_chip": false
+  },
+  "ui_revision": "6.4.0"
 }

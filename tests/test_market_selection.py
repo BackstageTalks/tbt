@@ -128,7 +128,10 @@ def test_prime_top_and_value_follow_distinct_working_policy():
     assert sections['market_selection']['prime_rule']['min_probability'] == .85
     assert sections['market_selection']['prime_rule']['hard_odds_band'] is False
     assert sections['market_selection']['top_daily_rule']['product_label'] == 'Top Bets'
-    assert sections['market_selection']['top_daily_rule']['preferred_probability'] == .72
+    assert sections['market_selection']['top_daily_rule']['preferred_probability'] == .75
+    assert sections['market_selection']['top_daily_rule']['secondary_probability'] == .72
+    assert sections['market_selection']['top_daily_rule']['standard_probability'] == .70
+    assert sections['market_selection']['top_daily_rule']['target_count'] == 10
     assert sections['market_selection']['top_daily_rule']['min_probability'] == .68
     assert sections['market_selection']['top_daily_rule']['min_odds'] == 1.20
     assert sections['market_selection']['top_daily_rule']['min_edge'] is None
@@ -196,6 +199,33 @@ def test_top_bets_fill_to_ten_from_68_floor_without_lower_probability_displacing
     assert len(probs) == 10
     assert probs == sorted(probs, reverse=True)
     assert probs[-1] == .68
+
+
+def test_top_bets_keep_entire_tier_when_target_is_reached_without_default_hard_cap():
+    rows = [
+        row(f'p{i}', .80 - i * .002, 1.30 + i * .01, .75, depth=.95, surface1=20, surface2=20)
+        for i in range(12)
+    ]
+    sections = select_market_sections(rows, prime_min_probability=.99)
+    assert len(sections['top_daily_picks']) == 12
+    cascade = sections['market_selection']['top_cascade']
+    assert cascade['target_count'] == 10
+    assert cascade['applied_floor'] == .75
+    assert cascade['selected_before_optional_hard_limit'] == 12
+    assert sections['market_selection']['top_daily_rule']['limit'] is None
+
+
+def test_top_bets_cascade_stops_at_first_tier_that_reaches_ten_and_keeps_whole_tier():
+    rows = []
+    rows += [row(f'a{i}', .79 - i * .005, 1.35, .75, depth=.95, surface1=20, surface2=20) for i in range(6)]
+    rows += [row(f'b{i}', .74 - i * .002, 1.40, .75, depth=.95, surface1=20, surface2=20) for i in range(8)]
+    rows += [row(f'c{i}', .71 - i * .002, 1.45, .75, depth=.95, surface1=20, surface2=20) for i in range(5)]
+    sections = select_market_sections(rows, prime_min_probability=.99)
+    selected = sections['top_daily_picks']
+    assert len(selected) == 14
+    assert all(card['probability'] >= .72 for card in selected)
+    assert all(not card['event_id'].startswith('c') for card in selected)
+    assert sections['market_selection']['top_cascade']['applied_floor'] == .72
 
 
 def test_section_limits_do_not_reserve_unpublished_rows_from_lower_priority_sections():

@@ -181,6 +181,13 @@ def test_admin_update_preserves_unrelated_app_metadata_and_records_manual_paymen
     assert app["blinq_access_updated_by"] == "admin-1"
 
 
+def test_admin_access_update_can_be_active_without_subscription_plan():
+    normalized = normalize_access_update({"role": "admin", "plan": "", "status": "active"})
+    assert normalized["role"] == "admin"
+    assert normalized["plan"] == ""
+    assert normalized["status"] == "active"
+
+
 def test_avatar_variant_is_user_controlled_presentation_metadata_only():
     account = public_account(
         user(user_metadata={"display_name": "Member", "blinq_avatar_variant": "w"}),

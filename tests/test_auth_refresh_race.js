@@ -48,16 +48,16 @@ function makeContext(localStorage, fetchImpl) {
     if (url === '/api/v1/auth/config') {
       return response(200, {
         enabled: true,
-        supabase_url: 'https://supabase.test',
-        anon_key: 'anon',
+        provider: 'firebase',
+        project_id: 'blinq-182',
+        auth_domain: 'blinq-182.firebaseapp.com',
       });
     }
-    if (String(url).includes('/logout')) return response(200, {});
     throw new Error(`Unexpected fetch: ${url}`);
   };
 
   const tabA = makeContext(sharedLocalStorage, async (url) => {
-    if (String(url).includes('/token?grant_type=refresh_token')) {
+    if (String(url).includes('securetoken.googleapis.com/v1/token')) {
       return new Promise(resolve => { resolveRefresh = resolve; });
     }
     return commonFetch(url);
@@ -66,7 +66,8 @@ function makeContext(localStorage, fetchImpl) {
 
   await tabA.BlinqAuth.init();
   await tabB.BlinqAuth.init();
-  sharedLocalStorage.setItem('blinq_v3_session', JSON.stringify({
+  sharedLocalStorage.setItem('blinq_v4_session', JSON.stringify({
+    provider: 'firebase',
     access_token: 'old-access',
     refresh_token: 'old-refresh',
     expires_at: 1,
@@ -79,13 +80,13 @@ function makeContext(localStorage, fetchImpl) {
   // Logout in a different tab must invalidate the already-running refresh in A.
   await tabB.BlinqAuth.signOut();
   resolveRefresh(response(200, {
-    access_token: 'refreshed-access',
+    id_token: 'refreshed-access',
     refresh_token: 'refreshed-refresh',
-    expires_in: 3600,
+    expires_in: '3600',
   }));
 
   assert.strictEqual(await pendingRestore, null);
-  assert.strictEqual(sharedLocalStorage.getItem('blinq_v3_session'), null);
+  assert.strictEqual(sharedLocalStorage.getItem('blinq_v4_session'), null);
   console.log('auth cross-tab refresh/logout race: PASS');
 })().catch(error => {
   console.error(error);

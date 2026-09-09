@@ -35,34 +35,40 @@
 
     <main class="main dashboard-main">
       <header class="topbar dashboard-topbar">
-        <div class="topbar-copy dashboard-title-block">
-          <div class="eyebrow" id="pageEyebrow">TENNIS INTELLIGENCE</div>
-          <div class="title-row">
-            <h1 id="pageTitle">Dashboard</h1>
-            <span class="today-label" id="todayLabel"></span>
-          </div>
-          <p class="subtitle" id="pageSubtitle">Recommended Prime Picks and current tennis intelligence.</p>
+        <div class="topbar-balance" aria-hidden="true"></div>
+        <div class="route-context-meta" hidden>
+          <span id="pageEyebrow">TENNIS INTELLIGENCE</span>
+          <span id="pageTitle">Dashboard</span>
+          <span id="pageSubtitle">Recommended Prime Picks and current tennis intelligence.</span>
+          <span id="todayLabel"></span>
         </div>
 
         <section class="header-feature-strip" id="headerFeatureStrip" aria-label="BlinQ header content slots"></section>
-
-        <div class="dashboard-live-chip" aria-label="Live model status">
-          <i></i><span>Live intelligence</span><strong id="headerModelState">Production</strong>
-        </div>
+        <div class="dashboard-live-chip" aria-label="Live model status"><i></i><span>Live intelligence</span><strong id="headerModelState">Production</strong></div>
 
         <div class="topbar-actions dashboard-account-actions">
-          <button class="btn top-upgrade" data-route="account" type="button"><span aria-hidden="true">✦</span> Upgrade</button>
-          <button class="profile-button profile-button-large" id="profileButton" type="button" aria-label="Open account and profile">
-            <span class="avatar avatar-large" id="avatar">B</span>
-            <span class="profile-copy">
-              <span class="profile-name-row"><strong id="profileName">BlinQ User</strong></span>
-              <span class="profile-membership-row">
-                <span class="profile-tier"><span class="profile-tier-icon" id="profilePlanIcon" aria-hidden="true">◇</span><span id="profilePlan">Member</span></span>
-                <span class="profile-status"><i aria-hidden="true"></i><span id="memberStatus">Active</span></span>
+          <div class="dashboard-datetime" aria-label="Current local date and time">
+            <strong id="headerTime">—</strong>
+            <span id="headerDate">—</span>
+          </div>
+          <button class="btn top-upgrade" data-route="account" type="button"><span aria-hidden="true">✦</span><span>Upgrade</span></button>
+          <div class="profile-shell" id="profileShell">
+            <button class="profile-button profile-button-large" id="profileButton" type="button" aria-label="Open account and membership">
+              <span class="avatar avatar-large" id="avatar">B</span>
+              <span class="profile-copy">
+                <span class="profile-name-row"><strong id="profileName">BlinQ User</strong></span>
+                <span class="profile-membership-row">
+                  <span class="profile-tier"><span class="profile-tier-icon" id="profilePlanIcon" aria-hidden="true">◇</span><span id="profilePlan">Member</span></span>
+                  <span class="profile-status"><i aria-hidden="true"></i><span id="memberStatus">Active</span></span>
+                </span>
               </span>
-            </span>
-            <span class="profile-chevron" aria-hidden="true">⌄</span>
-          </button>
+            </button>
+            <button class="ui-chevron profile-menu-toggle" id="profileMenuToggle" type="button" aria-expanded="false" aria-controls="profileMenu" aria-label="Open account menu"><span aria-hidden="true">⌄</span></button>
+            <div class="profile-menu" id="profileMenu" hidden>
+              <button type="button" data-route="account"><span>◎</span><span><strong>Account & membership</strong><small>Profile, access and plans</small></span></button>
+              <button type="button" id="headerLogoutButton"><span>↪</span><span><strong>Sign out</strong><small>End this session</small></span></button>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -73,15 +79,11 @@
 
         <section class="picks-panel prime-panel" id="predictionsPanel" data-ui-element="PRIME_PICKS_PANEL">
           <div class="panel-head picks-head">
-            <div>
-              <div class="section-kicker"><span>✦</span> Prime Picks</div>
-              <p>Accuracy-first Match Winner selections. The preferred odds zone is 1.20–1.50, but model probability and data quality come first.</p>
-            </div>
+            <div><div class="section-kicker"><span>✦</span> Prime Picks</div></div>
             <div class="panel-actions">
               <span class="feed-status"><i></i><span>Live · updated <strong id="updatedAt">—</strong></span></span>
               <span class="match-count"><strong id="matchCount">0</strong> picks</span>
               <button class="btn btn-ghost" id="refreshButton" type="button">↻ Refresh</button>
-              <a class="btn btn-ghost see-all-link" id="viewAllButton" href="#prime" data-route="prime">See all →</a>
             </div>
           </div>
 
@@ -101,40 +103,53 @@
             <button class="carousel-arrow carousel-arrow-right" id="nextPick" type="button" aria-label="Next Prime Picks">›</button>
           </div>
           <div class="carousel-dots" id="carouselDots" aria-label="Prime Picks carousel pages"></div>
+          <a class="section-see-all-card" id="primeSeeAllCard" href="#prime" data-route="prime"><span>Prime Picks</span><strong id="primeSeeAllCardCount">0 published</strong><b>See all →</b></a>
         </section>
 
         <section class="picks-panel market-panel" id="topDailyPanel" data-ui-element="TOP_DAILY_PANEL">
-          <div class="panel-head picks-head"><div><div class="section-kicker"><span>★</span> Top Bets</div><p>Confidence-first Match Winner picks after Prime. Cascade: 75% → 72% → 70% → 68% until the board reaches at least 10; the full qualifying tier stays published.</p></div><div class="section-actions"><span class="section-count" id="topDailyCount">0 picks</span><a class="btn btn-ghost see-all-link" id="topDailySeeAll" href="#top_daily" data-route="top_daily">See all →</a></div></div>
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>★</span> Top Bets</div></div><div class="section-actions"><span class="section-count" id="topDailyCount">0 picks</span></div></div>
           <div class="market-carousel-shell"><button class="market-arrow prev" type="button" data-market-prev="top_daily" aria-label="Previous Top Bets">‹</button><div class="market-preview-grid" id="topDailyGrid"><div class="state-card">Top Bets selector output is not published yet.</div></div><button class="market-arrow next" type="button" data-market-next="top_daily" aria-label="Next Top Bets">›</button></div>
+          <a class="section-see-all-card" href="#top_daily" data-route="top_daily"><span>Top Bets</span><strong id="topDailySeeAllCardCount">0 published</strong><b>See all →</b></a>
         </section>
 
         <section id="bannerMid" class="promo-grid ad-row" aria-label="Advertising row between Top Bets and Value Picks"></section>
 
         <section class="picks-panel market-panel" id="valuePanel" data-ui-element="VALUE_PICKS_PANEL">
-          <div class="panel-head picks-head"><div><div class="section-kicker"><span>◇</span> Value Picks</div><p>Higher-priced opportunities where BlinQ sees a meaningful de-vig market edge and expected value.</p></div><div class="section-actions"><span class="section-count" id="valueCount">0 picks</span><a class="btn btn-ghost see-all-link" id="valueSeeAll" href="#value" data-route="value">See all →</a></div></div>
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>◇</span> Value Picks</div></div><div class="section-actions"><span class="section-count" id="valueCount">0 picks</span></div></div>
           <div class="market-carousel-shell"><button class="market-arrow prev" type="button" data-market-prev="value" aria-label="Previous Value Picks">‹</button><div class="market-preview-grid" id="valueGrid"><div class="state-card">Value selector output is not published yet.</div></div><button class="market-arrow next" type="button" data-market-next="value" aria-label="Next Value Picks">›</button></div>
+          <a class="section-see-all-card" href="#value" data-route="value"><span>Value Picks</span><strong id="valueSeeAllCardCount">0 published</strong><b>See all →</b></a>
         </section>
 
         <section class="picks-panel market-panel" id="acePanel" data-ui-element="ACE_PICKS_PANEL">
-          <div class="panel-head picks-head"><div><div class="section-kicker"><span>♠</span> Ace Picks</div><p>Aces and Double Faults projections from point-in-time player statistics.</p></div><div class="section-actions"><span class="section-count" id="aceCount">0 picks</span><a class="btn btn-ghost see-all-link" id="aceSeeAll" href="#ace" data-route="ace">See all →</a></div></div>
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>♠</span> Ace Picks</div></div><div class="section-actions"><span class="section-count" id="aceCount">0 picks</span></div></div>
           <div class="market-carousel-shell"><button class="market-arrow prev" type="button" data-market-prev="ace" aria-label="Previous Ace Picks">‹</button><div class="market-preview-grid" id="aceGrid"><div class="state-card">Aces / Double Faults model output is not published yet.</div></div><button class="market-arrow next" type="button" data-market-next="ace" aria-label="Next Ace Picks">›</button></div>
+          <a class="section-see-all-card" href="#ace" data-route="ace"><span>Ace Picks</span><strong id="aceSeeAllCardCount">0 published</strong><b>See all →</b></a>
         </section>
 
         <section id="bannerBottom" class="promo-grid ad-row" aria-label="Advertising row between Ace Picks and S/G Picks"></section>
 
         <section class="picks-panel market-panel" id="sgPanel" data-ui-element="SG_PICKS_PANEL">
-          <div class="panel-head picks-head"><div><div class="section-kicker"><span>▥</span> S/G Picks</div><p>Sets and Games projections from structured historical score data.</p></div><div class="section-actions"><span class="section-count" id="sgCount">0 picks</span><a class="btn btn-ghost see-all-link" id="sgSeeAll" href="#sg" data-route="sg">See all →</a></div></div>
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>▥</span> S/G Picks</div></div><div class="section-actions"><span class="section-count" id="sgCount">0 picks</span></div></div>
           <div class="market-carousel-shell"><button class="market-arrow prev" type="button" data-market-prev="sg" aria-label="Previous S/G Picks">‹</button><div class="market-preview-grid" id="sgGrid"><div class="state-card">Sets / Games model output is not published yet.</div></div><button class="market-arrow next" type="button" data-market-next="sg" aria-label="Next S/G Picks">›</button></div>
+          <a class="section-see-all-card" href="#sg" data-route="sg"><span>S/G Picks</span><strong id="sgSeeAllCardCount">0 published</strong><b>See all →</b></a>
         </section>
 
         <section class="picks-panel market-panel doubles-panel" id="doublesPanel" data-ui-element="DOUBLES_PANEL">
-          <div class="panel-head picks-head"><div><div class="section-kicker"><span>◈</span> Doubles</div><p>Separate doubles model branch. Singles probabilities are never reused for doubles.</p></div><div class="section-actions"><span class="section-count" id="doublesCount">0 picks</span><a class="btn btn-ghost see-all-link" id="doublesSeeAll" href="#doubles" data-route="doubles">See all →</a></div></div>
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>◈</span> Doubles</div></div><div class="section-actions"><span class="section-count" id="doublesCount">0 picks</span></div></div>
           <div class="market-preview-grid"><div class="state-card market-empty">Doubles model is not enabled yet.</div></div>
+          <a class="section-see-all-card" href="#doubles" data-route="doubles"><span>Doubles</span><strong id="doublesSeeAllCardCount">0 published</strong><b>See all →</b></a>
+        </section>
+
+        <section class="picks-panel market-panel results-preview-panel" id="resultsPreviewPanel" data-ui-element="RESULTS_PANEL">
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>✓</span> Results</div></div><div class="section-actions"><span class="section-count" id="resultsPreviewCount">0 settled</span></div></div>
+          <div id="resultsPreviewContent" class="results-preview-content"></div>
+          <a class="section-see-all-card" href="#results" data-route="results"><span>Results</span><strong id="resultsSeeAllCardCount">0 settled</strong><b>See all →</b></a>
         </section>
 
         <section class="picks-panel market-panel btts-panel" id="bttsBonusPanel" data-ui-element="BTTS_BONUS_PANEL">
-          <div class="panel-head picks-head"><div><div class="section-kicker"><span>⚽</span> BTTS Bonus <em class="beta-tag">BETA</em></div><p>Football bonus: both teams to score. This product is served separately from the tennis engine.</p></div><a class="btn btn-ghost see-all-link" href="/btts">Open /btts →</a></div>
+          <div class="panel-head picks-head"><div><div class="section-kicker"><span>⚽</span> BTTS Bonus <em class="beta-tag">BETA</em></div></div></div>
           <a class="btts-teaser" href="/btts"><span>FOOTBALL · BETA</span><strong>Both Teams To Score</strong><small>Open the dedicated BTTS page →</small></a>
+          <a class="section-see-all-card" href="/btts"><span>BTTS Bonus</span><strong>Football · BETA</strong><b>Open →</b></a>
         </section>
       </div>
 
@@ -148,7 +163,7 @@
         </div>
         <div class="footer-bottom-row">
           <p>Probabilities express uncertainty, not guarantees. Published predictions remain auditable against real outcomes.</p>
-          <nav class="footer-languages" aria-label="Language versions"><span>LANGUAGE</span><a href="?lang=sk#predictions">SK</a><a href="?lang=cz#predictions">CZ</a><a href="?lang=pl#predictions">PL</a><a href="?lang=hu#predictions">HU</a><a href="?lang=de#predictions">DE</a><a href="?lang=ua#predictions">UA</a><a href="?lang=ru#predictions">RU</a></nav>
+          <nav class="footer-languages" aria-label="Language versions"><span>LANGUAGE</span><a href="?lang=en#predictions">EN</a><a href="?lang=sk#predictions">SK</a><a href="?lang=cz#predictions">CZ</a><a href="?lang=pl#predictions">PL</a><a href="?lang=hu#predictions">HU</a><a href="?lang=de#predictions">DE</a><a href="?lang=ua#predictions">UA</a><a href="?lang=ru#predictions">RU</a></nav>
         </div>
       </footer>
     </main>
@@ -181,6 +196,11 @@
   <dialog id="matchDialog" class="match-dialog">
     <button class="dialog-close" id="dialogClose" aria-label="Close">×</button>
     <div id="dialogContent"></div>
+  </dialog>
+
+  <dialog id="upgradeDialog" class="upgrade-dialog" aria-labelledby="upgradeDialogTitle">
+    <button class="dialog-close ui-chevron" id="upgradeDialogClose" aria-label="Close">×</button>
+    <div id="upgradeDialogContent"></div>
   </dialog>
 
   <template id="predictionTemplate">

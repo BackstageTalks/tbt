@@ -10,14 +10,20 @@ def _cfg():
 
 def test_v63_banner_rows_are_restored_and_manageable():
     cfg = _cfg()
-    assert cfg["ui_revision"] == "6.3.0"
+    assert cfg["ui_revision"] in {"6.3.0", "6.4.0"}
     assert cfg["content_rows"]["content_top"]["enabled"] is True
-    assert cfg["content_rows"]["content_mid"]["enabled"] is True
-    assert cfg["content_rows"]["content_bottom"]["enabled"] is True
+    if cfg["ui_revision"] == "6.3.0":
+        assert cfg["content_rows"]["content_mid"]["enabled"] is True
+        assert cfg["content_rows"]["content_bottom"]["enabled"] is True
+    else:
+        assert isinstance(cfg["content_rows"]["content_mid"]["enabled"], bool)
+        assert isinstance(cfg["content_rows"]["content_bottom"]["enabled"], bool)
     assert cfg["content_rows"]["content_top"]["preset"] in {"1+1+1+1", "2+2", "2+1+1", "1+1+2", "4"}
-    assert [cfg["elements"][f"CONTENT_TOP_{i}"]["content"]["route"] for i in range(1, 5)] == [
-        "prime", "top_daily", "value", "results"
-    ]
+    routes = [cfg["elements"][f"CONTENT_TOP_{i}"]["content"]["route"] for i in range(1, 5)]
+    if cfg["ui_revision"] == "6.3.0":
+        assert routes == ["prime", "top_daily", "value", "results"]
+    else:
+        assert routes == ["account", "account", "account", "account"]
     assert all(cfg["elements"][f"CONTENT_TOP_{i}"]["content"]["type"] == "promo" for i in range(1, 5))
 
 

@@ -488,9 +488,9 @@ Admin receives full internal access independent of paid plan.
 
 ### Admin bootstrap
 
-Backend recognises admin from Supabase `app_metadata.role = admin`, with `BLINQ_ADMIN_EMAILS` available as an environment bootstrap path.
+Backend recognises admin from Firebase custom claim `role = admin`, with `BLINQ_ADMIN_EMAILS` available as an environment bootstrap path.
 
-For test accounts, role can be assigned in Supabase Auth app metadata. The UI/backend already contains Admin → Users access-management functionality for role/plan/status management.
+Admin → Users manages Firebase role/plan/status custom claims. The Supabase app-metadata path is retained only as the temporary auth rollback fallback.
 
 ### Logout
 
@@ -619,6 +619,7 @@ Production success must be confirmed from actual GitHub/Azure logs, not assumed 
 - v5.8 — Ace statistics enrichment resilience: valid HTTP 200 statistics with no supported fields are cached as unavailable instead of aborting the run.
 - v5.9 — Match Winner cascade: shared 78/80/5 quality pool, Daily 1.25–1.50, Prime >1.50, close-market Value branch, edge/EV display-only, and prioritized odds requests. **SUPERSEDED by v6.0.**
 - v6.0 — Prime / Top Bets / Value product policy, explicit EV/edge guardrails and mutually exclusive publication (one underlying pick = one public offer).
+- v6.1 — Top Bets confidence-first refinement: 72% target, 68% hard floor, edge/EV diagnostic-only, quality-first ranking, odds 1.20 sanity floor.
 
 Documentation-only addition after v5.7:
 
@@ -630,7 +631,7 @@ Documentation-only addition after v5.7:
 
 ### Data / predictions
 
-- [LOCAL IMPLEMENTED / PROD PENDING] Deploy and confirm v5.9 Match Winner cascade; then monitor Daily/Prime/Value live volume, hit rate and ROI.
+- [PROD CONFIRMED v6.0 / v6.1 LOCAL] Monitor Prime / Top Bets / Value live volume, hit rate and ROI; deploy v6.1 confidence-first Top Bets refinement.
 - [RUNNING] Complete Ace statistics enrichment and inspect real coverage.
 - [NEXT] Run `sg-scores` enrichment.
 - [NEXT] Resolve / populate `best_of` for current upcoming events.
@@ -778,13 +779,63 @@ The existing Match Winner market-publication schema remains `1`; v6 adds `primar
 - explicit exclusivity regression confirms one underlying Match Winner selection cannot be present in more than one of Prime / Top Bets / Value.
 
 **Production result**
-PENDING. Do not treat local code/tests as proof of live publication until the GitHub/Azure refresh/deploy/confirmation logs succeed.
+CONFIRMED for v6.0 on 2026-09-08 from the real GitHub/Azure refresh/deploy/confirmation log: 429 upcoming rows, Prime 3, Top Bets 0, Value 2, 41 odds candidates, 33 odds available (~80.5% coverage), deployment succeeded, and publication confirmation reported 145 newly confirmed predictions with 5 newly confirmed market picks. The zero Top Bets output is the live observation that motivated v6.1; it is not treated as a selector failure.
 
 **Follow-up**
 - monitor actual section volumes, hit rate, average odds, units and ROI;
 - backtest thresholds and assignment priority OOS rather than tuning from a small live sample;
 - monitor provider quota after broadening the pre-price candidate floor;
 - keep one-pick/one-offer as a non-negotiable publication invariant.
+
+## 25. 2026-09-08 — Top Bets confidence-first refinement (v6.1)
+
+**Why**
+The first confirmed v6.0 production refresh produced 3 Prime Picks and 2 Value Picks but 0 Top Bets. A fixed 72% + price/edge/EV gate made the main daily Top Bets section too brittle: a day with no candidate clearing every market threshold resulted in an empty product section even when several high-quality model picks existed just below 72%. Product direction is that Top Bets should rank the strongest available model-backed betting picks, not act as a second Value filter.
+
+**Decision**
+Top Bets becomes confidence-first while keeping the same one-pick/one-offer exclusivity:
+
+- preferred probability target: `>= 0.72`;
+- hard fallback probability floor: `>= 0.68`;
+- data depth: `>= 0.80`;
+- surface history: `>= 5/5`;
+- real Match Winner odds are still required because this is a betting section;
+- decimal odds have only a low-price sanity floor of `1.20`;
+- edge and expected value are **not** Top Bets eligibility or ranking inputs; they remain diagnostic market metadata only;
+- max 10 picks;
+- ranking is lexicographic: model probability -> data depth -> minimum player surface sample -> minimum player overall sample -> odds as final tiebreaker.
+
+This means 71% always ranks ahead of 68% regardless of a larger quoted edge/EV on the 68% row. If ten rows already exist above 72%, lower-probability fallback rows never enter the public top ten. If fewer exist, the selector naturally fills downward only as far as the 68% floor.
+
+Elo, surface Elo, H2H and form are not separately re-added to the Top Bets ranking because they already feed the Match Winner model probability. Data depth and sample counts are used only as evidence-strength tiebreakers so those model inputs are not double-counted.
+
+**Implementation**
+- `api/tbt/services/market_selection.py`: Top Bets 72% preferred / 68% floor, 1.20 odds sanity floor, edge/EV optional and disabled by default, confidence-first quality ranking, market-selection schema 6 / `prime_top_value_v3_confidence_first_top`.
+- `web/ui-config.json`: mirrors the confidence-first rule and marks edge/EV `diagnostic_only`.
+- `web/index.html`, `web/app.js`: Top Bets copy, empty state and detail table now emphasize probability/data quality; Top cards foreground odds, depth and surface sample rather than edge/EV.
+- tests: regression coverage for 71% outranking 68% even when the lower-probability row has much larger edge/EV, quality tiebreak order, top-10 filling down to exactly the 68% floor, and limit-aware exclusivity so an unpublished #11 Top qualifier can still become a lower-priority Value offer if it independently qualifies.
+
+**Data/API impact**
+No new provider endpoint and no wider pre-price discovery gate are required. The existing odds discovery floor (`p >= 0.55`, depth `>= 0.75`, surface `>= 3/3`) already covers all possible v6.1 Top Bets candidates, so provider request volume should not increase solely because of this selector change.
+
+**Validation**
+- `python -m compileall -q api scripts` — PASS.
+- `node --check web/app.js` and `node --check web/auth.js` — PASS.
+- `web/ui-config.json` JSON parse — PASS.
+- focused market/publication/admin suite — 28 PASS.
+- full collection — 190 tests. Local runtime does not have `pyarrow`; excluding the same 8 parquet/history tests that require it, the remaining 182 tests PASS.
+
+**Production result**
+PENDING. Requires a real refresh/deploy/publication confirmation after v6.1 is pushed.
+
+**Follow-up**
+- inspect the first several live v6.1 boards before changing the 68% floor;
+- compare hit rate by probability band: 72%+, 70-71.99%, 68-69.99%;
+- optionally expose those bands as transparent UI labels without changing ranking;
+- keep Value as the separate market-disagreement/EV experiment;
+- keep exclusivity limit-aware: only an actually published higher-priority offer reserves a selection identity.
+
+---
 
 ## 23. Entry template for future work
 

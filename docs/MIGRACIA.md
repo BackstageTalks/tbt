@@ -17,17 +17,19 @@ Oficiálny návod: https://docs.github.com/en/codespaces/the-githubdev-web-based
    nasadenie z pushu je vypnuté, kým nenastavíš `TBT_DEPLOY_ENABLED=true`.
 6. Nastav dva dátové Secrets podľa DNES_STIAHNUT_DATA.md a spusti históriu.
 
-## Existujúci Azure a Supabase
+## Existujúci Azure a autentifikácia
 
 Workflow používa existujúci deployment secret
 `AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10`.
 Ak má tvoj platný token iný názov, zmeň odkaz v oboch workflow súboroch.
 
-V Azure Static Web App Application settings nastav `SUPABASE_URL` a `SUPABASE_ANON_KEY`
-existujúceho Supabase projektu. Nepoužívaj `service_role` ani secret key ako anon key.
-Supabase Auth → URL Configuration: nastav produkčnú Site URL a povoľ callback
-`https://TVOJA-DOMENA/follow-the-data/`. Zachovaj existujúci Supabase projekt: účty zostanú.
-Potvrdenie emailov a odosielanie resetov závisí od nastavení a limitov Supabase mailu.
+Aktuálna produkčná identita je Firebase Auth. V Azure nastav `FIREBASE_PROJECT_ID`,
+`FIREBASE_CLIENT_EMAIL` a `FIREBASE_PRIVATE_KEY`; `BLINQ_ADMIN_EMAILS` ostáva bootstrap
+pre interného admina. Kompletný postup a live validačné endpointy sú v
+`FIREBASE_MIGRATION.md`.
+
+`SUPABASE_*` premenné zatiaľ ponechaj iba ako rollback fallback. Po úspešnom Firebase
+login → `/api/v1/auth/me` → `/api/v1/feed` → Admin Users teste ich možno odstrániť.
 
 Po tréningu s úspešnou propagáciou spusti `refresh` (napr. max_requests 750).
 Tento ručne spustený režim **nasadí web aj API** cez existujúci Azure token.

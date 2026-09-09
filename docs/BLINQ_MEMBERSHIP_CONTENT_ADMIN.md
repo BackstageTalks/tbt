@@ -71,7 +71,7 @@ Live admin configuration and banner analytics use Azure Table Storage. By defaul
 
 `BLINQ_ADMIN_STORAGE_CONNECTION_STRING`
 
-Supabase remains the identity/account system. Admin account management also requires the existing server-only `SUPABASE_SERVICE_ROLE_KEY`.
+Firebase Auth is the primary identity/account system. Admin account management uses the server-only Firebase Admin credentials (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`). Supabase Auth remains only as a temporary rollback fallback until Firebase live validation is complete.
 
 The repository `web/ui-config.json` is the safe default/bootstrap configuration. Admin-published runtime configuration overrides it while retaining newly introduced default fields through a merge.
 

@@ -222,7 +222,6 @@ def admin_user_access(req):
         logging.exception("Admin access update failed")
         return response({"error": "admin_update_unavailable"}, 503)
 
-
 @app.route(route="v1/admin/ui-config", methods=["PUT"])
 def admin_ui_config(req):
     try:
@@ -258,3 +257,4 @@ def admin_banner_analytics(req):
         return response({"error": "admin_auth_unavailable"}, 503)
     except AdminStorageUnavailable:
         return response({"available": False, "error": "admin_storage_unavailable"}, 503)
+

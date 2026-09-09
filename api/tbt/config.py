@@ -15,6 +15,9 @@ class Settings:
     supabase_anon_key: str = os.getenv("SUPABASE_ANON_KEY", "")
     supabase_service_role_key: str = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "")
     blinq_admin_emails: str = os.getenv("BLINQ_ADMIN_EMAILS", "")
+    firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID", "").strip()
+    firebase_client_email: str = os.getenv("FIREBASE_CLIENT_EMAIL", "").strip()
+    firebase_private_key: str = os.getenv("FIREBASE_PRIVATE_KEY", "")
     model_artifact: str = str(Path(__file__).resolve().parents[1] / "artifacts/model.joblib")
     min_train_matches: int = 2500
 

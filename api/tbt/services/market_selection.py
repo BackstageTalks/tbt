@@ -45,17 +45,22 @@ PRIME_LIMIT = 30
 
 # TOP BETS = strongest remaining model picks after Prime. `top_daily` remains
 # the internal compatibility key used by the existing feed/publication ledger.
-# 72% is the preferred target, but the list may fill down to a hard 68% floor.
-# Edge/EV do not determine eligibility or ranking. A very low-price sanity floor
-# avoids commercially useless bets; after that, odds are only the final tiebreaker.
-TOP_PREFERRED_PROBABILITY = 0.72
+# The selector uses an adaptive confidence cascade validated against the large
+# walk-forward backtest: start at 75%, then 72%, 70%, and only finally 68%.
+# As soon as a tier brings the remaining Top Bets set to at least ten, selection
+# stops and ALL qualifying picks in that tier are kept. The dashboard previews
+# only ten; the feed itself is not truncated by a presentation limit.
+TOP_PREFERRED_PROBABILITY = 0.75
+TOP_SECONDARY_PROBABILITY = 0.72
+TOP_STANDARD_PROBABILITY = 0.70
 TOP_MIN_PROBABILITY = 0.68
+TOP_TARGET_COUNT = 10
 TOP_MIN_DATA_DEPTH = 0.80
 TOP_MIN_SURFACE_MATCHES = 5
 TOP_MIN_ODDS: float | None = 1.20
 TOP_MIN_EDGE: float | None = None
 TOP_MIN_EXPECTED_VALUE: float | None = None
-TOP_LIMIT = 10
+TOP_LIMIT: int | None = None
 
 # VALUE = edge/EV first. This branch intentionally accepts lower model win
 # probability than Prime/Top, but demands a stronger price disagreement.
@@ -65,7 +70,7 @@ VALUE_MIN_SURFACE_MATCHES = 3
 VALUE_MIN_ODDS = 1.80
 VALUE_MIN_EDGE = 0.05
 VALUE_MIN_EXPECTED_VALUE = 0.08
-VALUE_LIMIT = 10
+VALUE_LIMIT: int | None = None
 
 
 def _normal(value: Any) -> str:
@@ -336,6 +341,39 @@ def _top_rank_key(card: dict[str, Any]) -> tuple[float, float, int, int, float]:
         _number(card.get("odds")) or 0.0,
     )
 
+
+
+
+def _top_cascade_select(
+    cards: list[dict[str, Any]],
+    *,
+    minimum_probability: float = TOP_MIN_PROBABILITY,
+    target_count: int = TOP_TARGET_COUNT,
+) -> tuple[list[dict[str, Any]], float | None, dict[str, int]]:
+    """Select all cards in the first confidence tier that reaches the target.
+
+    The input must already exclude Prime selections. This makes the cascade match
+    the public product semantics: Top Bets are the strongest *remaining* picks.
+    Lower tiers are fallback inventory, not mandatory filler.
+    """
+    minimum = float(minimum_probability)
+    thresholds = [
+        TOP_PREFERRED_PROBABILITY,
+        TOP_SECONDARY_PROBABILITY,
+        TOP_STANDARD_PROBABILITY,
+        minimum,
+    ]
+    thresholds = sorted({max(minimum, float(value)) for value in thresholds}, reverse=True)
+    counts: dict[str, int] = {}
+    selected: list[dict[str, Any]] = []
+    applied_floor: float | None = None
+    for threshold in thresholds:
+        selected = [card for card in cards if (_number(card.get("probability")) or 0.0) >= threshold]
+        counts[f"{threshold:.2f}"] = len(selected)
+        applied_floor = threshold
+        if len(selected) >= int(target_count):
+            break
+    return selected, applied_floor, counts
 
 def _passes_candidate_gate(
     row: dict[str, Any],
@@ -709,23 +747,53 @@ def select_market_sections(
         reverse=True,
     )
 
-    qualified = {
-        "prime": prime_qualified,
-        "top_daily": top_qualified,
-        "value": value_qualified,
-    }
-    exclusive, duplicate_removed, limited_out = _exclusive_section_assignment(
-        qualified,
-        priority=tuple(section_priority),
-        limits={
-            "prime": prime_limit,
-            "top_daily": top_limit,
-            "value": value_limit,
-        },
+    # Assign Prime first, then run the adaptive Top Bets cascade only on
+    # selections that genuinely remain after Prime. Value receives everything
+    # still unclaimed. This preserves the one-underlying-pick/one-public-offer
+    # invariant while making the Top cascade product-correct.
+    prime_exclusive, prime_removed, prime_limited = _exclusive_section_assignment(
+        {"prime": prime_qualified},
+        priority=("prime",),
+        limits={"prime": prime_limit},
     )
-    prime = exclusive.get("prime", [])
-    top = exclusive.get("top_daily", [])
-    value = exclusive.get("value", [])
+    prime = prime_exclusive.get("prime", [])
+    claimed = {_selection_identity(card) for card in prime}
+
+    top_remaining = [card for card in top_qualified if _selection_identity(card) not in claimed]
+    top_duplicate_removed = len(top_qualified) - len(top_remaining)
+    top_cascade, top_applied_floor, top_tier_counts = _top_cascade_select(
+        top_remaining,
+        minimum_probability=top_min_probability,
+        target_count=TOP_TARGET_COUNT,
+    )
+    top_cascade_excluded = len(top_remaining) - len(top_cascade)
+    if top_limit is not None:
+        top = top_cascade[: max(0, int(top_limit))]
+        top_limited_out = max(0, len(top_cascade) - len(top))
+    else:
+        top = top_cascade
+        top_limited_out = 0
+    claimed.update(_selection_identity(card) for card in top)
+
+    value_remaining = [card for card in value_qualified if _selection_identity(card) not in claimed]
+    value_duplicate_removed = len(value_qualified) - len(value_remaining)
+    if value_limit is not None:
+        value = value_remaining[: max(0, int(value_limit))]
+        value_limited_out = max(0, len(value_remaining) - len(value))
+    else:
+        value = value_remaining
+        value_limited_out = 0
+
+    duplicate_removed = {
+        "prime": int(prime_removed.get("prime", 0)),
+        "top_daily": top_duplicate_removed,
+        "value": value_duplicate_removed,
+    }
+    limited_out = {
+        "prime": int(prime_limited.get("prime", 0)),
+        "top_daily": top_limited_out,
+        "value": value_limited_out,
+    }
 
     selected_identities = [
         _selection_identity(card)
@@ -742,8 +810,8 @@ def select_market_sections(
         "ace_picks": deepcopy(ace_picks or []),
         "sg_picks": deepcopy(sg_picks or []),
         "market_selection": {
-            "schema": 6,
-            "selection_policy": "prime_top_value_v3_confidence_first_top",
+            "schema": 7,
+            "selection_policy": "prime_top_value_v4_adaptive_top_cascade",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "prime_qualified_before_exclusivity": len(prime_qualified),
@@ -754,6 +822,7 @@ def select_market_sections(
                 "value": len(value),
                 "duplicates_removed": sum(duplicate_removed.values()),
                 "limited_out": sum(limited_out.values()),
+                "top_cascade_excluded": int(top_cascade_excluded),
             },
             "exclusive_assignment": {
                 "enabled": True,
@@ -762,6 +831,20 @@ def select_market_sections(
                 "duplicates_removed_by_section": duplicate_removed,
                 "limited_out_by_section": limited_out,
                 "limit_aware": True,
+            },
+            "top_cascade": {
+                "target_count": int(TOP_TARGET_COUNT),
+                "tiers": [
+                    float(TOP_PREFERRED_PROBABILITY),
+                    float(TOP_SECONDARY_PROBABILITY),
+                    float(TOP_STANDARD_PROBABILITY),
+                    float(top_min_probability),
+                ],
+                "applied_floor": None if top_applied_floor is None else float(top_applied_floor),
+                "remaining_after_prime": len(top_remaining),
+                "tier_counts": top_tier_counts,
+                "selected_before_optional_hard_limit": len(top_cascade),
+                "presentation_preview_limit": 10,
             },
             "current_outputs": (
                 ["match_winner"]
@@ -799,7 +882,10 @@ def select_market_sections(
                 "product_label": "Top Bets",
                 "objective": "confidence_first",
                 "preferred_probability": float(TOP_PREFERRED_PROBABILITY),
+                "secondary_probability": float(TOP_SECONDARY_PROBABILITY),
+                "standard_probability": float(TOP_STANDARD_PROBABILITY),
                 "min_probability": float(top_min_probability),
+                "target_count": int(TOP_TARGET_COUNT),
                 "min_data_depth": float(top_min_data_depth),
                 "min_surface_matches_each": int(top_min_surface_matches),
                 "requires_odds": True,
@@ -810,6 +896,8 @@ def select_market_sections(
                 ),
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
+                "presentation_preview_limit": 10,
+                "cascade": "75_then_72_then_70_then_68_until_at_least_10_keep_full_tier",
                 "sort": "probability_desc_then_depth_then_surface_sample_then_overall_sample_then_odds",
             },
             "value_rule": {

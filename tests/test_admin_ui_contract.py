@@ -20,7 +20,7 @@ def test_admin_layout_has_fixed_slot_inventory_and_access_states():
     assert {
         "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3",
         "PRIME_PICKS_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
-        "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "BTTS_BONUS_PANEL", "FOOTER_SYSTEM",
+        "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "DOUBLES_PANEL", "BTTS_BONUS_PANEL", "FOOTER_SYSTEM",
     } <= set(elements)
     contexts = {"trial", "expired", "rookie", "pro", "elite", "goat", "legend"}
     valid = {"active", "locked", "blurred", "hidden"}
@@ -79,6 +79,8 @@ def test_admin_runtime_secret_never_enters_web_bundle():
         for name in ("index.html", "app.js", "auth.js", "ui-config.json")
     )
     assert "SUPABASE_SERVICE_ROLE_KEY" not in web
+    assert "FIREBASE_PRIVATE_KEY" not in web
+    assert "FIREBASE_CLIENT_EMAIL" not in web
     assert "/api/v1/admin/users" in web
 
 
@@ -106,9 +108,10 @@ def test_rss_sources_live_in_backend_json_and_are_empty_until_owner_configures_t
 def test_large_content_rows_use_only_fixed_supported_merge_presets():
     cfg = _cfg()
     assert set(cfg["content_rows"]) == {"content_top", "content_mid", "content_bottom"}
-    assert all(cfg["content_rows"][zone]["preset"] == "1+1+1+1" for zone in cfg["content_rows"])
-    assert all(cfg["content_rows"][zone]["enabled"] is True for zone in cfg["content_rows"])
-    assert set(cfg["admin"]["row_presets"]) == {"1+1+1+1", "2+2", "2+1+1", "1+1+2", "4"}
+    supported = {"1+1+1+1", "2+2", "2+1+1", "1+1+2", "4"}
+    assert all(cfg["content_rows"][zone]["preset"] in supported for zone in cfg["content_rows"])
+    assert all(isinstance(cfg["content_rows"][zone]["enabled"], bool) for zone in cfg["content_rows"])
+    assert set(cfg["admin"]["row_presets"]) == supported
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "rowPresetMap" in app_js
     assert "data-admin-row-enabled" in app_js
@@ -178,8 +181,12 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["prime"]["max_negative_expected_value"] == -0.03
     assert rules["prime"]["limit"] == 30
     assert rules["top_daily"]["label"] == "Top Bets"
-    assert rules["top_daily"]["limit"] == 10
-    assert rules["top_daily"]["preferred_probability"] == 0.72
+    assert rules["top_daily"]["limit"] is None
+    assert rules["top_daily"]["presentation_preview_limit"] == 10
+    assert rules["top_daily"]["target_count"] == 10
+    assert rules["top_daily"]["preferred_probability"] == 0.75
+    assert rules["top_daily"]["secondary_probability"] == 0.72
+    assert rules["top_daily"]["standard_probability"] == 0.70
     assert rules["top_daily"]["min_probability"] == 0.68
     assert rules["top_daily"]["min_odds"] == 1.20
     assert rules["top_daily"]["max_odds"] is None
@@ -194,6 +201,9 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["value"]["min_odds"] == 1.80
     assert rules["value"]["min_edge"] == 0.05
     assert rules["value"]["min_expected_value"] == 0.08
+    assert rules["value"]["limit"] is None
+    assert rules["value"]["presentation_preview_limit"] == 10
+    assert rules["doubles"]["model_branch"] == "separate"
     assert rules["match_winner_assignment"]["exclusive"] is True
     assert rules["match_winner_assignment"]["priority"] == ["prime", "top_daily", "value"]
     assert set(rules["ace"]["markets"]) == {"aces", "double_faults"}
@@ -203,7 +213,7 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     order = [
         'id="bannerTop"', 'id="predictionsPanel"', 'id="topDailyPanel"',
         'id="bannerMid"', 'id="valuePanel"', 'id="acePanel"',
-        'id="bannerBottom"', 'id="sgPanel"', 'id="bttsBonusPanel"',
+        'id="bannerBottom"', 'id="sgPanel"', 'id="doublesPanel"', 'id="bttsBonusPanel"',
     ]
     positions = [html.index(token) for token in order]
     assert positions == sorted(positions)
@@ -221,3 +231,22 @@ def test_banner_adaptation_and_watermark_controls_are_exposed_in_admin():
     assert ".promo-image.fit-cover" in css
     assert ".promo-image.pos-center" in css
     assert cfg["elements"]["SIDEBAR_PROMO_2"]["watermark"]["text"] == "COMING SOON"
+
+
+def test_public_sidebar_is_betting_first_and_admin_is_isolated_at_bottom():
+    cfg = _cfg()
+    nav_items = sorted(
+        [item for item in cfg["elements"].values() if item.get("kind") == "navigation"],
+        key=lambda item: item["order"],
+    )
+    nav = {item["content"]["route"]: item["content"]["label"] for item in nav_items}
+    assert list(nav) == ["predictions", "prime", "top_daily", "value", "ace", "sg", "doubles", "results", "btts"]
+    assert nav["prime"] == "Prime Picks"
+    for removed in ("tournaments", "players", "stats", "model", "backtests", "account"):
+        assert removed not in nav
+    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert 'id="adminNavigationWrap"' in html
+    assert "['doubles','Doubles','◈']" in app
+    assert "['btts','BTTS Bonus','⚽']" in app
+    assert "renderAdminPerformance" in app

@@ -1,8 +1,9 @@
 """Persistent admin UI configuration and banner analytics.
 
-The store uses Azure Table Storage, not Supabase. Supabase remains limited to
-identity/account/profile metadata. On Azure Functions, AzureWebJobsStorage is
-used automatically unless BLINQ_ADMIN_STORAGE_CONNECTION_STRING is supplied.
+The store uses Azure Table Storage, not Firebase/Supabase. Firebase Auth is the
+primary identity provider; Supabase Auth exists only as a temporary rollback fallback.
+On Azure Functions, AzureWebJobsStorage is used automatically unless
+BLINQ_ADMIN_STORAGE_CONNECTION_STRING is supplied.
 """
 from __future__ import annotations
 
@@ -104,6 +105,37 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError(f"Invalid fixed row preset for {zone}")
         if "enabled" in row and not isinstance(row.get("enabled"), bool):
             raise ValueError(f"Invalid enabled flag for {zone}")
+
+    dashboard = payload.get("dashboard") or {}
+    sections = dashboard.get("sections") or {}
+    valid_dashboard_sections = {"prime", "top_daily", "value", "ace", "sg", "doubles", "results", "btts"}
+    if not isinstance(sections, dict) or not valid_dashboard_sections.issubset(sections):
+        raise ValueError("Invalid dashboard section configuration")
+    for section_id in valid_dashboard_sections:
+        section = sections.get(section_id)
+        if not isinstance(section, dict):
+            raise ValueError(f"Invalid dashboard section: {section_id}")
+        for flag in ("sidebar_enabled", "dashboard_enabled"):
+            if not isinstance(section.get(flag), bool):
+                raise ValueError(f"Invalid {flag} for {section_id}")
+        order = section.get("dashboard_order")
+        if not isinstance(order, int) or not 1 <= order <= 99:
+            raise ValueError(f"Invalid dashboard order for {section_id}")
+        preview = section.get("preview_limit")
+        if not (preview == "ALL" or isinstance(preview, int) and 1 <= preview <= 20):
+            raise ValueError(f"Invalid preview limit for {section_id}")
+        plan_settings = section.get("plans") or {}
+        if not isinstance(plan_settings, dict):
+            raise ValueError(f"Invalid dashboard plan settings for {section_id}")
+        for plan_id in ("trial", "expired", "rookie", "pro", "elite", "goat", "legend"):
+            entitlement = plan_settings.get(plan_id)
+            if not isinstance(entitlement, dict):
+                raise ValueError(f"Missing dashboard entitlement {section_id}/{plan_id}")
+            visible = entitlement.get("visible_picks")
+            if not (visible == "ALL" or isinstance(visible, int) and 0 <= visible <= 20):
+                raise ValueError(f"Invalid visible pick count for {section_id}/{plan_id}")
+            if not isinstance(entitlement.get("blur_remaining"), bool) or not isinstance(entitlement.get("see_all"), bool):
+                raise ValueError(f"Invalid dashboard entitlement flags for {section_id}/{plan_id}")
 
     advertisers = payload.get("advertisers") or {}
     campaigns = payload.get("campaigns") or {}
