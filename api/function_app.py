@@ -7,9 +7,11 @@ import azure.functions as func
 from tbt.config import settings
 from tbt.services.auth import (
     AuthUnavailable,
+    auth_provider,
     is_admin,
     public_account,
     request_authorization,
+    update_firebase_profile,
     verify_user,
 )
 from tbt.services.admin_accounts import list_users, update_user_access
@@ -62,16 +64,24 @@ def _admin_account_row(user):
 
 @app.route(route="health", methods=["GET"])
 def health(req):
-    return response({"ok": True, "version": "3.2.0"})
+    return response({"ok": True, "version": "3.3.0"})
 
 
 @app.route(route="v1/auth/config", methods=["GET"])
 def auth_config(req):
-    return response({
-        "enabled": bool(settings.supabase_url and settings.supabase_anon_key),
-        "supabase_url": settings.supabase_url,
-        "anon_key": settings.supabase_anon_key,
-    })
+    provider = auth_provider(settings)
+    payload = {"enabled": provider != "none", "provider": provider}
+    if provider == "firebase":
+        payload.update({
+            "project_id": settings.firebase_project_id,
+            "auth_domain": f"{settings.firebase_project_id}.firebaseapp.com",
+        })
+    elif provider == "supabase":
+        payload.update({
+            "supabase_url": settings.supabase_url,
+            "anon_key": settings.supabase_anon_key,
+        })
+    return response(payload)
 
 
 @app.route(route="v1/auth/me", methods=["GET"])
@@ -83,6 +93,24 @@ def account(req):
         return response({"error": "auth_unavailable"}, 503)
 
 
+@app.route(route="v1/auth/profile", methods=["PUT"])
+def auth_profile(req):
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if auth_provider(settings) != "firebase":
+            return response({"error": "profile_update_unavailable"}, 503)
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        updated = update_firebase_profile(settings, user.get("id"), payload)
+        return response(public_account(updated, cfg=settings))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
 
 
 @app.route(route="v1/ui-config", methods=["GET"])
@@ -194,6 +222,7 @@ def admin_user_access(req):
         logging.exception("Admin access update failed")
         return response({"error": "admin_update_unavailable"}, 503)
 
+
 @app.route(route="v1/admin/ui-config", methods=["PUT"])
 def admin_ui_config(req):
     try:
@@ -229,4 +258,3 @@ def admin_banner_analytics(req):
         return response({"error": "admin_auth_unavailable"}, 503)
     except AdminStorageUnavailable:
         return response({"available": False, "error": "admin_storage_unavailable"}, 503)
-
