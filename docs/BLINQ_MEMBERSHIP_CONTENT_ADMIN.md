@@ -1,0 +1,104 @@
+# BlinQ membership, fixed UI access and content manager
+
+This document describes the web/admin implementation added on 2026-09-06.
+
+## Plans
+
+- ROOKIE — €5.99/month, automatic 72-hour Rookie trial after registration.
+- PRO — €14.99/month.
+- ELITE — €99/year.
+- GOAT — €199 lifetime.
+- LEGEND — hidden/disabled reserve plan.
+- ADMIN — separate role, never a subscription plan.
+
+Trial access is derived from the Firebase account creation timestamp and always inherits the Rookie UI rules. Paid/admin access lives in Firebase custom claims, so a normal user cannot self-upgrade by editing presentation metadata.
+
+## Fixed layout contract
+
+The page layout does not move according to plan. Every functional area has a stable element ID and a per-plan access state:
+
+- `active`
+- `locked`
+- `blurred`
+- `hidden` (geometry remains reserved)
+
+The header shell/logo remain fixed. The three small header slots are separately configurable. The dashboard has three optional external advertising rows. Each row is a fixed four-unit band: above Prime Picks, between Top 10 Daily Picks and Value Picks, and between Ace Picks and S/G Picks. The whole row is switched ON/OFF first; when enabled, its division is selected from the fixed presets.
+
+Allowed row presets are deliberately limited to:
+
+- `1+1+1+1`
+- `2+2`
+- `2+1+1`
+- `1+1+2`
+- `4`
+
+Covered slot content is retained in configuration and returns when the row is switched back to a smaller preset.
+
+## Content slots
+
+Large external rows default to RSS/news fallback. A fixed slot can be configured as:
+
+- advertisement
+- RSS/news
+- image
+- internal BlinQ content
+- promo
+
+For ad inventory, slot, campaign and advertiser are logically separate objects. Assign a campaign to a slot in Admin; moving the campaign later does not change its campaign ID or analytics history.
+
+Each banner can also have a single configurable watermark overlay, e.g. `COMING SOON`.
+
+## Ads and RSS
+
+ROOKIE/PRO see ads. ELITE/GOAT may enable Hide Ads. Hiding ads never collapses the layout; external ad creatives are replaced by RSS/image/internal fallback content.
+
+RSS settings are editable in Admin and are stored in the same runtime UI configuration. One or two feeds are enough. The backend normalizes, freshness-filters and deduplicates headlines before returning them to the frontend.
+
+## Analytics
+
+Banner events are stored by campaign and slot. The frontend counts an impression only after at least 50% of the banner is in the viewport for about 1 second (configurable). Admin reports:
+
+- impressions
+- unique impressions
+- clicks
+- unique clicks
+- CTR
+- slots used by campaign
+
+## Runtime storage
+
+Live admin configuration and banner analytics use Azure Table Storage. By default the code uses `AzureWebJobsStorage`; alternatively set:
+
+`BLINQ_ADMIN_STORAGE_CONNECTION_STRING`
+
+Firebase Auth is the only runtime identity/account system. Admin account management uses the server-only Firebase Admin credentials (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`).
+
+The repository `web/ui-config.json` is the safe default/bootstrap configuration. Admin-published runtime configuration overrides it while retaining newly introduced default fields through a merge.
+
+## Fixed advertising creative formats
+
+Campaigns can store separate creative URLs/paths for the three supported large-slot widths. The frontend automatically chooses the variant matching the current fixed row preset:
+
+- 1-column: 4:1, recommended 1200 × 300 px, minimum 800 × 200 px, center safe area 80%
+- 2-column: 8:1, recommended 2400 × 300 px, minimum 1600 × 200 px, center safe area 85%
+- 4-column/full row: 16:1, recommended 2400 × 150 px, minimum 1600 × 100 px, center safe area 90%
+
+Creatives default to `cover + center`, so compliant artwork fills and centers automatically. Admin can switch to `contain` and choose center/left/right/top/bottom alignment. An optional mobile image can override the desktop creative. The page geometry remains fixed.
+
+A fallback image can also be supplied. Campaigns support a full-image mode (useful for advertiser-supplied finished banners) and a split mode where BlinQ headline/text/CTA may be rendered over or alongside the creative. The creative never changes the slot geometry.
+
+## Dashboard market structure
+
+The fixed dashboard order is:
+
+1. AD ROW
+2. Prime Picks
+3. Top 10 Daily Picks
+4. AD ROW
+5. Value Picks
+6. Ace Picks
+7. AD ROW
+8. S/G Picks
+9. BTTS Bonus BETA
+
+Prime Picks are all Match Winner predictions above the configured probability threshold (default 70%), with no odds or count requirement. Top 10 Daily is a future daily betting shortlist across supported tennis markets. Value defaults to odds > 1.70 and maximum 15% implied-probability gap. Ace Picks cover Aces/Double Faults, S/G covers Sets/Games, and BTTS links to the separate football `/btts` product.
