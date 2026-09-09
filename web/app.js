@@ -114,7 +114,7 @@
           state.ui.content_rows=state.ui.content_rows||{};
           state.ui.content_rows.content_top=clone(state.uiSource.content_rows?.content_top||{enabled:true,preset:'2+1+1'});
           for(const zone of ['content_mid','content_bottom']) state.ui.content_rows[zone]=mergeConfig(state.uiSource.content_rows?.[zone]||{},state.ui.content_rows?.[zone]||{});
-          ['CONTENT_TOP_1','CONTENT_TOP_2','CONTENT_TOP_3','CONTENT_TOP_4'].forEach(id=>{
+          ['CONTENT_TOP_1','CONTENT_TOP_2','CONTENT_TOP_3','CONTENT_TOP_4','HEADER_BANNER_1','HEADER_BANNER_2','HEADER_BANNER_3'].forEach(id=>{
             if(state.uiSource?.elements?.[id]?.content) state.ui.elements[id].content=clone(state.uiSource.elements[id].content);
           });
         }
@@ -404,9 +404,9 @@
       return;
     }
     const promos=[
-      ['pro','PRO','More daily picks','Unlock the full daily board'],
-      ['elite','ELITE','Deeper access','Advanced BlinQ coverage'],
-      ['legend','LEGEND','Maximum access','Built for daily power users'],
+      ['pro','PRO','Unlock the full daily board','More daily picks and complete section access'],
+      ['elite','ELITE','Advanced match intelligence','Deeper coverage and richer context'],
+      ['legend','LEGEND','Maximum BlinQ access','Premium workflow for power users'],
     ];
     host.innerHTML=promos.map(([plan,label,headline,text])=>`<button type="button" class="header-plan-promo plan-${plan}" data-upgrade-plan="${plan}" data-upgrade-section="${label}"><small>${label}</small><strong>${headline}</strong><span>${text}</span></button>`).join('');
   }
