@@ -1,6 +1,0 @@
--r requirements.txt
-numpy>=2.0,<3
-pandas>=2.2,<3
-scikit-learn>=1.5,<2
-joblib>=1.4,<2
-pyarrow>=17,<22
