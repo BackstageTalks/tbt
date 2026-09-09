@@ -52,6 +52,21 @@ jobs:
           print('Azure API import smoke: PASS')
           PY
 
+      - name: Guard Firebase-only auth runtime
+        run: |
+          set -euo pipefail
+          if grep -RniE 'supabase|SUPABASE' \
+            api/function_app.py \
+            api/tbt/config.py \
+            api/tbt/services/auth.py \
+            api/tbt/services/admin_accounts.py \
+            web/auth.js \
+            web/staticwebapp.config.json; then
+            echo 'Supabase reference found in Firebase-only auth runtime' >&2
+            exit 1
+          fi
+          echo 'Firebase-only auth runtime guard: PASS'
+
       - name: Install backend test dependencies
         if: github.event_name != 'workflow_dispatch'
         run: python -m pip install -r api/requirements-train.txt pytest

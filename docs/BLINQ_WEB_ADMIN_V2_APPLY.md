@@ -21,7 +21,7 @@ This package implements the fixed-layout membership/content/admin architecture a
 
 ## Runtime requirements
 
-See `BLINQ_WEB_ADMIN_INSTALL.md`. Runtime admin config and analytics use Azure Table Storage. Supabase remains the account/authentication layer.
+See `BLINQ_WEB_ADMIN_INSTALL.md`. Runtime admin config and analytics use Azure Table Storage. Firebase Auth is the account/authentication layer.
 
 ## Intentionally deferred
 

@@ -106,11 +106,9 @@
 
   function provider() {
     if (!config?.enabled) throw new Error('Authentication is temporarily unavailable.');
-    return String(config.provider || 'supabase').toLowerCase();
-  }
-  function supabaseEndpoint(path) { return `${config.supabase_url}/auth/v1${path}`; }
-  function supabaseHeaders(token) {
-    return {apikey: config.anon_key, ...(token ? {Authorization: `Bearer ${token}`} : {})};
+    const value = String(config.provider || '').toLowerCase();
+    if (value !== 'firebase') throw new Error('Firebase authentication is not configured.');
+    return value;
   }
   function firebaseEndpoint(action) {
     return `https://identitytoolkit.googleapis.com/v1/accounts:${action}?key=${encodeURIComponent(FIREBASE_WEB.apiKey)}`;
@@ -127,14 +125,6 @@
     });
     return save(data, refreshEpoch, 'firebase');
   }
-  async function restoreSupabase(s, refreshEpoch) {
-    const data = await json(supabaseEndpoint('/token?grant_type=refresh_token'), {
-      method: 'POST',
-      headers: supabaseHeaders(),
-      body: JSON.stringify({refresh_token: s.refresh_token}),
-    });
-    return save(data, refreshEpoch, 'supabase');
-  }
 
   async function restore() {
     const s = session();
@@ -143,7 +133,7 @@
     if (!s.refresh_token) { clear(); return null; }
     if (!refreshing) {
       const refreshEpoch = epoch();
-      refreshing = (s.provider === 'supabase' ? restoreSupabase(s, refreshEpoch) : restoreFirebase(s, refreshEpoch))
+      refreshing = restoreFirebase(s, refreshEpoch)
         .catch(error => {
           if ([400, 401, 403].includes(error.status)) {
             if (epoch() === refreshEpoch) clear();
@@ -159,10 +149,9 @@
   async function init() {
     clearLegacy();
     config = await json('/api/v1/auth/config');
-    if (config?.provider === 'firebase') {
-      if (config.project_id && config.project_id !== FIREBASE_WEB.projectId) {
-        throw new Error('Firebase project configuration mismatch.');
-      }
+    if (provider() !== 'firebase') throw new Error('Firebase authentication is not configured.');
+    if (config.project_id && config.project_id !== FIREBASE_WEB.projectId) {
+      throw new Error('Firebase project configuration mismatch.');
     }
     return {...config, recovery: false};
   }
@@ -174,13 +163,9 @@
     });
     return replaceSession(data, 'firebase');
   }
-  async function signInSupabase(email, password) {
-    return replaceSession(await json(supabaseEndpoint('/token?grant_type=password'), {
-      method: 'POST', headers: supabaseHeaders(), body: JSON.stringify({email, password}),
-    }), 'supabase');
-  }
   async function signIn(email, password) {
-    return provider() === 'firebase' ? signInFirebase(email, password) : signInSupabase(email, password);
+    provider();
+    return signInFirebase(email, password);
   }
 
   async function signUpFirebase(email, password, name) {
@@ -199,15 +184,9 @@
     }
     return replaceSession(current, 'firebase');
   }
-  async function signUpSupabase(email, password, name) {
-    const redirect = `${location.origin}/follow-the-data/`;
-    const data = await json(supabaseEndpoint(`/signup?redirect_to=${encodeURIComponent(redirect)}`), {
-      method: 'POST', headers: supabaseHeaders(), body: JSON.stringify({email, password, data: {display_name: name}}),
-    });
-    return replaceSession(data, 'supabase');
-  }
   async function signUp(email, password, name) {
-    return provider() === 'firebase' ? signUpFirebase(email, password, name) : signUpSupabase(email, password, name);
+    provider();
+    return signUpFirebase(email, password, name);
   }
 
   async function resetFirebase(email) {
@@ -216,14 +195,9 @@
       body: JSON.stringify({requestType: 'PASSWORD_RESET', email}),
     });
   }
-  async function resetSupabase(email) {
-    const redirect = `${location.origin}/follow-the-data/`;
-    return json(supabaseEndpoint(`/recover?redirect_to=${encodeURIComponent(redirect)}`), {
-      method: 'POST', headers: supabaseHeaders(), body: JSON.stringify({email}),
-    });
-  }
   async function reset(email) {
-    return provider() === 'firebase' ? resetFirebase(email) : resetSupabase(email);
+    provider();
+    return resetFirebase(email);
   }
 
   async function updateFirebase(fields) {
@@ -246,25 +220,13 @@
     }
     return null;
   }
-  async function updateSupabase(fields) {
-    const s = await restore();
-    if (!s) throw new Error('Sign in again.');
-    return json(supabaseEndpoint('/user'), {
-      method: 'PUT', headers: supabaseHeaders(s.access_token), body: JSON.stringify(fields),
-    });
-  }
   async function update(fields) {
-    return provider() === 'firebase' ? updateFirebase(fields) : updateSupabase(fields);
+    provider();
+    return updateFirebase(fields);
   }
 
   async function signOut() {
-    const s = session();
     clear();
-    if (s?.provider === 'supabase' && config?.supabase_url) {
-      await json(supabaseEndpoint('/logout'), {
-        method: 'POST', headers: supabaseHeaders(s.access_token), body: '{}',
-      }).catch(() => {});
-    }
   }
 
   async function apiWithSession(url, options = {}) {

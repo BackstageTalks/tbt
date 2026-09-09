@@ -11,7 +11,7 @@ This document describes the web/admin implementation added on 2026-09-06.
 - LEGEND — hidden/disabled reserve plan.
 - ADMIN — separate role, never a subscription plan.
 
-Trial access is derived from Supabase `created_at` and always inherits the Rookie UI rules. Paid/admin access lives in Supabase `app_metadata`, so a normal user cannot self-upgrade by editing `user_metadata`.
+Trial access is derived from the Firebase account creation timestamp and always inherits the Rookie UI rules. Paid/admin access lives in Firebase custom claims, so a normal user cannot self-upgrade by editing presentation metadata.
 
 ## Fixed layout contract
 
@@ -71,7 +71,7 @@ Live admin configuration and banner analytics use Azure Table Storage. By defaul
 
 `BLINQ_ADMIN_STORAGE_CONNECTION_STRING`
 
-Firebase Auth is the primary identity/account system. Admin account management uses the server-only Firebase Admin credentials (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`). Supabase Auth remains only as a temporary rollback fallback until Firebase live validation is complete.
+Firebase Auth is the only runtime identity/account system. Admin account management uses the server-only Firebase Admin credentials (`FIREBASE_PROJECT_ID`, `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY`).
 
 The repository `web/ui-config.json` is the safe default/bootstrap configuration. Admin-published runtime configuration overrides it while retaining newly introduced default fields through a merge.
 

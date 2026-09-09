@@ -45,21 +45,32 @@ def test_firebase_runtime_dependency_and_api_routes_are_present():
     requirements = (ROOT / "api" / "requirements.txt").read_text(encoding="utf-8")
     function_app = (ROOT / "api" / "function_app.py").read_text(encoding="utf-8")
     assert "firebase-admin>=6.5,<8" in requirements
-    assert '"version": "3.3.0"' in function_app
+    assert '"version": "3.3.1"' in function_app
     assert "auth_provider(settings)" in function_app
     assert 'route="v1/auth/profile"' in function_app
 
 
-def test_firebase_provider_wins_when_legacy_supabase_is_still_configured():
+def test_firebase_provider_is_selected_when_server_credentials_exist():
     cfg = SimpleNamespace(
         firebase_project_id="blinq-182",
         firebase_client_email="server@example.iam.gserviceaccount.com",
         firebase_private_key="dummy",
-        supabase_url="https://legacy.supabase.co",
-        supabase_anon_key="legacy",
     )
     assert auth_provider(cfg) == "firebase"
 
+
+
+def test_runtime_auth_has_no_supabase_fallback():
+    runtime_files = [
+        ROOT / "api" / "function_app.py",
+        ROOT / "api" / "tbt" / "config.py",
+        ROOT / "api" / "tbt" / "services" / "auth.py",
+        ROOT / "api" / "tbt" / "services" / "admin_accounts.py",
+        ROOT / "web" / "auth.js",
+        ROOT / "web" / "staticwebapp.config.json",
+    ]
+    combined = "\n".join(path.read_text(encoding="utf-8") for path in runtime_files).lower()
+    assert "supabase" not in combined
 
 def test_private_key_normalization_handles_azure_json_style_value():
     cfg = SimpleNamespace(firebase_private_key='"-----BEGIN PRIVATE KEY-----\\nabc\\n-----END PRIVATE KEY-----\\n"')

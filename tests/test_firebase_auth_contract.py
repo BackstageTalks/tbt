@@ -3,13 +3,11 @@ from types import SimpleNamespace
 from tbt.services.auth import auth_provider, firebase_user_to_dict
 
 
-def test_firebase_is_primary_when_both_identity_configs_exist():
+def test_firebase_is_only_runtime_identity_provider():
     cfg = SimpleNamespace(
         firebase_project_id="blinq-182",
         firebase_client_email="server@example.iam.gserviceaccount.com",
         firebase_private_key="-----BEGIN PRIVATE KEY-----\\nkey\\n-----END PRIVATE KEY-----\\n",
-        supabase_url="https://legacy.supabase.co",
-        supabase_anon_key="legacy",
     )
     assert auth_provider(cfg) == "firebase"
 
@@ -52,3 +50,5 @@ def test_web_uses_firebase_rest_without_server_secret():
     assert "FIREBASE_CLIENT_EMAIL" not in auth_js
     assert "identitytoolkit.googleapis.com" in csp
     assert "securetoken.googleapis.com" in csp
+    assert "supabase.co" not in auth_js.lower()
+    assert "supabase.co" not in csp.lower()

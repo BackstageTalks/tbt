@@ -1,15 +1,13 @@
-"""Identity and BlinQ account access helpers.
+"""Firebase identity and BlinQ account access helpers.
 
-Firebase Auth is the primary identity provider. A narrow Supabase Auth fallback is
-kept temporarily so the deployment can be rolled back without touching tennis
-storage. Supabase must never be used for historical tennis data.
+Firebase Auth is the only runtime identity provider. Tennis history remains outside
+the identity layer.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from threading import Lock
 
-import httpx
 
 
 class AuthUnavailable(RuntimeError):
@@ -49,13 +47,7 @@ def firebase_configured(cfg) -> bool:
 
 
 def auth_provider(cfg) -> str:
-    if firebase_configured(cfg):
-        return "firebase"
-    if str(getattr(cfg, "supabase_url", "") or "").strip() and str(
-        getattr(cfg, "supabase_anon_key", "") or ""
-    ).strip():
-        return "supabase"
-    return "none"
+    return "firebase" if firebase_configured(cfg) else "none"
 
 
 def _firebase_modules():
@@ -126,7 +118,7 @@ def _millis_iso(value):
 
 
 def firebase_user_to_dict(record) -> dict:
-    """Normalize Firebase UserRecord to the internal Supabase-compatible shape."""
+    """Normalize Firebase UserRecord to the internal BlinQ account shape."""
     claims = dict(getattr(record, "custom_claims", None) or {})
     metadata = getattr(record, "user_metadata", None)
     created_at = _millis_iso(getattr(metadata, "creation_timestamp", None))
@@ -192,41 +184,15 @@ def _verify_firebase_user(token, cfg):
         raise AuthUnavailable("Identity service temporarily unavailable") from exc
 
 
-def _verify_supabase_user(token, cfg, client=None):
-    if not cfg.supabase_url or not cfg.supabase_anon_key:
-        raise AuthUnavailable("Authentication is not configured")
-    own = client is None
-    client = client or httpx.Client(timeout=10)
-    try:
-        response = client.get(
-            f"{cfg.supabase_url}/auth/v1/user",
-            headers={"apikey": cfg.supabase_anon_key, "Authorization": f"Bearer {token}"},
-        )
-        if response.status_code in (401, 403):
-            return None
-        if response.status_code != 200:
-            raise AuthUnavailable("Identity service temporarily unavailable")
-        user = response.json()
-        return user if isinstance(user, dict) and user.get("id") else None
-    except (httpx.HTTPError, ValueError) as exc:
-        raise AuthUnavailable("Identity service temporarily unavailable") from exc
-    finally:
-        if own:
-            client.close()
-
-
 def verify_user(authorization, cfg, client=None):
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
     token = authorization.split(" ", 1)[1].strip()
     if not token or len(token) > 16384:
         return None
-    provider = auth_provider(cfg)
-    if provider == "firebase":
-        return _verify_firebase_user(token, cfg)
-    if provider == "supabase":
-        return _verify_supabase_user(token, cfg, client=client)
-    raise AuthUnavailable("Authentication is not configured")
+    if auth_provider(cfg) != "firebase":
+        raise AuthUnavailable("Authentication is not configured")
+    return _verify_firebase_user(token, cfg)
 
 
 def update_firebase_profile(cfg, user_id, payload):

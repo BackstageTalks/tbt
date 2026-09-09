@@ -1,7 +1,7 @@
 """Persistent admin UI configuration and banner analytics.
 
-The store uses Azure Table Storage, not Firebase/Supabase. Firebase Auth is the
-primary identity provider; Supabase Auth exists only as a temporary rollback fallback.
+The store uses Azure Table Storage, not Firebase. Firebase Auth is the runtime
+identity provider; tennis history is kept outside the identity layer.
 On Azure Functions, AzureWebJobsStorage is used automatically unless
 BLINQ_ADMIN_STORAGE_CONNECTION_STRING is supplied.
 """

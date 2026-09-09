@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from tbt.services.auth import account_access, public_account
-from tbt.services.admin_accounts import normalize_access_update, update_user_access
+from tbt.services.admin_accounts import _apply_access_metadata, normalize_access_update
 
 
 NOW = datetime(2026, 9, 6, 18, 0, tzinfo=timezone.utc)
@@ -24,8 +24,9 @@ def user(**overrides):
 
 def cfg(**overrides):
     data = {
-        "supabase_url": "https://supabase.test",
-        "supabase_service_role_key": "service",
+        "firebase_project_id": "blinq-182",
+        "firebase_client_email": "server@example.iam.gserviceaccount.com",
+        "firebase_private_key": "dummy",
         "blinq_admin_emails": "",
     }
     data.update(overrides)
@@ -136,44 +137,15 @@ def test_active_plan_requires_expiration_date():
         normalize_access_update({"role": "user", "plan": "pro", "status": "active"})
 
 
-class FakeResponse:
-    def __init__(self, status_code, payload):
-        self.status_code = status_code
-        self._payload = payload
-
-    def json(self):
-        return self._payload
-
-
-class FakeClient:
-    def __init__(self):
-        self.put_payload = None
-
-    def get(self, url, **kwargs):
-        return FakeResponse(200, user(app_metadata={"provider": "email", "role": "user"}))
-
-    def put(self, url, **kwargs):
-        self.put_payload = kwargs["json"]
-        updated = user(app_metadata=kwargs["json"]["app_metadata"])
-        return FakeResponse(200, updated)
-
-
 def test_admin_update_preserves_unrelated_app_metadata_and_records_manual_payment():
-    client = FakeClient()
-    updated = update_user_access(
-        cfg(),
-        "u1",
-        {
-            "role": "user",
-            "plan": "elite",
-            "status": "active",
-            "expires_at": (NOW + timedelta(days=365)).isoformat(),
-            "payment_reference": "manual-link-payment-42",
-        },
-        actor_id="admin-1",
-        client=client,
-    )
-    app = updated["app_metadata"]
+    changes = normalize_access_update({
+        "role": "user",
+        "plan": "elite",
+        "status": "active",
+        "expires_at": (NOW + timedelta(days=365)).isoformat(),
+        "payment_reference": "manual-link-payment-42",
+    })
+    app = _apply_access_metadata({"provider": "email", "role": "user"}, changes, "admin-1")
     assert app["provider"] == "email"
     assert app["blinq_plan"] == "elite"
     assert app["blinq_status"] == "active"

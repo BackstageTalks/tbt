@@ -78,7 +78,6 @@ def test_admin_runtime_secret_never_enters_web_bundle():
         (ROOT / "web" / name).read_text(encoding="utf-8")
         for name in ("index.html", "app.js", "auth.js", "ui-config.json")
     )
-    assert "SUPABASE_SERVICE_ROLE_KEY" not in web
     assert "FIREBASE_PRIVATE_KEY" not in web
     assert "FIREBASE_CLIENT_EMAIL" not in web
     assert "/api/v1/admin/users" in web

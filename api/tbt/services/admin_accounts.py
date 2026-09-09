@@ -1,13 +1,11 @@
-"""Admin-only identity account management helpers.
+"""Admin-only Firebase identity account management helpers.
 
-Firebase Auth is primary. A temporary Supabase Auth fallback remains for rollback.
 This module manages identity/account metadata only and never tennis data.
 """
 from __future__ import annotations
 
 from datetime import datetime, timezone
 
-import httpx
 
 from .auth import (
     AuthUnavailable,
@@ -22,33 +20,6 @@ from .auth import (
 
 ALLOWED_STATUSES = {"active", "expired", "suspended", "lifetime"}
 ALLOWED_ROLES = {"user", "admin"}
-
-
-def _headers(cfg):
-    key = str(getattr(cfg, "supabase_service_role_key", "") or "").strip()
-    url = str(getattr(cfg, "supabase_url", "") or "").strip()
-    if not key or not url:
-        raise AuthUnavailable("Admin account management is not configured")
-    return {
-        "apikey": key,
-        "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json",
-        "Accept": "application/json",
-    }
-
-
-def _request_json(response):
-    if response.status_code in (401, 403):
-        raise AuthUnavailable("Supabase admin access denied")
-    if response.status_code < 200 or response.status_code >= 300:
-        raise AuthUnavailable(f"Supabase admin request failed ({response.status_code})")
-    try:
-        payload = response.json()
-    except ValueError as exc:
-        raise AuthUnavailable("Supabase admin response is invalid") from exc
-    if not isinstance(payload, dict):
-        raise AuthUnavailable("Supabase admin response is invalid")
-    return payload
 
 
 def _firebase_list_users(cfg, *, page=1, per_page=100):
@@ -70,55 +41,21 @@ def _firebase_list_users(cfg, *, page=1, per_page=100):
 def list_users(cfg, *, page=1, per_page=100, client=None):
     page = max(1, int(page))
     per_page = max(1, min(200, int(per_page)))
-    if firebase_configured(cfg):
-        return _firebase_list_users(cfg, page=page, per_page=per_page)
-
-    own = client is None
-    client = client or httpx.Client(timeout=15)
-    try:
-        response = client.get(
-            f"{cfg.supabase_url}/auth/v1/admin/users",
-            headers=_headers(cfg),
-            params={"page": page, "per_page": per_page},
-        )
-        payload = _request_json(response)
-        users = payload.get("users")
-        if not isinstance(users, list):
-            raise AuthUnavailable("Supabase admin response lacks users")
-        return users
-    except httpx.HTTPError as exc:
-        raise AuthUnavailable("Supabase admin service temporarily unavailable") from exc
-    finally:
-        if own:
-            client.close()
+    if not firebase_configured(cfg):
+        raise AuthUnavailable("Firebase admin account management is not configured")
+    return _firebase_list_users(cfg, page=page, per_page=per_page)
 
 
 def get_user(cfg, user_id, *, client=None):
     user_id = str(user_id or "").strip()
     if not user_id or len(user_id) > 256:
         raise ValueError("Invalid user id")
-    if firebase_configured(cfg):
-        user = firebase_get_user(cfg, user_id)
-        if not user:
-            raise AuthUnavailable("Firebase user does not exist")
-        return user
-
-    own = client is None
-    client = client or httpx.Client(timeout=15)
-    try:
-        response = client.get(
-            f"{cfg.supabase_url}/auth/v1/admin/users/{user_id}",
-            headers=_headers(cfg),
-        )
-        payload = _request_json(response)
-        if not payload.get("id"):
-            raise AuthUnavailable("Supabase user response is invalid")
-        return payload
-    except httpx.HTTPError as exc:
-        raise AuthUnavailable("Supabase admin service temporarily unavailable") from exc
-    finally:
-        if own:
-            client.close()
+    if not firebase_configured(cfg):
+        raise AuthUnavailable("Firebase admin account management is not configured")
+    user = firebase_get_user(cfg, user_id)
+    if not user:
+        raise AuthUnavailable("Firebase user does not exist")
+    return user
 
 
 def _clean_text(value, *, max_len):
@@ -215,23 +152,6 @@ def _update_firebase_user_access(cfg, user_id, changes, *, actor_id=""):
 
 def update_user_access(cfg, user_id, payload, *, actor_id="", client=None):
     changes = normalize_access_update(payload)
-    if firebase_configured(cfg):
-        return _update_firebase_user_access(cfg, user_id, changes, actor_id=actor_id)
-
-    own = client is None
-    client = client or httpx.Client(timeout=15)
-    try:
-        current = get_user(cfg, user_id, client=client)
-        app = _apply_access_metadata(current.get("app_metadata") or {}, changes, actor_id)
-
-        response = client.put(
-            f"{cfg.supabase_url}/auth/v1/admin/users/{str(user_id).strip()}",
-            headers=_headers(cfg),
-            json={"app_metadata": app},
-        )
-        return _request_json(response)
-    except httpx.HTTPError as exc:
-        raise AuthUnavailable("Supabase admin service temporarily unavailable") from exc
-    finally:
-        if own:
-            client.close()
+    if not firebase_configured(cfg):
+        raise AuthUnavailable("Firebase admin account management is not configured")
+    return _update_firebase_user_access(cfg, user_id, changes, actor_id=actor_id)

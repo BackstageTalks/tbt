@@ -64,7 +64,7 @@ def _admin_account_row(user):
 
 @app.route(route="health", methods=["GET"])
 def health(req):
-    return response({"ok": True, "version": "3.3.0"})
+    return response({"ok": True, "version": "3.3.1"})
 
 
 @app.route(route="v1/auth/config", methods=["GET"])
@@ -75,11 +75,6 @@ def auth_config(req):
         payload.update({
             "project_id": settings.firebase_project_id,
             "auth_domain": f"{settings.firebase_project_id}.firebaseapp.com",
-        })
-    elif provider == "supabase":
-        payload.update({
-            "supabase_url": settings.supabase_url,
-            "anon_key": settings.supabase_anon_key,
         })
     return response(payload)
 

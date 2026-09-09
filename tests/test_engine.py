@@ -5,7 +5,6 @@ import copy
 
 import numpy as np
 import pytest
-import httpx
 
 from tbt.services.engine import predict, reconcile_ledger, serving_feed, confirm_publication
 from tbt.services.data_quality import audit_history
@@ -56,21 +55,28 @@ def test_duplicate_provider_event_stops_training(match_factory):
 def test_auth_prefers_custom_client_token_over_swa_authorization():
     headers = {
         "Authorization": "Bearer swa-overwritten-token",
-        "X-Blinq-Access-Token": "supabase-user-token",
+        "X-Blinq-Access-Token": "firebase-user-token",
     }
-    assert request_authorization(headers) == "Bearer supabase-user-token"
+    assert request_authorization(headers) == "Bearer firebase-user-token"
     assert request_authorization({"Authorization": "Bearer direct-token"}) == "Bearer direct-token"
 
 
-def test_auth_rejects_expired_and_unavailable_identity_service():
-    cfg = SimpleNamespace(supabase_url='https://test.supabase.co', supabase_anon_key='public')
+def test_auth_rejects_expired_and_unavailable_identity_service(monkeypatch):
+    cfg = SimpleNamespace(
+        firebase_project_id='blinq-182',
+        firebase_client_email='server@example.iam.gserviceaccount.com',
+        firebase_private_key='dummy',
+    )
     assert verify_user(None, cfg) is None
-    for status in (401, 403):
-        with httpx.Client(transport=httpx.MockTransport(lambda req: httpx.Response(status))) as client:
-            assert verify_user('Bearer expired', cfg, client) is None
-    with httpx.Client(transport=httpx.MockTransport(lambda req: httpx.Response(500))) as client:
-        with pytest.raises(AuthUnavailable):
-            verify_user('Bearer anything', cfg, client)
+    monkeypatch.setattr('tbt.services.auth._verify_firebase_user', lambda token, cfg: None)
+    assert verify_user('Bearer expired', cfg) is None
+
+    def unavailable(token, cfg):
+        raise AuthUnavailable('Identity service temporarily unavailable')
+
+    monkeypatch.setattr('tbt.services.auth._verify_firebase_user', unavailable)
+    with pytest.raises(AuthUnavailable):
+        verify_user('Bearer anything', cfg)
 
 
 def test_stale_feed_and_started_matches_are_explicit():

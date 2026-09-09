@@ -28,7 +28,7 @@ Aktuálna produkčná identita je Firebase Auth. V Azure nastav `FIREBASE_PROJEC
 pre interného admina. Kompletný postup a live validačné endpointy sú v
 `FIREBASE_MIGRATION.md`.
 
-`SUPABASE_*` premenné zatiaľ ponechaj iba ako rollback fallback. Po úspešnom Firebase
+`SUPABASE_*` runtime premenné boli po úspešnom Firebase end-to-end overení odstránené.
 login → `/api/v1/auth/me` → `/api/v1/feed` → Admin Users teste ich možno odstrániť.
 
 Po tréningu s úspešnou propagáciou spusti `refresh` (napr. max_requests 750).

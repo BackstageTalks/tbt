@@ -25,7 +25,7 @@ def minimize_provider_payload(
 
     Deliberately drops the raw provider response.  The compact result is safe for
     long-lived GitHub Parquet history and release artifacts. Tennis data is not
-    stored in Supabase; Supabase is reserved for authentication/account data.
+    stored in the identity layer; Firebase Auth is reserved for authentication/account data.
     """
     raw = payload if isinstance(payload, dict) else {}
     out: dict[str, Any] = {}
