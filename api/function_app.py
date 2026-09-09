@@ -64,7 +64,7 @@ def _admin_account_row(user):
 
 @app.route(route="health", methods=["GET"])
 def health(req):
-    return response({"ok": True, "version": "3.4.0"})
+    return response({"ok": True, "version": "3.4.2"})
 
 
 @app.route(route="v1/auth/config", methods=["GET"])
