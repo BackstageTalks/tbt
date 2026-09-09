@@ -31,10 +31,13 @@
       "lifetime": false,
       "hide_ads_allowed": false,
       "description": "Entry access to the BlinQ workspace.",
-      "cta_label": "Open ROOKIE",
+      "cta_label": "Choose Rookie",
       "url": "",
       "avatar": "rookie",
-      "order": 1
+      "order": 1,
+      "marketing_avatar": "/assets/rookie_m.webp",
+      "card_title": "Start with BlinQ",
+      "show_price": false
     },
     "pro": {
       "label": "BlinQ PRO",
@@ -43,11 +46,14 @@
       "duration_days": 30,
       "lifetime": false,
       "hide_ads_allowed": false,
-      "description": "Core predictions, tournaments and the main BlinQ workflow.",
-      "cta_label": "Open PRO",
+      "description": "Core predictions + expanded daily board.",
+      "cta_label": "Upgrade to PRO",
       "url": "",
       "avatar": "pro",
-      "order": 2
+      "order": 2,
+      "marketing_avatar": "/assets/pro_w.webp",
+      "card_title": "Core predictions",
+      "show_price": false
     },
     "elite": {
       "label": "BlinQ ELITE",
@@ -56,11 +62,14 @@
       "duration_days": 180,
       "lifetime": false,
       "hide_ads_allowed": false,
-      "description": "Expanded premium access for users who follow more matches and analytics.",
-      "cta_label": "Open ELITE",
+      "description": "Expanded analytical access for users who follow more matches and context.",
+      "cta_label": "Choose Elite",
       "url": "",
       "avatar": "elite",
-      "order": 3
+      "order": 3,
+      "marketing_avatar": "/assets/elite_w.webp",
+      "card_title": "Advanced analytics",
+      "show_price": false
     },
     "goat": {
       "label": "BlinQ GOAT",
@@ -69,11 +78,16 @@
       "duration_days": null,
       "lifetime": true,
       "hide_ads_allowed": false,
-      "description": "Top-tier BlinQ access with the complete enabled workspace.",
-      "cta_label": "Open GOAT",
+      "description": "Top-tier BlinQ access for selected and verified members.",
+      "cta_label": "Invite / Verified only",
       "url": "",
       "avatar": "goat",
-      "order": 5
+      "order": 5,
+      "marketing_avatar": "/assets/goat.webp",
+      "card_title": "Invite / Verified only",
+      "show_price": false,
+      "invite_only": true,
+      "verified_only": true
     },
     "legend": {
       "label": "BlinQ LEGEND",
@@ -82,11 +96,14 @@
       "duration_days": 365,
       "lifetime": false,
       "hide_ads_allowed": false,
-      "description": "Long-term premium BlinQ membership with configurable workspace permissions.",
-      "cta_label": "Open LEGEND",
+      "description": "The highest publicly available BlinQ tier.",
+      "cta_label": "Choose Legend",
       "url": "",
       "avatar": "legend",
-      "order": 4
+      "order": 4,
+      "marketing_avatar": "/assets/legend_m.webp",
+      "card_title": "Maximum public access",
+      "show_price": false
     }
   },
   "navigation": {
@@ -150,12 +167,13 @@
         "image_url": "",
         "mobile_image_url": "",
         "image_fit": "cover",
-        "image_position": "center"
+        "image_position": "center",
+        "plan_id": "pro"
       },
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -188,12 +206,13 @@
         "image_url": "",
         "mobile_image_url": "",
         "image_fit": "cover",
-        "image_position": "center"
+        "image_position": "center",
+        "plan_id": "elite"
       },
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -226,12 +245,13 @@
         "image_url": "",
         "mobile_image_url": "",
         "image_fit": "cover",
-        "image_position": "center"
+        "image_position": "center",
+        "plan_id": "legend"
       },
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -289,12 +309,13 @@
         "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
-        "image_position": "center"
+        "image_position": "center",
+        "plan_id": "pro"
       },
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -312,13 +333,13 @@
       "kind": "large_banner",
       "order": 42,
       "content": {
-        "eyebrow": "BLINQ PRO",
-        "headline": "More picks. More context.",
-        "text": "Core daily prediction access.",
-        "button_text": "See PRO",
+        "eyebrow": "BLINQ ELITE",
+        "headline": "Go deeper",
+        "text": "Expanded access for heavier analytical workflows.",
+        "button_text": "See ELITE",
         "link": "#account",
         "route": "account",
-        "theme": "blue",
+        "theme": "purple",
         "sponsored": false,
         "campaign_id": "",
         "advertiser_id": "blinq",
@@ -331,12 +352,13 @@
         "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
-        "image_position": "center"
+        "image_position": "center",
+        "plan_id": "elite"
       },
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -373,12 +395,13 @@
         "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
-        "image_position": "center"
+        "image_position": "center",
+        "plan_id": "elite"
       },
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -396,10 +419,10 @@
       "kind": "large_banner",
       "order": 44,
       "content": {
-        "eyebrow": "BLINQ GOAT",
-        "headline": "Unlock the full engine",
-        "text": "Top-tier access to the complete enabled BlinQ workspace.",
-        "button_text": "See GOAT",
+        "eyebrow": "BLINQ LEGEND",
+        "headline": "Maximum BlinQ access",
+        "text": "Premium daily workflow for power users.",
+        "button_text": "See LEGEND",
         "link": "#account",
         "route": "account",
         "theme": "gold",
@@ -415,12 +438,13 @@
         "type": "promo",
         "mobile_image_url": "",
         "image_fit": "cover",
-        "image_position": "center"
+        "image_position": "center",
+        "plan_id": "legend"
       },
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -674,7 +698,7 @@
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -716,7 +740,7 @@
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -758,7 +782,7 @@
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -800,7 +824,7 @@
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -1109,7 +1133,7 @@
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -1149,7 +1173,7 @@
       "watermark": {
         "enabled": true,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -1189,7 +1213,7 @@
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -1346,7 +1370,7 @@
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -1388,7 +1412,7 @@
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -1430,7 +1454,7 @@
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -1472,7 +1496,7 @@
       "watermark": {
         "enabled": false,
         "text": "COMING SOON",
-        "preset": "default"
+        "preset": "violet"
       },
       "access": {
         "trial": "active",
@@ -1565,6 +1589,7 @@
     ],
     "max_rss_sources": 8,
     "dashboard_preview_choices": [
+      0,
       1,
       2,
       3,
@@ -1700,7 +1725,7 @@
         0.69,
         0.68
       ],
-      "fill_policy": "confidence_cascade_to_10_never_bypass_depth_surface_or_ev_guardrails"
+      "fill_policy": "confidence_cascade_min5_then_expand_to_10_never_bypass_depth_surface_or_ev_guardrails"
     },
     "top_daily": {
       "label": "Top Bets",
@@ -1754,7 +1779,7 @@
       "presentation_preview_limit": 10,
       "target_count": 10,
       "minimum_dashboard_count": 5,
-      "fill_policy": "reserve_5_value_style_then_expand_positive_edge_tiers_to_10",
+      "fill_policy": "reserve_5_value_style_then_expand_nonnegative_ev_tiers_to_10",
       "fallback_tiers": [
         {
           "min_odds": 1.8,
@@ -1779,6 +1804,11 @@
         {
           "min_odds": 1.2,
           "min_edge": 0.01,
+          "min_expected_value": 0.0
+        },
+        {
+          "min_odds": 1.2,
+          "min_edge": 0.0,
           "min_expected_value": 0.0
         }
       ]
@@ -2243,8 +2273,33 @@
       "sg"
     ],
     "visible_slots": 4,
-    "user_switches": true,
-    "show_disabled_strip": true
+    "user_switches": false,
+    "show_disabled_strip": false,
+    "auto_replace_empty_sections": true,
+    "cards_per_panel_desktop": 2,
+    "cards_per_panel_wide": 3
   },
-  "ui_revision": "6.5.3"
+  "ui_revision": "6.5.5",
+  "watermark_presets": {
+    "violet": {
+      "label": "BlinQ Violet",
+      "class": "violet"
+    },
+    "blue": {
+      "label": "Deep Blue",
+      "class": "blue"
+    },
+    "cyan": {
+      "label": "Cyan",
+      "class": "cyan"
+    },
+    "gold": {
+      "label": "Legend Gold",
+      "class": "gold"
+    },
+    "slate": {
+      "label": "Slate",
+      "class": "slate"
+    }
+  }
 }

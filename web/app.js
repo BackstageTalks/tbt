@@ -2,9 +2,9 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
-  const dashboardCardsPerPanel = () => innerWidth >= 1900 ? 3 : innerWidth >= 760 ? 2 : 1;
+  const dashboardCardsPerPanel = () => { const wide=Math.max(1,Number(state.ui?.dashboard?.cards_per_panel_wide)||3),desktop=Math.max(1,Number(state.ui?.dashboard?.cards_per_panel_desktop)||2); return innerWidth >= 1900 ? wide : innerWidth >= 760 ? desktop : 1; };
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   const pct = value => `${(Number(value || 0) * (Number(value || 0) <= 1 ? 100 : 1)).toFixed(1)}%`;
   const number = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
@@ -83,8 +83,8 @@
     prime:{label:'Prime Picks',panel_id:'predictionsPanel',sidebar_element:'SIDEBAR_PRIME',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:1,preview_limit:10},
     top_daily:{label:'Top Bets',panel_id:'topDailyPanel',sidebar_element:'SIDEBAR_TOP_DAILY',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:2,preview_limit:10},
     value:{label:'Value Picks',panel_id:'valuePanel',sidebar_element:'SIDEBAR_VALUE',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:3,preview_limit:10},
-    doubles:{label:'Doubles',panel_id:'doublesPanel',sidebar_element:'SIDEBAR_DOUBLES',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:4,preview_limit:10},
-    ace:{label:'Ace Picks',panel_id:'acePanel',sidebar_element:'SIDEBAR_ACE',sidebar_enabled:true,dashboard_enabled:false,dashboard_order:5,preview_limit:10},
+    doubles:{label:'Doubles',panel_id:'doublesPanel',sidebar_element:'SIDEBAR_DOUBLES',sidebar_enabled:true,dashboard_enabled:false,dashboard_order:4,preview_limit:10},
+    ace:{label:'Ace Picks',panel_id:'acePanel',sidebar_element:'SIDEBAR_ACE',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:5,preview_limit:10},
     sg:{label:'S/G Picks',panel_id:'sgPanel',sidebar_element:'SIDEBAR_SG',sidebar_enabled:true,dashboard_enabled:false,dashboard_order:6,preview_limit:10},
     results:{label:'Results',panel_id:'resultsPreviewPanel',sidebar_element:'SIDEBAR_RESULTS',sidebar_enabled:true,dashboard_enabled:false,dashboard_order:7,preview_limit:5},
     btts:{label:'BTTS Bonus',panel_id:'bttsBonusPanel',sidebar_element:'SIDEBAR_BTTS',sidebar_enabled:true,dashboard_enabled:false,dashboard_order:8,preview_limit:5},
@@ -111,6 +111,16 @@
         if(String(runtime.config.ui_revision||'')!==String(state.uiSource.ui_revision||'')){
           state.ui.ui_revision=state.uiSource.ui_revision;
           state.ui.dashboard=mergeConfig(state.uiSource.dashboard||{},state.ui.dashboard||{});
+          // Release-level display policy migrations must not be undone by an
+          // older persisted runtime config. Preserve editable entitlements, but
+          // adopt the new public dashboard chrome and default active windows.
+          for(const field of ['visible_slots','user_switches','show_disabled_strip','auto_replace_empty_sections','cards_per_panel_desktop','cards_per_panel_wide','section_order']){
+            if(Object.prototype.hasOwnProperty.call(state.uiSource.dashboard||{},field))state.ui.dashboard[field]=clone(state.uiSource.dashboard[field]);
+          }
+          for(const key of dashboardPickSectionKeys){
+            const sourceSection=state.uiSource.dashboard?.sections?.[key],targetSection=state.ui.dashboard?.sections?.[key];
+            if(sourceSection&&targetSection)targetSection.dashboard_enabled=sourceSection.dashboard_enabled;
+          }
           state.ui.content_rows=state.ui.content_rows||{};
           state.ui.content_rows.content_top=clone(state.uiSource.content_rows?.content_top||{enabled:true,preset:'2+1+1'});
           for(const zone of ['content_mid','content_bottom']) state.ui.content_rows[zone]=mergeConfig(state.uiSource.content_rows?.[zone]||{},state.ui.content_rows?.[zone]||{});
@@ -119,6 +129,13 @@
           });
         }
       }
+    } catch {}
+    try {
+      const links = await getJSON('/membership-links.json');
+      Object.entries(links?.plans||{}).forEach(([id,row])=>{
+        const url=String((typeof row==='string'?row:(row?.payment_url||row?.url))||'').trim();
+        if(url&&state.ui?.plans?.[id]) state.ui.plans[id].url=url;
+      });
     } catch {}
     renderAllUiContent();
   }
@@ -184,10 +201,12 @@
   function dashboardVisibilityState(){
     if(state.dashboardVisibility)return state.dashboardVisibility;
     const defaults=dashboardVisibilityDefaults();
-    try{
-      const saved=JSON.parse(localStorage.getItem('blinq_dashboard_sections_v2')||'null');
-      if(saved&&typeof saved==='object')dashboardPickSectionKeys.forEach(key=>{if(typeof saved[key]==='boolean')defaults[key]=saved[key];});
-    }catch{}
+    if(state.ui?.dashboard?.user_switches===true){
+      try{
+        const saved=JSON.parse(localStorage.getItem('blinq_dashboard_sections_v2')||'null');
+        if(saved&&typeof saved==='object')dashboardPickSectionKeys.forEach(key=>{if(typeof saved[key]==='boolean')defaults[key]=saved[key];});
+      }catch{}
+    }
     const max=Math.max(1,Number(state.ui?.dashboard?.visible_slots)||4);
     let enabled=dashboardPickSectionKeys.filter(key=>defaults[key]);
     if(enabled.length>max){const keep=new Set(enabled.slice(0,max));dashboardPickSectionKeys.forEach(key=>{defaults[key]=keep.has(key);});}
@@ -197,6 +216,7 @@
     try{localStorage.setItem('blinq_dashboard_sections_v2',JSON.stringify(dashboardVisibilityState()));}catch{}
   }
   function toggleDashboardSection(key){
+    if(state.ui?.dashboard?.user_switches!==true)return;
     if(!dashboardPickSectionKeys.includes(key))return;
     const prefs=dashboardVisibilityState(),max=Math.max(1,Number(state.ui?.dashboard?.visible_slots)||4),wasOn=Boolean(prefs[key]);
     prefs[key]=!wasOn;
@@ -216,12 +236,14 @@
     renderPredictions();renderMarketSections();renderDashboardComposition();
   }
   function renderDashboardSectionToggles(){
-    const host=$('dashboardSectionToggles'),status=$('dashboardSectionsStatus');if(!host)return;
+    const host=$('dashboardSectionToggles'),status=$('dashboardSectionsStatus'),switcher=$('dashboardSectionSwitcher'),disabled=$('dashboardDisabledSections');if(!host)return;
+    const userSwitches=state.ui?.dashboard?.user_switches===true;
+    if(switcher)switcher.hidden=!userSwitches;
+    if(!userSwitches){host.innerHTML='';if(disabled){disabled.hidden=true;disabled.innerHTML='';}return;}
     const prefs=dashboardVisibilityState();
     host.innerHTML=dashboardPickSectionKeys.map(key=>{const cfg=dashboardSectionConfig(key),on=Boolean(prefs[key]);return `<button type="button" class="dashboard-section-toggle${on?' is-on':''}" data-dashboard-toggle="${escapeHtml(key)}" aria-pressed="${on?'true':'false'}"><span class="switch-dot" aria-hidden="true"><i></i></span><span><strong>${escapeHtml(cfg.label||key)}</strong><small>${on?'ON':'OFF'}</small></span></button>`;}).join('');
     const active=dashboardPickSectionKeys.filter(key=>prefs[key]);
     if(status)status.textContent=`${Math.min(active.length,Number(state.ui?.dashboard?.visible_slots)||4)} of ${dashboardPickSectionKeys.length} sections shown`;
-    const disabled=$('dashboardDisabledSections');
     if(disabled){
       const hidden=dashboardPickSectionKeys.filter(key=>!prefs[key]);
       disabled.hidden=!hidden.length||state.ui?.dashboard?.show_disabled_strip===false;
@@ -232,7 +254,13 @@
     const view=$('predictionsView');if(!view)return;
     const top=$('bannerTop'),mid=$('bannerMid'),bottom=$('bannerBottom');if(top)top.style.order='10';if(mid){mid.style.order='900';mid.hidden=true;}if(bottom){bottom.style.order='910';bottom.hidden=true;}
     const prefs=dashboardVisibilityState(),max=Math.max(1,Number(state.ui?.dashboard?.visible_slots)||4);
-    const active=dashboardPickSectionKeys.filter(key=>prefs[key]&&dashboardSectionConfig(key).sidebar_enabled!==false).slice(0,max);
+    const configured=dashboardPickSectionKeys.filter(key=>prefs[key]&&dashboardSectionConfig(key).sidebar_enabled!==false).slice(0,max);
+    const countFor=key=>marketRows(key).length;
+    let active=[...configured];
+    if(state.ui?.dashboard?.auto_replace_empty_sections!==false){
+      const replacements=dashboardPickSectionKeys.filter(key=>!active.includes(key)&&dashboardSectionConfig(key).sidebar_enabled!==false&&countFor(key)>0);
+      active=active.map(key=>countFor(key)>0?key:(replacements.shift()||key));
+    }
     dashboardPickSectionKeys.forEach(key=>{
       const cfg=dashboardSectionConfig(key),panel=$(cfg.panel_id);if(!panel)return;
       panel.hidden=!active.includes(key);panel.style.order=String(20+active.indexOf(key));
@@ -287,7 +315,7 @@
 
   function watermarkHtml(item){
     const wm=item?.watermark||{};
-    return wm.enabled?`<span class="slot-watermark">${escapeHtml(wm.text||'COMING SOON')}</span>`:'';
+    const preset=String(wm.preset||'violet').replace(/[^a-z0-9_-]/gi,''); return wm.enabled?`<span class="slot-watermark wm-${escapeHtml(preset)}">${escapeHtml(wm.text||'COMING SOON')}</span>`:'';
   }
   function safeLink(value, fallback='#predictions'){
     const text=String(value||'').trim();
@@ -372,6 +400,18 @@
     return rowPresetMap[rowPreset(zone)].map(([start,span])=>({item:slots[start],span,start})).filter(entry=>entry.item);
   }
 
+  function marketingAvatarUrl(planId){
+    const id=String(planId||'').toLowerCase(),plan=state.ui?.plans?.[id]||{};
+    const explicit=safeUiAsset(plan.marketing_avatar||'');if(explicit)return explicit;
+    const entry=state.ui?.assets?.account_avatars?.[id]||{};
+    return safeUiAsset(entry.default||entry.w||entry.m||'');
+  }
+  function promoPlanAvatarHtml(content,compact=false){
+    const planId=String(content?.plan_id||'').toLowerCase();if(!planId)return '';
+    const src=marketingAvatarUrl(planId);if(!src)return '';
+    return `<span class="promo-plan-avatar plan-${escapeHtml(planId)}${compact?' compact':''}" aria-hidden="true"><img src="${escapeHtml(src)}" alt="" loading="lazy"></span>`;
+  }
+
   function bannerAttrs(item,content){
     const slot=String(item.id||'');
     const campaign=String(content?.campaign_id||slot);
@@ -393,7 +433,7 @@
   }
   function headerSlotHtml(item,index=0){
     const c=resolvedBannerContent(item,index),route=c.route||'',href=safeLink(c.link,route?`#${route}`:'#predictions'),external=isExternalLink(href);
-    return `<a href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} class="header-slot theme-${escapeHtml(c.theme||'blue')}"><small>${escapeHtml(c.eyebrow||item.label)}</small><strong>${escapeHtml(c.headline||'')}</strong><span>${escapeHtml(c.text||'')}</span>${watermarkHtml(item)}</a>`;
+    return `<a href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} class="header-slot theme-${escapeHtml(c.theme||'blue')}${c.plan_id?' has-plan-avatar':''}"><div class="header-slot-copy"><small>${escapeHtml(c.eyebrow||item.label)}</small><strong>${escapeHtml(c.headline||'')}</strong><span>${escapeHtml(c.text||'')}</span></div>${promoPlanAvatarHtml(c,true)}${watermarkHtml(item)}</a>`;
   }
   function renderHeaderSlots(){
     const host=$('headerFeatureStrip'); if(!host)return;
@@ -416,12 +456,12 @@
     const attrs=`${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)}`;
     const target=external?'target="_blank" rel="noopener"':'';
     if(sidebar){
-      return `<a class="sidebar-promo theme-${theme}" href="${escapeHtml(href)}" ${target} ${attrs}>${sponsored}<small>${escapeHtml(c.eyebrow||'BLINQ')}</small><strong>${escapeHtml(c.headline||'')}</strong><span>${escapeHtml(c.text||'')}</span><b>${escapeHtml(c.button_text||'Open')}</b>${watermarkHtml(item)}</a>`;
+      return `<a class="sidebar-promo theme-${theme}${c.plan_id?' has-plan-avatar':''}" href="${escapeHtml(href)}" ${target} ${attrs}>${sponsored}<div class="sidebar-promo-copy"><small>${escapeHtml(c.eyebrow||'BLINQ')}</small><strong>${escapeHtml(c.headline||'')}</strong><span>${escapeHtml(c.text||'')}</span><b>${escapeHtml(c.button_text||'Open')}</b></div>${promoPlanAvatarHtml(c,true)}${watermarkHtml(item)}</a>`;
     }
     const span=Math.max(1,Math.min(4,Number(spanOverride||c.span)||1));
     const fullCreative=c.creative_mode==='full'||(c.type==='advertisement'&&c.show_copy===false);
     const showCopy=c.show_copy!==false;
-    return `<a class="promo-banner promo-card theme-${theme} span-${span}${fullCreative?' creative-full':''}${showCopy?'':' no-copy'}" href="${escapeHtml(href)}" ${target} ${attrs}>${sponsored}${bannerImageHtml(c,span)}${showCopy?`<div class="promo-copy"><span class="promo-eyebrow">${escapeHtml(c.eyebrow||'BLINQ')}</span><strong>${escapeHtml(c.headline||'')}</strong><p>${escapeHtml(c.text||'')}</p><span class="promo-cta">${escapeHtml(c.button_text||'Open')}</span></div>`:''}${watermarkHtml(item)}</a>`;
+    return `<a class="promo-banner promo-card theme-${theme} span-${span}${fullCreative?' creative-full':''}${showCopy?'':' no-copy'}${c.plan_id?' has-plan-avatar':''}" href="${escapeHtml(href)}" ${target} ${attrs}>${sponsored}${bannerImageHtml(c,span)}${showCopy?`<div class="promo-copy"><span class="promo-eyebrow">${escapeHtml(c.eyebrow||'BLINQ')}</span><strong>${escapeHtml(c.headline||'')}</strong><p>${escapeHtml(c.text||'')}</p><span class="promo-cta">${escapeHtml(c.button_text||'Open')}</span></div>`:''}${promoPlanAvatarHtml(c,false)}${watermarkHtml(item)}</a>`;
   }
   function renderBanners(){
     const hosts={content_top:$('bannerTop'),content_mid:$('bannerMid'),content_bottom:$('bannerBottom')};
@@ -722,7 +762,7 @@
   function renderAdminCanvas(){
     const nav=elementList('navigation').map(x=>adminMiniBlock(x.id,true)).join('');const promos=elementList('sidebar_promo','sidebar').map(x=>adminMiniBlock(x.id,true)).join('');const picks=[...Array(8)].map((_,i)=>adminMiniBlock(`TOP_PICK_${i+1}`,true)).join('')+adminMiniBlock('TOP_PICK_MORE',true);const features=elementList('feature','features').map(x=>adminMiniBlock(x.id,true)).join('');
     const rowBlock=(zone,title)=>`<div class="admin-row-caption"><span>${escapeHtml(title)}</span><b>${escapeHtml(rowPreset(zone))} · ${escapeHtml(rowCreativeSummary(zone))}</b></div><div class="admin-slot-row four preset-${escapeHtml(rowPreset(zone).replaceAll('+','-'))}${rowEnabled(zone)?'':' row-off'}">${adminRowHtml(zone)||'<div class="admin-row-off-label">ROW OFF</div>'}</div>`;
-    return `<div class="admin-canvas"><div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>FIXED</small></div><div class="admin-header-slots">${adminMiniBlock('HEADER_BANNER_1')}${adminMiniBlock('HEADER_BANNER_2')}${adminMiniBlock('HEADER_BANNER_3')}</div></div><div class="admin-canvas-body"><aside class="admin-canvas-sidebar"><b>SIDEBAR</b>${nav}<div class="admin-canvas-divider"></div><b>3 PROMO SLOTS</b>${promos}${features?`<div class="admin-canvas-divider"></div><b>FEATURE FLAGS</b>${features}`:''}</aside><main class="admin-canvas-main"><div class="admin-functional-row">${adminMiniBlock('PREDICTION_TOOLBAR')}</div>${rowBlock('content_top','BANNER ROW · TOP OF DASHBOARD')}<div class="admin-prime-map"><div>${adminMiniBlock('PRIME_PICKS_PANEL')}${adminMiniBlock('TOP_DAILY_PANEL')}</div><div class="admin-pick-strip">${picks}</div></div>${rowBlock('content_mid','OPTIONAL BANNER ROW 2')}<div class="admin-functional-row">${adminMiniBlock('VALUE_PICKS_PANEL')}${adminMiniBlock('DOUBLES_PANEL')}</div>${rowBlock('content_bottom','OPTIONAL BANNER ROW 3')}<div class="admin-functional-row">${adminMiniBlock('ACE_PICKS_PANEL')}${adminMiniBlock('SG_PICKS_PANEL')}</div><div class="admin-functional-row">${adminMiniBlock('RESULTS_PANEL')}${adminMiniBlock('BTTS_BONUS_PANEL')}</div>${adminMiniBlock('FOOTER_SYSTEM')}</main></div></div>`;
+    return `<div class="admin-canvas"><div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>FIXED</small></div><div class="admin-header-slots">${adminMiniBlock('HEADER_BANNER_1')}${adminMiniBlock('HEADER_BANNER_2')}${adminMiniBlock('HEADER_BANNER_3')}</div></div><div class="admin-canvas-body"><aside class="admin-canvas-sidebar"><b>SIDEBAR</b>${nav}<div class="admin-canvas-divider"></div><b>3 PROMO SLOTS</b>${promos}${renderDashboardQuickControls()}${features?`<div class="admin-canvas-divider"></div><b>FEATURE FLAGS</b>${features}`:''}</aside><main class="admin-canvas-main"><div class="admin-functional-row">${adminMiniBlock('PREDICTION_TOOLBAR')}</div>${rowBlock('content_top','BANNER ROW · TOP OF DASHBOARD')}<div class="admin-prime-map"><div>${adminMiniBlock('PRIME_PICKS_PANEL')}${adminMiniBlock('TOP_DAILY_PANEL')}</div><div class="admin-pick-strip">${picks}</div></div>${rowBlock('content_mid','OPTIONAL BANNER ROW 2')}<div class="admin-functional-row">${adminMiniBlock('VALUE_PICKS_PANEL')}${adminMiniBlock('DOUBLES_PANEL')}</div>${rowBlock('content_bottom','OPTIONAL BANNER ROW 3')}<div class="admin-functional-row">${adminMiniBlock('ACE_PICKS_PANEL')}${adminMiniBlock('SG_PICKS_PANEL')}</div><div class="admin-functional-row">${adminMiniBlock('RESULTS_PANEL')}${adminMiniBlock('BTTS_BONUS_PANEL')}</div>${adminMiniBlock('FOOTER_SYSTEM')}</main></div></div>`;
   }
 
   function campaignOptions(selected=''){
@@ -754,20 +794,24 @@
   function contentEditor(item){
     const c=item.content||{};
     if(item.kind==='navigation') return `<div class="admin-field-grid"><label>Button label<input data-admin-content="label" value="${escapeHtml(c.label||'')}"></label><label>Icon<input data-admin-content="icon" value="${escapeHtml(c.icon||'')}"></label><label>Route<input data-admin-content="route" value="${escapeHtml(c.route||'')}"></label></div>`;
-    if(!['header_slot','large_banner','sidebar_promo'].includes(item.kind)) return '<p class="admin-muted">This is a functional element. Configure its plan access below; its internal data placement will be wired after the layout is approved.</p>';
+    if(!['header_slot','large_banner','sidebar_promo'].includes(item.kind)) return '<p class="admin-muted">Functional dashboard element. Use the Dashboard display block below to configure its public placement and pick visibility.</p>';
+    const sidebarDestination=item.kind==='sidebar_promo'?`<div class="admin-link-callout span-2"><div><strong>Sidebar banner destination</strong><span>The whole banner is clickable. Use an external https:// URL or an internal #route.</span></div><label>Banner click URL<input data-admin-content="link" value="${escapeHtml(c.link||'')}" placeholder="https://... or #account"></label></div>`:'';
+    const standardDestination=item.kind!=='sidebar_promo'?`<label>Destination URL / link<input data-admin-content="link" value="${escapeHtml(c.link||'')}" placeholder="https://... or #account"></label>`:'';
     return `<div class="admin-field-grid">
+      ${sidebarDestination}
       <label>Content type<select data-admin-content="type"><option value="internal"${c.type==='internal'?' selected':''}>Internal</option><option value="advertisement"${c.type==='advertisement'?' selected':''}>Advertisement</option><option value="rss"${c.type==='rss'?' selected':''}>RSS / news</option><option value="image"${c.type==='image'?' selected':''}>Image</option><option value="promo"${(!c.type||c.type==='promo')?' selected':''}>Promo</option></select></label>
       <label>Theme<select data-admin-content="theme">${['violet','blue','purple','green','gold'].map(v=>`<option value="${v}"${v===(c.theme||'violet')?' selected':''}>${v}</option>`).join('')}</select></label>
-      <div class="field-hint-box">${escapeHtml(item.kind==='large_banner'?`Banner width is controlled by the fixed row preset. Current creative: ${creativeSpecText(item)}.`:`Fixed creative: ${creativeSpecText(item)}.`)}</div>
+      <div class="field-hint-box span-2">${escapeHtml(item.kind==='large_banner'?`Banner width is controlled by the fixed row preset. Current creative: ${creativeSpecText(item)}.`:`Fixed creative: ${creativeSpecText(item)}.`)}</div>
       <label class="check-field"><input type="checkbox" data-admin-content="enabled" ${c.enabled!==false?'checked':''}> Content enabled</label>
       <label>Campaign<select data-admin-content="campaign_id">${campaignOptions(String(c.campaign_id||''))}</select></label>
       <label>Advertiser ID<input data-admin-content="advertiser_id" value="${escapeHtml(c.advertiser_id||'')}" placeholder="inline / fallback advertiser"></label>
+      <label>Plan avatar<select data-admin-content="plan_id"><option value="">None</option>${['rookie','pro','elite','legend','goat'].map(v=>`<option value="${v}"${v===String(c.plan_id||'').toLowerCase()?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label>
       <label>Eyebrow<input data-admin-content="eyebrow" value="${escapeHtml(c.eyebrow||'')}"></label>
       <label>Headline<input data-admin-content="headline" value="${escapeHtml(c.headline||'')}"></label>
       <label class="span-2">Text<textarea data-admin-content="text" rows="3">${escapeHtml(c.text||'')}</textarea></label>
       <label>CTA text<input data-admin-content="button_text" value="${escapeHtml(c.button_text||'')}"></label>
-      <label>Link<input data-admin-content="link" value="${escapeHtml(c.link||'')}"></label>
-      <label>Route<input data-admin-content="route" value="${escapeHtml(c.route||'')}"></label>
+      ${standardDestination}
+      <label>Internal route (optional)<input data-admin-content="route" value="${escapeHtml(c.route||'')}"></label>
       <label class="span-2">Desktop image path / URL<input data-admin-content="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/... or https://..."></label>
       <label class="span-2">Mobile image (optional)<input data-admin-content="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="Optional mobile-specific creative"></label>
       <label>Image fit<select data-admin-content="image_fit"><option value="cover"${(c.image_fit||'cover')==='cover'?' selected':''}>Cover · fill slot</option><option value="contain"${c.image_fit==='contain'?' selected':''}>Contain · show whole image</option></select></label>
@@ -780,8 +824,21 @@
   }
   function watermarkEditor(item){
     if(!['header_slot','large_banner','sidebar_promo'].includes(item.kind))return '';
-    const wm=item.watermark||{};
-    return `<div class="admin-section"><div class="admin-section-title"><strong>Watermark overlay</strong><span>One fixed visual style</span></div><div class="admin-field-grid"><label class="check-field"><input type="checkbox" data-admin-watermark="enabled" ${wm.enabled?'checked':''}> Enable watermark</label><label>Watermark text<input data-admin-watermark="text" value="${escapeHtml(wm.text||'COMING SOON')}"></label></div><div class="watermark-preview"><span>${escapeHtml(wm.text||'COMING SOON')}</span></div></div>`;
+    const wm=item.watermark||{},presets=state.ui?.watermark_presets||{violet:{label:'BlinQ Violet'},blue:{label:'Deep Blue'},cyan:{label:'Cyan'},gold:{label:'Legend Gold'},slate:{label:'Slate'}};
+    const preset=String(wm.preset||'violet');
+    return `<div class="admin-section"><div class="admin-section-title"><strong>Watermark overlay</strong><span>Text and color preset</span></div><div class="admin-field-grid watermark-controls"><label class="check-field"><input type="checkbox" data-admin-watermark="enabled" ${wm.enabled?'checked':''}> Enable watermark</label><label>Watermark text<input data-admin-watermark="text" value="${escapeHtml(wm.text||'COMING SOON')}"></label><label>Color<select data-admin-watermark="preset">${Object.entries(presets).map(([id,row])=>`<option value="${escapeHtml(id)}"${id===preset?' selected':''}>${escapeHtml(row?.label||id)}</option>`).join('')}</select></label></div><div class="watermark-preview wm-${escapeHtml(preset)}"><span>${escapeHtml(wm.text||'COMING SOON')}</span></div></div>`;
+  }
+  function adminDashboardSectionKeyForElement(id){
+    const map={PRIME_PICKS_PANEL:'prime',TOP_DAILY_PANEL:'top_daily',VALUE_PICKS_PANEL:'value',DOUBLES_PANEL:'doubles',ACE_PICKS_PANEL:'ace',SG_PICKS_PANEL:'sg',RESULTS_PANEL:'results',BTTS_BONUS_PANEL:'btts'};
+    return map[id]||dashboardSectionKeyForSidebarElement(id)||'';
+  }
+  function dashboardDisplayEditor(elementId){
+    const key=adminDashboardSectionKeyForElement(elementId);if(!key)return '';
+    const choices=state.ui?.admin?.dashboard_preview_choices||[0,1,2,3,4,5,'ALL'],previewChoices=[5,10,15,20,'ALL'];
+    const cfg=dashboardSectionConfig(key),ent=cfg.plans?.[state.adminPlan]||cfg.plans?.rookie||{};
+    const options=choices.map(v=>`<option value="${escapeHtml(v)}"${String(ent.visible_picks).toUpperCase()===String(v).toUpperCase()?' selected':''}>${escapeHtml(v)}</option>`).join('');
+    const preview=previewChoices.map(v=>`<option value="${escapeHtml(v)}"${String(cfg.preview_limit).toUpperCase()===String(v).toUpperCase()?' selected':''}>${escapeHtml(v)}</option>`).join('');
+    return `<div class="admin-section dashboard-inspector-section" data-dashboard-section="${escapeHtml(key)}"><div class="admin-section-title"><strong>Dashboard pick display · ${escapeHtml(cfg.label||key)}</strong><span>Use the free inspector space for panel visibility and card access.</span></div><div class="admin-field-grid"><label class="check-field"><input type="checkbox" data-dashboard-field="sidebar_enabled" ${cfg.sidebar_enabled!==false?'checked':''}> Show in sidebar</label><label class="check-field"><input type="checkbox" data-dashboard-field="dashboard_enabled" ${cfg.dashboard_enabled!==false?'checked':''}> Show on dashboard</label><label>Preview pool<select data-dashboard-field="preview_limit">${preview}</select></label><label>Visible picks · ${escapeHtml(accessLabel(state.adminPlan))}<select data-dashboard-plan-field="visible_picks">${options}</select><small class="field-hint">0 + Blur remaining = the whole pick preview is blurred.</small></label><label class="check-field"><input type="checkbox" data-dashboard-plan-field="blur_remaining" ${ent.blur_remaining!==false?'checked':''}> Blur remaining</label><label class="check-field"><input type="checkbox" data-dashboard-plan-field="see_all" ${ent.see_all?'checked':''}> See all</label></div></div>`;
   }
   function renderAdminInspector(){
     const item=elements()?.[state.selectedElement] || elements()?.HEADER_BANNER_1;
@@ -789,18 +846,19 @@
     return `<aside class="admin-inspector"><div class="admin-inspector-head"><small>${escapeHtml(state.selectedElement)}</small><h3>${escapeHtml(item.label||state.selectedElement)}</h3><span>${escapeHtml(item.kind||'element')} · ${escapeHtml(item.zone||'')}</span></div>
       <div class="admin-section"><div class="admin-section-title"><strong>Content / details</strong><span>What this fixed position displays</span></div>${contentEditor(item)}</div>
       ${watermarkEditor(item)}
+      ${dashboardDisplayEditor(state.selectedElement)}
       <div class="admin-section"><div class="admin-section-title"><strong>Plan access</strong><span>Layout stays reserved even when hidden</span></div><div class="admin-access-grid">${accessContexts.map(plan=>`<label><span>${escapeHtml(state.ui?.plans?.[plan]?.label||plan.toUpperCase())}</span>${accessSelect(state.selectedElement,plan)}</label>`).join('')}</div></div>
     </aside>`;
   }
-  function renderAdminDashboardControls(){
-    const choices=state.ui?.admin?.dashboard_preview_choices||[1,2,3,4,5,'ALL'];
-    return `<div class="admin-dashboard-manager"><div class="admin-section-title"><strong>Dashboard panels</strong><span>Sidebar availability and dashboard presence are independent. Pick limits below apply to the plan selected above.</span></div>${dashboardSectionKeys.map(key=>{const cfg=dashboardSectionConfig(key),ent=cfg.plans?.[state.adminPlan]||cfg.plans?.rookie||{};const options=choices.map(v=>`<option value="${escapeHtml(v)}"${String(ent.visible_picks).toUpperCase()===String(v).toUpperCase()?' selected':''}>${escapeHtml(v)}</option>`).join('');return `<div class="admin-dashboard-row" data-dashboard-section="${escapeHtml(key)}"><strong>${escapeHtml(cfg.label||key)}</strong><label><input type="checkbox" data-dashboard-field="sidebar_enabled" ${cfg.sidebar_enabled!==false?'checked':''}> Sidebar</label><label><input type="checkbox" data-dashboard-field="dashboard_enabled" ${cfg.dashboard_enabled!==false?'checked':''}> Dashboard</label><span class="admin-fixed-order">Order ${Number(cfg.dashboard_order||99)} · fixed</span><label>Visible picks <select data-dashboard-plan-field="visible_picks">${options}</select></label><label><input type="checkbox" data-dashboard-plan-field="blur_remaining" ${ent.blur_remaining!==false?'checked':''}> Blur rest</label><label><input type="checkbox" data-dashboard-plan-field="see_all" ${ent.see_all?'checked':''}> See all</label></div>`}).join('')}</div>`;
+  function renderDashboardQuickControls(){
+    return `<div class="admin-canvas-divider"></div><b>DASHBOARD DISPLAY</b><div class="admin-dashboard-quick">${dashboardPickSectionKeys.map(key=>{const cfg=dashboardSectionConfig(key);return `<label data-dashboard-section="${escapeHtml(key)}"><span>${escapeHtml(cfg.label||key)}</span><input type="checkbox" data-dashboard-field="dashboard_enabled" ${cfg.dashboard_enabled!==false?'checked':''}></label>`}).join('')}</div>`;
   }
+  function renderAdminDashboardControls(){ return renderDashboardQuickControls(); }
 
   function renderAdminLayout(){
-    const planOptions=accessContexts.map(id=>`<option value="${id}"${state.adminPlan===id?' selected':''}>${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</option>`).join('');const copyOptions=accessContexts.filter(id=>id!==state.adminPlan).map(id=>`<option value="${id}">${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</option>`).join('');const presets=state.ui?.admin?.row_presets||Object.keys(rowPresetMap);
+    const planOptions=accessContexts.map(id=>`<option value="${id}"${state.adminPlan===id?' selected':''}>${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</option>`).join('');const copyOptions=accessContexts.filter(id=>id!==state.adminPlan).map(id=>`<option value="${id}">${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</option>`).join('');const presets=state.ui?.admin?.row_presets||Object.keys(rowPresetMap);const dashboard=state.ui?.dashboard||{};
     const rowControls=contentRowZones.map(zone=>{const row=rowConfig(zone);const options=presets.map(id=>`<option value="${escapeHtml(id)}"${rowPreset(zone)===id?' selected':''}>${escapeHtml(id)}</option>`).join('');return `<div class="admin-row-control"><label class="check-field"><input type="checkbox" data-admin-row-enabled="${escapeHtml(zone)}" ${rowEnabled(zone)?'checked':''}> ${escapeHtml(row.label||zone)}</label><label>Division<select data-admin-row-preset="${escapeHtml(zone)}">${options}</select></label><small>${escapeHtml(rowCreativeSummary(zone))}</small></div>`}).join('');
-    return `<div class="admin-toolbar"><label>Editing access for<select id="adminPlanSelect">${planOptions}</select></label><label>Copy all access from<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Copy → ${escapeHtml(accessLabel(state.adminPlan))}</button><span class="admin-toolbar-spacer"></span><button class="btn btn-ghost" type="button" data-admin-action="preview">Preview as ${escapeHtml(accessLabel(state.adminPlan))}</button><button class="btn btn-ghost" type="button" data-admin-action="clear-preview">Exit preview</button><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Save browser draft</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publish changes</button><button class="btn btn-ghost" type="button" data-admin-action="export">Export JSON</button><button class="btn btn-ghost" type="button" data-admin-action="reset">Reset</button></div>${renderAdminDashboardControls()}<div class="admin-note admin-banner-note"><strong>Dashboard banners</strong><span>The first row is the visible top promo area. Enable/disable rows here, choose the division, then click a banner block in the canvas to edit its copy, link, theme or image.</span></div><div class="admin-row-controls">${rowControls}</div><div class="admin-editor-grid"><div>${renderAdminCanvas()}</div>${renderAdminInspector()}</div>`;
+    return `<div class="admin-toolbar"><label>Editing access for<select id="adminPlanSelect">${planOptions}</select></label><label>Copy all access from<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Copy → ${escapeHtml(accessLabel(state.adminPlan))}</button><span class="admin-toolbar-separator"></span><label>Cards / desktop<select data-dashboard-global-field="cards_per_panel_desktop">${[1,2,3].map(v=>`<option value="${v}"${Number(dashboard.cards_per_panel_desktop||2)===v?' selected':''}>${v}</option>`).join('')}</select></label><label>Cards / wide<select data-dashboard-global-field="cards_per_panel_wide">${[2,3,4].map(v=>`<option value="${v}"${Number(dashboard.cards_per_panel_wide||3)===v?' selected':''}>${v}</option>`).join('')}</select></label><label class="admin-toolbar-check"><input type="checkbox" data-dashboard-global-field="auto_replace_empty_sections" ${dashboard.auto_replace_empty_sections!==false?'checked':''}> Auto-fill empty panel</label><span class="admin-toolbar-spacer"></span><button class="btn btn-ghost" type="button" data-admin-action="preview-demo">Preview full board</button><button class="btn btn-ghost" type="button" data-admin-action="preview">Preview as ${escapeHtml(accessLabel(state.adminPlan))}</button><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Save browser draft</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publish changes</button><button class="btn btn-ghost" type="button" data-admin-action="export">Export JSON</button></div><div class="admin-note admin-banner-note"><strong>Dashboard banners</strong><span>The top public promo row is PRO / ELITE / LEGEND. Click any banner block in the canvas to edit copy, destination link, avatar, theme, image or watermark. Dashboard pick-window toggles now live in the left canvas column and each pick panel exposes detailed display settings in the inspector. Replace an empty window with the next section that has published picks when auto-fill is enabled.</span></div><div class="admin-row-controls">${rowControls}</div><div class="admin-editor-grid"><div>${renderAdminCanvas()}</div>${renderAdminInspector()}</div>`;
   }
 
   function renderAdminPlans(){
@@ -868,6 +926,20 @@
     return `<div class="admin-note"><strong>Internal model workspace</strong><span>Live performance, model evaluation and backtests live here; none of these items occupy the public sidebar.</span></div>${metricCards([['Model',String(feed.model?.version||'—'),'production artifact'],['Settled',String(p.n??0),'published results'],['Live accuracy',p.accuracy!=null?pct(p.accuracy):'—','settled feed'],['Holdout n',String(holdout.n??'—'),'chronological evaluation'],['Holdout accuracy',holdout.accuracy!=null?pct(holdout.accuracy):'—','model report'],['Δ log loss vs Elo',delta.log_loss!=null?number(delta.log_loss):'—','negative is better']])}<div class="route-sub static-copy"><h3>Backtests</h3><p>Historical walk-forward validation is retained inside Model Performance. Latest embedded report: ${escapeHtml(backtest.method||report.method||'available when published with the model artifact')}.</p></div>`;
   }
 
+  function buildDemoMatch(i,section='prime'){
+    const names=[['Maya Jensen','Elena Moretti'],['Sofia Marin','Lea Novak'],['Clara Voss','Nina Petrov'],['Emma Lind','Sara Costa'],['Julia Weber','Anna Horak'],['Lina Rossi','Eva Klein'],['Marta Silva','Klara Novak'],['Alice Morel','Daria Ivanova']];
+    const [a,b]=names[i%names.length],prob=Math.max(.56,.91-i*.025-(section==='value'?.12:section==='top_daily'?.06:0)),odds=section==='value'?1.82+i*.07:section==='top_daily'?1.42+i*.06:1.24+i*.04;
+    const id=`demo-${section}-${i+1}`,tour=i%2?'wta':'atp';
+    return {event_id:id,scheduled_at:new Date(Date.now()+(i+2)*3600000).toISOString(),tour,tournament:i%2?'BlinQ Open':'BlinQ Masters',surface:i%3===0?'clay':i%3===1?'hard':'grass',round:'R16',player1:{id:`${id}-a`,name:a,rank:18+i*3,country_code:i%2?'SK':'CZ',probability:prob,photo_url:''},player2:{id:`${id}-b`,name:b,rank:31+i*4,country_code:i%2?'IT':'ES',probability:1-prob,photo_url:''},winner_id:`${id}-a`,pick:a,selection:a,probability:prob,odds,edge:section==='value'?.065:.035,expected_value:section==='value'?.11:.045,data_depth:.88,quality:{player1:{matches:34+i,surface_matches:9+i},player2:{matches:28+i,surface_matches:7+i}},betting:{odds,edge:section==='value'?.065:.035,expected_value:section==='value'?.11:.045,betting_day:new Date().toISOString().slice(0,10)},signals:[{label:'Recent form',player_id:`${id}-a`},{label:'Surface strength',player_id:`${id}-a`},{label:'Return form',player_id:`${id}-a`}],model_version:'demo-preview'};
+  }
+  function buildDemoProjection(i){
+    const row=buildDemoMatch(i,'ace');return {...row,pick:row.player1.name,selection:row.player1.name,price_status:'projection_only',market_type:i%2?'Aces':'Double Faults',projection:6.2+i*.35,opponent_projection:4.1+i*.22,projection_gap:2.1+i*.13,projection_confidence:.82-i*.025,projection_samples:{player1:14+i,player2:12+i},projection_unit:'count'};
+  }
+  function enableDemoBoardPreview(){
+    if(!state.demoFeedBackup)state.demoFeedBackup=clone(state.feed||{});
+    const base=clone(state.feed||{});base.generated_at=new Date().toISOString();base.model={...(base.model||{}),version:'DEMO PREVIEW'};base.prime_picks=[0,1,2,3,4].map(i=>buildDemoMatch(i,'prime'));base.top_daily_picks=[0,1,2,3,4,5].map(i=>buildDemoMatch(i,'top_daily'));base.value_picks=[0,1,2,3,4].map(i=>buildDemoMatch(i,'value'));base.ace_picks=[0,1,2,3,4].map(buildDemoProjection);base.doubles_picks=[];base.sg_picks=[];state.feed=base;state.demoMode=true;state.dashboardVisibility=null;state.page=0;Object.keys(state.marketPage||{}).forEach(k=>state.marketPage[k]=0);populateFilters();renderAllUiContent();setRoute('predictions');showStatus('Demo preview only — sample picks are in browser memory and are never published.');
+  }
+
   function renderAdminRoute(){
     const tabs=[['layout','Layout & slots'],['performance','Model Performance'],['campaigns','Campaigns'],['feeds','RSS feeds'],['plans','Plans'],['accounts','Accounts'],['analytics','Banner analytics']];
     const panel=state.adminTab==='layout'?renderAdminLayout():state.adminTab==='performance'?renderAdminPerformance():state.adminTab==='campaigns'?renderAdminCampaigns():state.adminTab==='feeds'?renderAdminFeeds():state.adminTab==='plans'?renderAdminPlans():state.adminTab==='accounts'?renderAdminAccounts():renderAdminAnalytics();
@@ -912,6 +984,7 @@
       else if(action==='export')exportUiConfig();
       else if(action==='reset'){localStorage.removeItem(draftKey());state.ui=clone(state.uiSource);state.selectedElement='HEADER_BANNER_1';renderAllUiContent();rerenderAdmin();showStatus('Reset to repository defaults. Publish if you want this reset live.');}
       else if(action==='copy-plan'){const source=$('adminCopyFrom')?.value,target=state.adminPlan;if(source&&target){Object.values(elements()).forEach(item=>{item.access=item.access||{};item.access[target]=item.access[source]||'active';if(target==='rookie')item.access.trial=item.access[target];});rerenderAdmin();showStatus(`Access copied from ${accessLabel(source)} to ${accessLabel(target)}.`);}}
+      else if(action==='preview-demo'){state.previewPlan=null;enableDemoBoardPreview();}
       else if(action==='preview'){state.previewPlan=state.adminPlan;renderAllUiContent();setRoute('predictions');showStatus(`Previewing page as ${accessLabel(state.previewPlan)}.`);}
       else if(action==='clear-preview'){state.previewPlan=null;renderAllUiContent();rerenderAdmin();showStatus('Admin preview disabled.');}
       else if(action==='add-advertiser'){state.ui.advertisers=state.ui.advertisers||{};const id=nextEntityId('advertiser',state.ui.advertisers);state.ui.advertisers[id]={name:`Advertiser ${Object.keys(state.ui.advertisers).length+1}`,website:'',note:''};rerenderAdmin();}
@@ -928,8 +1001,9 @@
       if(t.id==='adminPlanSelect'){state.adminPlan=t.value;rerenderAdmin();return;}
       if(t.dataset.adminRowEnabled){const zone=t.dataset.adminRowEnabled;state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows[zone]=state.ui.content_rows[zone]||{};state.ui.content_rows[zone].enabled=t.checked;renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminRowPreset){const zone=t.dataset.adminRowPreset;state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows[zone]=state.ui.content_rows[zone]||{};state.ui.content_rows[zone].preset=t.value;renderAllUiContent();rerenderAdmin();return;}
+      if(t.dataset.dashboardGlobalField){state.ui.dashboard=state.ui.dashboard||{};let value=t.type==='checkbox'?t.checked:Number(t.value);state.ui.dashboard[t.dataset.dashboardGlobalField]=value;state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();return;}
       const dashboardRow=t.closest('[data-dashboard-section]');
-      if(dashboardRow&&t.dataset.dashboardField){const key=dashboardRow.dataset.dashboardSection;state.ui.dashboard=state.ui.dashboard||{};state.ui.dashboard.sections=state.ui.dashboard.sections||{};const cfg=state.ui.dashboard.sections[key]=state.ui.dashboard.sections[key]||clone(dashboardSectionFallback[key]||{});cfg[t.dataset.dashboardField]=t.type==='checkbox'?t.checked:(t.type==='number'?Number(t.value):t.value);renderAllUiContent();rerenderAdmin();return;}
+      if(dashboardRow&&t.dataset.dashboardField){const key=dashboardRow.dataset.dashboardSection;state.ui.dashboard=state.ui.dashboard||{};state.ui.dashboard.sections=state.ui.dashboard.sections||{};const cfg=state.ui.dashboard.sections[key]=state.ui.dashboard.sections[key]||clone(dashboardSectionFallback[key]||{});let value=t.type==='checkbox'?t.checked:(t.dataset.dashboardField==='preview_limit'&&String(t.value).toUpperCase()!=='ALL'?Number(t.value):t.value);if(t.dataset.dashboardField==='dashboard_enabled'){const pickKeys=dashboardPickSectionKeys;const enabled=pickKeys.filter(k=>(state.ui.dashboard.sections[k]||dashboardSectionFallback[k]||{}).dashboard_enabled!==false);if(value&&!enabled.includes(key)&&enabled.length>=Number(state.ui.dashboard.visible_slots||4)){const victim=[...enabled].reverse().find(k=>k!==key);if(victim)state.ui.dashboard.sections[victim].dashboard_enabled=false;}cfg.dashboard_enabled=value;if(!value){const after=pickKeys.filter(k=>(state.ui.dashboard.sections[k]||dashboardSectionFallback[k]||{}).dashboard_enabled!==false);const start=pickKeys.indexOf(key)+1;const replacement=[...pickKeys.slice(start),...pickKeys.slice(0,start)].find(k=>k!==key&&!after.includes(k)&&(state.ui.dashboard.sections[k]||dashboardSectionFallback[k]||{}).sidebar_enabled!==false);if(replacement&&after.length<Number(state.ui.dashboard.visible_slots||4))state.ui.dashboard.sections[replacement].dashboard_enabled=true;}state.dashboardVisibility=null;}else cfg[t.dataset.dashboardField]=value;renderAllUiContent();rerenderAdmin();return;}
       if(dashboardRow&&t.dataset.dashboardPlanField){const key=dashboardRow.dataset.dashboardSection;state.ui.dashboard=state.ui.dashboard||{};state.ui.dashboard.sections=state.ui.dashboard.sections||{};const cfg=state.ui.dashboard.sections[key]=state.ui.dashboard.sections[key]||clone(dashboardSectionFallback[key]||{});cfg.plans=cfg.plans||{};cfg.plans[state.adminPlan]=cfg.plans[state.adminPlan]||{};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.dashboardPlanField==='visible_picks'&&String(value).toUpperCase()!=='ALL')value=Number(value);cfg.plans[state.adminPlan][t.dataset.dashboardPlanField]=value;if(state.adminPlan==='rookie')cfg.plans.trial=clone(cfg.plans.rookie);renderAllUiContent();rerenderAdmin();return;}
       if(t.id==='adminUserPlan'){setAdminPlanDefaults(t.value);return;}
       if(t.id==='adminUserStatus'){const expiry=$('adminUserExpires');if(expiry){expiry.disabled=t.value==='lifetime';if(t.value==='lifetime')expiry.value='';}return;}
@@ -947,14 +1021,14 @@
     const form=$('adminUserForm');if(form)form.onsubmit=async event=>{event.preventDefault();const user=state.adminSelectedUser;if(!user)return;const message=$('adminUserMessage');message.textContent='Saving…';try{const rawExpiry=$('adminUserExpires').value,status=$('adminUserStatus').value;if(status==='trial')throw new Error('Choose ACTIVE, EXPIRED or SUSPENDED before saving an automatic trial.');const payload={role:$('adminUserRole').disabled?'admin':$('adminUserRole').value,plan:$('adminUserPlan').value,status,expires_at:rawExpiry?new Date(rawExpiry).toISOString():null,payment_reference:$('adminPaymentReference').value.trim()};const updated=await BlinqAuth.adminUpdateAccess(user.id,payload);state.adminUsers=(state.adminUsers||[]).map(row=>row.id===updated.id?updated:row);state.adminSelectedUser=updated;message.textContent='Applied.';setTimeout(()=>rerenderAdmin(),450);}catch(error){message.textContent=error.message;}};
   }
   function planAvatarHtml(id,p={}){
-    const style=String(p.avatar||id||'').toLowerCase();
+    const style=String(p.avatar||id||'').toLowerCase(),src=safeUiAsset(p.marketing_avatar||'')||marketingAvatarUrl(style);
     const glyph={rookie:'○',pro:'◇',elite:'✦',goat:'♛',legend:'♛'}[style]||'◇';
-    return `<span class="plan-card-avatar plan-${escapeHtml(style)}" aria-label="${escapeHtml((p.label||id).toUpperCase())} avatar"><b aria-hidden="true">${glyph}</b><em>${escapeHtml(String(p.label||id).replace(/^BlinQ\s+/i,'').slice(0,8))}</em></span>`;
+    return `<span class="plan-card-avatar plan-${escapeHtml(style)}${src?' has-photo':''}" aria-label="${escapeHtml((p.label||id).toUpperCase())} avatar">${src?`<img src="${escapeHtml(src)}" alt="" loading="lazy">`:`<b aria-hidden="true">${glyph}</b>`}<em>${escapeHtml(String(p.label||id).replace(/^BlinQ\s+/i,'').slice(0,8))}</em></span>`;
   }
   function renderPlanCardsForAccount(){
     const current=accountPlan();
     const plans=Object.entries(state.ui?.plans||{}).filter(([id,p])=>!['trial','expired'].includes(id)&&p.enabled!==false).sort((a,b)=>Number(a[1]?.order||99)-Number(b[1]?.order||99));
-    return `<div class="account-plan-grid">${plans.map(([id,p])=>{const url=String(p.url||'').trim(),active=current===id;return `<article class="membership-card plan-${escapeHtml(id)}${active?' current-plan':''}">${planAvatarHtml(id,p)}<div class="membership-card-copy"><small>${escapeHtml(p.label||id.toUpperCase())}</small><strong>${active?'Current level':'Membership level'}</strong><p>${escapeHtml(p.description||p.note||'')}</p></div>${active?'<span class="membership-current">ACTIVE</span>':url?`<a class="btn btn-primary membership-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Open plan')} →</a>`:'<button class="btn btn-ghost membership-cta" type="button" disabled>Link not set</button>'}</article>`}).join('')}</div>`;
+    return `<div class="account-plan-grid">${plans.map(([id,p])=>{const url=String(p.url||'').trim(),active=current===id,restricted=Boolean(p.invite_only||p.verified_only),title=active?'Current plan':(p.card_title||p.description||'BlinQ membership');let action='';if(active)action='<span class="membership-current">CURRENT PLAN</span>';else if(restricted)action=`<button class="btn btn-ghost membership-cta invite-only" type="button" disabled>${escapeHtml(p.cta_label||'Invite / Verified only')}</button>`;else if(url)action=`<a class="btn btn-primary membership-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Open plan')} →</a>`;else action=`<button class="btn btn-ghost membership-cta" type="button" disabled>${escapeHtml(p.cta_fallback_label||'Coming soon')}</button>`;return `<article class="membership-card plan-${escapeHtml(id)}${active?' current-plan':''}${restricted?' restricted-plan':''}">${planAvatarHtml(id,p)}<div class="membership-card-copy"><small>${escapeHtml(p.label||id.toUpperCase())}</small><strong>${escapeHtml(title)}</strong><p>${escapeHtml(p.description||p.note||'')}</p></div>${restricted?'<span class="membership-badge">VERIFIED</span>':''}${action}</article>`}).join('')}</div>`;
   }
   function primeTableRows(){ return rankedPredictions(); }
   function aceProjectionTable(rows){
