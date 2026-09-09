@@ -204,6 +204,152 @@ def _market_commitment_from_publication(event_id, publication):
     )
 
 
+
+def _market_publication_is_published(publication):
+    return bool(
+        isinstance(publication, dict)
+        and (
+            publication.get("issued_at")
+            or publication.get("publication_status") == "published"
+        )
+    )
+
+
+def _same_market_offer(event_id, section, commitment, publication):
+    """Match the stable offer identity while deliberately ignoring mutable odds.
+
+    A successful public deployment freezes the first auditable price snapshot.
+    Later provider refreshes may return a different price for the same event,
+    selection, section and betting day; those refreshed values must not silently
+    replace the already-issued public commitment.
+    """
+    if not isinstance(publication, dict):
+        return False
+    return (
+        str(event_id or "").strip() == str(commitment[0] or "").strip()
+        and str(publication.get("section") or "").strip() == str(section or "").strip()
+        and str(publication.get("market") or "").strip() == str(commitment[2] or "").strip()
+        and str(publication.get("selection_id") or "").strip() == str(commitment[3] or "").strip()
+        and str(publication.get("betting_day") or "").strip() == str(commitment[8] or "").strip()
+    )
+
+
+def _restore_market_card_snapshot(feed_row, ledger_row, publication):
+    """Restore an already-issued market card to its ledger-backed snapshot."""
+    betting = dict(feed_row.get("betting") or {})
+    snapshot_fields = (
+        "market",
+        "selection",
+        "selection_id",
+        "odds",
+        "fair_implied_probability",
+        "model_probability",
+        "edge",
+        "expected_value",
+        "provider_id",
+        "captured_at",
+        "betting_day",
+    )
+    for key in snapshot_fields:
+        if key in publication:
+            betting[key] = publication.get(key)
+    feed_row["betting"] = betting
+
+    # Market cards expose convenience aliases used directly by the web UI.
+    alias_map = {
+        "market": "market",
+        "selection": "selection",
+        "selection_id": "selection_id",
+        "odds": "odds",
+        "edge": "edge",
+        "expected_value": "expected_value",
+        "fair_implied_probability": "fair_implied_probability",
+        "betting_day": "betting_day",
+    }
+    for target, source in alias_map.items():
+        if source in publication:
+            feed_row[target] = publication.get(source)
+    feed_row["pick"] = publication.get("selection")
+    feed_row["probability"] = publication.get("model_probability")
+
+    # Prime cards are rendered from player probabilities/winner_id rather than
+    # the market-card aliases, so restore the immutable model commitment too.
+    if isinstance(ledger_row, dict):
+        feed_row["winner_id"] = ledger_row.get("winner_id")
+        feed_row["confidence"] = ledger_row.get("confidence")
+        feed_row["model_version"] = ledger_row.get("model_version")
+        feed_row["scheduled_at"] = ledger_row.get("scheduled_at", feed_row.get("scheduled_at"))
+        for key in ("data_depth", "quality", "signals"):
+            if key in ledger_row:
+                feed_row[key] = ledger_row.get(key)
+        for player_key in ("player1", "player2"):
+            frozen = ledger_row.get(player_key)
+            current = feed_row.get(player_key)
+            if isinstance(frozen, dict) and isinstance(current, dict):
+                current["probability"] = frozen.get("probability")
+
+    return feed_row
+
+
+def reconcile_market_feed_with_ledger(feed, ledger):
+    """Repair refresh-time market cards using immutable issued ledger snapshots.
+
+    Pending publications are still allowed to refresh normally. Only an offer
+    that has already been successfully issued is frozen. This keeps the public
+    feed auditable while allowing a failed private candidate from a prior run to
+    recover without deleting or rewriting publication history.
+    """
+    if not isinstance(feed, dict) or not isinstance(ledger, list):
+        raise ValueError("Invalid market publication artifacts")
+
+    ledger_index = {
+        str(row.get("event_id") or "").strip(): row
+        for row in ledger
+        if isinstance(row, dict) and str(row.get("event_id") or "").strip()
+    }
+    restored = 0
+    for section, key in _MARKET_SECTION_KEYS.items():
+        rows = feed.get(key, [])
+        if rows is None:
+            continue
+        if not isinstance(rows, list):
+            raise ValueError(f"Invalid market section: {key}")
+        for feed_row in rows:
+            commitment = _market_commitment_from_feed_row(feed_row, section)
+            event_id = commitment[0]
+            ledger_row = ledger_index.get(event_id)
+            if not isinstance(ledger_row, dict):
+                continue
+
+            publications = [
+                item
+                for item in ledger_row.get("market_publications", []) or []
+                if isinstance(item, dict)
+            ]
+            # Already exact: current pending snapshot or frozen issued snapshot.
+            if any(
+                _market_commitment_from_publication(event_id, item) == commitment
+                for item in publications
+            ):
+                continue
+
+            issued = [
+                item
+                for item in publications
+                if _market_publication_is_published(item)
+                and _same_market_offer(event_id, section, commitment, item)
+            ]
+            if len(issued) == 1:
+                _restore_market_card_snapshot(feed_row, ledger_row, issued[0])
+                restored += 1
+
+    if restored:
+        meta = feed.setdefault("market_selection", {})
+        if isinstance(meta, dict):
+            meta["restored_issued_snapshots"] = restored
+    return restored
+
+
 def validate_market_publication_candidate(feed, ledger):
     """Bind every odds-backed section row to an exact ledger snapshot.
 

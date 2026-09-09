@@ -23,6 +23,7 @@ from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.engine import predict, reconcile_ledger, serving_feed
 from tbt.services.publication import (
+    reconcile_market_feed_with_ledger,
     validate_market_publication_candidate,
     validate_publication_candidate,
 )
@@ -272,6 +273,11 @@ def _load_prediction_ledger(store):
         raise ValueError("Invalid prediction ledger")
     validate_publication_candidate(feed, ledger)
     if (feed.get("market_selection") or {}).get("publication_schema") == 1:
+        # A previous refresh may have uploaded a private candidate and then
+        # failed before public deployment because provider odds moved after an
+        # already-issued snapshot. Repair that private candidate in memory so
+        # the immutable ledger can be reused safely on the next refresh.
+        reconcile_market_feed_with_ledger(feed, ledger)
         validate_market_publication_candidate(feed, ledger)
     return ledger
 
@@ -297,6 +303,15 @@ def _publish_predictions(
         ace_picks=ace_picks, ace_report=ace_report,
         sg_picks=sg_picks, sg_report=sg_report,
     )
+    # Never replace an already-issued audited market price with a later provider
+    # refresh. Pending snapshots remain refreshable until first public deploy.
+    restored_market_snapshots = reconcile_market_feed_with_ledger(feed, records)
+    if restored_market_snapshots:
+        print(
+            f"Restored {restored_market_snapshots} already-issued market snapshot(s) "
+            "after provider odds refresh"
+        )
+    validate_market_publication_candidate(feed, records)
     feed = clean(feed)
     write_json(store.directory / "ledger.json", records)
     write_json(store.directory / "feed.json", feed)
