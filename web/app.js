@@ -9,8 +9,7 @@
   const number = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
   const fmtTime = value => value ? new Intl.DateTimeFormat(undefined,{hour:'2-digit',minute:'2-digit'}).format(new Date(value)) : 'TBA';
   const fmtDate = value => value ? new Intl.DateTimeFormat(undefined,{day:'2-digit',month:'short',year:'numeric'}).format(new Date(value)) : '—';
-  const fmtToday = () => new Intl.DateTimeFormat(undefined,{weekday:'short',day:'2-digit',month:'short',year:'numeric'}).format(new Date());
-  const fmtClock = () => new Intl.DateTimeFormat(undefined,{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
+  const fmtToday = () => new Intl.DateTimeFormat(undefined,{weekday:'long',day:'2-digit',month:'short',year:'numeric'}).format(new Date());
   const initials = name => String(name || 'B').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
   const flagEmoji = code => { const value=String(code||'').trim().toUpperCase(); if(!/^[A-Z]{2}$/.test(value))return ''; return [...value].map(ch=>String.fromCodePoint(127397+ch.charCodeAt(0))).join(''); };
   const safePhotoUrl = value => { const url=String(value||'').trim(); return /^\/assets\/players\/[A-Za-z0-9_.-]+$/.test(url)?url:''; };
@@ -23,21 +22,16 @@
     return '';
   }
   function accountAvatarUrl(account){
-    const admin=Boolean(account?.is_admin||String(account?.role||'').toLowerCase()==='admin');
-    const configuredPlan=String(state.ui?.assets?.admin_avatar_plan||'goat').trim().toLowerCase();
-    const plan=admin?configuredPlan:String(account?.plan||'').trim().toLowerCase();
+    const plan=String(account?.plan||'').trim().toLowerCase();
     const variant=String(account?.avatar_variant||'').trim().toLowerCase();
     const entry=state.ui?.assets?.account_avatars?.[plan];
     if(!entry||typeof entry!=='object')return '';
     if(entry.default)return safeUiAsset(entry.default);
-    return ['m','w'].includes(variant)?safeUiAsset(entry[variant]):safeUiAsset(entry.m||entry.w);
-  }
-  function accountAvatarFallback(account){
-    return account?.is_admin||String(account?.role||'').toLowerCase()==='admin'?'♛':initials(account?.name||account?.email||'B');
+    return ['m','w'].includes(variant)?safeUiAsset(entry[variant]):'';
   }
   function setAccountAvatar(host,account){
     if(!host)return;
-    const fallback=accountAvatarFallback(account);
+    const fallback=initials(account?.name||account?.email||'B');
     const src=accountAvatarUrl(account);
     host.textContent=fallback;host.classList.remove('has-photo');
     if(!src)return;
@@ -91,19 +85,7 @@
     state.ui = clone(state.uiSource);
     try {
       const runtime = await getJSON('/api/v1/ui-config');
-      if(runtime?.configured && runtime?.config?.schema===2){
-        state.ui=mergeConfig(state.uiSource,runtime.config); state.runtimeConfigLoaded=true;
-        if(String(runtime.config.ui_revision||'')!==String(state.uiSource.ui_revision||'')){
-          state.ui.ui_revision=state.uiSource.ui_revision;
-          ['content_top','content_mid','content_bottom'].forEach(zone=>{
-            state.ui.content_rows=state.ui.content_rows||{};
-            state.ui.content_rows[zone]={...(state.ui.content_rows[zone]||{}),enabled:true};
-          });
-          ['CONTENT_TOP_1','CONTENT_TOP_2','CONTENT_TOP_3','CONTENT_TOP_4'].forEach(id=>{
-            if(state.uiSource?.elements?.[id]?.content) state.ui.elements[id].content=clone(state.uiSource.elements[id].content);
-          });
-        }
-      }
+      if(runtime?.configured && runtime?.config?.schema===2){ state.ui=mergeConfig(state.uiSource,runtime.config); state.runtimeConfigLoaded=true; }
     } catch {}
     renderAllUiContent();
   }
@@ -358,7 +340,7 @@
       node.setAttribute('aria-disabled',mode==='active'?'false':'true');
     });
   }
-  function renderAllUiContent(){ if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); renderHeaderSlots(); renderBanners(); renderSidebarPromos(); renderMarketSections(); renderDashboardResultsPreview(); applyAccessStates(); }
+  function renderAllUiContent(){ if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); renderHeaderSlots(); renderBanners(); renderSidebarPromos(); renderMarketSections(); applyAccessStates(); }
 
   function auth(mode='login'){
     state.authMode=mode; $('authMessage').textContent='';
@@ -445,12 +427,12 @@
     const start=state.marketPage[key]*perPage;
     const visible=preview.slice(start,start+perPage);
     host.innerHTML=visible.length?visible.map(row=>marketPreviewCard(row,key)).join(''):`<div class="state-card market-empty">${escapeHtml(emptyText)}</div>`;
-    const count=$(key==='top_daily'?'topDailyCount':`${key}Count`);if(count)count.textContent=`${rows.length} ${rows.length===1?'pick':'picks'}`; const seeCount=$(key==='top_daily'?'topDailySeeAllCardCount':`${key}SeeAllCardCount`);if(seeCount)seeCount.textContent=`${rows.length} published`;
+    const count=$(key==='top_daily'?'topDailyCount':`${key}Count`);if(count)count.textContent=`${rows.length} ${rows.length===1?'pick':'picks'}`;
     const see=$(key==='top_daily'?'topDailySeeAll':`${key}SeeAll`);if(see)see.hidden=rows.length<=previewLimit;
     const shell=host.closest('.market-carousel-shell');
     if(shell){const prev=shell.querySelector('[data-market-prev]'),next=shell.querySelector('[data-market-next]');if(prev){prev.hidden=pageCount<=1;prev.disabled=state.marketPage[key]<=0;}if(next){next.hidden=pageCount<=1;next.disabled=state.marketPage[key]>=pageCount-1;}}
   }
-  function renderMarketSections(){renderMarketSection('top_daily','topDailyGrid','No Top Bets pass the adaptive 75 → 72 → 70 → 68 confidence cascade.');renderMarketSection('value','valueGrid','No Value Picks pass the current odds, edge and EV guardrails.');renderMarketSection('ace','aceGrid','No Aces / Double Faults projections pass the current data-depth and gap guardrails yet.');renderMarketSection('sg','sgGrid','No Sets / Games projections pass the current data-depth and signal guardrails yet.');const doublesRows=marketRows('doubles');const dc=$('doublesCount');if(dc)dc.textContent=`${doublesRows.length} picks`;const dsc=$('doublesSeeAllCardCount');if(dsc)dsc.textContent=`${doublesRows.length} published`;const ds=$('doublesSeeAll');if(ds)ds.hidden=true;}
+  function renderMarketSections(){renderMarketSection('top_daily','topDailyGrid','No Top Bets pass the adaptive 75 → 72 → 70 → 68 confidence cascade.');renderMarketSection('value','valueGrid','No Value Picks pass the current odds, edge and EV guardrails.');renderMarketSection('ace','aceGrid','No Aces / Double Faults projections pass the current data-depth and gap guardrails yet.');renderMarketSection('sg','sgGrid','No Sets / Games projections pass the current data-depth and signal guardrails yet.');const dc=$('doublesCount');if(dc)dc.textContent=`${marketRows('doubles').length} picks`;const ds=$('doublesSeeAll');if(ds)ds.hidden=true;}
 
   function signalMeta(signal,m){ const id=String(signal?.player_id ?? signal?.favours_player_id ?? ''); const favours=id===String(m.pickId); const label=signal?.label||signal?.factor||'Model signal'; return {label,favours}; }
   function renderSignal(signal,m){ const s=signalMeta(signal,m); return `<div class="signal-row"><span>${escapeHtml(s.label)}</span><div class="signal-meter"><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i></i><i></i></div></div>`; }
@@ -466,7 +448,7 @@
 
 
   function renderDots(pageCount){ const host=$('carouselDots'); if(!host)return; host.innerHTML=''; if(pageCount<=1)return; for(let i=0;i<pageCount;i++){const b=document.createElement('button');b.type='button';b.className=i===state.page?'active':'';b.setAttribute('aria-label',`Show Prime Picks page ${i+1}`);b.onclick=()=>{state.page=i;renderPredictions()};host.appendChild(b)} }
-  function renderPredictions(){ const allRows=rankedPredictions(),rows=allRows.slice(0,10),grid=$('predictionGrid'),size=Math.min(5,pageSize()); if(!grid)return; $('matchCount').textContent=allRows.length; const primeSeeCount=$('primeSeeAllCardCount');if(primeSeeCount)primeSeeCount.textContent=`${allRows.length} published`; const see=$('viewAllButton');if(see)see.hidden=allRows.length<=10; const pageCount=Math.max(1,Math.ceil(rows.length/size)); state.page=Math.min(state.page,pageCount-1); const start=state.page*size; const visible=rows.slice(start,start+size); grid.classList.remove('show-all'); grid.innerHTML=''; if(!visible.length){grid.innerHTML='<div class="state-card">No Prime Picks pass the current accuracy/data-quality guardrails.</div>';} else visible.forEach((m,index)=>grid.appendChild(renderCard(m,Number.isInteger(m.accessIndex)?m.accessIndex:start+index))); $('prevPick').hidden=pageCount<=1; $('nextPick').hidden=pageCount<=1; $('prevPick').disabled=state.page<=0; $('nextPick').disabled=state.page>=pageCount-1; renderDots(pageCount); applyAccessStates(grid); }
+  function renderPredictions(){ const allRows=rankedPredictions(),rows=allRows.slice(0,10),grid=$('predictionGrid'),size=Math.min(5,pageSize()); if(!grid)return; $('matchCount').textContent=allRows.length; const see=$('viewAllButton');if(see)see.hidden=allRows.length<=10; const pageCount=Math.max(1,Math.ceil(rows.length/size)); state.page=Math.min(state.page,pageCount-1); const start=state.page*size; const visible=rows.slice(start,start+size); grid.classList.remove('show-all'); grid.innerHTML=''; if(!visible.length){grid.innerHTML='<div class="state-card">No Prime Picks pass the current accuracy/data-quality guardrails.</div>';} else visible.forEach((m,index)=>grid.appendChild(renderCard(m,Number.isInteger(m.accessIndex)?m.accessIndex:start+index))); $('prevPick').hidden=pageCount<=1; $('nextPick').hidden=pageCount<=1; $('prevPick').disabled=state.page<=0; $('nextPick').disabled=state.page>=pageCount-1; renderDots(pageCount); applyAccessStates(grid); }
 
   function openMatch(m){ const signalRows=m.signals.length?m.signals.map(s=>{const meta=signalMeta(s,m);const favoursId=String(s?.player_id??s?.favours_player_id??'');const favours=favoursId===String(m.p1Id)?m.p1:favoursId===String(m.p2Id)?m.p2:'—';return `<div class="dialog-signal"><span>${escapeHtml(meta.label)}</span><strong>${escapeHtml(favours)}</strong><small>${meta.favours?'supports pick':'counter-signal'}</small></div>`}).join(''):'<p class="signal-empty">No secondary signals are available.</p>'; const betting=Number.isFinite(m.odds)&&m.odds>1?`<div class="dialog-section dialog-market"><h3>Current market snapshot</h3><div class="dialog-market-grid"><span>Odds <strong>${m.odds.toFixed(2)}</strong></span><span>Model edge <strong>${Number.isFinite(m.edge)?`${m.edge>=0?'+':''}${(m.edge*100).toFixed(1)} pp`:'—'}</strong></span><span>EV <strong>${Number.isFinite(m.expectedValue)?`${m.expectedValue>=0?'+':''}${(m.expectedValue*100).toFixed(1)}%`:'—'}</strong></span></div></div>`:''; $('dialogContent').innerHTML=`<div class="dialog-eyebrow">${escapeHtml(m.tour)} · ${escapeHtml(m.tournament)}</div><h2>${escapeHtml(m.p1)} <span>vs</span> ${escapeHtml(m.p2)}</h2><div class="dialog-pick"><div><small>BlinQ Pick</small><strong>${escapeHtml(m.pick)}</strong></div><div class="dialog-prob">${pct(m.probability)} <span class="confidence ${m.confidence}">${m.confidence==='very-high'?'VERY HIGH':m.confidence.toUpperCase()}</span></div></div>${betting}<div class="dialog-section"><h3>Model signals</h3>${signalRows}</div><div class="dialog-meta"><span>${escapeHtml(String(m.surface).replaceAll('_',' '))}</span><span>${fmtDate(m.date)} · ${fmtTime(m.date)}</span><span>Model ${escapeHtml(m.model||'—')}</span></div>`; $('matchDialog').showModal(); }
 
@@ -488,7 +470,7 @@
     responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.']
   };
 
-  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; if(route==='admin') state.previewPlan=null; state.route=route; state.page=0; const meta=routeMeta[route]; const overview=route==='predictions'; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push) history.replaceState(null,'',`#${route}`); }
+  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; if(route==='admin') state.previewPlan=null; state.route=route; state.page=0; const meta=routeMeta[route]; const overview=route==='predictions'; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; const titleBlock=document.querySelector('.dashboard-title-block'); if(titleBlock) titleBlock.hidden=overview; const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();applyAccessStates();} else renderRoute(route); if(push) history.replaceState(null,'',`#${route}`); }
 
   function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
   function issuedMarketPublications(row){
@@ -552,7 +534,7 @@
   }
   function planDefaultExpiry(planId, from=new Date()){
     const plan=state.ui?.plans?.[planId]||{};
-    if(plan.lifetime)return null;
+    if(plan.lifetime||String(plan.billing||'').toLowerCase()==='lifetime')return null;
     const days=Number(plan.duration_days); if(!Number.isFinite(days)||days<=0)return null;
     return new Date(from.getTime()+days*86400000);
   }
@@ -580,7 +562,7 @@
   function renderAdminCanvas(){
     const nav=elementList('navigation').map(x=>adminMiniBlock(x.id,true)).join('');const promos=elementList('sidebar_promo','sidebar').map(x=>adminMiniBlock(x.id,true)).join('');const picks=[...Array(8)].map((_,i)=>adminMiniBlock(`TOP_PICK_${i+1}`,true)).join('')+adminMiniBlock('TOP_PICK_MORE',true);const features=elementList('feature','features').map(x=>adminMiniBlock(x.id,true)).join('');
     const rowBlock=(zone,title)=>`<div class="admin-row-caption"><span>${escapeHtml(title)}</span><b>${escapeHtml(rowPreset(zone))} · ${escapeHtml(rowCreativeSummary(zone))}</b></div><div class="admin-slot-row four preset-${escapeHtml(rowPreset(zone).replaceAll('+','-'))}${rowEnabled(zone)?'':' row-off'}">${adminRowHtml(zone)||'<div class="admin-row-off-label">ROW OFF</div>'}</div>`;
-    return `<div class="admin-canvas"><div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>FIXED</small></div><div class="admin-header-slots">${adminMiniBlock('HEADER_BANNER_1')}${adminMiniBlock('HEADER_BANNER_2')}${adminMiniBlock('HEADER_BANNER_3')}</div></div><div class="admin-canvas-body"><aside class="admin-canvas-sidebar"><b>SIDEBAR</b>${nav}<div class="admin-canvas-divider"></div><b>3 PROMO SLOTS</b>${promos}${features?`<div class="admin-canvas-divider"></div><b>FEATURE FLAGS</b>${features}`:''}</aside><main class="admin-canvas-main"><div class="admin-functional-row">${adminMiniBlock('PREDICTION_TOOLBAR')}</div>${rowBlock('content_top','AD ROW · ABOVE PRIME PICKS')}<div class="admin-prime-map"><div>${adminMiniBlock('PRIME_PICKS_PANEL')}${adminMiniBlock('TOP_DAILY_PANEL')}</div><div class="admin-pick-strip">${picks}</div></div>${rowBlock('content_mid','AD ROW · TOP 10 DAILY → VALUE')}<div class="admin-functional-row">${adminMiniBlock('VALUE_PICKS_PANEL')}${adminMiniBlock('ACE_PICKS_PANEL')}</div>${rowBlock('content_bottom','AD ROW · ACE → S/G')}<div class="admin-functional-row">${adminMiniBlock('SG_PICKS_PANEL')}${adminMiniBlock('DOUBLES_PANEL')}</div><div class="admin-functional-row">${adminMiniBlock('RESULTS_PANEL')}${adminMiniBlock('BTTS_BONUS_PANEL')}</div>${adminMiniBlock('FOOTER_SYSTEM')}</main></div></div>`;
+    return `<div class="admin-canvas"><div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>FIXED</small></div><div class="admin-header-slots">${adminMiniBlock('HEADER_BANNER_1')}${adminMiniBlock('HEADER_BANNER_2')}${adminMiniBlock('HEADER_BANNER_3')}</div></div><div class="admin-canvas-body"><aside class="admin-canvas-sidebar"><b>SIDEBAR</b>${nav}<div class="admin-canvas-divider"></div><b>3 PROMO SLOTS</b>${promos}${features?`<div class="admin-canvas-divider"></div><b>FEATURE FLAGS</b>${features}`:''}</aside><main class="admin-canvas-main"><div class="admin-functional-row">${adminMiniBlock('PREDICTION_TOOLBAR')}</div>${rowBlock('content_top','AD ROW · ABOVE PRIME PICKS')}<div class="admin-prime-map"><div>${adminMiniBlock('PRIME_PICKS_PANEL')}${adminMiniBlock('TOP_DAILY_PANEL')}</div><div class="admin-pick-strip">${picks}</div></div>${rowBlock('content_mid','AD ROW · TOP 10 DAILY → VALUE')}<div class="admin-functional-row">${adminMiniBlock('VALUE_PICKS_PANEL')}${adminMiniBlock('ACE_PICKS_PANEL')}</div>${rowBlock('content_bottom','AD ROW · ACE → S/G')}<div class="admin-functional-row">${adminMiniBlock('SG_PICKS_PANEL')}${adminMiniBlock('DOUBLES_PANEL')}</div><div class="admin-functional-row">${adminMiniBlock('BTTS_BONUS_PANEL')}</div>${adminMiniBlock('FOOTER_SYSTEM')}</main></div></div>`;
   }
 
   function campaignOptions(selected=''){
@@ -630,8 +612,8 @@
       <label class="span-2">Mobile image (optional)<input data-admin-content="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="Optional mobile-specific creative"></label>
       <label>Image fit<select data-admin-content="image_fit"><option value="cover"${(c.image_fit||'cover')==='cover'?' selected':''}>Cover · fill slot</option><option value="contain"${c.image_fit==='contain'?' selected':''}>Contain · show whole image</option></select></label>
       <label>Image position<select data-admin-content="image_position">${['center','left','right','top','bottom'].map(v=>`<option value="${v}"${v===(c.image_position||'center')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label>
-      <label>Show from · optional<input data-admin-content="active_from" type="datetime-local" value="${escapeHtml(c.active_from||'')}"></label>
-      <label>Show until · optional<input data-admin-content="active_until" type="datetime-local" value="${escapeHtml(c.active_until||'')}"></label>
+      <label>Active from<input data-admin-content="active_from" type="datetime-local" value="${escapeHtml(c.active_from||'')}"></label>
+      <label>Active until<input data-admin-content="active_until" type="datetime-local" value="${escapeHtml(c.active_until||'')}"></label>
       <label>When ads are hidden<select data-admin-content="ad_hidden_fallback">${['auto','rss','image','internal'].map(v=>`<option value="${v}"${v===(c.ad_hidden_fallback||'auto')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label>
       <label class="check-field"><input type="checkbox" data-admin-content="sponsored" ${c.sponsored?'checked':''}> Sponsored label</label>
     </div>`;
@@ -657,8 +639,8 @@
   }
 
   function renderAdminPlans(){
-    const plans=Object.entries(state.ui?.plans||{}).filter(([id])=>!['trial','expired'].includes(id)).sort((a,b)=>Number(a[1]?.order||99)-Number(b[1]?.order||99));
-    return `<div class="admin-note"><strong>Membership catalogue</strong><span>No price is rendered in BlinQ. Enable/disable a level and change its external URL/copy here or directly in ui-config.json. LEGEND stays ready but hidden until you enable it.</span></div><div class="admin-plan-grid">${plans.map(([id,p])=>`<article class="admin-plan-card ${p.enabled===false?'disabled':''}" data-plan-card="${escapeHtml(id)}"><div class="admin-plan-head">${planAvatarHtml(id,p)}<small>${escapeHtml(id)}</small><input data-plan-field="label" value="${escapeHtml(p.label||id.toUpperCase())}"><label class="check-field"><input type="checkbox" data-plan-field="enabled" ${p.enabled!==false?'checked':''}> Visible / enabled</label></div><div class="admin-field-grid"><label class="span-2">Description<textarea data-plan-field="description" rows="3">${escapeHtml(p.description||p.note||'')}</textarea></label><label>CTA label<input data-plan-field="cta_label" value="${escapeHtml(p.cta_label||'Open plan')}"></label><label>Avatar level<select data-plan-field="avatar">${['rookie','pro','elite','goat','legend'].map(v=>`<option value="${v}"${v===(p.avatar||id)?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label><label class="span-2">External plan URL<input data-plan-field="url" value="${escapeHtml(p.url||'')}" placeholder="https://..."></label><label>Display order<input data-plan-field="order" type="number" min="1" max="99" value="${Number(p.order||99)}"></label><label>Default duration (days)<input data-plan-field="duration_days" type="number" min="1" value="${p.duration_days??''}" ${p.lifetime?'disabled':''}></label><label class="check-field"><input type="checkbox" data-plan-field="lifetime" ${p.lifetime?'checked':''}> Unlimited / lifetime</label><label class="check-field"><input type="checkbox" ${p.hide_ads_allowed?'checked':''} disabled> Hide Ads eligibility</label></div><div class="admin-plan-term"><span>Default account term</span><strong>${escapeHtml(planTermLabel(id))}</strong></div></article>`).join('')}</div><div class="admin-actions-row"><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Save browser draft</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publish membership changes</button><button class="btn btn-ghost" type="button" data-admin-action="export">Export ui-config.json</button></div>`;
+    const plans=Object.entries(state.ui?.plans||{}).filter(([id])=>!['trial','expired'].includes(id));
+    return `<div class="admin-note"><strong>Plan catalogue</strong><span>Plan defaults come from this JSON/runtime configuration. Account activation remains manual.</span></div><div class="admin-plan-grid">${plans.map(([id,p])=>`<article class="admin-plan-card ${p.enabled===false?'disabled':''}" data-plan-card="${escapeHtml(id)}"><div class="admin-plan-head"><small>${escapeHtml(id)}</small><input data-plan-field="label" value="${escapeHtml(p.label||id.toUpperCase())}"><label class="check-field"><input type="checkbox" data-plan-field="enabled" ${p.enabled!==false?'checked':''}> Enabled</label></div><div class="admin-field-grid"><label>Price<input data-plan-field="price" value="${escapeHtml(p.price||'')}"></label><label>Currency<input data-plan-field="currency" value="${escapeHtml(p.currency||'EUR')}"></label><label>Billing<input data-plan-field="billing" value="${escapeHtml(p.billing||'')}"></label><label>Default duration (days)<input data-plan-field="duration_days" type="number" min="1" value="${p.duration_days??''}" ${p.lifetime?'disabled':''}></label><label class="check-field"><input type="checkbox" data-plan-field="lifetime" ${p.lifetime?'checked':''}> Unlimited / lifetime</label><label class="check-field"><input type="checkbox" ${p.hide_ads_allowed?'checked':''} disabled> Hide Ads eligibility</label><label class="span-2">Payment link<input data-plan-field="payment_link" value="${escapeHtml(p.payment_link||'')}" placeholder="https://..."></label><label class="span-2">Note<textarea data-plan-field="note" rows="2">${escapeHtml(p.note||'')}</textarea></label></div><div class="admin-plan-term"><span>Default account term</span><strong>${escapeHtml(planTermLabel(id))}</strong></div></article>`).join('')}</div><div class="admin-actions-row"><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Save browser draft</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publish plan changes</button><button class="btn btn-ghost" type="button" data-admin-action="export">Export ui-config.json</button></div>`;
   }
   function userDateValue(value){ if(!value)return ''; const d=new Date(value); if(Number.isNaN(d.getTime()))return ''; const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function renderAdminUserEditor(user){
@@ -791,20 +773,14 @@
       if(t.dataset.campaignImage&&state.adminCampaignId){const campaign=state.ui?.campaigns?.[state.adminCampaignId];if(campaign){campaign.images=campaign.images&&typeof campaign.images==='object'?campaign.images:{};campaign.images[String(t.dataset.campaignImage)]=t.value;renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.rssField){state.ui.rss=state.ui.rss||{};let value=t.type==='checkbox'?t.checked:t.value;if(['refresh_minutes','max_age_hours','max_items'].includes(t.dataset.rssField))value=Number(value);state.ui.rss[t.dataset.rssField]=value;rerenderAdmin();return;}
       const sourceCard=t.closest('[data-rss-source]');if(sourceCard&&t.dataset.rssSourceField){const source=state.ui?.rss?.sources?.[Number(sourceCard.dataset.rssSource)];if(source){let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.rssSourceField==='priority')value=Number(value);source[t.dataset.rssSourceField]=value;rerenderAdmin();}return;}
-      const card=t.closest('[data-plan-card]');if(card&&t.dataset.planField){const plan=state.ui.plans?.[card.dataset.planCard];if(plan){let value=t.type==='checkbox'?t.checked:t.value;if(['duration_days','order'].includes(t.dataset.planField))value=value===''?null:Number(value);plan[t.dataset.planField]=value;if(t.dataset.planField==='lifetime'&&value)plan.duration_days=null;rerenderAdmin();}return;}
+      const card=t.closest('[data-plan-card]');if(card&&t.dataset.planField){const plan=state.ui.plans?.[card.dataset.planCard];if(plan){let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.planField==='duration_days')value=value===''?null:Number(value);plan[t.dataset.planField]=value;if(t.dataset.planField==='lifetime'&&value)plan.duration_days=null;rerenderAdmin();}return;}
     };
     const search=$('adminUserSearch');if(search)search.oninput=()=>{const q=search.value.trim().toLowerCase();host.querySelectorAll('.admin-user-row').forEach(row=>{row.hidden=q&&!String(row.dataset.search||'').includes(q);});};
     const form=$('adminUserForm');if(form)form.onsubmit=async event=>{event.preventDefault();const user=state.adminSelectedUser;if(!user)return;const message=$('adminUserMessage');message.textContent='Saving…';try{const rawExpiry=$('adminUserExpires').value,status=$('adminUserStatus').value;if(status==='trial')throw new Error('Choose ACTIVE, EXPIRED or SUSPENDED before saving an automatic trial.');const payload={role:$('adminUserRole').disabled?'admin':$('adminUserRole').value,plan:$('adminUserPlan').value,status,expires_at:rawExpiry?new Date(rawExpiry).toISOString():null,payment_reference:$('adminPaymentReference').value.trim()};const updated=await BlinqAuth.adminUpdateAccess(user.id,payload);state.adminUsers=(state.adminUsers||[]).map(row=>row.id===updated.id?updated:row);state.adminSelectedUser=updated;message.textContent='Applied.';setTimeout(()=>rerenderAdmin(),450);}catch(error){message.textContent=error.message;}};
   }
-  function planAvatarHtml(id,p={}){
-    const style=String(p.avatar||id||'').toLowerCase();
-    const glyph={rookie:'○',pro:'◇',elite:'✦',goat:'♛',legend:'♛'}[style]||'◇';
-    return `<span class="plan-card-avatar plan-${escapeHtml(style)}" aria-label="${escapeHtml((p.label||id).toUpperCase())} avatar"><b aria-hidden="true">${glyph}</b><em>${escapeHtml(String(p.label||id).replace(/^BlinQ\s+/i,'').slice(0,8))}</em></span>`;
-  }
   function renderPlanCardsForAccount(){
-    const current=accountPlan();
-    const plans=Object.entries(state.ui?.plans||{}).filter(([id,p])=>!['trial','expired'].includes(id)&&p.enabled!==false).sort((a,b)=>Number(a[1]?.order||99)-Number(b[1]?.order||99));
-    return `<div class="account-plan-grid">${plans.map(([id,p])=>{const url=String(p.url||'').trim(),active=current===id;return `<article class="membership-card plan-${escapeHtml(id)}${active?' current-plan':''}">${planAvatarHtml(id,p)}<div class="membership-card-copy"><small>${escapeHtml(p.label||id.toUpperCase())}</small><strong>${active?'Current level':'Membership level'}</strong><p>${escapeHtml(p.description||p.note||'')}</p></div>${active?'<span class="membership-current">ACTIVE</span>':url?`<a class="btn btn-primary membership-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Open plan')} →</a>`:'<button class="btn btn-ghost membership-cta" type="button" disabled>Link not set</button>'}</article>`}).join('')}</div>`;
+    const plans=Object.entries(state.ui?.plans||{}).filter(([id,p])=>!['trial','expired'].includes(id)&&p.enabled!==false);
+    return `<div class="account-plan-grid">${plans.map(([id,p])=>`<article><small>${escapeHtml(p.label||id.toUpperCase())}</small><strong>${escapeHtml(p.price?`${p.price} ${p.currency||'EUR'}`:'Price on request')}</strong><span>${escapeHtml(p.billing||'')}</span><p>${escapeHtml(p.note||'')}</p>${p.payment_link?`<a class="btn btn-primary" href="${escapeHtml(p.payment_link)}" target="_blank" rel="noopener">Payment link</a>`:'<button class="btn btn-ghost" type="button" disabled>Payment link not set</button>'}</article>`).join('')}</div>`;
   }
   function primeTableRows(){ return rankedPredictions(); }
   function aceProjectionTable(rows){
@@ -830,16 +806,6 @@
     }).join('');
     return `<div class="admin-table-wrap picks-table-wrap"><table class="admin-analytics-table picks-table"><thead><tr><th>Date</th><th>Match</th><th>Tournament</th><th>Pick</th><th>Probability</th><th>Odds</th><th>Model Edge</th><th>EV</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }
-  function renderDashboardResultsPreview(){
-    const host=$('resultsPreviewContent');if(!host)return;
-    const rows=(state.feed?.results||[]).filter(row=>typeof row?.result?.correct==='boolean');
-    const wins=rows.filter(row=>row.result.correct===true).length,losses=Math.max(0,rows.length-wins),hit=rows.length?wins/rows.length:null;
-    const perf=state.feed?.betting_performance?.overall||state.feed?.performance?.betting?.overall||{};
-    const roi=Number(perf.roi),units=Number(perf.profit_units);
-    host.innerHTML=`<div class="results-preview-metrics"><span><small>Record</small><strong>${wins}-${losses}</strong></span><span><small>Hit rate</small><strong>${hit==null?'—':pct(hit)}</strong></span><span><small>ROI</small><strong>${Number.isFinite(roi)?pct(roi):'—'}</strong></span><span><small>Units</small><strong>${Number.isFinite(units)?`${units>=0?'+':''}${units.toFixed(2)}u`:'—'}</strong></span></div>`;
-    const count=$('resultsPreviewCount');if(count)count.textContent=`${rows.length} settled`;const cardCount=$('resultsSeeAllCardCount');if(cardCount)cardCount.textContent=`${rows.length} settled`;
-  }
-
   function resultsSummary(){
     const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category);
     return metricCards([['Record',`${m.wins}-${m.losses}`,'wins - losses'],['Hit Rate',m.hit==null?'—':pct(m.hit),'filtered settled sample'],['Avg Odds',m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?`${m.oddsSample} odds-backed picks`:'no issued odds'],['ROI',m.roi==null?'—':pct(m.roi),'flat 1u on issued odds'],['Units',m.oddsSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—','profit · flat 1u stake'],['Sample',String(m.sample),'settled published rows']]);
@@ -859,13 +825,12 @@
     else if(route==='players'){const names=[...new Set((feed.upcoming||[]).flatMap(x=>[x.player1?.name,x.player2?.name]).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):'No upcoming players are currently published.'}</div>`;}
     else if(route==='stats'){body=metricCards([['Settled predictions',String(p.n??0),'Published and scored'],['Accuracy',p.accuracy!=null?pct(p.accuracy):'—','Observed results'],['Log loss',number(p.log_loss),'Lower is better'],['Brier score',number(p.brier_score),'Probability quality']])+`<div class="route-sub"><h3>Results</h3>${renderResults()}</div>`;}
     else if(route==='model'||route==='backtests'){const h=report.holdout||{},delta=report.delta_vs_elo||{};body=metricCards([['Model',String(feed.model?.version||'—'),'Production artifact'],['Holdout n',String(h.n??'—'),'Chronological holdout'],['Holdout accuracy',h.accuracy!=null?pct(h.accuracy):'—','Evaluation report'],['Δ log loss vs Elo',delta.log_loss!=null?number(delta.log_loss):'—','Negative is better']])+`<div class="route-sub static-copy"><h3>Data window</h3><p>${escapeHtml(history.start?fmtDate(history.start):'—')} → ${escapeHtml(history.end?fmtDate(history.end):'—')} · ${escapeHtml(String(history.matches??'—'))} historical matches in the current serving metadata.</p><p>No result here is presented as a guarantee. Holdout metrics describe a specific historical evaluation period.</p></div>`;}
-    else if(route==='account'){const a=feed.account||{},avatarSrc=accountAvatarUrl(a);const adToggle=a.hide_ads_allowed?`<label class="preference-toggle"><span><strong>Hide advertisements</strong><small>Replace external ads with RSS/news, repo images or BlinQ content. Layout stays fixed.</small></span><input id="hideAdsToggle" type="checkbox" ${a.hide_ads?'checked':''}></label>`:'';const avatarFallback=accountAvatarFallback(a);const avatarPreview=`<span class="account-avatar-preview" id="accountAvatarPreview">${escapeHtml(avatarFallback)}</span>`;body=`<div class="account-grid"><form id="profileForm" class="account-panel"><div class="account-access-summary"><small>${escapeHtml(a.plan_label||a.plan||'Member')}</small><strong>${escapeHtml(String(a.status||'active').toUpperCase())}</strong><span>${a.expires_at?`until ${escapeHtml(fmtDate(a.expires_at))}`:a.status==='lifetime'?'no expiry':'managed manually'}</span></div><label>Email<input value="${escapeHtml(a.email||'')}" disabled /></label><label>Display name<input id="profileDisplayName" maxlength="80" value="${escapeHtml(a.name||'')}" /></label><label>Avatar variant<select id="profileAvatarVariant"><option value="" ${!a.avatar_variant?'selected':''}>Initials</option><option value="m" ${a.avatar_variant==='m'?'selected':''}>M</option><option value="w" ${a.avatar_variant==='w'?'selected':''}>W</option></select></label>${adToggle}<p id="profileMessage" class="form-message"></p><div class="account-actions"><button class="btn btn-primary" type="submit">Save profile</button><button class="btn btn-ghost" id="passwordResetButton" type="button">Reset password</button><button class="btn btn-ghost" id="logoutButton" type="button">Sign out</button></div></form><aside class="account-side">${avatarPreview}<small class="trial-eyebrow">BLINQ MEMBERS</small><strong>${escapeHtml(a.name||'BlinQ Member')}</strong><p>${escapeHtml(a.email||'')}</p><p>Role: ${escapeHtml(a.role||'user')} · Plan: ${escapeHtml(a.plan_label||a.plan||'—')}</p><p>Payments are external; access is paired to the account by an administrator.</p></aside></div><div class="route-sub"><h3>Available plans</h3>${renderPlanCardsForAccount()}</div>`;}
+    else if(route==='account'){const a=feed.account||{},avatarSrc=accountAvatarUrl(a);const adToggle=a.hide_ads_allowed?`<label class="preference-toggle"><span><strong>Hide advertisements</strong><small>Replace external ads with RSS/news, repo images or BlinQ content. Layout stays fixed.</small></span><input id="hideAdsToggle" type="checkbox" ${a.hide_ads?'checked':''}></label>`:'';const avatarPreview=avatarSrc?`<span class="account-avatar-preview has-photo"><img src="${escapeHtml(avatarSrc)}" alt="" /></span>`:`<span class="account-avatar-preview">${escapeHtml(initials(a.name||a.email||'B'))}</span>`;body=`<div class="account-grid"><form id="profileForm" class="account-panel"><div class="account-access-summary"><small>${escapeHtml(a.plan_label||a.plan||'Member')}</small><strong>${escapeHtml(String(a.status||'active').toUpperCase())}</strong><span>${a.expires_at?`until ${escapeHtml(fmtDate(a.expires_at))}`:a.status==='lifetime'?'no expiry':'managed manually'}</span></div><label>Email<input value="${escapeHtml(a.email||'')}" disabled /></label><label>Display name<input id="profileDisplayName" maxlength="80" value="${escapeHtml(a.name||'')}" /></label><label>Avatar variant<select id="profileAvatarVariant"><option value="" ${!a.avatar_variant?'selected':''}>Initials</option><option value="m" ${a.avatar_variant==='m'?'selected':''}>M</option><option value="w" ${a.avatar_variant==='w'?'selected':''}>W</option></select></label>${adToggle}<p id="profileMessage" class="form-message"></p><div class="account-actions"><button class="btn btn-primary" type="submit">Save profile</button><button class="btn btn-ghost" id="passwordResetButton" type="button">Reset password</button><button class="btn btn-ghost" id="logoutButton" type="button">Sign out</button></div></form><aside class="account-side">${avatarPreview}<small class="trial-eyebrow">BLINQ MEMBERS</small><strong>${escapeHtml(a.name||'BlinQ Member')}</strong><p>${escapeHtml(a.email||'')}</p><p>Role: ${escapeHtml(a.role||'user')} · Plan: ${escapeHtml(a.plan_label||a.plan||'—')}</p><p>Payments are external; access is paired to the account by an administrator.</p></aside></div><div class="route-sub"><h3>Available plans</h3>${renderPlanCardsForAccount()}</div>`;}
     else {const copy={how_blinq_works:'BlinQ processes point-in-time tennis history, builds model features without using future results, publishes pre-match probabilities, and later evaluates those same published records against real outcomes.',methodology:'The core rules are chronological evaluation, immutable first-published probabilities, explicit missing-data handling, and honest probability metrics. A prediction is informative only when it existed before the match.',model_data:`Current serving metadata reports ${history.matches??'—'} historical matches. The web application reads only the authenticated published serving feed; it does not fabricate missing tennis data.`,faq:'Probabilities are not certainties. Confidence is derived from the model probability, and performance should always be read together with sample size and coverage.',responsible_use:'Use BlinQ as analytical information. Do not treat any probability as a guaranteed outcome, and do not infer certainty from a high-confidence label.'};body=`<div class="static-copy"><p>${escapeHtml(copy[route]||'This section is available in the BlinQ workspace.')}</p></div>`;}
-    host.innerHTML=`<div class="route-card route-card-clean">${body}</div>`; if(route==='account')wireAccount(); if(route==='results')wireResultsFilters(); applyAccessStates(host);
+    host.innerHTML=`<div class="route-card"><h2>${escapeHtml(routeMeta[route][1])}</h2><p>${escapeHtml(routeMeta[route][2])}</p>${body}</div>`; if(route==='account')wireAccount(); if(route==='results')wireResultsFilters(); applyAccessStates(host);
   }
 
   function wireAccount(){
-    setAccountAvatar($('accountAvatarPreview'),state.feed?.account||{});
     $('profileForm').onsubmit=async e=>{e.preventDefault();const msg=$('profileMessage');msg.textContent='Saving…';try{await BlinqAuth.update({data:{display_name:$('profileDisplayName').value.trim(),blinq_avatar_variant:$('profileAvatarVariant')?.value||''}});await loadFeed(false);setRoute('account',false);$('profileMessage').textContent='Profile saved.';}catch(err){msg.textContent=err.message;}};
     const hideAds=$('hideAdsToggle');if(hideAds)hideAds.onchange=async()=>{const msg=$('profileMessage');msg.textContent='Updating ad preference…';try{await BlinqAuth.update({data:{blinq_hide_ads:hideAds.checked}});await loadFeed(false);setRoute('account',false);$('profileMessage').textContent='Ad preference saved.';}catch(err){msg.textContent=err.message;}};
     $('passwordResetButton').onclick=async()=>{const email=state.feed.account?.email;if(!email)return;const msg=$('profileMessage');msg.textContent='Sending…';try{await BlinqAuth.reset(email);msg.textContent='Recovery email requested.';}catch(err){msg.textContent=err.message;}};
@@ -882,7 +847,7 @@
       const resolvedPlan=accountPlan();
       const planLabel=a.plan_label||state.ui?.plans?.[resolvedPlan]?.label||a.plan||'Member';
       $('profilePlan').textContent=planLabel;
-      const planIcon={admin:'♛',rookie:'○',pro:'◇',elite:'✦',goat:'♛',legend:'♛',expired:'○'}[resolvedPlan]||'◇';
+      const planIcon={admin:'⚙',rookie:'○',pro:'◇',elite:'✦',goat:'♛',legend:'♛',expired:'○'}[resolvedPlan]||'◇';
       const planIconHost=$('profilePlanIcon');if(planIconHost)planIconHost.textContent=planIcon;
       const member=$('memberStatus');
       if(member){
@@ -891,13 +856,11 @@
       }
       const profileButton=$('profileButton');if(profileButton)profileButton.dataset.plan=resolvedPlan;
       setAccountAvatar($('avatar'),a);
-      $('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—'; $('todayLabel').textContent=fmtToday(); updateHeaderClock(); const sidebarModel=$('sidebarModelState'); if(sidebarModel)sidebarModel.textContent=feed?.model?.version?`Model ${feed.model.version}`:'Production feed'; const headerModel=$('headerModelState');if(headerModel)headerModel.textContent=feed?.model?.version?String(feed.model.version):'Production';
+      $('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—'; $('todayLabel').textContent=fmtToday(); const sidebarModel=$('sidebarModelState'); if(sidebarModel)sidebarModel.textContent=feed?.model?.version?`Model ${feed.model.version}`:'Production feed'; const headerModel=$('headerModelState');if(headerModel)headerModel.textContent=feed?.model?.version?String(feed.model.version):'Production';
       $('staleNotice').hidden=!feed.stale; $('staleNotice').textContent=feed.stale?'Published data is older than 12 hours. Check prediction creation times before evaluating them.':''; $('appShell').hidden=false; if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();
     }catch(error){if(error.status===401){BlinqAuth.clear();auth('login');return;}showStatus('Data could not be loaded. Try again shortly.');throw error;}
   }
-
-  function updateHeaderClock(){const date=$('headerDate'),time=$('headerTime');if(date)date.textContent=fmtToday();if(time)time.textContent=fmtClock();}
 
   function showStatus(message){const n=$('statusBanner');n.textContent=message;n.hidden=!message;if(message)setTimeout(()=>{n.hidden=true},5000)}
 
@@ -916,6 +879,6 @@
     let resizeTimer; window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.route==='predictions'){state.page=0;renderPredictions();}},120)});
   }
 
-  async function boot(){ setupEvents(); updateHeaderClock(); setInterval(updateHeaderClock,30000); await loadUiConfig(); const hash=location.hash.replace(/^#/,''); if(routeMeta[hash])state.route=hash; try{const cfg=await BlinqAuth.init();state.authEnabled=Boolean(cfg.enabled);if(cfg.recovery){auth('recovery');return;}const session=await BlinqAuth.restore();if(session)await loadFeed();else auth('login');}catch(error){showStatus(error.message);auth('login');} }
+  async function boot(){ setupEvents(); await loadUiConfig(); const hash=location.hash.replace(/^#/,''); if(routeMeta[hash])state.route=hash; try{const cfg=await BlinqAuth.init();state.authEnabled=Boolean(cfg.enabled);if(cfg.recovery){auth('recovery');return;}const session=await BlinqAuth.restore();if(session)await loadFeed();else auth('login');}catch(error){showStatus(error.message);auth('login');} }
   boot();
 })();
