@@ -24,6 +24,7 @@ from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.engine import predict, reconcile_ledger, serving_feed
 from tbt.services.publication import (
     validate_market_publication_candidate,
+    restore_published_market_snapshots,
     validate_publication_candidate,
 )
 from tbt.services.ace_selection import select_ace_picks
@@ -272,6 +273,7 @@ def _load_prediction_ledger(store):
         raise ValueError("Invalid prediction ledger")
     validate_publication_candidate(feed, ledger)
     if (feed.get("market_selection") or {}).get("publication_schema") == 1:
+        feed = restore_published_market_snapshots(feed, ledger)
         validate_market_publication_candidate(feed, ledger)
     return ledger
 
@@ -298,6 +300,9 @@ def _publish_predictions(
         sg_picks=sg_picks, sg_report=sg_report,
     )
     feed = clean(feed)
+    feed = restore_published_market_snapshots(feed, records)
+    validate_publication_candidate(feed, records)
+    validate_market_publication_candidate(feed, records)
     write_json(store.directory / "ledger.json", records)
     write_json(store.directory / "feed.json", feed)
     store.upload_bundle([store.directory / "ledger.json", store.directory / "feed.json"])

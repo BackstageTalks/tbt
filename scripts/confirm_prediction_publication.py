@@ -14,6 +14,7 @@ from tbt.services.publication import (
     confirm_market_publications,
     confirm_publication,
     validate_market_publication_candidate,
+    restore_published_market_snapshots,
     validate_publication_candidate,
 )
 
@@ -130,6 +131,9 @@ def main(argv=None):
     feed = read_json(directory / "feed.json", {})
     if not isinstance(ledger, list) or not isinstance(feed, dict):
         raise ValueError("Invalid prediction publication artifacts")
+
+    if (feed.get("market_selection") or {}).get("publication_schema") == 1:
+        feed = restore_published_market_snapshots(feed, ledger)
 
     if deployed_feed is None:
         deployed_feed = feed

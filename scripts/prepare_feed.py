@@ -13,6 +13,7 @@ from release_store import ReleaseStore
 from tbt.services.feed import empty_feed, read_feed
 from tbt.services.publication import (
     validate_market_publication_candidate,
+    restore_published_market_snapshots,
     validate_publication_candidate,
 )
 
@@ -246,6 +247,7 @@ def main() -> None:
             ledger = json.loads((cache / "ledger.json").read_text(encoding="utf-8"))
             validate_publication_candidate(payload, ledger)
             if (payload.get("market_selection") or {}).get("publication_schema") == 1:
+                payload = restore_published_market_snapshots(payload, ledger)
                 validate_market_publication_candidate(payload, ledger)
             payload = _attach_player_assets(payload, repository)
 
