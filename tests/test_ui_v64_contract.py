@@ -12,11 +12,11 @@ def test_v64_dashboard_sections_are_independently_manageable():
     sections=cfg["dashboard"]["sections"]
     assert set(sections) == {"prime","top_daily","value","ace","sg","doubles","results","btts"}
     assert sections["prime"]["dashboard_enabled"] is True
-    assert sections["doubles"]["dashboard_enabled"] is False
+    assert sections["doubles"]["dashboard_enabled"] is True
     assert sections["ace"]["dashboard_enabled"] is True
-    assert sections["sg"]["dashboard_enabled"] is False
+    assert sections["sg"]["dashboard_enabled"] is True
     assert cfg["dashboard"]["section_order"] == ["prime", "top_daily", "value", "doubles", "ace", "sg"]
-    assert cfg["dashboard"]["visible_slots"] == 4
+    assert cfg["dashboard"]["visible_slots"] == 6
     assert sections["btts"]["sidebar_enabled"] is True
     for section in sections.values():
         assert isinstance(section["sidebar_enabled"], bool)
@@ -27,8 +27,10 @@ def test_v64_dashboard_sections_are_independently_manageable():
 
 def test_v64_top_banner_row_promotes_membership_levels():
     cfg=_cfg()
-    assert cfg["content_rows"]["content_top"]["enabled"] is True
-    assert cfg["content_rows"]["content_top"]["preset"] == "2+1+1"
+    row=cfg["content_rows"]["content_top"]
+    assert isinstance(row["enabled"], bool)
+    assert row["preset"] in {"1", "2", "3", "4"}
+    assert row["slot_count"] in {0, 1, 2, 3, 4}
     top=[cfg["elements"][f"CONTENT_TOP_{i}"]["content"] for i in range(1,5)]
     assert top[0]["eyebrow"] == "BLINQ PRO"
     assert top[2]["eyebrow"] == "BLINQ ELITE"

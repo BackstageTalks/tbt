@@ -101,4 +101,4 @@ The fixed dashboard order is:
 8. S/G Picks
 9. BTTS Bonus BETA
 
-Prime Picks are all Match Winner predictions above the configured probability threshold (default 70%), with no odds or count requirement. Top 10 Daily is a future daily betting shortlist across supported tennis markets. Value defaults to odds > 1.70 and maximum 15% implied-probability gap. Ace Picks cover Aces/Double Faults, S/G covers Sets/Games, and BTTS links to the separate football `/btts` product.
+Prime Picks are all Match Winner predictions above the configured probability threshold (default 70%), with no odds or count requirement. Top 10 Daily is a future daily betting shortlist across supported tennis markets. Value defaults to odds > 1.70 and maximum 15% implied-probability gap. Ace Picks cover Aces/Double Faults, S/G covers Sets/Games, and BTTS links to the separate football `#btts` product.

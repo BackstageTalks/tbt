@@ -25,7 +25,7 @@
 - Added CONTENT_MID_1..4 while preserving existing top/bottom slot identities.
 - Moved Prime filters directly into the Prime Picks panel.
 - Added fixed dashboard sections: Prime, Top 10 Daily, Value, Ace, S/G, BTTS Bonus BETA.
-- Added dedicated sidebar routes for those sections plus Results and `/btts`.
+- Added dedicated sidebar routes for those sections plus Results and `#btts`.
 - Added third sidebar promo slot.
 - Added compact horizontal banner creative specs, minimum sizes, safe areas, mobile creative, fit and positioning controls.
 - Retained per-banner editable watermark overlay (`COMING SOON` by default).

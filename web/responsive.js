@@ -90,16 +90,16 @@
     if (!node) return;
     let time = '';
     if (publishedAt && Number.isFinite(Date.parse(publishedAt))) {
-      time = new Intl.DateTimeFormat(document.documentElement.lang || 'en', {month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'}).format(new Date(publishedAt));
+      time = new Intl.DateTimeFormat(document.documentElement.lang || 'en', {hour: '2-digit', minute: '2-digit'}).format(new Date(publishedAt));
     }
     node.dataset.state = status;
     node.textContent = {
-      loading: 'Refreshing picks…',
-      ready: time ? `Updated ${time} · Auto-refresh on` : 'Connected · Auto-refresh on',
-      stale: 'Older published data · Waiting for a new update',
-      error: 'Refresh failed · Please retry',
-      offline: 'You are offline · Displayed picks may be out of date'
-    }[status] || 'Connecting…';
+      loading: 'LIVE · Refreshing…',
+      ready: time ? `LIVE · ${time}` : 'LIVE · Connected',
+      stale: time ? `STALE · ${time}` : 'STALE · Waiting for update',
+      error: 'REFRESH FAILED',
+      offline: 'OFFLINE · Cached data'
+    }[status] || 'LIVE · Connecting…';
     $('syncRefresh').disabled = status === 'loading';
   }
   function refreshFinished() { $('syncRefresh').disabled = false; }

@@ -1,10 +1,684 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/responsive.css"><title>BlinQ v6.5.9 preview</title></head><body>
+<a class="skip-link" href="#mainContent">Skip to content</a>
+<noscript><p class="no-script">BlinQ needs JavaScript to sign in and load current predictions. Please enable it in your browser.</p></noscript>
+<div class="status-banner" hidden="" id="statusBanner" role="status"></div>
+<div class="app-shell dashboard-shell app-shell-topnav" hidden="" id="appShell">
+<!-- Legacy drawer hooks remain in the DOM for backwards-compatible JS, but the public layout is top-navigation only. -->
+<button aria-label="Close navigation" class="nav-backdrop legacy-nav-hook" hidden="" id="navBackdrop" type="button"></button>
+<aside aria-label="Legacy navigation" class="sidebar dashboard-sidebar legacy-nav-hook" hidden="" id="appNavigation">
+<button aria-label="Close navigation" class="mobile-menu-close" id="menuClose" type="button">×</button>
+<nav aria-label="Administration" class="nav-section nav-admin" hidden="" id="adminNavigationWrap"><div class="nav-items" id="adminNavigation"></div></nav>
+</aside>
+<main class="main dashboard-main" id="mainContent" tabindex="-1">
+<header class="app-header dashboard-topbar">
+<button aria-controls="appNavigation" aria-expanded="false" aria-label="Open navigation" class="mobile-menu-button legacy-nav-hook" id="menuToggle" type="button"><span aria-hidden="true">☰</span></button>
+<div class="header-primary">
+<a aria-label="BlinQ home" class="top-brand" data-route="predictions" href="#predictions">
+<img alt="BlinQ" class="top-brand-logo" src="/assets/blinq_logo.svg"/>
+<span class="top-brand-copy"><strong>STATISTICAL ENGINE</strong><small>by BackstageTalks</small></span>
+</a>
+<section aria-label="BlinQ community and promotion links" class="header-feature-strip" id="headerFeatureStrip"></section>
+<div class="topbar-actions dashboard-account-actions">
+<button class="btn top-upgrade" data-route="account" id="topUpgradeButton" type="button"><span aria-hidden="true">✦</span><span id="topUpgradeLabel">Plans</span></button>
+<div class="profile-shell" id="profileShell">
+<button aria-label="Open account and membership" class="profile-button profile-button-large" id="profileButton" type="button">
+<span class="profile-avatar-anchor">
+<span class="avatar avatar-large" id="avatar">B</span>
+<span class="account-hover-tooltip" id="accountHoverTooltip" role="tooltip">
+<strong id="tooltipAccountName">BlinQ User</strong>
+<span id="tooltipAccountEmail">—</span>
+<span class="tooltip-meta-row"><em>Level</em><b id="tooltipAccountPlan">Member</b></span>
+<span class="tooltip-meta-row"><em>Remaining</em><b id="tooltipAccountRemaining">—</b></span>
+</span>
+</span>
+<span class="profile-copy">
+<span class="profile-name-row"><strong id="profileName">BlinQ User</strong></span>
+<span class="profile-membership-row"><span class="profile-tier"><span aria-hidden="true" class="profile-tier-icon" id="profilePlanIcon">◇</span><span id="profilePlan">Member</span></span><span class="profile-status"><i aria-hidden="true"></i><span id="memberStatus">Active</span></span></span>
+</span>
+</button>
+<button aria-controls="profileMenu" aria-expanded="false" aria-label="Open account menu" class="ui-chevron profile-menu-toggle" id="profileMenuToggle" type="button"><span aria-hidden="true">⌄</span></button>
+<div class="profile-menu" hidden="" id="profileMenu">
+<button data-route="account" type="button"><span>◎</span><span><strong>Account &amp; membership</strong><small>Profile, access and plans</small></span></button>
+<button data-route="admin" hidden="" id="profileAdminLink" type="button"><span>⚙</span><span><strong>Admin</strong><small>Control center</small></span></button>
+<button id="headerLogoutButton" type="button"><span>↪</span><span><strong>Sign out</strong><small>End this session</small></span></button>
+</div>
+</div>
+<div aria-label="Current local date and time" class="dashboard-datetime legacy-nav-hook"><strong id="headerTime">—</strong><span id="headerDate">—</span></div>
+<span class="legacy-nav-hook" id="headerModelState">Production</span>
+</div>
+</div>
+<nav aria-label="Main navigation" class="top-navigation"><div class="nav-items" id="mainNavigation"></div></nav>
+</header>
+<section class="route-context-meta route-heading" id="routeHeading">
+<span id="pageEyebrow">TENNIS INTELLIGENCE</span>
+<h1 id="pageTitle" tabindex="-1">Dashboard</h1>
+<span id="pageSubtitle">Recommended Prime Picks and current tennis intelligence.</span>
+<span hidden="" id="todayLabel"></span>
+</section>
+<section class="inline-notice" hidden="" id="staleNotice"></section>
+<div id="predictionsView">
+<section aria-label="Main BlinQ banner" aria-live="off" class="dashboard-hero-stage" id="dashboardHero"></section>
+<div class="sync-bar" id="syncBar"><span class="sync-state" id="syncStatus" role="status">LIVE · Connecting…</span><span class="sync-copy">Auto-refresh on</span><button aria-label="Refresh published data" class="sync-refresh" id="syncRefresh" type="button">↻ Refresh</button></div>
+<section aria-label="Dashboard section visibility" class="dashboard-section-switcher" hidden="" id="dashboardSectionSwitcher">
+<div class="dashboard-section-toggles" id="dashboardSectionToggles"></div>
+<div class="dashboard-section-status"><span aria-hidden="true">⌁</span><div><strong id="dashboardSectionsStatus">4 of 6 sections shown</strong><small>Turn a section off and the next one moves into its place.</small></div></div>
+</section>
+<section aria-label="Advertising row above dashboard picks" class="promo-grid ad-row" id="bannerTop"></section>
+<section class="picks-panel prime-panel" data-ui-element="PRIME_PICKS_PANEL" id="predictionsPanel">
+<div class="panel-head picks-head">
+<div><div class="section-kicker"><span>✦</span> Prime Picks</div></div>
+<div class="panel-actions">
+<span class="feed-status"><i></i><span>Live · updated <strong id="updatedAt">—</strong></span></span>
+<span class="match-count"><strong id="matchCount">0</strong> picks</span>
+<button class="btn btn-ghost" id="refreshButton" type="button">↻ Refresh</button>
+</div>
+</div>
+<section aria-label="Prime Picks filters" class="toolbar dashboard-toolbar prime-toolbar" data-ui-element="PREDICTION_TOOLBAR" hidden="" id="predictionToolbar">
+<select aria-label="Tour" id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select>
+<select aria-label="Tournament" id="tournamentFilter"><option value="">All Tournaments</option></select>
+<select aria-label="Surface" id="surfaceFilter"><option value="">All Surfaces</option></select>
+<select aria-label="Confidence" id="confidenceFilter"><option value="">All Confidence</option></select>
+<input aria-label="Search players or tournaments" id="searchInput" type="search"/>
+</section>
+<div class="pick-carousel-shell" id="pickCarouselShell">
+<button aria-label="Previous Prime Picks" class="carousel-arrow carousel-arrow-left" id="prevPick" type="button">‹</button>
+<div class="pick-carousel" id="predictionGrid">
+<div class="state-card">Loading Prime Picks…</div>
+</div>
+<button aria-label="Next Prime Picks" class="carousel-arrow carousel-arrow-right" id="nextPick" type="button">›</button>
+</div>
+<div aria-label="Prime Picks carousel pages" class="carousel-dots" id="carouselDots"></div>
+<a class="section-see-all-card" data-route="prime" href="#prime" id="primeSeeAllCard"><span>Prime Picks</span><strong id="primeSeeAllCardCount">0 published</strong><b>See more →</b></a>
+</section>
+<section class="picks-panel market-panel" data-ui-element="TOP_DAILY_PANEL" id="topDailyPanel">
+<div class="panel-head picks-head"><div><div class="section-kicker"><span>★</span> Top Bets</div></div><div class="section-actions"><span class="section-count" id="topDailyCount">0 picks</span></div></div>
+<div class="market-carousel-shell"><button aria-label="Previous Top Bets" class="market-arrow prev" data-market-prev="top_daily" type="button">‹</button><div class="market-preview-grid" id="topDailyGrid"><div class="state-card">Top Bets selector output is not published yet.</div></div><button aria-label="Next Top Bets" class="market-arrow next" data-market-next="top_daily" type="button">›</button></div>
+<a class="section-see-all-card" data-route="top_daily" href="#top_daily"><span>Top Bets</span><strong id="topDailySeeAllCardCount">0 published</strong><b>See more →</b></a>
+</section>
+<section aria-label="Advertising row between Top Bets and Value Picks" class="promo-grid ad-row" id="bannerMid"></section>
+<section class="picks-panel market-panel" data-ui-element="VALUE_PICKS_PANEL" id="valuePanel">
+<div class="panel-head picks-head"><div><div class="section-kicker"><span>◇</span> Value Picks</div></div><div class="section-actions"><span class="section-count" id="valueCount">0 picks</span></div></div>
+<div class="market-carousel-shell"><button aria-label="Previous Value Picks" class="market-arrow prev" data-market-prev="value" type="button">‹</button><div class="market-preview-grid" id="valueGrid"><div class="state-card">Value selector output is not published yet.</div></div><button aria-label="Next Value Picks" class="market-arrow next" data-market-next="value" type="button">›</button></div>
+<a class="section-see-all-card" data-route="value" href="#value"><span>Value Picks</span><strong id="valueSeeAllCardCount">0 published</strong><b>See more →</b></a>
+</section>
+<section class="picks-panel market-panel" data-ui-element="ACE_PICKS_PANEL" id="acePanel">
+<div class="panel-head picks-head"><div><div class="section-kicker"><span>♠</span> Ace Picks</div></div><div class="section-actions"><span class="section-count" id="aceCount">0 picks</span></div></div>
+<div class="market-carousel-shell"><button aria-label="Previous Ace Picks" class="market-arrow prev" data-market-prev="ace" type="button">‹</button><div class="market-preview-grid" id="aceGrid"><div class="state-card">Aces / Double Faults model output is not published yet.</div></div><button aria-label="Next Ace Picks" class="market-arrow next" data-market-next="ace" type="button">›</button></div>
+<a class="section-see-all-card" data-route="ace" href="#ace"><span>Ace Picks</span><strong id="aceSeeAllCardCount">0 published</strong><b>See more →</b></a>
+</section>
+<section aria-label="Advertising row between Ace Picks and S/G Picks" class="promo-grid ad-row" id="bannerBottom"></section>
+<section class="picks-panel market-panel" data-ui-element="SG_PICKS_PANEL" id="sgPanel">
+<div class="panel-head picks-head"><div><div class="section-kicker"><span>▥</span> S/G Picks</div></div><div class="section-actions"><span class="section-count" id="sgCount">0 picks</span></div></div>
+<div class="market-carousel-shell"><button aria-label="Previous S/G Picks" class="market-arrow prev" data-market-prev="sg" type="button">‹</button><div class="market-preview-grid" id="sgGrid"><div class="state-card">Sets / Games model output is not published yet.</div></div><button aria-label="Next S/G Picks" class="market-arrow next" data-market-next="sg" type="button">›</button></div>
+<a class="section-see-all-card" data-route="sg" href="#sg"><span>S/G Picks</span><strong id="sgSeeAllCardCount">0 published</strong><b>See more →</b></a>
+</section>
+<section class="picks-panel market-panel doubles-panel" data-ui-element="DOUBLES_PANEL" id="doublesPanel">
+<div class="panel-head picks-head"><div><div class="section-kicker"><span>◈</span> Doubles</div></div><div class="section-actions"><span class="section-count" id="doublesCount">0 picks</span></div></div>
+<div class="market-carousel-shell"><button aria-label="Previous Doubles picks" class="market-arrow prev" data-market-prev="doubles" type="button">‹</button><div class="market-preview-grid" id="doublesGrid"><div class="state-card market-empty">Doubles model is not enabled yet.</div></div><button aria-label="Next Doubles picks" class="market-arrow next" data-market-next="doubles" type="button">›</button></div>
+<a class="section-see-all-card" data-route="doubles" href="#doubles"><span>Doubles</span><strong id="doublesSeeAllCardCount">0 published</strong><b>See more →</b></a>
+</section>
+<section class="picks-panel market-panel results-preview-panel" data-ui-element="RESULTS_PANEL" id="resultsPreviewPanel">
+<div class="panel-head picks-head"><div><div class="section-kicker"><span>✓</span> Results</div></div><div class="section-actions"><span class="section-count" id="resultsPreviewCount">0 settled</span></div></div>
+<div class="results-preview-content" id="resultsPreviewContent"></div>
+<a class="section-see-all-card" data-route="results" href="#results"><span>Results</span><strong id="resultsSeeAllCardCount">0 settled</strong><b>See more →</b></a>
+</section>
+<section class="picks-panel market-panel btts-panel" data-ui-element="BTTS_BONUS_PANEL" id="bttsBonusPanel">
+<div class="panel-head picks-head"><div><div class="section-kicker"><span>⚽</span> BTTS Bonus <em class="beta-tag">BETA</em></div></div></div>
+<a class="btts-teaser" data-route="btts" href="#btts"><span>FOOTBALL · BETA</span><strong>Both Teams To Score</strong><small>Open the dedicated BTTS page →</small></a>
+<a class="section-see-all-card" data-route="btts" href="#btts"><span>BTTS Bonus</span><strong>Football · BETA</strong><b>Open →</b></a>
+</section>
+<section aria-label="Disabled dashboard sections" class="dashboard-disabled-sections" hidden="" id="dashboardDisabledSections"></section>
+</div>
+<section class="route-panel" hidden="" id="routePanel"></section>
+<footer class="site-footer" data-ui-element="FOOTER_SYSTEM">
+<div class="footer-main-row">
+<a aria-label="BlinQ home" class="footer-logo-link" data-route="predictions" href="#predictions"><img alt="BlinQ" class="footer-logo" src="/assets/blinq_logo.svg"/></a>
+<span>© 2026 BlinQ</span>
+<nav aria-label="Learn navigation" class="footer-learn-nav" id="footerLearnNavigation"></nav>
+</div>
+<div class="footer-bottom-row">
+<p>This data is provided for informational and analytical purposes only. Powered by BackstageTalks Statistical Engine.</p>
+<div class="footer-right-stack">
+<div aria-label="Live model status" class="footer-model-state"><i aria-hidden="true"></i><span><strong>Live model</strong><small id="footerModelState">Production feed</small></span></div>
+<nav aria-label="Language versions" class="footer-languages" id="footerLanguages"><span>LANGUAGE</span><a data-lang="en" href="?lang=en#predictions">EN</a><a data-lang="sk" href="?lang=sk#predictions">SK</a></nav>
+</div>
+</div>
+</footer>
+</main>
+<nav aria-label="Quick navigation" class="mobile-tabs" id="mobileTabs"><a data-route="predictions" href="#predictions"><span aria-hidden="true">⌂</span>Dashboard</a><a data-route="results" href="#results"><span aria-hidden="true">✓</span>Results</a><a data-route="account" href="#account"><span aria-hidden="true">✦</span>Plans</a></nav>
+</div>
+<dialog aria-labelledby="authTitle" class="auth-dialog" id="authDialog">
+<div class="auth-brand"><img alt="BlinQ" class="auth-logo" src="/assets/blinq_logo.svg"/></div>
+<div class="auth-intro">
+<h2 id="authTitle">Welcome back.</h2>
+<p id="authSubtitle">Sign in to your tennis intelligence workspace.</p>
+<span class="auth-engine">STATISTICAL ENGINE · BACKSTAGETALKS</span>
+</div>
+<form id="authForm">
+<label hidden="" id="nameLabel">Display name
+        <span class="auth-field"><span aria-hidden="true" class="auth-field-icon">○</span><input autocomplete="name" id="authName" maxlength="80"/></span>
+</label>
+<label id="emailLabel">Email
+        <span class="auth-field"><span aria-hidden="true" class="auth-field-icon">✉</span><input autocomplete="email" id="authEmail" placeholder="Enter your email" required="" type="email"/></span>
+</label>
+<label id="passwordLabel">Password
+        <span class="auth-field"><span aria-hidden="true" class="auth-field-icon">⌑</span><input autocomplete="current-password" id="authPassword" minlength="8" placeholder="Enter your password" required="" type="password"/><button aria-label="Show password" aria-pressed="false" class="auth-password-toggle" id="authPasswordToggle" type="button">Show</button></span>
+</label>
+<p aria-live="polite" id="authMessage" role="status"></p>
+<button class="btn btn-primary btn-full" id="authSubmit" type="submit">Sign in</button>
+</form>
+<div class="auth-links"><button id="switchSignup" type="button">Create account</button><button id="switchReset" type="button">Forgot password</button><button hidden="" id="resendVerification" type="button">Resend verification email</button></div>
+<div class="auth-footer">Powered by BackstageTalks Statistical Engine</div>
+</dialog>
+<dialog aria-label="Match analysis" class="match-dialog" id="matchDialog">
+<button aria-label="Close" class="dialog-close" id="dialogClose">×</button>
+<div id="dialogContent"></div>
+</dialog>
+<dialog aria-labelledby="upgradeDialogTitle" class="upgrade-dialog" id="upgradeDialog">
+<button aria-label="Close" class="dialog-close ui-chevron" id="upgradeDialogClose">×</button>
+<div id="upgradeDialogContent"></div>
+</dialog>
+<template id="predictionTemplate">
+<article class="prediction-card">
+<div class="card-meta"><span class="tour"></span><span class="time"></span><span class="surface"></span></div>
+<div class="players-row">
+<div class="player player-a"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div>
+<div class="vs">VS</div>
+<div class="player player-b"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div>
+</div>
+<div class="data-depth-row" hidden=""></div>
+<div class="pick-row"><div><small>BlinQ Pick</small><strong class="pick-name"></strong></div><div class="probability"></div><span class="confidence"></span></div>
+<div class="betting-row" hidden=""><span class="betting-odds"></span><span class="betting-edge"></span><span class="betting-ev"></span></div>
+<div class="signals"></div>
+<button class="analysis-link" type="button">See more →</button>
+</article>
+</template>
+<script>
+    (()=>{
+      const __store={}; const __storage={getItem:k=>Object.prototype.hasOwnProperty.call(__store,k)?__store[k]:null,setItem:(k,v)=>{__store[k]=String(v)},removeItem:k=>{delete __store[k]},clear:()=>{for(const k of Object.keys(__store)) delete __store[k]},key:i=>Object.keys(__store)[i]||null};
+      try{Object.defineProperty(__storage,'length',{get:()=>Object.keys(__store).length});Object.defineProperty(window,'localStorage',{configurable:true,value:__storage});Object.defineProperty(window,'sessionStorage',{configurable:true,value:__storage});}catch(e){}
+      const UI={"schema":2,"plans":{"trial":{"label":"ROOKIE TRIAL","enabled":true,"price":"0.00","currency":"EUR","billing":"72 hours","payment_link":"","note":"Automatic 3-day Rookie access after registration.","trial_hours":72,"inherits":"rookie","duration_days":null},"expired":{"label":"EXPIRED","enabled":true,"price":"","currency":"EUR","billing":"","payment_link":"","note":"No active paid access."},"rookie":{"label":"BlinQ ROOKIE","enabled":true,"note":"Limited daily picks; first 3 days free after registration.","duration_days":30,"trial_hours":72,"lifetime":false,"hide_ads_allowed":false,"description":"Entry access to the BlinQ workspace.","cta_label":"Choose Rookie","url":"","avatar":"rookie","order":1,"marketing_avatar":"/assets/rookie_m.webp","card_title":"Start with BlinQ","show_price":false},"pro":{"label":"BlinQ PRO","enabled":true,"note":"Full core predictions and tournaments.","duration_days":30,"lifetime":false,"hide_ads_allowed":false,"description":"Core predictions + expanded daily board.","cta_label":"Upgrade to PRO","url":"","avatar":"pro","order":2,"marketing_avatar":"/assets/pro_w.webp","card_title":"Core predictions","show_price":false},"elite":{"label":"BlinQ ELITE","enabled":true,"note":"180-day premium access; workspace permissions remain configurable in Admin.","duration_days":180,"lifetime":false,"hide_ads_allowed":false,"description":"Expanded analytical access for users who follow more matches and context.","cta_label":"Choose Elite","url":"","avatar":"elite","order":3,"marketing_avatar":"/assets/elite_w.webp","card_title":"Advanced analytics","show_price":false},"goat":{"label":"BlinQ GOAT","enabled":true,"note":"Lifetime top-tier access; workspace permissions remain configurable in Admin.","duration_days":null,"lifetime":true,"hide_ads_allowed":false,"description":"Lifetime access · All BlinQ features. Private top-tier access for selected members.","cta_label":"Request invite","url":"","avatar":"goat","order":5,"marketing_avatar":"/assets/goat.webp","card_title":"Private all-access","show_price":false,"invite_only":true,"invite_url":""},"legend":{"label":"BlinQ LEGEND","enabled":true,"note":"365-day premium access; workspace permissions remain configurable in Admin.","duration_days":365,"lifetime":false,"hide_ads_allowed":false,"description":"The highest publicly available BlinQ tier.","cta_label":"Choose Legend","url":"","avatar":"legend","order":4,"marketing_avatar":"/assets/legend_m.webp","card_title":"Maximum public access","show_price":false}},"navigation":{"learn":[{"id":"how_blinq_works","enabled":true,"label":"How BlinQ Works","href":"#how_blinq_works","order":101},{"id":"methodology","enabled":true,"label":"Methodology","href":"#methodology","order":102},{"id":"model_data","enabled":true,"label":"Model & Data","href":"#model_data","order":103},{"id":"faq","enabled":true,"label":"FAQ","href":"#faq","order":104},{"id":"responsible_use","enabled":true,"label":"Responsible Use","href":"#responsible_use","order":105}]},"elements":{"HEADER_BANNER_1":{"label":"Header CTA 1","zone":"header","kind":"header_slot","order":1,"content":{"eyebrow":"COMMUNITY","headline":"Join our Telegram Community","text":"News · Picks · Discussions","link":"","route":"","theme":"blue","campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","enabled":true,"active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","plan_id":"","type":"promo","sponsored":false,"button_text":"JOIN","icon":"✈"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"HEADER_BANNER_2":{"label":"Header CTA 2","zone":"header","kind":"header_slot","order":2,"content":{"eyebrow":"BLINQ VIP","headline":"Premium Picks","text":"Higher value. Better decisions.","link":"","route":"","theme":"gold","campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","enabled":true,"active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","plan_id":"","type":"promo","sponsored":false,"button_text":"OPEN","icon":"♛"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"HEADER_BANNER_3":{"label":"Header CTA 3","zone":"header","kind":"header_slot","order":3,"content":{"eyebrow":"RESULTS & STATS","headline":"Track performance","text":"Transparent. Verified.","link":"#results","route":"results","theme":"green","campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","enabled":true,"active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","plan_id":"","type":"promo","sponsored":false,"button_text":"VIEW","icon":"▥"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"PREDICTION_TOOLBAR":{"label":"Prediction filters","zone":"dashboard","kind":"panel","order":30,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"locked","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_TOP_1":{"label":"Dashboard banner 1","zone":"content_top","kind":"large_banner","order":41,"content":{"eyebrow":"BLINQ PRO","headline":"Start with Prime","text":"Unlock more daily picks and the core BlinQ workflow.","button_text":"See PRO","link":"#account","route":"account","theme":"blue","sponsored":false,"campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","enabled":true,"active_from":"","active_until":"","image_url":"","span":1,"type":"promo","mobile_image_url":"","image_fit":"cover","image_position":"center","plan_id":"pro"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_TOP_2":{"label":"Dashboard banner 2","zone":"content_top","kind":"large_banner","order":42,"content":{"eyebrow":"BLINQ ELITE","headline":"Go deeper","text":"Expanded access for heavier analytical workflows.","button_text":"See ELITE","link":"#account","route":"account","theme":"purple","sponsored":false,"campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","enabled":true,"active_from":"","active_until":"","image_url":"","span":1,"type":"promo","mobile_image_url":"","image_fit":"cover","image_position":"center","plan_id":"elite"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_TOP_3":{"label":"Dashboard banner 3","zone":"content_top","kind":"large_banner","order":43,"content":{"eyebrow":"BLINQ ELITE","headline":"Go deeper","text":"Expanded access for heavier analytical workflows.","button_text":"See ELITE","link":"#account","route":"account","theme":"purple","sponsored":false,"campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","enabled":true,"active_from":"","active_until":"","image_url":"","span":1,"type":"promo","mobile_image_url":"","image_fit":"cover","image_position":"center","plan_id":"elite"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_TOP_4":{"label":"Dashboard banner 4","zone":"content_top","kind":"large_banner","order":44,"content":{"eyebrow":"BLINQ LEGEND","headline":"Maximum BlinQ access","text":"Premium daily workflow for power users.","button_text":"See LEGEND","link":"#account","route":"account","theme":"gold","sponsored":false,"campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","enabled":true,"active_from":"","active_until":"","image_url":"","span":1,"type":"promo","mobile_image_url":"","image_fit":"cover","image_position":"center","plan_id":"legend"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"PRIME_PICKS_PANEL":{"label":"Prime Picks panel","zone":"predictions","kind":"panel","order":50,"content":{"label":"Prime Picks panel"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"blurred","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"TOP_PICK_1":{"label":"Prime Pick card 1","zone":"predictions","kind":"prediction_card","order":51,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"blurred","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"TOP_PICK_2":{"label":"Prime Pick card 2","zone":"predictions","kind":"prediction_card","order":52,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"blurred","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"TOP_PICK_3":{"label":"Prime Pick card 3","zone":"predictions","kind":"prediction_card","order":53,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"blurred","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"TOP_PICK_4":{"label":"Prime Pick card 4","zone":"predictions","kind":"prediction_card","order":54,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"blurred","expired":"blurred","rookie":"blurred","pro":"active","elite":"active","goat":"active","legend":"active"}},"TOP_PICK_5":{"label":"Prime Pick card 5","zone":"predictions","kind":"prediction_card","order":55,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"blurred","expired":"blurred","rookie":"blurred","pro":"active","elite":"active","goat":"active","legend":"active"}},"TOP_PICK_6":{"label":"Prime Pick card 6","zone":"predictions","kind":"prediction_card","order":56,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"blurred","expired":"blurred","rookie":"blurred","pro":"active","elite":"active","goat":"active","legend":"active"}},"TOP_PICK_7":{"label":"Prime Pick card 7","zone":"predictions","kind":"prediction_card","order":57,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"blurred","expired":"blurred","rookie":"blurred","pro":"active","elite":"active","goat":"active","legend":"active"}},"TOP_PICK_8":{"label":"Prime Pick card 8","zone":"predictions","kind":"prediction_card","order":58,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"blurred","expired":"blurred","rookie":"blurred","pro":"active","elite":"active","goat":"active","legend":"active"}},"TOP_PICK_MORE":{"label":"Prime Pick cards 9+","zone":"predictions","kind":"prediction_card","order":59,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"blurred","expired":"blurred","rookie":"blurred","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_BOTTOM_1":{"label":"Bottom external slot 1","zone":"content_bottom","kind":"large_banner","order":61,"content":{"eyebrow":"PARTNER SLOT","headline":"External content slot 5","text":"Fixed advertising/content position.","button_text":"Open","link":"#account","route":"account","theme":"green","sponsored":false,"campaign_id":"","advertiser_id":"","ad_hidden_fallback":"rss","enabled":true,"active_from":"","active_until":"","image_url":"","span":1,"type":"rss","mobile_image_url":"","image_fit":"cover","image_position":"center"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_BOTTOM_2":{"label":"Bottom external slot 2","zone":"content_bottom","kind":"large_banner","order":62,"content":{"eyebrow":"PARTNER SLOT","headline":"External content slot 6","text":"Fixed advertising/content position.","button_text":"Open","link":"#account","route":"account","theme":"purple","sponsored":false,"campaign_id":"","advertiser_id":"","ad_hidden_fallback":"rss","enabled":true,"active_from":"","active_until":"","image_url":"","span":1,"type":"rss","mobile_image_url":"","image_fit":"cover","image_position":"center"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_BOTTOM_3":{"label":"Bottom external slot 3","zone":"content_bottom","kind":"large_banner","order":63,"content":{"eyebrow":"PARTNER SLOT","headline":"External content slot 7","text":"Fixed advertising/content position.","button_text":"Open","link":"#account","route":"account","theme":"blue","sponsored":false,"campaign_id":"","advertiser_id":"","ad_hidden_fallback":"rss","enabled":true,"active_from":"","active_until":"","image_url":"","span":1,"type":"rss","mobile_image_url":"","image_fit":"cover","image_position":"center"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_BOTTOM_4":{"label":"Bottom external slot 4","zone":"content_bottom","kind":"large_banner","order":64,"content":{"eyebrow":"PARTNER SLOT","headline":"External content slot 8","text":"Fixed advertising/content position.","button_text":"Open","link":"#account","route":"account","theme":"violet","sponsored":false,"campaign_id":"","advertiser_id":"","ad_hidden_fallback":"rss","enabled":true,"active_from":"","active_until":"","image_url":"","span":1,"type":"rss","mobile_image_url":"","image_fit":"cover","image_position":"center"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"FOOTER_SYSTEM":{"label":"Footer system content","zone":"footer","kind":"panel","order":80,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"VIP_TELEGRAM":{"label":"VIP Telegram","zone":"features","kind":"feature","order":70,"content":{"label":"VIP Telegram"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"locked","expired":"locked","rookie":"locked","pro":"locked","elite":"active","goat":"active","legend":"active"}},"FOOTBALL_ACCESS":{"label":"Football project access","zone":"features","kind":"feature","order":71,"content":{"label":"Football project"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"locked","expired":"locked","rookie":"locked","pro":"locked","elite":"locked","goat":"active","legend":"active"}},"SIDEBAR_PREDICTIONS":{"label":"Dashboard","zone":"sidebar","kind":"navigation","order":1,"content":{"label":"Dashboard","route":"predictions","icon":"⌂"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"locked","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_PRIME":{"label":"Prime Picks","zone":"sidebar","kind":"navigation","order":2,"content":{"label":"Prime Picks","route":"prime","icon":"✦"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"locked","expired":"locked","rookie":"locked","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_TOP_DAILY":{"label":"Top Bets","zone":"sidebar","kind":"navigation","order":3,"content":{"label":"Top Bets","route":"top_daily","icon":"★"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"locked","expired":"locked","rookie":"locked","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_VALUE":{"label":"Value Picks","zone":"sidebar","kind":"navigation","order":4,"content":{"label":"Value Picks","route":"value","icon":"◇"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"locked","expired":"locked","rookie":"locked","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_ACE":{"label":"Ace Picks","zone":"sidebar","kind":"navigation","order":6,"content":{"label":"Ace Picks","route":"ace","icon":"♠"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"locked","expired":"locked","rookie":"locked","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_SG":{"label":"S/G Picks","zone":"sidebar","kind":"navigation","order":7,"content":{"label":"S/G Picks","route":"sg","icon":"▥"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"locked","expired":"locked","rookie":"locked","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_RESULTS":{"label":"Results","zone":"sidebar","kind":"navigation","order":8,"content":{"label":"Results","route":"results","icon":"✓"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"locked","expired":"locked","rookie":"locked","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_BTTS":{"label":"BTTS Bonus","zone":"sidebar","kind":"navigation","order":9,"content":{"label":"BTTS Bonus","route":"btts","icon":"⚽","beta":true,"href":"#btts"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"locked","expired":"locked","rookie":"locked","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_PROMO_1":{"label":"VIP Telegram","zone":"sidebar","kind":"sidebar_promo","order":20,"content":{"type":"internal","eyebrow":"VIP","headline":"VIP Telegram","text":"Exclusive picks & live updates.","button_text":"Open","link":"#account","route":"account","theme":"blue","campaign_id":"","advertiser_id":"","ad_hidden_fallback":"auto","enabled":true,"active_from":"","active_until":"","image_url":"","image_fit":"cover","image_position":"center","mobile_image_url":""},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_PROMO_2":{"label":"Football by BlinQ","zone":"sidebar","kind":"sidebar_promo","order":21,"content":{"type":"internal","eyebrow":"BLINQ FOOTBALL","headline":"Football by BlinQ","text":"Same intelligence. More sports.","button_text":"Preview","link":"#btts","route":"","theme":"purple","campaign_id":"","advertiser_id":"","ad_hidden_fallback":"auto","enabled":true,"active_from":"","active_until":"","image_url":"","image_fit":"cover","image_position":"center","mobile_image_url":""},"watermark":{"enabled":true,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_PROMO_3":{"label":"Upgrade to Elite","zone":"sidebar","kind":"sidebar_promo","order":22,"content":{"type":"promo","eyebrow":"ELITE","headline":"Upgrade to Elite","text":"Unlock premium picks and analytics.","button_text":"Upgrade","link":"#account","route":"account","theme":"violet","campaign_id":"","advertiser_id":"","ad_hidden_fallback":"auto","enabled":true,"active_from":"","active_until":"","image_url":"","image_fit":"cover","image_position":"center","mobile_image_url":""},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"TOP_DAILY_PANEL":{"label":"Top Bets panel","zone":"predictions","kind":"panel","order":60,"content":{"label":"Top Bets panel"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"locked","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"VALUE_PICKS_PANEL":{"label":"Value Picks panel","zone":"predictions","kind":"panel","order":70,"content":{"label":"Value Picks panel"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"locked","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"ACE_PICKS_PANEL":{"label":"Ace Picks panel","zone":"predictions","kind":"panel","order":80,"content":{"label":"Ace Picks panel"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"locked","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"SG_PICKS_PANEL":{"label":"S/G Picks panel","zone":"predictions","kind":"panel","order":90,"content":{"label":"S/G Picks panel"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"locked","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"BTTS_BONUS_PANEL":{"label":"BTTS Bonus BETA panel","zone":"predictions","kind":"panel","order":100,"content":{"label":"BTTS Bonus BETA panel"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"locked","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_MID_1":{"label":"Middle external slot 1","zone":"content_mid","kind":"large_banner","order":61,"content":{"eyebrow":"PARTNER SLOT","headline":"Middle external slot 1","text":"Fixed advertising/content position.","button_text":"Open","link":"#account","route":"account","theme":"blue","sponsored":false,"campaign_id":"","advertiser_id":"","ad_hidden_fallback":"rss","enabled":true,"active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","span":1,"type":"rss"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_MID_2":{"label":"Middle external slot 2","zone":"content_mid","kind":"large_banner","order":62,"content":{"eyebrow":"PARTNER SLOT","headline":"Middle external slot 2","text":"Fixed advertising/content position.","button_text":"Open","link":"#account","route":"account","theme":"purple","sponsored":false,"campaign_id":"","advertiser_id":"","ad_hidden_fallback":"rss","enabled":true,"active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","span":1,"type":"rss"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_MID_3":{"label":"Middle external slot 3","zone":"content_mid","kind":"large_banner","order":63,"content":{"eyebrow":"PARTNER SLOT","headline":"Middle external slot 3","text":"Fixed advertising/content position.","button_text":"Open","link":"#account","route":"account","theme":"green","sponsored":false,"campaign_id":"","advertiser_id":"","ad_hidden_fallback":"rss","enabled":true,"active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","span":1,"type":"rss"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"CONTENT_MID_4":{"label":"Middle external slot 4","zone":"content_mid","kind":"large_banner","order":64,"content":{"eyebrow":"PARTNER SLOT","headline":"Middle external slot 4","text":"Fixed advertising/content position.","button_text":"Open","link":"#account","route":"account","theme":"violet","sponsored":false,"campaign_id":"","advertiser_id":"","ad_hidden_fallback":"rss","enabled":true,"active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","span":1,"type":"rss"},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"SIDEBAR_DOUBLES":{"zone":"sidebar","kind":"navigation","watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"},"label":"Doubles","order":5,"content":{"label":"Doubles","route":"doubles","icon":"◈"}},"DOUBLES_PANEL":{"label":"Doubles Picks panel","zone":"dashboard","kind":"panel","order":75,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"RESULTS_PANEL":{"label":"Results preview panel","zone":"dashboard","kind":"panel","order":95,"content":{},"watermark":{"enabled":false,"text":"COMING SOON","preset":"default"},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"HEADER_BANNER_4":{"label":"Header CTA 4","zone":"header","kind":"header_slot","order":4,"content":{"type":"promo","enabled":true,"campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","sponsored":false,"eyebrow":"BLINQ NEWS","headline":"Updates & releases","text":"Product news and new features.","button_text":"OPEN","theme":"purple","icon":"✦","link":"","route":"","plan_id":""},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"HERO_BANNER_1":{"label":"Main banner 1","zone":"hero","kind":"hero_banner","order":1,"content":{"type":"promo","enabled":true,"campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","creative_mode":"split","show_copy":true,"sponsored":false,"eyebrow":"BLINQ STATISTICAL ENGINE","headline":"Data. Analysis.","accent_text":"Better Decisions.","text":"Advanced tennis intelligence for informed players.","button_text":"","theme":"violet","icon":"","link":"","route":"","plan_id":""},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"HERO_BANNER_2":{"label":"Main banner 2","zone":"hero","kind":"hero_banner","order":2,"content":{"type":"promo","enabled":true,"campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","creative_mode":"split","show_copy":true,"sponsored":false,"eyebrow":"COMMUNITY","headline":"Join the BlinQ","accent_text":"Telegram Community","text":"News · Picks · Discussions","button_text":"JOIN","theme":"blue","icon":"","link":"","route":"","plan_id":""},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"HERO_BANNER_3":{"label":"Main banner 3","zone":"hero","kind":"hero_banner","order":3,"content":{"type":"promo","enabled":true,"campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","creative_mode":"split","show_copy":true,"sponsored":false,"eyebrow":"RESULTS & STATS","headline":"Track performance.","accent_text":"Stay informed.","text":"Transparent model results and published statistics.","button_text":"SEE RESULTS","theme":"green","icon":"","link":"#results","route":"results","plan_id":""},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}},"HERO_BANNER_4":{"label":"Main banner 4","zone":"hero","kind":"hero_banner","order":4,"content":{"type":"promo","enabled":false,"campaign_id":"","advertiser_id":"blinq","ad_hidden_fallback":"internal","active_from":"","active_until":"","image_url":"","mobile_image_url":"","image_fit":"cover","image_position":"center","creative_mode":"split","show_copy":true,"sponsored":true,"eyebrow":"BLINQ PARTNER","headline":"Your campaign.","accent_text":"Your message.","text":"Assign a campaign, image, link and schedule in Admin.","button_text":"OPEN","theme":"gold","icon":"","link":"","route":"","plan_id":""},"watermark":{"enabled":false,"text":"COMING SOON","preset":"violet","position":"bottom-right","opacity":0.42,"size":1.0},"access":{"trial":"active","expired":"active","rookie":"active","pro":"active","elite":"active","goat":"active","legend":"active"}}},"admin":{"draft_storage_key":"blinq_admin_ui_config_v1","preview_plan":"rookie","runtime_config_enabled":true,"row_presets":["1","2","3","4"],"max_rss_sources":8,"dashboard_preview_choices":[0,1,2,3,4,5,"ALL"]},"ad_fallbacks":{"mode":"mixed","rss_enabled":true,"fallback_images":[],"internal":{"eyebrow":"BLINQ","headline":"BlinQ Tennis Intelligence","text":"No active advertisement or RSS item is available right now. Explore the current BlinQ board.","button_text":"Open dashboard","link":"#predictions","route":"predictions","theme":"blue"},"priority":["active_advertisement","rss_news","blinq_internal"]},"analytics":{"impression_threshold":0.5,"impression_ms":1000,"window_days":30},"content_rows":{"content_top":{"label":"DASHBOARD PROMO ZONE · top","enabled":false,"preset":"1","slot_count":0},"content_mid":{"label":"OPTIONAL PROMO ZONE · middle","enabled":false,"preset":"1","slot_count":0},"content_bottom":{"label":"OPTIONAL PROMO ZONE · bottom","enabled":false,"preset":"1","slot_count":0}},"advertisers":{},"campaigns":{},"rss":{"enabled":true,"refresh_minutes":60,"max_age_hours":48,"max_items":24,"sources":[{"id":"tennis_main","name":"Tennis main feed","url":"","enabled":false,"priority":10},{"id":"tennis_backup","name":"Tennis backup feed","url":"","enabled":false,"priority":5}]},"creative_specs":{"header_slot":{"aspect_ratio":"3:1","recommended":"900 × 300 px","minimum":"600 × 200 px","safe_area":"center 80%"},"sidebar_promo":{"aspect_ratio":"3:1","recommended":"900 × 300 px","minimum":"600 × 200 px","safe_area":"center 80%"},"large_1":{"aspect_ratio":"20:3","recommended":"1200 × 180 px","minimum":"900 × 135 px","safe_area":"center 90%"},"large_2":{"aspect_ratio":"10:3","recommended":"600 × 180 px","minimum":"450 × 135 px","safe_area":"center 88%"},"large_4":{"aspect_ratio":"5:3","recommended":"300 × 180 px","minimum":"240 × 144 px","safe_area":"center 82%"},"header_1":{"aspect_ratio":"12:1","recommended":"1200 × 100 px","minimum":"900 × 75 px","safe_area":"center 90%"},"header_2":{"aspect_ratio":"6:1","recommended":"600 × 100 px","minimum":"450 × 75 px","safe_area":"center 88%"},"header_3":{"aspect_ratio":"4:1","recommended":"400 × 100 px","minimum":"300 × 75 px","safe_area":"center 84%"},"header_4":{"aspect_ratio":"3:1","recommended":"300 × 100 px","minimum":"240 × 80 px","safe_area":"center 82%"},"large_3":{"aspect_ratio":"20:9","recommended":"400 × 180 px","minimum":"320 × 144 px","safe_area":"center 84%"},"hero_banner":{"aspect_ratio":"20:3","recommended":"1500 × 225 px","minimum":"1000 × 150 px","safe_area":"center 86%"}},"market_rules":{"prime":{"market":"match_winner","objective":"accuracy_first","min_win_probability":0.68,"min_data_depth":0.8,"min_surface_matches":5,"preferred_min_odds":1.2,"preferred_max_odds":1.5,"hard_odds_band":false,"max_negative_expected_value":-0.03,"limit":30,"use_dashboard_filters":false,"sort":"probability_desc_then_data_depth_then_ev","presentation_preview_limit":10,"preferred_probability":0.85,"target_count":10,"minimum_dashboard_count":5,"confidence_tiers":[0.85,0.83,0.81,0.79,0.77,0.75,0.73,0.71,0.69,0.68],"fill_policy":"confidence_cascade_min5_then_expand_to_10_never_bypass_depth_surface_or_ev_guardrails"},"top_daily":{"label":"Top Bets","internal_key":"top_daily","limit":null,"markets":["match_winner"],"requires_odds":true,"objective":"confidence_first","min_probability":0.68,"min_data_depth":0.8,"min_surface_matches":5,"min_odds":1.2,"max_odds":null,"min_edge":null,"min_expected_value":null,"timezone":"Europe/Bratislava","betting_day_start_hour":6,"sort":"probability_desc_then_depth_then_surface_sample_then_overall_sample_then_odds","preferred_probability":0.8,"edge_ev_role":"diagnostic_only","secondary_probability":0.78,"standard_probability":0.76,"target_count":10,"presentation_preview_limit":10,"cascade":"80_then_78_then_76_then_74_then_72_then_70_then_68_until_at_least_10_keep_full_tier","confidence_tiers":[0.8,0.78,0.76,0.74,0.72,0.7,0.68],"minimum_dashboard_count":5},"value":{"label":"Value Picks","limit":null,"selection_mode":"edge_ev_first","objective":"edge_ev_first","min_probability":0.55,"min_data_depth":0.75,"min_surface_matches":3,"min_odds":1.8,"min_edge":0.05,"min_expected_value":0.08,"sort":"ev_desc_then_edge_then_probability","presentation_preview_limit":10,"target_count":10,"minimum_dashboard_count":5,"fill_policy":"reserve_5_value_style_then_expand_nonnegative_ev_tiers_to_10","fallback_tiers":[{"min_odds":1.8,"min_edge":0.05,"min_expected_value":0.08},{"min_odds":1.65,"min_edge":0.04,"min_expected_value":0.06},{"min_odds":1.5,"min_edge":0.03,"min_expected_value":0.04},{"min_odds":1.35,"min_edge":0.02,"min_expected_value":0.02},{"min_odds":1.2,"min_edge":0.01,"min_expected_value":0.0},{"min_odds":1.2,"min_edge":0.0,"min_expected_value":0.0}]},"ace":{"limit":10,"markets":["aces","double_faults"],"presentation_preview_limit":10,"target_count":10,"fill_policy":"confidence_only_never_bypass_data_depth_or_sample_gates"},"sg":{"limit":10,"markets":["sets","games"],"presentation_preview_limit":10,"target_count":10,"fill_policy":"confidence_only_never_bypass_data_depth_or_sample_gates"},"btts":{"beta":true,"sport":"football","href":"#btts"},"match_winner_assignment":{"exclusive":true,"priority":["prime","top_daily","value"],"dedupe_key":"market:betting_day:event_id:selection_id"},"doubles":{"label":"Doubles","model_branch":"separate","enabled":false,"presentation_preview_limit":10,"note":"Separate doubles model; singles predictions are never reused."}},"assets":{"favicon":"/assets/blinq_favi.png","background":"/assets/blinq_background.png","player_fallback":{"atp":"/assets/missing_foto_m.png","wta":"/assets/missing_foto_w.png"},"account_avatars":{"rookie":{"m":"/assets/rookie_m.webp","w":"/assets/rookie_w.webp"},"pro":{"m":"/assets/pro_m.webp","w":"/assets/pro_w.webp"},"elite":{"m":"/assets/elite_m.webp","w":"/assets/elite_w.webp"},"legend":{"m":"/assets/legend_m.webp","w":"/assets/legend_w.webp"},"goat":{"default":"/assets/goat.webp"}},"admin_avatar_plan":"goat"},"dashboard":{"show_header_feature_strip":true,"snapshot_cards":["matches","prime","top_daily","odds_coverage"],"sections":{"prime":{"label":"Prime Picks","panel_id":"predictionsPanel","sidebar_element":"SIDEBAR_PRIME","sidebar_enabled":true,"dashboard_enabled":true,"dashboard_order":1,"preview_limit":5,"plans":{"trial":{"visible_picks":3,"blur_remaining":true,"see_all":false},"rookie":{"visible_picks":3,"blur_remaining":true,"see_all":false},"expired":{"visible_picks":1,"blur_remaining":true,"see_all":false},"pro":{"visible_picks":5,"blur_remaining":false,"see_all":true},"elite":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"goat":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"legend":{"visible_picks":"ALL","blur_remaining":false,"see_all":true}}},"top_daily":{"label":"Top Bets","panel_id":"topDailyPanel","sidebar_element":"SIDEBAR_TOP_DAILY","sidebar_enabled":true,"dashboard_enabled":true,"dashboard_order":2,"preview_limit":5,"plans":{"trial":{"visible_picks":2,"blur_remaining":true,"see_all":false},"rookie":{"visible_picks":2,"blur_remaining":true,"see_all":false},"expired":{"visible_picks":1,"blur_remaining":true,"see_all":false},"pro":{"visible_picks":5,"blur_remaining":true,"see_all":true},"elite":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"goat":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"legend":{"visible_picks":"ALL","blur_remaining":false,"see_all":true}}},"value":{"label":"Value Picks","panel_id":"valuePanel","sidebar_element":"SIDEBAR_VALUE","sidebar_enabled":true,"dashboard_enabled":true,"dashboard_order":3,"preview_limit":5,"plans":{"trial":{"visible_picks":1,"blur_remaining":true,"see_all":false},"rookie":{"visible_picks":1,"blur_remaining":true,"see_all":false},"expired":{"visible_picks":1,"blur_remaining":true,"see_all":false},"pro":{"visible_picks":3,"blur_remaining":true,"see_all":true},"elite":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"goat":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"legend":{"visible_picks":"ALL","blur_remaining":false,"see_all":true}}},"ace":{"label":"Ace Picks","panel_id":"acePanel","sidebar_element":"SIDEBAR_ACE","sidebar_enabled":true,"dashboard_enabled":true,"dashboard_order":5,"preview_limit":5,"plans":{"trial":{"visible_picks":1,"blur_remaining":true,"see_all":false},"rookie":{"visible_picks":1,"blur_remaining":true,"see_all":false},"expired":{"visible_picks":1,"blur_remaining":true,"see_all":false},"pro":{"visible_picks":3,"blur_remaining":true,"see_all":true},"elite":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"goat":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"legend":{"visible_picks":"ALL","blur_remaining":false,"see_all":true}}},"sg":{"label":"S/G Picks","panel_id":"sgPanel","sidebar_element":"SIDEBAR_SG","sidebar_enabled":true,"dashboard_enabled":true,"dashboard_order":6,"preview_limit":5,"plans":{"trial":{"visible_picks":1,"blur_remaining":true,"see_all":false},"rookie":{"visible_picks":1,"blur_remaining":true,"see_all":false},"expired":{"visible_picks":1,"blur_remaining":true,"see_all":false},"pro":{"visible_picks":3,"blur_remaining":true,"see_all":true},"elite":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"goat":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"legend":{"visible_picks":"ALL","blur_remaining":false,"see_all":true}}},"doubles":{"label":"Doubles","panel_id":"doublesPanel","sidebar_element":"SIDEBAR_DOUBLES","sidebar_enabled":true,"dashboard_enabled":true,"dashboard_order":4,"preview_limit":5,"plans":{"trial":{"visible_picks":1,"blur_remaining":true,"see_all":false},"rookie":{"visible_picks":1,"blur_remaining":true,"see_all":false},"expired":{"visible_picks":1,"blur_remaining":true,"see_all":false},"pro":{"visible_picks":3,"blur_remaining":true,"see_all":true},"elite":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"goat":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"legend":{"visible_picks":"ALL","blur_remaining":false,"see_all":true}}},"results":{"label":"Results","panel_id":"resultsPreviewPanel","sidebar_element":"SIDEBAR_RESULTS","sidebar_enabled":true,"dashboard_enabled":false,"dashboard_order":7,"preview_limit":5,"plans":{"trial":{"visible_picks":"ALL","blur_remaining":false,"see_all":false},"rookie":{"visible_picks":"ALL","blur_remaining":false,"see_all":false},"expired":{"visible_picks":"ALL","blur_remaining":false,"see_all":false},"pro":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"elite":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"goat":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"legend":{"visible_picks":"ALL","blur_remaining":false,"see_all":true}}},"btts":{"label":"BTTS Bonus","panel_id":"bttsBonusPanel","sidebar_element":"SIDEBAR_BTTS","sidebar_enabled":true,"dashboard_enabled":false,"dashboard_order":8,"preview_limit":5,"plans":{"trial":{"visible_picks":2,"blur_remaining":true,"see_all":false},"rookie":{"visible_picks":2,"blur_remaining":true,"see_all":false},"expired":{"visible_picks":1,"blur_remaining":true,"see_all":false},"pro":{"visible_picks":5,"blur_remaining":true,"see_all":true},"elite":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"goat":{"visible_picks":"ALL","blur_remaining":false,"see_all":true},"legend":{"visible_picks":"ALL","blur_remaining":false,"see_all":true}}}},"show_live_chip":false,"section_order":["prime","top_daily","value","doubles","ace","sg"],"visible_slots":6,"user_switches":false,"show_disabled_strip":false,"auto_replace_empty_sections":true,"cards_per_panel_desktop":1,"cards_per_panel_wide":1,"detail_pick_limit":5},"ui_revision":"6.5.9","watermark_presets":{"violet":{"label":"BlinQ Violet","class":"violet"},"blue":{"label":"Deep Blue","class":"blue"},"cyan":{"label":"Cyan","class":"cyan"},"gold":{"label":"Legend Gold","class":"gold"},"slate":{"label":"Slate","class":"slate"}},"header_cta":{"label":"HEADER CTA / TELEGRAM","enabled":true,"slot_count":3,"mobile_mode":"carousel"},"hero_banner":{"label":"MAIN ROTATING BANNER","enabled":true,"slot_count":3,"rotation_seconds":8,"auto_rotate":true,"show_dots":true,"pause_on_hover":true}};
+      const FEED={"generated_at": "2026-09-10T07:45:00+00:00", "stale": false, "account": {"id": "u-admin", "email": "member@blinq.app", "email_verified": true, "name": "Macheth", "role": "admin", "plan": "admin", "plan_label": "Admin", "status": "active", "is_admin": true, "created_at": "2026-09-07T06:00:00+00:00", "last_sign_in_at": "2026-09-10T07:45:00+00:00", "avatar_variant": "m", "telegram_nick": "@Macheth"}, "model": {"version": "v201-20260910-test", "report": {}}, "history": {"matches": 12345}, "performance": {"n": 100, "accuracy": 0.73}, "upcoming": [{"event_id": "p0", "scheduled_at": "2026-09-10T10:30:00+00:00", "tour": "ATP", "tournament": "ITF M25 Test \u00b7 Round of 16", "surface": "hard", "round": "R16", "player1": {"id": "a0", "name": "Patrick Schoen", "probability": 0.91, "rank": 120}, "player2": {"id": "b0", "name": "Benjamin Thomas George", "probability": 0.09, "rank": 180}, "winner_id": "a0", "data_depth": 0.93, "betting": {"odds": 1.22, "edge": 0.041, "expected_value": 0.032}, "signals": [{"label": "Surface strength", "player_id": "a0"}, {"label": "Recent form", "player_id": "a0"}], "model_version": "v201-test"}, {"event_id": "p1", "scheduled_at": "2026-09-10T11:30:00+00:00", "tour": "ATP", "tournament": "ITF M25 Test \u00b7 Round of 16", "surface": "hard", "round": "R16", "player1": {"id": "a1", "name": "Alen Mujakic", "probability": 0.895, "rank": 121}, "player2": {"id": "b1", "name": "Fausto Tabacco", "probability": 0.105, "rank": 181}, "winner_id": "a1", "data_depth": 0.93, "betting": {"odds": 1.25, "edge": 0.043000000000000003, "expected_value": 0.035}, "signals": [{"label": "Surface strength", "player_id": "a1"}, {"label": "Recent form", "player_id": "a1"}], "model_version": "v201-test"}, {"event_id": "p2", "scheduled_at": "2026-09-10T12:30:00+00:00", "tour": "ATP", "tournament": "ITF M25 Test \u00b7 Round of 16", "surface": "hard", "round": "R16", "player1": {"id": "a2", "name": "Tobias Costanzo", "probability": 0.88, "rank": 122}, "player2": {"id": "b2", "name": "Kirill Kivattsev", "probability": 0.12, "rank": 182}, "winner_id": "a2", "data_depth": 0.93, "betting": {"odds": 1.28, "edge": 0.045, "expected_value": 0.038}, "signals": [{"label": "Surface strength", "player_id": "a2"}, {"label": "Recent form", "player_id": "a2"}], "model_version": "v201-test"}, {"event_id": "p3", "scheduled_at": "2026-09-10T13:30:00+00:00", "tour": "ATP", "tournament": "ITF M25 Test \u00b7 Round of 16", "surface": "hard", "round": "R16", "player1": {"id": "a3", "name": "Borges / Cabral", "probability": 0.865, "rank": 123}, "player2": {"id": "b3", "name": "Erler / Miedler", "probability": 0.135, "rank": 183}, "winner_id": "a3", "data_depth": 0.93, "betting": {"odds": 1.31, "edge": 0.047, "expected_value": 0.041}, "signals": [{"label": "Surface strength", "player_id": "a3"}, {"label": "Recent form", "player_id": "a3"}], "model_version": "v201-test"}, {"event_id": "p4", "scheduled_at": "2026-09-10T14:30:00+00:00", "tour": "ATP", "tournament": "ITF M25 Test \u00b7 Round of 16", "surface": "hard", "round": "R16", "player1": {"id": "a4", "name": "Martin Klizan", "probability": 0.8500000000000001, "rank": 124}, "player2": {"id": "b4", "name": "Alex Molcan", "probability": 0.15, "rank": 184}, "winner_id": "a4", "data_depth": 0.93, "betting": {"odds": 1.3399999999999999, "edge": 0.049, "expected_value": 0.044}, "signals": [{"label": "Surface strength", "player_id": "a4"}, {"label": "Recent form", "player_id": "a4"}], "model_version": "v201-test"}], "prime_picks": [{"event_id": "p0", "scheduled_at": "2026-09-10T10:30:00+00:00", "tour": "ATP", "tournament": "ITF M25 Test \u00b7 Round of 16", "surface": "hard", "round": "R16", "player1": {"id": "a0", "name": "Patrick Schoen", "probability": 0.91, "rank": 120}, "player2": {"id": "b0", "name": "Benjamin Thomas George", "probability": 0.09, "rank": 180}, "winner_id": "a0", "data_depth": 0.93, "betting": {"odds": 1.22, "edge": 0.041, "expected_value": 0.032}, "signals": [{"label": "Surface strength", "player_id": "a0"}, {"label": "Recent form", "player_id": "a0"}], "model_version": "v201-test"}, {"event_id": "p1", "scheduled_at": "2026-09-10T11:30:00+00:00", "tour": "ATP", "tournament": "ITF M25 Test \u00b7 Round of 16", "surface": "hard", "round": "R16", "player1": {"id": "a1", "name": "Alen Mujakic", "probability": 0.895, "rank": 121}, "player2": {"id": "b1", "name": "Fausto Tabacco", "probability": 0.105, "rank": 181}, "winner_id": "a1", "data_depth": 0.93, "betting": {"odds": 1.25, "edge": 0.043000000000000003, "expected_value": 0.035}, "signals": [{"label": "Surface strength", "player_id": "a1"}, {"label": "Recent form", "player_id": "a1"}], "model_version": "v201-test"}, {"event_id": "p2", "scheduled_at": "2026-09-10T12:30:00+00:00", "tour": "ATP", "tournament": "ITF M25 Test \u00b7 Round of 16", "surface": "hard", "round": "R16", "player1": {"id": "a2", "name": "Tobias Costanzo", "probability": 0.88, "rank": 122}, "player2": {"id": "b2", "name": "Kirill Kivattsev", "probability": 0.12, "rank": 182}, "winner_id": "a2", "data_depth": 0.93, "betting": {"odds": 1.28, "edge": 0.045, "expected_value": 0.038}, "signals": [{"label": "Surface strength", "player_id": "a2"}, {"label": "Recent form", "player_id": "a2"}], "model_version": "v201-test"}, {"event_id": "p3", "scheduled_at": "2026-09-10T13:30:00+00:00", "tour": "ATP", "tournament": "ITF M25 Test \u00b7 Round of 16", "surface": "hard", "round": "R16", "player1": {"id": "a3", "name": "Borges / Cabral", "probability": 0.865, "rank": 123}, "player2": {"id": "b3", "name": "Erler / Miedler", "probability": 0.135, "rank": 183}, "winner_id": "a3", "data_depth": 0.93, "betting": {"odds": 1.31, "edge": 0.047, "expected_value": 0.041}, "signals": [{"label": "Surface strength", "player_id": "a3"}, {"label": "Recent form", "player_id": "a3"}], "model_version": "v201-test"}, {"event_id": "p4", "scheduled_at": "2026-09-10T14:30:00+00:00", "tour": "ATP", "tournament": "ITF M25 Test \u00b7 Round of 16", "surface": "hard", "round": "R16", "player1": {"id": "a4", "name": "Martin Klizan", "probability": 0.8500000000000001, "rank": 124}, "player2": {"id": "b4", "name": "Alex Molcan", "probability": 0.15, "rank": 184}, "winner_id": "a4", "data_depth": 0.93, "betting": {"odds": 1.3399999999999999, "edge": 0.049, "expected_value": 0.044}, "signals": [{"label": "Surface strength", "player_id": "a4"}, {"label": "Recent form", "player_id": "a4"}], "model_version": "v201-test"}], "top_daily_picks": [{"id": "top_daily0", "scheduled_at": "2026-09-10T11:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Sandeep Singh Rao"}, "player2": {"name": "Astrid Cirotte"}, "pick": "Sandeep Singh Rao", "probability": 0.82, "odds": 1.36, "edge": 0.075, "expected_value": 0.09}, {"id": "top_daily1", "scheduled_at": "2026-09-10T12:00:00+00:00", "tour": "WTA", "tournament": "ITF W15 / Challenger", "surface": "clay", "player1": {"name": "Sascha Gueymard Wayenburg"}, "player2": {"name": "Mark Lajal"}, "pick": "Sascha Gueymard Wayenburg", "probability": 0.8019999999999999, "odds": 1.4400000000000002, "edge": 0.08499999999999999, "expected_value": 0.102}, {"id": "top_daily2", "scheduled_at": "2026-09-10T13:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Ane Mintegi Del Olmo"}, "player2": {"name": "Alicia Herrero Linana"}, "pick": "Ane Mintegi Del Olmo", "probability": 0.7839999999999999, "odds": 1.52, "edge": 0.095, "expected_value": 0.11399999999999999}, {"id": "top_daily3", "scheduled_at": "2026-09-10T14:00:00+00:00", "tour": "WTA", "tournament": "ITF W15 / Challenger", "surface": "clay", "player1": {"name": "Laura Svatikova"}, "player2": {"name": "Viktoria Veleva"}, "pick": "Laura Svatikova", "probability": 0.766, "odds": 1.6, "edge": 0.105, "expected_value": 0.126}, {"id": "top_daily4", "scheduled_at": "2026-09-10T15:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Tobia Costanzo"}, "player2": {"name": "Kirill Kivattsev"}, "pick": "Tobia Costanzo", "probability": 0.748, "odds": 1.6800000000000002, "edge": 0.11499999999999999, "expected_value": 0.138}], "value_picks": [{"id": "value0", "scheduled_at": "2026-09-10T11:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Sandeep Singh Rao"}, "player2": {"name": "Astrid Cirotte"}, "pick": "Sandeep Singh Rao", "probability": 0.82, "odds": 1.36, "edge": 0.075, "expected_value": 0.09}, {"id": "value1", "scheduled_at": "2026-09-10T12:00:00+00:00", "tour": "WTA", "tournament": "ITF W15 / Challenger", "surface": "clay", "player1": {"name": "Sascha Gueymard Wayenburg"}, "player2": {"name": "Mark Lajal"}, "pick": "Sascha Gueymard Wayenburg", "probability": 0.8019999999999999, "odds": 1.4400000000000002, "edge": 0.08499999999999999, "expected_value": 0.102}, {"id": "value2", "scheduled_at": "2026-09-10T13:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Ane Mintegi Del Olmo"}, "player2": {"name": "Alicia Herrero Linana"}, "pick": "Ane Mintegi Del Olmo", "probability": 0.7839999999999999, "odds": 1.52, "edge": 0.095, "expected_value": 0.11399999999999999}, {"id": "value3", "scheduled_at": "2026-09-10T14:00:00+00:00", "tour": "WTA", "tournament": "ITF W15 / Challenger", "surface": "clay", "player1": {"name": "Laura Svatikova"}, "player2": {"name": "Viktoria Veleva"}, "pick": "Laura Svatikova", "probability": 0.766, "odds": 1.6, "edge": 0.105, "expected_value": 0.126}, {"id": "value4", "scheduled_at": "2026-09-10T15:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Tobia Costanzo"}, "player2": {"name": "Kirill Kivattsev"}, "pick": "Tobia Costanzo", "probability": 0.748, "odds": 1.6800000000000002, "edge": 0.11499999999999999, "expected_value": 0.138}], "doubles_picks": [{"id": "doubles0", "scheduled_at": "2026-09-10T11:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Sandeep Singh Rao"}, "player2": {"name": "Astrid Cirotte"}, "pick": "Sandeep Singh Rao", "probability": 0.82, "odds": 1.36, "edge": 0.075, "expected_value": 0.09}, {"id": "doubles1", "scheduled_at": "2026-09-10T12:00:00+00:00", "tour": "WTA", "tournament": "ITF W15 / Challenger", "surface": "clay", "player1": {"name": "Sascha Gueymard Wayenburg"}, "player2": {"name": "Mark Lajal"}, "pick": "Sascha Gueymard Wayenburg", "probability": 0.8019999999999999, "odds": 1.4400000000000002, "edge": 0.08499999999999999, "expected_value": 0.102}, {"id": "doubles2", "scheduled_at": "2026-09-10T13:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Ane Mintegi Del Olmo"}, "player2": {"name": "Alicia Herrero Linana"}, "pick": "Ane Mintegi Del Olmo", "probability": 0.7839999999999999, "odds": 1.52, "edge": 0.095, "expected_value": 0.11399999999999999}, {"id": "doubles3", "scheduled_at": "2026-09-10T14:00:00+00:00", "tour": "WTA", "tournament": "ITF W15 / Challenger", "surface": "clay", "player1": {"name": "Laura Svatikova"}, "player2": {"name": "Viktoria Veleva"}, "pick": "Laura Svatikova", "probability": 0.766, "odds": 1.6, "edge": 0.105, "expected_value": 0.126}, {"id": "doubles4", "scheduled_at": "2026-09-10T15:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Tobia Costanzo"}, "player2": {"name": "Kirill Kivattsev"}, "pick": "Tobia Costanzo", "probability": 0.748, "odds": 1.6800000000000002, "edge": 0.11499999999999999, "expected_value": 0.138}], "ace_picks": [{"id": "ace0", "scheduled_at": "2026-09-10T11:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Sandeep Singh Rao"}, "player2": {"name": "Astrid Cirotte"}, "pick": "Sandeep Singh Rao", "probability": 0.82, "odds": 1.36, "edge": 0.075, "expected_value": 0.09, "price_status": "projection_only", "projection": 6.6, "opponent_projection": 4.3, "projection_gap": 2.3, "projection_confidence": 0.95, "projection_samples": {"player1": 35, "player2": 42}, "market_type": "Most Double Faults"}, {"id": "ace1", "scheduled_at": "2026-09-10T12:00:00+00:00", "tour": "WTA", "tournament": "ITF W15 / Challenger", "surface": "clay", "player1": {"name": "Sascha Gueymard Wayenburg"}, "player2": {"name": "Mark Lajal"}, "pick": "Sascha Gueymard Wayenburg", "probability": 0.8019999999999999, "odds": 1.4400000000000002, "edge": 0.08499999999999999, "expected_value": 0.102, "price_status": "projection_only", "projection": 6.8999999999999995, "opponent_projection": 4.3, "projection_gap": 2.5999999999999996, "projection_confidence": 0.95, "projection_samples": {"player1": 35, "player2": 42}, "market_type": "Most Double Faults"}, {"id": "ace2", "scheduled_at": "2026-09-10T13:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Ane Mintegi Del Olmo"}, "player2": {"name": "Alicia Herrero Linana"}, "pick": "Ane Mintegi Del Olmo", "probability": 0.7839999999999999, "odds": 1.52, "edge": 0.095, "expected_value": 0.11399999999999999, "price_status": "projection_only", "projection": 7.199999999999999, "opponent_projection": 4.3, "projection_gap": 2.9, "projection_confidence": 0.95, "projection_samples": {"player1": 35, "player2": 42}, "market_type": "Most Double Faults"}, {"id": "ace3", "scheduled_at": "2026-09-10T14:00:00+00:00", "tour": "WTA", "tournament": "ITF W15 / Challenger", "surface": "clay", "player1": {"name": "Laura Svatikova"}, "player2": {"name": "Viktoria Veleva"}, "pick": "Laura Svatikova", "probability": 0.766, "odds": 1.6, "edge": 0.105, "expected_value": 0.126, "price_status": "projection_only", "projection": 7.5, "opponent_projection": 4.3, "projection_gap": 3.1999999999999997, "projection_confidence": 0.95, "projection_samples": {"player1": 35, "player2": 42}, "market_type": "Most Double Faults"}, {"id": "ace4", "scheduled_at": "2026-09-10T15:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Tobia Costanzo"}, "player2": {"name": "Kirill Kivattsev"}, "pick": "Tobia Costanzo", "probability": 0.748, "odds": 1.6800000000000002, "edge": 0.11499999999999999, "expected_value": 0.138, "price_status": "projection_only", "projection": 7.8, "opponent_projection": 4.3, "projection_gap": 3.5, "projection_confidence": 0.95, "projection_samples": {"player1": 35, "player2": 42}, "market_type": "Most Double Faults"}], "sg_picks": [{"id": "sg0", "scheduled_at": "2026-09-10T11:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Sandeep Singh Rao"}, "player2": {"name": "Astrid Cirotte"}, "pick": "Sandeep Singh Rao", "probability": 0.82, "odds": 1.36, "edge": 0.075, "expected_value": 0.09, "price_status": "projection_only", "projection": 6.8, "reference_projection": 4.0, "projection_gap": 2.8, "projection_confidence": 0.93, "projection_samples": {"player1": 35, "player2": 42}, "market_type": "Games projection", "projection_unit": "games"}, {"id": "sg1", "scheduled_at": "2026-09-10T12:00:00+00:00", "tour": "WTA", "tournament": "ITF W15 / Challenger", "surface": "clay", "player1": {"name": "Sascha Gueymard Wayenburg"}, "player2": {"name": "Mark Lajal"}, "pick": "Sascha Gueymard Wayenburg", "probability": 0.8019999999999999, "odds": 1.4400000000000002, "edge": 0.08499999999999999, "expected_value": 0.102, "price_status": "projection_only", "projection": 7.0, "reference_projection": 4.0, "projection_gap": 2.8, "projection_confidence": 0.93, "projection_samples": {"player1": 35, "player2": 42}, "market_type": "Games projection", "projection_unit": "games"}, {"id": "sg2", "scheduled_at": "2026-09-10T13:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Ane Mintegi Del Olmo"}, "player2": {"name": "Alicia Herrero Linana"}, "pick": "Ane Mintegi Del Olmo", "probability": 0.7839999999999999, "odds": 1.52, "edge": 0.095, "expected_value": 0.11399999999999999, "price_status": "projection_only", "projection": 7.2, "reference_projection": 4.0, "projection_gap": 2.8, "projection_confidence": 0.93, "projection_samples": {"player1": 35, "player2": 42}, "market_type": "Games projection", "projection_unit": "games"}, {"id": "sg3", "scheduled_at": "2026-09-10T14:00:00+00:00", "tour": "WTA", "tournament": "ITF W15 / Challenger", "surface": "clay", "player1": {"name": "Laura Svatikova"}, "player2": {"name": "Viktoria Veleva"}, "pick": "Laura Svatikova", "probability": 0.766, "odds": 1.6, "edge": 0.105, "expected_value": 0.126, "price_status": "projection_only", "projection": 7.4, "reference_projection": 4.0, "projection_gap": 2.8, "projection_confidence": 0.93, "projection_samples": {"player1": 35, "player2": 42}, "market_type": "Games projection", "projection_unit": "games"}, {"id": "sg4", "scheduled_at": "2026-09-10T15:00:00+00:00", "tour": "ATP", "tournament": "ITF W15 / Challenger", "surface": "hard", "player1": {"name": "Tobia Costanzo"}, "player2": {"name": "Kirill Kivattsev"}, "pick": "Tobia Costanzo", "probability": 0.748, "odds": 1.6800000000000002, "edge": 0.11499999999999999, "expected_value": 0.138, "price_status": "projection_only", "projection": 7.6, "reference_projection": 4.0, "projection_gap": 2.8, "projection_confidence": 0.93, "projection_samples": {"player1": 35, "player2": 42}, "market_type": "Games projection", "projection_unit": "games"}], "results": [], "market_selection": {"odds_report": {"betting_day": "2026-09-10"}}};
+      const session={provider:'firebase',access_token:'fake-token',refresh_token:'fake-refresh',expires_at:Math.floor(Date.now()/1000)+7200};
+      try{localStorage.setItem('blinq_v4_session',JSON.stringify(session));localStorage.setItem('blinq_v4_session_epoch','visual-test');}catch(e){}
+      const realFetch=window.fetch.bind(window);
+      window.fetch=async (input,options={})=>{
+        const url=typeof input==='string'?input:(input&&input.url)||'';
+        const jsonResponse=(obj,status=200)=>Promise.resolve(new Response(JSON.stringify(obj),{status,headers:{'Content-Type':'application/json'}}));
+        if(url.includes('/api/v1/auth/config')) return jsonResponse({enabled:true,provider:'firebase',project_id:'blinq-182'});
+        if(url.includes('/api/v1/feed')) return jsonResponse(FEED);
+        if(url.includes('/api/v1/ui-config')) return jsonResponse({configured:false,config:null});
+        if(url.includes('/api/v1/content/news')) return jsonResponse({items:[]});
+        if(url.includes('/api/v1/banner-events')) return jsonResponse({ok:true});
+        if(url.includes('/api/v1/admin/users')) return jsonResponse({users:[]});
+        if(url.includes('/api/v1/admin/banner-analytics')) return jsonResponse({available:true,days:30,summary:{},campaigns:[]});
+        if(url.endsWith('/ui-config.json') || url==='/ui-config.json' || url.startsWith('file:')&&url.endsWith('ui-config.json')) return jsonResponse(UI);
+        return jsonResponse({},404);
+      };
+    })();
+    </script><script>(() => {
+  'use strict';
+
+  // Firebase web configuration is intentionally public client configuration.
+  // Server credentials never enter the web bundle.
+  const FIREBASE_WEB = Object.freeze({
+    apiKey: 'AIzaSyDMH_CDVsJL_nu369r-s3kQDYpGrSfzevE',
+    authDomain: 'blinq-182.firebaseapp.com',
+    projectId: 'blinq-182',
+  });
+
+  const KEY = 'blinq_v4_session';
+  const EPOCH_KEY = 'blinq_v4_session_epoch';
+  const LEGACY_KEYS = ['blinq_v3_session', 'blinq_v3_session_epoch'];
+  let config = null;
+  let refreshing = null;
+
+  function epoch() { return localStorage.getItem(EPOCH_KEY) || ''; }
+  function mutateEpoch() {
+    const value = `${Date.now()}:${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(EPOCH_KEY, value);
+    return value;
+  }
+  function session() {
+    try { return JSON.parse(localStorage.getItem(KEY) || 'null'); }
+    catch { return null; }
+  }
+  function clear() {
+    mutateEpoch();
+    localStorage.removeItem(KEY);
+    sessionStorage.removeItem(KEY);
+  }
+  function clearLegacy() { LEGACY_KEYS.forEach(key => localStorage.removeItem(key)); }
+
+  function normalizeSession(value, provider = config?.provider || 'firebase') {
+    const s = value?.session || value || {};
+    const access = s.access_token || s.idToken || s.id_token || '';
+    const refresh = s.refresh_token || s.refreshToken || '';
+    const expiresIn = Number(s.expires_in || s.expiresIn || 3600);
+    if (!access) return null;
+    return {
+      provider,
+      access_token: access,
+      refresh_token: refresh,
+      expires_at: Number(s.expires_at) || Math.floor(Date.now() / 1000) + expiresIn,
+    };
+  }
+  function save(value, expectedEpoch = null, provider = config?.provider || 'firebase') {
+    if (expectedEpoch !== null && epoch() !== expectedEpoch) return null;
+    const normalized = normalizeSession(value, provider);
+    if (!normalized) return null;
+    if (expectedEpoch !== null && epoch() !== expectedEpoch) return null;
+    const serialized = JSON.stringify(normalized);
+    localStorage.setItem(KEY, serialized);
+    if (expectedEpoch !== null && epoch() !== expectedEpoch) {
+      if (localStorage.getItem(KEY) === serialized) localStorage.removeItem(KEY);
+      return null;
+    }
+    return normalized;
+  }
+  function replaceSession(value, provider = config?.provider || 'firebase') {
+    const nextEpoch = mutateEpoch();
+    return save(value, nextEpoch, provider);
+  }
+
+  function errorMessage(data, status) {
+    let raw = data?.error_description || data?.msg || data?.message || data?.error || `HTTP ${status}`;
+    if (raw && typeof raw === 'object') raw = raw.message || raw.status || JSON.stringify(raw);
+    raw = String(raw || `HTTP ${status}`);
+    const code = raw.split(' : ')[0].trim().toUpperCase();
+    const friendly = {
+      INVALID_LOGIN_CREDENTIALS: 'Incorrect email or password.',
+      EMAIL_NOT_FOUND: 'Incorrect email or password.',
+      INVALID_PASSWORD: 'Incorrect email or password.',
+      EMAIL_EXISTS: 'An account with this email already exists.',
+      WEAK_PASSWORD: 'Choose a stronger password with at least eight characters.',
+      INVALID_EMAIL: 'Enter a valid email address.',
+      TOO_MANY_ATTEMPTS_TRY_LATER: 'Too many attempts. Try again later.',
+      USER_DISABLED: 'This account has been disabled.',
+      EMAIL_NOT_VERIFIED: 'Verify your email before opening the BlinQ workspace.',
+      TOKEN_EXPIRED: 'Your session expired. Sign in again.',
+      INVALID_ID_TOKEN: 'Your session is no longer valid. Sign in again.',
+    };
+    return friendly[code] || raw.replaceAll('_', ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
+  }
+
+  async function json(url, options = {}) {
+    const headers = {Accept: 'application/json', ...(options.headers || {})};
+    if (options.body && !Object.keys(headers).some(key => key.toLowerCase() === 'content-type')) {
+      headers['Content-Type'] = 'application/json';
+    }
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      cache: 'no-store',
+      signal: AbortSignal.timeout(20000),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(errorMessage(data, response.status));
+      error.status = response.status;
+      error.code = typeof data?.error === 'object' ? data.error.message : data?.error;
+      throw error;
+    }
+    return data;
+  }
+
+  function provider() {
+    if (!config?.enabled) throw new Error('Authentication is temporarily unavailable.');
+    const value = String(config.provider || '').toLowerCase();
+    if (value !== 'firebase') throw new Error('Firebase authentication is not configured.');
+    return value;
+  }
+  function firebaseEndpoint(action) {
+    return `https://identitytoolkit.googleapis.com/v1/accounts:${action}?key=${encodeURIComponent(FIREBASE_WEB.apiKey)}`;
+  }
+  function firebaseRefreshEndpoint() {
+    return `https://securetoken.googleapis.com/v1/token?key=${encodeURIComponent(FIREBASE_WEB.apiKey)}`;
+  }
+
+  async function restoreFirebase(s, refreshEpoch) {
+    const data = await json(firebaseRefreshEndpoint(), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+      body: new URLSearchParams({grant_type: 'refresh_token', refresh_token: s.refresh_token}).toString(),
+    });
+    return save(data, refreshEpoch, 'firebase');
+  }
+
+  async function restore() {
+    const s = session();
+    if (!s) return null;
+    if (s.expires_at > Date.now() / 1000 + 60) return s;
+    if (!s.refresh_token) { clear(); return null; }
+    if (!refreshing) {
+      const refreshEpoch = epoch();
+      refreshing = restoreFirebase(s, refreshEpoch)
+        .catch(error => {
+          if ([400, 401, 403].includes(error.status)) {
+            if (epoch() === refreshEpoch) clear();
+            return null;
+          }
+          throw error;
+        })
+        .finally(() => { refreshing = null; });
+    }
+    return refreshing;
+  }
+
+  async function init() {
+    clearLegacy();
+    config = await json('/api/v1/auth/config');
+    if (provider() !== 'firebase') throw new Error('Firebase authentication is not configured.');
+    if (config.project_id && config.project_id !== FIREBASE_WEB.projectId) {
+      throw new Error('Firebase project configuration mismatch.');
+    }
+    return {...config, recovery: false};
+  }
+
+  async function firebaseEmailVerified(idToken) {
+    const lookup = await json(firebaseEndpoint('lookup'), {
+      method: 'POST',
+      body: JSON.stringify({idToken}),
+    });
+    return lookup?.users?.[0]?.emailVerified === true;
+  }
+
+  async function signInFirebase(email, password) {
+    const data = await json(firebaseEndpoint('signInWithPassword'), {
+      method: 'POST',
+      body: JSON.stringify({email, password, returnSecureToken: true}),
+    });
+    if (!(await firebaseEmailVerified(data.idToken))) {
+      replaceSession(data, 'firebase');
+      const error = new Error('Verify your email before opening the BlinQ workspace.');
+      error.status = 403;
+      error.code = 'EMAIL_NOT_VERIFIED';
+      throw error;
+    }
+    return replaceSession(data, 'firebase');
+  }
+  async function signIn(email, password) {
+    provider();
+    return signInFirebase(email, password);
+  }
+
+  async function signUpFirebase(email, password, name) {
+    const data = await json(firebaseEndpoint('signUp'), {
+      method: 'POST',
+      body: JSON.stringify({email, password, returnSecureToken: true}),
+    });
+    let current = data;
+    const displayName = String(name || '').trim().slice(0, 80);
+    if (displayName) {
+      current = await json(firebaseEndpoint('update'), {
+        method: 'POST',
+        body: JSON.stringify({idToken: data.idToken, displayName, returnSecureToken: true}),
+      });
+      current.refreshToken = current.refreshToken || data.refreshToken;
+    }
+    await json(firebaseEndpoint('sendOobCode'), {
+      method: 'POST',
+      body: JSON.stringify({requestType: 'VERIFY_EMAIL', idToken: current.idToken}),
+    });
+    clear();
+    return {verification_required: true, email: String(email || '').trim()};
+  }
+  async function signUp(email, password, name) {
+    provider();
+    return signUpFirebase(email, password, name);
+  }
+
+  async function resendVerification() {
+    provider();
+    const s = await restore();
+    if (!s) throw new Error('Sign in once more, then resend the verification email.');
+    await json(firebaseEndpoint('sendOobCode'), {
+      method: 'POST',
+      body: JSON.stringify({requestType: 'VERIFY_EMAIL', idToken: s.access_token}),
+    });
+    return true;
+  }
+
+  async function resetFirebase(email) {
+    return json(firebaseEndpoint('sendOobCode'), {
+      method: 'POST',
+      body: JSON.stringify({requestType: 'PASSWORD_RESET', email}),
+    });
+  }
+  async function reset(email) {
+    provider();
+    return resetFirebase(email);
+  }
+
+  async function updateFirebase(fields) {
+    const s = await restore();
+    if (!s) throw new Error('Sign in again.');
+    if (fields?.password) {
+      const data = await json(firebaseEndpoint('update'), {
+        method: 'POST',
+        body: JSON.stringify({idToken: s.access_token, password: fields.password, returnSecureToken: true}),
+      });
+      data.refreshToken = data.refreshToken || s.refresh_token;
+      return replaceSession(data, 'firebase');
+    }
+    if (fields?.data && typeof fields.data === 'object') {
+      return json('/api/v1/auth/profile', {
+        method: 'PUT',
+        headers: {'X-Blinq-Access-Token': s.access_token},
+        body: JSON.stringify(fields.data),
+      });
+    }
+    return null;
+  }
+  async function update(fields) {
+    provider();
+    return updateFirebase(fields);
+  }
+
+  async function signOut() {
+    clear();
+  }
+
+  async function apiWithSession(url, options = {}) {
+    const s = await restore();
+    if (!s) throw new Error('Sign in again.');
+    return json(url, {
+      ...options,
+      headers: {'X-Blinq-Access-Token': s.access_token, ...(options.headers || {})},
+    });
+  }
+  async function feed() {
+    const s = await restore();
+    return json('/api/v1/feed', {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
+  }
+  async function adminUsers(page = 1, perPage = 100) {
+    return apiWithSession(`/api/v1/admin/users?page=${encodeURIComponent(page)}&per_page=${encodeURIComponent(perPage)}`);
+  }
+  async function adminUpdateAccess(userId, payload) {
+    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/access`, {
+      method: 'PUT', body: JSON.stringify(payload || {}),
+    });
+  }
+  async function runtimeUiConfig() { return json('/api/v1/ui-config'); }
+  async function contentNews() { return json('/api/v1/content/news'); }
+  async function bannerEvent(payload, keepalive = false) {
+    return json('/api/v1/banner-events', {method: 'POST', keepalive, body: JSON.stringify(payload || {})});
+  }
+  async function adminSaveUiConfig(payload) {
+    return apiWithSession('/api/v1/admin/ui-config', {method: 'PUT', body: JSON.stringify(payload || {})});
+  }
+  async function adminBannerAnalytics(days = 30) {
+    return apiWithSession(`/api/v1/admin/banner-analytics?days=${encodeURIComponent(days)}`);
+  }
+
+  window.BlinqAuth = {
+    init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed,
+    adminUsers, adminUpdateAccess, runtimeUiConfig, contentNews,
+    bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear,
+  };
+})();
+</script><script>/* Responsive presentation only. Authentication, entitlements and data remain in app.js. */
 (() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const compact = () => matchMedia('(max-width: 1023px)').matches;
+  let lastFocus, menuOpen = false, publishedAt = '';
+
+  function closeMenu(restore = true) {
+    if (!menuOpen) return;
+    menuOpen = false;
+    document.body.classList.remove('nav-open');
+    $('navBackdrop').hidden = true;
+    $('menuToggle').setAttribute('aria-expanded', 'false');
+    $('appNavigation').removeAttribute('role');
+    $('appNavigation').removeAttribute('aria-modal');
+    $('appNavigation').inert = compact();
+    $('mainContent').inert = false;
+    $('mobileTabs').inert = false;
+    if (restore && lastFocus?.isConnected) lastFocus.focus();
+  }
+  function openMenu() {
+    if (!compact()) return;
+    lastFocus = document.activeElement;
+    menuOpen = true;
+    document.body.classList.add('nav-open');
+    $('navBackdrop').hidden = false;
+    $('menuToggle').setAttribute('aria-expanded', 'true');
+    $('appNavigation').inert = false;
+    $('appNavigation').setAttribute('role', 'dialog');
+    $('appNavigation').setAttribute('aria-modal', 'true');
+    $('mainContent').inert = true;
+    $('mobileTabs').inert = true;
+    $('menuClose').focus();
+  }
+  function routeChanged(route, focus) {
+    closeMenu(false);
+    document.body.dataset.currentRoute = route;
+    document.querySelectorAll('.nav-link, .mobile-tabs a').forEach(link => {
+      const active = link.dataset.route === route;
+      link.classList.toggle('active', active);
+      if (active) link.setAttribute('aria-current', 'page');
+      else link.removeAttribute('aria-current');
+    });
+    if (focus) {
+      window.scrollTo({top: 0, behavior: 'instant'});
+      $('pageTitle').focus({preventScroll: true});
+    }
+  }
+  function cardsPerPanel() {
+    return Math.max(1, parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cards-per-panel'), 10) || 1);
+  }
+  function pager(host, page, count) {
+    const shell = host.parentElement;
+    let label = shell.querySelector('.page-position');
+    if (!label) {
+      label = document.createElement('span');
+      label.className = 'page-position';
+      label.setAttribute('role', 'status');
+      shell.appendChild(label);
+    }
+    label.textContent = `${page + 1} / ${count}`;
+    label.hidden = count <= 1;
+    shell.classList.toggle('has-pages', count > 1);
+  }
+  function prepareRoute(host) {
+    // Preserve real table semantics on desktop and expose column names on narrow screens.
+    host.querySelectorAll('.picks-table, .results-table').forEach(table => {
+      table.setAttribute('role', 'table');
+      table.querySelectorAll('thead,tbody').forEach(group => group.setAttribute('role', 'rowgroup'));
+      table.querySelectorAll('tr').forEach(row => row.setAttribute('role', 'row'));
+      table.querySelectorAll('td').forEach(cell => cell.setAttribute('role', 'cell'));
+      const headers = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+      table.querySelectorAll('tbody tr').forEach(row => {
+        [...row.children].forEach((cell, i) => cell.dataset.label = headers[i] || '');
+      });
+      table.querySelectorAll('th').forEach(th => {th.setAttribute('scope', 'col');th.setAttribute('role', 'columnheader');});
+    });
+    host.querySelectorAll('.route-rules').forEach(rule => {
+      const details = document.createElement('details');
+      details.className = 'selection-details';
+      const summary = document.createElement('summary');
+      summary.textContent = 'How these picks are selected';
+      rule.replaceWith(details);
+      details.append(summary, rule);
+    });
+  }
+  function sync(status, generatedAt) {
+    if (generatedAt) publishedAt = generatedAt;
+    const node = $('syncStatus');
+    if (!node) return;
+    let time = '';
+    if (publishedAt && Number.isFinite(Date.parse(publishedAt))) {
+      time = new Intl.DateTimeFormat(document.documentElement.lang || 'en', {hour: '2-digit', minute: '2-digit'}).format(new Date(publishedAt));
+    }
+    node.dataset.state = status;
+    node.textContent = {
+      loading: 'LIVE · Refreshing…',
+      ready: time ? `LIVE · ${time}` : 'LIVE · Connected',
+      stale: time ? `STALE · ${time}` : 'STALE · Waiting for update',
+      error: 'REFRESH FAILED',
+      offline: 'OFFLINE · Cached data'
+    }[status] || 'LIVE · Connecting…';
+    $('syncRefresh').disabled = status === 'loading';
+  }
+  function refreshFinished() { $('syncRefresh').disabled = false; }
+  function init() {
+    document.querySelector('.skip-link').onclick = event => {event.preventDefault();$('mainContent').focus();};
+    $('menuToggle').onclick = openMenu;
+    $('menuClose').onclick = () => closeMenu();
+    $('navBackdrop').onclick = () => closeMenu();
+    $('appNavigation').inert = compact();
+    matchMedia('(max-width: 1023px)').addEventListener('change', () => {
+      closeMenu();
+      $('appNavigation').inert = compact();
+    });
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') {
+        if (menuOpen) {event.preventDefault();closeMenu();}
+        const menu = $('profileMenu');
+        if (!menu.hidden) {menu.hidden = true;$('profileMenuToggle').setAttribute('aria-expanded', 'false');$('profileMenuToggle').focus();}
+      }
+      if (!menuOpen || event.key !== 'Tab') return;
+      const focusable = [...$('appNavigation').querySelectorAll('a[href],button:not(:disabled)')].filter(n => n.getClientRects().length);
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {event.preventDefault();last?.focus();}
+      else if (!event.shiftKey && document.activeElement === last) {event.preventDefault();first?.focus();}
+    });
+    // Swipe is optional; visible arrow buttons remain available to all input types.
+    document.querySelectorAll('.pick-carousel-shell, .market-carousel-shell').forEach(shell => {
+      let start = null;
+      shell.addEventListener('pointerdown', event => {
+        if (event.pointerType !== 'touch' || event.target.closest('button,a')) return;
+        start = {x: event.clientX, y: event.clientY};
+      }, {passive: true});
+      shell.addEventListener('pointerup', event => {
+        if (!start) return;
+        const dx = event.clientX - start.x, dy = event.clientY - start.y;
+        start = null;
+        if (Math.abs(dx) < 55 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+        const button = shell.querySelector(dx < 0 ? '[data-market-next],#nextPick' : '[data-market-prev],#prevPick');
+        if (button && !button.hidden && !button.disabled) button.click();
+      }, {passive: true});
+      shell.addEventListener('pointercancel', () => {start = null;}, {passive: true});
+    });
+    // Recover absent market-player photos without inline handlers (CSP compatible).
+    document.addEventListener('error', event => {
+      const img = event.target;
+      if (img.tagName !== 'IMG' || !img.closest('.market-card .player-avatar')) return;
+      const avatar = img.parentElement, name = avatar.parentElement.querySelector('.player-name')?.textContent || '?';
+      avatar.classList.remove('has-photo');
+      avatar.textContent = name.split(/\s+/).slice(0,2).map(s => s[0]).join('').toUpperCase();
+    }, true);
+  }
+  window.BlinqUI = Object.freeze({init, cardsPerPanel, pager, prepareRoute, routeChanged, closeMenu, sync, refreshFinished});
+})();
+</script><script>(() => {
   'use strict';
 
   const $ = id => document.getElementById(id);
   const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
-  const dashboardCardsPerPanel = () => 1; // v6.5.10: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
+  const dashboardCardsPerPanel = () => 1; // v6.5.8: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   const pct = value => `${(Number(value || 0) * (Number(value || 0) <= 1 ? 100 : 1)).toFixed(1)}%`;
   const number = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
@@ -695,7 +1369,7 @@
     return [];
   }
   function marketProbability(row){const raw=row?.probability??row?.win_probability??row?.model_probability??row?.confidence_probability;const value=Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;}
-  function marketPreviewCard(row,key,index=0,locked=false,compact=false){
+  function marketPreviewCard(row,key,index=0,locked=false){
     if(locked)return lockedPickCard(key,index);
     const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);const pick=row?.pick||row?.selection||row?.prediction||'—';const odds=Number(row?.odds),edge=Number(row?.edge),ev=Number(row?.expected_value);
     const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),projectionGap=Number(row?.projection_gap),projectionConfidence=Number(row?.projection_confidence);const samples=row?.projection_samples||{};const projectionOnly=row?.price_status==='projection_only'&&Number.isFinite(projection);
@@ -712,7 +1386,7 @@
       badge=probability==null?'MODEL':confidenceBand(probability).replace('-',' ').toUpperCase();mainValue=probability==null?'—':pct(probability);confidenceClass=probability==null?'low':confidenceBand(probability);
     }
     const p1Photo=safePhotoUrl(p1.photo_url),p2Photo=safePhotoUrl(p2.photo_url),fallback=playerFallbackUrl(row?.tour);const avatar=(photo,name)=>{const src=photo||fallback;return src?`<span class="player-avatar has-photo"><img src="${escapeHtml(src)}" alt="" loading="lazy" /></span>`:`<span class="player-avatar">${escapeHtml(initials(name))}</span>`};const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
-    return `<article class="prediction-card featured market-card${projectionOnly?' projection-card':''}${compact?' dashboard-preview-card':''}"><div class="card-meta"><span class="tour">${escapeHtml(String(row?.tour||'').toUpperCase())} ${escapeHtml(row?.tournament||row?.competition||'')}</span><span class="time">${escapeHtml(fmtTime(row?.scheduled_at||row?.date))}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row"><div class="player">${avatar(p1Photo,p1Name)}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${escapeHtml(playerMetaLabel(p1.rank,p1.country_code))}</small></div><div class="vs">VS</div><div class="player">${avatar(p2Photo,p2Name)}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${escapeHtml(playerMetaLabel(p2.rank,p2.country_code))}</small></div></div><div class="pick-row"><div><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div><div class="market-card-meta">${escapeHtml(meta||row?.market||row?.market_type||'')}</div></article>`;
+    return `<article class="prediction-card featured market-card${projectionOnly?' projection-card':''}"><div class="card-meta"><span class="tour">${escapeHtml(String(row?.tour||'').toUpperCase())} ${escapeHtml(row?.tournament||row?.competition||'')}</span><span class="time">${escapeHtml(fmtTime(row?.scheduled_at||row?.date))}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row"><div class="player">${avatar(p1Photo,p1Name)}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${escapeHtml(playerMetaLabel(p1.rank,p1.country_code))}</small></div><div class="vs">VS</div><div class="player">${avatar(p2Photo,p2Name)}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${escapeHtml(playerMetaLabel(p2.rank,p2.country_code))}</small></div></div><div class="pick-row"><div><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div><div class="market-card-meta">${escapeHtml(meta||row?.market||row?.market_type||'')}</div></article>`;
   }
 
   function renderMarketSection(key,hostId,emptyText){
@@ -721,7 +1395,7 @@
     const perPage=dashboardCardsPerPanel(),pageCount=Math.max(1,Math.ceil(preview.length/perPage));
     state.marketPage[key]=Math.min(Number(state.marketPage[key]||0),pageCount-1);
     const start=state.marketPage[key]*perPage,visible=preview.slice(start,start+perPage),unlocked=visiblePickCount(key,preview.length),ent=dashboardPlanEntitlement(key);
-    host.innerHTML=visible.length?visible.map((row,localIndex)=>{const absoluteIndex=start+localIndex;const locked=ent.blur_remaining!==false&&absoluteIndex>=unlocked;return marketPreviewCard(row,key,absoluteIndex,locked,true)}).join(''):`<div class="state-card market-empty">${escapeHtml(emptyText)}</div>`;
+    host.innerHTML=visible.length?visible.map((row,localIndex)=>{const absoluteIndex=start+localIndex;const locked=ent.blur_remaining!==false&&absoluteIndex>=unlocked;return marketPreviewCard(row,key,absoluteIndex,locked)}).join(''):`<div class="state-card market-empty">${escapeHtml(emptyText)}</div>`;
     host.style.setProperty('--visible-cards',String(Math.max(1,visible.length)));
     window.BlinqUI.pager(host,state.marketPage[key],pageCount);
     const count=$(key==='top_daily'?'topDailyCount':`${key}Count`);if(count)count.textContent=`${rows.length} ${rows.length===1?'pick':'picks'}`;
@@ -740,20 +1414,7 @@
     box.querySelector('.player-name').textContent=name;box.querySelector('.player-rank').textContent=playerMetaLabel(rank,country);
   }
   function dataDepthLabel(m){const q=m.quality||{},a=q.player1||{},b=q.player2||{};const values=[a.matches,b.matches,a.surface_matches,b.surface_matches].map(Number);if(values.every(Number.isFinite))return `History ${values[0]} / ${values[1]} · Surface ${values[2]} / ${values[3]}`;if(Number.isFinite(m.dataDepth))return `Data depth ${Math.round(m.dataDepth*100)}%`;return '';}
-  function renderCard(m, slotIndex=0){
-    const template=$('predictionTemplate').content.cloneNode(true),card=template.querySelector('.prediction-card');
-    card.dataset.id=m.id;card.dataset.uiElement=slotIndex<8?`TOP_PICK_${slotIndex+1}`:'TOP_PICK_MORE';card.classList.add('featured','dashboard-preview-card');
-    card.querySelector('.tour').textContent=`${m.tour} ${m.tournament}${m.round?` · ${m.round}`:''}`;card.querySelector('.time').textContent=fmtTime(m.date);card.querySelector('.surface').textContent=String(m.surface).replaceAll('_',' ').toUpperCase();
-    setPlayerIdentity(card.querySelector('.player-a'),m.p1,m.p1Rank,m.p1Country,m.p1Photo,m.tour);setPlayerIdentity(card.querySelector('.player-b'),m.p2,m.p2Rank,m.p2Country,m.p2Photo,m.tour);
-    const depth=card.querySelector('.data-depth-row');if(depth){const label=dataDepthLabel(m);depth.textContent=label;depth.hidden=!label;}
-    card.querySelector('.pick-name').textContent=m.pick;card.querySelector('.probability').textContent=pct(m.probability);
-    const conf=card.querySelector('.confidence');conf.textContent=m.confidence==='very-high'?'VERY HIGH':m.confidence.toUpperCase();conf.classList.add(m.confidence);
-    const bettingRow=card.querySelector('.betting-row');if(bettingRow&&Number.isFinite(m.odds)&&m.odds>1){bettingRow.hidden=false;card.querySelector('.betting-odds').textContent=`Odds ${m.odds.toFixed(2)}`;card.querySelector('.betting-edge').textContent=Number.isFinite(m.edge)?`Model edge ${m.edge>=0?'+':''}${(m.edge*100).toFixed(1)} pp`:'Model edge —';card.querySelector('.betting-ev').textContent=Number.isFinite(m.expectedValue)?`EV ${m.expectedValue>=0?'+':''}${(m.expectedValue*100).toFixed(1)}%`:'EV —';}
-    // Dashboard is intentionally a lightweight preview. Full section pages contain 3–5 picks.
-    const signals=card.querySelector('.signals');if(signals){signals.hidden=true;signals.innerHTML='';}
-    const analysis=card.querySelector('.analysis-link');if(analysis){analysis.hidden=true;analysis.onclick=null;}
-    return template;
-  }
+  function renderCard(m, slotIndex=0){ const template=$('predictionTemplate').content.cloneNode(true),card=template.querySelector('.prediction-card'); card.dataset.id=m.id; card.dataset.uiElement=slotIndex<8?`TOP_PICK_${slotIndex+1}`:'TOP_PICK_MORE'; card.classList.add('featured'); card.querySelector('.tour').textContent=`${m.tour} ${m.tournament}${m.round?` · ${m.round}`:''}`; card.querySelector('.time').textContent=fmtTime(m.date); card.querySelector('.surface').textContent=String(m.surface).replaceAll('_',' ').toUpperCase(); setPlayerIdentity(card.querySelector('.player-a'),m.p1,m.p1Rank,m.p1Country,m.p1Photo,m.tour);setPlayerIdentity(card.querySelector('.player-b'),m.p2,m.p2Rank,m.p2Country,m.p2Photo,m.tour); const depth=card.querySelector('.data-depth-row');if(depth){const label=dataDepthLabel(m);depth.textContent=label;depth.hidden=!label;} card.querySelector('.pick-name').textContent=m.pick; card.querySelector('.probability').textContent=pct(m.probability); const conf=card.querySelector('.confidence'); conf.textContent=m.confidence==='very-high'?'VERY HIGH':m.confidence.toUpperCase(); conf.classList.add(m.confidence); const bettingRow=card.querySelector('.betting-row');if(bettingRow&&Number.isFinite(m.odds)&&m.odds>1){bettingRow.hidden=false;card.querySelector('.betting-odds').textContent=`Odds ${m.odds.toFixed(2)}`;card.querySelector('.betting-edge').textContent=Number.isFinite(m.edge)?`Model edge ${m.edge>=0?'+':''}${(m.edge*100).toFixed(1)} pp`:'Model edge —';card.querySelector('.betting-ev').textContent=Number.isFinite(m.expectedValue)?`EV ${m.expectedValue>=0?'+':''}${(m.expectedValue*100).toFixed(1)}%`:'EV —';} const signals=card.querySelector('.signals'); signals.innerHTML=m.signals.length?m.signals.slice(0,4).map(s=>renderSignal(s,m)).join(''):'<div class="signal-empty">No strong secondary signal is available.</div>'; card.querySelector('.analysis-link').textContent='See more →'; card.querySelector('.analysis-link').onclick=()=>setRoute('prime'); return template; }
 
 
   function renderDots(pageCount){ const host=$('carouselDots'); if(!host)return; host.innerHTML=''; if(pageCount<=1)return; for(let i=0;i<pageCount;i++){const b=document.createElement('button');b.type='button';b.className=i===state.page?'active':'';b.setAttribute('aria-label',`Show Prime Picks page ${i+1}`);b.onclick=()=>{state.page=i;renderPredictions()};host.appendChild(b)} }
@@ -1345,3 +2006,4 @@
   async function boot(){ setupEvents();window.BlinqUI.init();setupLiveRefresh(); updateHeaderClock(); setInterval(updateHeaderClock,30000); await loadUiConfig(); const hash=location.hash.replace(/^#/,''); if(routeMeta[hash])state.route=hash; try{const cfg=await BlinqAuth.init();state.authEnabled=Boolean(cfg.enabled);if(cfg.recovery){auth('recovery');return;}const session=await BlinqAuth.restore();if(session)await loadFeed();else auth('login');}catch(error){showStatus(error.message);auth('login');} }
   boot();
 })();
+</script></body></html>

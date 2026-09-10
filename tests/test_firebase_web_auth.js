@@ -42,6 +42,9 @@ function response(status, payload) {
       if (String(url).includes('identitytoolkit.googleapis.com/v1/accounts:signInWithPassword')) {
         return response(200, {idToken: 'firebase-id-token', refreshToken: 'firebase-refresh', expiresIn: '3600'});
       }
+      if (String(url).includes('identitytoolkit.googleapis.com/v1/accounts:lookup')) {
+        return response(200, {users: [{email: 'member@example.com', emailVerified: true}]});
+      }
       if (url === '/api/v1/feed') {
         assert.strictEqual(options.headers['X-Blinq-Access-Token'], 'firebase-id-token');
         return response(200, {account: {id: 'u1'}});
@@ -58,6 +61,7 @@ function response(status, payload) {
   await context.BlinqAuth.feed();
 
   assert(calls.some(call => call.url.includes('accounts:signInWithPassword')));
+  assert(calls.some(call => call.url.includes('accounts:lookup')));
   assert(!calls.some(call => call.url.includes('supabase.co')));
   const stored = JSON.parse(context.localStorage.getItem('blinq_v4_session'));
   assert.strictEqual(stored.provider, 'firebase');

@@ -110,14 +110,14 @@ def test_rss_sources_live_in_backend_json_and_are_empty_until_owner_configures_t
 def test_large_content_rows_use_only_fixed_supported_merge_presets():
     cfg = _cfg()
     assert set(cfg["content_rows"]) == {"content_top", "content_mid", "content_bottom"}
-    supported = {"1+1+1+1", "2+2", "2+1+1", "1+1+2", "4"}
+    supported = {"1", "2", "3", "4"}
     assert all(cfg["content_rows"][zone]["preset"] in supported for zone in cfg["content_rows"])
     assert all(isinstance(cfg["content_rows"][zone]["enabled"], bool) for zone in cfg["content_rows"])
     assert set(cfg["admin"]["row_presets"]) == supported
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "rowPresetMap" in app_js
-    assert "data-admin-row-enabled" in app_js
-    assert "data-admin-row-preset" in app_js
+    assert "data-admin-row-count" in app_js
+    assert "data-admin-row-preset" not in app_js
 
 
 def test_campaigns_advertisers_and_rss_are_separate_runtime_entities():
@@ -154,11 +154,11 @@ def test_rookie_pick_entitlement_is_stable_across_filters():
 def test_campaign_manager_supports_fixed_size_creative_variants():
     cfg = _cfg()
     specs = cfg["creative_specs"]
-    assert specs["large_1"]["recommended"] == "1200 × 300 px"
-    assert specs["large_2"]["recommended"] == "2400 × 300 px"
-    assert specs["large_4"]["recommended"] == "2400 × 150 px"
-    assert specs["large_1"]["minimum"] == "800 × 200 px"
-    assert specs["large_4"]["safe_area"] == "center 90%"
+    assert specs["large_1"]["recommended"] == "1200 × 180 px"
+    assert specs["large_2"]["recommended"] == "600 × 180 px"
+    assert specs["large_4"]["recommended"] == "300 × 180 px"
+    assert specs["large_1"]["minimum"] == "900 × 135 px"
+    assert specs["large_4"]["safe_area"] == "center 82%"
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "data-campaign-image" in app_js
     assert "creative_mode:'full'" in app_js
@@ -213,10 +213,10 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["match_winner_assignment"]["priority"] == ["prime", "top_daily", "value"]
     assert set(rules["ace"]["markets"]) == {"aces", "double_faults"}
     assert set(rules["sg"]["markets"]) == {"sets", "games"}
-    assert rules["btts"]["href"] == "/btts"
+    assert rules["btts"]["href"] == "#btts"
     dashboard = cfg["dashboard"]
     assert dashboard["section_order"] == ["prime", "top_daily", "value", "doubles", "ace", "sg"]
-    assert dashboard["visible_slots"] == 4
+    assert dashboard["visible_slots"] == 6
     assert dashboard["user_switches"] is False
 
 

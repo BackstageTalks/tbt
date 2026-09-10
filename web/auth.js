@@ -77,6 +77,7 @@
       INVALID_EMAIL: 'Enter a valid email address.',
       TOO_MANY_ATTEMPTS_TRY_LATER: 'Too many attempts. Try again later.',
       USER_DISABLED: 'This account has been disabled.',
+      EMAIL_NOT_VERIFIED: 'Verify your email before opening the BlinQ workspace.',
       TOKEN_EXPIRED: 'Your session expired. Sign in again.',
       INVALID_ID_TOKEN: 'Your session is no longer valid. Sign in again.',
     };
@@ -156,11 +157,26 @@
     return {...config, recovery: false};
   }
 
+  async function firebaseEmailVerified(idToken) {
+    const lookup = await json(firebaseEndpoint('lookup'), {
+      method: 'POST',
+      body: JSON.stringify({idToken}),
+    });
+    return lookup?.users?.[0]?.emailVerified === true;
+  }
+
   async function signInFirebase(email, password) {
     const data = await json(firebaseEndpoint('signInWithPassword'), {
       method: 'POST',
       body: JSON.stringify({email, password, returnSecureToken: true}),
     });
+    if (!(await firebaseEmailVerified(data.idToken))) {
+      replaceSession(data, 'firebase');
+      const error = new Error('Verify your email before opening the BlinQ workspace.');
+      error.status = 403;
+      error.code = 'EMAIL_NOT_VERIFIED';
+      throw error;
+    }
     return replaceSession(data, 'firebase');
   }
   async function signIn(email, password) {
@@ -182,11 +198,27 @@
       });
       current.refreshToken = current.refreshToken || data.refreshToken;
     }
-    return replaceSession(current, 'firebase');
+    await json(firebaseEndpoint('sendOobCode'), {
+      method: 'POST',
+      body: JSON.stringify({requestType: 'VERIFY_EMAIL', idToken: current.idToken}),
+    });
+    clear();
+    return {verification_required: true, email: String(email || '').trim()};
   }
   async function signUp(email, password, name) {
     provider();
     return signUpFirebase(email, password, name);
+  }
+
+  async function resendVerification() {
+    provider();
+    const s = await restore();
+    if (!s) throw new Error('Sign in once more, then resend the verification email.');
+    await json(firebaseEndpoint('sendOobCode'), {
+      method: 'POST',
+      body: JSON.stringify({requestType: 'VERIFY_EMAIL', idToken: s.access_token}),
+    });
+    return true;
   }
 
   async function resetFirebase(email) {
@@ -262,7 +294,7 @@
   }
 
   window.BlinqAuth = {
-    init, restore, signIn, signUp, reset, update, signOut, feed,
+    init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed,
     adminUsers, adminUpdateAccess, runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear,
   };

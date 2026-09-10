@@ -18,11 +18,12 @@ def test_v653_header_geometry_and_brand_contract():
 def test_v653_header_promos_and_revision_contract():
     config = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    assert config["ui_revision"] == "6.5.5"
-    assert config["elements"]["HEADER_BANNER_1"]["content"]["eyebrow"] == "BLINQ PRO"
-    assert config["elements"]["HEADER_BANNER_2"]["content"]["eyebrow"] == "BLINQ ELITE"
-    assert config["elements"]["HEADER_BANNER_3"]["content"]["eyebrow"] == "BLINQ LEGEND"
-    assert "'HEADER_BANNER_1','HEADER_BANNER_2','HEADER_BANNER_3'" in js
+    assert tuple(map(int, config["ui_revision"].split("."))) >= (6, 5, 7)
+    assert config["elements"]["HEADER_BANNER_1"]["content"]["eyebrow"] == "COMMUNITY"
+    assert config["elements"]["HEADER_BANNER_2"]["content"]["eyebrow"] == "BLINQ VIP"
+    assert config["elements"]["HEADER_BANNER_3"]["content"]["eyebrow"] == "RESULTS & STATS"
+    assert config["elements"]["HEADER_BANNER_4"]["content"]["eyebrow"] == "BLINQ NEWS"
+    assert "'HEADER_BANNER_1','HEADER_BANNER_2','HEADER_BANNER_3','HEADER_BANNER_4'" in js
 
 
 def test_v653_health_version_contract():

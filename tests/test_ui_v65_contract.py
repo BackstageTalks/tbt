@@ -19,13 +19,13 @@ def test_v65_four_window_order_is_single_consistent_contract():
     expected = ["prime", "top_daily", "value", "doubles", "ace", "sg"]
     assert tuple(map(int, cfg["ui_revision"].split("."))) >= (6, 5, 4)
     assert cfg["dashboard"]["section_order"] == expected
-    assert cfg["dashboard"]["visible_slots"] == 4
+    assert cfg["dashboard"]["visible_slots"] == 6
     assert cfg["dashboard"]["user_switches"] is False
     assert cfg["dashboard"]["show_disabled_strip"] is False
     assert cfg["dashboard"]["auto_replace_empty_sections"] is True
-    assert cfg["dashboard"]["cards_per_panel_desktop"] == 2
-    assert cfg["dashboard"]["cards_per_panel_wide"] == 3
-    assert [k for k in expected if cfg["dashboard"]["sections"][k]["dashboard_enabled"]] == ["prime", "top_daily", "value", "ace"]
+    assert cfg["dashboard"]["cards_per_panel_desktop"] == 1
+    assert cfg["dashboard"]["cards_per_panel_wide"] == 1
+    assert [k for k in expected if cfg["dashboard"]["sections"][k]["dashboard_enabled"]] == expected
     assert cfg["dashboard"]["sections"]["results"]["dashboard_enabled"] is False
     assert cfg["dashboard"]["sections"]["btts"]["dashboard_enabled"] is False
     assert validate_ui_config(cfg) is cfg
@@ -49,19 +49,18 @@ def test_v65_dashboard_admin_display_controls_results_tables_and_future_doubles_
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert 'id="dashboardSectionToggles"' in html
-    assert 'id="dashboardSectionSwitcher" aria-label="Dashboard section visibility" hidden' in html
-    assert 'data-dashboard-global-field="cards_per_panel_desktop"' in app
-    assert 'data-dashboard-global-field="auto_replace_empty_sections"' in app
+    assert 'id="dashboardSectionSwitcher"' in html
+    assert 'aria-label="Dashboard section visibility"' in html
+    assert 'const dashboardCardsPerPanel = () => 1' in app
+    assert 'detail_pick_limit' in app
     assert 'id="headerFeatureStrip"' in html
     assert 'id="headerTime"' in html and 'id="headerDate"' in html
-    assert "['pro','PRO','Unlock the full daily board'" in app
-    assert "['elite','ELITE','Advanced match intelligence'" in app
-    assert "['legend','LEGEND','Maximum BlinQ access'" in app
     assert 'id="dashboardDisabledSections"' in html
+    assert "function showUpgradePrompt" in app
     assert 'id="doublesGrid"' in html
     assert 'data-route="results"' in html
     assert "renderResultsFilters()+resultsSummary()" in app
-    assert "genericTable(marketRows('doubles'),'doubles')" in app
+    assert "detailCards(marketRows('doubles'),'doubles')" in app
     assert "doubles:'Doubles'" in app
     assert "const useImage=preference==='image'&&images.length;" in app
     assert "route==='tournaments'" in app and "else if(route==='tournaments')" in app

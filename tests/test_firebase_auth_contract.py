@@ -21,6 +21,7 @@ def test_firebase_user_record_maps_to_internal_account_shape():
         uid = "firebase-u1"
         email = "member@example.com"
         display_name = "Member"
+        email_verified = True
         custom_claims = {
             "role": "user",
             "blinq_plan": "pro",
@@ -33,6 +34,7 @@ def test_firebase_user_record_maps_to_internal_account_shape():
     user = firebase_user_to_dict(Record())
     assert user["id"] == "firebase-u1"
     assert user["email"] == "member@example.com"
+    assert user["email_verified"] is True
     assert user["app_metadata"]["blinq_plan"] == "pro"
     assert user["user_metadata"]["display_name"] == "Member"
     assert user["user_metadata"]["blinq_avatar_variant"] == "w"

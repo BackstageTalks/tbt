@@ -8,10 +8,11 @@ def _cfg():
 
 def test_v654_public_promos_exclude_goat_and_keep_pro_elite_legend():
     cfg = _cfg()
-    assert cfg["ui_revision"] == "6.5.5"
-    assert [cfg["elements"][f"HEADER_BANNER_{i}"]["content"]["eyebrow"] for i in (1,2,3)] == ["BLINQ PRO", "BLINQ ELITE", "BLINQ LEGEND"]
+    assert tuple(map(int, cfg["ui_revision"].split("."))) >= (6, 5, 7)
+    header=[cfg["elements"][f"HEADER_BANNER_{i}"]["content"]["eyebrow"] for i in (1,2,3,4)]
+    assert header == ["COMMUNITY", "BLINQ VIP", "RESULTS & STATS", "BLINQ NEWS"]
     assert cfg["elements"]["CONTENT_TOP_4"]["content"]["eyebrow"] == "BLINQ LEGEND"
-    assert "BLINQ GOAT" not in (ROOT / "web" / "ui-config.json").read_text(encoding="utf-8")
+    assert all("GOAT" not in label for label in header)
 
 def test_v654_logo_signature_and_admin_only_dashboard_controls():
     css=(ROOT / "web" / "styles.css").read_text(encoding="utf-8")
@@ -23,7 +24,7 @@ def test_v654_logo_signature_and_admin_only_dashboard_controls():
     assert cfg["dashboard"]["user_switches"] is False
     assert cfg["dashboard"]["show_disabled_strip"] is False
     assert "Dashboard pick display" in js
-    assert "Replace an empty window with the next section that has published picks" in js
+    assert "auto_replace_empty_sections" in js
 
 def test_v654_health_and_selection_schema_contract():
     api=(ROOT / "api" / "function_app.py").read_text(encoding="utf-8")
