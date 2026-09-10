@@ -2,9 +2,9 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), featuredBannerTimer:null, featuredBannerIndex:0, featuredBannerEntries:[], adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
-  const dashboardCardsPerPanel = () => { const wide=Math.max(1,Number(state.ui?.dashboard?.cards_per_panel_wide)||3),desktop=Math.max(1,Number(state.ui?.dashboard?.cards_per_panel_desktop)||2); return innerWidth >= 1900 ? wide : innerWidth >= 760 ? desktop : 1; };
+  const dashboardCardsPerPanel = () => Math.min(window.BlinqUI.cardsPerPanel(),Math.max(1,Number(innerWidth>=1900?state.ui?.dashboard?.cards_per_panel_wide:state.ui?.dashboard?.cards_per_panel_desktop)||2));
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
   const pct = value => `${(Number(value || 0) * (Number(value || 0) <= 1 ? 100 : 1)).toFixed(1)}%`;
   const number = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
@@ -252,7 +252,7 @@
   }
   function renderDashboardComposition(){
     const view=$('predictionsView');if(!view)return;
-    const top=$('bannerTop'),mid=$('bannerMid'),bottom=$('bannerBottom');if(top)top.style.order='10';if(mid){mid.style.order='900';mid.hidden=true;}if(bottom){bottom.style.order='910';bottom.hidden=true;}
+    const top=$('bannerTop'),mid=$('bannerMid'),bottom=$('bannerBottom');if(top)top.style.order='10';if(mid)mid.style.order='35';if(bottom)bottom.style.order='65';
     const prefs=dashboardVisibilityState(),max=Math.max(1,Number(state.ui?.dashboard?.visible_slots)||4);
     const configured=dashboardPickSectionKeys.filter(key=>prefs[key]&&dashboardSectionConfig(key).sidebar_enabled!==false).slice(0,max);
     const countFor=key=>marketRows(key).length;
@@ -263,7 +263,7 @@
     }
     dashboardPickSectionKeys.forEach(key=>{
       const cfg=dashboardSectionConfig(key),panel=$(cfg.panel_id);if(!panel)return;
-      panel.hidden=!active.includes(key);panel.style.order=String(20+active.indexOf(key));
+      panel.hidden=!active.includes(key);panel.style.order=String(20+active.indexOf(key)*10);
     });
     for(const key of ['results','btts']){const cfg=dashboardSectionConfig(key),panel=$(cfg.panel_id);if(panel)panel.hidden=true;}
     dashboardSectionKeys.forEach(key=>{
@@ -284,19 +284,6 @@
     const raw=String(label||'Model signal');if(locale==='sk')return raw;
     const map={'Celková výkonnosť':'Overall performance','Sila na povrchu':'Surface strength','Aktuálna forma':'Recent form','Vzájomné zápasy':'Head to head','Výkonnosť':'Performance','Forma':'Recent form'};
     return map[raw]||raw;
-  }
-
-  function syncMobileNavigation(){
-    const bottom=$('mobileBottomNav'); if(!bottom)return;
-    bottom.querySelectorAll('[data-mobile-route]').forEach(node=>node.classList.toggle('active',node.dataset.mobileRoute===state.route));
-    const more=$('mobileMoreToggle');
-    if(more)more.classList.toggle('active',['ace','doubles','sg','results','btts','account','admin'].includes(state.route));
-  }
-  function setMobileMore(open){
-    const sheet=$('mobileMoreSheet'),backdrop=$('mobileMoreBackdrop'),toggle=$('mobileMoreToggle');
-    if(!sheet||!backdrop||!toggle)return;
-    sheet.hidden=!open;backdrop.hidden=!open;toggle.setAttribute('aria-expanded',open?'true':'false');
-    document.documentElement.classList.toggle('mobile-sheet-open',open);
   }
 
   function renderNavigation(){
@@ -324,7 +311,6 @@
         const a=document.createElement('a'); a.href=item.href||`#${item.id}`; a.dataset.route=item.id||''; a.textContent=item.label||item.id; footer.appendChild(a);
       });
     }
-    syncMobileNavigation();
   }
 
   function watermarkHtml(item){
@@ -467,7 +453,7 @@
   function bannerHtml(item, sidebar=false, index=0, spanOverride=null){
     const c=resolvedBannerContent(item,index),route=c.route||'',href=safeLink(c.link,route?`#${route}`:'#account'),external=isExternalLink(href); const theme=String(c.theme||'violet').replace(/[^a-z0-9_-]/gi,'');
     const sponsored=c.sponsored?'<span class="sponsored-label">SPONSORED</span>':'';
-    const attrs=`${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)}`;
+    const attrs=`aria-label="${escapeHtml(c.headline||c.button_text||item.label||'Open partner content')}" ${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)}`;
     const target=external?'target="_blank" rel="noopener"':'';
     if(sidebar){
       return `<a class="sidebar-promo theme-${theme}${c.plan_id?' has-plan-avatar':''}" href="${escapeHtml(href)}" ${target} ${attrs}>${sponsored}<div class="sidebar-promo-copy"><small>${escapeHtml(c.eyebrow||'BLINQ')}</small><strong>${escapeHtml(c.headline||'')}</strong><span>${escapeHtml(c.text||'')}</span><b>${escapeHtml(c.button_text||'Open')}</b></div>${promoPlanAvatarHtml(c,true)}${watermarkHtml(item)}</a>`;
@@ -477,45 +463,17 @@
     const showCopy=c.show_copy!==false;
     return `<a class="promo-banner promo-card theme-${theme} span-${span}${fullCreative?' creative-full':''}${showCopy?'':' no-copy'}${c.plan_id?' has-plan-avatar':''}" href="${escapeHtml(href)}" ${target} ${attrs}>${sponsored}${bannerImageHtml(c,span)}${showCopy?`<div class="promo-copy"><span class="promo-eyebrow">${escapeHtml(c.eyebrow||'BLINQ')}</span><strong>${escapeHtml(c.headline||'')}</strong><p>${escapeHtml(c.text||'')}</p><span class="promo-cta">${escapeHtml(c.button_text||'Open')}</span></div>`:''}${promoPlanAvatarHtml(c,false)}${watermarkHtml(item)}</a>`;
   }
-  function renderFeaturedBanner(){
-    const host=$('bannerTop'),entries=state.featuredBannerEntries||[];
-    if(!host||!entries.length){if(host){host.hidden=true;host.innerHTML='';}return;}
-    const index=((Number(state.featuredBannerIndex)||0)%entries.length+entries.length)%entries.length;
-    const entry=entries[index];
-    host.hidden=false;
-    host.dataset.layout='featured';
-    host.dataset.rowEnabled='true';
-    host.dataset.rotationCount=String(entries.length);
-    host.dataset.rotationIndex=String(index);
-    host.innerHTML=bannerHtml(entry.item,false,index,4);
-    installBannerTracking(host);
-  }
-  function scheduleFeaturedBannerRotation(){
-    if(state.featuredBannerTimer){clearInterval(state.featuredBannerTimer);state.featuredBannerTimer=null;}
-    const total=(state.featuredBannerEntries||[]).length;
-    if(total<=1)return;
-    const interval=Math.max(8000,Number(state.ui?.ads?.featured_rotation_ms)||14000);
-    state.featuredBannerTimer=setInterval(()=>{
-      state.featuredBannerIndex=(Number(state.featuredBannerIndex||0)+1)%total;
-      renderFeaturedBanner();
-    },interval);
-  }
   function renderBanners(){
-    const hosts={content_top:$('bannerTop'),content_mid:$('bannerMid'),content_bottom:$('bannerBottom')};
-    let offset=0;
-    contentRowZones.forEach(zone=>{
-      const host=hosts[zone]; if(!host)return;
-      const rows=rowItems(zone); host.dataset.layout=rowPreset(zone); host.dataset.rowEnabled=rowEnabled(zone)?'true':'false';
-      if(zone==='content_top'){
-        state.featuredBannerEntries=rowEnabled(zone)?rows:[];
-        if(state.featuredBannerIndex>=state.featuredBannerEntries.length)state.featuredBannerIndex=0;
-        renderFeaturedBanner();
-        scheduleFeaturedBannerRotation();
-      }else{
-        host.hidden=true;
-        host.innerHTML='';
-      }
-      offset+=4;
+    // Three responsive positions. Prefer one from each enabled row, then fill
+    // remaining positions with that row's other configured creatives.
+    const groups=contentRowZones.map(zone=>rowItems(zone));
+    const selected=[];
+    for(let i=0;i<4&&selected.length<3;i++)for(const rows of groups){if(rows[i]&&selected.length<3)selected.push(rows[i]);}
+    ['bannerTop','bannerMid','bannerBottom'].forEach((id,index)=>{
+      const host=$(id);if(!host)return;
+      const entry=selected[index];host.hidden=!entry;host.dataset.layout='4';host.dataset.rowEnabled=entry?'true':'false';
+      host.innerHTML=entry?bannerHtml(entry.item,false,index,4):'';
+      if(entry)installBannerTracking(host);
     });
   }
   function renderSidebarPromos(){
@@ -581,9 +539,11 @@
       node.setAttribute('aria-disabled',mode==='active'?'false':'true');
     });
   }
-  function renderAllUiContent(){ if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}if(state.featuredBannerTimer){clearInterval(state.featuredBannerTimer);state.featuredBannerTimer=null;}state.bannerTimers=new WeakMap();renderNavigation(); renderHeaderSlots(); renderBanners(); renderSidebarPromos(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); applyAccessStates(); }
+  function renderAllUiContent(){ if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); renderHeaderSlots(); renderBanners(); renderSidebarPromos(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); applyAccessStates(); }
 
   function auth(mode='login'){
+    feedGeneration++;
+    window.BlinqUI.closeMenu(false); $('appShell').hidden=true;
     state.authMode=mode; $('authMessage').textContent='';
     $('nameLabel').hidden=mode!=='signup'; $('emailLabel').hidden=mode==='recovery'; $('passwordLabel').hidden=mode==='reset';
     $('authEmail').required=mode!=='recovery'; $('authPassword').required=mode!=='reset'; $('authName').required=mode==='signup';
@@ -594,7 +554,7 @@
     $('switchSignup').textContent=mode==='login'?'Create account':'Back to sign in'; $('switchReset').hidden=mode!=='login';
     $('authSubmit').disabled=!state.authEnabled;
     if(!state.authEnabled) $('authMessage').textContent='Authentication is temporarily unavailable.';
-    $('appShell').hidden=true; const mobileNav=$('mobileBottomNav');if(mobileNav)mobileNav.hidden=true; setMobileMore(false);
+    $('appShell').hidden=true;
     if(!$('authDialog').open) $('authDialog').showModal();
   }
 
@@ -665,11 +625,13 @@
     state.marketPage[key]=Math.min(Number(state.marketPage[key]||0),pageCount-1);
     const start=state.marketPage[key]*perPage,visible=preview.slice(start,start+perPage),unlocked=visiblePickCount(key,preview.length),ent=dashboardPlanEntitlement(key);
     host.innerHTML=visible.length?visible.map((row,localIndex)=>{const absoluteIndex=start+localIndex;const locked=ent.blur_remaining!==false&&absoluteIndex>=unlocked;return marketPreviewCard(row,key,absoluteIndex,locked)}).join(''):`<div class="state-card market-empty">${escapeHtml(emptyText)}</div>`;
+    host.style.setProperty('--visible-cards',String(Math.max(1,visible.length)));
+    window.BlinqUI.pager(host,state.marketPage[key],pageCount);
     const count=$(key==='top_daily'?'topDailyCount':`${key}Count`);if(count)count.textContent=`${rows.length} ${rows.length===1?'pick':'picks'}`;
     const seeCount=$(key==='top_daily'?'topDailySeeAllCardCount':`${key}SeeAllCardCount`);if(seeCount)seeCount.textContent=`${rows.length} published`;
     const shell=host.closest('.market-carousel-shell');if(shell){const prev=shell.querySelector('[data-market-prev]'),next=shell.querySelector('[data-market-next]');if(prev){prev.hidden=pageCount<=1;prev.disabled=state.marketPage[key]<=0;}if(next){next.hidden=pageCount<=1;next.disabled=state.marketPage[key]>=pageCount-1;}}
   }
-  function renderMarketSections(){renderMarketSection('top_daily','topDailyGrid','No Top Bets pass the adaptive 80 → 78 → 76 → 74 → 72 → 70 → 68 confidence cascade.');renderMarketSection('value','valueGrid','No Value Picks pass the current odds, edge and EV guardrails.');renderMarketSection('doubles','doublesGrid','Doubles picks are not published yet. The separate pair/team model remains isolated from singles.');renderMarketSection('ace','aceGrid','No Aces / Double Faults projections pass the current data-depth and gap guardrails yet.');renderMarketSection('sg','sgGrid','No Sets / Games projections pass the current data-depth and signal guardrails yet.');}
+  function renderMarketSections(){renderMarketSection('top_daily','topDailyGrid','No Top Bets available yet. New qualifying picks appear automatically.');renderMarketSection('value','valueGrid','No Value Picks available yet. We are waiting for qualifying opportunities.');renderMarketSection('doubles','doublesGrid','No Doubles picks have been published yet.');renderMarketSection('ace','aceGrid','No Ace Picks available yet. New projections appear automatically.');renderMarketSection('sg','sgGrid','No Sets / Games picks available yet. New projections appear automatically.');}
 
   function signalMeta(signal,m){ const id=String(signal?.player_id ?? signal?.favours_player_id ?? ''); const favours=id===String(m.pickId); const label=translateSignalLabel(signal?.label||signal?.factor||'Model signal'); return {label,favours}; }
   function renderSignal(signal,m){ const s=signalMeta(signal,m); return `<div class="signal-row"><span>${escapeHtml(s.label)}</span><div class="signal-meter"><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i></i><i></i></div></div>`; }
@@ -690,8 +652,9 @@
     $('matchCount').textContent=allRows.length;const primeSeeCount=$('primeSeeAllCardCount');if(primeSeeCount)primeSeeCount.textContent=`${allRows.length} published`;
     const pageCount=Math.max(1,Math.ceil(rows.length/size));state.page=Math.min(state.page,pageCount-1);const start=state.page*size,visible=rows.slice(start,start+size),unlocked=visiblePickCount('prime',rows.length),ent=dashboardPlanEntitlement('prime');
     grid.classList.remove('show-all');grid.innerHTML='';
-    if(!visible.length)grid.innerHTML='<div class="state-card">No Prime Picks pass the current accuracy/data-quality guardrails.</div>';
+    if(!visible.length)grid.innerHTML='<div class="state-card">No Prime Picks available yet. This board updates automatically when new picks qualify.</div>';
     else visible.forEach((m,index)=>{const absoluteIndex=start+index;if(ent.blur_remaining!==false&&absoluteIndex>=unlocked)grid.insertAdjacentHTML('beforeend',lockedPickCard('prime',absoluteIndex));else grid.appendChild(renderCard(m,Number.isInteger(m.accessIndex)?m.accessIndex:absoluteIndex));});
+    grid.style.setProperty('--visible-cards',String(Math.max(1,visible.length)));window.BlinqUI.pager(grid,state.page,pageCount);
     $('prevPick').hidden=pageCount<=1;$('nextPick').hidden=pageCount<=1;$('prevPick').disabled=state.page<=0;$('nextPick').disabled=state.page>=pageCount-1;renderDots(pageCount);renderDashboardComposition();applyAccessStates(grid);
   }
 
@@ -715,7 +678,7 @@
     responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.']
   };
 
-  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; setMobileMore(false); const section=dashboardSectionKeys.includes(route)?dashboardSectionConfig(route):null; if(section&&route!=='predictions'&&elementAccess(section.sidebar_element)!=='active'&&state.route!=='admin'){showUpgradePrompt(firstUnlockPlan(route,0,true),section.label||route);route='predictions';} if(route==='admin') state.previewPlan=null; state.route=route; state.page=0; const meta=routeMeta[route]; const overview=route==='predictions'; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push) history.replaceState(null,'',`#${route}`); }
+  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; const section=dashboardSectionKeys.includes(route)?dashboardSectionConfig(route):null; if(section&&route!=='predictions'&&elementAccess(section.sidebar_element)!=='active'&&state.route!=='admin'){showUpgradePrompt(firstUnlockPlan(route,0,true),section.label||route);route='predictions';} if(route==='admin') state.previewPlan=null; const routeChanged=state.route!==route;state.route=route;if(routeChanged)state.page=0;const meta=routeMeta[route]; const overview=route==='predictions'; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push&&location.hash!==`#${route}`) history.pushState(null,'',`#${route}`); window.BlinqUI.routeChanged(route,push); document.title=`${meta[1]} · BlinQ`; }
 
   function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
   function issuedMarketPublications(row){
@@ -1130,23 +1093,27 @@
     else if(route==='model'||route==='backtests'){const h=report.holdout||{},delta=report.delta_vs_elo||{};body=metricCards([['Model',String(feed.model?.version||'—'),'Production artifact'],['Holdout n',String(h.n??'—'),'Chronological holdout'],['Holdout accuracy',h.accuracy!=null?pct(h.accuracy):'—','Evaluation report'],['Δ log loss vs Elo',delta.log_loss!=null?number(delta.log_loss):'—','Negative is better']])+`<div class="route-sub static-copy"><h3>Data window</h3><p>${escapeHtml(history.start?fmtDate(history.start):'—')} → ${escapeHtml(history.end?fmtDate(history.end):'—')} · ${escapeHtml(String(history.matches??'—'))} historical matches in the current serving metadata.</p><p>No result here is presented as a guarantee. Holdout metrics describe a specific historical evaluation period.</p></div>`;}
     else if(route==='account'){body=`<section class="account-membership-page"><div class="account-membership-heading"><small>BLINQ MEMBERSHIP</small><h2>Available plans</h2></div>${renderPlanCardsForAccount()}</section>`;}
     else {const copy={how_blinq_works:'BlinQ processes point-in-time tennis history, builds model features without using future results, publishes pre-match probabilities, and later evaluates those same published records against real outcomes.',methodology:'The core rules are chronological evaluation, immutable first-published probabilities, explicit missing-data handling, and honest probability metrics. A prediction is informative only when it existed before the match.',model_data:`Current serving metadata reports ${history.matches??'—'} historical matches. The web application reads only the authenticated published serving feed; it does not fabricate missing tennis data.`,faq:'Probabilities are not certainties. Confidence is derived from the model probability, and performance should always be read together with sample size and coverage.',responsible_use:'Use BlinQ as analytical information. Do not treat any probability as a guaranteed outcome, and do not infer certainty from a high-confidence label.'};body=`<div class="static-copy"><p>${escapeHtml(copy[route]||'This section is available in the BlinQ workspace.')}</p></div>`;}
-    host.innerHTML=`<div class="route-card route-card-clean">${body}</div>`; if(route==='results')wireResultsFilters(); applyAccessStates(host);
+    host.innerHTML=`<div class="route-card route-card-clean">${body}</div>`; window.BlinqUI.prepareRoute(host); if(route==='results')wireResultsFilters(); applyAccessStates(host);
   }
 
   function showUpgradePrompt(planId='pro',sectionLabel='this content'){
+    window.BlinqUI.closeMenu(false);
     const dialog=$('upgradeDialog'),host=$('upgradeDialogContent');if(!dialog||!host)return;
     const plan=state.ui?.plans?.[planId]||state.ui?.plans?.pro||{},url=String(plan.url||'').trim();
     host.innerHTML=`<div class="upgrade-dialog-eyebrow">UNLOCK MORE WITH BLINQ</div><div class="upgrade-dialog-plan">${planAvatarHtml(planId,plan)}<div><h2 id="upgradeDialogTitle">Unlock ${escapeHtml(sectionLabel)}</h2><p>${escapeHtml(plan.description||plan.note||`Available with ${upgradePlanLabel(planId)}.`)}</p></div></div><div class="upgrade-dialog-benefits"><span>More published picks</span><span>Full card details</span><span>See all access</span></div>${url?`<a class="btn btn-primary upgrade-dialog-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">Upgrade to ${escapeHtml(String(plan.label||planId).replace(/^BlinQ\s+/i,''))} →</a>`:`<button class="btn btn-primary upgrade-dialog-cta" type="button" data-route="account">View membership options →</button>`}`;
     if(!dialog.open)dialog.showModal();
   }
-  async function signOutCurrentSession(){await BlinqAuth.signOut();state.feed={upcoming:[],results:[],performance:{},history:{},model:null};auth('login');}
+  async function signOutCurrentSession(){feedGeneration++;await BlinqAuth.signOut();state.feed={upcoming:[],results:[],performance:{},history:{},model:null};auth('login');}
   function closeProfileMenu(){const menu=$('profileMenu'),toggle=$('profileMenuToggle');if(menu)menu.hidden=true;if(toggle)toggle.setAttribute('aria-expanded','false');}
 
+  let feedLoading=false,feedGeneration=0;
   async function loadFeed(showLoading=true){
+    if(feedLoading)return;feedLoading=true;const generation=feedGeneration;window.BlinqUI.sync('loading');
     if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML='<div class="state-card">Loading current model predictions…</div>';
     try{
-      const feed=await BlinqAuth.feed(); state.feed=feed||{}; state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
-      await loadNewsPool(); loadAdminDraft(); renderAllUiContent(); populateFilters();
+      const feed=(await BlinqAuth.feed())||{};if(generation!==feedGeneration)return;
+      state.feed=feed; state.feed.upcoming=Array.isArray(feed?.upcoming)?feed.upcoming:[]; state.feed.results=Array.isArray(feed?.results)?feed.results:[];
+      await loadNewsPool();if(generation!==feedGeneration)return;loadAdminDraft(); renderAllUiContent(); populateFilters();
       const a=feed.account||{};
       $('profileName').textContent=a.name||a.email||'BlinQ User';
       const resolvedPlan=accountPlan();
@@ -1167,9 +1134,9 @@
       if(tooltipPlan)tooltipPlan.textContent=a.plan_label||state.ui?.plans?.[String(a.plan||'').toLowerCase()]?.label||a.plan||planLabel||'Member';
       if(tooltipRemaining){const status=String(a.status||'active').toLowerCase();tooltipRemaining.textContent=status==='lifetime'?'Lifetime':a.expires_at?remainingLabel(a.expires_at):(status==='active'?'Managed manually':status.toUpperCase());}
       $('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—'; $('todayLabel').textContent=fmtToday(); updateHeaderClock(); const footerModel=$('footerModelState'); if(footerModel)footerModel.textContent=feed?.model?.version?`Model ${feed.model.version}`:'Production feed'; const headerModel=$('headerModelState');if(headerModel)headerModel.textContent=feed?.model?.version?String(feed.model.version):'Production';
-      $('staleNotice').hidden=!feed.stale; $('staleNotice').textContent=feed.stale?'Published data is older than 12 hours. Check prediction creation times before evaluating them.':''; $('appShell').hidden=false; const mobileNav=$('mobileBottomNav');if(mobileNav)mobileNav.hidden=false; if($('authDialog').open)$('authDialog').close();
-      if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();
-    }catch(error){if(error.status===401){BlinqAuth.clear();auth('login');return;}showStatus('Data could not be loaded. Try again shortly.');throw error;}
+      $('staleNotice').hidden=!feed.stale; $('staleNotice').textContent=feed.stale?'Published data is older than 12 hours. Check prediction creation times before evaluating them.':''; $('appShell').hidden=false; if($('authDialog').open)$('authDialog').close();
+      if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
+    }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();auth('login');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus('Data could not be refreshed. Please try again.');if(!$('appShell').hidden&&state.route==='predictions')renderPredictions();throw error;}finally{feedLoading=false;window.BlinqUI.refreshFinished();}
   }
 
   function updateHeaderClock(){const date=$('headerDate'),time=$('headerTime');if(date)date.textContent=fmtToday();if(time)time.textContent=fmtClock();}
@@ -1178,14 +1145,10 @@
 
   function setupEvents(){
     $('authDialog').addEventListener('cancel',e=>e.preventDefault()); $('authForm').addEventListener('submit',handleAuthSubmit); $('switchSignup').onclick=()=>auth(state.authMode==='login'?'signup':'login'); $('switchReset').onclick=()=>auth('reset');
-    $('refreshButton').onclick=()=>loadFeed(); ['tourFilter','tournamentFilter','surfaceFilter','confidenceFilter'].forEach(id=>$(id).addEventListener('change',()=>{state.page=0;state.showAll=false;renderPredictions()})); $('searchInput').addEventListener('input',()=>{state.page=0;state.showAll=false;renderPredictions()});
+    $('refreshButton').onclick=()=>loadFeed().catch(()=>{});$('syncRefresh').onclick=()=>loadFeed(false).catch(()=>{}); ['tourFilter','tournamentFilter','surfaceFilter','confidenceFilter'].forEach(id=>$(id).addEventListener('change',()=>{state.page=0;state.showAll=false;renderPredictions()})); $('searchInput').addEventListener('input',()=>{state.page=0;state.showAll=false;renderPredictions()});
     $('prevPick').onclick=()=>{state.page=Math.max(0,state.page-1);renderPredictions()}; $('nextPick').onclick=()=>{state.page+=1;renderPredictions()}; $('dialogClose').onclick=()=>$('matchDialog').close(); $('matchDialog').addEventListener('click',e=>{if(e.target===$('matchDialog'))$('matchDialog').close()}); $('profileButton').onclick=()=>{closeProfileMenu();setRoute('account')};
     $('profileMenuToggle').onclick=e=>{e.stopPropagation();const menu=$('profileMenu'),toggle=$('profileMenuToggle'),open=menu.hidden;menu.hidden=!open;toggle.setAttribute('aria-expanded',open?'true':'false');};
     $('headerLogoutButton').onclick=signOutCurrentSession;$('upgradeDialogClose').onclick=()=>$('upgradeDialog').close();$('upgradeDialog').addEventListener('click',e=>{if(e.target===$('upgradeDialog'))$('upgradeDialog').close()});
-    const moreToggle=$('mobileMoreToggle'),moreClose=$('mobileMoreClose'),moreBackdrop=$('mobileMoreBackdrop');
-    if(moreToggle)moreToggle.onclick=()=>setMobileMore(moreToggle.getAttribute('aria-expanded')!=='true');
-    if(moreClose)moreClose.onclick=()=>setMobileMore(false);
-    if(moreBackdrop)moreBackdrop.onclick=()=>setMobileMore(false);
     document.addEventListener('click',e=>{
       if(!e.target.closest('#profileShell'))closeProfileMenu();
       const dashboardToggle=e.target.closest('[data-dashboard-toggle]');if(dashboardToggle&&state.route==='predictions'){e.preventDefault();toggleDashboardSection(dashboardToggle.dataset.dashboardToggle);return;}
@@ -1197,9 +1160,23 @@
       const next=e.target.closest('[data-market-next]');if(next){const key=next.dataset.marketNext;state.marketPage[key]=Number(state.marketPage[key]||0)+1;renderMarketSections();return;}
       const target=e.target.closest('[data-route]');if(!target)return;const route=target.dataset.route;if(!routeMeta[route])return;e.preventDefault();setRoute(route);
     });
-    let resizeTimer; window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{if(state.route==='predictions'){state.page=0;Object.keys(state.marketPage||{}).forEach(k=>{state.marketPage[k]=0;});renderPredictions();renderMarketSections();renderDashboardComposition();}},120)});
+    let resizeTimer,lastCardCapacity=dashboardCardsPerPanel(); window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{const capacity=dashboardCardsPerPanel();if(capacity===lastCardCapacity)return;lastCardCapacity=capacity;if(state.route==='predictions'){state.page=0;Object.keys(state.marketPage||{}).forEach(k=>{state.marketPage[k]=0;});renderPredictions();renderMarketSections();renderDashboardComposition();}},120)});
   }
 
-  async function boot(){ setupEvents(); updateHeaderClock(); setInterval(updateHeaderClock,30000); if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}),{once:true});} await loadUiConfig(); const hash=location.hash.replace(/^#/,''); if(routeMeta[hash])state.route=hash; try{const cfg=await BlinqAuth.init();state.authEnabled=Boolean(cfg.enabled);if(cfg.recovery){auth('recovery');return;}const session=await BlinqAuth.restore();if(session)await loadFeed();else auth('login');}catch(error){showStatus(error.message);auth('login');} }
+  function setupLiveRefresh(){
+    let lastAttempt=Date.now();
+    const refresh=()=>{
+      if(document.hidden||!navigator.onLine||document.activeElement?.matches('input,select,textarea')||$('appShell').hidden||state.route==='admin'||state.demoMode||document.querySelector('dialog[open]')||Date.now()-lastAttempt<60000)return;
+      lastAttempt=Date.now();loadFeed(false).catch(()=>{});
+    };
+    setInterval(refresh,5*60*1000);
+    document.addEventListener('visibilitychange',refresh);
+    window.addEventListener('online',()=>{lastAttempt=0;refresh();});
+    window.addEventListener('offline',()=>window.BlinqUI.sync('offline'));
+    window.addEventListener('popstate',()=>{if(!$('appShell').hidden)setRoute(location.hash.slice(1)||'predictions',false);});
+    window.addEventListener('hashchange',()=>{const route=location.hash.slice(1)||'predictions';if(!$('appShell').hidden&&route!==state.route)setRoute(route,false);});
+  }
+
+  async function boot(){ setupEvents();window.BlinqUI.init();setupLiveRefresh(); updateHeaderClock(); setInterval(updateHeaderClock,30000); await loadUiConfig(); const hash=location.hash.replace(/^#/,''); if(routeMeta[hash])state.route=hash; try{const cfg=await BlinqAuth.init();state.authEnabled=Boolean(cfg.enabled);if(cfg.recovery){auth('recovery');return;}const session=await BlinqAuth.restore();if(session)await loadFeed();else auth('login');}catch(error){showStatus(error.message);auth('login');} }
   boot();
 })();

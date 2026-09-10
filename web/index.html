@@ -4,24 +4,24 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#050912" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="BlinQ" />
   <meta name="description" content="BlinQ Tennis Intelligence — live pre-match probabilities, results and model analytics." />
   <title>BlinQ · Tennis Intelligence</title>
   <link rel="icon" href="/assets/blinq_favi.png" type="image/png" />
-  <link rel="apple-touch-icon" href="/assets/blinq_app_192.png" />
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/styles.css?v=responsive-1" />
+  <link rel="stylesheet" href="/responsive.css?v=responsive-1" />
   <script src="/auth.js" defer></script>
-  <script src="/app.js" defer></script>
+  <script src="/responsive.js?v=responsive-1" defer></script>
+  <script src="/app.js?v=responsive-1" defer></script>
 </head>
 <body>
-  <div id="statusBanner" class="status-banner" hidden></div>
+  <a class="skip-link" href="#mainContent">Skip to content</a>
+  <noscript><p class="no-script">BlinQ needs JavaScript to sign in and load current predictions. Please enable it in your browser.</p></noscript>
+  <div id="statusBanner" class="status-banner" role="status" hidden></div>
 
   <div class="app-shell dashboard-shell" id="appShell" hidden>
-    <aside class="sidebar dashboard-sidebar">
+    <button class="nav-backdrop" id="navBackdrop" type="button" aria-label="Close navigation" hidden></button>
+    <aside class="sidebar dashboard-sidebar" id="appNavigation" aria-label="Main menu">
+      <button class="mobile-menu-close" id="menuClose" type="button" aria-label="Close navigation">×</button>
       <a class="brand brand-image engine-brand" href="#predictions" data-route="predictions" aria-label="BlinQ home">
         <img src="/assets/blinq_logo.svg" alt="BlinQ" class="brand-logo" />
         <span class="engine-copy"><strong>STATISTICAL ENGINE</strong><small>by BackstageTalks</small></span>
@@ -38,14 +38,14 @@
       </nav>
     </aside>
 
-    <main class="main dashboard-main">
+    <main class="main dashboard-main" id="mainContent" tabindex="-1">
       <header class="topbar dashboard-topbar">
-        <div class="topbar-balance" aria-hidden="true"></div>
-        <div class="route-context-meta" hidden>
+        <button class="mobile-menu-button" id="menuToggle" type="button" aria-expanded="false" aria-controls="appNavigation" aria-label="Open navigation"><span aria-hidden="true">☰</span></button>
+        <div class="route-context-meta">
           <span id="pageEyebrow">TENNIS INTELLIGENCE</span>
-          <span id="pageTitle">Dashboard</span>
+          <h1 id="pageTitle" tabindex="-1">Dashboard</h1>
           <span id="pageSubtitle">Recommended Prime Picks and current tennis intelligence.</span>
-          <span id="todayLabel"></span>
+          <span id="todayLabel" hidden></span>
         </div>
 
         <section class="header-feature-strip" id="headerFeatureStrip" aria-label="BlinQ header content slots"></section>
@@ -85,6 +85,7 @@
         </div>
       </header>
 
+      <div class="sync-bar"><span class="sync-state" id="syncStatus" role="status">Connecting…</span><button class="sync-refresh" id="syncRefresh" type="button">↻ Refresh</button></div>
       <section id="staleNotice" class="inline-notice" hidden></section>
 
       <div id="predictionsView">
@@ -106,11 +107,11 @@
           </div>
 
           <section class="toolbar dashboard-toolbar prime-toolbar" id="predictionToolbar" data-ui-element="PREDICTION_TOOLBAR" aria-label="Prime Picks filters" hidden>
-            <select id="tourFilter"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select>
-            <select id="tournamentFilter"><option value="">All Tournaments</option></select>
-            <select id="surfaceFilter"><option value="">All Surfaces</option></select>
-            <select id="confidenceFilter"><option value="">All Confidence</option></select>
-            <input id="searchInput" type="search" />
+            <select id="tourFilter" aria-label="Tour"><option value="">All Tours</option><option value="ATP">ATP</option><option value="WTA">WTA</option></select>
+            <select id="tournamentFilter" aria-label="Tournament"><option value="">All Tournaments</option></select>
+            <select id="surfaceFilter" aria-label="Surface"><option value="">All Surfaces</option></select>
+            <select id="confidenceFilter" aria-label="Confidence"><option value="">All Confidence</option></select>
+            <input id="searchInput" aria-label="Search players or tournaments" type="search" />
           </section>
 
           <div class="pick-carousel-shell" id="pickCarouselShell">
@@ -190,28 +191,8 @@
         </div>
       </footer>
     </main>
+    <nav class="mobile-tabs" id="mobileTabs" aria-label="Quick navigation"><a href="#predictions" data-route="predictions"><span aria-hidden="true">⌂</span>Dashboard</a><a href="#results" data-route="results"><span aria-hidden="true">✓</span>Results</a><a href="#account" data-route="account"><span aria-hidden="true">◎</span>Account</a></nav>
   </div>
-
-  <nav class="mobile-bottom-nav" id="mobileBottomNav" aria-label="Mobile navigation" hidden>
-    <a href="#predictions" data-route="predictions" data-mobile-route="predictions"><span>⌂</span><b>Home</b></a>
-    <a href="#prime" data-route="prime" data-mobile-route="prime"><span>✦</span><b>Prime</b></a>
-    <a href="#top_daily" data-route="top_daily" data-mobile-route="top_daily"><span>★</span><b>Top</b></a>
-    <a href="#value" data-route="value" data-mobile-route="value"><span>◇</span><b>Value</b></a>
-    <button type="button" id="mobileMoreToggle" aria-expanded="false" aria-controls="mobileMoreSheet"><span>•••</span><b>More</b></button>
-  </nav>
-  <div class="mobile-more-backdrop" id="mobileMoreBackdrop" hidden></div>
-  <section class="mobile-more-sheet" id="mobileMoreSheet" hidden aria-label="More BlinQ sections">
-    <div class="mobile-sheet-handle" aria-hidden="true"></div>
-    <div class="mobile-sheet-head"><div><small>BLINQ</small><strong>More</strong></div><button type="button" id="mobileMoreClose" aria-label="Close more menu">×</button></div>
-    <nav class="mobile-more-grid">
-      <a href="#ace" data-route="ace"><span>♠</span><b>Ace Picks</b></a>
-      <a href="#doubles" data-route="doubles"><span>◈</span><b>Doubles</b></a>
-      <a href="#sg" data-route="sg"><span>▥</span><b>S/G Picks</b></a>
-      <a href="#results" data-route="results"><span>✓</span><b>Results</b></a>
-      <a href="/btts"><span>⚽</span><b>BTTS</b></a>
-      <a href="#account" data-route="account"><span>◎</span><b>Account</b></a>
-    </nav>
-  </section>
 
   <dialog id="authDialog" class="auth-dialog" aria-labelledby="authTitle">
     <div class="auth-brand"><img src="/assets/blinq_logo.svg" alt="BlinQ" class="auth-logo" /></div>
@@ -237,7 +218,7 @@
     <div class="auth-footer">Powered by BackstageTalks Statistical Engine</div>
   </dialog>
 
-  <dialog id="matchDialog" class="match-dialog">
+  <dialog id="matchDialog" class="match-dialog" aria-label="Match analysis">
     <button class="dialog-close" id="dialogClose" aria-label="Close">×</button>
     <div id="dialogContent"></div>
   </dialog>

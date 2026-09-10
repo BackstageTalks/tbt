@@ -12,7 +12,6 @@ from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.services.feed import empty_feed, read_feed
 from tbt.services.publication import (
-    reconcile_market_feed_with_ledger,
     validate_market_publication_candidate,
     validate_publication_candidate,
 )
@@ -247,16 +246,6 @@ def main() -> None:
             ledger = json.loads((cache / "ledger.json").read_text(encoding="utf-8"))
             validate_publication_candidate(payload, ledger)
             if (payload.get("market_selection") or {}).get("publication_schema") == 1:
-                # Defensive recovery for a private refresh candidate created
-                # before the issued-snapshot freeze fix. This never rewrites
-                # ledger history; it only restores the serving card to the
-                # already-confirmed auditable snapshot.
-                restored_market_snapshots = reconcile_market_feed_with_ledger(payload, ledger)
-                if restored_market_snapshots:
-                    print(
-                        f"Recovered {restored_market_snapshots} already-issued market snapshot(s) "
-                        "from private candidate"
-                    )
                 validate_market_publication_candidate(payload, ledger)
             payload = _attach_player_assets(payload, repository)
 
