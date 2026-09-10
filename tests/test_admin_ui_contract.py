@@ -52,7 +52,7 @@ def test_hide_ads_and_fallback_inventory_are_configured_without_collapsing_layou
     assert cfg["plans"]["elite"]["hide_ads_allowed"] is False
     assert cfg["plans"]["legend"]["hide_ads_allowed"] is False
     assert cfg["plans"]["goat"]["hide_ads_allowed"] is False
-    assert cfg["ad_fallbacks"]["priority"] == ["active_advertisement", "rss_news", "blinq_internal"]
+    assert cfg["ad_fallbacks"]["priority"] == ["active_advertisement", "blinq_internal"]
     assert cfg["ad_fallbacks"]["mode"] == "mixed"
     assert isinstance(cfg["ad_fallbacks"]["fallback_images"], list)
     for slot in [
@@ -120,17 +120,17 @@ def test_large_content_rows_use_only_fixed_supported_merge_presets():
     assert "data-admin-row-preset" not in app_js
 
 
-def test_campaigns_advertisers_and_rss_are_separate_runtime_entities():
+def test_campaigns_remain_available_while_rss_is_retired_from_public_admin():
     cfg = _cfg()
     assert isinstance(cfg["advertisers"], dict)
     assert isinstance(cfg["campaigns"], dict)
-    assert cfg["rss"]["enabled"] is True
-    assert len(cfg["rss"]["sources"]) == 2
-    assert {row["id"] for row in cfg["rss"]["sources"]} == {"tennis_main", "tennis_backup"}
+    assert cfg["rss"]["enabled"] is False
+    assert cfg["rss"]["sources"] == []
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "renderAdminCampaigns" in app_js
-    assert "renderAdminFeeds" in app_js
     assert "campaignContent" in app_js
+    route = app_js.split("function renderAdminRoute()", 1)[1].split("function rerenderAdmin", 1)[0]
+    assert "RSS feeds" not in route
 
 
 def test_virtual_future_permissions_are_configurable_without_changing_layout():

@@ -113,7 +113,7 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError(f"{plan} membership URL must use HTTP(S)")
     required_elements = {
         *(f"HEADER_BANNER_{i}" for i in range(1, 5)),
-        *(f"HERO_BANNER_{i}" for i in range(1, 5)),
+        *(f"HERO_BANNER_{i}" for i in range(1, 6)),
         *(f"CONTENT_TOP_{i}" for i in range(1, 5)),
         *(f"CONTENT_MID_{i}" for i in range(1, 5)),
         *(f"CONTENT_BOTTOM_{i}" for i in range(1, 5)),
@@ -141,10 +141,12 @@ def validate_ui_config(payload: object) -> dict:
     dashboard = payload.get("dashboard") or {}
     sections = dashboard.get("sections") or {}
     pick_section_order = ["prime", "top_daily", "value", "doubles", "ace", "sg"]
-    if dashboard.get("section_order") != pick_section_order:
-        raise ValueError("Dashboard section order must match the public sidebar order")
-    if dashboard.get("visible_slots") != 6:
-        raise ValueError("Dashboard must expose exactly six active pick windows")
+    section_order = dashboard.get("section_order") or []
+    if not isinstance(section_order, list) or set(section_order) != {"prime", "top_daily", "value", "doubles", "ace", "sg", "results", "btts"}:
+        raise ValueError("Dashboard section order must contain each public section exactly once")
+    visible_slots = dashboard.get("visible_slots")
+    if not isinstance(visible_slots, int) or not 1 <= visible_slots <= 6:
+        raise ValueError("Dashboard visible_slots must be between 1 and 6")
     if dashboard.get("user_switches") is not False:
         raise ValueError("Dashboard section switches are admin-managed and must stay off for users")
     if dashboard.get("show_disabled_strip") is not False:
@@ -158,9 +160,7 @@ def validate_ui_config(payload: object) -> dict:
     if not isinstance(sections, dict) or not valid_dashboard_sections.issubset(sections):
         raise ValueError("Invalid dashboard section configuration")
     active_pick_windows = [key for key in pick_section_order if isinstance(sections.get(key), dict) and sections[key].get("dashboard_enabled") is True]
-    if len(active_pick_windows) != 6:
-        raise ValueError("Exactly six pick sections must be enabled on the dashboard")
-    expected_dashboard_orders = {"prime": 1, "top_daily": 2, "value": 3, "doubles": 4, "ace": 5, "sg": 6, "results": 7, "btts": 8}
+    expected_dashboard_orders = {}
     for section_id in valid_dashboard_sections:
         section = sections.get(section_id)
         if not isinstance(section, dict):
@@ -169,8 +169,8 @@ def validate_ui_config(payload: object) -> dict:
             if not isinstance(section.get(flag), bool):
                 raise ValueError(f"Invalid {flag} for {section_id}")
         order = section.get("dashboard_order")
-        if order != expected_dashboard_orders[section_id]:
-            raise ValueError(f"Dashboard order is fixed for {section_id}")
+        if not isinstance(order, int) or not 1 <= order <= 20:
+            raise ValueError(f"Invalid dashboard order for {section_id}")
         preview = section.get("preview_limit")
         if not (preview == "ALL" or isinstance(preview, int) and 1 <= preview <= 20):
             raise ValueError(f"Invalid preview limit for {section_id}")
@@ -186,10 +186,14 @@ def validate_ui_config(payload: object) -> dict:
                 raise ValueError(f"Invalid visible pick count for {section_id}/{plan_id}")
             if not isinstance(entitlement.get("blur_remaining"), bool) or not isinstance(entitlement.get("see_all"), bool):
                 raise ValueError(f"Invalid dashboard entitlement flags for {section_id}/{plan_id}")
+            plan_order = entitlement.get("order", order)
+            if not isinstance(plan_order, int) or not 1 <= plan_order <= 20:
+                raise ValueError(f"Invalid dashboard entitlement order for {section_id}/{plan_id}")
 
     ad_fallbacks = payload.get("ad_fallbacks") or {}
-    if ad_fallbacks.get("priority") != ["active_advertisement", "rss_news", "blinq_internal"]:
-        raise ValueError("Ad fallback priority must be advertisement, RSS, then BlinQ internal")
+    allowed_priority = ["active_advertisement", "blinq_internal"]
+    if ad_fallbacks.get("priority") not in (allowed_priority, ["active_advertisement", "rss_news", "blinq_internal"]):
+        raise ValueError("Invalid ad fallback priority")
 
     advertisers = payload.get("advertisers") or {}
     campaigns = payload.get("campaigns") or {}
@@ -249,6 +253,11 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError(f"UI element {element_id} has an invalid access state")
         if str(access.get("trial")).lower() != str(access.get("rookie")).lower():
             raise ValueError(f"UI element {element_id} trial access must inherit Rookie")
+        click_access = element.get("click_access") or {}
+        if click_access and (not isinstance(click_access, dict) or any(plan not in contexts or not isinstance(value, bool) for plan, value in click_access.items())):
+            raise ValueError(f"Invalid click access for {element_id}")
+        if click_access and "trial" in click_access and "rookie" in click_access and click_access["trial"] != click_access["rookie"]:
+            raise ValueError(f"UI element {element_id} trial click access must inherit Rookie")
         content = element.get("content") or {}
         if isinstance(content, dict) and not _valid_destination(content.get("link"), allow_internal=True):
             raise ValueError(f"UI element {element_id} has an invalid destination URL")
