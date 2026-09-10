@@ -1271,3 +1271,351 @@ body{background:
   .card-metrics-bar{margin:7px -12px 0!important;padding:7px 10px!important;overflow-x:auto!important;scrollbar-width:none!important}.card-metrics-bar::-webkit-scrollbar{display:none}.card-metric{padding:0 8px!important}.card-metric small{font-size:8px!important}.card-metric strong{font-size:9.5px!important}.card-more-link{font-size:9.5px!important;padding-left:9px!important}
   .admin-simple-banner-grid,.hero-admin-grid{grid-template-columns:1fr}.simple-banner-audience-grid{grid-template-columns:1fr}.admin-simple-banner-fields{grid-template-columns:1fr}.admin-simple-banner-fields .span-2{grid-column:auto}
 }
+
+/* ========================================================================== */
+/* BlinQ v6.5.21 — match card rebuild                                         */
+/* Header + hero are intentionally untouched. This layer only rebuilds bet    */
+/* presentation so the match, selection and value metrics read at a glance.   */
+/* ========================================================================== */
+
+/* Remove the legacy flex floor. Panels should end immediately after content. */
+#predictionsView>.picks-panel{
+  display:block!important;
+  min-height:0!important;
+  height:auto!important;
+}
+#predictionsView .pick-carousel-shell,
+#predictionsView .market-carousel-shell{
+  display:block!important;
+  flex:none!important;
+  min-height:0!important;
+  height:auto!important;
+}
+
+/* One preview is enough on the overview; make it feel like a premium match tile. */
+#predictionsView .match-card-v3,
+.detail-picks-grid .match-card-v3{
+  min-height:0!important;
+  height:auto!important;
+  padding:0!important;
+  overflow:hidden!important;
+  border-radius:13px!important;
+  border:1px solid #31506d!important;
+  background:
+    radial-gradient(circle at 50% -28%,rgba(55,116,168,.12),transparent 46%),
+    linear-gradient(165deg,#0b1d2e 0%,#081724 72%,#07131f 100%)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 10px 26px rgba(0,0,0,.12)!important;
+}
+#predictionsView .match-card-v3.featured,
+.detail-picks-grid .match-card-v3.featured{
+  border-color:#6b54bf!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 0 0 1px rgba(126,87,219,.035),0 10px 26px rgba(0,0,0,.12)!important;
+}
+
+.match-card-v3 .match-card-meta{
+  min-height:34px!important;
+  margin:0!important;
+  padding:9px 12px 8px!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto auto!important;
+  align-items:center!important;
+  gap:8px!important;
+  border-bottom:1px solid rgba(45,75,101,.58)!important;
+  background:rgba(4,13,22,.18)!important;
+  color:#88a5bd!important;
+  font-size:9.5px!important;
+  line-height:1.1!important;
+}
+.match-card-v3 .match-card-meta .tour{
+  min-width:0!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+  white-space:nowrap!important;
+  font-weight:650!important;
+}
+.match-card-v3 .match-card-meta .time{
+  color:#b9d0e1!important;
+  font-size:10.5px!important;
+  font-variant-numeric:tabular-nums!important;
+}
+.match-card-v3 .match-card-meta .surface{
+  padding:4px 7px!important;
+  border-radius:6px!important;
+  background:#1d6d99!important;
+  color:#eef9ff!important;
+  font-size:8px!important;
+  line-height:1!important;
+  font-weight:900!important;
+  letter-spacing:.015em!important;
+}
+
+.match-card-v3 .match-players-row{
+  min-height:102px!important;
+  margin:0!important;
+  padding:15px 14px 12px!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) 28px minmax(0,1fr)!important;
+  align-items:center!important;
+  gap:8px!important;
+}
+.match-card-v3 .player{
+  display:grid!important;
+  justify-items:center!important;
+  align-content:center!important;
+  min-width:0!important;
+}
+.match-card-v3 .player-avatar{
+  width:54px!important;
+  height:54px!important;
+  flex:0 0 54px!important;
+  border:1px solid #365f80!important;
+  background:radial-gradient(circle at 35% 25%,#284866,#0c1b29 72%)!important;
+  box-shadow:0 0 0 4px rgba(30,69,101,.14)!important;
+  font-size:12px!important;
+}
+.match-card-v3 .player-name{
+  max-width:100%!important;
+  margin-top:8px!important;
+  color:#f7f9fc!important;
+  font-size:12.5px!important;
+  line-height:1.18!important;
+  font-weight:850!important;
+  letter-spacing:-.012em!important;
+  text-align:center!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+.match-card-v3 .player-rank{
+  min-height:12px!important;
+  margin-top:3px!important;
+  color:#7192ad!important;
+  font-size:8.5px!important;
+  line-height:1.1!important;
+  font-weight:650!important;
+}
+.match-card-v3 .match-vs{
+  color:#708da5!important;
+  font-size:9px!important;
+  font-weight:800!important;
+  letter-spacing:.08em!important;
+}
+
+/* Optional historical context in Prime — useful, but visually secondary. */
+.match-card-v3 .match-context,
+.match-card-v3 .data-depth-row{
+  min-height:23px!important;
+  margin:-4px 12px 8px!important;
+  padding:5px 8px!important;
+  border:0!important;
+  border-radius:6px!important;
+  background:rgba(4,14,23,.30)!important;
+  color:#718ca4!important;
+  font-size:8.5px!important;
+  line-height:1.2!important;
+  text-align:center!important;
+}
+
+/* Selection is the visual anchor of the card. */
+.match-card-v3 .match-pick-row{
+  min-height:62px!important;
+  margin:0 10px 10px!important;
+  padding:10px 11px!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto!important;
+  align-items:center!important;
+  gap:12px!important;
+  border:1px solid #23425c!important;
+  border-radius:10px!important;
+  background:linear-gradient(100deg,rgba(8,25,40,.96),rgba(6,18,30,.88))!important;
+}
+.match-card-v3 .pick-copy{
+  min-width:0!important;
+  display:grid!important;
+  gap:3px!important;
+}
+.match-card-v3 .pick-copy>small,
+.match-card-v3 .match-pick-row>div>small{
+  margin:0!important;
+  color:#7f98ae!important;
+  font-size:8.5px!important;
+  line-height:1!important;
+  font-weight:750!important;
+  letter-spacing:.02em!important;
+  text-transform:none!important;
+}
+.match-card-v3 .pick-name{
+  max-width:100%!important;
+  color:#f8fbff!important;
+  font-size:13.5px!important;
+  line-height:1.18!important;
+  font-weight:900!important;
+  letter-spacing:-.018em!important;
+  white-space:nowrap!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+.match-card-v3 .pick-score{
+  display:grid!important;
+  justify-items:end!important;
+  align-content:center!important;
+  gap:5px!important;
+  min-width:92px!important;
+}
+.match-card-v3 .probability{
+  color:#fff!important;
+  font-size:27px!important;
+  line-height:.88!important;
+  font-weight:950!important;
+  letter-spacing:-.05em!important;
+  font-variant-numeric:tabular-nums!important;
+}
+.match-card-v3 .probability small{
+  margin-left:4px!important;
+  color:#8296aa!important;
+  font-size:8px!important;
+  letter-spacing:.02em!important;
+  font-weight:800!important;
+}
+.match-card-v3 .confidence{
+  display:inline-flex!important;
+  align-items:center!important;
+  min-height:18px!important;
+  padding:3px 7px!important;
+  border-radius:999px!important;
+  font-size:7.5px!important;
+  line-height:1!important;
+  font-weight:950!important;
+  letter-spacing:.025em!important;
+  background:rgba(7,19,27,.80)!important;
+}
+
+/* Three clean KPIs + one action. No more tiny sentence of mixed values. */
+.match-card-v3 .match-kpi-bar,
+.match-card-v3 .card-metrics-bar{
+  min-height:48px!important;
+  margin:0!important;
+  padding:0!important;
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(62px,1fr)) minmax(112px,auto)!important;
+  align-items:stretch!important;
+  gap:0!important;
+  border-top:1px solid rgba(42,72,98,.72)!important;
+  background:linear-gradient(90deg,rgba(3,12,20,.74),rgba(7,22,35,.58))!important;
+  overflow:hidden!important;
+}
+.match-card-v3 .card-metric{
+  min-width:0!important;
+  padding:8px 10px 7px!important;
+  display:grid!important;
+  align-content:center!important;
+  gap:3px!important;
+  border-right:1px solid #1c354a!important;
+  white-space:nowrap!important;
+}
+.match-card-v3 .card-metric small{
+  color:#6f899f!important;
+  font-size:7.5px!important;
+  line-height:1!important;
+  font-weight:800!important;
+  letter-spacing:.065em!important;
+  text-transform:uppercase!important;
+}
+.match-card-v3 .card-metric strong{
+  color:#e9f1f8!important;
+  font-size:11.5px!important;
+  line-height:1.05!important;
+  font-weight:900!important;
+  font-variant-numeric:tabular-nums!important;
+}
+.match-card-v3 .card-metric.metric-positive strong{color:#5df082!important}
+.match-card-v3 .card-metric.metric-negative strong{color:#ff9a9f!important}
+.match-card-v3 .card-more-link{
+  min-width:112px!important;
+  margin:0!important;
+  padding:0 12px!important;
+  display:flex!important;
+  align-items:center!important;
+  justify-content:flex-end!important;
+  border:0!important;
+  background:linear-gradient(90deg,rgba(63,36,117,.05),rgba(84,45,157,.15))!important;
+  color:#a77aff!important;
+  font:900 10.5px/1.1 inherit!important;
+  white-space:nowrap!important;
+  cursor:pointer!important;
+}
+.match-card-v3 .card-more-link:hover{
+  color:#d1b9ff!important;
+  background:linear-gradient(90deg,rgba(75,43,139,.08),rgba(98,54,179,.22))!important;
+  text-decoration:none!important;
+}
+
+/* Detailed pages may show the technical note; the overview intentionally does not. */
+.match-card-v3 .market-card-note{
+  margin:-2px 12px 9px!important;
+  padding:0!important;
+  color:#6e879d!important;
+  font-size:8.5px!important;
+  line-height:1.3!important;
+  white-space:normal!important;
+}
+
+/* The card itself now contains See more. Remove the duplicate active footer. */
+#predictionsView .section-see-all-card:not([data-upgrade-plan]){display:none!important}
+#predictionsView .section-see-all-card[data-upgrade-plan]{
+  min-height:31px!important;
+  margin:8px -13px -13px!important;
+  padding:7px 11px!important;
+  border-top:1px solid #1b3246!important;
+  background:rgba(3,11,19,.42)!important;
+}
+#predictionsView .section-see-all-card[data-upgrade-plan] strong{display:none!important}
+#predictionsView .section-see-all-card[data-upgrade-plan] b{margin-left:auto!important;font-size:9.5px!important}
+
+/* Empty sections keep the grid tidy without pretending to contain a full card. */
+#predictionsView .state-card{
+  min-height:224px!important;
+  padding:28px 22px!important;
+  border-radius:12px!important;
+  font-size:12.5px!important;
+  line-height:1.45!important;
+}
+
+/* Tablet */
+@media(max-width:1250px) and (min-width:701px){
+  .match-card-v3 .player-avatar{width:50px!important;height:50px!important;flex-basis:50px!important}
+  .match-card-v3 .player-name{font-size:11.5px!important}
+  .match-card-v3 .probability{font-size:24px!important}
+  .match-card-v3 .match-kpi-bar,.match-card-v3 .card-metrics-bar{grid-template-columns:repeat(3,minmax(56px,1fr)) minmax(96px,auto)!important}
+  .match-card-v3 .card-metric{padding-left:8px!important;padding-right:8px!important}
+  .match-card-v3 .card-more-link{min-width:96px!important;font-size:9.5px!important;padding:0 9px!important}
+}
+
+/* Mobile: keep data readable; action gets its own row instead of squeezing KPIs. */
+@media(max-width:700px){
+  #predictionsView>.picks-panel{padding:11px!important}
+  .match-card-v3 .match-card-meta{padding:9px 10px 8px!important;font-size:9px!important}
+  .match-card-v3 .match-players-row{min-height:98px!important;padding:14px 10px 11px!important;grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr)!important}
+  .match-card-v3 .player-avatar{width:50px!important;height:50px!important;flex-basis:50px!important}
+  .match-card-v3 .player-name{font-size:11.5px!important}
+  .match-card-v3 .match-pick-row{margin:0 8px 8px!important;padding:9px 10px!important;min-height:58px!important}
+  .match-card-v3 .pick-name{font-size:12.5px!important}
+  .match-card-v3 .pick-score{min-width:82px!important}
+  .match-card-v3 .probability{font-size:24px!important}
+  .match-card-v3 .match-kpi-bar,.match-card-v3 .card-metrics-bar{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    min-height:0!important;
+  }
+  .match-card-v3 .card-metric{padding:8px!important}
+  .match-card-v3 .card-metric:nth-child(3){border-right:0!important}
+  .match-card-v3 .card-more-link{
+    grid-column:1/-1!important;
+    min-width:0!important;
+    min-height:36px!important;
+    padding:0 10px!important;
+    justify-content:flex-end!important;
+    border-top:1px solid #1c354a!important;
+    background:rgba(80,44,147,.10)!important;
+    font-size:10px!important;
+  }
+}

@@ -68,6 +68,21 @@
       "card_title": "Advanced analytics",
       "show_price": false
     },
+    "legend": {
+      "label": "BlinQ LEGEND",
+      "enabled": true,
+      "note": "365-day premium access; workspace permissions remain configurable in Admin.",
+      "duration_days": 365,
+      "lifetime": false,
+      "hide_ads_allowed": false,
+      "description": "The highest publicly available BlinQ tier.",
+      "cta_label": "Choose Legend",
+      "url": "",
+      "avatar": "legend",
+      "order": 4,
+      "card_title": "Maximum public access",
+      "show_price": false
+    },
     "goat": {
       "label": "BlinQ GOAT",
       "enabled": true,
@@ -84,21 +99,6 @@
       "show_price": false,
       "invite_only": true,
       "invite_url": ""
-    },
-    "legend": {
-      "label": "BlinQ LEGEND",
-      "enabled": true,
-      "note": "365-day premium access; workspace permissions remain configurable in Admin.",
-      "duration_days": 365,
-      "lifetime": false,
-      "hide_ads_allowed": false,
-      "description": "The highest publicly available BlinQ tier.",
-      "cta_label": "Choose Legend",
-      "url": "",
-      "avatar": "legend",
-      "order": 4,
-      "card_title": "Maximum public access",
-      "show_price": false
     }
   },
   "navigation": {
@@ -183,12 +183,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -238,12 +238,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -293,12 +293,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -323,8 +323,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "CONTENT_TOP_1": {
@@ -369,12 +369,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -424,12 +424,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -479,12 +479,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -534,12 +534,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -566,8 +566,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "TOP_PICK_1": {
@@ -587,8 +587,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "TOP_PICK_2": {
@@ -608,8 +608,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "TOP_PICK_3": {
@@ -629,8 +629,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "TOP_PICK_4": {
@@ -650,8 +650,8 @@
         "rookie": "blurred",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "TOP_PICK_5": {
@@ -671,8 +671,8 @@
         "rookie": "blurred",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "TOP_PICK_6": {
@@ -692,8 +692,8 @@
         "rookie": "blurred",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "TOP_PICK_7": {
@@ -713,8 +713,8 @@
         "rookie": "blurred",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "TOP_PICK_8": {
@@ -734,8 +734,8 @@
         "rookie": "blurred",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "TOP_PICK_MORE": {
@@ -755,8 +755,8 @@
         "rookie": "blurred",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "CONTENT_BOTTOM_1": {
@@ -800,12 +800,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -854,12 +854,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -908,12 +908,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -962,12 +962,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -992,8 +992,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "VIP_TELEGRAM": {
@@ -1015,8 +1015,8 @@
         "rookie": "locked",
         "pro": "locked",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "FOOTBALL_ACCESS": {
@@ -1038,8 +1038,8 @@
         "rookie": "locked",
         "pro": "locked",
         "elite": "locked",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "SIDEBAR_PREDICTIONS": {
@@ -1063,8 +1063,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "SIDEBAR_PRIME": {
@@ -1088,8 +1088,8 @@
         "rookie": "locked",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "SIDEBAR_TOP_DAILY": {
@@ -1113,8 +1113,8 @@
         "rookie": "locked",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "SIDEBAR_VALUE": {
@@ -1138,8 +1138,8 @@
         "rookie": "locked",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "SIDEBAR_ACE": {
@@ -1163,8 +1163,8 @@
         "rookie": "locked",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "SIDEBAR_SG": {
@@ -1188,8 +1188,8 @@
         "rookie": "locked",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "SIDEBAR_RESULTS": {
@@ -1213,8 +1213,8 @@
         "rookie": "locked",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "SIDEBAR_BTTS": {
@@ -1240,8 +1240,8 @@
         "rookie": "locked",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "SIDEBAR_PROMO_1": {
@@ -1283,12 +1283,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -1335,12 +1335,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -1387,12 +1387,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -1419,8 +1419,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "VALUE_PICKS_PANEL": {
@@ -1442,8 +1442,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "ACE_PICKS_PANEL": {
@@ -1465,8 +1465,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "SG_PICKS_PANEL": {
@@ -1488,8 +1488,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "BTTS_BONUS_PANEL": {
@@ -1511,8 +1511,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "CONTENT_MID_1": {
@@ -1556,12 +1556,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -1610,12 +1610,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -1664,12 +1664,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -1718,12 +1718,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -1745,8 +1745,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "label": "Doubles",
       "order": 5,
@@ -1773,8 +1773,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "RESULTS_PANEL": {
@@ -1794,8 +1794,8 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       }
     },
     "HEADER_BANNER_4": {
@@ -1840,12 +1840,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -1898,12 +1898,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -1956,12 +1956,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -2014,12 +2014,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -2072,12 +2072,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -2130,12 +2130,12 @@
         "rookie": "active",
         "pro": "active",
         "elite": "active",
-        "goat": "active",
-        "legend": "active"
+        "legend": "active",
+        "goat": "active"
       },
       "click_access": {
-        "expired": true,
         "trial": true,
+        "expired": true,
         "rookie": true,
         "pro": true,
         "elite": true,
@@ -2497,14 +2497,14 @@
             "see_all": false,
             "order": 1
           },
-          "rookie": {
-            "visible_picks": 3,
+          "expired": {
+            "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 1
           },
-          "expired": {
-            "visible_picks": 1,
+          "rookie": {
+            "visible_picks": 3,
             "blur_remaining": true,
             "see_all": false,
             "order": 1
@@ -2521,13 +2521,13 @@
             "see_all": true,
             "order": 1
           },
-          "goat": {
+          "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
             "order": 1
           },
-          "legend": {
+          "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
@@ -2550,14 +2550,14 @@
             "see_all": false,
             "order": 2
           },
-          "rookie": {
-            "visible_picks": 2,
+          "expired": {
+            "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 2
           },
-          "expired": {
-            "visible_picks": 1,
+          "rookie": {
+            "visible_picks": 2,
             "blur_remaining": true,
             "see_all": false,
             "order": 2
@@ -2574,13 +2574,13 @@
             "see_all": true,
             "order": 2
           },
-          "goat": {
+          "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
             "order": 2
           },
-          "legend": {
+          "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
@@ -2603,13 +2603,13 @@
             "see_all": false,
             "order": 4
           },
-          "rookie": {
+          "expired": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 4
           },
-          "expired": {
+          "rookie": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
@@ -2627,13 +2627,13 @@
             "see_all": true,
             "order": 4
           },
-          "goat": {
+          "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
             "order": 4
           },
-          "legend": {
+          "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
@@ -2656,13 +2656,13 @@
             "see_all": false,
             "order": 3
           },
-          "rookie": {
+          "expired": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 3
           },
-          "expired": {
+          "rookie": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
@@ -2680,13 +2680,13 @@
             "see_all": true,
             "order": 3
           },
-          "goat": {
+          "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
             "order": 3
           },
-          "legend": {
+          "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
@@ -2709,13 +2709,13 @@
             "see_all": false,
             "order": 6
           },
-          "rookie": {
+          "expired": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 6
           },
-          "expired": {
+          "rookie": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
@@ -2733,13 +2733,13 @@
             "see_all": true,
             "order": 6
           },
-          "goat": {
+          "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
             "order": 6
           },
-          "legend": {
+          "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
@@ -2762,13 +2762,13 @@
             "see_all": false,
             "order": 5
           },
-          "rookie": {
+          "expired": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 5
           },
-          "expired": {
+          "rookie": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
@@ -2786,13 +2786,13 @@
             "see_all": true,
             "order": 5
           },
-          "goat": {
+          "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
             "order": 5
           },
-          "legend": {
+          "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
@@ -2815,13 +2815,13 @@
             "see_all": false,
             "order": 7
           },
-          "rookie": {
+          "expired": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": false,
             "order": 7
           },
-          "expired": {
+          "rookie": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": false,
@@ -2839,13 +2839,13 @@
             "see_all": true,
             "order": 7
           },
-          "goat": {
+          "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
             "order": 7
           },
-          "legend": {
+          "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
@@ -2868,14 +2868,14 @@
             "see_all": false,
             "order": 8
           },
-          "rookie": {
-            "visible_picks": 2,
+          "expired": {
+            "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 8
           },
-          "expired": {
-            "visible_picks": 1,
+          "rookie": {
+            "visible_picks": 2,
             "blur_remaining": true,
             "see_all": false,
             "order": 8
@@ -2892,13 +2892,13 @@
             "see_all": true,
             "order": 8
           },
-          "goat": {
+          "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
             "order": 8
           },
-          "legend": {
+          "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
@@ -2926,7 +2926,7 @@
     "cards_per_panel_wide": 1,
     "detail_pick_limit": 5
   },
-  "ui_revision": "6.5.20",
+  "ui_revision": "6.5.22",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",

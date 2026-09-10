@@ -7,11 +7,11 @@
 <meta content="BlinQ tenisová analytika — live predzápasové pravdepodobnosti, výsledky a analýza modelu." name="description"/>
 <title>BlinQ · Tenisová analytika</title>
 <link href="/assets/blinq_favi.png" rel="icon" type="image/png"/>
-<link href="/styles.css?v=v6520" rel="stylesheet"/>
-<link href="/responsive.css?v=v6520" rel="stylesheet"/>
+<link href="/styles.css?v=v6522" rel="stylesheet"/>
+<link href="/responsive.css?v=v6522" rel="stylesheet"/>
 <script defer="" src="/auth.js"></script>
-<script defer="" src="/responsive.js?v=v6520"></script>
-<script defer="" src="/app.js?v=v6520"></script>
+<script defer="" src="/responsive.js?v=v6522"></script>
+<script defer="" src="/app.js?v=v6522"></script>
 </head><body>
 <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
 <noscript><p class="no-script">BlinQ needs JavaScript to sign in and load current predictions. Please enable it in your browser.</p></noscript>
@@ -193,16 +193,16 @@
 <div id="upgradeDialogContent"></div>
 </dialog>
 <template id="predictionTemplate">
-<article class="prediction-card">
-<div class="card-meta"><span class="tour"></span><span class="time"></span><span class="surface"></span></div>
-<div class="players-row">
+<article class="prediction-card match-card-v3">
+<div class="card-meta match-card-meta"><span class="tour"></span><span class="time"></span><span class="surface"></span></div>
+<div class="players-row match-players-row">
 <div class="player player-a"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div>
-<div class="vs">VS</div>
+<div class="vs match-vs">VS</div>
 <div class="player player-b"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div>
 </div>
-<div class="data-depth-row" hidden=""></div>
-<div class="pick-row"><div><small>BlinQ tip</small><strong class="pick-name"></strong></div><div class="probability"></div><span class="confidence"></span></div>
-<div class="betting-row card-metrics-bar" hidden=""><span class="card-metric betting-odds"></span><span class="card-metric metric-positive betting-edge"></span><span class="card-metric betting-ev"></span><button class="analysis-link card-more-link" data-route="prime" type="button">Zobraziť viac →</button></div>
+<div class="data-depth-row match-context" hidden=""></div>
+<div class="pick-row match-pick-row"><div class="pick-copy"><small>Náš tip</small><strong class="pick-name"></strong></div><div class="pick-score"><div class="probability"></div><span class="confidence"></span></div></div>
+<div class="betting-row card-metrics-bar match-kpi-bar" hidden=""><span class="card-metric betting-odds"></span><span class="card-metric betting-edge"></span><span class="card-metric betting-ev"></span><button class="analysis-link card-more-link" data-route="prime" type="button">Zobraziť viac →</button></div>
 <div class="signals"></div>
 </article>
 </template>

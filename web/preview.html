@@ -748,7 +748,7 @@
     return out;
   }
   const accessStates = ['active','locked','blurred','hidden'];
-  const accessContexts = ['expired','rookie','pro','elite','goat','legend'];
+  const accessContexts = ['expired','rookie','pro','elite','legend','goat'];
   const requestedLocale = new URLSearchParams(location.search).get('lang');
   const locale = requestedLocale==='sk' ? 'sk' : 'en';
   const dashboardPickSectionKeys=['prime','top_daily','value','doubles','ace','sg'];
@@ -861,7 +861,7 @@
     return Math.max(1,Math.min(total,Number(raw)||5));
   }
   function firstUnlockPlan(key,index=0,forSeeAll=false){
-    const section=dashboardSectionConfig(key);const plans=['rookie','pro','elite','goat','legend']
+    const section=dashboardSectionConfig(key);const plans=['rookie','pro','elite','legend','goat']
       .filter(id=>state.ui?.plans?.[id]?.enabled!==false)
       .sort((a,b)=>Number(state.ui?.plans?.[a]?.order||99)-Number(state.ui?.plans?.[b]?.order||99));
     for(const plan of plans){const ent=section.plans?.[plan]||{};if(forSeeAll){if(ent.see_all)return plan;continue;}const raw=ent.visible_picks;if(String(raw).toUpperCase()==='ALL'||Number(raw)>index)return plan;}

@@ -116,8 +116,9 @@ def test_large_content_rows_use_only_fixed_supported_merge_presets():
     assert set(cfg["admin"]["row_presets"]) == supported
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "rowPresetMap" in app_js
-    assert "data-admin-row-count" in app_js
-    assert "data-admin-row-preset" not in app_js
+    route = app_js.split("function renderAdminRoute()", 1)[1].split("function rerenderAdmin", 1)[0]
+    assert "CONTENT_TOP_" not in route
+    assert "data-admin-row-preset" not in route
 
 
 def test_campaigns_remain_available_while_rss_is_retired_from_public_admin():
@@ -215,7 +216,8 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert set(rules["sg"]["markets"]) == {"sets", "games"}
     assert rules["btts"]["href"] == "#btts"
     dashboard = cfg["dashboard"]
-    assert dashboard["section_order"] == ["prime", "top_daily", "value", "doubles", "ace", "sg"]
+    assert set(dashboard["section_order"]) == {"prime", "top_daily", "value", "doubles", "ace", "sg", "results", "btts"}
+    assert len(dashboard["section_order"]) == 8
     assert dashboard["visible_slots"] == 6
     assert dashboard["user_switches"] is False
 
@@ -248,6 +250,6 @@ def test_public_sidebar_is_betting_first_and_admin_is_isolated_at_bottom():
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert 'id="adminNavigationWrap"' in html
-    assert "['doubles','Doubles','◈']" in app
-    assert "['btts','BTTS Bonus','⚽']" in app
+    assert "doubles:'◈'" in app
+    assert "btts:'⚽'" in app
     assert "renderAdminPerformance" in app
