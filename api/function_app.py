@@ -78,10 +78,11 @@ def _admin_user(req):
     user = _verified_user(req)
     if not user:
         return None, response({"error": "unauthorized"}, 401)
-    if not bool(user.get("email_verified", False)):
-        return None, response({"error": "email_not_verified"}, 403)
     if not is_admin(user, settings):
         return None, response({"error": "forbidden"}, 403)
+    # Legacy bootstrap admins may pre-date Firebase email verification.
+    # A valid Firebase token + BLINQ_ADMIN_EMAILS membership is sufficient
+    # to regain Admin access; normal members still require verified email.
     return user, None
 
 
@@ -190,7 +191,7 @@ def feed(req):
         user = _verified_user(req)
         if not user:
             return response({"error": "unauthorized"}, 401)
-        if not bool(user.get("email_verified", False)):
+        if not bool(user.get("email_verified", False)) and not is_admin(user, settings):
             return response({"error": "email_not_verified"}, 403)
         data = visible_feed(read_feed(FEED))
         data["account"] = public_account(user, cfg=settings)
