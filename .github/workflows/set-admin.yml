@@ -32,27 +32,111 @@ jobs:
           import firebase_admin
           from firebase_admin import auth, credentials
 
-          service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
-          uid = os.environ.get("ADMIN_UID")
+
+          # ---------------------------------------------------------
+          # LOAD SECRETS
+          # ---------------------------------------------------------
+
+          service_account_json = (
+              os.environ.get("FIREBASE_SERVICE_ACCOUNT") or ""
+          ).strip()
+
+          uid = (
+              os.environ.get("ADMIN_UID") or ""
+          ).strip()
+
+
+          # ---------------------------------------------------------
+          # CLEAN UID
+          # ---------------------------------------------------------
+
+          # Ak bolo UID omylom vložené v "úvodzovkách",
+          # automaticky ich odstránime.
+          if len(uid) >= 2:
+              if (
+                  (uid.startswith('"') and uid.endswith('"'))
+                  or
+                  (uid.startswith("'") and uid.endswith("'"))
+              ):
+                  uid = uid[1:-1].strip()
+
+
+          # ---------------------------------------------------------
+          # VALIDATE SECRETS
+          # ---------------------------------------------------------
 
           if not service_account_json:
-              raise RuntimeError("Missing FIREBASE_SERVICE_ACCOUNT secret")
+              raise RuntimeError(
+                  "Missing FIREBASE_SERVICE_ACCOUNT secret"
+              )
 
           if not uid:
-              raise RuntimeError("Missing ADMIN_UID secret")
+              raise RuntimeError(
+                  "Missing ADMIN_UID secret"
+              )
 
-          service_account = json.loads(service_account_json)
+          if len(uid) > 128:
+              raise RuntimeError(
+                  f"ADMIN_UID is too long ({len(uid)} characters). "
+                  "Firebase UID must have max 128 characters."
+              )
+
+          if any(char.isspace() for char in uid):
+              raise RuntimeError(
+                  "ADMIN_UID contains whitespace. "
+                  "Copy only the User UID from Firebase Authentication."
+              )
+
+          print("ADMIN_UID loaded successfully")
+          print("UID length:", len(uid))
+
+
+          # ---------------------------------------------------------
+          # LOAD FIREBASE SERVICE ACCOUNT
+          # ---------------------------------------------------------
+
+          try:
+              service_account = json.loads(
+                  service_account_json
+              )
+          except json.JSONDecodeError as exc:
+              raise RuntimeError(
+                  "FIREBASE_SERVICE_ACCOUNT is not valid JSON"
+              ) from exc
+
+
+          # ---------------------------------------------------------
+          # INITIALIZE FIREBASE ADMIN
+          # ---------------------------------------------------------
 
           firebase_admin.initialize_app(
               credentials.Certificate(service_account)
           )
 
+
+          # ---------------------------------------------------------
+          # FIND USER
+          # ---------------------------------------------------------
+
+          print("Looking for Firebase user...")
+
           user = auth.get_user(uid)
 
           print("User found:", user.email)
 
-          # Zachová existujúce custom claims a doplní admin oprávnenia.
-          claims = dict(user.custom_claims or {})
+
+          # ---------------------------------------------------------
+          # PRESERVE EXISTING CLAIMS
+          # ---------------------------------------------------------
+
+          claims = dict(
+              user.custom_claims or {}
+          )
+
+
+          # ---------------------------------------------------------
+          # SET BLINQ ADMIN CLAIMS
+          # ---------------------------------------------------------
 
           claims.update({
               "admin": True,
@@ -60,17 +144,54 @@ jobs:
               "tier": "goat"
           })
 
-          auth.set_custom_user_claims(uid, claims)
+          auth.set_custom_user_claims(
+              uid,
+              claims
+          )
+
+
+          # ---------------------------------------------------------
+          # VERIFY RESULT
+          # ---------------------------------------------------------
 
           updated_user = auth.get_user(uid)
+
+          updated_claims = dict(
+              updated_user.custom_claims or {}
+          )
+
+          if updated_claims.get("admin") is not True:
+              raise RuntimeError(
+                  "Admin claim was not saved correctly."
+              )
+
+          if updated_claims.get("role") != "admin":
+              raise RuntimeError(
+                  "Role claim was not saved correctly."
+              )
+
+          if updated_claims.get("tier") != "goat":
+              raise RuntimeError(
+                  "Tier claim was not saved correctly."
+              )
+
+
+          # ---------------------------------------------------------
+          # SUCCESS
+          # ---------------------------------------------------------
 
           print("")
           print("======================================")
           print("✅ BLINQ ADMIN SUCCESSFULLY SET")
           print("======================================")
           print("Email:", updated_user.email)
-          print("UID:", updated_user.uid)
-          print("Claims:", updated_user.custom_claims)
+          print("UID length:", len(updated_user.uid))
+          print("Claims:", updated_claims)
+          print("")
+          print("Admin: TRUE")
+          print("Role: admin")
+          print("Tier: goat")
           print("")
           print("Odhlas sa z BlinQ a znovu sa prihlas.")
+          print("======================================")
           PY
