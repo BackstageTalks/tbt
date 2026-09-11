@@ -8,8 +8,8 @@ def test_overview_route_navigation_and_admin_access_exist():
     cfg=json.loads((ROOT/'web/ui-config.json').read_text(encoding='utf-8'))
     app=(ROOT/'web/app.js').read_text(encoding='utf-8')
     html=(ROOT/'web/index.html').read_text(encoding='utf-8')
-    assert cfg['ui_revision'] in {'6.5.23','6.5.24','6.5.25','6.5.26'}
-    assert any(v in html for v in ('v=v6523','v=v6524','v=v6525','v=v6526'))
+    assert cfg['ui_revision'] in {'6.5.23','6.5.24','6.5.25'}
+    assert any(v in html for v in ('v=v6523','v=v6524','v=v6525'))
     assert cfg['elements']['SIDEBAR_OVERVIEW']['content']['route']=='overview'
     assert cfg['elements']['SIDEBAR_OVERVIEW']['access']['rookie']=='locked'
     assert cfg['elements']['SIDEBAR_OVERVIEW']['access']['goat']=='active'

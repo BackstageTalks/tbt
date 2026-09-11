@@ -8,8 +8,8 @@ def test_v6522_admin_is_task_based_and_goat_is_top_tier():
     css=(ROOT/'web'/'styles.css').read_text(encoding='utf-8')
     html=(ROOT/'web'/'index.html').read_text(encoding='utf-8')
     cfg=json.loads((ROOT/'web'/'ui-config.json').read_text(encoding='utf-8'))
-    assert cfg['ui_revision'] in {'6.5.22','6.5.23','6.5.24','6.5.25','6.5.26'}
-    assert any(v in html for v in ('v=v6522','v=v6523','v=v6524','v=v6525','v=v6526'))
+    assert cfg['ui_revision'] in {'6.5.22','6.5.23','6.5.24','6.5.25'}
+    assert any(v in html for v in ('v=v6522','v=v6523','v=v6524','v=v6525'))
     assert "const membershipHierarchy = ['rookie','pro','elite','legend','goat']" in app
     assert "const accessContexts = ['expired',...membershipHierarchy]" in app
     assert 'GOAT is always the highest level' in app

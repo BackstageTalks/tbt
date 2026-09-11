@@ -8,9 +8,9 @@ def test_v6524_theme_assets_and_toggle():
     css=(ROOT/'web/premium-theme.css').read_text()
     js=(ROOT/'web/theme.js').read_text()
     cfg=json.loads((ROOT/'web/ui-config.json').read_text())
-    assert cfg['ui_revision'] in {'6.5.24','6.5.25','6.5.26'}
-    assert any(v in html for v in ('/premium-theme.css?v=v6524','/premium-theme.css?v=v6525','/premium-theme.css?v=v6526'))
-    assert any(v in html for v in ('/theme.js?v=v6524','/theme.js?v=v6525','/theme.js?v=v6526'))
+    assert cfg['ui_revision'] in {'6.5.24','6.5.25'}
+    assert any(v in html for v in ('/premium-theme.css?v=v6524','/premium-theme.css?v=v6525'))
+    assert any(v in html for v in ('/theme.js?v=v6524','/theme.js?v=v6525'))
     assert 'id="themeToggle"' in html
     assert 'data-theme="dark"' in css
     assert 'blinq_theme_v1' in js
