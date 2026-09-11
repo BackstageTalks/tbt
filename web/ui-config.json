@@ -1071,7 +1071,7 @@
       "label": "Overview",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 2,
+      "order": 9,
       "content": {
         "label": "Overview",
         "route": "overview",
@@ -1096,7 +1096,7 @@
       "label": "Prime Picks",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 3,
+      "order": 2,
       "content": {
         "label": "Prime Picks",
         "route": "prime",
@@ -1121,7 +1121,7 @@
       "label": "Top Bets",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 4,
+      "order": 3,
       "content": {
         "label": "Top Bets",
         "route": "top_daily",
@@ -1171,7 +1171,7 @@
       "label": "Ace Picks",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 7,
+      "order": 4,
       "content": {
         "label": "Ace Picks",
         "route": "ace",
@@ -1196,7 +1196,7 @@
       "label": "S/G Picks",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 8,
+      "order": 7,
       "content": {
         "label": "S/G Picks",
         "route": "sg",
@@ -1221,7 +1221,7 @@
       "label": "Results",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 9,
+      "order": 8,
       "content": {
         "label": "Results",
         "route": "results",
@@ -2937,50 +2937,50 @@
         "sidebar_element": "SIDEBAR_OVERVIEW",
         "sidebar_enabled": true,
         "dashboard_enabled": false,
-        "dashboard_order": 1,
+        "dashboard_order": 9,
         "preview_limit": "ALL",
         "plans": {
           "trial": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 1
+            "order": 9
           },
           "expired": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 1
+            "order": 9
           },
           "rookie": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 1
+            "order": 9
           },
           "pro": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 1
+            "order": 9
           },
           "elite": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 1
+            "order": 9
           },
           "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 1
+            "order": 9
           },
           "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 1
+            "order": 9
           }
         }
       }
@@ -3004,7 +3004,7 @@
     "cards_per_panel_wide": 1,
     "detail_pick_limit": 5
   },
-  "ui_revision": "6.5.23",
+  "ui_revision": "6.5.25",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",

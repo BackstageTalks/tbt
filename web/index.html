@@ -3,15 +3,17 @@
 <html lang="sk"><head>
 <meta charset="utf-8"/>
 <meta content="width=device-width,initial-scale=1,viewport-fit=cover" name="viewport"/>
-<meta content="#050912" name="theme-color"/>
+<meta content="#eef5ff" name="theme-color"/>
 <meta content="BlinQ tenisová analytika — live predzápasové pravdepodobnosti, výsledky a analýza modelu." name="description"/>
 <title>BlinQ · Tenisová analytika</title>
 <link href="/assets/blinq_favi.png" rel="icon" type="image/png"/>
-<link href="/styles.css?v=v6523" rel="stylesheet"/>
-<link href="/responsive.css?v=v6523" rel="stylesheet"/>
+<script src="/theme.js?v=v6525"></script>
+<link href="/styles.css?v=v6525" rel="stylesheet"/>
+<link href="/responsive.css?v=v6525" rel="stylesheet"/>
+<link href="/premium-theme.css?v=v6525" rel="stylesheet"/>
 <script defer="" src="/auth.js"></script>
-<script defer="" src="/responsive.js?v=v6523"></script>
-<script defer="" src="/app.js?v=v6523"></script>
+<script defer="" src="/responsive.js?v=v6525"></script>
+<script defer="" src="/app.js?v=v6525"></script>
 </head><body>
 <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
 <noscript><p class="no-script">BlinQ needs JavaScript to sign in and load current predictions. Please enable it in your browser.</p></noscript>
@@ -31,8 +33,9 @@
 <img alt="BlinQ" class="top-brand-logo" src="/assets/blinq_logo.svg"/>
 <span class="top-brand-copy"><strong>STATISTICAL ENGINE</strong><small>by BackstageTalks</small></span>
 </a>
-<section aria-label="BlinQ komunita a promo odkazy" class="header-feature-strip" id="headerFeatureStrip"></section>
+<nav aria-label="Hlavná navigácia" class="top-navigation"><div class="nav-items" id="mainNavigation"></div></nav>
 <div class="topbar-actions dashboard-account-actions">
+<button aria-label="Prepnúť farebný režim" aria-pressed="false" class="theme-toggle" id="themeToggle" title="Prepnúť svetlý / tmavý režim" type="button"><span class="theme-toggle-sun" aria-hidden="true">☀</span><span class="theme-toggle-moon" aria-hidden="true">☾</span></button>
 <button class="btn top-upgrade" data-route="account" id="topUpgradeButton" type="button"><span aria-hidden="true">✦</span><span id="topUpgradeLabel">Plány</span></button>
 <div class="profile-shell" id="profileShell">
 <button aria-label="Open account and membership" class="profile-button profile-button-large" id="profileButton" type="button">
@@ -60,8 +63,8 @@
 <div aria-label="Aktuálny miestny dátum a čas" class="dashboard-datetime legacy-nav-hook"><strong id="headerTime">—</strong><span id="headerDate">—</span></div>
 <span class="legacy-nav-hook" id="headerModelState">Produkcia</span>
 </div>
+<section aria-label="BlinQ komunita a promo odkazy" class="header-feature-strip" id="headerFeatureStrip"></section>
 </div>
-<nav aria-label="Hlavná navigácia" class="top-navigation"><div class="nav-items" id="mainNavigation"></div></nav>
 </header>
 <section class="route-context-meta route-heading" id="routeHeading">
 <span id="pageEyebrow">TENISOVÁ ANALYTIKA</span>
@@ -70,6 +73,7 @@
 <span hidden="" id="todayLabel"></span>
 </section>
 <section class="inline-notice" hidden="" id="staleNotice"></section>
+<section class="admin-preview-bar" hidden id="adminPreviewBar" aria-live="polite"><div><span>⚙</span><strong id="adminPreviewLabel">ADMIN PREVIEW</strong><small>Access rules are being simulated. This is not your real administrator access.</small></div><button class="btn btn-ghost" id="adminPreviewExit" type="button">Exit preview</button></section>
 <div id="predictionsView">
 <section aria-label="Main BlinQ banner" aria-live="off" class="dashboard-hero-stage" id="dashboardHero"></section>
 <div class="sync-bar" id="syncBar"><span class="sync-state" id="syncStatus" role="status">LIVE · Connecting…</span><span class="sync-copy">Automatické obnovenie zapnuté</span><button aria-label="Obnoviť publikované dáta" class="sync-refresh" id="syncRefresh" type="button">↻ Obnoviť</button></div>
