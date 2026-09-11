@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#070b12" />
+  <meta name="description" content="BlinQ Tennis Intelligence — premium tennis analytics web app prototype." />
+  <title>BlinQ — Tennis Intelligence</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+
+  <header class="topbar" id="topbar">
+    <div class="topbar-inner">
+      <button class="brand" data-nav="home" aria-label="BlinQ home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 48 48" role="img"><circle cx="24" cy="24" r="20" fill="currentColor"/><path d="M10 28c10-1 17-8 19-18M19 39c2-10 9-17 19-19" fill="none" stroke="#07101a" stroke-width="4.2" stroke-linecap="round"/></svg>
+        </span>
+        <span class="brand-word">BlinQ</span>
+        <span class="brand-divider"></span>
+        <span class="brand-sub">TENNIS<br>INTELLIGENCE</span>
+      </button>
+
+      <nav class="desktop-nav" aria-label="Hlavná navigácia">
+        <button class="nav-link is-active" data-nav="home">Today</button>
+        <button class="nav-link" data-nav="overview">Overview</button>
+        <button class="nav-link" data-nav="seeall">See All</button>
+        <button class="nav-link" data-nav="vip">VIP</button>
+        <button class="nav-link" data-nav="stats">Stats</button>
+      </nav>
+
+      <div class="top-actions">
+        <button class="tier-pill" data-nav="membership"><span class="tier-dot"></span> ELITE</button>
+        <button class="install-btn" id="installBtn" hidden>Install</button>
+        <button class="avatar" data-nav="profile" aria-label="Profil">MD</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="app-shell">
+    <section id="view-home" class="view is-active" data-view="home">
+      <div class="promo-row" aria-label="Promo slots">
+        <article class="promo-card promo-lime">
+          <div><span class="eyebrow">BLINQ EDGE</span><h3>Data sees more.</h3></div>
+          <span class="promo-chip">Daily insight</span>
+        </article>
+        <article class="promo-card promo-violet">
+          <div><span class="eyebrow">ELITE ACCESS</span><h3>VIP group + See All + Overview</h3></div>
+          <button data-nav="membership" class="ghost-link">Explore →</button>
+        </article>
+        <article class="promo-card promo-blue">
+          <div><span class="eyebrow">LIVE MODEL</span><h3>Surface, form, serve, return.</h3></div>
+          <span class="promo-chip">BlinQ Index</span>
+        </article>
+      </div>
+
+      <section class="hero-panel glass-card">
+        <div class="hero-copy">
+          <span class="eyebrow lime">TODAY'S INTELLIGENCE</span>
+          <h1>Smarter tennis picks.<br><span>Sharper edges.</span></h1>
+          <p>BlinQ spája formu, povrch, serve/return metriky, matchup dáta a modelové pravdepodobnosti do jedného čistého feedu.</p>
+          <div class="hero-actions">
+            <button class="primary-btn" data-nav="seeall">See all picks</button>
+            <button class="secondary-btn" data-nav="overview">Open overview</button>
+          </div>
+          <div class="hero-kpis">
+            <div><strong>68%</strong><span>Model confidence</span></div>
+            <div><strong>+12.4%</strong><span>Sample EV</span></div>
+            <div><strong>8–2</strong><span>Last 10</span></div>
+          </div>
+        </div>
+        <div class="hero-visual" aria-hidden="true">
+          <div class="court-orbit"></div>
+          <div class="hero-photo-wrap"><img src="assets/hero-players.webp" alt="" class="hero-photo" /></div>
+          <div class="hero-data-pill pill-a"><span>CONFIDENCE</span><b>68%</b></div>
+          <div class="hero-data-pill pill-b"><span>EV</span><b>+12.4%</b></div>
+          <div class="hero-ball"></div>
+        </div>
+      </section>
+
+      <div class="section-heading">
+        <div><span class="eyebrow">FEATURED</span><h2>Top picks today</h2></div>
+        <button class="text-btn" data-nav="seeall">View all →</button>
+      </div>
+
+      <section class="pick-grid" id="pickGrid"></section>
+
+      <section class="split-grid">
+        <article class="glass-card performance-mini">
+          <div class="card-topline"><div><span class="eyebrow lime">PERFORMANCE</span><h3>Current pulse</h3></div><span class="range-pill">30D</span></div>
+          <div class="metric-row">
+            <div class="metric"><span>ROI</span><strong class="positive">+12.4%</strong><small>+24.8 units</small></div>
+            <div class="metric"><span>Win rate</span><strong>68%</strong><small>34 / 50</small></div>
+            <div class="metric"><span>Yield</span><strong class="positive">+8.9%</strong><small>Avg 1.92</small></div>
+          </div>
+          <div class="spark-card"><svg viewBox="0 0 600 170" preserveAspectRatio="none"><defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a7ff4f" stop-opacity=".25"/><stop offset="1" stop-color="#a7ff4f" stop-opacity="0"/></linearGradient><linearGradient id="line" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8d67ff"/><stop offset="1" stop-color="#a7ff4f"/></linearGradient></defs><path d="M0 125 C55 75,80 145,125 105 S215 40,270 96 S355 82,410 62 S495 48,600 30 L600 170 L0 170 Z" fill="url(#area)"/><path d="M0 125 C55 75,80 145,125 105 S215 40,270 96 S355 82,410 62 S495 48,600 30" fill="none" stroke="url(#line)" stroke-width="5" stroke-linecap="round"/></svg></div>
+        </article>
+
+        <article class="glass-card vip-teaser">
+          <span class="eyebrow violet">ELITE / VIP</span>
+          <h3>Private intelligence layer</h3>
+          <div class="vip-photo"></div>
+          <p>VIP skupina, všetky picky, Overview, pokročilé modely a hlbšie analýzy v jednom premium priestore.</p>
+          <div class="locked-insight"><span class="lock-icon">✦</span><div><small>BLINQ AI INSIGHT</small><strong>Market edge detected on indoor hard court profile.</strong></div></div>
+          <button class="secondary-btn full" data-nav="vip">Open VIP area</button>
+        </article>
+      </section>
+    </section>
+
+    <section id="view-overview" class="view" data-view="overview">
+      <div class="page-head"><div><span class="eyebrow lime">OVERVIEW</span><h1>Match intelligence</h1><p>Search a filtrácia žije iba tu — presne tam, kde ju potrebuješ.</p></div></div>
+      <div class="overview-toolbar glass-card">
+        <label class="search-box"><span>⌕</span><input id="overviewSearch" type="search" placeholder="Search player or tournament…" /></label>
+        <div class="chip-group" id="surfaceFilters">
+          <button class="filter-chip is-active" data-filter="all">All</button>
+          <button class="filter-chip" data-filter="hard">Hard</button>
+          <button class="filter-chip" data-filter="clay">Clay</button>
+          <button class="filter-chip" data-filter="grass">Grass</button>
+        </div>
+      </div>
+      <div id="overviewList" class="overview-list"></div>
+    </section>
+
+    <section id="view-seeall" class="view" data-view="seeall">
+      <div class="page-head"><div><span class="eyebrow lime">SEE ALL</span><h1>Full pick board</h1><p>Všetky aktuálne picky na jednom mieste, zoradené podľa confidence a edge.</p></div></div>
+      <div class="board glass-card">
+        <div class="board-head"><span>Match</span><span>Pick</span><span>Odds</span><span>Conf.</span><span>EV</span><span></span></div>
+        <div id="allPicksTable"></div>
+      </div>
+    </section>
+
+    <section id="view-vip" class="view" data-view="vip">
+      <div class="page-head"><div><span class="eyebrow violet">VIP / ELITE</span><h1>Premium intelligence</h1><p>Hlbšie modely, market edge, scenáre a VIP insighty.</p></div></div>
+      <div class="vip-grid">
+        <article class="glass-card vip-hero-card">
+          <div class="card-topline"><span class="eyebrow lime">VIP INSIGHT</span><span class="elite-tag">♛ ELITE</span></div>
+          <div class="vip-match"><div><small>Jannik</small><strong>Sinner</strong><span>ITA · #1</span></div><div class="vip-vs">VS</div><div><small>Carlos</small><strong>Alcaraz</strong><span>ESP · #2</span></div></div>
+          <div class="ai-quote"><span>✦</span><p>“Serve efficiency and lower unforced-error profile create a stronger high-leverage path.”</p></div>
+          <div class="prob-row"><div><span>WIN PROBABILITY</span><strong>62%</strong><small>Sinner</small></div><div class="edge-badge">+14%<small>vs market</small></div><div><span>WIN PROBABILITY</span><strong class="muted">38%</strong><small>Alcaraz</small></div></div>
+        </article>
+        <article class="glass-card trend-card"><span class="eyebrow violet">KEY TRENDS</span><div class="trend-list"><div><b>01</b><span>7 wins in last 10 H2H-style sample</span></div><div><b>02</b><span>Higher indoor hard hold profile</span></div><div><b>03</b><span>Positive return pressure differential</span></div><div><b>04</b><span>Model edge remains after line move</span></div></div></article>
+      </div>
+    </section>
+
+    <section id="view-stats" class="view" data-view="stats">
+      <div class="page-head"><div><span class="eyebrow lime">STATS</span><h1>Performance dashboard</h1><p>Výsledky, ROI, win rate, yield a trend výkonnosti.</p></div></div>
+      <div class="stats-grid">
+        <article class="stat-tile glass-card"><span>ROI</span><strong class="positive">+12.4%</strong><small>+24.8 units</small></article>
+        <article class="stat-tile glass-card"><span>WIN RATE</span><strong>68%</strong><small>34 / 50 picks</small></article>
+        <article class="stat-tile glass-card"><span>YIELD</span><strong class="positive">+8.9%</strong><small>Avg. odds 1.92</small></article>
+        <article class="stat-tile glass-card"><span>STREAK</span><strong class="positive">4 W</strong><small>Current run</small></article>
+      </div>
+      <article class="glass-card chart-large"><div class="card-topline"><div><span class="eyebrow">CONFIDENCE TREND</span><h3>Last 30 days</h3></div><span class="range-pill">30D</span></div><svg viewBox="0 0 900 260" preserveAspectRatio="none"><defs><linearGradient id="area2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a7ff4f" stop-opacity=".28"/><stop offset="1" stop-color="#a7ff4f" stop-opacity="0"/></linearGradient><linearGradient id="line2" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8d67ff"/><stop offset="1" stop-color="#a7ff4f"/></linearGradient></defs><path d="M0 200 C95 120,130 230,220 160 S380 75,470 155 S590 135,680 90 S800 110,900 55 L900 260 L0 260 Z" fill="url(#area2)"/><path d="M0 200 C95 120,130 230,220 160 S380 75,470 155 S590 135,680 90 S800 110,900 55" fill="none" stroke="url(#line2)" stroke-width="7" stroke-linecap="round"/></svg></article>
+      <article class="glass-card result-strip"><div><span class="eyebrow">LAST 10</span><h3>8–2</h3></div><div class="result-dots"><span class="w">W</span><span class="w">W</span><span class="l">L</span><span class="w">W</span><span class="w">W</span><span class="w">W</span><span class="l">L</span><span class="w">W</span><span class="w">W</span><span class="w">W</span></div></article>
+    </section>
+
+    <section id="view-membership" class="view" data-view="membership">
+      <div class="page-head"><div><span class="eyebrow lime">MEMBERSHIP</span><h1>Choose your edge</h1><p>Od ochutnávky po maximum. Aktuálny prototyp je nastavený na ELITE.</p></div></div>
+      <div class="tiers" id="tiers"></div>
+    </section>
+
+    <section id="view-profile" class="view" data-view="profile">
+      <div class="profile-card glass-card"><div class="profile-avatar">MD</div><div><span class="eyebrow">ACCOUNT</span><h1>Member profile</h1><p>ELITE access · web app prototype</p></div><button class="secondary-btn" data-nav="membership">Manage membership</button></div>
+    </section>
+  </main>
+
+  <nav class="mobile-nav" aria-label="Mobilná navigácia">
+    <button class="mobile-link is-active" data-nav="home"><span>⌂</span><small>Today</small></button>
+    <button class="mobile-link" data-nav="overview"><span>◎</span><small>Overview</small></button>
+    <button class="mobile-link" data-nav="seeall"><span>▦</span><small>Picks</small></button>
+    <button class="mobile-link" data-nav="vip"><span>✦</span><small>VIP</small></button>
+    <button class="mobile-link" data-nav="profile"><span>◉</span><small>Profile</small></button>
+  </nav>
+
+  <button class="support-fab" id="supportFab" aria-label="BlinQ support">A</button>
+  <aside class="support-panel" id="supportPanel" aria-hidden="true">
+    <div class="support-head"><div><span class="support-avatar">A</span><div><strong>Ava · BlinQ Support</strong><small>Typically replies by email</small></div></div><button id="supportClose">×</button></div>
+    <div class="support-body"><p>Ahoj 👋 Napíš, s čím potrebuješ pomôcť. Toto je funkčný prototyp vlastného BlinQ support widgetu.</p><textarea placeholder="Your message…"></textarea><input type="email" placeholder="Email for reply"/><button id="supportSend" class="primary-btn full">Send message</button><div class="support-status" id="supportStatus"></div></div>
+  </aside>
+
+  <div class="modal-backdrop" id="modalBackdrop" hidden>
+    <div class="analysis-modal glass-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modal-top"><div><span class="eyebrow lime">BLINQ ANALYSIS</span><h2 id="modalTitle">Match analysis</h2></div><button id="modalClose">×</button></div>
+      <div id="modalContent"></div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
