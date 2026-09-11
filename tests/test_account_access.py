@@ -108,14 +108,14 @@ def test_admin_role_is_separate_from_subscription_plan():
     assert account["is_admin"] is True
 
 
-def test_admin_email_allowlist_bootstraps_admin_without_metadata():
+def test_admin_email_allowlist_does_not_grant_runtime_admin_without_claim():
     access = account_access(
         user(email="owner@example.com"),
         cfg=cfg(blinq_admin_emails="owner@example.com, second@example.com"),
         now=NOW,
     )
-    assert access["is_admin"] is True
-    assert access["role"] == "admin"
+    assert access["is_admin"] is False
+    assert access["role"] == "user"
 
 
 def test_lifetime_is_only_valid_for_goat():

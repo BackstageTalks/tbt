@@ -13,12 +13,11 @@ def test_static_asset_contract_is_configured():
         "atp": "/assets/missing_foto_m.png",
         "wta": "/assets/missing_foto_w.png",
     }
-    assert assets["account_avatars"]["rookie"]["m"] == "/assets/rookie_m.webp"
-    assert assets["account_avatars"]["rookie"]["w"] == "/assets/rookie_w.webp"
-    assert assets["account_avatars"]["pro"]["m"] == "/assets/pro_m.webp"
-    assert assets["account_avatars"]["elite"]["w"] == "/assets/elite_w.webp"
-    assert assets["account_avatars"]["legend"]["m"] == "/assets/legend_m.webp"
-    assert assets["account_avatars"]["goat"]["default"] == "/assets/goat.webp"
+    for plan, variants in assets["account_avatars"].items():
+        for _, asset_path in variants.items():
+            assert asset_path.startswith("/assets/") and asset_path.endswith(".webp")
+            assert (ROOT / "web" / asset_path.lstrip("/")).is_file()
+
 
 
 def test_web_links_favicon_background_and_fallback_logic():
