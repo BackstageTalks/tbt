@@ -1,0 +1,76 @@
+name: Set BlinQ Admin
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  set-admin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Firebase Admin
+        run: python -m pip install firebase-admin
+
+      - name: Set Firebase admin claims
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          ADMIN_UID: ${{ secrets.ADMIN_UID }}
+
+        run: |
+          python - <<'PY'
+          import json
+          import os
+
+          import firebase_admin
+          from firebase_admin import auth, credentials
+
+          service_account_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT")
+          uid = os.environ.get("ADMIN_UID")
+
+          if not service_account_json:
+              raise RuntimeError("Missing FIREBASE_SERVICE_ACCOUNT secret")
+
+          if not uid:
+              raise RuntimeError("Missing ADMIN_UID secret")
+
+          service_account = json.loads(service_account_json)
+
+          firebase_admin.initialize_app(
+              credentials.Certificate(service_account)
+          )
+
+          user = auth.get_user(uid)
+
+          print("User found:", user.email)
+
+          # Zachová existujúce custom claims a doplní admin oprávnenia.
+          claims = dict(user.custom_claims or {})
+
+          claims.update({
+              "admin": True,
+              "role": "admin",
+              "tier": "goat"
+          })
+
+          auth.set_custom_user_claims(uid, claims)
+
+          updated_user = auth.get_user(uid)
+
+          print("")
+          print("======================================")
+          print("✅ BLINQ ADMIN SUCCESSFULLY SET")
+          print("======================================")
+          print("Email:", updated_user.email)
+          print("UID:", updated_user.uid)
+          print("Claims:", updated_user.custom_claims)
+          print("")
+          print("Odhlas sa z BlinQ a znovu sa prihlas.")
+          PY
