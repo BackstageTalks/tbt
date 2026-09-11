@@ -170,13 +170,16 @@
       method: 'POST',
       body: JSON.stringify({email, password, returnSecureToken: true}),
     });
-    // Keep the authenticated Firebase session and let the API decide whether
-    // this account may enter the workspace. We still perform the Firebase
-    // lookup so the sign-in flow validates the account state and keeps the
-    // resend-verification UX available. Legacy bootstrap admins are allowed
-    // by the API; normal unverified members are rejected by /api/v1/feed.
-    await firebaseEmailVerified(data.idToken);
+    // Persist the Firebase session first so an unverified user can request a
+    // fresh verification email without entering the password a second time.
     replaceSession(data, 'firebase');
+    const verified = await firebaseEmailVerified(data.idToken);
+    if (!verified) {
+      const error = new Error('Verify your email before opening the BlinQ workspace.');
+      error.code = 'EMAIL_NOT_VERIFIED';
+      error.status = 403;
+      throw error;
+    }
     return session();
   }
   async function signIn(email, password) {

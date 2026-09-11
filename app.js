@@ -772,11 +772,23 @@
           return;
         }
       } else await BlinqAuth.signIn(email,password);
-      $('authPassword').value=''; if($('authDialog').open) $('authDialog').close(); await loadFeed();
+      // Keep the modal visible while the workspace is being authorized. The
+      // feed loader closes it only after a successful authenticated response.
+      // This avoids the old close/reopen flash and guarantees that API errors
+      // stay visible to the user instead of looking like a dead login button.
+      $('authPassword').value='';
+      await loadFeed();
     } catch(error){
-      const verification=String(error.code||'').toUpperCase()==='EMAIL_NOT_VERIFIED'||String(error.code||'').toLowerCase()==='email_not_verified';
-      $('authMessage').textContent=verification?publicText('Your email is not verified yet. Open the verification link or resend the email.'):publicText(error.message);
+      const code=String(error.code||'').toLowerCase();
+      const verification=code==='email_not_verified';
+      const suspended=code==='account_suspended';
+      $('authMessage').textContent=verification
+        ?publicText('Your email is not verified yet. Open the verification link or resend the email.')
+        :suspended
+          ?publicText('This BlinQ account is suspended. Contact support if you believe this is a mistake.')
+          :publicText(error.message||'Sign-in failed. Please try again.');
       if($('resendVerification'))$('resendVerification').hidden=!verification;
+      if(!$('authDialog').open)$('authDialog').showModal();
     }
     finally{ button.disabled=false; }
   }
@@ -1572,7 +1584,7 @@
       const headerModel=$('headerModelState');if(headerModel){headerModel.textContent=compactModelVersion||publicText('Production');headerModel.title=fullModelVersion||publicText('Production');}
       $('staleNotice').hidden=!feed.stale; $('staleNotice').textContent=feed.stale?publicText('Published data is older than 12 hours. Check prediction creation times before evaluating them.'):''; $('appShell').hidden=false; if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
-    }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();auth('login');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if(!$('appShell').hidden&&state.route==='predictions')renderPredictions();throw error;}finally{feedLoading=false;window.BlinqUI.refreshFinished();}
+    }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact support if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{feedLoading=false;window.BlinqUI.refreshFinished();}
   }
   async function refreshWorkspace(showLoading=false){await loadUiConfig();return loadFeed(showLoading);}
 

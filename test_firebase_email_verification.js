@@ -54,9 +54,16 @@ function response(status, payload) {
   assert(verifyMail, 'signup must request a Firebase VERIFY_EMAIL mail');
   assert.strictEqual(context.localStorage.getItem('blinq_v4_session'), null, 'signup must not leave an active app session before verification');
 
-  await context.BlinqAuth.signIn('member@example.com','password123');
+  let verificationError = null;
+  try {
+    await context.BlinqAuth.signIn('member@example.com','password123');
+  } catch (error) {
+    verificationError = error;
+  }
+  assert(verificationError, 'unverified sign-in must produce an explicit error');
+  assert.strictEqual(verificationError.code, 'EMAIL_NOT_VERIFIED');
   let preVerifySession = JSON.parse(context.localStorage.getItem('blinq_v4_session'));
-  assert.strictEqual(preVerifySession.access_token, 'login-token', 'Firebase session must be kept so API can enforce verification and resend can work');
+  assert.strictEqual(preVerifySession.access_token, 'login-token', 'Firebase session must be kept so resend can work');
 
   await context.BlinqAuth.resendVerification();
   assert(calls.filter(call => call.url.includes('accounts:sendOobCode') && call.body.requestType === 'VERIFY_EMAIL').length >= 2,
