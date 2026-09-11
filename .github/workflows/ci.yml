@@ -20,9 +20,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Full backend tests remain mandatory for push/PR.
-      # A manual workflow_dispatch is the explicit web deploy path, so an
-      # unrelated backend/history test cannot block publishing web changes.
+      # Production candidate: the same checks are mandatory for every trigger,
+      # including manual deploys. No test bypass is allowed on workflow_dispatch.
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -68,11 +67,9 @@ jobs:
           echo 'Firebase-only auth runtime guard: PASS'
 
       - name: Install backend test dependencies
-        if: github.event_name != 'workflow_dispatch'
         run: python -m pip install -r api/requirements-train.txt pytest
 
       - name: Run backend tests
-        if: github.event_name != 'workflow_dispatch'
         env:
           PYTHONPATH: api:scripts
         run: python -m pytest
@@ -90,14 +87,21 @@ jobs:
           node tests/test_firebase_web_auth.js
           node tests/test_firebase_email_verification.js
 
-      - name: Check required web files
+      - name: Check production web artifact
         run: |
+          set -euo pipefail
           test -s web/index.html
           test -s web/styles.css
           test -s web/staticwebapp.config.json
           test -s api/function_app.py
           test -s api/requirements.txt
           test -s scripts/prepare_feed.py
+          test ! -e web/preview.html
+          test ! -e web/pro-preview.html
+          if find web -type f \( -name '*.bak' -o -name '*.tmp' -o -name '*.pyc' \) | grep -q .; then
+            echo 'Temporary/backup file found in production web artifact' >&2
+            exit 1
+          fi
 
   deploy:
     needs: checks

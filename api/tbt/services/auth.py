@@ -134,8 +134,6 @@ def firebase_user_to_dict(record) -> dict:
         "user_metadata": {
             "display_name": display_name,
             "name": display_name,
-            "blinq_avatar_variant": claims.get("blinq_avatar_variant", ""),
-            "blinq_hide_ads": bool(claims.get("blinq_hide_ads", False)),
         },
     }
 
@@ -197,7 +195,12 @@ def verify_user(authorization, cfg, client=None):
 
 
 def update_firebase_profile(cfg, user_id, payload):
-    """Update user-controlled presentation data without exposing custom claims."""
+    """Update Firebase-owned profile fields without touching authorization claims.
+
+    Non-auth profile metadata (Telegram/avatar) is stored separately in Azure
+    Table Storage by the API layer. Keeping this function claim-free prevents a
+    profile save from racing with or overwriting plan/admin custom claims.
+    """
     if not firebase_configured(cfg):
         raise AuthUnavailable("Firebase authentication is not configured")
     if not isinstance(payload, dict):
@@ -206,28 +209,21 @@ def update_firebase_profile(cfg, user_id, payload):
     if not user_id:
         raise ValueError("Invalid user id")
 
+    display_name = str(payload.get("display_name") or "").strip()
+    if len(display_name) > 80:
+        raise ValueError("Display name is too long")
+
     _, firebase_auth, _ = _firebase_modules()
     app = firebase_app(cfg)
     try:
-        record = firebase_auth.get_user(user_id, app=app)
-        claims = dict(record.custom_claims or {})
-
         if "display_name" in payload:
-            display_name = str(payload.get("display_name") or "").strip()[:80]
             firebase_auth.update_user(user_id, display_name=display_name or None, app=app)
-
-        if "blinq_avatar_variant" in payload:
-            avatar = str(payload.get("blinq_avatar_variant") or "").strip().lower()
-            claims["blinq_avatar_variant"] = avatar if avatar in {"m", "w"} else ""
-
-        firebase_auth.set_custom_user_claims(user_id, claims or None, app=app)
         updated = firebase_auth.get_user(user_id, app=app)
         return firebase_user_to_dict(updated)
     except ValueError:
         raise
     except Exception as exc:
         raise AuthUnavailable("Identity service temporarily unavailable") from exc
-
 
 def _parse_utc(value):
     if not isinstance(value, str) or not value.strip():
@@ -241,17 +237,15 @@ def _parse_utc(value):
     return parsed.astimezone(timezone.utc)
 
 
-def _admin_email_set(cfg):
-    raw = str(getattr(cfg, "blinq_admin_emails", "") or "")
-    return {item.strip().lower() for item in raw.split(",") if item.strip()}
+def is_suspended(user) -> bool:
+    if not isinstance(user, dict):
+        return False
+    app = user.get("app_metadata") or {}
+    return str(app.get("blinq_status") or "").strip().lower() == "suspended"
 
 
 def is_admin(user, cfg=None):
-    """Admin is an explicit server-issued claim, never an email allowlist.
-
-    BLINQ_ADMIN_EMAILS may still be used by an offline/bootstrap migration tool,
-    but it is intentionally ignored at request time.
-    """
+    """Return whether an explicit server-issued admin claim is present."""
     if not isinstance(user, dict):
         return False
     app = user.get("app_metadata") or {}
@@ -274,6 +268,22 @@ def account_access(user, *, cfg=None, now=None):
     admin = is_admin(user, cfg)
     created_at = _parse_utc(user.get("created_at"))
     trial_expires = created_at + timedelta(hours=72) if created_at else None
+    assigned_plan = str(app.get("blinq_plan") or "").strip().lower()
+    assigned_status = str(app.get("blinq_status") or "").strip().lower()
+    expires_at = _parse_utc(app.get("blinq_expires_at"))
+
+    # Suspension overrides every role, including admin. This makes revocation a
+    # real kill-switch instead of a cosmetic account flag.
+    if assigned_status == "suspended":
+        return {
+            "role": "user",
+            "plan": assigned_plan if assigned_plan in PAID_PLANS else "expired",
+            "plan_label": PLAN_LABELS.get(assigned_plan, PLAN_LABELS["expired"]),
+            "status": "suspended",
+            "expires_at": expires_at.isoformat() if expires_at else None,
+            "trial_expires_at": trial_expires.isoformat() if trial_expires else None,
+            "is_admin": False,
+        }
 
     if admin:
         return {
@@ -284,21 +294,6 @@ def account_access(user, *, cfg=None, now=None):
             "expires_at": None,
             "trial_expires_at": trial_expires.isoformat() if trial_expires else None,
             "is_admin": True,
-        }
-
-    assigned_plan = str(app.get("blinq_plan") or "").strip().lower()
-    assigned_status = str(app.get("blinq_status") or "").strip().lower()
-    expires_at = _parse_utc(app.get("blinq_expires_at"))
-
-    if assigned_status == "suspended":
-        return {
-            "role": "user",
-            "plan": assigned_plan if assigned_plan in PAID_PLANS else "expired",
-            "plan_label": PLAN_LABELS.get(assigned_plan, PLAN_LABELS["expired"]),
-            "status": "suspended",
-            "expires_at": expires_at.isoformat() if expires_at else None,
-            "trial_expires_at": trial_expires.isoformat() if trial_expires else None,
-            "is_admin": False,
         }
 
     active_paid = assigned_plan in PAID_PLANS and assigned_status in {"active", "lifetime"}
@@ -335,16 +330,18 @@ def account_access(user, *, cfg=None, now=None):
     }
 
 
-def public_account(user, *, cfg=None, now=None):
+def public_account(user, *, cfg=None, now=None, profile=None):
     metadata = user.get("user_metadata") or {}
     access = account_access(user, cfg=cfg, now=now)
     # Advertising is no longer plan-gated. Every membership level follows the
     # same active-ad -> RSS/news -> BlinQ fallback policy in the web client.
     hide_ads_allowed = False
     hide_ads = False
-    avatar_variant = str(metadata.get("blinq_avatar_variant") or "").strip().lower()
+    profile = profile if isinstance(profile, dict) else {}
+    avatar_variant = str(profile.get("avatar_variant") or "").strip().lower()
     if avatar_variant not in {"m", "w"}:
         avatar_variant = ""
+    telegram_nick = str(profile.get("telegram_nick") or "").strip()[:33]
     return {
         "id": user["id"],
         "email": user.get("email", ""),
@@ -354,6 +351,7 @@ def public_account(user, *, cfg=None, now=None):
         "last_sign_in_at": user.get("last_sign_in_at"),
         **access,
         "avatar_variant": avatar_variant,
+        "telegram_nick": telegram_nick,
         "hide_ads_allowed": hide_ads_allowed,
         "hide_ads": hide_ads,
     }

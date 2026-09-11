@@ -11,7 +11,6 @@ class Settings:
     rapidapi_host: str = os.getenv("RAPIDAPI_HOST", "tennisapi1.p.rapidapi.com")
     rapidapi_base_url: str = os.getenv("RAPIDAPI_BASE_URL", "https://tennisapi1.p.rapidapi.com").rstrip("/")
     request_timeout_seconds: int = 30
-    blinq_admin_emails: str = os.getenv("BLINQ_ADMIN_EMAILS", "")
     firebase_project_id: str = os.getenv("FIREBASE_PROJECT_ID", "").strip()
     firebase_client_email: str = os.getenv("FIREBASE_CLIENT_EMAIL", "").strip()
     firebase_private_key: str = os.getenv("FIREBASE_PRIVATE_KEY", "")

@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+import ipaddress
 import json
 import threading
 import time
@@ -27,9 +28,27 @@ def _load_config() -> dict:
 
 
 def _safe_http_url(value: object) -> str:
+    """Accept only public-looking HTTPS feed/article URLs.
+
+    This is an admin-configured feature, but the server still must not become an
+    SSRF proxy to loopback/link-local/private infrastructure. Redirects are
+    disabled below, so validation cannot be bypassed by a redirect hop.
+    """
     text = str(value or "").strip()
     parsed = urlparse(text)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+    if parsed.scheme != "https" or not parsed.hostname or parsed.username or parsed.password:
+        return ""
+    host = parsed.hostname.rstrip(".").lower()
+    if host in {"localhost", "localhost.localdomain"} or host.endswith((".local", ".internal", ".localhost", ".lan", ".home")):
+        return ""
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        address = None
+    if address is not None and (
+        address.is_private or address.is_loopback or address.is_link_local
+        or address.is_multicast or address.is_reserved or address.is_unspecified
+    ):
         return ""
     return text
 
@@ -114,7 +133,7 @@ def news_pool(*, client=None, now=None, config=None) -> dict:
             return {"items": list(_CACHE["items"]), "sources": len(sources), "generated_at": now.isoformat()}
 
     own = client is None
-    client = client or httpx.Client(timeout=8, follow_redirects=True, headers={"User-Agent": "BlinQ-RSS/1.0"})
+    client = client or httpx.Client(timeout=8, follow_redirects=False, headers={"User-Agent": "BlinQ-RSS/1.0"})
     collected = []
     try:
         for source in sources:

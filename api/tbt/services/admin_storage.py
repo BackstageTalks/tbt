@@ -24,16 +24,21 @@ class AdminStorageUnavailable(RuntimeError):
 UI_TABLE = "BlinQAdminConfig"
 ANALYTICS_TABLE = "BlinQBannerAnalytics"
 _VALID_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
+_VALID_BANNER_SLOT = re.compile(r"^(?:HEADER_BANNER_[1-4]|HERO_BANNER_[1-5]|CONTENT_(?:TOP|MID|BOTTOM)_[1-4]|SIDEBAR_PROMO_[1-3])$")
 
 
 def _valid_destination(value: object, *, allow_internal: bool = True) -> bool:
     text = str(value or "").strip()
     if not text:
         return True
-    if allow_internal and (text.startswith("#") or text.startswith("/")):
-        return True
+    if allow_internal:
+        if text.startswith("#") and not text.startswith("##"):
+            return True
+        # Never accept protocol-relative //host links as internal paths.
+        if text.startswith("/") and not text.startswith("//"):
+            return True
     parsed = urlparse(text)
-    return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
+    return parsed.scheme == "https" and bool(parsed.netloc) and not parsed.username and not parsed.password
 
 
 def _connection_string() -> str:
@@ -115,7 +120,7 @@ def validate_ui_config(payload: object) -> dict:
         raise ValueError("Plan-based ad-free access is disabled")
     for plan in plan_order:
         if not _valid_destination(plans[plan].get("url"), allow_internal=False):
-            raise ValueError(f"{plan} membership URL must use HTTP(S)")
+            raise ValueError(f"{plan} membership URL must use HTTPS")
     required_elements = {
         *(f"HEADER_BANNER_{i}" for i in range(1, 5)),
         *(f"HERO_BANNER_{i}" for i in range(1, 6)),
@@ -227,8 +232,8 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError(f"Campaign {campaign_id} has an invalid creative inventory")
         for value in [campaign.get("image_url"), campaign.get("mobile_image_url"), *images.values()]:
             url = str(value or "").strip()
-            if url and not (url.startswith("https://") or url.startswith("http://") or url.startswith("/")):
-                raise ValueError(f"Campaign {campaign_id} creative must be an HTTP(S) URL or an absolute web path")
+            if url and not _valid_destination(url, allow_internal=True):
+                raise ValueError(f"Campaign {campaign_id} creative must use HTTPS or an absolute same-origin web path")
 
     rss = payload.get("rss") or {}
     if not isinstance(rss, dict):
@@ -245,8 +250,8 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError("Invalid or duplicate RSS source id")
         source_ids.add(source_id)
         url = str(source.get("url") or "").strip()
-        if url and not (url.startswith("https://") or url.startswith("http://")):
-            raise ValueError(f"RSS source {source_id} must use HTTP(S)")
+        if url and not _valid_destination(url, allow_internal=False):
+            raise ValueError(f"RSS source {source_id} must use HTTPS")
 
     for element_id, element in elements.items():
         if not isinstance(element, dict):
@@ -332,6 +337,8 @@ def record_banner_event(payload: object) -> dict:
     slot_id = _clean_id(payload.get("slot_id"))
     if not slot_id:
         raise ValueError("Missing slot id")
+    if not _VALID_BANNER_SLOT.fullmatch(slot_id):
+        raise ValueError("Invalid banner slot")
     campaign_id = _clean_id(payload.get("campaign_id"), fallback=slot_id)
     advertiser_id = _clean_id(payload.get("advertiser_id"), fallback="unassigned")
     client_id = str(payload.get("client_id") or "")[:256]
