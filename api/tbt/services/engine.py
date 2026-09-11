@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from copy import deepcopy
+import json
 import numpy as np
 import pandas as pd
 
@@ -219,7 +221,7 @@ def betting_performance(results):
 
 def reconcile_ledger(ledger, predictions, history, now=None):
     now = now or datetime.now(timezone.utc)
-    stored = {row["event_id"]: dict(row) for row in ledger}
+    stored = {row["event_id"]: deepcopy(row) for row in ledger}
     for row in predictions:
         # Freeze the first prediction. Never rewrite history after learning result.
         if datetime.fromisoformat(row["scheduled_at"]) <= now:
@@ -241,13 +243,43 @@ def reconcile_ledger(ledger, predictions, history, now=None):
                 existing["best_of"] = row.get("best_of")
             existing.setdefault("original_scheduled_at", existing["scheduled_at"])
             existing["scheduled_at"] = row["scheduled_at"]
-    completed = {event_id(m): m for m in history if m.is_completed}
+    # Provider IDs are not sufficient evidence of identity. Keep all candidates
+    # instead of silently accepting whichever history row happens to come last.
+    completed = {}
+    for match in history:
+        if match.is_completed:
+            completed.setdefault(event_id(match), []).append(match)
     for key, row in stored.items():
-        match = completed.get(key)
-        if match is None:
+        candidates = completed.get(key, [])
+        if not candidates:
             continue
-        if {row["player1"]["id"], row["player2"]["id"]} != {match.player1_id, match.player2_id}:
-            raise ValueError("Settlement identity mismatch")
+        expected = {row["player1"]["id"], row["player2"]["id"]}
+        identities_match = all(
+            expected == {match.player1_id, match.player2_id}
+            for match in candidates
+        )
+        outcomes = {(match.winner_id, match.scheduled_at) for match in candidates}
+        if not identities_match or len(outcomes) != 1:
+            reason = "player_identity_mismatch" if not identities_match else "conflicting_completed_results"
+            conflict = {
+                "reason": reason,
+                "event_id": str(key),
+                "expected_player_ids": sorted(expected),
+                "candidates": [
+                    {"match_id": match.match_id,
+                     "player_ids": sorted({match.player1_id, match.player2_id}),
+                     "winner_id": match.winner_id,
+                     "scheduled_at": match.scheduled_at.isoformat()}
+                    for match in candidates
+                ],
+            }
+            row["settlement_quarantine"] = conflict
+            print(json.dumps({"warning": "settlement_identity_quarantined", **conflict}), flush=True)
+            # Preserve commitments and prior results for audit. Neither these
+            # results nor this fixture may enter the public feed while ambiguous.
+            continue
+        match = candidates[0]
+        row.pop("settlement_quarantine", None)
 
         # The provider may correct the actual start after settlement. Scheduled
         # time is mutable, but the published probability/issuance timestamp is not.
@@ -304,7 +336,8 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
     now = now or datetime.now(timezone.utc)
     future = {event_id(m) for m in upcoming if m.scheduled_at > now
               and not m.is_completed and m.status in {"upcoming", "notstarted", "scheduled"}}
-    results = [row for row in ledger if row.get("result") is not None and not row.get("excluded_reason")]
+    results = [row for row in ledger if row.get("result") is not None
+               and not row.get("excluded_reason") and not row.get("settlement_quarantine")]
     metrics = evaluate_probabilities(
         [int(r["result"]["winner_id"] == r["player1"]["id"]) for r in results],
         [r["player1"]["probability"] for r in results]) if results else {}
@@ -319,7 +352,8 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
     return {"schema": 1, "ready": True, "generated_at": now.isoformat(),
             "model": {"version": model.version, "report": report, "objective": "accuracy"},
             "upcoming": [r for r in ledger if r["event_id"] in future and r.get("result") is None
-                         and datetime.fromisoformat(r["scheduled_at"]) > now and not r.get("excluded_reason")],
+                         and datetime.fromisoformat(r["scheduled_at"]) > now
+                         and not r.get("excluded_reason") and not r.get("settlement_quarantine")],
             "results": result_rows, "performance": metrics,
             "betting_performance": betting,
             "results_meta": {"settled_total": len(results), "returned": len(result_rows), "limit": 1000},
