@@ -314,7 +314,7 @@
         if(saved&&typeof saved==='object')dashboardPickSectionKeys.forEach(key=>{if(typeof saved[key]==='boolean')defaults[key]=saved[key];});
       }catch{}
     }
-    const max=Math.max(1,Number(state.ui?.dashboard?.visible_slots)||4);
+    const max=Math.max(1,Math.min(6,Number(state.ui?.dashboard?.visible_slots)||6));
     let enabled=dashboardPickSectionKeys.filter(key=>defaults[key]);
     if(enabled.length>max){const keep=new Set(enabled.slice(0,max));dashboardPickSectionKeys.forEach(key=>{defaults[key]=keep.has(key);});}
     state.dashboardVisibility=defaults;return defaults;
@@ -325,7 +325,7 @@
   function toggleDashboardSection(key){
     if(state.ui?.dashboard?.user_switches!==true)return;
     if(!dashboardPickSectionKeys.includes(key))return;
-    const prefs=dashboardVisibilityState(),max=Math.max(1,Number(state.ui?.dashboard?.visible_slots)||4),wasOn=Boolean(prefs[key]);
+    const prefs=dashboardVisibilityState(),max=Math.max(1,Math.min(6,Number(state.ui?.dashboard?.visible_slots)||6)),wasOn=Boolean(prefs[key]);
     prefs[key]=!wasOn;
     if(wasOn){
       const start=dashboardPickSectionKeys.indexOf(key)+1;
@@ -350,7 +350,7 @@
     const prefs=dashboardVisibilityState();
     host.innerHTML=dashboardPickSectionKeys.map(key=>{const cfg=dashboardSectionConfig(key),on=Boolean(prefs[key]);return `<button type="button" class="dashboard-section-toggle${on?' is-on':''}" data-dashboard-toggle="${escapeHtml(key)}" aria-pressed="${on?'true':'false'}"><span class="switch-dot" aria-hidden="true"><i></i></span><span><strong>${escapeHtml(cfg.label||key)}</strong><small>${on?'ON':'OFF'}</small></span></button>`;}).join('');
     const active=dashboardPickSectionKeys.filter(key=>prefs[key]);
-    if(status)status.textContent=`${Math.min(active.length,Number(state.ui?.dashboard?.visible_slots)||4)} of ${dashboardPickSectionKeys.length} sections shown`;
+    if(status)status.textContent=`${Math.min(active.length,Math.min(6,Number(state.ui?.dashboard?.visible_slots)||6))} of ${dashboardPickSectionKeys.length} sections shown`;
     if(disabled){
       const hidden=dashboardPickSectionKeys.filter(key=>!prefs[key]);
       disabled.hidden=!hidden.length||state.ui?.dashboard?.show_disabled_strip===false;
@@ -358,20 +358,24 @@
     }
   }
   function renderDashboardComposition(){
-    const view=$('predictionsView');if(!view)return;
-    const top=$('bannerTop'),mid=$('bannerMid'),bottom=$('bannerBottom');if(top)top.style.order='10';if(mid)mid.style.order='45';if(bottom)bottom.style.order='80';
-    const prefs=dashboardVisibilityState(),max=Math.max(1,Number(state.ui?.dashboard?.visible_slots)||4);
-    const orderedKeys=orderedDashboardKeys();const configured=orderedKeys.filter(key=>{const cfg=dashboardSectionConfig(key);return prefs[key]&&cfg.sidebar_enabled!==false&&elementAccess(cfg.sidebar_element)!=='hidden';}).slice(0,max);
-    const countFor=key=>marketRows(key).length;
-    let active=[...configured];
-    if(state.ui?.dashboard?.auto_replace_empty_sections!==false){
-      const replacements=orderedKeys.filter(key=>{const cfg=dashboardSectionConfig(key);return !active.includes(key)&&cfg.sidebar_enabled!==false&&elementAccess(cfg.sidebar_element)!=='hidden'&&countFor(key)>0;});
-      active=active.map(key=>countFor(key)>0?key:(replacements.shift()||key));
-    }
-    dashboardPickSectionKeys.forEach(key=>{
+    const view=$('predictionsView'),grid=$('dashboardSixGrid');if(!view||!grid)return;
+    const top=$('bannerTop'),mid=$('bannerMid'),bottom=$('bannerBottom');if(top)top.style.order='10';grid.style.order='20';if(mid)mid.style.order='45';if(bottom)bottom.style.order='80';
+    const prefs=dashboardVisibilityState(),max=Math.max(1,Math.min(6,Number(state.ui?.dashboard?.visible_slots)||6));
+    const orderedKeys=orderedDashboardKeys();
+    // Six virtual dashboard slots. An intentionally disabled section stays disabled; empty enabled sections keep their elegant empty state.
+    const active=orderedKeys.filter(key=>{const cfg=dashboardSectionConfig(key);return prefs[key]&&cfg.dashboard_enabled!==false&&cfg.sidebar_enabled!==false&&elementAccess(cfg.sidebar_element)!=='hidden';}).slice(0,max);
+    orderedKeys.forEach(key=>{
       const cfg=dashboardSectionConfig(key),panel=$(cfg.panel_id);if(!panel)return;
-      panel.hidden=!active.includes(key);panel.style.order=String(20+active.indexOf(key)*10);
+      // Move all six pick panels into one layout host so hidden sections cannot leave holes between legacy DOM rows.
+      if(panel.parentElement!==grid)grid.appendChild(panel);
+      const slot=active.indexOf(key);
+      panel.hidden=slot<0;
+      panel.classList.toggle('dashboard-grid-active',slot>=0);
+      if(slot>=0){panel.dataset.gridSlot=String(slot+1);panel.style.order=String(slot+1);}else{delete panel.dataset.gridSlot;panel.style.order='';}
     });
+    grid.dataset.activeCount=String(active.length);
+    grid.hidden=active.length===0;
+    // Results and BTTS remain dedicated pages/panels and never consume one of the six dashboard fields.
     for(const key of ['results','btts']){const cfg=dashboardSectionConfig(key),panel=$(cfg.panel_id);if(panel)panel.hidden=true;}
     dashboardSectionKeys.forEach(key=>{
       const see=sectionSeeAllNode(key),ent=dashboardPlanEntitlement(key);if(!see)return;
@@ -1167,7 +1171,7 @@
     const cfg=dashboardSectionConfig(key);
     const preview=previewChoices.map(v=>`<option value="${escapeHtml(v)}"${String(cfg.preview_limit).toUpperCase()===String(v).toUpperCase()?' selected':''}>${escapeHtml(v)}</option>`).join('');
     const rows=accessContexts.map(plan=>{const ent=cfg.plans?.[plan]||cfg.plans?.rookie||{},options=choices.map(v=>`<option value="${escapeHtml(v)}"${String(ent.visible_picks).toUpperCase()===String(v).toUpperCase()?' selected':''}>${escapeHtml(v)}</option>`).join(''),order=Number(ent.order||cfg.dashboard_order||99);return `<div class="admin-plan-rule" data-dashboard-plan-row="${escapeHtml(plan)}"><b>${escapeHtml(state.ui?.plans?.[plan]?.label||plan.toUpperCase())}</b><label>Visible picks<select data-dashboard-matrix-field="visible_picks">${options}</select></label><label>Order<input type="number" min="1" max="20" data-dashboard-matrix-field="order" value="${order}"></label><label class="check-field"><input type="checkbox" data-dashboard-matrix-field="blur_remaining" ${ent.blur_remaining!==false?'checked':''}> Blur rest</label><label class="check-field"><input type="checkbox" data-dashboard-matrix-field="see_all" ${ent.see_all?'checked':''}> See more</label></div>`;}).join('');
-    return `<div class="admin-section dashboard-inspector-section" data-dashboard-section="${escapeHtml(key)}"><div class="admin-section-title"><strong>Section rules · ${escapeHtml(cfg.label||key)}</strong><span>Set visibility, teaser depth and order independently for every membership level.</span></div><div class="admin-field-grid"><label class="check-field"><input type="checkbox" data-dashboard-field="sidebar_enabled" ${cfg.sidebar_enabled!==false?'checked':''}> Show in top navigation</label><label class="check-field"><input type="checkbox" data-dashboard-field="dashboard_enabled" ${cfg.dashboard_enabled!==false?'checked':''}> Section enabled</label><label>Preview pool<select data-dashboard-field="preview_limit">${preview}</select></label></div><div class="admin-plan-rules">${rows}</div><small class="field-hint">Visible picks = 0 + Blur rest means the section remains visible but every pick is blurred. Order can be different for ROOKIE, PRO, ELITE, LEGEND and GOAT.</small></div>`;
+    return `<div class="admin-section dashboard-inspector-section" data-dashboard-section="${escapeHtml(key)}"><div class="admin-section-title"><strong>Section rules · ${escapeHtml(cfg.label||key)}</strong><span>Set dashboard visibility, teaser depth and order independently for every membership level. The six-slot layout closes gaps automatically.</span></div><div class="admin-field-grid"><label class="check-field"><input type="checkbox" data-dashboard-field="sidebar_enabled" ${cfg.sidebar_enabled!==false?'checked':''}> Show in top navigation</label><label class="check-field"><input type="checkbox" data-dashboard-field="dashboard_enabled" ${cfg.dashboard_enabled!==false?'checked':''}> Show on dashboard</label><label>Preview pool<select data-dashboard-field="preview_limit">${preview}</select></label></div><div class="admin-plan-rules">${rows}</div><small class="field-hint">Visible picks = 0 + Blur rest means the section remains visible but every pick is blurred. Order can be different for ROOKIE, PRO, ELITE, LEGEND and GOAT.</small></div>`;
   }
   function bannerAudienceEditor(item){
     if(!['header_slot','hero_banner','large_banner','sidebar_promo'].includes(item.kind))return '';
@@ -1220,7 +1224,7 @@
     const cfg=dashboardSectionConfig(key),ent=cfg.plans?.[state.adminPlan]||cfg.plans?.rookie||{};
     const enabled=cfg.dashboard_enabled!==false,nav=cfg.sidebar_enabled!==false;
     const order=Number(ent.order||cfg.dashboard_order||99);
-    return `<article class="admin-section-card" data-dashboard-section="${escapeHtml(key)}"><div class="admin-section-card-head"><div><small>ORDER ${order}</small><h3>${escapeHtml(cfg.label||key)}</h3></div><div class="admin-section-card-switches"><span>GLOBAL</span><label><input type="checkbox" data-dashboard-field="dashboard_enabled" ${enabled?'checked':''}> Site</label><label><input type="checkbox" data-dashboard-field="sidebar_enabled" ${nav?'checked':''}> Navigation</label></div></div>${adminSectionPresetButtons(key)}${adminSectionRuleRow(key,state.adminPlan,true)}<details class="admin-all-levels"><summary>All membership levels</summary><div class="admin-all-level-rules">${accessContexts.map(plan=>adminSectionRuleRow(key,plan)).join('')}</div></details></article>`;
+    return `<article class="admin-section-card" data-dashboard-section="${escapeHtml(key)}"><div class="admin-section-card-head"><div><small>ORDER ${order}</small><h3>${escapeHtml(cfg.label||key)}</h3></div><div class="admin-section-card-switches"><span>GLOBAL</span><label><input type="checkbox" data-dashboard-field="dashboard_enabled" ${enabled?'checked':''}> Dashboard</label><label><input type="checkbox" data-dashboard-field="sidebar_enabled" ${nav?'checked':''}> Navigation</label></div></div>${adminSectionPresetButtons(key)}${adminSectionRuleRow(key,state.adminPlan,true)}<details class="admin-all-levels"><summary>All membership levels</summary><div class="admin-all-level-rules">${accessContexts.map(plan=>adminSectionRuleRow(key,plan)).join('')}</div></details></article>`;
   }
   function adminPageAccessRow(key,plan){
     const access=adminSectionRouteAccess(key,plan);

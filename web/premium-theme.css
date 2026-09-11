@@ -1,4 +1,4 @@
-/* BlinQ v6.5.25 — Premium soft UI + persistent light/dark theme
+/* BlinQ v6.5.26 — Premium soft UI + adaptive six-panel dashboard grid
    Loaded after legacy styles so the visual system can evolve without changing data/runtime logic. */
 
 :root,
@@ -399,3 +399,170 @@ html.admin-preview-active .profile-shell{box-shadow:0 0 0 2px rgba(240,183,62,.3
 .overview-row-locked{cursor:pointer}.overview-row-locked td{background:linear-gradient(90deg,rgba(120,132,157,.035),rgba(123,92,244,.035))!important}.overview-row-locked .overview-masked{color:var(--ui-faint)!important}.overview-detail-btn.locked{background:rgba(123,92,244,.11)!important;color:var(--ui-violet)!important}.overview-row-locked:hover{background:rgba(123,92,244,.055)!important}
 .admin-overview-card .admin-section-card-head p{margin:4px 0 0;color:var(--ui-muted);font-size:10px;max-width:620px}.admin-overview-card .admin-section-rule-row{grid-template-columns:minmax(120px,.8fr) minmax(150px,1fr) minmax(140px,.8fr) auto auto!important}
 @media(max-width:760px){.admin-preview-bar{align-items:flex-start;flex-direction:column}.admin-preview-bar .btn{width:100%}.admin-overview-card .admin-section-rule-row{grid-template-columns:1fr!important}}
+
+/* ==========================================================================
+   BlinQ v6.5.26 — adaptive six-panel dashboard
+   The public dashboard has six virtual positions: Prime, Top, Ace, Value,
+   Doubles and Sets/Games. Disabled modules disappear and the remaining
+   modules expand to fill each row without visual holes. Results/BTTS stay
+   dedicated routes.
+   ========================================================================== */
+
+#predictionsView{
+  grid-template-columns:minmax(0,1fr)!important;
+  gap:14px!important;
+}
+#dashboardHero,#bannerTop,#bannerMid,#bannerBottom,#dashboardSixGrid,.dashboard-section-switcher,.dashboard-disabled-sections,.sync-bar{
+  grid-column:1/-1!important;
+}
+
+.dashboard-six-grid{
+  display:grid;
+  grid-template-columns:repeat(6,minmax(0,1fr));
+  gap:14px;
+  align-items:stretch;
+  width:100%;
+  min-width:0;
+}
+.dashboard-six-grid[hidden]{display:none!important}
+.dashboard-six-grid>.picks-panel{
+  min-width:0!important;
+  min-height:0!important;
+  height:100%;
+  margin:0!important;
+  padding:12px!important;
+  display:flex!important;
+  flex-direction:column!important;
+  border:1px solid var(--ui-line)!important;
+  border-radius:18px!important;
+  background:var(--ui-surface)!important;
+  box-shadow:var(--ui-shadow-soft)!important;
+  backdrop-filter:var(--ui-glass)!important;
+  color:var(--ui-text)!important;
+  overflow:hidden;
+}
+.dashboard-six-grid>.picks-panel:hover{
+  border-color:rgba(80,115,177,.30)!important;
+  box-shadow:0 14px 36px rgba(67,96,145,.12)!important;
+}
+.dashboard-six-grid>.picks-panel[hidden]{display:none!important}
+
+/* 6 visible: canonical 3 × 2 layout */
+.dashboard-six-grid[data-active-count="6"]>[data-grid-slot="1"]{grid-column:1/3}
+.dashboard-six-grid[data-active-count="6"]>[data-grid-slot="2"]{grid-column:3/5}
+.dashboard-six-grid[data-active-count="6"]>[data-grid-slot="3"]{grid-column:5/7}
+.dashboard-six-grid[data-active-count="6"]>[data-grid-slot="4"]{grid-column:1/3}
+.dashboard-six-grid[data-active-count="6"]>[data-grid-slot="5"]{grid-column:3/5}
+.dashboard-six-grid[data-active-count="6"]>[data-grid-slot="6"]{grid-column:5/7}
+
+/* 5 visible: 3 on top, two wider panels below */
+.dashboard-six-grid[data-active-count="5"]>[data-grid-slot="1"]{grid-column:1/3}
+.dashboard-six-grid[data-active-count="5"]>[data-grid-slot="2"]{grid-column:3/5}
+.dashboard-six-grid[data-active-count="5"]>[data-grid-slot="3"]{grid-column:5/7}
+.dashboard-six-grid[data-active-count="5"]>[data-grid-slot="4"]{grid-column:1/4}
+.dashboard-six-grid[data-active-count="5"]>[data-grid-slot="5"]{grid-column:4/7}
+
+/* 4 visible: balanced 2 × 2 */
+.dashboard-six-grid[data-active-count="4"]>[data-grid-slot="1"],
+.dashboard-six-grid[data-active-count="4"]>[data-grid-slot="3"]{grid-column:1/4}
+.dashboard-six-grid[data-active-count="4"]>[data-grid-slot="2"],
+.dashboard-six-grid[data-active-count="4"]>[data-grid-slot="4"]{grid-column:4/7}
+
+/* 3 visible: one full row */
+.dashboard-six-grid[data-active-count="3"]>[data-grid-slot="1"]{grid-column:1/3}
+.dashboard-six-grid[data-active-count="3"]>[data-grid-slot="2"]{grid-column:3/5}
+.dashboard-six-grid[data-active-count="3"]>[data-grid-slot="3"]{grid-column:5/7}
+
+/* 2 visible: equal halves. 1 visible: full width. */
+.dashboard-six-grid[data-active-count="2"]>[data-grid-slot="1"]{grid-column:1/4}
+.dashboard-six-grid[data-active-count="2"]>[data-grid-slot="2"]{grid-column:4/7}
+.dashboard-six-grid[data-active-count="1"]>[data-grid-slot="1"]{grid-column:1/7}
+
+/* Keep preview cards compact like the target mock-up. */
+.dashboard-six-grid .picks-head{flex:0 0 auto!important}
+.dashboard-six-grid .pick-carousel-shell,
+.dashboard-six-grid .market-carousel-shell{flex:1 1 auto!important;display:flex!important;min-height:0!important}
+.dashboard-six-grid .pick-carousel,
+.dashboard-six-grid .market-preview-grid{flex:1 1 auto!important;width:100%!important;align-content:stretch!important}
+.dashboard-six-grid .prediction-card{height:100%;min-height:228px!important}
+.dashboard-six-grid .match-card-v3 .match-players-row{min-height:88px!important;padding-top:10px!important;padding-bottom:9px!important}
+.dashboard-six-grid .match-card-v3 .match-pick-row{min-height:54px!important}
+.dashboard-six-grid .section-see-all-card{margin-top:8px!important}
+.dashboard-six-grid .carousel-dots{display:none!important}
+
+/* Empty sections must still look like intentional premium modules, never large grey dead zones. */
+.dashboard-six-grid .state-card,
+.dashboard-six-grid .market-empty{
+  min-height:228px!important;
+  width:100%!important;
+  padding:28px 24px!important;
+  display:grid!important;
+  place-items:center!important;
+  text-align:center!important;
+  border:1px dashed rgba(96,132,187,.24)!important;
+  border-radius:14px!important;
+  background:
+    radial-gradient(circle at 50% 28%,rgba(79,145,247,.09),transparent 30%),
+    linear-gradient(145deg,rgba(249,252,255,.92),rgba(239,246,255,.78))!important;
+  color:var(--ui-muted)!important;
+  line-height:1.55!important;
+  font-size:11px!important;
+}
+html[data-theme="dark"] .dashboard-six-grid .state-card,
+html[data-theme="dark"] .dashboard-six-grid .market-empty{
+  border-color:rgba(129,161,207,.18)!important;
+  background:
+    radial-gradient(circle at 50% 28%,rgba(80,143,241,.10),transparent 30%),
+    linear-gradient(145deg,rgba(16,32,54,.94),rgba(10,23,40,.92))!important;
+}
+
+/* Locked previews retain the real card silhouette; only the protected content is muted. */
+.dashboard-six-grid .dashboard-locked-card{
+  min-height:228px!important;
+  border:1px solid rgba(123,92,244,.18)!important;
+  background:linear-gradient(145deg,rgba(250,252,255,.96),rgba(242,245,255,.96))!important;
+  color:var(--ui-text)!important;
+  box-shadow:none!important;
+}
+.dashboard-six-grid .dashboard-locked-card::before{
+  background:
+    radial-gradient(circle at 27% 35%,rgba(82,131,205,.12),transparent 18%),
+    radial-gradient(circle at 73% 35%,rgba(82,131,205,.12),transparent 18%),
+    linear-gradient(180deg,rgba(250,252,255,.16),rgba(239,244,255,.72))!important;
+  filter:blur(5px)!important;
+}
+html[data-theme="dark"] .dashboard-six-grid .dashboard-locked-card{
+  background:linear-gradient(145deg,#111d31,#0d1728)!important;
+  border-color:rgba(151,121,255,.22)!important;
+}
+html[data-theme="dark"] .dashboard-six-grid .dashboard-locked-card::before{
+  background:linear-gradient(180deg,rgba(13,28,48,.12),rgba(8,18,32,.70))!important;
+}
+.dashboard-six-grid .locked-pick-copy{gap:6px!important}
+.dashboard-six-grid .locked-pick-copy strong{color:var(--ui-text-strong)!important;font-size:12px!important}
+.dashboard-six-grid .locked-pick-copy small{color:var(--ui-muted)!important;font-size:9px!important}
+.dashboard-six-grid .locked-pick-copy .btn{min-height:34px!important;border-radius:10px!important}
+
+/* Tablet: exactly two columns; an odd last module expands across the row. */
+@media(max-width:1180px){
+  .dashboard-six-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important}
+  .dashboard-six-grid>[data-grid-slot]{grid-column:auto!important}
+  .dashboard-six-grid[data-active-count="5"]>[data-grid-slot="5"],
+  .dashboard-six-grid[data-active-count="3"]>[data-grid-slot="3"],
+  .dashboard-six-grid[data-active-count="1"]>[data-grid-slot="1"]{grid-column:1/-1!important}
+}
+
+/* Mobile: one clean card per row; no horizontal overflow and no artificial spanning. */
+@media(max-width:760px){
+  #predictionsView{gap:11px!important}
+  .dashboard-six-grid{grid-template-columns:minmax(0,1fr)!important;gap:11px!important}
+  .dashboard-six-grid>[data-grid-slot]{grid-column:1!important}
+  .dashboard-six-grid>.picks-panel{padding:10px!important;border-radius:16px!important}
+  .dashboard-six-grid .prediction-card,
+  .dashboard-six-grid .state-card,
+  .dashboard-six-grid .market-empty,
+  .dashboard-six-grid .dashboard-locked-card{min-height:0!important}
+  .dashboard-six-grid .state-card,.dashboard-six-grid .market-empty{padding:24px 18px!important;min-height:168px!important}
+  .dashboard-six-grid .match-card-v3 .match-players-row{min-height:92px!important}
+}
+

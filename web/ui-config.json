@@ -2999,12 +2999,12 @@
     "visible_slots": 6,
     "user_switches": false,
     "show_disabled_strip": false,
-    "auto_replace_empty_sections": true,
+    "auto_replace_empty_sections": false,
     "cards_per_panel_desktop": 1,
     "cards_per_panel_wide": 1,
     "detail_pick_limit": 5
   },
-  "ui_revision": "6.5.25",
+  "ui_revision": "6.5.26",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
