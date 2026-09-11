@@ -31,14 +31,15 @@ def test_rebuild_keeps_v65_dashboard_contract_and_complete_assets():
         assert (ROOT / "web" / "assets" / name).is_file(), name
 
 
-def test_rebuild_keeps_two_point_top_bets_adaptive_cascade():
+def test_rebuild_keeps_probability_first_market_policy():
     source = (ROOT / "api" / "tbt" / "services" / "market_selection.py").read_text(encoding="utf-8")
-    assert "TOP_PREFERRED_PROBABILITY = 0.80" in source
-    assert "TOP_SECONDARY_PROBABILITY = 0.78" in source
-    assert "TOP_STANDARD_PROBABILITY = 0.76" in source
-    assert "TOP_TARGET_COUNT = 10" in source
-    assert "prime_top_value_v7_min5_before_expand" in source
-    assert "presentation_preview_limit" in source
+    assert "PUBLICATION_MIN_PROBABILITY = 0.60" in source
+    assert "PRIME_TOP_MIN_PROBABILITY = 0.65" in source
+    assert "PRIME_MAX_ODDS_EXCLUSIVE = 1.50" in source
+    assert "TOP_MIN_ODDS: float | None = 1.50" in source
+    assert "VALUE_MIN_ODDS = 1.80" in source
+    assert "VALUE_MAX_ODDS_DIFFERENCE = 0.15" in source
+    assert "probability_first_odds_buckets_v9" in source
 
 
 def test_firebase_runtime_dependency_and_api_routes_are_present():
@@ -46,7 +47,7 @@ def test_firebase_runtime_dependency_and_api_routes_are_present():
     function_app = (ROOT / "api" / "function_app.py").read_text(encoding="utf-8")
     assert "firebase-admin>=6.5,<8" in requirements
     assert 'API_VERSION = "3.5.1"' in function_app
-    assert 'RELEASE = "6.5.34"' in function_app
+    assert 'RELEASE = "6.5.36"' in function_app
     assert "auth_provider(settings)" in function_app
     assert 'route="v1/auth/profile"' in function_app
 

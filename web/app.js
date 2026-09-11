@@ -16,7 +16,7 @@
   const flagEmoji = code => { const value=String(code||'').trim().toUpperCase(); if(!/^[A-Z]{2}$/.test(value))return ''; return [...value].map(ch=>String.fromCodePoint(127397+ch.charCodeAt(0))).join(''); };
   const safePhotoUrl = value => { const url=String(value||'').trim(); return /^\/assets\/players\/[A-Za-z0-9_.-]+$/.test(url)?url:''; };
   const safeUiAsset = value => { const url=String(value||'').trim(); if(!/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)||url.split('/').includes('..'))return ''; return url; };
-  const avatarAssetSrc = value => { const url=safeUiAsset(value); return url ? `${url}?v=v6534` : ''; };
+  const avatarAssetSrc = value => { const url=safeUiAsset(value); return url ? `${url}?v=v6536` : ''; };
   function playerFallbackUrl(tour){
     const key=String(tour||'').trim().toLowerCase();
     const map=state.ui?.assets?.player_fallback||{};
