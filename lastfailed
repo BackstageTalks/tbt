@@ -1,0 +1,3 @@
+{
+  "tests/test_ui_v6532_contract.py::test_auth_assets_are_cache_busted_to_6532": true
+}
