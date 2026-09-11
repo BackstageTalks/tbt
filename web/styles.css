@@ -1219,3 +1219,45 @@ body{background:var(--dash-bg)}
 .admin-section-presets{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 12px;border-bottom:1px solid #1d2e43;background:#07111b}.admin-section-presets>span{color:#77899e;font-size:9px;font-weight:800}.admin-section-presets>div{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}.admin-section-presets button{min-height:28px;padding:5px 8px;border:1px solid #2b3e56;border-radius:7px;background:#0b1623;color:#b8c4d2;font-size:9px;font-weight:800;cursor:pointer}.admin-section-presets button:hover{border-color:#7458df;color:#fff;background:#171438}.admin-section-presets button:nth-child(3){border-color:#5b4928;color:#d8bd79}.admin-section-presets button:last-child{border-color:#51303b;color:#dca5b5}
 .admin-console-v6522 .admin-tabs-v6522 button strong{font-size:14px}.admin-console-v6522 .admin-tabs-v6522 button small{font-size:11px}.admin-console-v6522 .admin-level-picker>span{font-size:12px}.admin-console-v6522 .admin-level-chip{font-size:12px}.admin-console-v6522 .admin-section-card-head h3{font-size:15px}.admin-console-v6522 .admin-section-card-switches label{font-size:11px}.admin-console-v6522 .admin-section-rule-row label,.admin-console-v6522 .admin-page-access-row label{font-size:10px}.admin-console-v6522 .admin-section-rule-row select,.admin-console-v6522 .admin-section-rule-row input[type=number],.admin-console-v6522 .admin-page-access-row select{font-size:11px}.admin-console-v6522 .admin-banner-library-card strong{font-size:12px}.admin-console-v6522 .admin-banner-library-card small,.admin-console-v6522 .admin-banner-library-card em{font-size:9px}.admin-console-v6522 .admin-form-grid label,.admin-console-v6522 .admin-wide-field{font-size:10px}.admin-console-v6522 .admin-form-grid input,.admin-console-v6522 .admin-form-grid select,.admin-console-v6522 .admin-form-grid textarea,.admin-console-v6522 .admin-wide-field input{font-size:12px}.admin-console-v6522 .admin-banner-access-row>b{font-size:11px}.admin-console-v6522 .admin-banner-access-row label{font-size:10px}.admin-console-v6522 .admin-plan-level>b{font-size:11px}.admin-console-v6522 .admin-user-editor-head h3{font-size:15px}.admin-console-v6522 .admin-user-editor-head p{font-size:10px}
 @media(max-width:900px){.admin-section-presets{align-items:flex-start;flex-direction:column}.admin-section-presets>div{justify-content:flex-start}}
+
+/* BlinQ 6.5.32 — authentication surface refinement */
+.auth-dialog{
+  width:min(620px,calc(100vw - 36px));
+  max-height:min(900px,calc(100dvh - 36px));
+  padding:54px 58px 38px;
+  border:1px solid rgba(73,111,143,.62);
+  border-radius:30px;
+  background:
+    radial-gradient(circle at 50% 14%,rgba(41,96,142,.17),transparent 34%),
+    radial-gradient(circle at 100% 100%,rgba(54,154,171,.08),transparent 32%),
+    linear-gradient(180deg,#0b1725 0%,#09131f 52%,#08111c 100%);
+  box-shadow:0 34px 110px rgba(0,0,0,.62),inset 0 1px 0 rgba(255,255,255,.025);
+}
+.auth-dialog::backdrop{background:rgba(1,5,10,.82);backdrop-filter:blur(10px)}
+.auth-brand{margin:0 0 26px}.auth-logo{width:min(360px,72vw);max-height:118px;object-fit:contain}
+.auth-intro h2{font-size:clamp(2rem,4.2vw,2.7rem);font-weight:800;letter-spacing:-.045em;margin:0 0 12px}
+.auth-intro p{font-size:16px;line-height:1.55;color:#87a0bd;margin:0 auto;max-width:470px}
+.auth-engine{margin-top:16px;font-size:12px;letter-spacing:.16em;color:#63f56a;text-shadow:0 0 16px rgba(99,245,106,.12)}
+.auth-dialog form{margin-top:36px}
+.auth-dialog form>label{font-size:15px;font-weight:650;color:#eef4fb;margin:20px 0}
+.auth-field{height:66px;margin-top:10px;border-radius:14px;border:1px solid #24405b;background:rgba(4,14,24,.74);padding:0 18px;gap:14px}
+.auth-field:focus-within{border-color:#8a37ff;box-shadow:0 0 0 2px rgba(138,55,255,.28),0 0 26px rgba(108,44,255,.18)}
+.auth-field-icon{width:24px;font-size:20px;color:#dce9f7}
+.auth-field input{font-size:17px;color:#f7fbff}
+.auth-field input::placeholder{color:#7899c2}
+.auth-password-toggle{min-width:74px;height:40px;border:0;border-radius:10px;background:#101438;color:#b894ff;font-weight:800;cursor:pointer}
+.auth-dialog #authSubmit{min-height:58px;margin-top:14px;border-radius:12px;font-size:16px;font-weight:800;background:linear-gradient(90deg,#5e36ef 0%,#793be3 100%);box-shadow:0 14px 34px rgba(85,46,221,.22)}
+.auth-dialog #authSubmit:hover:not(:disabled){filter:brightness(1.08);transform:translateY(-1px)}
+.auth-dialog #authSubmit:disabled{opacity:.55;cursor:wait}
+.auth-dialog #authMessage{margin:16px 0 0;padding:0 2px;color:#d6b4ff;font-size:14px;line-height:1.55}
+.auth-links{margin-top:24px;padding:0 4px}.auth-links button{font-size:14px;color:#a15aff}.auth-links button:hover{color:#c799ff}
+.auth-languages{gap:9px;margin:28px 0 0}.auth-languages a{min-width:44px;padding:10px 12px;border-radius:10px;font-size:12px;background:#0a1522;border-color:#263e56}.auth-languages a:hover,.auth-languages a.active{border-color:#8b31ff;background:#291345;color:#f4eaff;box-shadow:0 0 18px rgba(139,49,255,.12)}
+.auth-footer{margin-top:26px;padding-top:20px;color:#71869e;font-size:13px}
+
+@media(max-width:640px){
+  .auth-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);padding:34px 24px 24px;border-radius:24px}
+  .auth-logo{width:min(300px,78vw);max-height:92px}
+  .auth-intro h2{font-size:2rem}.auth-intro p{font-size:14px}.auth-engine{font-size:10px;letter-spacing:.13em}
+  .auth-dialog form{margin-top:26px}.auth-field{height:58px}.auth-dialog form>label{font-size:14px;margin:16px 0}
+  .auth-links{gap:8px}.auth-links button{font-size:13px}.auth-footer{font-size:11px}
+}

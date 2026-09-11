@@ -737,6 +737,11 @@
     state.authMode=mode; $('authMessage').textContent=''; if($('resendVerification'))$('resendVerification').hidden=true;
     $('nameLabel').hidden=mode!=='signup'; $('emailLabel').hidden=mode==='recovery'; $('passwordLabel').hidden=mode==='reset';
     $('authEmail').required=mode!=='recovery'; $('authPassword').required=mode!=='reset'; $('authName').required=mode==='signup';
+    // Never apply the new-account password policy to sign-in. Older Firebase
+    // accounts may legitimately have a 6- or 7-character password; a static
+    // minlength=8 made the browser block the submit event before our handler
+    // could call Firebase, which looked like a broken login button.
+    $('authPassword').minLength=(mode==='signup'||mode==='recovery')?8:0;
     $('authPassword').autocomplete=mode==='login'?'current-password':'new-password';
     $('authTitle').textContent=publicText({login:'Welcome back.',signup:'Create your BlinQ account.',reset:'Restore access.',recovery:'Set a new password.'}[mode]);
     $('authSubtitle').textContent=publicText({login:'Sign in to your tennis intelligence workspace.',signup:'Create an account to access your BlinQ workspace.',reset:'We will send a password recovery link to your email.',recovery:'Choose a password with at least eight characters.'}[mode]);
@@ -749,8 +754,13 @@
   }
 
   async function handleAuthSubmit(event){
-    event.preventDefault(); const button=$('authSubmit'); button.disabled=true; $('authMessage').textContent=publicText('Working…');
-    const email=$('authEmail').value.trim(), password=$('authPassword').value;
+    event.preventDefault();
+    const button=$('authSubmit'),message=$('authMessage'),passwordInput=$('authPassword');
+    const email=$('authEmail').value.trim(), password=passwordInput.value;
+    if(!email && state.authMode!=='recovery'){message.textContent=publicText('Enter your email address.');$('authEmail').focus();return;}
+    if(['login','signup','recovery'].includes(state.authMode)&&!password){message.textContent=publicText('Enter your password.');passwordInput.focus();return;}
+    if(['signup','recovery'].includes(state.authMode)&&password.length<8){message.textContent=publicText('Choose a password with at least eight characters.');passwordInput.focus();return;}
+    button.disabled=true; message.textContent=publicText('Working…');
     try{
       if(state.authMode==='reset'){ await BlinqAuth.reset(email); $('authMessage').textContent=publicText('If the account exists, check your email for the recovery link.'); return; }
       if(state.authMode==='recovery') await BlinqAuth.update({password});

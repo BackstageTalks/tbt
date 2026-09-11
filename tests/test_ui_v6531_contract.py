@@ -10,10 +10,10 @@ def text(path):
 
 def test_release_version_and_asset_cache_keys_are_consistent():
     cfg = json.loads(text("web/ui-config.json"))
-    assert cfg["ui_revision"] == "6.5.31"
+    assert cfg["ui_revision"] == "6.5.32"
     html = text("web/index.html")
     for asset in ("styles.css", "responsive.css", "premium.css", "auth.js", "responsive.js", "app.js"):
-        assert f'/{asset}?v=6531' in html
+        assert f'/{asset}?v=6532' in html
 
 
 def test_server_owned_entitlements_are_wired_into_feed():

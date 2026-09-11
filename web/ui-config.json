@@ -2926,7 +2926,7 @@
     "cards_per_panel_wide": 1,
     "detail_pick_limit": 5
   },
-  "ui_revision": "6.5.31",
+  "ui_revision": "6.5.32",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
