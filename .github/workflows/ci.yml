@@ -1,0 +1,155 @@
+name: Test and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Full backend tests remain mandatory for push/PR.
+      # A manual workflow_dispatch is the explicit web deploy path, so an
+      # unrelated backend/history test cannot block publishing web changes.
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: |
+            api/requirements.txt
+            api/requirements-train.txt
+
+      - name: Install API runtime dependencies
+        run: python -m pip install -r api/requirements.txt
+
+      - name: Compile API and scripts
+        run: python -m compileall -q api scripts
+
+      - name: Smoke import Azure API
+        env:
+          PYTHONPATH: api
+        run: |
+          python - <<'PY'
+          import function_app
+          from tbt.services.auth import auth_provider, update_firebase_profile, verify_user
+          assert callable(auth_provider)
+          assert callable(update_firebase_profile)
+          assert callable(verify_user)
+          assert callable(function_app.health)
+          print('Azure API import smoke: PASS')
+          PY
+
+      - name: Guard Firebase-only auth runtime
+        run: |
+          set -euo pipefail
+          if grep -RniE 'supabase|SUPABASE' \
+            api/function_app.py \
+            api/tbt/config.py \
+            api/tbt/services/auth.py \
+            api/tbt/services/admin_accounts.py \
+            web/auth.js \
+            web/staticwebapp.config.json; then
+            echo 'Supabase reference found in Firebase-only auth runtime' >&2
+            exit 1
+          fi
+          echo 'Firebase-only auth runtime guard: PASS'
+
+      - name: Install backend test dependencies
+        if: github.event_name != 'workflow_dispatch'
+        run: python -m pip install -r api/requirements-train.txt pytest
+
+      - name: Run backend tests
+        if: github.event_name != 'workflow_dispatch'
+        env:
+          PYTHONPATH: api:scripts
+        run: python -m pytest
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Check frontend JavaScript
+        run: |
+          node --check web/app.js
+          node --check web/auth.js
+          node tests/test_auth_refresh_race.js
+          node tests/test_firebase_web_auth.js
+          node tests/test_firebase_email_verification.js
+
+      - name: Check required web files
+        run: |
+          test -s web/index.html
+          test -s web/styles.css
+          test -s web/staticwebapp.config.json
+          test -s api/function_app.py
+          test -s api/requirements.txt
+          test -s scripts/prepare_feed.py
+
+  deploy:
+    needs: checks
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && vars.TBT_DEPLOY_ENABLED == 'true')
+    # Web/API deployment only reads committed prediction/player-asset releases.
+    # It must not queue behind long-running history/environment writers.
+    # Keep production deployments serialized only against other deployments.
+    concurrency:
+      group: tbt-production-deploy
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Prepare private serving feed
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          python scripts/prepare_feed.py
+          test -s api/data/feed.json
+
+      - name: Deploy BlinQ to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: web
+          api_location: api
+          output_location: ''
+          skip_app_build: true
+
+      - name: Confirm deployed prediction publication
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          python scripts/confirm_prediction_publication.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --deployed-feed api/data/feed.json

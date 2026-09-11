@@ -1,0 +1,17 @@
+[
+  "tests/test_server_entitlements.py::test_elite_gets_full_curated_feed",
+  "tests/test_server_entitlements.py::test_expired_has_only_explicit_free_subset",
+  "tests/test_server_entitlements.py::test_rookie_never_receives_hidden_rows",
+  "tests/test_server_entitlements.py::test_suspended_is_denied",
+  "tests/test_server_entitlements.py::test_trial_inherits_rookie_server_side",
+  "tests/test_ui_v6530_contract.py::test_admin_requires_explicit_verified_claim",
+  "tests/test_ui_v6530_contract.py::test_backup_files_do_not_ship_from_web_root",
+  "tests/test_ui_v6530_contract.py::test_release_version_and_asset_cache_keys_are_consistent",
+  "tests/test_ui_v6530_contract.py::test_security_headers_are_present",
+  "tests/test_ui_v6530_contract.py::test_server_owned_entitlements_are_wired_into_feed",
+  "tests/test_ui_v6531_contract.py::test_admin_requires_explicit_verified_claim",
+  "tests/test_ui_v6531_contract.py::test_backup_files_do_not_ship_from_web_root",
+  "tests/test_ui_v6531_contract.py::test_release_version_and_asset_cache_keys_are_consistent",
+  "tests/test_ui_v6531_contract.py::test_security_headers_are_present",
+  "tests/test_ui_v6531_contract.py::test_server_owned_entitlements_are_wired_into_feed"
+]
