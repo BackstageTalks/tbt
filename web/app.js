@@ -834,7 +834,7 @@
       else cards.push(lockedPickCard(key,absoluteIndex));
     }
     host.innerHTML=cards.length?cards.join(''):`<div class="state-card market-empty">${escapeHtml(emptyText)}</div>`;
-    host.style.setProperty('--visible-cards',String(Math.max(1,visible.length)));
+    host.style.setProperty('--visible-cards',String(Math.max(1,cards.length)));
     window.BlinqUI.pager(host,state.marketPage[key],pageCount);
     const count=$(key==='top_daily'?'topDailyCount':`${key}Count`);if(count)count.textContent=locale==='en'?`${rows.length} ${rows.length===1?'pick':'picks'}`:`${rows.length} ${locale==='cz'?'tipů':'tipov'}`;
     const seeCount=$(key==='top_daily'?'topDailySeeAllCardCount':`${key}SeeAllCardCount`);if(seeCount)seeCount.textContent=publicText(`${rows.length} published`);
@@ -876,7 +876,7 @@
     grid.classList.remove('show-all');grid.innerHTML='';
     if(!previewCount)grid.innerHTML='<div class="state-card">No Prime Picks available yet. This board updates automatically when new picks qualify.</div>';
     else for(let absoluteIndex=start;absoluteIndex<end;absoluteIndex++){const m=allRows[absoluteIndex];if(m)grid.appendChild(renderCard(m,Number.isInteger(m.accessIndex)?m.accessIndex:absoluteIndex));else grid.insertAdjacentHTML('beforeend',lockedPickCard('prime',absoluteIndex));}
-    grid.style.setProperty('--visible-cards',String(Math.max(1,visible.length)));window.BlinqUI.pager(grid,state.page,pageCount);
+    grid.style.setProperty('--visible-cards',String(Math.max(1,end-start)));window.BlinqUI.pager(grid,state.page,pageCount);
     $('prevPick').hidden=pageCount<=1;$('nextPick').hidden=pageCount<=1;$('prevPick').disabled=state.page<=0;$('nextPick').disabled=state.page>=pageCount-1;renderDots(pageCount);renderDashboardComposition();applyAccessStates(grid);translatePublicDom(grid);
   }
 

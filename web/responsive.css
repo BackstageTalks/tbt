@@ -1620,7 +1620,7 @@ body{background:
   }
 }
 
-/* ==========================================================================\n   BlinQ 6.5.30 · production layout stabilization\n   Prevents cumulative shifts, clipped controls and breakpoint jitter.\n   ========================================================================== */
+/* ==========================================================================\n   BlinQ 6.5.31 · production layout stabilization\n   Prevents cumulative shifts, clipped controls and breakpoint jitter.\n   ========================================================================== */
 html{scrollbar-gutter:stable;overflow-x:hidden}
 body{overflow-x:clip}
 *,*::before,*::after{box-sizing:border-box}
