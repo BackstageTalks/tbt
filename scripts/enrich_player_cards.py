@@ -32,6 +32,8 @@ from tbt.utils import safe_int
 PROFILE_ASSET = "player_profiles.json"
 PHOTO_ASSET = "player_photos.zip"
 REPORT_ASSET = "player_enrichment_report.json"
+TOURNAMENT_PROFILE_ASSET = "tournament_profiles.json"
+TOURNAMENT_LOGO_ASSET = "tournament_logos.zip"
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -204,6 +206,59 @@ def _recently_unavailable(profile: dict[str, Any], *, days: int = 30) -> bool:
     return datetime.now(timezone.utc) - checked.astimezone(timezone.utc) < timedelta(days=days)
 
 
+def _current_tournaments(feed: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return unique current tournaments that expose a numeric provider id."""
+    found: dict[str, dict[str, Any]] = {}
+    keys = (
+        "upcoming", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
+        "value_picks", "value", "doubles_picks", "doubles", "ace_picks", "aces",
+        "ace_markets", "sg_picks", "sets_games", "set_game_picks",
+    )
+    for key in keys:
+        rows = feed.get(key) if isinstance(feed, dict) else None
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            tournament_id = str(row.get("tournament_logo_id") or row.get("tournament_id") or row.get("tournamentId") or "").strip()
+            if not tournament_id or not tournament_id.isdigit():
+                continue
+            found.setdefault(tournament_id, {
+                "id": tournament_id,
+                "name": str(row.get("tournament") or row.get("competition") or "").strip(),
+                "tour": str(row.get("tour") or "").upper(),
+            })
+    return sorted(found.values(), key=lambda row: (row["name"], row["id"]))
+
+
+def _safe_extract_named_zip(zip_path: Path, target_dir: Path, prefix: str) -> None:
+    if not zip_path.is_file():
+        return
+    target_dir.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, "r") as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            name = Path(info.filename).name
+            if not name:
+                continue
+            if not name.replace("-", "").replace("_", "").replace(".", "").isalnum():
+                continue
+            target = target_dir / name
+            with archive.open(info, "r") as source, target.open("wb") as dest:
+                shutil.copyfileobj(source, dest)
+
+
+def _build_named_zip(source_dir: Path, zip_path: Path, prefix: str) -> None:
+    temporary = zip_path.with_suffix(zip_path.suffix + ".tmp")
+    with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        for path in sorted(source_dir.glob("*")):
+            if path.is_file():
+                archive.write(path, arcname=f"{prefix}/{path.name}")
+    temporary.replace(zip_path)
+
+
 def _current_players(feed: dict[str, Any]) -> list[dict[str, Any]]:
     """Return unique current players, prioritising the strongest visible picks."""
     scored: dict[str, dict[str, Any]] = {}
@@ -246,6 +301,7 @@ def main() -> None:
     )
     parser.add_argument("--max-players", type=int, default=0, help="0 = all current feed players")
     parser.add_argument("--max-photo-requests", type=int, default=250)
+    parser.add_argument("--max-tournament-logo-requests", type=int, default=120)
     parser.add_argument("--max-fallback-ranking-requests", type=int, default=100)
     parser.add_argument("--refresh-photos", action="store_true")
     parser.add_argument(
@@ -257,6 +313,7 @@ def main() -> None:
     for name, value in (
         ("max_players", args.max_players),
         ("max_photo_requests", args.max_photo_requests),
+        ("max_tournament_logo_requests", args.max_tournament_logo_requests),
         ("max_fallback_ranking_requests", args.max_fallback_ranking_requests),
     ):
         if value < 0:
@@ -269,6 +326,7 @@ def main() -> None:
     prediction_store.download(extra_names=("feed.json",), required_names=("feed.json",))
     feed = _load_json(cache / "predictions" / "feed.json", {})
     players = _current_players(feed)
+    tournaments = _current_tournaments(feed)
     if args.max_players > 0:
         players = players[: args.max_players]
     if not players:
@@ -276,16 +334,21 @@ def main() -> None:
 
     asset_store = ReleaseStore(args.data_repository, "tbt-player-assets-v1", cache / "assets")
     existing_assets = asset_store._asset_names()
-    relevant_assets = {PROFILE_ASSET, PHOTO_ASSET, REPORT_ASSET} & existing_assets
+    relevant_assets = {PROFILE_ASSET, PHOTO_ASSET, REPORT_ASSET, TOURNAMENT_PROFILE_ASSET, TOURNAMENT_LOGO_ASSET} & existing_assets
     if relevant_assets:
         asset_store.download(extra_names=tuple(sorted(relevant_assets)))
 
     profile_path = cache / "assets" / PROFILE_ASSET
     photo_zip_path = cache / "assets" / PHOTO_ASSET
     report_path = cache / "assets" / REPORT_ASSET
+    tournament_profile_path = cache / "assets" / TOURNAMENT_PROFILE_ASSET
+    tournament_logo_zip_path = cache / "assets" / TOURNAMENT_LOGO_ASSET
     photos_dir = cache / "photos"
     photos_dir.mkdir(parents=True, exist_ok=True)
     _safe_extract_photos(photo_zip_path, photos_dir)
+    tournament_logos_dir = cache / "tournament-logos"
+    tournament_logos_dir.mkdir(parents=True, exist_ok=True)
+    _safe_extract_named_zip(tournament_logo_zip_path, tournament_logos_dir, "tournaments")
 
     cached = _load_json(profile_path, {"schema": 1, "players": {}})
     cached_players = cached.get("players") if isinstance(cached, dict) else {}
@@ -298,8 +361,18 @@ def main() -> None:
         if isinstance(value, dict)
     }
 
+    cached_tournaments = _load_json(tournament_profile_path, {"schema": 1, "tournaments": {}})
+    cached_tournament_rows = cached_tournaments.get("tournaments") if isinstance(cached_tournaments, dict) else {}
+    if not isinstance(cached_tournament_rows, dict):
+        cached_tournament_rows = {}
+    tournament_profiles: dict[str, dict[str, Any]] = {
+        str(key): dict(value)
+        for key, value in cached_tournament_rows.items()
+        if isinstance(value, dict)
+    }
+
     provider = RapidTennisClient(request_budget=None)
-    provider.request_limit = 2 + args.max_fallback_ranking_requests + args.max_photo_requests
+    provider.request_limit = 2 + args.max_fallback_ranking_requests + args.max_photo_requests + args.max_tournament_logo_requests
     report: dict[str, Any] = {
         "schema": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -313,6 +386,11 @@ def main() -> None:
         "photos_downloaded": 0,
         "photos_cached": 0,
         "photos_unavailable": 0,
+        "tournaments_requested": len(tournaments),
+        "tournament_logo_requests": 0,
+        "tournament_logos_downloaded": 0,
+        "tournament_logos_cached": 0,
+        "tournament_logos_unavailable": 0,
         "players_with_rank": 0,
         "players_with_country": 0,
         "errors": [],
@@ -431,6 +509,58 @@ def main() -> None:
                     f"photo {player_id} {item['name']}: {type(exc).__name__}: {exc}"
                 )
 
+        tournament_logo_budget = args.max_tournament_logo_requests
+        for item in tournaments:
+            tournament_id = item["id"]
+            profile = tournament_profiles.get(tournament_id, {"id": tournament_id})
+            profile.setdefault("name", item["name"])
+            profile.setdefault("tour", item["tour"])
+            existing_file = str(profile.get("logo_file") or "")
+            if existing_file and (tournament_logos_dir / Path(existing_file).name).is_file():
+                report["tournament_logos_cached"] += 1
+                tournament_profiles[tournament_id] = profile
+                continue
+            if tournament_logo_budget <= 0:
+                tournament_profiles[tournament_id] = profile
+                continue
+            try:
+                report["tournament_logo_requests"] += 1
+                tournament_logo_budget -= 1
+                result = provider.tournament_logo(tournament_id)
+                profile["logo_checked_at"] = now_iso
+                if result is None:
+                    profile["logo_status"] = "unavailable"
+                    report["tournament_logos_unavailable"] += 1
+                    tournament_profiles[tournament_id] = profile
+                    continue
+                data, media_type = result
+                ext = _photo_extension(data, media_type)
+                if ext is None:
+                    profile["logo_status"] = "invalid_media"
+                    report["errors"].append(
+                        f"tournament logo {tournament_id} {item['name']}: unsupported media type {media_type or 'unknown'}"
+                    )
+                    tournament_profiles[tournament_id] = profile
+                    continue
+                for old in tournament_logos_dir.glob(f"{tournament_id}.*"):
+                    if old.name != f"{tournament_id}.{ext}":
+                        old.unlink(missing_ok=True)
+                filename = f"{tournament_id}.{ext}"
+                (tournament_logos_dir / filename).write_bytes(data)
+                profile["logo_file"] = filename
+                profile["logo_status"] = "available"
+                profile["logo_fetched_at"] = now_iso
+                tournament_profiles[tournament_id] = profile
+                report["tournament_logos_downloaded"] += 1
+            except RequestBudgetExceeded as exc:
+                report["errors"].append(f"tournament logo request budget stopped: {exc}")
+                break
+            except Exception as exc:
+                tournament_profiles[tournament_id] = profile
+                report["errors"].append(
+                    f"tournament logo {tournament_id} {item['name']}: {type(exc).__name__}: {exc}"
+                )
+
     finally:
         provider.client.close()
 
@@ -445,6 +575,7 @@ def main() -> None:
     report["rapidapi_remaining"] = provider.rate_limit_remaining
     report["profiles_total_cached"] = len(profiles)
     report["photo_files_total_cached"] = len([p for p in photos_dir.glob("*") if p.is_file()])
+    report["tournament_logo_files_total_cached"] = len([p for p in tournament_logos_dir.glob("*") if p.is_file()])
 
     payload = {
         "schema": 1,
@@ -453,10 +584,19 @@ def main() -> None:
         "historical_training_eligible": False,
         "players": profiles,
     }
+    tournament_payload = {
+        "schema": 1,
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "presentation_only": True,
+        "historical_training_eligible": False,
+        "tournaments": tournament_profiles,
+    }
     _write_json(profile_path, payload)
     _build_photo_zip(photos_dir, photo_zip_path)
+    _write_json(tournament_profile_path, tournament_payload)
+    _build_named_zip(tournament_logos_dir, tournament_logo_zip_path, "tournaments")
     _write_json(report_path, report)
-    asset_store.upload_bundle([profile_path, photo_zip_path, report_path])
+    asset_store.upload_bundle([profile_path, photo_zip_path, tournament_profile_path, tournament_logo_zip_path, report_path])
 
     print(json.dumps(report, indent=2, ensure_ascii=False, allow_nan=False, default=str))
 

@@ -805,12 +805,15 @@
 
   function normalize(row){
     const player1=row?.player1||{},player2=row?.player2||{};
-    const p1=Number(player1?.probability||0), p2=Number(player2?.probability||0);
-    const winnerId=String(row?.winner_id || (p1>=p2?player1?.id:player2?.id) || '');
-    const winner=winnerId===String(player1?.id)?player1:player2;
-    const probability=Math.max(p1,p2);
+    const rawP1=player1?.probability,rawP2=player2?.probability;
+    const p1=rawP1==null||rawP1===''?null:Number(rawP1),p2=rawP2==null||rawP2===''?null:Number(rawP2);
+    const p1Known=Number.isFinite(p1),p2Known=Number.isFinite(p2);
+    const inferredWinner=p1Known&&p2Known?(p1>=p2?player1?.id:player2?.id):'';
+    const winnerId=String(row?.winner_id || inferredWinner || '');
+    const winner=winnerId===String(player1?.id)?player1:winnerId===String(player2?.id)?player2:null;
+    const probability=p1Known&&p2Known?Math.max(p1,p2):p1Known?p1:p2Known?p2:null;
     const betting=row?.betting&&typeof row.betting==='object'?row.betting:{};
-    return {id:row?.event_id||row?.id,date:row?.scheduled_at,tour:String(row?.tour||'').toUpperCase(),tournament:row?.tournament||'Tournament',surface:row?.surface||'unknown',round:row?.round||'',p1:player1?.name||'Player 1',p2:player2?.name||'Player 2',p1Id:player1?.id,p2Id:player2?.id,p1Prob:p1,p2Prob:p2,p1Rank:player1?.rank??null,p2Rank:player2?.rank??null,p1Country:player1?.country_code||'',p2Country:player2?.country_code||'',p1Photo:safePhotoUrl(player1?.photo_url),p2Photo:safePhotoUrl(player2?.photo_url),pick:winner?.name||'—',pickId:winnerId,probability,confidence:confidenceBand(probability),signals:Array.isArray(row?.signals)?row.signals:[],quality:row?.quality&&typeof row.quality==='object'?row.quality:{},dataDepth:Number(row?.data_depth),odds:Number(betting.odds),edge:Number(betting.edge),expectedValue:Number(betting.expected_value),bettingDay:betting.betting_day||'',model:row?.model_version||state.feed?.model?.version||'',raw:row};
+    return {id:row?.event_id||row?.id,date:row?.scheduled_at,tour:String(row?.tour||'').toUpperCase(),tournament:row?.tournament||'Tournament',surface:row?.surface||'unknown',round:row?.round||'',p1:player1?.name||'Player 1',p2:player2?.name||'Player 2',p1Id:player1?.id,p2Id:player2?.id,p1Prob:p1,p2Prob:p2,p1Rank:player1?.rank??null,p2Rank:player2?.rank??null,p1Country:player1?.country_code||'',p2Country:player2?.country_code||'',p1Photo:safePhotoUrl(player1?.photo_url),p2Photo:safePhotoUrl(player2?.photo_url),pick:winner?.name||'—',pickId:winnerId,probability,confidence:Number.isFinite(probability)?confidenceBand(probability):'unknown',signals:Array.isArray(row?.signals)?row.signals:[],quality:row?.quality&&typeof row.quality==='object'?row.quality:{},dataDepth:Number(row?.data_depth),odds:Number(betting.odds),edge:Number(betting.edge),expectedValue:Number(betting.expected_value),bettingDay:betting.betting_day||'',model:row?.model_version||state.feed?.model?.version||'',raw:row};
   }
 
   function populateSelect(id,values,label){ const select=$(id),selected=select.value; select.innerHTML=`<option value="">${label}</option>`; [...values].filter(Boolean).sort().forEach(value=>{const opt=document.createElement('option');opt.value=value;opt.textContent=String(value).replaceAll('_',' ');select.appendChild(opt)}); if([...select.options].some(o=>o.value===selected)) select.value=selected; }
@@ -945,8 +948,13 @@
   }
   function dailyHubTournament(row){
     const tournament=row?.tournament||row?.competition||'—';
-    const round=row?.round?String(row.round).toUpperCase():'';
-    return '<span class="hub-tournament">'+tournamentVisual(row)+'<span class="hub-tournament-copy"><b>'+escapeHtml(tournament)+'</b><small>'+escapeHtml(round||String(row?.tour||'').toUpperCase()||'Tour')+'</small></span></span>';
+    const surface=String(row?.surface||'').replaceAll('_',' ').trim();
+    const city=String(row?.tournament_city||row?.city||row?.venue_city||'').trim();
+    const country=String(row?.tournament_country||row?.country||row?.venue_country||'').trim();
+    const location=[city,country].filter(Boolean).join(', ');
+    const round=row?.round?String(row.round).replaceAll('_',' ').trim():'';
+    const context=[location,surface&&surface!=='unknown'?surface:'',round].filter(Boolean).join(' · ');
+    return '<span class="hub-tournament">'+tournamentVisual(row)+'<span class="hub-tournament-copy"><b>'+escapeHtml(tournament)+'</b><small>'+escapeHtml(context||String(row?.tour||'').toUpperCase()||'Tour')+'</small></span></span>';
   }
   function dailyHubMatch(row){
     const p1=row?.player1||{name:row?.player1_name||'—'};
@@ -954,50 +962,57 @@
     const tour=row?.tour||'';
     return '<span class="hub-match hub-match-rich">'+hubPlayerMeta(p1,tour)+'<i>vs</i>'+hubPlayerMeta(p2,tour)+'</span>';
   }
+  function recentFormData(source,key){
+    const presentation=source?.presentation&&typeof source.presentation==='object'?source.presentation:{};
+    const value=presentation?.[key]&&typeof presentation[key]==='object'?presentation[key]:{};
+    const matches=Number(value?.matches),wins=Number(value?.wins),winPct=Number(value?.win_pct);
+    const sequence=Array.isArray(value?.sequence)?value.sequence.filter(v=>v==='W'||v==='L').slice(-10):[];
+    return {
+      matches:Number.isFinite(matches)?matches:null,
+      wins:Number.isFinite(wins)?wins:null,
+      winPct:Number.isFinite(winPct)?winPct:null,
+      sequence
+    };
+  }
+  function formSummaryDisplay(form){
+    if(form.matches==null||form.matches<=0||form.winPct==null)return '—';
+    return `${form.wins}/${form.matches} · ${Math.round(form.winPct*100)}%`;
+  }
+  function formSequenceHtml(form){
+    if(!form.sequence.length)return '<span class="form-empty">—</span>';
+    return form.sequence.map(v=>'<i class="form-dot '+(v==='W'?'win':'loss')+'">'+v+'</i>').join('');
+  }
   function playerInsightStats(row,side){
     const match=normalize(row);
     const source=row?.['player'+side]||{};
     const quality=row?.quality?.['player'+side]||{};
+    const presentation=source?.presentation&&typeof source.presentation==='object'?source.presentation:{};
     const probability=side===1?firstFinite(match.p1Prob,source.probability):firstFinite(match.p2Prob,source.probability);
     const rank=side===1?match.p1Rank:match.p2Rank;
-    const surfaceSample=firstFinite(quality?.surface_matches,source?.surface_matches,readFirstValue(source,['surface.history_count','stats.surface_matches','surface_matches']));
-    const overallSample=firstFinite(quality?.matches,source?.matches,readFirstValue(source,['history.matches','stats.matches','matches_played']));
-    const servePct=firstFinite(readFirstValue(source,['statistics.first_serve_win','stats.first_serve_win','stats.first_serve_points_won','first_serve_win','first_serve_points_won','serve.first_serve_win']),readFirstValue(row,['stats.p'+side+'_first_serve_win','statistics.p'+side+'_first_serve_win']));
-    const returnPct=firstFinite(readFirstValue(source,['statistics.return_points_won','stats.return_points_won','return_points_won','return.return_points_won','statistics.break_points_won','break_points_won']),readFirstValue(row,['stats.p'+side+'_return_points_won','statistics.p'+side+'_return_points_won']));
-    const aces=firstFinite(readFirstValue(source,['statistics.aces','stats.aces','aces','service.aces']),readFirstValue(row,['stats.p'+side+'_aces','statistics.p'+side+'_aces']));
-    const netPct=firstFinite(readFirstValue(source,['statistics.net_points_won','stats.net_points_won','net_points_won','net.net_points_won']),readFirstValue(row,['stats.p'+side+'_net_points_won','statistics.p'+side+'_net_points_won']));
-    const formPct=firstFinite(readFirstValue(source,['statistics.win_rate_recent','stats.win_rate_recent','form.recent_win_rate','recent_win_rate']),readFirstValue(quality,['recent_form','form']));
-    const probabilityPct=probability!=null?Number(probability)*(Number(probability)<=1?100:1):null;
+    const surfaceSample=firstFinite(presentation?.surface_history_matches,quality?.surface_matches,source?.surface_matches,readFirstValue(source,['surface.history_count','surface_matches']));
+    const overallSample=firstFinite(presentation?.history_matches,quality?.matches,source?.matches,readFirstValue(source,['history.matches','matches_played']));
+    const overallForm=recentFormData(source,'recent_form');
+    const surfaceForm=recentFormData(source,'surface_form');
+    const probabilityPct=probability!=null&&Number.isFinite(Number(probability))?Number(probability)*(Number(probability)<=1?100:1):null;
+    // Radar is a visual comparison index. 50% match probability is neutral (zero edge).
+    const probabilityScore=probabilityPct!=null?clampValue((probabilityPct-50)*2,0,100):null;
     const rankScore=Number.isFinite(Number(rank))&&Number(rank)>0?clampValue(100-(Math.min(Number(rank),250)/250)*100,4,99):null;
     const surfaceScore=surfaceSample!=null?clampValue((Number(surfaceSample)/20)*100,4,100):null;
     const experienceScore=overallSample!=null?clampValue((Number(overallSample)/50)*100,4,100):null;
-    const serveScore=servePct!=null?clampValue(Number(servePct)*(Number(servePct)<=1?100:1),0,100):null;
-    const returnScore=returnPct!=null?clampValue(Number(returnPct)*(Number(returnPct)<=1?100:1),0,100):null;
-    const aceScore=aces!=null?clampValue((Number(aces)/12)*100,0,100):null;
-    const netScore=netPct!=null?clampValue(Number(netPct)*(Number(netPct)<=1?100:1),0,100):null;
-    const formScore=formPct!=null?clampValue(Number(formPct)*(Number(formPct)<=1?100:1),0,100):null;
+    const formScore=overallForm.winPct!=null?clampValue(overallForm.winPct*100,0,100):null;
     return {
-      probability: probabilityPct,
-      rank:Number.isFinite(Number(rank))&&Number(rank)>0?Number(rank):null,
-      rankScore,
-      surfaceSample,
-      overallSample,
-      surfaceScore,
-      experienceScore,
-      serve:serveScore,
-      ret:returnScore,
-      aces:aceScore,
-      net:netScore,
-      form:formScore,
-      serveDisplay: servePct!=null?pct(Number(servePct)<=1?Number(servePct):Number(servePct)/100):'—',
-      returnDisplay: returnPct!=null?pct(Number(returnPct)<=1?Number(returnPct):Number(returnPct)/100):'—',
-      aceDisplay: aces!=null?String(Number(aces).toFixed(1).replace(/\.0$/,'')):'—',
-      netDisplay: netPct!=null?pct(Number(netPct)<=1?Number(netPct):Number(netPct)/100):'—',
-      formDisplay: formPct!=null?pct(Number(formPct)<=1?Number(formPct):Number(formPct)/100):'—',
+      probability: probabilityScore, rawProbability: probabilityPct,
+      rank:Number.isFinite(Number(rank))&&Number(rank)>0?Number(rank):null, rankScore,
+      surfaceSample,overallSample,surfaceScore,experienceScore,form:formScore,
+      overallForm,surfaceForm,
+      h2hWins:Number.isFinite(Number(presentation?.h2h_wins))?Number(presentation.h2h_wins):null,
+      h2hLosses:Number.isFinite(Number(presentation?.h2h_losses))?Number(presentation.h2h_losses):null,
+      probabilityDisplay: probabilityPct!=null?probabilityPct.toFixed(1)+'%':'—',
+      rankDisplay: Number.isFinite(Number(rank))&&Number(rank)>0?'#'+Math.trunc(Number(rank)):'—',
       surfaceDisplay: surfaceSample!=null?String(Math.round(surfaceSample)):'—',
       historyDisplay: overallSample!=null?String(Math.round(overallSample)):'—',
-      probabilityDisplay: probabilityPct!=null?probabilityPct.toFixed(1)+'%':'—',
-      rankDisplay: Number.isFinite(Number(rank))&&Number(rank)>0?'#'+Math.trunc(Number(rank)):'—'
+      overallFormDisplay:formSummaryDisplay(overallForm),
+      surfaceFormDisplay:formSummaryDisplay(surfaceForm)
     };
   }
   function radarPoints(values,cx,cy,radius){
@@ -1008,25 +1023,13 @@
   function renderRadarComparison(row){
     const match=normalize(row),stats1=playerInsightStats(row,1),stats2=playerInsightStats(row,2);
     const candidates=[
-      [lcopy('BlinQ %','BlinQ %','BlinQ %'),stats1.probability,stats2.probability],
+      [lcopy('BlinQ edge','BlinQ edge','BlinQ edge'),stats1.probability,stats2.probability],
       [lcopy('Ranking','Rebríček','Žebříček'),stats1.rankScore,stats2.rankScore],
-      [lcopy('Surface data','Povrchové dáta','Povrchová data'),stats1.surfaceScore,stats2.surfaceScore],
+      [lcopy('Surface sample','Povrchová vzorka','Povrchový vzorek'),stats1.surfaceScore,stats2.surfaceScore],
       [lcopy('History','História','Historie'),stats1.experienceScore,stats2.experienceScore],
-      [lcopy('Form','Forma','Forma'),stats1.form,stats2.form],
-      [lcopy('1st serve','1. podanie','1. podání'),stats1.serve,stats2.serve],
-      [lcopy('Return','Return','Return'),stats1.ret,stats2.ret],
-      [lcopy('Aces','Esá','Esa'),stats1.aces,stats2.aces],
-      [lcopy('Net','Sieť','Síť'),stats1.net,stats2.net]
+      [lcopy('Recent form','Aktuálna forma','Aktuální forma'),stats1.form,stats2.form]
     ];
     let metrics=candidates.filter(([,a,b])=>Number.isFinite(a)&&Number.isFinite(b));
-    if(metrics.length<3){
-      const fallbacks=candidates.filter(([,a,b])=>Number.isFinite(a)||Number.isFinite(b));
-      for(const metric of fallbacks){
-        if(metrics.some(existing=>existing[0]===metric[0])) continue;
-        metrics.push([metric[0],Number.isFinite(metric[1])?metric[1]:50,Number.isFinite(metric[2])?metric[2]:50]);
-        if(metrics.length>=3) break;
-      }
-    }
     metrics=metrics.slice(0,6);
     if(metrics.length<3){
       return '<div class="insight-radar-head"><div><small>'+escapeHtml(lcopy('Match comparison','Porovnanie zápasu','Porovnání zápasu'))+'</small><h3>'+escapeHtml(lcopy('Player radar','Radar hráčov','Radar hráčů'))+'</h3></div></div><div class="radar-unavailable">'+escapeHtml(lcopy('Not enough comparable API data for a radar yet.','Zatiaľ nie je dosť porovnateľných API dát pre radar.','Zatím není dost porovnatelných API dat pro radar.'))+'</div>';
@@ -1063,17 +1066,19 @@
     const match=normalize(row);
     const name=side===1?match.p1:match.p2,country=side===1?match.p1Country:match.p2Country,rank=side===1?match.p1Rank:match.p2Rank,photo=side===1?match.p1Photo:match.p2Photo;
     const stats=playerInsightStats(row,side),picked=String(match.pick||'').toLowerCase()===String(name).toLowerCase();
+    const tour=String(row?.tour||match.tour||'').toUpperCase();
+    const h2h=stats.h2hWins!=null&&stats.h2hLosses!=null?`${stats.h2hWins}–${stats.h2hLosses}`:'—';
+    const surfaceName=String(row?.surface||match.surface||'Surface').replaceAll('_',' ');
     const metrics=[
       ['BlinQ %',stats.probabilityDisplay],
-      [lcopy('Ranking','Rebríček','Žebříček'),stats.rankDisplay],
+      [lcopy('Ranking','Rebríček','Žebříček'),stats.rankDisplay+(tour?' '+tour:'')],
+      [lcopy('History matches','História zápasov','Historie zápasů'),stats.historyDisplay],
       [lcopy('Surface matches','Zápasy na povrchu','Zápasy na povrchu'),stats.surfaceDisplay],
-      [lcopy('History','História','Historie'),stats.historyDisplay]
+      [lcopy('Overall form','Celková forma','Celková forma'),stats.overallFormDisplay],
+      [surfaceName+' '+lcopy('form','forma','forma'),stats.surfaceFormDisplay],
+      ['H2H',h2h]
     ];
-    if(stats.serveDisplay!=='—') metrics.push([lcopy('1st serve','1. podanie','1. podání'),stats.serveDisplay]);
-    if(stats.returnDisplay!=='—') metrics.push([lcopy('Return','Return','Return'),stats.returnDisplay]);
-    if(stats.aceDisplay!=='—') metrics.push([lcopy('Aces','Esá','Esa'),stats.aceDisplay]);
-    if(stats.formDisplay!=='—') metrics.push([lcopy('Form','Forma','Forma'),stats.formDisplay]);
-    return '<article class="insight-player-card'+(picked?' picked':'')+'">'+(picked?'<span class="insight-picked-badge">BLINQ PICK</span>':'')+'<div class="insight-player-head">'+smallAvatar(photo,name,row?.tour||'')+'<div><h4>'+escapeHtml(name)+'</h4><p>'+escapeHtml([flagEmoji(country),Number.isFinite(Number(rank))&&Number(rank)>0?'#'+Math.trunc(Number(rank)):'' ].filter(Boolean).join(' · ')||'—')+'</p></div></div><div class="insight-player-metrics">'+metrics.map(([label,value])=>'<span><small>'+escapeHtml(label)+'</small><strong>'+escapeHtml(value)+'</strong></span>').join('')+'</div></article>';
+    return '<article class="insight-player-card'+(picked?' picked':'')+'">'+(picked?'<span class="insight-picked-badge">BLINQ PICK</span>':'')+'<div class="insight-player-head">'+smallAvatar(photo,name,row?.tour||'')+'<div><h4>'+escapeHtml(name)+'</h4><p>'+escapeHtml([flagEmoji(country),Number.isFinite(Number(rank))&&Number(rank)>0?'#'+Math.trunc(Number(rank))+' '+tour:''].filter(Boolean).join(' · ')||'—')+'</p></div></div><div class="insight-player-metrics">'+metrics.map(([label,value])=>'<span><small>'+escapeHtml(label)+'</small><strong>'+escapeHtml(value)+'</strong></span>').join('')+'</div><div class="insight-form-strips"><div><small>'+escapeHtml(lcopy('Last matches','Posledné zápasy','Poslední zápasy'))+'</small><b>'+formSequenceHtml(stats.overallForm)+'</b></div><div><small>'+escapeHtml(surfaceName+' '+lcopy('form','forma','forma'))+'</small><b>'+formSequenceHtml(stats.surfaceForm)+'</b></div></div></article>';
   }
   function renderDailyHubInsight(){
     const host=$('dailyHubInsightBoard'),main=$('dailyHubInsightMain');
@@ -1124,19 +1129,15 @@
     if(!tabs.includes(state.dailyHubTab)) state.dailyHubTab=tabs.includes(cfg.default_tab)?cfg.default_tab:tabs[0];
     $('dailyHubTabs').innerHTML=tabs.map(tab=>{const rows=dailyHubRows(tab),ent=dailyHubEntitlement(tab);const total=Number(ent.total);const count=Number.isFinite(total)?total:rows.length;return `<button type="button" role="tab" aria-selected="${tab===state.dailyHubTab?'true':'false'}" class="daily-hub-tab${tab===state.dailyHubTab?' active':''}" data-daily-hub-tab="${tab}"><span>${escapeHtml(dailyHubTabLabel(tab))}</span><b>${count}</b></button>`;}).join('');
     const tab=state.dailyHubTab,rows=dailyHubRows(tab),ent=dailyHubEntitlement(tab);const total=Number(ent.total);const allCount=Number.isFinite(total)?Math.max(total,rows.length):rows.length;const preview=Math.max(1,Number(cfg.preview_rows)||10),canExpand=ent.see_all===true&&allCount>preview,limit=(state.dailyHubExpanded&&canExpand)?allCount:preview;const shown=Math.min(allCount,limit);
-    const currentId=state.dailyHubSelected?.[tab]||'';
-    const selectedExists=rows.some(row=>eventKey(row)===currentId);
-    if(!selectedExists&&rows[0]) state.dailyHubSelected[tab]=eventKey(rows[0]);
     $('dailyHubHead').innerHTML=`<tr>${dailyHubColumns(tab).map(c=>`<th>${escapeHtml(c)}</th>`).join('')}</tr>`;
     const out=[];
     for(let i=0;i<shown;i++){
-      if(i<rows.length) out.push(dailyHubRow(rows[i],tab,eventKey(rows[i])===state.dailyHubSelected[tab]));
+      if(i<rows.length) out.push(dailyHubRow(rows[i],tab,false));
       else if(ent.blur_remaining!==false) out.push(dailyHubLockedRow(tab,i));
     }
     $('dailyHubBody').innerHTML=out.join('');
     $('dailyHubEmpty').hidden=Boolean(out.length);
     const expand=$('dailyHubExpand'); if(expand){ expand.hidden=!canExpand; expand.textContent=state.dailyHubExpanded?lcopy('Show less','Zobraziť menej','Zobrazit méně'):`${lcopy('Show all','Zobraziť všetky','Zobrazit všechny')} (${allCount})`; expand.dataset.expanded=state.dailyHubExpanded?'1':'0'; expand.setAttribute('aria-expanded',state.dailyHubExpanded?'true':'false'); }
-    renderDailyHubInsight();
   }
 
 
@@ -1232,13 +1233,42 @@
     $('prevPick').hidden=pageCount<=1;$('nextPick').hidden=pageCount<=1;$('prevPick').disabled=state.page<=0;$('nextPick').disabled=state.page>=pageCount-1;renderDots(pageCount);renderDashboardComposition();applyAccessStates(grid);translatePublicDom(grid);
   }
 
+  function renderMatchStatsPanel(row){
+    const match=normalize(row),s1=playerInsightStats(row,1),s2=playerInsightStats(row,2);
+    const rows=[
+      [lcopy('BlinQ probability','BlinQ pravdepodobnosť','BlinQ pravděpodobnost'),s1.probabilityDisplay,s2.probabilityDisplay],
+      [lcopy('Ranking','Rebríček','Žebříček'),s1.rankDisplay,s2.rankDisplay],
+      [lcopy('Surface matches','Zápasy na povrchu','Zápasy na povrchu'),s1.surfaceDisplay,s2.surfaceDisplay],
+      [lcopy('History sample','Historická vzorka','Historický vzorek'),s1.historyDisplay,s2.historyDisplay],
+      [lcopy('1st serve','1. podanie','1. podání'),s1.serveDisplay,s2.serveDisplay],
+      [lcopy('Return','Return','Return'),s1.returnDisplay,s2.returnDisplay],
+      [lcopy('Aces','Esá','Esa'),s1.aceDisplay,s2.aceDisplay],
+      [lcopy('Form','Forma','Forma'),s1.formDisplay,s2.formDisplay],
+      [lcopy('Net play','Hra na sieti','Hra na síti'),s1.netDisplay,s2.netDisplay]
+    ];
+    return `<div class="match-stat-table"><div class="match-stat-head"><span>${escapeHtml(lcopy('Metric','Metrika','Metrika'))}</span><strong>${escapeHtml(match.p1)}</strong><b>${escapeHtml(match.p2)}</b></div>${rows.map(([label,a,b])=>`<div class="match-stat-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(a))}</strong><b>${escapeHtml(String(b))}</b></div>`).join('')}</div>`;
+  }
+  function renderMatchHistoryPanel(row){
+    const match=normalize(row),s1=playerInsightStats(row,1),s2=playerInsightStats(row,2);
+    const cards=(side,name,stats)=>`<article class="match-history-card"><div class="match-history-title"><span>${side}</span><strong>${escapeHtml(name)}</strong></div><div class="match-history-grid"><span><small>${escapeHtml(lcopy('Ranking','Rebríček','Žebříček'))}</small><b>${escapeHtml(stats.rankDisplay)}</b></span><span><small>${escapeHtml(lcopy('Surface matches','Zápasy na povrchu','Zápasy na povrchu'))}</small><b>${escapeHtml(stats.surfaceDisplay)}</b></span><span><small>${escapeHtml(lcopy('History sample','História','Historie'))}</small><b>${escapeHtml(stats.historyDisplay)}</b></span><span><small>BlinQ %</small><b>${escapeHtml(stats.probabilityDisplay)}</b></span></div></article>`;
+    return `<div class="match-history-wrap">${cards('P1',match.p1,s1)}${cards('P2',match.p2,s2)}</div>`;
+  }
   function openMatch(m,tab='daily',rowOverride=null){
     const row=rowOverride||m?.raw||m;
     const match=rowOverride?normalize(rowOverride):m;
     const signalRows=Array.isArray(match.signals)&&match.signals.length?match.signals.map(s=>{const meta=signalMeta(s,match);const favoursId=String(s?.player_id??s?.favours_player_id??'');const favours=favoursId===String(match.p1Id)?match.p1:favoursId===String(match.p2Id)?match.p2:'—';return `<div class="dialog-signal"><span>${escapeHtml(meta.label)}</span><strong>${escapeHtml(favours)}</strong><small>${meta.favours?'supports pick':'counter-signal'}</small></div>`;}).join(''):'<p class="signal-empty">No secondary signals are available.</p>';
-    const betting=(Number.isFinite(match.odds)&&match.odds>1)||tab==='value'||tab==='ace'||tab==='games'?`<div class="dialog-section dialog-market"><h3>${escapeHtml(lcopy('Pick context','Kontext tipu','Kontext tipu'))}</h3>${insightSummaryCards(row,tab)}</div>`:'';
-    $('dialogContent').innerHTML=`<div class="dialog-eyebrow">${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2><div class="dialog-pick"><div><small>BlinQ Pick</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${marketProbability(row)==null?'—':pct(marketProbability(row))} <span class="confidence ${match.confidence}">${match.confidence==='very-high'?'VERY HIGH':match.confidence.toUpperCase()}</span></div></div>${betting}<div class="dialog-duel-grid">${insightPlayerCard(row,1)}${insightPlayerCard(row,2)}</div><div class="dialog-section dialog-radar-wrap">${renderRadarComparison(row)}</div><div class="dialog-section"><h3>Model signals</h3>${signalRows}</div><div class="dialog-meta"><span>${escapeHtml(String(match.surface).replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>Model ${escapeHtml(match.model||'—')}</span></div>`;
-    $('matchDialog').showModal();
+    const overview=`<div class="match-detail-overview">${insightSummaryCards(row,tab)}<div class="dialog-duel-grid">${insightPlayerCard(row,1)}${insightPlayerCard(row,2)}</div></div>`;
+    const statistics=`<div class="match-detail-statistics">${renderMatchStatsPanel(row)}</div>`;
+    const radar=`<div class="match-detail-radar"><div class="dialog-duel-grid match-detail-radar-players">${insightPlayerCard(row,1)}${insightPlayerCard(row,2)}</div><div class="dialog-section dialog-radar-wrap">${renderRadarComparison(row)}</div><div class="dialog-section match-model-signals"><h3>${escapeHtml(lcopy('Model signals','Model signals','Model signals'))}</h3>${signalRows}</div></div>`;
+    const history=`<div class="match-detail-history">${renderMatchHistoryPanel(row)}</div>`;
+    $('dialogContent').innerHTML=`<div class="match-detail-shell"><div class="dialog-eyebrow">${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2><div class="dialog-pick match-detail-pick"><div><small>BlinQ Pick</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${marketProbability(row)==null?'—':pct(marketProbability(row))} <span class="confidence ${match.confidence}">${match.confidence==='very-high'?'VERY HIGH':match.confidence.toUpperCase()}</span></div></div><nav class="match-detail-tabs" role="tablist"><button type="button" data-match-tab="overview">${escapeHtml(lcopy('Overview','Prehľad','Přehled'))}</button><button type="button" data-match-tab="statistics">${escapeHtml(lcopy('Statistics','Štatistiky','Statistiky'))}</button><button type="button" class="active" data-match-tab="radar">${escapeHtml(lcopy('Radar','Radar','Radar'))}</button><button type="button" data-match-tab="history">${escapeHtml(lcopy('History','História','Historie'))}</button></nav><section class="match-detail-panel" data-match-panel="overview" hidden>${overview}</section><section class="match-detail-panel" data-match-panel="statistics" hidden>${statistics}</section><section class="match-detail-panel active" data-match-panel="radar">${radar}</section><section class="match-detail-panel" data-match-panel="history" hidden>${history}</section><div class="dialog-meta"><span>${escapeHtml(String(match.surface).replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>Model ${escapeHtml(match.model||'—')}</span></div></div>`;
+    const dialog=$('matchDialog');
+    dialog.querySelectorAll('[data-match-tab]').forEach(button=>button.addEventListener('click',()=>{
+      const id=button.dataset.matchTab;
+      dialog.querySelectorAll('[data-match-tab]').forEach(node=>{node.classList.toggle('active',node===button);node.setAttribute('aria-selected',node===button?'true':'false');});
+      dialog.querySelectorAll('[data-match-panel]').forEach(panel=>{const active=panel.dataset.matchPanel===id;panel.hidden=!active;panel.classList.toggle('active',active);});
+    }));
+    dialog.showModal();
   }
 
 
@@ -1263,12 +1293,8 @@
       if(event.target.closest('#dailyHubExpand')){ state.dailyHubExpanded=!state.dailyHubExpanded; renderDailyHub(); return; }
       const row=event.target.closest('tr[data-hub-event]');
       if(row){
-        state.dailyHubSelected[state.dailyHubTab]=String(row.dataset.hubEvent||'');
-        renderDailyHub();
-        if(event.target.closest('[data-hub-detail]')){
-          const current=dailyHubRows(state.dailyHubTab).find(r=>eventKey(r)===String(row.dataset.hubEvent||''));
-          if(current) openMatch(normalize(current),state.dailyHubTab,current);
-        }
+        const current=dailyHubRows(state.dailyHubTab).find(r=>eventKey(r)===String(row.dataset.hubEvent||''));
+        if(current) openMatch(normalize(current),state.dailyHubTab,current);
       }
     });
   }

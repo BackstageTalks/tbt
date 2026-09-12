@@ -21,6 +21,8 @@ from tbt.services.publication import (
 PREDICTION_ASSETS = {"feed.json", "ledger.json"}
 PLAYER_PROFILE_ASSET = "player_profiles.json"
 PLAYER_PHOTO_ASSET = "player_photos.zip"
+TOURNAMENT_PROFILE_ASSET = "tournament_profiles.json"
+TOURNAMENT_LOGO_ASSET = "tournament_logos.zip"
 
 
 def _prediction_asset_state(store: ReleaseStore) -> str:
@@ -119,6 +121,83 @@ def _feed_player_ids(payload: dict) -> set[str]:
     return ids
 
 
+def _feed_tournament_ids(payload: dict) -> set[str]:
+    ids: set[str] = set()
+    keys = (
+        "upcoming", "results", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
+        "value_picks", "value", "doubles_picks", "doubles", "ace_picks", "aces", "ace_markets",
+        "sg_picks", "sets_games", "set_game_picks",
+    )
+    for key in keys:
+        rows = payload.get(key)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            tournament_id = str(row.get("tournament_logo_id") or row.get("tournament_id") or row.get("tournamentId") or "").strip()
+            if tournament_id:
+                ids.add(tournament_id)
+    markets = payload.get("markets")
+    if isinstance(markets, dict):
+        for rows in markets.values():
+            if not isinstance(rows, list):
+                continue
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                tournament_id = str(row.get("tournament_logo_id") or row.get("tournament_id") or row.get("tournamentId") or "").strip()
+                if tournament_id:
+                    ids.add(tournament_id)
+    return ids
+
+
+def _load_tournament_profiles(path: Path) -> tuple[dict[str, dict], dict]:
+    if not path.is_file():
+        return {}, {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError):
+        return {}, {}
+    if not isinstance(payload, dict) or payload.get("schema") != 1:
+        return {}, payload if isinstance(payload, dict) else {}
+    tournaments = payload.get("tournaments")
+    if not isinstance(tournaments, dict):
+        return {}, payload
+    return {
+        str(tournament_id): profile
+        for tournament_id, profile in tournaments.items()
+        if isinstance(profile, dict)
+    }, payload
+
+
+def _extract_current_tournament_logos(zip_path: Path, tournament_ids: set[str]) -> set[str]:
+    target_dir = ROOT / "web" / "assets" / "tournaments"
+    if target_dir.exists():
+        shutil.rmtree(target_dir)
+    target_dir.mkdir(parents=True, exist_ok=True)
+    extracted: set[str] = set()
+    if not zip_path.is_file() or not tournament_ids:
+        return extracted
+    with zipfile.ZipFile(zip_path, "r") as archive:
+        for info in archive.infolist():
+            if info.is_dir():
+                continue
+            filename = Path(info.filename).name
+            if not filename:
+                continue
+            stem = Path(filename).stem
+            if stem not in tournament_ids:
+                continue
+            if not filename.replace("-", "").replace("_", "").replace(".", "").isalnum():
+                continue
+            target = target_dir / filename
+            with archive.open(info, "r") as source, target.open("wb") as dest:
+                shutil.copyfileobj(source, dest)
+            extracted.add(filename)
+    return extracted
+
+
 def _extract_current_photos(zip_path: Path, player_ids: set[str]) -> set[str]:
     target_dir = ROOT / "web" / "assets" / "players"
     if target_dir.exists():
@@ -190,6 +269,32 @@ def _merge_player_profiles(payload: dict, profiles: dict[str, dict], photos: set
             enrich_rows(rows)
 
 
+def _merge_tournament_profiles(payload: dict, profiles: dict[str, dict], logos: set[str]) -> None:
+    def enrich_rows(rows):
+        if not isinstance(rows, list):
+            return
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            tournament_id = str(row.get("tournament_logo_id") or row.get("tournament_id") or row.get("tournamentId") or "").strip()
+            profile = profiles.get(tournament_id)
+            if not tournament_id or not isinstance(profile, dict):
+                continue
+            logo_file = Path(str(profile.get("logo_file") or "")).name
+            if logo_file and logo_file in logos:
+                row["tournament_logo_url"] = f"/assets/tournaments/{logo_file}"
+    for key in (
+        "upcoming", "results", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
+        "value_picks", "value", "doubles_picks", "doubles", "ace_picks", "aces", "ace_markets",
+        "sg_picks", "sets_games", "set_game_picks",
+    ):
+        enrich_rows(payload.get(key))
+    markets = payload.get("markets")
+    if isinstance(markets, dict):
+        for rows in markets.values():
+            enrich_rows(rows)
+
+
 def _attach_player_assets(payload: dict, repository: str) -> dict:
     # Presentation metadata is optional. The prediction release remains the sole
     # source of prediction commitments and is validated before this merge. A
@@ -205,8 +310,12 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
         required = {PLAYER_PROFILE_ASSET, PLAYER_PHOTO_ASSET}
         if not required <= assets:
             return payload
+        optional = tuple(
+            name for name in (TOURNAMENT_PROFILE_ASSET, TOURNAMENT_LOGO_ASSET)
+            if name in assets
+        )
         store.download(
-            extra_names=(PLAYER_PROFILE_ASSET, PLAYER_PHOTO_ASSET),
+            extra_names=(PLAYER_PROFILE_ASSET, PLAYER_PHOTO_ASSET, *optional),
             required_names=(PLAYER_PROFILE_ASSET, PLAYER_PHOTO_ASSET),
         )
         profiles, profile_payload = _load_player_profiles(cache / PLAYER_PROFILE_ASSET)
@@ -220,6 +329,18 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
             "photos_deployed": len(photos),
             "presentation_only": True,
         }
+        if {TOURNAMENT_PROFILE_ASSET, TOURNAMENT_LOGO_ASSET} <= assets:
+            tournament_profiles, tournament_payload = _load_tournament_profiles(cache / TOURNAMENT_PROFILE_ASSET)
+            tournament_ids = _feed_tournament_ids(payload)
+            logos = _extract_current_tournament_logos(cache / TOURNAMENT_LOGO_ASSET, tournament_ids)
+            _merge_tournament_profiles(payload, tournament_profiles, logos)
+            payload["tournament_assets"] = {
+                "schema": 1,
+                "generated_at": tournament_payload.get("generated_at"),
+                "profiles_cached": len(tournament_profiles),
+                "logos_deployed": len(logos),
+                "presentation_only": True,
+            }
     except Exception as exc:
         print(f"Optional player assets skipped: {type(exc).__name__}: {exc}")
     return payload
