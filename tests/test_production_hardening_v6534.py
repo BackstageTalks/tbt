@@ -125,10 +125,10 @@ def test_release_and_asset_versions_are_consistent():
     html = (ROOT / "web/index.html").read_text(encoding="utf-8")
     config = (ROOT / "web/ui-config.json").read_text(encoding="utf-8")
     function_app = (ROOT / "api/function_app.py").read_text(encoding="utf-8")
-    assert '"ui_revision": "6.5.37"' in config
-    assert 'RELEASE = "6.5.37"' in function_app
+    assert '"ui_revision": "6.5.38"' in config
+    assert 'RELEASE = "6.5.38"' in function_app
     for asset in ("styles.css", "responsive.css", "premium.css", "auth.js", "responsive.js", "app.js"):
-        assert f"/{asset}?v=6537" in html
+        assert f"/{asset}?v=6538" in html
 
 
 def test_profile_save_is_patch_like_and_does_not_clear_omitted_fields(monkeypatch):

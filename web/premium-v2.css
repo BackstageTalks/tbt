@@ -1,4 +1,4 @@
-/* BlinQ 6.5.37 — Premium Dashboard V2
+/* BlinQ 6.5.38 — Premium Dashboard V2
    Real production-facing visual layer based on the current dashboard DOM.
    Loaded last so it can refine the existing responsive system without
    rewriting application structure or behaviour. */
@@ -339,3 +339,121 @@ body#blinqPremium .app-footer,body#blinqPremium footer{
   body#blinqPremium .match-card-v3 .card-metric strong{font-size:9px!important}
   body#blinqPremium #predictionsView>.picks-panel{padding:11px!important}
 }
+
+/* BlinQ 6.5.38 — readability + polish pass */
+body#blinqPremium #staleNotice{display:none!important}
+
+/* Slightly larger global rhythm. The previous 7–9px labels looked sharp in a
+   mockup but too small on a real desktop browser. */
+body#blinqPremium{font-size:15px}
+body#blinqPremium .dashboard-main{width:min(1600px,calc(100vw - 40px))!important;max-width:1600px!important}
+body#blinqPremium .header-primary{grid-template-columns:144px minmax(0,1fr) max-content!important;gap:18px!important;min-height:72px!important}
+body#blinqPremium .top-brand-logo{width:116px!important}
+body#blinqPremium .top-brand-copy strong{font-size:9px!important}
+body#blinqPremium .top-brand-copy small{font-size:9px!important}
+body#blinqPremium .header-feature-strip .header-slot{height:62px!important;min-height:62px!important;padding:8px 12px!important}
+body#blinqPremium .header-feature-strip .header-slot-copy small{font-size:10px!important}
+body#blinqPremium .header-feature-strip .header-slot-copy strong{font-size:13px!important;line-height:1.15!important}
+body#blinqPremium .header-feature-strip .header-slot-copy span{font-size:10px!important;line-height:1.2!important}
+body#blinqPremium .top-navigation .nav-link{min-height:42px!important;font-size:12px!important;padding-inline:12px!important}
+body#blinqPremium .sync-bar{min-height:36px!important;font-size:10px!important;padding:5px 12px!important}
+body#blinqPremium .sync-refresh{font-size:10px!important;min-height:26px!important}
+
+body#blinqPremium .dashboard-hero-stage,
+body#blinqPremium .dashboard-hero-stage .dashboard-hero{height:200px!important;min-height:200px!important}
+body#blinqPremium .dashboard-hero-stage .dashboard-hero{padding:30px 38px!important}
+body#blinqPremium .dashboard-hero-copy>small{font-size:10px!important}
+body#blinqPremium .dashboard-hero-copy h2{font-size:39px!important}
+body#blinqPremium .dashboard-hero-copy p{font-size:14px!important;max-width:600px!important}
+body#blinqPremium .hero-slide-cta{min-height:38px!important;font-size:11px!important;padding-inline:15px!important}
+
+body#blinqPremium #predictionsView{gap:16px!important}
+body#blinqPremium #predictionsView>.picks-panel{padding:15px 15px 11px!important;border-radius:16px!important}
+body#blinqPremium .picks-head{min-height:34px!important;margin-bottom:10px!important}
+body#blinqPremium .section-kicker{font-size:15px!important;gap:9px!important}
+body#blinqPremium .section-kicker span{font-size:17px!important}
+body#blinqPremium .section-count,body#blinqPremium .match-count{font-size:10px!important;min-height:24px!important;padding:0 9px!important}
+
+body#blinqPremium #predictionsView .prediction-card.match-card-v3{min-height:262px!important;padding:13px 14px 11px!important;border-radius:13px!important}
+body#blinqPremium .match-card-v3 .match-card-meta{font-size:10px!important;min-height:24px!important}
+body#blinqPremium .match-card-v3 .match-card-meta .time{font-size:10px!important}
+body#blinqPremium .match-card-v3 .match-card-meta .surface{font-size:9px!important;max-width:92px!important;padding:3px 8px!important}
+body#blinqPremium .match-card-v3 .match-players-row{min-height:88px!important;margin:10px 0 7px!important}
+body#blinqPremium .match-card-v3 .player-avatar{width:46px!important;height:46px!important;flex-basis:46px!important}
+body#blinqPremium .match-card-v3 .player-name{font-size:13px!important;line-height:1.22!important}
+body#blinqPremium .match-card-v3 .player-rank{font-size:9px!important}
+body#blinqPremium .match-card-v3 .match-vs{font-size:10px!important}
+body#blinqPremium .match-card-v3 .match-pick-row{min-height:64px!important;padding:9px 11px!important}
+body#blinqPremium .match-card-v3 .pick-copy small{font-size:10px!important}
+body#blinqPremium .match-card-v3 .pick-name{font-size:15px!important}
+body#blinqPremium .match-card-v3 .probability{font-size:29px!important}
+body#blinqPremium .match-card-v3 .probability small{font-size:9px!important}
+body#blinqPremium .match-card-v3 .confidence{font-size:8px!important;padding:3px 6px!important}
+body#blinqPremium .match-card-v3 .match-kpi-bar,
+body#blinqPremium #predictionsView .prediction-card .betting-row{margin-top:9px!important;padding-top:8px!important;gap:7px 12px!important}
+body#blinqPremium .match-card-v3 .card-metric small{font-size:8px!important}
+body#blinqPremium .match-card-v3 .card-metric strong{font-size:12px!important}
+body#blinqPremium .match-card-v3 .card-more-link{font-size:10px!important;min-height:22px!important}
+body#blinqPremium #predictionsView .section-see-all-card>b{font-size:11px!important}
+body#blinqPremium #predictionsView .state-card{font-size:12px!important;min-height:220px!important}
+
+/* Admin: restore full control center and make it actually pleasant to use. */
+body#blinqPremium .admin-console-v6522{max-width:1560px!important;gap:16px!important;padding-bottom:44px!important}
+body#blinqPremium .admin-control-header{padding:22px 24px!important;border-radius:16px!important}
+body#blinqPremium .admin-control-header small{font-size:11px!important}
+body#blinqPremium .admin-control-header h1{font-size:28px!important}
+body#blinqPremium .admin-control-header p{font-size:13px!important;line-height:1.5!important}
+body#blinqPremium .admin-tabs-v6522{grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:9px!important}
+body#blinqPremium .admin-tabs-v6522 button{padding:14px 15px!important;min-height:72px!important;border-radius:12px!important}
+body#blinqPremium .admin-tabs-v6522 button strong{font-size:14px!important}
+body#blinqPremium .admin-tabs-v6522 button small{font-size:10px!important;line-height:1.3!important}
+body#blinqPremium .admin-ux-heading h2{font-size:23px!important}
+body#blinqPremium .admin-ux-heading p{font-size:13px!important;max-width:850px!important}
+body#blinqPremium .admin-note{padding:13px 14px!important;border-radius:11px!important}
+body#blinqPremium .admin-note strong{font-size:13px!important}
+body#blinqPremium .admin-note span{font-size:12px!important;line-height:1.5!important}
+body#blinqPremium .admin-note-error{border-color:rgba(211,83,98,.5)!important;background:rgba(73,22,32,.35)!important}
+body#blinqPremium .admin-user-row{min-height:64px!important;padding:10px!important}
+body#blinqPremium .admin-user-row strong{font-size:13px!important}
+body#blinqPremium .admin-user-row small,body#blinqPremium .admin-user-row b,body#blinqPremium .admin-user-row em{font-size:11px!important}
+body#blinqPremium .admin-user-row .avatar{width:34px!important;height:34px!important}
+body#blinqPremium .admin-user-editor-head h3{font-size:18px!important}
+body#blinqPremium .admin-user-editor-head p{font-size:12px!important}
+body#blinqPremium .admin-form-grid label,body#blinqPremium .admin-wide-field,
+body#blinqPremium .admin-section-rule-row label,body#blinqPremium .admin-page-access-row label{font-size:11px!important}
+body#blinqPremium .admin-form-grid input,body#blinqPremium .admin-form-grid select,body#blinqPremium .admin-form-grid textarea,
+body#blinqPremium .admin-wide-field input,body#blinqPremium .admin-section-rule-row select,body#blinqPremium .admin-section-rule-row input[type=number],body#blinqPremium .admin-page-access-row select{font-size:13px!important;min-height:38px!important}
+body#blinqPremium .admin-section-card-head h3{font-size:17px!important}
+body#blinqPremium .admin-banner-library-card strong{font-size:13px!important}
+body#blinqPremium .admin-banner-library-card small,body#blinqPremium .admin-banner-library-card em{font-size:10px!important}
+
+@media(max-width:1380px){body#blinqPremium .admin-tabs-v6522{grid-template-columns:repeat(4,minmax(0,1fr))!important}}
+@media(max-width:1000px){
+  body#blinqPremium .dashboard-hero-stage,body#blinqPremium .dashboard-hero-stage .dashboard-hero{height:180px!important;min-height:180px!important}
+  body#blinqPremium .dashboard-hero-copy h2{font-size:33px!important}
+  body#blinqPremium .admin-tabs-v6522{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:600px){
+  body#blinqPremium .dashboard-main{width:100%!important}
+  body#blinqPremium .dashboard-hero-stage,body#blinqPremium .dashboard-hero-stage .dashboard-hero{height:164px!important;min-height:164px!important}
+  body#blinqPremium .dashboard-hero-copy h2{font-size:27px!important}
+  body#blinqPremium .dashboard-hero-copy p{font-size:12px!important}
+  body#blinqPremium .match-card-v3 .player-name{font-size:12px!important}
+  body#blinqPremium .match-card-v3 .pick-name{font-size:14px!important}
+  body#blinqPremium .match-card-v3 .probability{font-size:27px!important}
+  body#blinqPremium .match-card-v3 .card-metric strong{font-size:11px!important}
+  body#blinqPremium .admin-tabs-v6522{grid-template-columns:1fr!important}
+}
+
+/* 6.5.39 — premium boot state: never show a blank black viewport while auth/feed initializes. */
+body#blinqPremium .boot-splash{position:fixed;inset:0;z-index:9998;display:grid;place-items:center;background:radial-gradient(circle at 50% 42%,rgba(35,54,82,.34),transparent 34%),linear-gradient(180deg,#050912 0%,#06101a 100%);transition:opacity .18s ease,visibility .18s ease}
+body#blinqPremium .boot-splash.is-done{opacity:0;visibility:hidden;pointer-events:none}
+body#blinqPremium .boot-splash-card{display:grid;justify-items:center;gap:18px;min-width:220px;padding:30px 34px;border:1px solid rgba(95,127,162,.22);border-radius:24px;background:rgba(8,18,30,.56);box-shadow:0 28px 80px rgba(0,0,0,.35),inset 0 1px rgba(255,255,255,.025);backdrop-filter:blur(14px)}
+body#blinqPremium .boot-splash-logo{width:150px;max-height:62px;object-fit:contain}
+body#blinqPremium .boot-splash-card p{margin:0;color:#8fa8c1;font-size:13px;font-weight:700;letter-spacing:.02em}
+body#blinqPremium .boot-splash-line{display:flex;gap:7px;align-items:center}
+body#blinqPremium .boot-splash-line span{width:7px;height:7px;border-radius:999px;background:#8e62ff;box-shadow:0 0 16px rgba(142,98,255,.62);animation:blinqBootPulse 1s ease-in-out infinite}
+body#blinqPremium .boot-splash-line span:nth-child(2){animation-delay:.14s}
+body#blinqPremium .boot-splash-line span:nth-child(3){animation-delay:.28s}
+@keyframes blinqBootPulse{0%,100%{opacity:.28;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
+@media (prefers-reduced-motion:reduce){body#blinqPremium .boot-splash-line span{animation:none}}

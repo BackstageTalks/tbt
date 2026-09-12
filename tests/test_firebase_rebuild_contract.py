@@ -48,7 +48,7 @@ def test_firebase_runtime_dependency_and_api_routes_are_present():
     function_app = (ROOT / "api" / "function_app.py").read_text(encoding="utf-8")
     assert "firebase-admin>=6.5,<8" in requirements
     assert 'API_VERSION = "3.5.1"' in function_app
-    assert 'RELEASE = "6.5.37"' in function_app
+    assert 'RELEASE = "6.5.38"' in function_app
     assert "auth_provider(settings)" in function_app
     assert 'route="v1/auth/profile"' in function_app
 

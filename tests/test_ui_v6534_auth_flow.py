@@ -24,6 +24,6 @@ def test_auth_failures_are_rendered_in_login_modal():
     assert "The BlinQ workspace could not be opened." in APP
 
 
-def test_assets_are_cache_busted_to_6537():
+def test_assets_are_cache_busted_to_6538():
     for asset in ('styles.css', 'responsive.css', 'premium.css', 'auth.js', 'responsive.js', 'app.js'):
-        assert f'/{asset}?v=6537' in HTML
+        assert f'/{asset}?v=6538' in HTML

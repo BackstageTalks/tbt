@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'layout', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -1264,7 +1264,7 @@
   function renderAdminAccounts(){
     const users=Array.isArray(state.adminUsers)?state.adminUsers:[];
     const list=state.adminUsersLoading?'<div class="state-card">Loading accounts…</div>':users.length?users.map(user=>`<button type="button" class="admin-user-row${state.adminSelectedUser?.id===user.id?' selected':''}" data-admin-user="${escapeHtml(user.id)}" data-search="${escapeHtml(`${user.email||''} ${user.name||''} ${user.telegram_nick||''} ${user.plan||''}`.toLowerCase())}"><span class="avatar">${escapeHtml(initials(user.name||user.email||'U'))}</span><span><strong>${escapeHtml(user.name||'Member')}</strong><small>${escapeHtml(user.email||'')}</small></span><b>${escapeHtml(user.plan_label||user.plan||'—')}</b><em>${escapeHtml(user.status||'—')}</em></button>`).join(''):'<div class="admin-user-empty">No accounts loaded. Admin account management is not configured in the runtime.</div>';
-    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>MEMBERS</small><h2>Accounts</h2><p>Account changes are applied directly to the selected member; they do not require Publish changes.</p></div></div><div class="admin-accounts-toolbar"><label class="search-box"><span>⌕</span><input id="adminUserSearch" type="search" placeholder="Search by name, email or Telegram…"></label><button class="btn btn-ghost" type="button" data-admin-action="refresh-users">↻ Refresh users</button></div><div class="admin-accounts-grid"><div class="admin-user-list">${list}</div>${renderAdminUserEditor(state.adminSelectedUser)}</div></section>`;
+    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>MEMBERS</small><h2>Accounts</h2><p>Account changes are applied directly to the selected member; they do not require Publish changes.</p></div></div>${state.adminUsersError?`<div class="admin-note admin-note-error"><strong>Account API unavailable</strong><span>${escapeHtml(state.adminUsersError)}</span></div>`:''}<div class="admin-accounts-toolbar"><label class="search-box"><span>⌕</span><input id="adminUserSearch" type="search" placeholder="Search by name, email or Telegram…"></label><button class="btn btn-ghost" type="button" data-admin-action="refresh-users">↻ Refresh users</button></div><div class="admin-accounts-grid"><div class="admin-user-list">${list}</div>${renderAdminUserEditor(state.adminSelectedUser)}</div></section>`;
   }
   function nextEntityId(prefix, collection){
     const existing=new Set(Object.keys(collection||{})); let i=1; while(existing.has(`${prefix}-${i}`))i+=1; return `${prefix}-${i}`;
@@ -1330,9 +1330,9 @@
   }
 
   function renderAdminRoute(){
-    const tabs=[['layout','Sections & access','Visibility, pick counts and ordering'],['banners','Banners & links','Top CTA, Telegram links and main rotating banner'],['plans','Plans','Membership names and validity'],['accounts','Accounts','Members, roles and subscriptions']];
-    if(!['layout','banners','plans','accounts'].includes(state.adminTab))state.adminTab='layout';
-    const panel=state.adminTab==='layout'?renderAdminLayout():state.adminTab==='banners'?renderAdminBanners():state.adminTab==='plans'?renderAdminPlans():renderAdminAccounts();
+    const tabs=[['layout','Sections & access','Visibility, pick counts and ordering'],['banners','Banners & links','Top CTA, hero and fixed banner positions'],['campaigns','Campaigns','Advertisers, creatives and banner assignments'],['plans','Plans','Membership names and validity'],['accounts','Accounts','Members, roles and subscriptions'],['analytics','Analytics','Banner views, clicks and CTR'],['performance','Model quality','Live accuracy and holdout diagnostics']];
+    if(!['layout','banners','campaigns','plans','accounts','analytics','performance'].includes(state.adminTab))state.adminTab='layout';
+    const panel=state.adminTab==='layout'?renderAdminLayout():state.adminTab==='banners'?renderAdminBanners():state.adminTab==='campaigns'?renderAdminCampaigns():state.adminTab==='plans'?renderAdminPlans():state.adminTab==='accounts'?renderAdminAccounts():state.adminTab==='analytics'?renderAdminAnalytics():renderAdminPerformance();
     const configActions=state.adminTab==='accounts'?`<div class="admin-account-direct-note"><span>●</span> Account edits apply immediately</div>`:`${state.adminTab==='layout'?'<button class="btn btn-ghost" type="button" data-admin-action="preview-demo">Demo board</button>':''}<button class="btn btn-ghost" type="button" data-admin-action="save-draft">Save draft</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publish changes</button><details><summary>More</summary><button type="button" data-admin-action="export">Export JSON</button><button type="button" data-admin-action="reset">Reset draft</button></details>`;
     return `<div class="admin-console admin-console-v6522"><header class="admin-control-header"><div><small>BLINQ CONTROL</small><h1>Admin Control Center</h1><p>${state.adminTab==='accounts'?'Manage member access directly.':'Simple controls for the live site. Changes stay local until you publish.'}</p></div><div class="admin-global-actions">${configActions}</div></header><nav class="admin-tabs admin-tabs-v6522">${tabs.map(([id,label,hint])=>`<button type="button" class="${state.adminTab===id?'active':''}" data-admin-tab="${id}"><strong>${label}</strong><small>${hint}</small></button>`).join('')}</nav><div class="admin-panel admin-panel-v6522">${panel}</div></div>`;
   }
@@ -1342,8 +1342,8 @@
   async function loadAdminUsers(force=false){
     if(state.adminUsersLoading||(!force&&Array.isArray(state.adminUsers)))return;
     state.adminUsersLoading=true;rerenderAdmin();
-    try{const data=await BlinqAuth.adminUsers(1,200);state.adminUsers=Array.isArray(data?.users)?data.users:[];if(state.adminSelectedUser){state.adminSelectedUser=state.adminUsers.find(x=>x.id===state.adminSelectedUser.id)||null;}}
-    catch(error){state.adminUsers=[];showStatus(error.status===503?'Admin account API is not configured in the runtime.':error.message);}
+    try{const data=await BlinqAuth.adminUsers(1,200);state.adminUsersError='';state.adminUsers=Array.isArray(data?.users)?data.users:[];if(state.adminSelectedUser){state.adminSelectedUser=state.adminUsers.find(x=>x.id===state.adminSelectedUser.id)||null;}}
+    catch(error){state.adminUsers=[];state.adminUsersError=error.status===503?'Admin account API is not configured. Check Firebase Admin credentials and Azure storage settings.':error.message;showStatus(state.adminUsersError);}
     finally{state.adminUsersLoading=false;rerenderAdmin();}
   }
   function setSelectedElement(id){ if(!elements()?.[id])return;state.selectedElement=id;rerenderAdmin(); }
@@ -1603,7 +1603,7 @@
       const fullModelVersion=String(feed?.model?.version||'').trim(),compactModelVersion=shortModelVersion(fullModelVersion);
       const footerModel=$('footerModelState'); if(footerModel){footerModel.textContent=compactModelVersion?`Model ${compactModelVersion}`:publicText('Production feed');footerModel.title=fullModelVersion||publicText('Production feed');}
       const headerModel=$('headerModelState');if(headerModel){headerModel.textContent=compactModelVersion||publicText('Production');headerModel.title=fullModelVersion||publicText('Production');}
-      $('staleNotice').hidden=!feed.stale; $('staleNotice').textContent=feed.stale?publicText('Published data is older than 12 hours. Check prediction creation times before evaluating them.'):''; $('appShell').hidden=false; if($('authDialog').open)$('authDialog').close();
+      const staleNotice=$('staleNotice'); if(staleNotice){staleNotice.hidden=true;staleNotice.textContent='';} $('appShell').hidden=false; if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
     }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact support if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{feedLoading=false;window.BlinqUI.refreshFinished();}
   }
@@ -1649,6 +1649,19 @@
     window.addEventListener('hashchange',()=>{const route=location.hash.slice(1)||'predictions';if(!$('appShell').hidden&&route!==state.route)setRoute(route,false);});
   }
 
-  async function boot(){ setupEvents();window.BlinqUI.init();setupLiveRefresh(); updateHeaderClock(); setInterval(updateHeaderClock,30000); await loadUiConfig(); const hash=location.hash.replace(/^#/,''); if(routeMeta[hash])state.route=hash; try{const cfg=await BlinqAuth.init();state.authEnabled=Boolean(cfg.enabled);if(cfg.recovery){auth('recovery');return;}const session=await BlinqAuth.restore();if(session)await loadFeed();else auth('login');}catch(error){showStatus(error.message);auth('login');} }
+  function finishBootSplash(){const splash=$('bootSplash');if(!splash)return;splash.classList.add('is-done');setTimeout(()=>splash.remove(),220);}
+  async function boot(){
+    setupEvents();window.BlinqUI.init();setupLiveRefresh();updateHeaderClock();setInterval(updateHeaderClock,30000);
+    const hash=location.hash.replace(/^#/,'');if(routeMeta[hash])state.route=hash;
+    try{
+      // UI config and auth config are independent network calls; do them in parallel to reduce cold-start time.
+      const [,cfg]=await Promise.all([loadUiConfig(),BlinqAuth.init()]);
+      state.authEnabled=Boolean(cfg.enabled);
+      if(cfg.recovery){auth('recovery');finishBootSplash();return;}
+      const session=await BlinqAuth.restore();
+      if(session)await loadFeed();else auth('login');
+    }catch(error){showStatus(error.message);auth('login');}
+    finally{finishBootSplash();}
+  }
   boot();
 })();
