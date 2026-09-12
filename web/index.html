@@ -7,13 +7,13 @@
 <meta content="BlinQ tenisová analytika — live predzápasové pravdepodobnosti, výsledky a analýza modelu." name="description"/>
 <title>BlinQ · Tenisová analytika</title>
 <link href="/assets/blinq_favi.png" rel="icon" type="image/png"/>
-<link href="/styles.css?v=6550" rel="stylesheet"/>
-<link href="/responsive.css?v=6550" rel="stylesheet"/>
-<link href="/premium.css?v=6550" rel="stylesheet"/>
-<link href="/premium-v2.css?v=6550" rel="stylesheet"/>
-<script defer="" src="/auth.js?v=6550"></script>
-<script defer="" src="/responsive.js?v=6550"></script>
-<script defer="" src="/app.js?v=6550"></script>
+<link href="/styles.css?v=6551" rel="stylesheet"/>
+<link href="/responsive.css?v=6551" rel="stylesheet"/>
+<link href="/premium.css?v=6551" rel="stylesheet"/>
+<link href="/premium-v2.css?v=6551" rel="stylesheet"/>
+<script defer="" src="/auth.js?v=6551"></script>
+<script defer="" src="/responsive.js?v=6551"></script>
+<script defer="" src="/app.js?v=6551"></script>
 </head><body id="blinqPremium">
 <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
 <noscript><p class="no-script">BlinQ needs JavaScript to sign in and load current predictions. Please enable it in your browser.</p></noscript>
@@ -41,6 +41,7 @@
 <span class="top-brand-copy"><strong>STATISTICAL ENGINE</strong><small>by BackstageTalks</small></span>
 </a>
 <section aria-label="BlinQ komunita a promo odkazy" class="header-feature-strip" id="headerFeatureStrip"></section>
+<label class="header-search" aria-label="Hľadať hráča alebo turnaj"><span aria-hidden="true">⌕</span><input id="headerSearchInput" type="search" placeholder="Hľadať turnaje, hráčov…"></label>
 <div class="topbar-actions dashboard-account-actions">
 <button class="btn top-upgrade" data-route="account" id="topUpgradeButton" type="button"><span aria-hidden="true">✦</span><span id="topUpgradeLabel">Plány</span></button>
 <div class="profile-shell" id="profileShell">
@@ -227,6 +228,10 @@
 </form>
 <div class="auth-links"><button id="switchSignup" type="button">Vytvoriť účet</button><button id="switchReset" type="button">Zabudnuté heslo</button><button hidden="" id="resendVerification" type="button">Poslať overovací e-mail znova</button></div>
 <nav aria-label="Jazykové verzie" class="auth-languages" id="authLanguages"><a class="active" data-lang="sk" href="?lang=sk">SK</a><a data-lang="cz" href="?lang=cz">CZ</a><a data-lang="en" href="?lang=en">EN</a></nav><div class="auth-footer">Powered by BackstageTalks Statistical Engine</div>
+</dialog>
+<dialog aria-labelledby="accountDialogTitle" class="account-dialog" id="accountDialog">
+<button aria-label="Zavrieť" class="dialog-close" id="accountDialogClose" type="button">×</button>
+<div id="accountDialogContent"></div>
 </dialog>
 <dialog aria-label="Analýza zápasu" class="match-dialog" id="matchDialog">
 <button aria-label="Zavrieť" class="dialog-close" id="dialogClose">×</button>

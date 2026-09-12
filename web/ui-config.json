@@ -1874,9 +1874,9 @@
         "show_copy": true,
         "sponsored": false,
         "eyebrow": "BLINQ STATISTICAL ENGINE",
-        "headline": "Data. Analysis.",
-        "accent_text": "Better Decisions.",
-        "text": "Advanced tennis intelligence for informed players.",
+        "headline": "Dáta. Analýza.",
+        "accent_text": "Lepšie rozhodnutia.",
+        "text": "Pokročilá tenisová analytika pre informované rozhodnutia.",
         "button_text": "",
         "theme": "violet",
         "icon": "",
@@ -3101,7 +3101,7 @@
       }
     }
   },
-  "ui_revision": "6.5.50",
+  "ui_revision": "6.5.51",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",

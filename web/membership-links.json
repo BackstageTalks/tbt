@@ -1,20 +1,11 @@
 {
-  "schema": 1,
+  "schema": 2,
+  "currency": "EUR",
   "plans": {
-    "rookie": {
-      "payment_url": ""
-    },
-    "pro": {
-      "payment_url": ""
-    },
-    "elite": {
-      "payment_url": ""
-    },
-    "legend": {
-      "payment_url": ""
-    },
-    "goat": {
-      "payment_url": ""
-    }
+    "rookie": {"payment_url": "", "price": "", "billing_label": ""},
+    "pro": {"payment_url": "", "price": "", "billing_label": ""},
+    "elite": {"payment_url": "", "price": "", "billing_label": ""},
+    "legend": {"payment_url": "", "price": "", "billing_label": ""},
+    "goat": {"payment_url": "", "price": "", "billing_label": "", "invite_url": ""}
   }
 }
