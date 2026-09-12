@@ -1,0 +1,3149 @@
+{
+  "schema": 2,
+  "plans": {
+    "trial": {
+      "label": "ROOKIE TRIAL",
+      "enabled": true,
+      "price": "0.00",
+      "currency": "EUR",
+      "billing": "72 hours",
+      "payment_link": "",
+      "note": "Automatic 3-day Rookie access after registration.",
+      "trial_hours": 72,
+      "inherits": "rookie",
+      "duration_days": null
+    },
+    "expired": {
+      "label": "EXPIRED",
+      "enabled": true,
+      "price": "",
+      "currency": "EUR",
+      "billing": "",
+      "payment_link": "",
+      "note": "No active paid access."
+    },
+    "rookie": {
+      "label": "BlinQ ROOKIE",
+      "enabled": true,
+      "note": "Limited daily picks; first 3 days free after registration.",
+      "duration_days": 30,
+      "trial_hours": 72,
+      "lifetime": false,
+      "hide_ads_allowed": false,
+      "description": "Entry access to the BlinQ workspace.",
+      "cta_label": "Choose Rookie",
+      "url": "",
+      "avatar": "rookie",
+      "order": 1,
+      "card_title": "Start with BlinQ",
+      "show_price": false
+    },
+    "pro": {
+      "label": "BlinQ PRO",
+      "enabled": true,
+      "note": "Full core predictions and tournaments.",
+      "duration_days": 30,
+      "lifetime": false,
+      "hide_ads_allowed": false,
+      "description": "Core predictions + expanded daily board.",
+      "cta_label": "Upgrade to PRO",
+      "url": "",
+      "avatar": "pro",
+      "order": 2,
+      "card_title": "Core predictions",
+      "show_price": false
+    },
+    "elite": {
+      "label": "BlinQ ELITE",
+      "enabled": true,
+      "note": "180-day premium access; workspace permissions remain configurable in Admin.",
+      "duration_days": 180,
+      "lifetime": false,
+      "hide_ads_allowed": false,
+      "description": "Expanded analytical access for users who follow more matches and context.",
+      "cta_label": "Choose Elite",
+      "url": "",
+      "avatar": "elite",
+      "order": 3,
+      "card_title": "Advanced analytics",
+      "show_price": false
+    },
+    "legend": {
+      "label": "BlinQ LEGEND",
+      "enabled": true,
+      "note": "365-day premium access; workspace permissions remain configurable in Admin.",
+      "duration_days": 365,
+      "lifetime": false,
+      "hide_ads_allowed": false,
+      "description": "The highest publicly available BlinQ tier.",
+      "cta_label": "Choose Legend",
+      "url": "",
+      "avatar": "legend",
+      "order": 4,
+      "card_title": "Maximum public access",
+      "show_price": false
+    },
+    "goat": {
+      "label": "BlinQ GOAT",
+      "enabled": true,
+      "note": "Lifetime top-tier access; workspace permissions remain configurable in Admin.",
+      "duration_days": null,
+      "lifetime": true,
+      "hide_ads_allowed": false,
+      "description": "Lifetime access · All BlinQ features. Private top-tier access for selected members.",
+      "cta_label": "Request invite",
+      "url": "",
+      "avatar": "goat",
+      "order": 5,
+      "card_title": "Private all-access",
+      "show_price": false,
+      "invite_only": true,
+      "invite_url": ""
+    }
+  },
+  "navigation": {
+    "learn": [
+      {
+        "id": "how_blinq_works",
+        "enabled": true,
+        "label": "How BlinQ Works",
+        "href": "#how_blinq_works",
+        "order": 101
+      },
+      {
+        "id": "methodology",
+        "enabled": true,
+        "label": "Methodology",
+        "href": "#methodology",
+        "order": 102
+      },
+      {
+        "id": "model_data",
+        "enabled": true,
+        "label": "Model & Data",
+        "href": "#model_data",
+        "order": 103
+      },
+      {
+        "id": "faq",
+        "enabled": true,
+        "label": "FAQ",
+        "href": "#faq",
+        "order": 104
+      },
+      {
+        "id": "responsible_use",
+        "enabled": true,
+        "label": "Responsible Use",
+        "href": "#responsible_use",
+        "order": 105
+      }
+    ]
+  },
+  "elements": {
+    "HEADER_BANNER_1": {
+      "label": "Header CTA 1",
+      "zone": "header",
+      "kind": "header_slot",
+      "order": 1,
+      "content": {
+        "eyebrow": "COMMUNITY",
+        "headline": "Join our Telegram Community",
+        "text": "News · Picks · Discussions",
+        "link": "",
+        "route": "",
+        "theme": "blue",
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "plan_id": "",
+        "type": "promo",
+        "sponsored": false,
+        "button_text": "JOIN",
+        "icon": "✈"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "HEADER_BANNER_2": {
+      "label": "Header CTA 2",
+      "zone": "header",
+      "kind": "header_slot",
+      "order": 2,
+      "content": {
+        "eyebrow": "BLINQ VIP",
+        "headline": "Premium Picks",
+        "text": "Higher value. Better decisions.",
+        "link": "",
+        "route": "",
+        "theme": "gold",
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "plan_id": "",
+        "type": "promo",
+        "sponsored": false,
+        "button_text": "OPEN",
+        "icon": "♛"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "HEADER_BANNER_3": {
+      "label": "Header CTA 3",
+      "zone": "header",
+      "kind": "header_slot",
+      "order": 3,
+      "content": {
+        "eyebrow": "RESULTS & STATS",
+        "headline": "Track performance",
+        "text": "Transparent. Verified.",
+        "link": "#results",
+        "route": "results",
+        "theme": "green",
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "plan_id": "",
+        "type": "promo",
+        "sponsored": false,
+        "button_text": "VIEW",
+        "icon": "▥"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "PREDICTION_TOOLBAR": {
+      "label": "Prediction filters",
+      "zone": "dashboard",
+      "kind": "panel",
+      "order": 30,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "locked",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "CONTENT_TOP_1": {
+      "label": "Dashboard banner 1",
+      "zone": "content_top",
+      "kind": "large_banner",
+      "order": 41,
+      "content": {
+        "eyebrow": "BLINQ PRO",
+        "headline": "Start with Prime",
+        "text": "Unlock more daily picks and the core BlinQ workflow.",
+        "button_text": "See PRO",
+        "link": "#account",
+        "route": "account",
+        "theme": "blue",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "span": 1,
+        "type": "promo",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "plan_id": "pro"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "CONTENT_TOP_2": {
+      "label": "Dashboard banner 2",
+      "zone": "content_top",
+      "kind": "large_banner",
+      "order": 42,
+      "content": {
+        "eyebrow": "BLINQ ELITE",
+        "headline": "Go deeper",
+        "text": "Expanded access for heavier analytical workflows.",
+        "button_text": "See ELITE",
+        "link": "#account",
+        "route": "account",
+        "theme": "purple",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "span": 1,
+        "type": "promo",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "plan_id": "elite"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "CONTENT_TOP_3": {
+      "label": "Dashboard banner 3",
+      "zone": "content_top",
+      "kind": "large_banner",
+      "order": 43,
+      "content": {
+        "eyebrow": "BLINQ ELITE",
+        "headline": "Go deeper",
+        "text": "Expanded access for heavier analytical workflows.",
+        "button_text": "See ELITE",
+        "link": "#account",
+        "route": "account",
+        "theme": "purple",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "span": 1,
+        "type": "promo",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "plan_id": "elite"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "CONTENT_TOP_4": {
+      "label": "Dashboard banner 4",
+      "zone": "content_top",
+      "kind": "large_banner",
+      "order": 44,
+      "content": {
+        "eyebrow": "BLINQ LEGEND",
+        "headline": "Maximum BlinQ access",
+        "text": "Premium daily workflow for power users.",
+        "button_text": "See LEGEND",
+        "link": "#account",
+        "route": "account",
+        "theme": "gold",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "span": 1,
+        "type": "promo",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "plan_id": "legend"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "PRIME_PICKS_PANEL": {
+      "label": "Prime Picks panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 50,
+      "content": {
+        "label": "Prime Picks panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "blurred",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "TOP_PICK_1": {
+      "label": "Prime Pick card 1",
+      "zone": "predictions",
+      "kind": "prediction_card",
+      "order": 51,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "blurred",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "TOP_PICK_2": {
+      "label": "Prime Pick card 2",
+      "zone": "predictions",
+      "kind": "prediction_card",
+      "order": 52,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "blurred",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "TOP_PICK_3": {
+      "label": "Prime Pick card 3",
+      "zone": "predictions",
+      "kind": "prediction_card",
+      "order": 53,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "blurred",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "TOP_PICK_4": {
+      "label": "Prime Pick card 4",
+      "zone": "predictions",
+      "kind": "prediction_card",
+      "order": 54,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "blurred",
+        "expired": "blurred",
+        "rookie": "blurred",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "TOP_PICK_5": {
+      "label": "Prime Pick card 5",
+      "zone": "predictions",
+      "kind": "prediction_card",
+      "order": 55,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "blurred",
+        "expired": "blurred",
+        "rookie": "blurred",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "TOP_PICK_6": {
+      "label": "Prime Pick card 6",
+      "zone": "predictions",
+      "kind": "prediction_card",
+      "order": 56,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "blurred",
+        "expired": "blurred",
+        "rookie": "blurred",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "TOP_PICK_7": {
+      "label": "Prime Pick card 7",
+      "zone": "predictions",
+      "kind": "prediction_card",
+      "order": 57,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "blurred",
+        "expired": "blurred",
+        "rookie": "blurred",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "TOP_PICK_8": {
+      "label": "Prime Pick card 8",
+      "zone": "predictions",
+      "kind": "prediction_card",
+      "order": 58,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "blurred",
+        "expired": "blurred",
+        "rookie": "blurred",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "TOP_PICK_MORE": {
+      "label": "Prime Pick cards 9+",
+      "zone": "predictions",
+      "kind": "prediction_card",
+      "order": 59,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "blurred",
+        "expired": "blurred",
+        "rookie": "blurred",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "CONTENT_BOTTOM_1": {
+      "label": "Bottom external slot 1",
+      "zone": "content_bottom",
+      "kind": "large_banner",
+      "order": 61,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "External content slot 5",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "green",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "span": 1,
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "CONTENT_BOTTOM_2": {
+      "label": "Bottom external slot 2",
+      "zone": "content_bottom",
+      "kind": "large_banner",
+      "order": 62,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "External content slot 6",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "purple",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "span": 1,
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "CONTENT_BOTTOM_3": {
+      "label": "Bottom external slot 3",
+      "zone": "content_bottom",
+      "kind": "large_banner",
+      "order": 63,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "External content slot 7",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "blue",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "span": 1,
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "CONTENT_BOTTOM_4": {
+      "label": "Bottom external slot 4",
+      "zone": "content_bottom",
+      "kind": "large_banner",
+      "order": 64,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "External content slot 8",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "violet",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "span": 1,
+        "type": "rss",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "FOOTER_SYSTEM": {
+      "label": "Footer system content",
+      "zone": "footer",
+      "kind": "panel",
+      "order": 80,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "VIP_TELEGRAM": {
+      "label": "VIP Telegram",
+      "zone": "features",
+      "kind": "feature",
+      "order": 70,
+      "content": {
+        "label": "VIP Telegram"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "locked",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "FOOTBALL_ACCESS": {
+      "label": "Football project access",
+      "zone": "features",
+      "kind": "feature",
+      "order": 71,
+      "content": {
+        "label": "Football project"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "locked",
+        "elite": "locked",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "SIDEBAR_PREDICTIONS": {
+      "label": "Dashboard",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 1,
+      "content": {
+        "label": "Dashboard",
+        "route": "predictions",
+        "icon": "⌂"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "locked",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "SIDEBAR_PRIME": {
+      "label": "Prime Picks",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 2,
+      "content": {
+        "label": "Prime Picks",
+        "route": "prime",
+        "icon": "✦"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "SIDEBAR_TOP_DAILY": {
+      "label": "Top Bets",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 3,
+      "content": {
+        "label": "Top Bets",
+        "route": "top_daily",
+        "icon": "★"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "SIDEBAR_VALUE": {
+      "label": "Value Picks",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 4,
+      "content": {
+        "label": "Value Picks",
+        "route": "value",
+        "icon": "◇"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "SIDEBAR_ACE": {
+      "label": "Ace Picks",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 6,
+      "content": {
+        "label": "Ace Picks",
+        "route": "ace",
+        "icon": "♠"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "SIDEBAR_SG": {
+      "label": "S/G Picks",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 7,
+      "content": {
+        "label": "S/G Picks",
+        "route": "sg",
+        "icon": "▥"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "SIDEBAR_RESULTS": {
+      "label": "Results",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 8,
+      "content": {
+        "label": "Results",
+        "route": "results",
+        "icon": "✓"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "SIDEBAR_BTTS": {
+      "label": "BTTS Bonus",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 9,
+      "content": {
+        "label": "BTTS Bonus",
+        "route": "btts",
+        "icon": "⚽",
+        "beta": true,
+        "href": "#btts"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "SIDEBAR_PROMO_1": {
+      "label": "VIP Telegram",
+      "zone": "sidebar",
+      "kind": "sidebar_promo",
+      "order": 20,
+      "content": {
+        "type": "internal",
+        "eyebrow": "VIP",
+        "headline": "VIP Telegram",
+        "text": "Exclusive picks & live updates.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "blue",
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "auto",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "mobile_image_url": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "SIDEBAR_PROMO_2": {
+      "label": "Football by BlinQ",
+      "zone": "sidebar",
+      "kind": "sidebar_promo",
+      "order": 21,
+      "content": {
+        "type": "internal",
+        "eyebrow": "BLINQ FOOTBALL",
+        "headline": "Football by BlinQ",
+        "text": "Same intelligence. More sports.",
+        "button_text": "Preview",
+        "link": "#btts",
+        "route": "",
+        "theme": "purple",
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "auto",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "mobile_image_url": ""
+      },
+      "watermark": {
+        "enabled": true,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "SIDEBAR_PROMO_3": {
+      "label": "Upgrade to Elite",
+      "zone": "sidebar",
+      "kind": "sidebar_promo",
+      "order": 22,
+      "content": {
+        "type": "promo",
+        "eyebrow": "ELITE",
+        "headline": "Upgrade to Elite",
+        "text": "Unlock premium picks and analytics.",
+        "button_text": "Upgrade",
+        "link": "#account",
+        "route": "account",
+        "theme": "violet",
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "auto",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "mobile_image_url": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "TOP_DAILY_PANEL": {
+      "label": "Top Bets panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 60,
+      "content": {
+        "label": "Top Bets panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "locked",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "VALUE_PICKS_PANEL": {
+      "label": "Value Picks panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 70,
+      "content": {
+        "label": "Value Picks panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "locked",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "ACE_PICKS_PANEL": {
+      "label": "Ace Picks panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 80,
+      "content": {
+        "label": "Ace Picks panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "locked",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "SG_PICKS_PANEL": {
+      "label": "S/G Picks panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 90,
+      "content": {
+        "label": "S/G Picks panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "locked",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "BTTS_BONUS_PANEL": {
+      "label": "BTTS Bonus BETA panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 100,
+      "content": {
+        "label": "BTTS Bonus BETA panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "locked",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "CONTENT_MID_1": {
+      "label": "Middle external slot 1",
+      "zone": "content_mid",
+      "kind": "large_banner",
+      "order": 61,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "Middle external slot 1",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "blue",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "span": 1,
+        "type": "rss"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "CONTENT_MID_2": {
+      "label": "Middle external slot 2",
+      "zone": "content_mid",
+      "kind": "large_banner",
+      "order": 62,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "Middle external slot 2",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "purple",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "span": 1,
+        "type": "rss"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "CONTENT_MID_3": {
+      "label": "Middle external slot 3",
+      "zone": "content_mid",
+      "kind": "large_banner",
+      "order": 63,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "Middle external slot 3",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "green",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "span": 1,
+        "type": "rss"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "CONTENT_MID_4": {
+      "label": "Middle external slot 4",
+      "zone": "content_mid",
+      "kind": "large_banner",
+      "order": 64,
+      "content": {
+        "eyebrow": "PARTNER SLOT",
+        "headline": "Middle external slot 4",
+        "text": "Fixed advertising/content position.",
+        "button_text": "Open",
+        "link": "#account",
+        "route": "account",
+        "theme": "violet",
+        "sponsored": false,
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "rss",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "span": 1,
+        "type": "rss"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "SIDEBAR_DOUBLES": {
+      "zone": "sidebar",
+      "kind": "navigation",
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "label": "Doubles",
+      "order": 5,
+      "content": {
+        "label": "Doubles",
+        "route": "doubles",
+        "icon": "◈"
+      }
+    },
+    "DOUBLES_PANEL": {
+      "label": "Doubles Picks panel",
+      "zone": "dashboard",
+      "kind": "panel",
+      "order": 75,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "RESULTS_PANEL": {
+      "label": "Results preview panel",
+      "zone": "dashboard",
+      "kind": "panel",
+      "order": 95,
+      "content": {},
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "HEADER_BANNER_4": {
+      "label": "Header CTA 4",
+      "zone": "header",
+      "kind": "header_slot",
+      "order": 4,
+      "content": {
+        "type": "promo",
+        "enabled": true,
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "sponsored": false,
+        "eyebrow": "BLINQ NEWS",
+        "headline": "Updates & releases",
+        "text": "Product news and new features.",
+        "button_text": "OPEN",
+        "theme": "purple",
+        "icon": "✦",
+        "link": "",
+        "route": "",
+        "plan_id": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "HERO_BANNER_1": {
+      "label": "Main banner 1",
+      "zone": "hero",
+      "kind": "hero_banner",
+      "order": 1,
+      "content": {
+        "type": "promo",
+        "enabled": true,
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "creative_mode": "split",
+        "show_copy": true,
+        "sponsored": false,
+        "eyebrow": "BLINQ STATISTICAL ENGINE",
+        "headline": "Data. Analysis.",
+        "accent_text": "Better Decisions.",
+        "text": "Advanced tennis intelligence for informed players.",
+        "button_text": "",
+        "theme": "violet",
+        "icon": "",
+        "link": "",
+        "route": "",
+        "plan_id": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "HERO_BANNER_2": {
+      "label": "Main banner 2",
+      "zone": "hero",
+      "kind": "hero_banner",
+      "order": 2,
+      "content": {
+        "type": "promo",
+        "enabled": true,
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "creative_mode": "split",
+        "show_copy": true,
+        "sponsored": false,
+        "eyebrow": "COMMUNITY",
+        "headline": "Join the BlinQ",
+        "accent_text": "Telegram Community",
+        "text": "News · Picks · Discussions",
+        "button_text": "JOIN",
+        "theme": "blue",
+        "icon": "",
+        "link": "",
+        "route": "",
+        "plan_id": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "HERO_BANNER_3": {
+      "label": "Main banner 3",
+      "zone": "hero",
+      "kind": "hero_banner",
+      "order": 3,
+      "content": {
+        "type": "promo",
+        "enabled": true,
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "creative_mode": "split",
+        "show_copy": true,
+        "sponsored": false,
+        "eyebrow": "RESULTS & STATS",
+        "headline": "Track performance.",
+        "accent_text": "Stay informed.",
+        "text": "Transparent model results and published statistics.",
+        "button_text": "SEE RESULTS",
+        "theme": "green",
+        "icon": "",
+        "link": "#results",
+        "route": "results",
+        "plan_id": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "HERO_BANNER_4": {
+      "label": "Main banner 4",
+      "zone": "hero",
+      "kind": "hero_banner",
+      "order": 4,
+      "content": {
+        "type": "promo",
+        "enabled": false,
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "creative_mode": "split",
+        "show_copy": true,
+        "sponsored": true,
+        "eyebrow": "BLINQ PARTNER",
+        "headline": "Your campaign.",
+        "accent_text": "Your message.",
+        "text": "Assign a campaign, image, link and schedule in Admin.",
+        "button_text": "OPEN",
+        "theme": "gold",
+        "icon": "",
+        "link": "",
+        "route": "",
+        "plan_id": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "HERO_BANNER_5": {
+      "label": "Main banner 5",
+      "zone": "hero",
+      "kind": "hero_banner",
+      "order": 5,
+      "content": {
+        "type": "promo",
+        "enabled": false,
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "creative_mode": "split",
+        "show_copy": true,
+        "sponsored": true,
+        "eyebrow": "BLINQ PARTNER",
+        "headline": "Main banner 5",
+        "accent_text": "Your message.",
+        "text": "Assign a campaign, image, link and schedule in Admin.",
+        "button_text": "OPEN",
+        "theme": "gold",
+        "icon": "",
+        "link": "",
+        "route": "",
+        "plan_id": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    }
+  },
+  "admin": {
+    "draft_storage_key": "blinq_admin_ui_config_v1",
+    "preview_plan": "rookie",
+    "runtime_config_enabled": true,
+    "row_presets": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ],
+    "max_rss_sources": 8,
+    "dashboard_preview_choices": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      "ALL"
+    ]
+  },
+  "ad_fallbacks": {
+    "mode": "mixed",
+    "rss_enabled": false,
+    "fallback_images": [],
+    "internal": {
+      "eyebrow": "BLINQ",
+      "headline": "BlinQ Tennis Intelligence",
+      "text": "No active advertisement is available right now. Explore the current BlinQ board.",
+      "button_text": "Open dashboard",
+      "link": "#predictions",
+      "route": "predictions",
+      "theme": "blue"
+    },
+    "priority": [
+      "active_advertisement",
+      "blinq_internal"
+    ]
+  },
+  "analytics": {
+    "impression_threshold": 0.5,
+    "impression_ms": 1000,
+    "window_days": 30
+  },
+  "content_rows": {
+    "content_top": {
+      "label": "DASHBOARD PROMO ZONE · top",
+      "enabled": false,
+      "preset": "1",
+      "slot_count": 0
+    },
+    "content_mid": {
+      "label": "OPTIONAL PROMO ZONE · middle",
+      "enabled": false,
+      "preset": "1",
+      "slot_count": 0
+    },
+    "content_bottom": {
+      "label": "OPTIONAL PROMO ZONE · bottom",
+      "enabled": false,
+      "preset": "1",
+      "slot_count": 0
+    }
+  },
+  "advertisers": {},
+  "campaigns": {},
+  "creative_specs": {
+    "header_slot": {
+      "aspect_ratio": "3:1",
+      "recommended": "900 × 300 px",
+      "minimum": "600 × 200 px",
+      "safe_area": "center 80%"
+    },
+    "sidebar_promo": {
+      "aspect_ratio": "3:1",
+      "recommended": "900 × 300 px",
+      "minimum": "600 × 200 px",
+      "safe_area": "center 80%"
+    },
+    "large_1": {
+      "aspect_ratio": "20:3",
+      "recommended": "1200 × 180 px",
+      "minimum": "900 × 135 px",
+      "safe_area": "center 90%"
+    },
+    "large_2": {
+      "aspect_ratio": "10:3",
+      "recommended": "600 × 180 px",
+      "minimum": "450 × 135 px",
+      "safe_area": "center 88%"
+    },
+    "large_4": {
+      "aspect_ratio": "5:3",
+      "recommended": "300 × 180 px",
+      "minimum": "240 × 144 px",
+      "safe_area": "center 82%"
+    },
+    "header_1": {
+      "aspect_ratio": "12:1",
+      "recommended": "1200 × 100 px",
+      "minimum": "900 × 75 px",
+      "safe_area": "center 90%"
+    },
+    "header_2": {
+      "aspect_ratio": "6:1",
+      "recommended": "600 × 100 px",
+      "minimum": "450 × 75 px",
+      "safe_area": "center 88%"
+    },
+    "header_3": {
+      "aspect_ratio": "4:1",
+      "recommended": "400 × 100 px",
+      "minimum": "300 × 75 px",
+      "safe_area": "center 84%"
+    },
+    "header_4": {
+      "aspect_ratio": "3:1",
+      "recommended": "300 × 100 px",
+      "minimum": "240 × 80 px",
+      "safe_area": "center 82%"
+    },
+    "large_3": {
+      "aspect_ratio": "20:9",
+      "recommended": "400 × 180 px",
+      "minimum": "320 × 144 px",
+      "safe_area": "center 84%"
+    },
+    "hero_banner": {
+      "aspect_ratio": "20:3",
+      "recommended": "1500 × 225 px",
+      "minimum": "1000 × 150 px",
+      "safe_area": "center 86%"
+    }
+  },
+  "market_rules": {
+    "prime": {
+      "market": "match_winner",
+      "objective": "accuracy_first",
+      "min_win_probability": 0.68,
+      "min_data_depth": 0.8,
+      "min_surface_matches": 5,
+      "preferred_min_odds": null,
+      "preferred_max_odds": 1.49,
+      "hard_odds_band": true,
+      "max_negative_expected_value": null,
+      "limit": 30,
+      "use_dashboard_filters": false,
+      "sort": "probability_desc_then_data_depth_then_sample_depth",
+      "presentation_preview_limit": 10,
+      "preferred_probability": 0.85,
+      "target_count": 10,
+      "minimum_dashboard_count": 5,
+      "confidence_tiers": [
+        0.85,
+        0.83,
+        0.81,
+        0.79,
+        0.77,
+        0.75,
+        0.73,
+        0.71,
+        0.69,
+        0.68
+      ],
+      "fill_policy": "core_68_plus_then_fill_shortfall_to_5_from_65_to_67_9_only",
+      "fallback_min_probability": 0.65,
+      "fallback_only_if_core_count_below": 5
+    },
+    "top_daily": {
+      "label": "Top Bets",
+      "internal_key": "top_daily",
+      "limit": null,
+      "markets": [
+        "match_winner"
+      ],
+      "requires_odds": true,
+      "objective": "confidence_first",
+      "min_probability": 0.68,
+      "min_data_depth": 0.8,
+      "min_surface_matches": 5,
+      "min_odds": 1.5,
+      "max_odds": null,
+      "min_edge": null,
+      "min_expected_value": null,
+      "timezone": "Europe/Bratislava",
+      "betting_day_start_hour": 6,
+      "sort": "probability_desc_then_data_depth_then_surface_sample_then_overall_sample",
+      "preferred_probability": 0.8,
+      "edge_ev_role": "diagnostic_only",
+      "secondary_probability": 0.78,
+      "standard_probability": 0.76,
+      "target_count": 10,
+      "presentation_preview_limit": 10,
+      "cascade": "68_plus_core; if fewer than 5 after Value priority, fill from 65–67.9 only",
+      "confidence_tiers": [
+        0.8,
+        0.78,
+        0.76,
+        0.74,
+        0.72,
+        0.7,
+        0.68
+      ],
+      "minimum_dashboard_count": 5,
+      "fallback_min_probability": 0.65,
+      "fallback_only_if_core_count_below": 5
+    },
+    "value": {
+      "label": "Value Picks",
+      "limit": null,
+      "selection_mode": "probability_plus_close_odds",
+      "objective": "probability_plus_close_odds",
+      "min_probability": 0.6,
+      "min_data_depth": 0.75,
+      "min_surface_matches": 3,
+      "min_odds": 1.8,
+      "min_edge": null,
+      "min_expected_value": null,
+      "sort": "probability_desc_then_data_depth_then_sample_depth",
+      "presentation_preview_limit": 10,
+      "target_count": 10,
+      "minimum_dashboard_count": 5,
+      "fill_policy": "all_qualified_probability_60_plus_close_odds_max15pct",
+      "fallback_tiers": [],
+      "max_two_way_odds_difference": 0.15,
+      "edge_ev_role": "diagnostic_only"
+    },
+    "ace": {
+      "limit": 10,
+      "markets": [
+        "aces",
+        "double_faults"
+      ],
+      "presentation_preview_limit": 10,
+      "target_count": 10,
+      "fill_policy": "confidence_only_never_bypass_data_depth_or_sample_gates"
+    },
+    "sg": {
+      "limit": 10,
+      "markets": [
+        "sets",
+        "games"
+      ],
+      "presentation_preview_limit": 10,
+      "target_count": 10,
+      "fill_policy": "confidence_only_never_bypass_data_depth_or_sample_gates"
+    },
+    "btts": {
+      "beta": true,
+      "sport": "football",
+      "href": "#btts"
+    },
+    "match_winner_assignment": {
+      "exclusive": true,
+      "priority": [
+        "value",
+        "prime",
+        "top_daily"
+      ],
+      "dedupe_key": "market:betting_day:event_id:selection_id"
+    },
+    "doubles": {
+      "label": "Doubles",
+      "model_branch": "separate",
+      "enabled": false,
+      "presentation_preview_limit": 10,
+      "note": "Separate doubles model; singles predictions are never reused."
+    }
+  },
+  "assets": {
+    "favicon": "/assets/blinq_favi.png",
+    "background": "/assets/blinq_background.png",
+    "player_fallback": {
+      "atp": "/assets/missing_foto_m.png",
+      "wta": "/assets/missing_foto_w.png"
+    },
+    "account_avatars": {
+      "rookie": {
+        "m": "/assets/rookie_m.webp",
+        "w": "/assets/rookie_w.webp",
+        "marketing": "/assets/rookie_m.webp"
+      },
+      "pro": {
+        "m": "/assets/pro_m.webp",
+        "w": "/assets/pro_w.webp",
+        "marketing": "/assets/pro_w.webp"
+      },
+      "elite": {
+        "m": "/assets/elite_m.webp",
+        "w": "/assets/elite_w.webp",
+        "marketing": "/assets/elite_w.webp"
+      },
+      "legend": {
+        "m": "/assets/legend_m.webp",
+        "w": "/assets/legend_w.webp",
+        "marketing": "/assets/legend_m.webp"
+      },
+      "goat": {
+        "default": "/assets/goat.webp",
+        "marketing": "/assets/goat.webp"
+      }
+    },
+    "admin_avatar_plan": "goat"
+  },
+  "dashboard": {
+    "show_header_feature_strip": true,
+    "snapshot_cards": [
+      "matches",
+      "prime",
+      "top_daily",
+      "odds_coverage"
+    ],
+    "sections": {
+      "prime": {
+        "label": "Prime Picks",
+        "panel_id": "predictionsPanel",
+        "sidebar_element": "SIDEBAR_PRIME",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 1,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 1
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 1
+          },
+          "rookie": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 1
+          },
+          "pro": {
+            "visible_picks": 5,
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 1
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 1
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 1
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 1
+          }
+        }
+      },
+      "top_daily": {
+        "label": "Top Bets",
+        "panel_id": "topDailyPanel",
+        "sidebar_element": "SIDEBAR_TOP_DAILY",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 2,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 2,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 2
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 2
+          },
+          "rookie": {
+            "visible_picks": 2,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 2
+          },
+          "pro": {
+            "visible_picks": 5,
+            "blur_remaining": true,
+            "see_all": true,
+            "order": 2
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 2
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 2
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 2
+          }
+        }
+      },
+      "value": {
+        "label": "Value Picks",
+        "panel_id": "valuePanel",
+        "sidebar_element": "SIDEBAR_VALUE",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 4,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 4
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 4
+          },
+          "rookie": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 4
+          },
+          "pro": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": true,
+            "order": 4
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 4
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 4
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 4
+          }
+        }
+      },
+      "ace": {
+        "label": "Ace Picks",
+        "panel_id": "acePanel",
+        "sidebar_element": "SIDEBAR_ACE",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 3,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 3
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 3
+          },
+          "rookie": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 3
+          },
+          "pro": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": true,
+            "order": 3
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 3
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 3
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 3
+          }
+        }
+      },
+      "sg": {
+        "label": "S/G Picks",
+        "panel_id": "sgPanel",
+        "sidebar_element": "SIDEBAR_SG",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 6,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 6
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 6
+          },
+          "rookie": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 6
+          },
+          "pro": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": true,
+            "order": 6
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 6
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 6
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 6
+          }
+        }
+      },
+      "doubles": {
+        "label": "Doubles",
+        "panel_id": "doublesPanel",
+        "sidebar_element": "SIDEBAR_DOUBLES",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 5,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 5
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 5
+          },
+          "rookie": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 5
+          },
+          "pro": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": true,
+            "order": 5
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 5
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 5
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 5
+          }
+        }
+      },
+      "results": {
+        "label": "Results",
+        "panel_id": "resultsPreviewPanel",
+        "sidebar_element": "SIDEBAR_RESULTS",
+        "sidebar_enabled": true,
+        "dashboard_enabled": false,
+        "dashboard_order": 7,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": false,
+            "order": 7
+          },
+          "expired": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": false,
+            "order": 7
+          },
+          "rookie": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": false,
+            "order": 7
+          },
+          "pro": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 7
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 7
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 7
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 7
+          }
+        }
+      },
+      "btts": {
+        "label": "BTTS Bonus",
+        "panel_id": "bttsBonusPanel",
+        "sidebar_element": "SIDEBAR_BTTS",
+        "sidebar_enabled": true,
+        "dashboard_enabled": false,
+        "dashboard_order": 8,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 2,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 8
+          },
+          "expired": {
+            "visible_picks": 1,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 8
+          },
+          "rookie": {
+            "visible_picks": 2,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 8
+          },
+          "pro": {
+            "visible_picks": 5,
+            "blur_remaining": true,
+            "see_all": true,
+            "order": 8
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 8
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 8
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 8
+          }
+        }
+      }
+    },
+    "show_live_chip": false,
+    "section_order": [
+      "prime",
+      "top_daily",
+      "ace",
+      "value",
+      "doubles",
+      "sg",
+      "results",
+      "btts"
+    ],
+    "visible_slots": 6,
+    "user_switches": false,
+    "show_disabled_strip": false,
+    "auto_replace_empty_sections": true,
+    "cards_per_panel_desktop": 1,
+    "cards_per_panel_wide": 1,
+    "detail_pick_limit": 5,
+    "daily_hub": {
+      "enabled": true,
+      "default_tab": "daily",
+      "preview_rows": 10,
+      "expand_rows": 20,
+      "tabs": {
+        "daily": {
+          "label": "Daily Picks",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "rookie": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "pro": {
+              "visible_rows": 10,
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            }
+          }
+        },
+        "value": {
+          "label": "Value Picks",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "rookie": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "pro": {
+              "visible_rows": 10,
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            }
+          }
+        },
+        "ace": {
+          "label": "Aces",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "rookie": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "pro": {
+              "visible_rows": 10,
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            }
+          }
+        },
+        "games": {
+          "label": "Games",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "rookie": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "pro": {
+              "visible_rows": 10,
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "ui_revision": "6.5.49",
+  "watermark_presets": {
+    "violet": {
+      "label": "BlinQ Violet",
+      "class": "violet"
+    },
+    "blue": {
+      "label": "Deep Blue",
+      "class": "blue"
+    },
+    "cyan": {
+      "label": "Cyan",
+      "class": "cyan"
+    },
+    "gold": {
+      "label": "Legend Gold",
+      "class": "gold"
+    },
+    "slate": {
+      "label": "Slate",
+      "class": "slate"
+    }
+  },
+  "header_cta": {
+    "label": "HEADER CTA / TELEGRAM",
+    "enabled": true,
+    "slot_count": 3,
+    "mobile_mode": "carousel"
+  },
+  "hero_banner": {
+    "label": "MAIN ROTATING BANNER",
+    "enabled": true,
+    "slot_count": 3,
+    "rotation_seconds": 8,
+    "auto_rotate": true,
+    "show_dots": true,
+    "pause_on_hover": true
+  },
+  "rss": {
+    "enabled": false,
+    "refresh_minutes": 60,
+    "max_age_hours": 48,
+    "max_items": 0,
+    "sources": []
+  }
+}
