@@ -39,7 +39,7 @@ from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.5.38"
+RELEASE = "6.5.42"
 API_VERSION = "3.5.1"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -239,7 +239,12 @@ def feed(req):
         account_data = public_account(user, cfg=settings, profile=_profile_for(user))
         data = visible_feed(read_feed(FEED))
         try:
-            data, entitlements = filter_feed_for_access(data, account_data)
+            
+            try:
+                runtime_ui = load_runtime_ui_config()
+            except AdminStorageUnavailable:
+                runtime_ui = None
+            data, entitlements = filter_feed_for_access(data, account_data, runtime_ui)
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
         data["account"] = account_data

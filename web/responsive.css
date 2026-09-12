@@ -1670,3 +1670,37 @@ dialog{max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px)}
 @media (max-width:700px){
   .auth-dialog{width:calc(100vw - 20px);max-height:calc(100dvh - 20px);margin:auto}
 }
+
+
+/* ==========================================================================\n   BlinQ 6.5.40 · card clarity & premium KPI alignment\n   Keep every public metric on one deliberate row. No orphaned FORM/EV cells.\n   ========================================================================== */
+@media(min-width:701px){
+  .match-card-v3 .match-kpi-bar,
+  .match-card-v3 .card-metrics-bar{
+    grid-template-columns:repeat(4,minmax(52px,1fr)) minmax(94px,auto)!important;
+    min-height:52px!important;
+  }
+  .match-card-v3 .card-metric{padding:9px 8px 8px!important;text-align:center!important;justify-items:center!important}
+  .match-card-v3 .card-more-link{min-width:94px!important;padding:0 10px!important;justify-content:center!important}
+}
+.match-card-v3 .card-metric small{font-size:8px!important;letter-spacing:.075em!important}
+.match-card-v3 .card-metric strong{font-size:11px!important;line-height:1.1!important}
+.match-card-v3 .match-kpi-bar{border-radius:0 0 10px 10px!important}
+.match-card-v3 .pick-score{align-self:center!important}
+.match-card-v3.projection-card .probability small{
+  display:block!important;
+  margin:3px 0 0!important;
+  font-size:7.5px!important;
+  color:#86a4ba!important;
+  letter-spacing:.06em!important;
+  text-transform:uppercase!important;
+}
+.match-card-v3.projection-card .confidence{background:rgba(16,88,61,.24)!important;border-color:rgba(67,230,148,.45)!important;color:#68f0ae!important}
+.match-card-v3.projection-card .match-pick-row{border-color:rgba(44,161,126,.55)!important;background:linear-gradient(100deg,rgba(9,45,43,.38),rgba(7,23,35,.78))!important}
+
+@media(max-width:700px){
+  .match-card-v3 .match-kpi-bar,.match-card-v3 .card-metrics-bar{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .match-card-v3 .card-metric{padding:9px 8px!important;text-align:center!important;justify-items:center!important}
+  .match-card-v3 .card-metric:nth-child(2){border-right:0!important}
+  .match-card-v3 .card-metric:nth-child(3){border-right:1px solid #1c354a!important;border-top:1px solid #1c354a!important}
+  .match-card-v3 .card-metric:nth-child(4){border-right:0!important;border-top:1px solid #1c354a!important}
+}

@@ -2899,9 +2899,181 @@
     "auto_replace_empty_sections": true,
     "cards_per_panel_desktop": 1,
     "cards_per_panel_wide": 1,
-    "detail_pick_limit": 5
+    "detail_pick_limit": 5,
+    "daily_hub": {
+      "enabled": true,
+      "default_tab": "daily",
+      "preview_rows": 5,
+      "expand_rows": 10,
+      "tabs": {
+        "daily": {
+          "label": "Daily Picks",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 1,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "rookie": {
+              "visible_rows": 1,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "pro": {
+              "visible_rows": 5,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            }
+          }
+        },
+        "value": {
+          "label": "Value Picks",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "rookie": {
+              "visible_rows": 1,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "pro": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            }
+          }
+        },
+        "ace": {
+          "label": "Aces",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "rookie": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "pro": {
+              "visible_rows": 2,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            }
+          }
+        },
+        "games": {
+          "label": "Games",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "rookie": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "pro": {
+              "visible_rows": 2,
+              "blur_remaining": true,
+              "tab_enabled": true
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true
+            }
+          }
+        }
+      }
+    }
   },
-  "ui_revision": "6.5.38",
+  "ui_revision": "6.5.42",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",

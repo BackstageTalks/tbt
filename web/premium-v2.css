@@ -457,3 +457,423 @@ body#blinqPremium .boot-splash-line span:nth-child(2){animation-delay:.14s}
 body#blinqPremium .boot-splash-line span:nth-child(3){animation-delay:.28s}
 @keyframes blinqBootPulse{0%,100%{opacity:.28;transform:translateY(0)}50%{opacity:1;transform:translateY(-3px)}}
 @media (prefers-reduced-motion:reduce){body#blinqPremium .boot-splash-line span{animation:none}}
+
+/* BlinQ 6.5.40 — final card alignment override (loaded last). */
+@media(min-width:701px){
+  body#blinqPremium .match-card-v3 .match-kpi-bar,
+  body#blinqPremium #predictionsView .prediction-card .betting-row{
+    display:grid!important;
+    grid-template-columns:repeat(4,minmax(0,1fr)) minmax(88px,auto)!important;
+    gap:0!important;
+    align-items:stretch!important;
+    margin-top:10px!important;
+    padding:0!important;
+    min-height:50px!important;
+    border-top:1px solid rgba(43,76,102,.52)!important;
+    background:rgba(3,13,22,.22)!important;
+  }
+  body#blinqPremium .match-card-v3 .card-metric,
+  body#blinqPremium #predictionsView .prediction-card .betting-row .card-metric{
+    display:grid!important;
+    align-content:center!important;
+    justify-items:center!important;
+    text-align:center!important;
+    gap:4px!important;
+    padding:8px 6px!important;
+    border-right:1px solid rgba(35,67,91,.54)!important;
+  }
+  body#blinqPremium .match-card-v3 .card-more-link,
+  body#blinqPremium #predictionsView .prediction-card .betting-row .analysis-link{
+    grid-column:auto!important;
+    min-width:88px!important;
+    min-height:50px!important;
+    margin:0!important;
+    padding:0 8px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    justify-self:stretch!important;
+    border:0!important;
+    background:linear-gradient(90deg,rgba(82,47,149,.05),rgba(92,50,171,.14))!important;
+    color:#b99aff!important;
+    white-space:nowrap!important;
+  }
+}
+body#blinqPremium .match-card-v3.projection-card .probability small{
+  display:block!important;
+  margin-top:4px!important;
+  font-size:8px!important;
+  letter-spacing:.07em!important;
+  color:#7fa3b8!important;
+  text-transform:uppercase!important;
+}
+body#blinqPremium .match-card-v3.projection-card .confidence{
+  color:#6ff0ad!important;
+  border-color:rgba(85,231,164,.45)!important;
+  background:rgba(18,90,66,.22)!important;
+}
+@media(max-width:700px){
+  body#blinqPremium .match-card-v3 .match-kpi-bar,
+  body#blinqPremium #predictionsView .prediction-card .betting-row{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:0!important;
+  }
+  body#blinqPremium .match-card-v3 .card-more-link,
+  body#blinqPremium #predictionsView .prediction-card .betting-row .analysis-link{
+    grid-column:1/-1!important;
+    min-height:36px!important;
+    justify-self:stretch!important;
+    justify-content:center!important;
+    border-top:1px solid rgba(35,67,91,.54)!important;
+  }
+}
+
+
+/* BlinQ 6.5.41 — premium dashboard refinement + admin polish. */
+body#blinqPremium #predictionsView>.picks-panel{
+  display:grid!important;
+  grid-template-rows:auto minmax(0,1fr) auto!important;
+  align-content:start!important;
+  border-color:rgba(47,94,129,.44)!important;
+  background:
+    radial-gradient(circle at 100% 0%,rgba(44,111,160,.10),transparent 30%),
+    linear-gradient(180deg,rgba(7,20,33,.94),rgba(4,14,25,.98))!important;
+  box-shadow:0 18px 44px rgba(0,0,0,.20),inset 0 1px rgba(255,255,255,.02)!important;
+}
+body#blinqPremium #predictionsView>.picks-panel .market-carousel-shell,
+body#blinqPremium #predictionsView>.picks-panel .pick-carousel-shell,
+body#blinqPremium #predictionsView>.picks-panel .market-preview-grid,
+body#blinqPremium #predictionsView>.picks-panel .pick-carousel{height:100%!important;align-items:stretch!important}
+body#blinqPremium #predictionsView .market-preview-grid,
+body#blinqPremium #predictionsView .pick-carousel{display:grid!important;gap:14px!important;align-items:stretch!important}
+body#blinqPremium #predictionsView .prediction-card.match-card-v3{
+  display:grid!important;
+  grid-template-rows:auto auto auto 1fr auto auto!important;
+  align-content:start!important;
+  height:100%!important;
+  min-height:286px!important;
+  padding:14px 15px 13px!important;
+  border-radius:15px!important;
+  border:1px solid rgba(58,107,143,.42)!important;
+  background:
+    radial-gradient(circle at 88% 0%,rgba(73,140,188,.09),transparent 28%),
+    linear-gradient(180deg,rgba(8,24,39,.97),rgba(5,16,29,.99))!important;
+  box-shadow:0 14px 30px rgba(0,0,0,.17),inset 0 1px rgba(255,255,255,.025)!important;
+}
+body#blinqPremium .prime-panel .prediction-card.match-card-v3{
+  border-color:rgba(129,85,235,.48)!important;
+  background:
+    radial-gradient(circle at 92% 2%,rgba(130,90,235,.13),transparent 27%),
+    linear-gradient(180deg,rgba(10,24,42,.98),rgba(6,17,30,.99))!important;
+}
+body#blinqPremium #topDailyPanel .prediction-card.match-card-v3{
+  border-color:rgba(57,156,120,.35)!important;
+}
+body#blinqPremium #valuePanel .prediction-card.match-card-v3{
+  border-color:rgba(57,137,183,.38)!important;
+}
+body#blinqPremium .match-card-v3 .match-card-meta{min-height:26px!important;margin-bottom:2px!important}
+body#blinqPremium .match-card-v3 .match-card-meta .tour{font-size:10px!important;font-weight:800!important}
+body#blinqPremium .match-card-v3 .match-card-meta .time{font-size:11px!important;font-weight:800!important}
+body#blinqPremium .match-card-v3 .match-card-meta .surface{font-size:9px!important}
+body#blinqPremium .match-card-v3 .match-players-row{min-height:92px!important;margin:10px 0 9px!important;align-items:center!important}
+body#blinqPremium .match-card-v3 .player-avatar{width:48px!important;height:48px!important;flex-basis:48px!important}
+body#blinqPremium .match-card-v3 .player-name{font-size:14px!important}
+body#blinqPremium .match-card-v3 .player-rank{font-size:10px!important}
+body#blinqPremium .match-card-v3 .match-pick-row{
+  min-height:72px!important;
+  margin:0!important;
+  padding:10px 12px!important;
+  border-radius:11px!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.03)!important;
+}
+body#blinqPremium .match-card-v3 .pick-copy small{font-size:10px!important;letter-spacing:.02em!important}
+body#blinqPremium .match-card-v3 .pick-name{font-size:16px!important}
+body#blinqPremium .match-card-v3 .probability{font-size:31px!important}
+body#blinqPremium .match-card-v3 .probability small{display:block!important;margin-top:4px!important;font-size:9px!important;text-transform:uppercase!important;letter-spacing:.06em!important}
+body#blinqPremium .match-card-v3 .confidence{min-height:20px!important;display:inline-flex!important;align-items:center!important}
+body#blinqPremium .match-card-v3 .match-kpi-bar,
+body#blinqPremium #predictionsView .prediction-card .betting-row{
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:10px!important;
+  margin-top:12px!important;
+  padding-top:12px!important;
+  min-height:auto!important;
+  border-top:1px solid rgba(38,75,103,.58)!important;
+  background:transparent!important;
+}
+body#blinqPremium .match-card-v3 .card-metric,
+body#blinqPremium #predictionsView .prediction-card .betting-row .card-metric{
+  min-height:56px!important;
+  display:grid!important;
+  align-content:center!important;
+  justify-items:start!important;
+  text-align:left!important;
+  gap:5px!important;
+  padding:8px 10px!important;
+  border:1px solid rgba(34,65,90,.56)!important;
+  border-radius:10px!important;
+  background:linear-gradient(180deg,rgba(7,20,31,.52),rgba(5,15,25,.76))!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.02)!important;
+}
+body#blinqPremium .match-card-v3 .card-metric small{font-size:8px!important;color:#6f97b5!important;letter-spacing:.08em!important}
+body#blinqPremium .match-card-v3 .card-metric strong{font-size:13px!important;color:#edf4fb!important}
+body#blinqPremium .match-card-v3 .metric-positive strong{color:#53e99a!important}
+body#blinqPremium .match-card-v3 .metric-negative strong{color:#f08a98!important}
+body#blinqPremium .match-card-v3 .card-link-row{
+  display:flex!important;
+  justify-content:flex-end!important;
+  align-items:center!important;
+  margin-top:10px!important;
+  padding-top:2px!important;
+}
+body#blinqPremium .match-card-v3 .card-more-link,
+body#blinqPremium #predictionsView .prediction-card .betting-row .analysis-link{
+  min-height:26px!important;
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+  color:#bda2ff!important;
+  font-size:11px!important;
+  font-weight:760!important;
+  letter-spacing:.01em!important;
+}
+body#blinqPremium .match-card-v3 .card-more-link:hover{color:#d2bfff!important}
+body#blinqPremium #predictionsView .section-see-all-card{
+  margin-top:12px!important;
+  border-radius:12px!important;
+  border:1px solid rgba(52,85,112,.42)!important;
+  background:linear-gradient(180deg,rgba(8,18,30,.76),rgba(6,16,26,.92))!important;
+}
+body#blinqPremium #predictionsView .section-see-all-card span{font-size:11px!important}
+body#blinqPremium #predictionsView .section-see-all-card strong{font-size:13px!important}
+body#blinqPremium #predictionsView .state-card{
+  min-height:286px!important;
+  display:grid!important;
+  align-content:center!important;
+  border-style:solid!important;
+  border-color:rgba(45,84,113,.36)!important;
+}
+
+/* Ace / S&G projection cards read as premium projection modules, not placeholders. */
+body#blinqPremium .match-card-v3.projection-card .match-pick-row{min-height:78px!important}
+body#blinqPremium .match-card-v3.projection-card .card-metric strong{font-size:12px!important}
+body#blinqPremium .match-card-v3.projection-card .probability{font-size:33px!important}
+
+/* Admin interface refinement. */
+body#blinqPremium .admin-console-v6522{gap:18px!important;max-width:1640px!important}
+body#blinqPremium .admin-control-header{
+  border:1px solid rgba(58,94,125,.40)!important;
+  background:linear-gradient(135deg,rgba(13,24,41,.94),rgba(8,17,29,.98))!important;
+  box-shadow:0 18px 50px rgba(0,0,0,.22),inset 0 1px rgba(255,255,255,.03)!important;
+}
+body#blinqPremium .admin-tabs-v6522{gap:10px!important}
+body#blinqPremium .admin-tabs-v6522 button{
+  border:1px solid rgba(49,82,110,.42)!important;
+  background:linear-gradient(180deg,rgba(10,20,34,.90),rgba(7,16,28,.98))!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.02)!important;
+}
+body#blinqPremium .admin-tabs-v6522 button.active{
+  border-color:rgba(126,89,234,.62)!important;
+  background:linear-gradient(180deg,rgba(38,24,83,.92),rgba(13,21,38,.98))!important;
+  box-shadow:0 14px 34px rgba(62,32,132,.22),inset 0 1px rgba(255,255,255,.03)!important;
+}
+body#blinqPremium .admin-note,
+body#blinqPremium .admin-section-card,
+body#blinqPremium .admin-simple-banner-card,
+body#blinqPremium .admin-user-editor,
+body#blinqPremium .admin-user-list,
+body#blinqPremium .campaign-workspace,
+body#blinqPremium .campaign-list,
+body#blinqPremium .campaign-editor,
+body#blinqPremium .entity-grid article,
+body#blinqPremium .admin-toolbar{
+  border-color:rgba(48,82,109,.40)!important;
+  background:linear-gradient(180deg,rgba(8,18,30,.90),rgba(6,15,25,.97))!important;
+  box-shadow:0 16px 40px rgba(0,0,0,.14),inset 0 1px rgba(255,255,255,.02)!important;
+}
+body#blinqPremium .admin-banner-workspace{grid-template-columns:320px minmax(0,1fr)!important;gap:16px!important}
+body#blinqPremium .admin-banner-library{
+  position:sticky!important;top:12px!important;
+  border:1px solid rgba(48,82,109,.40)!important;
+  border-radius:16px!important;
+  background:linear-gradient(180deg,rgba(8,18,30,.92),rgba(6,15,26,.98))!important;
+  padding:14px!important;
+  box-shadow:0 16px 40px rgba(0,0,0,.18)!important;
+}
+body#blinqPremium .admin-banner-group{padding:0!important;border:0!important;background:transparent!important}
+body#blinqPremium .admin-banner-group + .admin-banner-group{margin-top:12px!important;padding-top:12px!important;border-top:1px solid rgba(37,66,91,.56)!important}
+body#blinqPremium .admin-banner-group-head strong{font-size:14px!important;color:#eef3f8!important}
+body#blinqPremium .admin-banner-group-head span{font-size:11px!important;color:#7c92a9!important}
+body#blinqPremium .admin-banner-library-card,
+body#blinqPremium .banner-library-button{
+  min-height:62px!important;
+  border-radius:12px!important;
+  border:1px solid rgba(47,79,106,.45)!important;
+  background:linear-gradient(180deg,rgba(10,20,34,.88),rgba(7,15,26,.96))!important;
+}
+body#blinqPremium .admin-banner-library-card.active,
+body#blinqPremium .banner-library-button.active,
+body#blinqPremium [data-admin-element].selected{
+  border-color:rgba(129,89,235,.64)!important;
+  box-shadow:0 0 0 1px rgba(129,89,235,.20),0 14px 34px rgba(63,32,135,.18)!important;
+}
+body#blinqPremium .admin-simple-banner-card{border-radius:18px!important;overflow:hidden!important}
+body#blinqPremium .admin-simple-banner-head{padding:18px 18px 14px!important;border-bottom:1px solid rgba(36,67,92,.52)!important}
+body#blinqPremium .admin-simple-banner-head h3{font-size:20px!important;color:#f2f6fb!important}
+body#blinqPremium .simple-banner-preview{
+  min-height:152px!important;
+  border:1px solid rgba(45,79,106,.44)!important;
+  border-radius:16px!important;
+  box-shadow:inset 0 1px rgba(255,255,255,.02)!important;
+}
+body#blinqPremium .simple-banner-preview strong{font-size:24px!important;line-height:1.06!important}
+body#blinqPremium .simple-banner-preview small{font-size:12px!important;max-width:74%!important}
+body#blinqPremium .simple-banner-preview b{font-size:11px!important}
+body#blinqPremium .admin-form-section{padding:16px 18px!important;border-top:1px solid rgba(36,67,92,.42)!important}
+body#blinqPremium .admin-form-grid{gap:10px!important}
+body#blinqPremium .admin-form-grid input,
+body#blinqPremium .admin-form-grid select,
+body#blinqPremium .admin-form-grid textarea,
+body#blinqPremium .admin-field-grid input,
+body#blinqPremium .admin-field-grid select,
+body#blinqPremium .admin-field-grid textarea,
+body#blinqPremium .admin-accounts-toolbar input,
+body#blinqPremium .admin-accounts-toolbar select{
+  border-radius:10px!important;
+  border:1px solid rgba(46,78,104,.54)!important;
+  background:#091626!important;
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.02)!important;
+}
+body#blinqPremium .admin-section-list{gap:14px!important}
+body#blinqPremium .admin-section-card{border-radius:16px!important;overflow:hidden!important}
+body#blinqPremium .admin-section-card-head{padding:16px 18px!important;border-bottom:1px solid rgba(35,66,90,.48)!important;background:linear-gradient(180deg,rgba(12,22,37,.55),rgba(7,15,26,.14))!important}
+body#blinqPremium .admin-section-card-head h3{font-size:18px!important}
+body#blinqPremium .admin-section-presets{padding:12px 18px!important;background:rgba(7,17,29,.68)!important}
+body#blinqPremium .admin-section-rule-row{padding:12px 18px!important;border-top:1px solid rgba(29,54,75,.42)!important;background:transparent!important}
+body#blinqPremium .admin-user-row{border-radius:12px!important;border:1px solid rgba(42,73,98,.38)!important;margin-bottom:8px!important;background:linear-gradient(180deg,rgba(10,19,32,.85),rgba(6,15,25,.96))!important}
+body#blinqPremium .admin-user-row.active,
+body#blinqPremium .admin-user-row.selected{border-color:rgba(126,89,234,.60)!important;box-shadow:0 0 0 1px rgba(126,89,234,.18)!important}
+body#blinqPremium .campaign-workspace{grid-template-columns:320px minmax(0,1fr)!important;gap:16px!important}
+body#blinqPremium .campaign-row{border-radius:12px!important;border:1px solid rgba(46,78,104,.45)!important;background:linear-gradient(180deg,rgba(10,20,34,.88),rgba(7,15,26,.96))!important}
+body#blinqPremium .campaign-row.selected{border-color:rgba(126,89,234,.60)!important;box-shadow:0 0 0 1px rgba(126,89,234,.18)!important}
+
+@media(max-width:1000px){
+  body#blinqPremium #predictionsView>.picks-panel{grid-template-rows:auto minmax(0,1fr) auto!important}
+  body#blinqPremium .match-card-v3 .match-kpi-bar,
+  body#blinqPremium #predictionsView .prediction-card .betting-row{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body#blinqPremium .match-card-v3 .card-metric,
+  body#blinqPremium #predictionsView .prediction-card .betting-row .card-metric{justify-items:start!important;text-align:left!important}
+  body#blinqPremium .admin-banner-workspace,
+  body#blinqPremium .campaign-workspace{grid-template-columns:1fr!important}
+  body#blinqPremium .admin-banner-library{position:static!important}
+}
+@media(max-width:700px){
+  body#blinqPremium #predictionsView .prediction-card.match-card-v3{min-height:272px!important;padding:13px 13px 12px!important}
+  body#blinqPremium .match-card-v3 .player-name{font-size:13px!important}
+  body#blinqPremium .match-card-v3 .pick-name{font-size:15px!important}
+  body#blinqPremium .match-card-v3 .probability{font-size:28px!important}
+  body#blinqPremium .match-card-v3 .match-kpi-bar,
+  body#blinqPremium #predictionsView .prediction-card .betting-row{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+  body#blinqPremium .match-card-v3 .card-metric{min-height:54px!important}
+  body#blinqPremium .match-card-v3 .card-link-row{margin-top:8px!important}
+}
+
+/* BlinQ 6.5.42 — consolidated Daily Picks hub + mobile-first readability. */
+body#blinqPremium #predictionsView>#predictionsPanel,
+body#blinqPremium #predictionsView>#topDailyPanel,
+body#blinqPremium #predictionsView>#valuePanel,
+body#blinqPremium #predictionsView>#acePanel,
+body#blinqPremium #predictionsView>#sgPanel,
+body#blinqPremium #predictionsView>#doublesPanel,
+body#blinqPremium #predictionsView>#bannerMid,
+body#blinqPremium #predictionsView>#bannerBottom{display:none!important}
+
+body#blinqPremium .daily-hub{
+  grid-column:1/-1;
+  min-width:0;
+  border:1px solid rgba(53,104,139,.48);
+  border-radius:17px;
+  background:radial-gradient(circle at 0 0,rgba(72,133,177,.08),transparent 30%),linear-gradient(180deg,rgba(7,20,33,.97),rgba(4,14,24,.99));
+  box-shadow:0 22px 58px rgba(0,0,0,.24),inset 0 1px rgba(255,255,255,.025);
+  overflow:hidden;
+}
+body#blinqPremium .daily-hub-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:17px 19px 10px}
+body#blinqPremium .daily-hub-head>div{display:grid;gap:2px}
+body#blinqPremium .daily-hub-head small{font-size:9px;font-weight:850;letter-spacing:.13em;color:#69dd9a}
+body#blinqPremium .daily-hub-head h2{margin:0;font-size:21px;line-height:1.1;color:#f5f8fc}
+body#blinqPremium .daily-hub-expand{border:0;background:transparent;color:#bea4ff;font-size:11px;font-weight:800;cursor:pointer}
+body#blinqPremium .daily-hub-tabs{display:flex;gap:7px;padding:8px 19px 12px;overflow:auto;scrollbar-width:thin}
+body#blinqPremium .daily-hub-tab{flex:0 0 auto;display:inline-flex;align-items:center;gap:8px;min-height:36px;padding:0 13px;border:1px solid rgba(52,86,114,.65);border-radius:9px;background:#091727;color:#b9c8d6;font-size:11px;font-weight:780;cursor:pointer}
+body#blinqPremium .daily-hub-tab b{display:grid;place-items:center;min-width:20px;height:20px;padding:0 5px;border-radius:6px;background:#13283b;color:#8ea7bc;font-size:9px}
+body#blinqPremium .daily-hub-tab.active{border-color:#5feb8c;background:linear-gradient(135deg,#54ed7e,#79f39c);color:#03150c;box-shadow:0 7px 22px rgba(76,226,126,.16)}
+body#blinqPremium .daily-hub-tab.active b{background:#071b10;color:#8bffad}
+body#blinqPremium .daily-hub-table-wrap{overflow:auto;border-top:1px solid rgba(41,74,100,.53)}
+body#blinqPremium .daily-hub-table{width:100%;border-collapse:collapse;table-layout:auto}
+body#blinqPremium .daily-hub-table thead{background:rgba(5,15,25,.78)}
+body#blinqPremium .daily-hub-table th{padding:9px 10px;text-align:left;color:#6788a3;font-size:8px;line-height:1;text-transform:uppercase;letter-spacing:.08em;font-weight:800;white-space:nowrap}
+body#blinqPremium .daily-hub-table td{padding:11px 10px;border-top:1px solid rgba(34,65,89,.48);color:#cbd8e3;font-size:11px;vertical-align:middle;white-space:nowrap}
+body#blinqPremium .daily-hub-table tbody tr{transition:background .14s ease}
+body#blinqPremium .daily-hub-table tbody tr:hover:not(.hub-row-locked){background:rgba(18,42,60,.48)}
+body#blinqPremium .daily-hub-table td:nth-child(1){color:#e5edf4;font-weight:800}
+body#blinqPremium .daily-hub-table td:nth-child(2){max-width:150px;overflow:hidden;text-overflow:ellipsis;color:#78bde5;font-size:10px;font-weight:720}
+body#blinqPremium .hub-match{display:flex;align-items:center;gap:8px;min-width:190px}
+body#blinqPremium .hub-match b{max-width:126px;overflow:hidden;text-overflow:ellipsis;color:#edf3f9;font-size:11px}
+body#blinqPremium .hub-match i{font-style:normal;color:#607d96;font-size:9px}
+body#blinqPremium .daily-hub-table td>strong{color:#f6f9fc;font-size:11px}
+body#blinqPremium .hub-prob{font-size:13px;color:#fff}
+body#blinqPremium .daily-hub-table .metric-positive{color:#53eb9a;font-weight:820}
+body#blinqPremium .hub-detail{min-height:30px;padding:0 12px;border:1px solid rgba(72,223,128,.75);border-radius:7px;background:rgba(16,69,44,.18);color:#61efa0;font-size:9px;font-weight:850;white-space:nowrap;cursor:pointer}
+body#blinqPremium .hub-detail:hover{background:rgba(43,171,99,.20)}
+body#blinqPremium .hub-row-locked td{position:relative;height:50px;padding:0 14px!important;text-align:center;background:linear-gradient(90deg,rgba(12,20,33,.96),rgba(27,20,50,.74),rgba(12,20,33,.96));overflow:hidden}
+body#blinqPremium .hub-row-locked td::before{content:"";position:absolute;inset:7px 10%;background:linear-gradient(90deg,rgba(86,110,136,.18),rgba(113,78,179,.20),rgba(86,110,136,.18));filter:blur(8px);border-radius:8px}
+body#blinqPremium .hub-row-locked td>*{position:relative;z-index:1;margin:0 4px}
+body#blinqPremium .hub-row-locked b{color:#d7cbff;font-size:10px}
+body#blinqPremium .hub-row-locked small{color:#806fa8;font-size:9px}
+body#blinqPremium .daily-hub-empty{padding:34px;text-align:center;color:#8298ac;font-size:12px}
+
+/* Admin: direct per-level control for the consolidated dashboard tabs. */
+body#blinqPremium .admin-daily-hub-settings{margin:0 0 18px}
+body#blinqPremium .admin-daily-hub-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+body#blinqPremium .admin-hub-tab-card{display:grid;gap:10px;padding:13px;border:1px solid rgba(47,81,108,.46);border-radius:13px;background:linear-gradient(180deg,rgba(9,20,34,.92),rgba(6,15,25,.98));box-shadow:inset 0 1px rgba(255,255,255,.02)}
+body#blinqPremium .admin-hub-tab-card>div{display:flex;align-items:end;justify-content:space-between;gap:10px}
+body#blinqPremium .admin-hub-tab-card strong{font-size:14px;color:#edf3f8}
+body#blinqPremium .admin-hub-tab-card small{font-size:9px;color:#8b76d3}
+body#blinqPremium .admin-hub-tab-card>label:not(.admin-toggle-line){display:grid;gap:5px;color:#8295a9;font-size:10px}
+body#blinqPremium .admin-hub-tab-card select{min-height:36px;border:1px solid #2b4055;border-radius:8px;background:#071421;color:#eef3f8;padding:6px 8px;font-size:12px}
+
+/* Mobile is a first-class layout: larger text and each pick becomes a readable compact card. */
+@media(max-width:760px){
+  body#blinqPremium{font-size:16px}
+  body#blinqPremium .daily-hub{border-radius:0;border-left:0;border-right:0}
+  body#blinqPremium .daily-hub-head{padding:15px 14px 9px}
+  body#blinqPremium .daily-hub-head small{font-size:10px}
+  body#blinqPremium .daily-hub-head h2{font-size:23px}
+  body#blinqPremium .daily-hub-expand{font-size:12px}
+  body#blinqPremium .daily-hub-tabs{padding:8px 14px 12px;gap:8px}
+  body#blinqPremium .daily-hub-tab{min-height:42px;padding:0 14px;font-size:13px}
+  body#blinqPremium .daily-hub-table-wrap{overflow:visible;padding:0 10px 10px}
+  body#blinqPremium .daily-hub-table,body#blinqPremium .daily-hub-table tbody{display:block;width:100%}
+  body#blinqPremium .daily-hub-table thead{display:none}
+  body#blinqPremium .daily-hub-table tr{display:grid;grid-template-columns:64px minmax(0,1fr) auto auto;gap:8px 10px;margin:0 0 9px;padding:12px;border:1px solid rgba(48,87,116,.50);border-radius:13px;background:linear-gradient(180deg,rgba(8,22,36,.96),rgba(5,16,27,.99));box-shadow:0 9px 24px rgba(0,0,0,.13)}
+  body#blinqPremium .daily-hub-table td{display:block!important;padding:0!important;border:0!important;font-size:12px!important;white-space:normal!important;max-width:none!important;overflow:visible!important}
+  body#blinqPremium .daily-hub-table td:nth-child(1){grid-column:1;font-size:13px!important}
+  body#blinqPremium .daily-hub-table td:nth-child(2){grid-column:2/-1;color:#73b9e2!important;font-size:11px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body#blinqPremium .daily-hub-table td:nth-child(3){grid-column:1/-1;padding:8px 0 5px!important;border-top:1px solid rgba(33,66,90,.50)!important;border-bottom:1px solid rgba(33,66,90,.50)!important}
+  body#blinqPremium .hub-match{min-width:0;justify-content:space-between;gap:6px}
+  body#blinqPremium .hub-match b{max-width:44%;font-size:13px}
+  body#blinqPremium .hub-match i{font-size:10px}
+  body#blinqPremium .daily-hub-table td:nth-child(4){grid-column:1/3;padding-top:3px!important}
+  body#blinqPremium .daily-hub-table td:nth-child(4)>strong{font-size:14px!important}
+  body#blinqPremium .daily-hub-table td:nth-child(n+5):not(:last-child){align-self:center;padding:7px 8px!important;border:1px solid rgba(35,69,94,.48)!important;border-radius:8px;background:#071522;font-size:12px!important;text-align:center}
+  body#blinqPremium .daily-hub-table td:last-child{grid-column:3/-1;grid-row:4;align-self:end;justify-self:end}
+  body#blinqPremium .hub-prob{font-size:14px}
+  body#blinqPremium .hub-detail{min-height:36px;padding:0 13px;font-size:11px}
+  body#blinqPremium .hub-row-locked{display:block!important;padding:0!important}
+  body#blinqPremium .hub-row-locked td{display:block!important;height:auto!important;padding:17px 10px!important}
+  body#blinqPremium .hub-row-locked small{display:block;margin-top:4px;font-size:10px}
+  body#blinqPremium .admin-daily-hub-grid{grid-template-columns:1fr!important}
+}
+@media(min-width:761px) and (max-width:1100px){
+  body#blinqPremium .admin-daily-hub-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
