@@ -363,9 +363,11 @@
       const replacements=orderedKeys.filter(key=>{const cfg=dashboardSectionConfig(key);return !active.includes(key)&&cfg.sidebar_enabled!==false&&elementAccess(cfg.sidebar_element)!=='hidden'&&countFor(key)>0;});
       active=active.map(key=>countFor(key)>0?key:(replacements.shift()||key));
     }
+    // 6.5.50: the homepage is intentionally a single Daily Intelligence surface.
+    // Keep legacy panel nodes only as compatibility hooks for old route/render code; never expose them on Overview.
     dashboardPickSectionKeys.forEach(key=>{
       const cfg=dashboardSectionConfig(key),panel=$(cfg.panel_id);if(!panel)return;
-      panel.hidden=!active.includes(key);panel.style.order=String(20+active.indexOf(key)*10);
+      panel.hidden=true; panel.setAttribute('aria-hidden','true');
     });
     for(const key of ['results','btts']){const cfg=dashboardSectionConfig(key),panel=$(cfg.panel_id);if(panel)panel.hidden=true;}
     dashboardSectionKeys.forEach(key=>{
@@ -982,6 +984,26 @@
     if(!form.sequence.length)return '<span class="form-empty">—</span>';
     return form.sequence.map(v=>'<i class="form-dot '+(v==='W'?'win':'loss')+'">'+v+'</i>').join('');
   }
+  function presentationMetric(source, keys, scale=1){
+    const presentation=source?.presentation&&typeof source.presentation==='object'?source.presentation:{};
+    for(const key of keys){
+      const raw=readFirstValue(presentation,[key]) ?? readFirstValue(source,[key]);
+      const value=Number(raw);
+      if(Number.isFinite(value)) return value*scale;
+    }
+    return null;
+  }
+  function formatPctMetric(value){
+    if(!Number.isFinite(Number(value))) return '—';
+    const n=Number(value); const pctValue=Math.abs(n)<=1?n*100:n;
+    return pctValue.toFixed(pctValue<10?1:0)+'%';
+  }
+  function dataCoverageInfo(row){
+    const depth=Number(row?.data_depth);
+    const pctValue=Number.isFinite(depth)?Math.round(Math.max(0,Math.min(1,depth))*100):null;
+    const label=pctValue==null?'—':pctValue>=85?lcopy('High coverage','Vysoké pokrytie','Vysoké pokrytí'):pctValue>=65?lcopy('Good coverage','Dobré pokrytie','Dobré pokrytí'):lcopy('Limited coverage','Obmedzené pokrytie','Omezené pokrytí');
+    return {pct:pctValue,label};
+  }
   function playerInsightStats(row,side){
     const match=normalize(row);
     const source=row?.['player'+side]||{};
@@ -1007,6 +1029,11 @@
       overallForm,surfaceForm,
       h2hWins:Number.isFinite(Number(presentation?.h2h_wins))?Number(presentation.h2h_wins):null,
       h2hLosses:Number.isFinite(Number(presentation?.h2h_losses))?Number(presentation.h2h_losses):null,
+      serveDisplay:formatPctMetric(presentationMetric(source,['serve_win_pct','serve.win_pct','serve_quality'])),
+      returnDisplay:formatPctMetric(presentationMetric(source,['return_win_pct','return.win_pct','return_quality'])),
+      aceDisplay:(()=>{const v=presentationMetric(source,['aces_per_match','ace_rate']);return Number.isFinite(v)?v.toFixed(1):'—';})(),
+      formDisplay:formSummaryDisplay(overallForm),
+      netDisplay:'—',
       probabilityDisplay: probabilityPct!=null?probabilityPct.toFixed(1)+'%':'—',
       rankDisplay: Number.isFinite(Number(rank))&&Number(rank)>0?'#'+Math.trunc(Number(rank)):'—',
       surfaceDisplay: surfaceSample!=null?String(Math.round(surfaceSample)):'—',
@@ -1051,12 +1078,12 @@
     const match=normalize(row),stats1=playerInsightStats(row,1),stats2=playerInsightStats(row,2);const probability=marketProbability(row);const line=apiMarketLine(row),odds=Number(row?.odds??row?.betting?.odds),ev=Number(row?.expected_value??row?.betting?.expected_value);
     const lineValue=tab==='ace'||tab==='games'?(Number.isFinite(line)?line.toFixed(1):'—'):(Number.isFinite(odds)?odds.toFixed(2):'—');
     const marketLabel=tab==='value'?lcopy('Close market','Trh','Trh'):tab==='ace'?lcopy('Aces line','Hranica es','Hranica es'):tab==='games'?lcopy('Games line','Hranica gemov','Hranice gemů'):lcopy('Odds','Kurz','Kurz');
-    const secondary=tab==='value'&&Number.isFinite(ev)?(ev>0?'+':'')+((Math.abs(ev)<=1?ev*100:ev).toFixed(1))+'%':dataDepthMetric(row);
+    const coverage=dataCoverageInfo(row);
     const cards=[
       ['BlinQ pick',match.pick],
       ['BlinQ %',probability==null?'—':pct(probability)],
       [marketLabel,lineValue],
-      [tab==='value'?'EV / edge':lcopy('Data depth','Hĺbka dát','Hloubka dat'),secondary],
+      [lcopy('Data coverage','Pokrytie dát','Pokrytí dat'),coverage.pct==null?'—':coverage.pct+'% · '+coverage.label],
       [lcopy('Rankings','Rebríček','Žebříček'),(Number.isFinite(Number(match.p1Rank))?'#'+Math.trunc(Number(match.p1Rank)):'—')+' vs '+(Number.isFinite(Number(match.p2Rank))?'#'+Math.trunc(Number(match.p2Rank)):'—')],
       [lcopy('Surface sample','Povrchová vzorka','Povrchový vzorek'),(stats1.surfaceSample!=null?Math.round(stats1.surfaceSample):'—')+' vs '+(stats2.surfaceSample!=null?Math.round(stats2.surfaceSample):'—')]
     ];
@@ -1137,6 +1164,7 @@
     }
     $('dailyHubBody').innerHTML=out.join('');
     $('dailyHubEmpty').hidden=Boolean(out.length);
+    const metaCount=$('dailyHubMetaCount'); if(metaCount) metaCount.textContent=`${allCount} ${allCount===1?'zápas':'zápasov'}`;
     const expand=$('dailyHubExpand'); if(expand){ expand.hidden=!canExpand; expand.textContent=state.dailyHubExpanded?lcopy('Show less','Zobraziť menej','Zobrazit méně'):`${lcopy('Show all','Zobraziť všetky','Zobrazit všechny')} (${allCount})`; expand.dataset.expanded=state.dailyHubExpanded?'1':'0'; expand.setAttribute('aria-expanded',state.dailyHubExpanded?'true':'false'); }
   }
 
@@ -1261,7 +1289,7 @@
     const statistics=`<div class="match-detail-statistics">${renderMatchStatsPanel(row)}</div>`;
     const radar=`<div class="match-detail-radar"><div class="dialog-duel-grid match-detail-radar-players">${insightPlayerCard(row,1)}${insightPlayerCard(row,2)}</div><div class="dialog-section dialog-radar-wrap">${renderRadarComparison(row)}</div><div class="dialog-section match-model-signals"><h3>${escapeHtml(lcopy('Model signals','Model signals','Model signals'))}</h3>${signalRows}</div></div>`;
     const history=`<div class="match-detail-history">${renderMatchHistoryPanel(row)}</div>`;
-    $('dialogContent').innerHTML=`<div class="match-detail-shell"><div class="dialog-eyebrow">${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2><div class="dialog-pick match-detail-pick"><div><small>BlinQ Pick</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${marketProbability(row)==null?'—':pct(marketProbability(row))} <span class="confidence ${match.confidence}">${match.confidence==='very-high'?'VERY HIGH':match.confidence.toUpperCase()}</span></div></div><nav class="match-detail-tabs" role="tablist"><button type="button" data-match-tab="overview">${escapeHtml(lcopy('Overview','Prehľad','Přehled'))}</button><button type="button" data-match-tab="statistics">${escapeHtml(lcopy('Statistics','Štatistiky','Statistiky'))}</button><button type="button" class="active" data-match-tab="radar">${escapeHtml(lcopy('Radar','Radar','Radar'))}</button><button type="button" data-match-tab="history">${escapeHtml(lcopy('History','História','Historie'))}</button></nav><section class="match-detail-panel" data-match-panel="overview" hidden>${overview}</section><section class="match-detail-panel" data-match-panel="statistics" hidden>${statistics}</section><section class="match-detail-panel active" data-match-panel="radar">${radar}</section><section class="match-detail-panel" data-match-panel="history" hidden>${history}</section><div class="dialog-meta"><span>${escapeHtml(String(match.surface).replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>Model ${escapeHtml(match.model||'—')}</span></div></div>`;
+    $('dialogContent').innerHTML=`<div class="match-detail-shell"><div class="dialog-eyebrow">${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2><div class="dialog-pick match-detail-pick"><div><small>BlinQ Pick</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${marketProbability(row)==null?'—':pct(marketProbability(row))} <span class="confidence ${match.confidence}">${match.confidence==='very-high'?'VERY HIGH':match.confidence.toUpperCase()}</span></div></div><nav class="match-detail-tabs" role="tablist"><button type="button" data-match-tab="overview">${escapeHtml(lcopy('Overview','Prehľad','Přehled'))}</button><button type="button" data-match-tab="statistics">${escapeHtml(lcopy('Statistics','Štatistiky','Statistiky'))}</button><button type="button" class="active" data-match-tab="radar">${escapeHtml(lcopy('Radar','Radar','Radar'))}</button><button type="button" data-match-tab="history">${escapeHtml(lcopy('History','História','Historie'))}</button></nav><section class="match-detail-panel" data-match-panel="overview" hidden>${overview}</section><section class="match-detail-panel" data-match-panel="statistics" hidden>${statistics}</section><section class="match-detail-panel active" data-match-panel="radar">${radar}</section><section class="match-detail-panel" data-match-panel="history" hidden>${history}</section><div class="dialog-meta"><span>${escapeHtml(String(match.surface).replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>Model ${escapeHtml(match.model||'—')}</span><span class="dialog-system-ok"><i></i>${escapeHtml(lcopy('All systems operational','Všetky systémy funkčné','Všechny systémy funkční'))}</span></div></div>`;
     const dialog=$('matchDialog');
     dialog.querySelectorAll('[data-match-tab]').forEach(button=>button.addEventListener('click',()=>{
       const id=button.dataset.matchTab;

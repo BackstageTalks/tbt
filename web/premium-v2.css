@@ -1625,3 +1625,195 @@ body#blinqPremium .form-dot.loss{color:#ff8997;background:rgba(224,70,91,.12);bo
 body#blinqPremium .form-empty{color:#71869a;font-size:11px}
 body#blinqPremium .hub-tournament-copy small{text-transform:none;line-height:1.25}
 @media(max-width:650px){body#blinqPremium .insight-form-strips{grid-template-columns:1fr}}
+
+/* ================================================================
+   BlinQ 6.5.50 — production dashboard redesign
+   One premium Daily Intelligence surface + detail modal.
+   Legacy dashboard cards remain DOM compatibility hooks only.
+   ================================================================ */
+body#blinqPremium{
+  --blinq-bg:#030a12;
+  --blinq-panel:#061522;
+  --blinq-panel-2:#081a29;
+  --blinq-line:rgba(39,82,111,.62);
+  --blinq-muted:#7690a6;
+  --blinq-text:#eff6fb;
+  --blinq-green:#59ef91;
+  --blinq-violet:#8d67ff;
+  background:
+    radial-gradient(circle at 50% -15%,rgba(22,66,98,.18),transparent 34%),
+    linear-gradient(180deg,#030912 0%,#04101a 42%,#030912 100%);
+}
+body#blinqPremium .dashboard-main{max-width:1540px;margin:0 auto;padding-inline:18px}
+body#blinqPremium .legacy-dashboard-panels{display:none!important}
+body#blinqPremium #dashboardSectionSwitcher,
+body#blinqPremium #dashboardDisabledSections,
+body#blinqPremium .overview-heading,
+body#blinqPremium .sync-bar{display:none!important}
+
+/* HEADER — one aligned premium rail */
+body#blinqPremium .dashboard-topbar{padding:10px 0 9px;background:linear-gradient(180deg,rgba(3,11,20,.98),rgba(3,12,21,.93));border-bottom:1px solid rgba(40,79,108,.44)}
+body#blinqPremium .header-primary{grid-template-columns:128px minmax(0,1fr) 292px;gap:12px;align-items:stretch}
+body#blinqPremium .top-brand{min-height:68px;padding:10px 12px;border:1px solid rgba(42,87,119,.68);border-radius:12px;background:linear-gradient(180deg,rgba(8,24,39,.98),rgba(5,17,29,.98));align-items:flex-start;justify-content:center}
+body#blinqPremium .top-brand-logo{width:88px;max-height:31px}
+body#blinqPremium .top-brand-copy{margin-top:4px;line-height:1.05}
+body#blinqPremium .top-brand-copy strong{font-size:7px;letter-spacing:.12em;color:#8a6dff}
+body#blinqPremium .top-brand-copy small{font-size:6.5px;color:#66849c}
+body#blinqPremium .header-feature-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+body#blinqPremium .header-feature-strip .header-slot{min-width:0;height:68px!important;min-height:68px!important;padding:9px 11px;border-radius:11px;background:linear-gradient(180deg,rgba(7,24,38,.98),rgba(5,18,30,.98));box-shadow:inset 0 1px 0 rgba(255,255,255,.018)}
+body#blinqPremium .header-slot-icon,body#blinqPremium .header-slot-image{width:31px;height:31px;flex:0 0 31px;border-radius:9px}
+body#blinqPremium .header-slot-copy{min-width:0;gap:1px}
+body#blinqPremium .header-slot-copy small{font-size:7px;letter-spacing:.04em}
+body#blinqPremium .header-slot-copy strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body#blinqPremium .header-slot-copy span{font-size:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body#blinqPremium .header-slot-cta{font-size:7px;white-space:nowrap}
+body#blinqPremium .topbar-actions,body#blinqPremium .dashboard-account-actions{grid-template-columns:86px minmax(0,1fr);gap:9px}
+body#blinqPremium .top-upgrade,body#blinqPremium .profile-shell{height:68px!important;min-height:68px!important;border-radius:11px}
+body#blinqPremium .top-upgrade{font-size:12px;font-weight:900;background:linear-gradient(135deg,#7351e8,#5b32d3)!important;border:1px solid rgba(143,105,255,.78)!important}
+body#blinqPremium .profile-button.profile-button-large{height:66px!important;min-height:66px!important}
+body#blinqPremium .top-navigation{margin-top:8px;padding:3px;border:1px solid rgba(41,80,108,.58);border-radius:11px;background:rgba(5,17,29,.84)}
+body#blinqPremium .top-navigation .nav-items{gap:2px;justify-content:space-between}
+body#blinqPremium .top-navigation .nav-link{min-height:38px!important;padding:0 13px!important;border-radius:8px!important}
+body#blinqPremium .top-navigation .nav-link .nav-copy strong{font-size:10.5px!important}
+body#blinqPremium .top-navigation .nav-link.active{background:linear-gradient(135deg,#7147dc,#5428bc)!important;box-shadow:0 5px 18px rgba(86,53,210,.22)}
+
+/* HERO — preserve the existing tennis-ball artwork; only polish framing */
+body#blinqPremium .dashboard-hero-stage{margin:12px 0 14px;border:1px solid rgba(43,89,120,.68);border-radius:14px;overflow:hidden;box-shadow:0 18px 48px rgba(0,0,0,.18)}
+body#blinqPremium .dashboard-hero-stage .hero-slide{min-height:210px}
+body#blinqPremium .dashboard-hero-stage .hero-copy{max-width:54%;padding:28px 32px}
+body#blinqPremium .dashboard-hero-stage .hero-copy h2{font-size:34px;line-height:1.02;letter-spacing:-.035em}
+body#blinqPremium .dashboard-hero-stage .hero-copy p{font-size:12px;color:#bfd0de}
+
+/* DAILY INTELLIGENCE — primary product surface */
+body#blinqPremium .daily-hub{margin:0 0 14px;border:1px solid rgba(42,91,121,.66);border-radius:16px;background:linear-gradient(180deg,rgba(5,20,33,.985),rgba(4,15,25,.995));box-shadow:0 22px 70px rgba(0,0,0,.18);overflow:hidden}
+body#blinqPremium .daily-hub-head{min-height:82px;padding:18px 20px 11px;align-items:center;border-bottom:0}
+body#blinqPremium .daily-hub-title{display:grid;gap:2px}
+body#blinqPremium .daily-hub-head small{font-size:9px;color:#45eaa1;letter-spacing:.18em}
+body#blinqPremium .daily-hub-head h2{font-size:24px;letter-spacing:-.02em}
+body#blinqPremium .daily-hub-head-right{display:flex;align-items:center;gap:14px}
+body#blinqPremium .daily-hub-meta{display:flex;align-items:center;gap:12px;padding:8px 13px;border-left:1px solid rgba(46,83,109,.7);border-right:1px solid rgba(46,83,109,.7);color:#9cb0c1}
+body#blinqPremium .daily-hub-meta span{font-size:10px}
+body#blinqPremium .daily-hub-meta b{padding:5px 10px;border:1px solid rgba(72,232,136,.52);border-radius:999px;color:#78f2a2;font-size:10px;background:rgba(26,103,61,.13)}
+body#blinqPremium .daily-hub-tabs{padding:0 20px 14px;gap:8px}
+body#blinqPremium .daily-hub-tab{min-height:40px;padding:0 16px;border-radius:9px;font-size:11px;background:#071827}
+body#blinqPremium .daily-hub-tab.active{background:linear-gradient(135deg,#59ee88,#78f2a0);box-shadow:0 7px 24px rgba(66,221,119,.17)}
+body#blinqPremium .daily-hub-table-wrap{padding:0;border-top:1px solid rgba(42,79,105,.58);overflow:auto}
+body#blinqPremium .daily-hub-table{table-layout:fixed}
+body#blinqPremium .daily-hub-table th{padding:10px 14px;color:#6d91ad;font-size:8px;letter-spacing:.1em}
+body#blinqPremium .daily-hub-table td{height:74px;padding:10px 14px!important;font-size:11px;border-top:1px solid rgba(34,69,94,.53)}
+body#blinqPremium .daily-hub-table th:nth-child(1),body#blinqPremium .daily-hub-table td:nth-child(1){width:72px}
+body#blinqPremium .daily-hub-table th:nth-child(2),body#blinqPremium .daily-hub-table td:nth-child(2){width:250px;max-width:none}
+body#blinqPremium .daily-hub-table th:nth-child(3),body#blinqPremium .daily-hub-table td:nth-child(3){width:420px;min-width:0}
+body#blinqPremium .daily-hub-table th:nth-child(4),body#blinqPremium .daily-hub-table td:nth-child(4){width:180px}
+body#blinqPremium .daily-hub-table tbody tr:hover:not(.hub-row-locked){background:linear-gradient(90deg,rgba(29,81,66,.19),rgba(45,37,95,.10));box-shadow:inset 3px 0 0 rgba(86,238,141,.72)}
+body#blinqPremium .hub-tournament{display:flex;align-items:center;gap:11px;min-width:0}
+body#blinqPremium .hub-tournament-logo{display:grid;place-items:center;width:43px;height:43px;flex:0 0 43px;border-radius:10px;border:1px solid rgba(56,95,122,.72);background:#071725;overflow:hidden;font-size:20px}
+body#blinqPremium .hub-tournament-logo.has-image{padding:4px;background:#f6f8fb}
+body#blinqPremium .hub-tournament-logo.has-image img{width:100%;height:100%;object-fit:contain!important}
+body#blinqPremium .hub-tournament-copy{display:grid;gap:3px;min-width:0}
+body#blinqPremium .hub-tournament-copy b{font-size:11px;color:#eef5fa;white-space:normal;line-height:1.15}
+body#blinqPremium .hub-tournament-copy small{font-size:8.5px;color:#75a2bf;white-space:normal;line-height:1.25}
+body#blinqPremium .hub-match-rich{display:grid;grid-template-columns:minmax(0,1fr) 22px minmax(0,1fr);align-items:center;gap:8px;min-width:0}
+body#blinqPremium .hub-player{display:flex;align-items:center;gap:8px;min-width:0}
+body#blinqPremium .hub-avatar{width:38px;height:38px;flex:0 0 38px;border-radius:50%;border:1px solid rgba(73,111,137,.75);background:#0a1d2c;overflow:hidden}
+body#blinqPremium .hub-avatar img{width:100%;height:100%;object-fit:cover}
+body#blinqPremium .hub-player-copy{display:grid;gap:3px;min-width:0}
+body#blinqPremium .hub-player-copy b{font-size:10.5px;color:#edf4f9;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body#blinqPremium .hub-player-copy small{font-size:8px;color:#7297b2}
+body#blinqPremium .hub-match-rich>i{font-size:8px;color:#657c91;font-style:normal;text-align:center;text-transform:uppercase}
+body#blinqPremium .hub-prob{font-size:16px;color:#5ff19a;letter-spacing:-.01em}
+body#blinqPremium .hub-detail{min-height:34px;padding:0 13px;border-radius:9px;border:1px solid #4ce58a;background:rgba(14,78,48,.13);color:#6ef0a0;font-size:10px;font-weight:900;cursor:pointer}
+body#blinqPremium .hub-detail:hover{background:#4ce58a;color:#04120b;box-shadow:0 7px 20px rgba(76,229,138,.18)}
+body#blinqPremium .daily-hub-expand{min-height:34px!important;padding:0 12px!important;border:0!important;background:transparent!important;color:#b89dff!important;font-size:10px!important}
+
+/* compact trust/intelligence row */
+body#blinqPremium .blinq-intelligence-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0;margin:0 0 12px;padding:0;border:1px solid rgba(39,79,107,.6);border-radius:14px;background:linear-gradient(180deg,rgba(6,20,33,.94),rgba(5,16,27,.98));overflow:hidden}
+body#blinqPremium .blinq-intelligence-strip article{display:flex;align-items:center;gap:11px;min-height:66px;padding:11px 18px;border-right:1px solid rgba(39,72,97,.55)}
+body#blinqPremium .blinq-intelligence-strip article:last-child{border-right:0}
+body#blinqPremium .blinq-intelligence-strip article>div{display:grid;gap:3px}
+body#blinqPremium .blinq-intelligence-strip strong{font-size:11px;color:#e9f3f9}
+body#blinqPremium .blinq-intelligence-strip small{font-size:8.5px;color:#7790a5}
+body#blinqPremium .intel-icon{display:grid;place-items:center;width:34px;height:34px;flex:0 0 34px;border-radius:50%;font-size:14px;font-weight:900}
+body#blinqPremium .intel-purple{color:#aa8cff;background:rgba(116,73,226,.16)}
+body#blinqPremium .intel-green{color:#58ef91;background:rgba(64,220,124,.14)}
+body#blinqPremium .intel-gold{color:#ffd34e;background:rgba(215,164,40,.13)}
+body#blinqPremium .intel-violet{color:#a879ff;background:rgba(135,87,239,.14)}
+
+/* VIP + FOOTER */
+body#blinqPremium .vip-bottom-rail{margin-top:0;border-color:rgba(153,109,14,.72);background:linear-gradient(90deg,rgba(47,32,4,.82),rgba(25,22,17,.96),rgba(53,38,7,.86));box-shadow:0 14px 44px rgba(0,0,0,.18)}
+body#blinqPremium .vip-bottom-icon{color:#ffce3b}
+body#blinqPremium .vip-bottom-cta{background:linear-gradient(135deg,#ffd747,#f0ad18)!important;color:#1e1300!important;border:0!important;font-weight:950}
+body#blinqPremium .site-footer{padding:10px 3px 16px;border-top:0}
+body#blinqPremium .footer-model-state i{background:#4bea89;box-shadow:0 0 10px rgba(75,234,137,.7)}
+
+/* MATCH DETAIL — factual player cards + effectful, honest radar */
+body#blinqPremium .match-dialog{width:min(760px,calc(100% - 24px));padding:20px;border-radius:17px}
+body#blinqPremium .match-detail-shell{gap:11px}
+body#blinqPremium .match-detail-shell>h2{font-size:19px}
+body#blinqPremium .match-detail-tabs{border-radius:9px;padding:3px}
+body#blinqPremium .match-detail-tabs button{min-height:32px;font-size:10px}
+body#blinqPremium .match-dialog .insight-player-card{padding:11px;border-radius:12px}
+body#blinqPremium .match-dialog .insight-player-head .hub-avatar{width:42px;height:42px;flex-basis:42px}
+body#blinqPremium .match-dialog .insight-player-head h4{font-size:13px}
+body#blinqPremium .match-dialog .insight-player-metrics{grid-template-columns:repeat(4,minmax(0,1fr));gap:5px}
+body#blinqPremium .match-dialog .insight-player-metrics span{padding:7px 6px}
+body#blinqPremium .match-dialog .insight-player-metrics small{font-size:7px}
+body#blinqPremium .match-dialog .insight-player-metrics strong{font-size:10.5px}
+body#blinqPremium .insight-form-strips{grid-template-columns:1fr 1fr!important;gap:5px;margin-top:6px}
+body#blinqPremium .insight-form-strips>div{padding:6px 7px}
+body#blinqPremium .form-dot{width:16px;height:16px;font-size:7px}
+body#blinqPremium .match-dialog .dialog-radar-wrap{padding:10px 12px 6px}
+body#blinqPremium .match-dialog .insight-radar-svg{max-width:390px}
+body#blinqPremium .dialog-system-ok{display:inline-flex!important;align-items:center;gap:6px;color:#68e995!important}
+body#blinqPremium .dialog-system-ok i{width:6px;height:6px;border-radius:50%;background:#54ed8e;box-shadow:0 0 8px rgba(84,237,142,.6)}
+
+@media(max-width:1180px){
+  body#blinqPremium .header-primary{grid-template-columns:110px minmax(0,1fr) 250px}
+  body#blinqPremium .daily-hub-table th:nth-child(2),body#blinqPremium .daily-hub-table td:nth-child(2){width:210px}
+  body#blinqPremium .daily-hub-table th:nth-child(3),body#blinqPremium .daily-hub-table td:nth-child(3){width:380px}
+}
+@media(max-width:980px){
+  body#blinqPremium .dashboard-main{padding-inline:10px}
+  body#blinqPremium .header-primary{grid-template-columns:1fr}
+  body#blinqPremium .top-brand{align-items:center;flex-direction:row;justify-content:flex-start}
+  body#blinqPremium .header-feature-strip{display:flex;overflow:auto}
+  body#blinqPremium .header-feature-strip .header-slot{flex:0 0 280px}
+  body#blinqPremium .dashboard-hero-stage .hero-copy{max-width:68%}
+  body#blinqPremium .blinq-intelligence-strip{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body#blinqPremium .blinq-intelligence-strip article:nth-child(2){border-right:0}
+  body#blinqPremium .blinq-intelligence-strip article:nth-child(-n+2){border-bottom:1px solid rgba(39,72,97,.55)}
+}
+@media(max-width:760px){
+  body#blinqPremium .dashboard-main{padding-inline:0}
+  body#blinqPremium .dashboard-topbar{padding-inline:8px}
+  body#blinqPremium .dashboard-hero-stage{margin-inline:8px}
+  body#blinqPremium .dashboard-hero-stage .hero-slide{min-height:190px}
+  body#blinqPremium .dashboard-hero-stage .hero-copy{max-width:78%;padding:22px 18px}
+  body#blinqPremium .dashboard-hero-stage .hero-copy h2{font-size:27px}
+  body#blinqPremium .daily-hub{border-radius:0;border-left:0;border-right:0}
+  body#blinqPremium .daily-hub-head{padding:14px;align-items:flex-start}
+  body#blinqPremium .daily-hub-head-right{gap:6px;flex-direction:column;align-items:flex-end}
+  body#blinqPremium .daily-hub-meta{padding:4px 8px;border:0}
+  body#blinqPremium .daily-hub-meta span{display:none}
+  body#blinqPremium .daily-hub-tabs{padding-inline:14px}
+  body#blinqPremium .daily-hub-table-wrap{padding:0 10px 10px}
+  body#blinqPremium .daily-hub-table{display:block;table-layout:auto}
+  body#blinqPremium .daily-hub-table tbody{display:block}
+  body#blinqPremium .daily-hub-table tr{display:grid;grid-template-columns:62px minmax(0,1fr) auto auto;gap:7px 9px;height:auto!important;margin-bottom:8px;padding:11px;border:1px solid rgba(47,87,115,.52);border-radius:12px;background:linear-gradient(180deg,rgba(7,23,37,.98),rgba(5,17,28,.99))}
+  body#blinqPremium .daily-hub-table td{height:auto;padding:0!important;border:0!important}
+  body#blinqPremium .daily-hub-table td:nth-child(1){grid-column:1;width:auto!important}
+  body#blinqPremium .daily-hub-table td:nth-child(2){grid-column:2/-1;width:auto!important}
+  body#blinqPremium .daily-hub-table td:nth-child(3){grid-column:1/-1;width:auto!important;padding:7px 0!important;border-top:1px solid rgba(37,70,94,.52)!important;border-bottom:1px solid rgba(37,70,94,.52)!important}
+  body#blinqPremium .hub-match-rich{grid-template-columns:minmax(0,1fr) 20px minmax(0,1fr)}
+  body#blinqPremium .hub-avatar{width:34px;height:34px;flex-basis:34px}
+  body#blinqPremium .daily-hub-table td:nth-child(4){grid-column:1/3;width:auto!important}
+  body#blinqPremium .daily-hub-table td:last-child{grid-column:3/-1;justify-self:end}
+  body#blinqPremium .blinq-intelligence-strip{margin-inline:8px}
+  body#blinqPremium .vip-bottom-rail,body#blinqPremium .site-footer{margin-inline:8px}
+}
+@media(max-width:540px){
+  body#blinqPremium .blinq-intelligence-strip{grid-template-columns:1fr}
+  body#blinqPremium .blinq-intelligence-strip article{border-right:0;border-bottom:1px solid rgba(39,72,97,.55)!important}
+  body#blinqPremium .blinq-intelligence-strip article:last-child{border-bottom:0!important}
+  body#blinqPremium .match-dialog .dialog-duel-grid{grid-template-columns:1fr}
+}
