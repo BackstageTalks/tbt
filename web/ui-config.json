@@ -2422,28 +2422,28 @@
     },
     "account_avatars": {
       "rookie": {
-        "m": "/assets/avatar_rookie_m_v6514.webp",
-        "w": "/assets/avatar_rookie_w_v6514.webp",
-        "marketing": "/assets/avatar_rookie_m_v6514.webp"
+        "m": "/assets/rookie_m.webp",
+        "w": "/assets/rookie_w.webp",
+        "marketing": "/assets/rookie_m.webp"
       },
       "pro": {
-        "m": "/assets/avatar_pro_m_v6514.webp",
-        "w": "/assets/avatar_pro_w_v6514.webp",
-        "marketing": "/assets/avatar_pro_w_v6514.webp"
+        "m": "/assets/pro_m.webp",
+        "w": "/assets/pro_w.webp",
+        "marketing": "/assets/pro_w.webp"
       },
       "elite": {
-        "m": "/assets/avatar_elite_m_v6514.webp",
-        "w": "/assets/avatar_elite_w_v6514.webp",
-        "marketing": "/assets/avatar_elite_w_v6514.webp"
+        "m": "/assets/elite_m.webp",
+        "w": "/assets/elite_w.webp",
+        "marketing": "/assets/elite_w.webp"
       },
       "legend": {
-        "m": "/assets/avatar_legend_m_v6514.webp",
-        "w": "/assets/avatar_legend_w_v6514.webp",
-        "marketing": "/assets/avatar_legend_m_v6514.webp"
+        "m": "/assets/legend_m.webp",
+        "w": "/assets/legend_w.webp",
+        "marketing": "/assets/legend_m.webp"
       },
       "goat": {
-        "default": "/assets/avatar_goat_v6514.webp",
-        "marketing": "/assets/avatar_goat_v6514.webp"
+        "default": "/assets/goat.webp",
+        "marketing": "/assets/goat.webp"
       }
     },
     "admin_avatar_plan": "goat"
