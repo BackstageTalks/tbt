@@ -40,7 +40,7 @@ from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.6.5"
+RELEASE = "6.6.6"
 API_VERSION = "3.5.1"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -547,7 +547,25 @@ def match_intelligence(req):
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
     except Exception:
-        logging.exception("Match intelligence enrichment failed")
+        logging.exception("Match intelligence live enrichment failed")
+        # Azure Static Web Apps runtime does not inherit GitHub Actions
+        # secrets. The deployed serving feed is therefore the authoritative
+        # offline fallback for presentation analytics. Never turn a provider
+        # outage/missing runtime secret into an empty modal when the feed
+        # already contains point-in-time Form/Surface/H2H/ranking context.
+        try:
+            fallback = _feed_match_intelligence(
+                locals().get("p1", ""),
+                locals().get("p2", ""),
+                locals().get("surface", ""),
+            )
+        except Exception:
+            fallback = None
+        if fallback is not None:
+            cache_key = locals().get("key")
+            if cache_key:
+                _store_match_intelligence(cache_key, fallback)
+            return response({**fallback, "cached": False, "live_provider": False})
         return response({"error": "match_intelligence_unavailable"}, 503)
 
 

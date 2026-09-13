@@ -27,3 +27,22 @@ def test_verifier_guards_completely_unenriched_current_feed():
     assert 'zero player presentation enrichment' in text
     assert 'no player_assets merge metadata' in text
     assert 'no tournament_assets merge metadata' in text
+
+
+def test_player_enrichment_refreshes_current_prediction_presentation_first():
+    text = read('.github/workflows/player-enrichment.yml')
+    assert 'scripts/pipeline.py refresh' in text
+    assert 'RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}' in text
+    assert 'group: tbt-history-data-writer' in text
+
+
+def test_presentation_guard_rejects_old_prediction_shape():
+    text = read('scripts/verify_presentation_feed.py')
+    assert 'no point-in-time recent_form data' in text
+    assert 'rows contain no tournament IDs' in text
+
+
+def test_match_intelligence_falls_back_to_serving_feed_after_live_failure():
+    text = read('api/function_app.py')
+    assert 'Match intelligence live enrichment failed' in text
+    assert 'live_provider": False' in text

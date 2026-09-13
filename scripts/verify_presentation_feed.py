@@ -78,6 +78,18 @@ def audit(payload: dict[str, Any]) -> dict[str, Any]:
         )
     )
 
+    def presentation_count(field: str) -> int:
+        total = 0
+        for player in players:
+            presentation = player.get("presentation") if isinstance(player.get("presentation"), dict) else {}
+            value = presentation.get(field)
+            if isinstance(value, dict):
+                if value.get("matches") not in (None, "", 0) or value.get("win_pct") not in (None, ""):
+                    total += 1
+            elif value not in (None, "", 0):
+                total += 1
+        return total
+
     return {
         "ready": bool(payload.get("ready")),
         "rows": len(rows),
@@ -88,6 +100,9 @@ def audit(payload: dict[str, Any]) -> dict[str, Any]:
         "photo": count("photo_url"),
         "best_rank": count("best_rank"),
         "ranking_points": count("ranking_points"),
+        "recent_form": presentation_count("recent_form"),
+        "surface_form": presentation_count("surface_form"),
+        "h2h_wins": presentation_count("h2h_wins"),
         "tournament_instances": tournaments,
         "tournament_logos": tournament_logos,
         "player_assets": payload.get("player_assets") or {},
@@ -114,6 +129,14 @@ def main() -> None:
         raise SystemExit("Serving feed has current players but no player_assets merge metadata")
     if report["player_instances"] and report["player_instances_enriched"] == 0:
         raise SystemExit("Serving feed has current players but zero player presentation enrichment")
+    # A current prediction release built with the analytics-aware engine must
+    # carry point-in-time Form LXX fields. If this is zero across a non-empty
+    # feed, we are deploying an old prediction candidate and player-card
+    # enrichment alone cannot repair it.
+    if report["player_instances"] and report["recent_form"] == 0:
+        raise SystemExit("Serving feed has no point-in-time recent_form data; refresh current predictions before deployment")
+    if report["rows"] and report["tournament_instances"] == 0:
+        raise SystemExit("Serving feed rows contain no tournament IDs; refresh current predictions before deployment")
     if report["tournament_instances"] and not report["tournament_assets"]:
         raise SystemExit("Serving feed has tournaments but no tournament_assets merge metadata")
 
@@ -121,6 +144,8 @@ def main() -> None:
         print(
             f"Presentation enrichment OK: {report['player_instances_enriched']}/"
             f"{report['player_instances']} player instances enriched; "
+            f"Form LXX {report['recent_form']}/{report['player_instances']}; "
+            f"surface LXX {report['surface_form']}/{report['player_instances']}; "
             f"{report['tournament_logos']}/{report['tournament_instances']} tournament logos."
         )
 

@@ -28,6 +28,21 @@ on:
         required: true
         default: "120"
         type: string
+      refresh_current_feed:
+        description: "Refresh current fixtures/predictions first so Form LXX, surface form, H2H context and tournament IDs use the current code"
+        required: true
+        default: true
+        type: boolean
+      max_refresh_requests:
+        description: "Provider request cap for current prediction refresh"
+        required: true
+        default: "750"
+        type: string
+      market_odds_max_events:
+        description: "Current events to enrich with provider-1 odds during refresh"
+        required: true
+        default: "120"
+        type: string
       refresh_photos:
         description: "Re-download photos that are already cached"
         required: true
@@ -45,6 +60,12 @@ jobs:
   enrich:
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    # The workflow still serializes player-asset writers globally, while this
+    # job also shares the history/prediction writer lock with data.yml because
+    # it refreshes the current prediction candidate before enrichment.
+    concurrency:
+      group: tbt-history-data-writer
+      cancel-in-progress: false
     env:
       PYTHONPATH: api
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
@@ -74,6 +95,21 @@ jobs:
           test -n "$RAPIDAPI_KEY" || { echo 'Missing RAPIDAPI_KEY'; exit 1; }
           visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
           test "$visibility" = "PRIVATE" || { echo 'Refusing non-private data repository'; exit 1; }
+
+      - name: Refresh current fixtures and prediction presentation
+        if: ${{ inputs.refresh_current_feed }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Important: player-card enrichment alone can only attach current
+          # rank/country/photo/profile metadata. Form LXX, surface LXX, H2H
+          # point-in-time context, custom_id and tournament IDs are emitted by
+          # the prediction engine. Rebuild the current candidate with this
+          # release before attaching presentation assets.
+          python scripts/pipeline.py refresh \
+            --max-requests "${{ inputs.max_refresh_requests }}" \
+            --market-odds-max-events "${{ inputs.market_odds_max_events }}" \
+            --betting-day-start-hour 6
 
       - name: Refresh current player metadata and photos
         shell: bash
