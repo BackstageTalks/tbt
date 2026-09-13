@@ -338,6 +338,34 @@ class RapidTennisClient:
             enrichment=True,
         )
 
+    def previous_player_matches(self, player_id: str | int, page: int = 0) -> Any:
+        """Previous matches for one player, newest first.
+
+        TennisApi exposes this endpoint as getPreviousPlayerMatches.  These rows
+        are presentation/research enrichment only; the predictive model continues
+        to use the immutable point-in-time history replay used by training.
+        """
+        page = max(0, int(page))
+        return self._get(
+            f"/api/tennis/player/{player_id}/events/last/{page}",
+            enrichment=True,
+        )
+
+    def upcoming_player_matches(self, player_id: str | int, page: int = 0) -> Any:
+        """Upcoming player matches when TennisApi has any (204 is normal)."""
+        page = max(0, int(page))
+        return self._get(
+            f"/api/tennis/player/{player_id}/events/next/{page}",
+            enrichment=True,
+        )
+
+    def player_near_matches(self, player_id: str | int) -> Any:
+        """Nearest previous/next player events from TennisApi."""
+        return self._get(
+            f"/api/tennis/player/{player_id}/near-events",
+            enrichment=True,
+        )
+
     def event_statistics(self, event_id: str | int) -> Any:
         """Post-match event statistics; coverage is provider/event dependent."""
         return self._get(

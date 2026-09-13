@@ -8,17 +8,17 @@ def read(path):
 
 def test_release_and_cache_are_6600():
     cfg = json.loads(read("web/ui-config.json"))
-    assert cfg["ui_revision"] == "6.6.1"
-    assert cfg["revision"] == "6.6.1"
-    assert 'RELEASE = "6.6.1"' in read("api/function_app.py")
+    assert cfg["ui_revision"] == "6.6.3"
+    assert cfg["revision"] == "6.6.3"
+    assert 'RELEASE = "6.6.3"' in read("api/function_app.py")
     html = read("web/index.html")
-    assert '/blinq.css?v=661' in html
+    assert '/blinq.css?v=663' in html
     for asset in ("auth.js", "responsive.js", "app.js"):
-        assert f'/{asset}?v=661' in html
+        assert f'/{asset}?v=663' in html
 
 def test_new_web_uses_one_design_system_not_legacy_css_stack():
     html = read("web/index.html")
-    assert '/blinq.css?v=661' in html
+    assert '/blinq.css?v=663' in html
     assert 'media="not all"' in html
     assert "premium-v2.css?v=" not in html
     assert "final-ui.css?v=" not in html
@@ -60,4 +60,4 @@ def test_account_is_modal_and_admin_controls_are_reachable():
     assert "adminQuickButton" in html
     assert "profileAdminLink" in html
     assert "publishUiConfig" in app
-    assert "Banners & links" in app
+    assert "Bannery a odkazy" in app

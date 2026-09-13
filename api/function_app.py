@@ -40,7 +40,7 @@ from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.6.1"
+RELEASE = "6.6.3"
 API_VERSION = "3.5.1"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -52,6 +52,13 @@ _BANNER_RATE_GLOBAL_MAX_EVENTS = 600
 _BANNER_RATE_BUCKETS = defaultdict(deque)
 _BANNER_RATE_GLOBAL = deque()
 _BANNER_RATE_LOCK = Lock()
+
+# Short-lived in-process cache for presentation-only match intelligence.  The
+# endpoint can otherwise trigger several provider calls whenever a modal opens.
+# Predictive/model features never read from this cache.
+_MATCH_INTELLIGENCE_CACHE: dict[str, tuple[float, dict]] = {}
+_MATCH_INTELLIGENCE_CACHE_LOCK = Lock()
+_MATCH_INTELLIGENCE_TTL_SECONDS = 15 * 60
 
 
 def _banner_event_allowed(payload):
@@ -185,6 +192,247 @@ def auth_profile(req):
         return response({"error": "account_storage_unavailable"}, 503)
 
 
+
+
+def _surface_family(value):
+    text = str(value or "").strip().lower().replace("_", " ")
+    if "clay" in text:
+        return "clay"
+    if "grass" in text:
+        return "grass"
+    if "hard" in text:
+        return "hard"
+    if "carpet" in text:
+        return "carpet"
+    return text or "unknown"
+
+
+def _event_side(event, player_id):
+    target = str(player_id or "")
+    home = event.get("homeTeam") if isinstance(event, dict) else None
+    away = event.get("awayTeam") if isinstance(event, dict) else None
+    home_id = str((home or {}).get("id") or "") if isinstance(home, dict) else ""
+    away_id = str((away or {}).get("id") or "") if isinstance(away, dict) else ""
+    if target and target == home_id:
+        return 1, away if isinstance(away, dict) else {}
+    if target and target == away_id:
+        return 2, home if isinstance(home, dict) else {}
+    return 0, {}
+
+
+def _completed_player_events(events, player_id):
+    out = []
+    for event in events or []:
+        if not isinstance(event, dict):
+            continue
+        side, opponent = _event_side(event, player_id)
+        if not side:
+            continue
+        status = event.get("status") if isinstance(event.get("status"), dict) else {}
+        status_type = str(status.get("type") or "").strip().lower()
+        winner = event.get("winnerCode")
+        try:
+            winner = int(winner)
+        except (TypeError, ValueError):
+            winner = 0
+        if status_type not in {"finished", "ended"} and winner not in {1, 2}:
+            continue
+        if winner not in {1, 2}:
+            continue
+        row = dict(event)
+        row["_blinq_side"] = side
+        row["_blinq_won"] = bool(winner == side)
+        row["_blinq_opponent"] = opponent
+        out.append(row)
+    out.sort(key=lambda item: int(item.get("startTimestamp") or 0), reverse=True)
+    return out
+
+
+def _form_from_events(events, player_id, *, surface=None, limit=35):
+    rows = _completed_player_events(events, player_id)
+    if surface:
+        wanted = _surface_family(surface)
+        rows = [row for row in rows if _surface_family(row.get("groundType") or ((row.get("tournament") or {}).get("uniqueTournament") or {}).get("groundType")) == wanted]
+    rows = rows[: max(1, int(limit))]
+    if not rows:
+        return {"matches": 0, "wins": 0, "win_pct": None}
+    wins = sum(1 for row in rows if row.get("_blinq_won"))
+    return {"matches": len(rows), "wins": wins, "win_pct": wins / len(rows)}
+
+
+def _h2h_from_events(events, player1_id, player2_id):
+    p2 = str(player2_id or "")
+    rows = []
+    for row in _completed_player_events(events, player1_id):
+        opponent = row.get("_blinq_opponent") if isinstance(row.get("_blinq_opponent"), dict) else {}
+        if str(opponent.get("id") or "") == p2:
+            rows.append(row)
+    wins = sum(1 for row in rows if row.get("_blinq_won"))
+    return {"player1_wins": wins, "player2_wins": len(rows) - wins, "matches": len(rows), "source": "recent_player_history"}
+
+
+def _ranking_rows(payload):
+    if isinstance(payload, list):
+        return [row for row in payload if isinstance(row, dict)]
+    if not isinstance(payload, dict):
+        return []
+    for key in ("rankings", "data", "results", "result"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return [row for row in value if isinstance(row, dict)]
+        if isinstance(value, dict):
+            nested = _ranking_rows(value)
+            if nested:
+                return nested
+    return []
+
+
+def _ranking_summary(payload, player_id):
+    rows = _ranking_rows(payload)
+    target = str(player_id or "")
+    if not rows:
+        return {}
+    def score(row):
+        team = row.get("team") if isinstance(row.get("team"), dict) else {}
+        exact = str(team.get("id") or row.get("teamId") or row.get("playerId") or "") == target
+        rank = row.get("ranking")
+        try:
+            rank_ok = int(rank) > 0
+        except (TypeError, ValueError):
+            rank_ok = False
+        return (1 if exact else 0, 1 if rank_ok else 0)
+    row = max(rows, key=score)
+    team = row.get("team") if isinstance(row.get("team"), dict) else {}
+    country = team.get("country") if isinstance(team.get("country"), dict) else {}
+    return {
+        "rank": row.get("ranking"),
+        "previous_rank": row.get("previousRanking"),
+        "best_rank": row.get("bestRanking"),
+        "ranking_points": row.get("points"),
+        "country_code": country.get("alpha2") or country.get("code") or "",
+    }
+
+
+def _provider_events(payload):
+    return RapidTennisClient._data(payload)
+
+
+def _cached_match_intelligence(key):
+    now = time.monotonic()
+    with _MATCH_INTELLIGENCE_CACHE_LOCK:
+        cached = _MATCH_INTELLIGENCE_CACHE.get(key)
+        if cached and now - cached[0] <= _MATCH_INTELLIGENCE_TTL_SECONDS:
+            return cached[1]
+        if cached:
+            _MATCH_INTELLIGENCE_CACHE.pop(key, None)
+    return None
+
+
+def _store_match_intelligence(key, payload):
+    with _MATCH_INTELLIGENCE_CACHE_LOCK:
+        if len(_MATCH_INTELLIGENCE_CACHE) > 500:
+            oldest = sorted(_MATCH_INTELLIGENCE_CACHE.items(), key=lambda item: item[1][0])[:100]
+            for old_key, _ in oldest:
+                _MATCH_INTELLIGENCE_CACHE.pop(old_key, None)
+        _MATCH_INTELLIGENCE_CACHE[key] = (time.monotonic(), payload)
+
+
+@app.route(route="v1/match-intelligence", methods=["GET"])
+def match_intelligence(req):
+    """Live presentation enrichment for the match-detail modal.
+
+    This endpoint intentionally does not feed the predictive model.  It uses
+    current TennisApi history/ranking data only to give members convenient
+    research context (Form LXX, surface form, ranking movement/points, H2H).
+    """
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if not bool(user.get("email_verified", False)):
+            return response({"error": "email_not_verified"}, 403)
+        if is_suspended(user):
+            return response({"error": "account_suspended"}, 403)
+        p1 = str(req.params.get("player1_id") or "").strip()
+        p2 = str(req.params.get("player2_id") or "").strip()
+        surface = str(req.params.get("surface") or "").strip()[:48]
+        if not p1.isdigit() or not p2.isdigit() or len(p1) > 12 or len(p2) > 12:
+            return response({"error": "invalid_player_ids"}, 400)
+        key = f"{p1}:{p2}:{_surface_family(surface)}"
+        cached = _cached_match_intelligence(key)
+        if cached is not None:
+            return response({**cached, "cached": True})
+
+        client = RapidTennisClient(settings)
+        histories = {}
+        rankings = {}
+        for pid in (p1, p2):
+            events = []
+            seen = set()
+            # TennisApi returns 30 events/page in the observed contract.  Two
+            # pages are enough for a dynamic L35 display while keeping modal
+            # enrichment economical.
+            for page in (0, 1):
+                payload = client.previous_player_matches(pid, page)
+                page_rows = _provider_events(payload)
+                if not page_rows:
+                    break
+                for event in page_rows:
+                    event_id = str(event.get("id") or event.get("customId") or "")
+                    if event_id and event_id in seen:
+                        continue
+                    if event_id:
+                        seen.add(event_id)
+                    events.append(event)
+                if len(page_rows) < 30:
+                    break
+            histories[pid] = events
+            try:
+                rankings[pid] = _ranking_summary(client.player_rankings(pid), pid)
+            except Exception:
+                logging.exception("Current ranking enrichment unavailable for player %s", pid)
+                rankings[pid] = {}
+
+        h2h = _h2h_from_events(histories[p1], p1, p2)
+        # If the second player's recent history includes older mutual matches,
+        # merge them without double-counting provider event ids.
+        p1_h2h_ids = {str(row.get("id") or "") for row in _completed_player_events(histories[p1], p1)
+                      if str((row.get("_blinq_opponent") or {}).get("id") or "") == p2}
+        extra_h2h = []
+        for row in _completed_player_events(histories[p2], p2):
+            opponent = row.get("_blinq_opponent") if isinstance(row.get("_blinq_opponent"), dict) else {}
+            if str(opponent.get("id") or "") != p1:
+                continue
+            rid = str(row.get("id") or "")
+            if rid and rid in p1_h2h_ids:
+                continue
+            extra_h2h.append(row)
+        if extra_h2h:
+            p1_extra_wins = sum(1 for row in extra_h2h if not row.get("_blinq_won"))
+            h2h["player1_wins"] += p1_extra_wins
+            h2h["player2_wins"] += len(extra_h2h) - p1_extra_wins
+            h2h["matches"] += len(extra_h2h)
+
+        result = {"source": "tennisapi_live_presentation", "surface": _surface_family(surface), "h2h": h2h}
+        for label, pid, opponent_wins_key in (("player1", p1, "player1_wins"), ("player2", p2, "player2_wins")):
+            completed = _completed_player_events(histories[pid], pid)
+            profile = {
+                "history_matches": min(len(completed), 60),
+                "surface_history_matches": sum(1 for row in completed if _surface_family(row.get("groundType") or ((row.get("tournament") or {}).get("uniqueTournament") or {}).get("groundType")) == _surface_family(surface)),
+                "recent_form": _form_from_events(histories[pid], pid, limit=35),
+                "surface_form": _form_from_events(histories[pid], pid, surface=surface, limit=35),
+                "h2h_wins": h2h.get(opponent_wins_key),
+                "h2h_losses": h2h.get("player2_wins" if opponent_wins_key == "player1_wins" else "player1_wins"),
+                "h2h_matches": h2h.get("matches"),
+            }
+            result[label] = {**rankings.get(pid, {}), "presentation": profile}
+        _store_match_intelligence(key, result)
+        return response({**result, "cached": False})
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+    except Exception:
+        logging.exception("Match intelligence enrichment failed")
+        return response({"error": "match_intelligence_unavailable"}, 503)
 
 
 @app.route(route="v1/player-image/{player_id}", methods=["GET"])

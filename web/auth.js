@@ -281,6 +281,14 @@
     const s = await restore();
     return json('/api/v1/feed', {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
   }
+  async function matchIntelligence(player1Id, player2Id, surface = '') {
+    const params = new URLSearchParams({
+      player1_id: String(player1Id || ''),
+      player2_id: String(player2Id || ''),
+      surface: String(surface || ''),
+    });
+    return apiWithSession(`/api/v1/match-intelligence?${params.toString()}`);
+  }
   async function adminUsers(page = 1, perPage = 100) {
     return apiWithSession(`/api/v1/admin/users?page=${encodeURIComponent(page)}&per_page=${encodeURIComponent(perPage)}`);
   }
@@ -302,7 +310,7 @@
   }
 
   window.BlinqAuth = {
-    init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed,
+    init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
     adminUsers, adminUpdateAccess, runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear,
   };
