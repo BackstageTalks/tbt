@@ -23,10 +23,22 @@ PREDICTION_ASSETS = {"feed.json", "ledger.json"}
 
 
 _PLAYER_PRESENTATION_KEYS = {
+    # All fields injected by prepare_feed._merge_player_profile(). They are
+    # presentation-only enrichment and must not change the immutable private
+    # prediction/publication candidate used for issuance confirmation.
     "rank",
+    "previous_rank",
+    "best_rank",
+    "ranking_points",
     "country_code",
     "country_code3",
     "country_name",
+    "birth_date",
+    "birth_timestamp",
+    "height_cm",
+    "hand",
+    "birthplace",
+    "residence",
     "photo_url",
 }
 
