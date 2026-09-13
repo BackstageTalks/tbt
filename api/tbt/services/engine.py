@@ -73,8 +73,8 @@ def _h2h_record(builder, match):
 
 def _presentation_player_profile(builder, match, *, player1):
     state = builder._state(match, player1)
-    overall = _recent_form_summary(state, limit=10)
-    surface = _recent_form_summary(state, surface=match.surface, limit=10)
+    overall = _recent_form_summary(state, limit=35)
+    surface = _recent_form_summary(state, surface=match.surface, limit=35)
     return {
         "history_matches": int(state.matches),
         "surface_history_matches": int(state.surface_matches.get(match.surface, 0)),

@@ -97,10 +97,24 @@ def profile_from_ranking_row(
     )
     rank = _rank_value(row, participant)
 
+    previous_rank = None
+    best_rank = None
+    points = None
+    for source in (row, participant):
+        if previous_rank is None:
+            previous_rank = safe_int(_first(source, "previousRanking", "previous_rank", "previousRank"))
+        if best_rank is None:
+            best_rank = safe_int(_first(source, "bestRanking", "best_rank", "careerHighRanking", "career_high_rank"))
+        if points is None:
+            points = safe_int(_first(source, "points", "rankingPoints", "ranking_points"))
+
     profile: dict[str, Any] = {
         "id": str(player_id),
         "name": str(name or "").strip(),
         "rank": rank,
+        "previous_rank": previous_rank if previous_rank and previous_rank > 0 else None,
+        "best_rank": best_rank if best_rank and best_rank > 0 else None,
+        "ranking_points": points if points is not None and points >= 0 else None,
         "country_code": str(alpha2).upper() if alpha2 else None,
         "country_code3": str(alpha3).upper() if alpha3 else None,
         "country_name": str(country.get("name") or "").strip() or None,
@@ -124,7 +138,7 @@ def _ranking_rows(payload: Any) -> list[dict[str, Any]]:
 
 def _merge_profile(base: dict[str, Any], update: dict[str, Any], *, source: str) -> dict[str, Any]:
     merged = dict(base)
-    for key in ("name", "rank", "country_code", "country_code3", "country_name", "tour"):
+    for key in ("name", "rank", "previous_rank", "best_rank", "ranking_points", "country_code", "country_code3", "country_name", "tour"):
         value = update.get(key)
         if value not in (None, ""):
             merged[key] = value

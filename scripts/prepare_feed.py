@@ -234,6 +234,9 @@ def _merge_player_profile(player: dict, profiles: dict[str, dict], photos: set[s
     if profile.get("rank") not in (None, ""):
         player["rank"] = profile.get("rank")
     for source, target in (
+        ("previous_rank", "previous_rank"),
+        ("best_rank", "best_rank"),
+        ("ranking_points", "ranking_points"),
         ("country_code", "country_code"),
         ("country_code3", "country_code3"),
         ("country_name", "country_name"),

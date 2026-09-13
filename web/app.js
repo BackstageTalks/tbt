@@ -818,7 +818,7 @@
     const winner=winnerId===String(player1?.id)?player1:winnerId===String(player2?.id)?player2:null;
     const probability=p1Known&&p2Known?Math.max(p1,p2):p1Known?p1:p2Known?p2:null;
     const betting=row?.betting&&typeof row.betting==='object'?row.betting:{};
-    return {id:row?.event_id||row?.id,date:row?.scheduled_at,tour:String(row?.tour||'').toUpperCase(),tournament:row?.tournament||'Tournament',surface:row?.surface||'unknown',round:row?.round||'',p1:player1?.name||'Player 1',p2:player2?.name||'Player 2',p1Id:player1?.id,p2Id:player2?.id,p1Prob:p1,p2Prob:p2,p1Rank:player1?.rank??null,p2Rank:player2?.rank??null,p1Country:player1?.country_code||'',p2Country:player2?.country_code||'',p1Photo:safePhotoUrl(player1?.photo_url),p2Photo:safePhotoUrl(player2?.photo_url),pick:winner?.name||'—',pickId:winnerId,probability,confidence:Number.isFinite(probability)?confidenceBand(probability):'unknown',signals:Array.isArray(row?.signals)?row.signals:[],quality:row?.quality&&typeof row.quality==='object'?row.quality:{},dataDepth:Number(row?.data_depth),odds:Number(betting.odds),edge:Number(betting.edge),expectedValue:Number(betting.expected_value),bettingDay:betting.betting_day||'',model:row?.model_version||state.feed?.model?.version||'',raw:row};
+    return {id:row?.event_id||row?.id,date:row?.scheduled_at,tour:String(row?.tour||'').toUpperCase(),tournament:row?.tournament||'Tournament',surface:row?.surface||'unknown',round:row?.round||'',p1:player1?.name||'Player 1',p2:player2?.name||'Player 2',p1Id:player1?.id,p2Id:player2?.id,p1Prob:p1,p2Prob:p2,p1Rank:player1?.rank??null,p2Rank:player2?.rank??null,p1PrevRank:player1?.previous_rank??null,p2PrevRank:player2?.previous_rank??null,p1BestRank:player1?.best_rank??null,p2BestRank:player2?.best_rank??null,p1RankingPoints:player1?.ranking_points??null,p2RankingPoints:player2?.ranking_points??null,p1Country:player1?.country_code||'',p2Country:player2?.country_code||'',p1Photo:safePhotoUrl(player1?.photo_url),p2Photo:safePhotoUrl(player2?.photo_url),pick:winner?.name||'—',pickId:winnerId,probability,confidence:Number.isFinite(probability)?confidenceBand(probability):'unknown',signals:Array.isArray(row?.signals)?row.signals:[],quality:row?.quality&&typeof row.quality==='object'?row.quality:{},dataDepth:Number(row?.data_depth),odds:Number(betting.odds),edge:Number(betting.edge),expectedValue:Number(betting.expected_value),bettingDay:betting.betting_day||'',model:row?.model_version||state.feed?.model?.version||'',raw:row};
   }
 
   function populateSelect(id,values,label){ const select=$(id),selected=select.value; select.innerHTML=`<option value="">${label}</option>`; [...values].filter(Boolean).sort().forEach(value=>{const opt=document.createElement('option');opt.value=value;opt.textContent=String(value).replaceAll('_',' ');select.appendChild(opt)}); if([...select.options].some(o=>o.value===selected)) select.value=selected; }
@@ -985,9 +985,23 @@
       sequence
     };
   }
-  function formSummaryDisplay(form){
+  function formSummaryDisplay(form,label='Form'){
     if(form.matches==null||form.matches<=0||form.winPct==null)return '—';
-    return `${form.wins}/${form.matches} · ${Math.round(form.winPct*100)}%`;
+    return `${label} L${Math.round(form.matches)} = ${Math.round(form.winPct*100)}%`;
+  }
+  function rankMovement(current,previous){
+    const now=Number(current),prior=Number(previous);
+    if(!Number.isFinite(now)||!Number.isFinite(prior)||now<=0||prior<=0||now===prior)return '';
+    const delta=prior-now;
+    return `${delta>0?'↑':'↓'}${Math.abs(Math.trunc(delta))}`;
+  }
+  function surfaceShortName(value){
+    const text=String(value||'').toLowerCase();
+    if(text.includes('clay'))return 'Clay';
+    if(text.includes('grass'))return 'Grass';
+    if(text.includes('hard'))return 'Hard';
+    if(text.includes('carpet'))return 'Carpet';
+    return value&&value!=='unknown'?String(value).replaceAll('_',' '):'Surface';
   }
   function formSequenceHtml(form){
     if(!form.sequence.length)return '<span class="form-empty">—</span>';
@@ -1047,8 +1061,8 @@
       rankDisplay: Number.isFinite(Number(rank))&&Number(rank)>0?'#'+Math.trunc(Number(rank)):'—',
       surfaceDisplay: surfaceSample!=null?String(Math.round(surfaceSample)):'—',
       historyDisplay: overallSample!=null?String(Math.round(overallSample)):'—',
-      overallFormDisplay:formSummaryDisplay(overallForm),
-      surfaceFormDisplay:formSummaryDisplay(surfaceForm)
+      overallFormDisplay:formSummaryDisplay(overallForm,'Form'),
+      surfaceFormDisplay:formSummaryDisplay(surfaceForm,surfaceShortName(row?.surface||match.surface))
     };
   }
   function radarPoints(values,cx,cy,radius){
@@ -1061,9 +1075,9 @@
     const candidates=[
       [lcopy('BlinQ edge','BlinQ edge','BlinQ edge'),stats1.probability,stats2.probability],
       [lcopy('Ranking','Rebríček','Žebříček'),stats1.rankScore,stats2.rankScore],
-      [lcopy('Surface sample','Povrchová vzorka','Povrchový vzorek'),stats1.surfaceScore,stats2.surfaceScore],
-      [lcopy('History','História','Historie'),stats1.experienceScore,stats2.experienceScore],
-      [lcopy('Recent form','Aktuálna forma','Aktuální forma'),stats1.form,stats2.form]
+      [lcopy('Form','Forma','Forma'),stats1.form,stats2.form],
+      [surfaceShortName(row?.surface||match.surface)+' '+lcopy('form','forma','forma'),stats1.surfaceForm.winPct!=null?stats1.surfaceForm.winPct*100:null,stats2.surfaceForm.winPct!=null?stats2.surfaceForm.winPct*100:null],
+      [lcopy('Surface sample','Povrchová vzorka','Povrchový vzorek'),stats1.surfaceScore,stats2.surfaceScore]
     ];
     let metrics=candidates.filter(([,a,b])=>Number.isFinite(a)&&Number.isFinite(b));
     metrics=metrics.slice(0,6);
@@ -1101,21 +1115,26 @@
   function insightPlayerCard(row,side){
     const match=normalize(row);
     const name=side===1?match.p1:match.p2,country=side===1?match.p1Country:match.p2Country,rank=side===1?match.p1Rank:match.p2Rank,photo=side===1?match.p1Photo:match.p2Photo;
+    const previousRank=side===1?match.p1PrevRank:match.p2PrevRank;
+    const bestRank=side===1?match.p1BestRank:match.p2BestRank;
+    const rankingPoints=side===1?match.p1RankingPoints:match.p2RankingPoints;
     const stats=playerInsightStats(row,side),picked=String(match.pick||'').toLowerCase()===String(name).toLowerCase();
     const tour=String(row?.tour||match.tour||'').toUpperCase();
     const h2h=stats.h2hWins!=null&&stats.h2hLosses!=null?`${stats.h2hWins}–${stats.h2hLosses}`:'—';
-    const surfaceName=String(row?.surface||match.surface||'Surface').replaceAll('_',' ');
+    const movement=rankMovement(rank,previousRank);
+    const surfaceLabel=surfaceShortName(row?.surface||match.surface);
     const metrics=[
       ['BlinQ %',stats.probabilityDisplay],
-      [lcopy('Ranking','Rebríček','Žebříček'),stats.rankDisplay+(tour?' '+tour:'')],
-      [lcopy('History matches','História zápasov','Historie zápasů'),stats.historyDisplay],
-      [lcopy('Surface matches','Zápasy na povrchu','Zápasy na povrchu'),stats.surfaceDisplay],
-      [lcopy('Overall form','Celková forma','Celková forma'),stats.overallFormDisplay],
-      [surfaceName+' '+lcopy('form','forma','forma'),stats.surfaceFormDisplay],
+      [lcopy('Rank','Rank','Rank'),stats.rankDisplay+(tour?' '+tour:'')+(movement?' · '+movement:'')],
+      [lcopy('Form','Forma','Forma'),stats.overallFormDisplay],
+      [surfaceLabel,stats.surfaceFormDisplay],
       ['H2H',h2h]
     ];
-    return '<article class="insight-player-card'+(picked?' picked':'')+'">'+(picked?'<span class="insight-picked-badge">BLINQ PICK</span>':'')+'<div class="insight-player-head">'+smallAvatar(photo,name,row?.tour||'')+'<div><h4>'+escapeHtml(name)+'</h4><p>'+escapeHtml([flagEmoji(country),Number.isFinite(Number(rank))&&Number(rank)>0?'#'+Math.trunc(Number(rank))+' '+tour:''].filter(Boolean).join(' · ')||'—')+'</p></div></div><div class="insight-player-metrics">'+metrics.map(([label,value])=>'<span><small>'+escapeHtml(label)+'</small><strong>'+escapeHtml(value)+'</strong></span>').join('')+'</div><div class="insight-form-strips"><div><small>'+escapeHtml(lcopy('Last matches','Posledné zápasy','Poslední zápasy'))+'</small><b>'+formSequenceHtml(stats.overallForm)+'</b></div><div><small>'+escapeHtml(surfaceName+' '+lcopy('form','forma','forma'))+'</small><b>'+formSequenceHtml(stats.surfaceForm)+'</b></div></div></article>';
+    if(Number.isFinite(Number(bestRank))&&Number(bestRank)>0) metrics.push([lcopy('Career high','Career high','Career high'),'#'+Math.trunc(Number(bestRank))]);
+    if(Number.isFinite(Number(rankingPoints))&&Number(rankingPoints)>=0) metrics.push([lcopy('Points','Body','Body'),Math.trunc(Number(rankingPoints)).toLocaleString()]);
+    return '<article class="insight-player-card'+(picked?' picked':'')+'">'+(picked?'<span class="insight-picked-badge">BLINQ PICK</span>':'')+'<div class="insight-player-head">'+smallAvatar(photo,name,row?.tour||'')+'<div><h4>'+escapeHtml(name)+'</h4><p>'+escapeHtml([flagEmoji(country),Number.isFinite(Number(rank))&&Number(rank)>0?'#'+Math.trunc(Number(rank))+' '+tour:'',movement].filter(Boolean).join(' · ')||'—')+'</p></div></div><div class="insight-player-metrics">'+metrics.map(([label,value])=>'<span><small>'+escapeHtml(label)+'</small><strong>'+escapeHtml(value)+'</strong></span>').join('')+'</div></article>';
   }
+
   function renderDailyHubInsight(){
     const host=$('dailyHubInsightBoard'),main=$('dailyHubInsightMain');
     if(!host||!main) return;
