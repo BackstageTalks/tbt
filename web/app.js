@@ -14,7 +14,7 @@
   const fmtClock = () => new Intl.DateTimeFormat(localeTag,{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
   const initials = name => String(name || 'B').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
   const flagEmoji = code => { const value=String(code||'').trim().toUpperCase(); if(!/^[A-Z]{2}$/.test(value))return ''; return [...value].map(ch=>String.fromCodePoint(127397+ch.charCodeAt(0))).join(''); };
-  const safePhotoUrl = value => { const url=String(value||'').trim(); if(/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)&&!url.split('/').includes('..'))return url; if(/^https:\/\//i.test(url)){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}} return ''; };
+  const safePhotoUrl = value => { const url=String(value||'').trim(); if(/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)&&!url.split('/').includes('..'))return url; if(/^\/api\/v1\/tournament-logo\/[0-9]{1,12}$/.test(url))return url; if(/^https:\/\//i.test(url)){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}} return ''; };
   const safeUiAsset = value => { const url=String(value||'').trim(); if(!/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)||url.split('/').includes('..'))return ''; return url; };
   const avatarAssetSrc = value => { const url=safeUiAsset(value); return url ? `${url}?v=v6544` : ''; };
   function playerFallbackUrl(tour){
@@ -185,7 +185,7 @@
           state.ui.content_rows=mergeConfig(state.uiSource.content_rows||{},runtime.config.content_rows||{});
           state.ui.header_cta=mergeConfig(state.uiSource.header_cta||{},runtime.config.header_cta||{});
           state.ui.hero_banner=mergeConfig(state.uiSource.hero_banner||{enabled:true,slot_count:1,rotation_seconds:10,auto_rotate:true,show_dots:true,pause_on_hover:true},runtime.config.hero_banner||{});
-          // 6.5.51 visual migration: reset only the first hero COPY to the approved base while preserving any admin-managed image, link, schedule and access. Once published under this revision, future edits are preserved.
+          // 6.5.53 visual migration: reset only the first hero COPY to the approved base while preserving any admin-managed image, link, schedule and access. Once published under this revision, future edits are preserved.
           const srcHero=state.uiSource?.elements?.HERO_BANNER_1?.content,liveHero=state.ui?.elements?.HERO_BANNER_1?.content;
           if(srcHero&&liveHero){['eyebrow','headline','accent_text','text','button_text','theme','show_copy','creative_mode'].forEach(k=>{liveHero[k]=srcHero[k];});}
         }
@@ -395,8 +395,8 @@
 
   function renderNavigation(){
     const navIcons={prime:'✦',top_daily:'★',value:'◇',doubles:'◈',ace:'♠',sg:'▥',results:'✓',btts:'⚽'};
-    const orderedSections=[...dashboardSectionKeys].sort((a,b)=>sectionPlanOrder(a)-sectionPlanOrder(b)||Number(dashboardSectionConfig(a).dashboard_order||99)-Number(dashboardSectionConfig(b).dashboard_order||99));
-    const primaryNav=[['predictions','Dashboard','⌂'],...orderedSections.map(id=>[id,dashboardSectionConfig(id).label||id,navIcons[id]||'•'])];
+    const orderedSections=[...dashboardSectionKeys].filter(id=>id!=='btts').sort((a,b)=>sectionPlanOrder(a)-sectionPlanOrder(b)||Number(dashboardSectionConfig(a).dashboard_order||99)-Number(dashboardSectionConfig(b).dashboard_order||99));
+    const primaryNav=[['predictions','Prehľad','⌂'],...orderedSections.map(id=>[id,dashboardSectionConfig(id).label||id,navIcons[id]||'•'])];
     const configNav=elementList('navigation');
     const main=primaryNav.map(([id,label,icon],index)=>{
       const item=configNav.find(entry=>entry.content?.route===id);
@@ -409,7 +409,7 @@
       adminWrap.hidden=!isAdminAccount();
       renderNavigationGroup(isAdminAccount()?[{id:'admin',href:'#admin',icon:'⚙',label:'Admin',order:1,enabled:true}]:[],'adminNavigation');
     }
-    const profileAdmin=$('profileAdminLink');if(profileAdmin)profileAdmin.hidden=!isAdminAccount();
+    const profileAdmin=$('profileAdminLink');if(profileAdmin)profileAdmin.hidden=!isAdminAccount(); const adminQuick=$('adminQuickButton');if(adminQuick)adminQuick.hidden=!isAdminAccount();
     const footer=$('footerLearnNavigation');
     if(footer){
       footer.innerHTML='';
@@ -935,21 +935,27 @@
     return null;
   }
   function tournamentVisual(row){
-    const logo=safePhotoUrl(row?.tournament_logo_url||row?.competition_logo_url||row?.competition_logo||row?.tournament_logo||'');
-    const country=String(row?.tournament_country_code||row?.competition_country_code||row?.country_code||row?.tournament_country||'').toUpperCase();
-    const flag=flagEmoji(country);
-    if(logo) return '<span class="hub-tournament-logo has-image"><img src="'+escapeHtml(logo)+'" alt="" loading="lazy"></span>';
-    if(flag) return '<span class="hub-tournament-logo">'+escapeHtml(flag)+'</span>';
-    return '<span class="hub-tournament-logo">🏆</span>';
+    const tournamentId=String(row?.tournament_logo_id||row?.tournament_id||row?.tournamentId||row?.unique_tournament_id||row?.uniqueTournament?.id||'').trim();
+    const explicit=safePhotoUrl(row?.tournament_logo_url||row?.competition_logo_url||row?.competition_logo||row?.tournament_logo||'');
+    const logo=explicit||(/^\d{1,12}$/.test(tournamentId)?`/api/v1/tournament-logo/${tournamentId}`:'');
+    const tour=String(row?.tour||row?.category||'').trim().toUpperCase();
+    const fallback=(tour.includes('WTA')?'WTA':tour.includes('ATP')?'ATP':tour.includes('ITF')?'ITF':'T');
+    if(logo) return '<span class="hub-tournament-logo has-image"><img data-tournament-logo src="'+escapeHtml(logo)+'" alt="" loading="lazy"><span class="hub-logo-fallback">'+escapeHtml(fallback)+'</span></span>';
+    return '<span class="hub-tournament-logo hub-tournament-badge">'+escapeHtml(fallback)+'</span>';
   }
   function smallAvatar(photo,name,tour){
     const safe=safePhotoUrl(photo),fallback=playerFallbackUrl(tour),src=safe||fallback;
     return src?'<span class="hub-avatar has-photo"><img src="'+escapeHtml(src)+'" alt="" loading="lazy"></span>':'<span class="hub-avatar">'+escapeHtml(initials(name))+'</span>';
   }
   function hubPlayerMeta(player,tour){
-    const name=player?.name||'—',rank=player?.rank,country=player?.country_code||'',photo=player?.photo_url||'';
-    const meta=[flagEmoji(country),Number.isFinite(Number(rank))&&Number(rank)>0?'#'+Math.trunc(Number(rank)):'' ].filter(Boolean).join(' · ');
-    return '<span class="hub-player">'+smallAvatar(photo,name,tour)+'<span class="hub-player-copy"><b>'+escapeHtml(name)+'</b><small>'+escapeHtml(meta||'—')+'</small></span></span>';
+    const name=player?.name||'—';
+    const rank=firstFinite(player?.rank,player?.ranking,player?.current_rank);
+    const country=player?.country_code||player?.country_code2||player?.country_code3||player?.country?.alpha2||player?.country?.alpha3||'';
+    const photo=player?.photo_url||player?.image_url||player?.photo||'';
+    const flag=flagEmoji(String(country||'').toUpperCase());
+    const rankText=rank!=null&&rank>0?'#'+Math.trunc(rank):'—';
+    const tourText=String(tour||'').toUpperCase();
+    return '<span class="hub-player">'+smallAvatar(photo,name,tour)+'<span class="hub-player-copy"><b>'+escapeHtml(name)+'</b><small class="hub-player-meta"><span class="hub-flag" aria-hidden="true">'+escapeHtml(flag||'')+'</span><span class="hub-rank">'+escapeHtml(rankText)+'</span><span class="hub-tour">'+escapeHtml(tourText)+'</span></small></span></span>';
   }
   function dailyHubTournament(row){
     const tournament=row?.tournament||row?.competition||'—';
@@ -1166,8 +1172,10 @@
       else if(ent.blur_remaining!==false) out.push(dailyHubLockedRow(tab,i));
     }
     $('dailyHubBody').innerHTML=out.join('');
+    host.querySelectorAll('img[data-tournament-logo]').forEach(img=>{img.addEventListener('error',()=>{img.hidden=true;img.parentElement?.classList.add('logo-failed');},{once:true});});
     $('dailyHubEmpty').hidden=Boolean(out.length);
     const metaCount=$('dailyHubMetaCount'); if(metaCount) metaCount.textContent=`${allCount} ${allCount===1?'zápas':'zápasov'}`;
+    const metaDate=$('dailyHubMetaDate'); if(metaDate){ const first=rows[0]; const raw=first?.scheduled_at||first?.date||first?.start_time||first?.start_at||''; const d=raw?new Date(raw):new Date(); metaDate.textContent=Number.isNaN(d.getTime())?'Dnešný výber':new Intl.DateTimeFormat(locale==='en'?'en-GB':locale==='cz'?'cs-CZ':'sk-SK',{weekday:'long',day:'numeric',month:'long'}).format(d); }
     const expand=$('dailyHubExpand'); if(expand){ expand.hidden=!canExpand; expand.textContent=state.dailyHubExpanded?lcopy('Show less','Zobraziť menej','Zobrazit méně'):`${lcopy('Show all','Zobraziť všetky','Zobrazit všechny')} (${allCount})`; expand.dataset.expanded=state.dailyHubExpanded?'1':'0'; expand.setAttribute('aria-expanded',state.dailyHubExpanded?'true':'false'); }
   }
 
@@ -1330,7 +1338,7 @@
     });
   }
 
-  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; const section=dashboardSectionKeys.includes(route)?dashboardSectionConfig(route):null; if(section&&route!=='predictions'&&elementAccess(section.sidebar_element)!=='active'&&state.route!=='admin'){showUpgradePrompt(firstUnlockPlan(route,0,true),section.label||route);route='predictions';} if(route==='admin') state.previewPlan=null; const routeChanged=state.route!==route;state.route=route;if(routeChanged)state.page=0;const meta=routeMeta[route]; const overview=route==='predictions'; const routeHeading=$('routeHeading'); if(routeHeading) routeHeading.hidden=overview; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDailyHub();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push&&location.hash!==`#${route}`) history.pushState(null,'',`#${route}`); window.BlinqUI.routeChanged(route,push); updateLanguageLinks(); document.title=`${meta[1]} · BlinQ`; if(route!=='admin')translatePublicDom(document.body); }
+  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; document.body.classList.toggle('blinq-home',route==='predictions'); document.body.classList.toggle('blinq-admin',route==='admin'); document.body.classList.toggle('blinq-route',route!=='predictions'&&route!=='admin'); const section=dashboardSectionKeys.includes(route)?dashboardSectionConfig(route):null; if(section&&route!=='predictions'&&elementAccess(section.sidebar_element)!=='active'&&state.route!=='admin'){showUpgradePrompt(firstUnlockPlan(route,0,true),section.label||route);route='predictions';} if(route==='admin') state.previewPlan=null; const routeChanged=state.route!==route;state.route=route;if(routeChanged)state.page=0;const meta=routeMeta[route]; const overview=route==='predictions'; const routeHeading=$('routeHeading'); if(routeHeading) routeHeading.hidden=overview; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDailyHub();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push&&location.hash!==`#${route}`) history.pushState(null,'',`#${route}`); window.BlinqUI.routeChanged(route,push); updateLanguageLinks(); document.title=`${meta[1]} · BlinQ`; if(route!=='admin')translatePublicDom(document.body); }
 
   function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
   function issuedMarketPublications(row){
@@ -1751,8 +1759,19 @@
     status.value='active';expiry.disabled=false;const date=planDefaultExpiry(planId);expiry.value=userDateValue(date?.toISOString());
   }
   async function publishUiConfig(){
-    try{await BlinqAuth.adminSaveUiConfig(state.ui);state.runtimeConfigLoaded=true;localStorage.removeItem(draftKey());showStatus('Admin configuration published. New sessions will load it automatically.');}
-    catch(error){showStatus(error.status===503?'Runtime config storage is not available; browser draft/export still works.':error.message);}
+    // Always keep a recoverable browser copy first. If Azure storage is available,
+    // the same validated config is then published globally. Admin UI never becomes a dead end.
+    localStorage.setItem(draftKey(),JSON.stringify(state.ui));
+    try{
+      await BlinqAuth.adminSaveUiConfig(state.ui);
+      state.runtimeConfigLoaded=true;
+      localStorage.removeItem(draftKey());
+      state.uiSource=clone(state.ui);
+      showStatus('Zmeny boli publikované na live webe.');
+    }catch(error){
+      renderAllUiContent();
+      showStatus(error.status===503?'Azure úložisko admin konfigurácie nie je dostupné. Zmeny sú uložené lokálne a okamžite platia v tomto prehliadači; JSON môžeš exportovať.':error.message);
+    }
   }
   function wireAdmin(){
     const host=$('routePanel'); if(!host)return;

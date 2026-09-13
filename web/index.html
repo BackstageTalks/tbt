@@ -7,13 +7,14 @@
 <meta content="BlinQ tenisová analytika — live predzápasové pravdepodobnosti, výsledky a analýza modelu." name="description"/>
 <title>BlinQ · Tenisová analytika</title>
 <link href="/assets/blinq_favi.png" rel="icon" type="image/png"/>
-<link href="/styles.css?v=6551" rel="stylesheet"/>
-<link href="/responsive.css?v=6551" rel="stylesheet"/>
-<link href="/premium.css?v=6551" rel="stylesheet"/>
-<link href="/premium-v2.css?v=6551" rel="stylesheet"/>
-<script defer="" src="/auth.js?v=6551"></script>
-<script defer="" src="/responsive.js?v=6551"></script>
-<script defer="" src="/app.js?v=6551"></script>
+<link href="/styles.css?v=6553" rel="stylesheet"/>
+<link href="/responsive.css?v=6553" rel="stylesheet"/>
+<link href="/premium.css?v=6553" rel="stylesheet"/>
+<link href="/premium-v2.css?v=6553" rel="stylesheet"/>
+<link href="/final-ui.css?v=6553" rel="stylesheet"/>
+<script defer="" src="/auth.js?v=6553"></script>
+<script defer="" src="/responsive.js?v=6553"></script>
+<script defer="" src="/app.js?v=6553"></script>
 </head><body id="blinqPremium">
 <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
 <noscript><p class="no-script">BlinQ needs JavaScript to sign in and load current predictions. Please enable it in your browser.</p></noscript>
@@ -41,9 +42,9 @@
 <span class="top-brand-copy"><strong>STATISTICAL ENGINE</strong><small>by BackstageTalks</small></span>
 </a>
 <section aria-label="BlinQ komunita a promo odkazy" class="header-feature-strip" id="headerFeatureStrip"></section>
-<label class="header-search" aria-label="Hľadať hráča alebo turnaj"><span aria-hidden="true">⌕</span><input id="headerSearchInput" type="search" placeholder="Hľadať turnaje, hráčov…"></label>
 <div class="topbar-actions dashboard-account-actions">
 <button class="btn top-upgrade" data-route="account" id="topUpgradeButton" type="button"><span aria-hidden="true">✦</span><span id="topUpgradeLabel">Plány</span></button>
+<button class="btn admin-quick" data-route="admin" hidden id="adminQuickButton" type="button"><span aria-hidden="true">⚙</span><span>Admin</span></button>
 <div class="profile-shell" id="profileShell">
 <button aria-label="Open account and membership" class="profile-button profile-button-large" id="profileButton" type="button">
 <span class="profile-avatar-anchor">
@@ -71,7 +72,7 @@
 <span class="legacy-nav-hook" id="headerModelState">Produkcia</span>
 </div>
 </div>
-<nav aria-label="Hlavná navigácia" class="top-navigation"><div class="nav-items" id="mainNavigation"></div></nav>
+<nav aria-label="Hlavná navigácia" class="top-navigation"><div class="nav-items" id="mainNavigation"></div><label class="header-search nav-search" aria-label="Hľadať hráča alebo turnaj"><span aria-hidden="true">⌕</span><input id="headerSearchInput" type="search" placeholder="Hľadať turnaje, hráčov…"></label></nav>
 </header>
 <section class="route-context-meta route-heading" id="routeHeading">
 <span id="pageEyebrow">TENISOVÁ ANALYTIKA</span>
@@ -93,7 +94,7 @@
   <div class="daily-hub-head">
     <div class="daily-hub-title"><small>BLINQ DAILY INTELLIGENCE</small><h2>Tipy dňa</h2></div>
     <div class="daily-hub-head-right">
-      <div class="daily-hub-meta" id="dailyHubMeta"><span>Aktuálny výber</span><b id="dailyHubMetaCount">0 zápasov</b></div>
+      <div class="daily-hub-meta" id="dailyHubMeta"><span class="daily-hub-date"><i aria-hidden="true">◫</i><b id="dailyHubMetaDate">Dnešný výber</b></span><strong id="dailyHubMetaCount">0 zápasov</strong></div>
       <button class="daily-hub-expand" id="dailyHubExpand" type="button">Zobraziť viac</button>
     </div>
   </div>

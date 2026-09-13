@@ -35,11 +35,12 @@ from tbt.services.admin_storage import (
 )
 from tbt.services.content_news import news_pool
 from tbt.services.feed import read_feed, visible_feed
+from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.5.51"
+RELEASE = "6.5.53"
 API_VERSION = "3.5.1"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -183,6 +184,31 @@ def auth_profile(req):
     except AdminStorageUnavailable:
         return response({"error": "account_storage_unavailable"}, 503)
 
+
+
+
+@app.route(route="v1/tournament-logo/{tournament_id}", methods=["GET"])
+def tournament_logo_proxy(req):
+    """Serve TennisApi tournament artwork without exposing the RapidAPI key.
+
+    The provider dark logo is preferred by RapidTennisClient.tournament_logo().
+    This is presentation-only data and is intentionally cached by browsers/CDNs.
+    """
+    raw = str((req.route_params or {}).get("tournament_id") or "").strip()
+    if not raw.isdigit() or not (1 <= len(raw) <= 12):
+        return func.HttpResponse(status_code=404)
+    try:
+        result = RapidTennisClient(settings).tournament_logo(raw)
+    except Exception:
+        logging.exception("Tournament logo unavailable for %s", raw)
+        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=300"})
+    if not result:
+        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=3600"})
+    data, content_type = result
+    allowed = {"image/png", "image/jpeg", "image/webp", "image/svg+xml", "image/gif"}
+    if content_type not in allowed:
+        content_type = "image/png"
+    return func.HttpResponse(body=data, status_code=200, mimetype=content_type, headers={"Cache-Control": "public, max-age=86400, stale-while-revalidate=604800"})
 
 @app.route(route="v1/ui-config", methods=["GET"])
 def runtime_ui_config(req):
