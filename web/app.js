@@ -185,7 +185,7 @@
           state.ui.content_rows=mergeConfig(state.uiSource.content_rows||{},runtime.config.content_rows||{});
           state.ui.header_cta=mergeConfig(state.uiSource.header_cta||{},runtime.config.header_cta||{});
           state.ui.hero_banner=mergeConfig(state.uiSource.hero_banner||{enabled:true,slot_count:1,rotation_seconds:10,auto_rotate:true,show_dots:true,pause_on_hover:true},runtime.config.hero_banner||{});
-          // 6.5.53 visual migration: reset only the first hero COPY to the approved base while preserving any admin-managed image, link, schedule and access. Once published under this revision, future edits are preserved.
+          // 6.5.54 visual migration: reset only the first hero COPY to the approved base while preserving any admin-managed image, link, schedule and access. Once published under this revision, future edits are preserved.
           const srcHero=state.uiSource?.elements?.HERO_BANNER_1?.content,liveHero=state.ui?.elements?.HERO_BANNER_1?.content;
           if(srcHero&&liveHero){['eyebrow','headline','accent_text','text','button_text','theme','show_copy','creative_mode'].forEach(k=>{liveHero[k]=srcHero[k];});}
         }

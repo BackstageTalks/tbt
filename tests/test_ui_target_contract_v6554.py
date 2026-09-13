@@ -8,19 +8,19 @@ def read(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
 
-def test_release_and_cache_are_6553():
+def test_release_and_cache_are_6554():
     cfg = json.loads(read("web/ui-config.json"))
-    assert cfg["ui_revision"] == "6.5.53"
-    assert cfg["revision"] == "6.5.53"
-    assert 'RELEASE = "6.5.53"' in read("api/function_app.py")
+    assert cfg["ui_revision"] == "6.5.54"
+    assert cfg["revision"] == "6.5.54"
+    assert 'RELEASE = "6.5.54"' in read("api/function_app.py")
     html = read("web/index.html")
     for asset in ("styles.css", "responsive.css", "premium.css", "premium-v2.css", "final-ui.css", "auth.js", "responsive.js", "app.js"):
-        assert f'/{asset}?v=6553' in html
+        assert f'/{asset}?v=6554' in html
 
 
 def test_final_ui_is_loaded_last_and_beats_legacy_specificity():
     html = read("web/index.html")
-    assert html.index("premium-v2.css?v=6553") < html.index("final-ui.css?v=6553")
+    assert html.index("premium-v2.css?v=6554") < html.index("final-ui.css?v=6554")
     css = read("web/final-ui.css")
     # Earlier premium.css historically used body#blinqPremium#blinqPremium + !important.
     # The final layer must meet/exceed that specificity or visual regressions silently return.

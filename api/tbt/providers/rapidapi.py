@@ -10,7 +10,6 @@ from typing import Any, Iterable
 import httpx
 
 from ..config import Settings, settings
-from ..data.history_snapshot import merge_matches
 from ..errors import ConfigurationError, ProviderError
 from .budget import RequestBudgetExceeded
 from .score import parse_event_score
@@ -26,6 +25,20 @@ from ..utils import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _merge_matches(*groups):
+    """Import the history merge helper only for data/training flows.
+
+    The Azure web/API runtime uses this provider for lightweight operations
+    such as tournament image proxying and intentionally does not ship the
+    pandas/pyarrow training stack. Keeping the history module lazy prevents
+    a production import-time dependency on pandas while preserving identical
+    merge semantics for history/refresh jobs, which install requirements-train.
+    """
+    from ..data.history_snapshot import merge_matches
+
+    return merge_matches(*groups)
 
 
 class RapidTennisClient:
@@ -838,7 +851,7 @@ class RapidTennisClient:
 
                 matches.append(match)
 
-        return merge_matches(matches)
+        return _merge_matches(matches)
 
     def upcoming(
         self,
@@ -862,7 +875,7 @@ class RapidTennisClient:
             )
             day += timedelta(days=1)
 
-        return merge_matches(matches)
+        return _merge_matches(matches)
 
     @staticmethod
     def _match_richness_score(
@@ -983,7 +996,7 @@ class RapidTennisClient:
                 if match.is_completed
             )
             day += timedelta(days=1)
-        return merge_matches(rows)
+        return _merge_matches(rows)
 
     def historical_year(
         self,
@@ -1053,7 +1066,7 @@ class RapidTennisClient:
             days_checked,
             days_with_categories,
             normalized_matches,
-            len(merge_matches(matches)),
+            len(_merge_matches(matches)),
         )
 
         if not matches:
@@ -1066,7 +1079,7 @@ class RapidTennisClient:
                 "Refusing to report a successful empty bootstrap."
             )
 
-        return merge_matches(matches)
+        return _merge_matches(matches)
 
     @classmethod
     def _walk_match_nodes(
