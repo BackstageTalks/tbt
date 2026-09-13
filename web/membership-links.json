@@ -1,0 +1,11 @@
+{
+  "schema": 2,
+  "currency": "EUR",
+  "plans": {
+    "rookie": {"payment_url": "", "price": "", "billing_label": ""},
+    "pro": {"payment_url": "", "price": "", "billing_label": ""},
+    "elite": {"payment_url": "", "price": "", "billing_label": ""},
+    "legend": {"payment_url": "", "price": "", "billing_label": ""},
+    "goat": {"payment_url": "", "price": "", "billing_label": "", "invite_url": ""}
+  }
+}

@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="sk">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#05111f" />
+  <title>BlinQ · Tennis Intelligence</title>
+  <link rel="icon" href="/assets/blinq_favi.png" type="image/png" />
+  <link rel="stylesheet" href="/styles.css?v=660" media="not all" />
+  <link rel="stylesheet" href="/responsive.css?v=660" media="not all" />
+  <link rel="stylesheet" href="/premium.css?v=660" media="not all" />
+  <link rel="stylesheet" href="/blinq.css?v=660" />
+  <script defer src="/auth.js?v=660"></script>
+  <script defer src="/responsive.js?v=660"></script>
+  <script defer src="/app.js?v=660"></script>
+</head>
+<body id="blinqPremium" class="blinq-home">
+  <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
+  <noscript><p class="no-script">BlinQ potrebuje JavaScript.</p></noscript>
+  <div id="statusBanner" class="status-banner" hidden role="status"></div>
+
+  <div id="bootSplash" class="boot-splash" aria-live="polite">
+    <div class="boot-card">
+      <img src="/assets/blinq_logo.svg" alt="BlinQ" />
+      <div class="boot-balls"><i></i><i></i><i></i></div>
+      <span>Načítavam BlinQ…</span>
+    </div>
+  </div>
+
+  <div id="appShell" class="app-shell" hidden>
+    <button id="navBackdrop" class="legacy-nav-hook" hidden></button>
+    <aside id="appNavigation" class="legacy-nav-hook" hidden aria-label="Legacy navigation">
+      <button id="menuClose" type="button">×</button>
+      <nav id="adminNavigationWrap" hidden><div id="adminNavigation"></div></nav>
+      <div id="sidebarPromoZone"></div>
+    </aside>
+
+    <header class="site-header dashboard-topbar">
+      <div class="header-top">
+        <a class="brand" href="#predictions" data-route="predictions" aria-label="BlinQ home">
+          <img src="/assets/blinq_logo.svg" alt="BlinQ" />
+        </a>
+
+        <section id="headerFeatureStrip" class="feature-strip" aria-label="BlinQ promo"></section>
+
+        <div class="header-actions">
+          <button id="topUpgradeButton" class="plans-button" type="button" data-route="account"><span>✦</span><strong id="topUpgradeLabel">Plány</strong></button>
+          <button id="topNotification" class="notification-button" type="button" aria-label="Upozornenia"><span>♢</span><i></i></button>
+          <button id="adminQuickButton" class="admin-quick" type="button" data-route="admin" hidden>Admin</button>
+          <div id="profileShell" class="profile-shell">
+            <button id="profileButton" class="profile-button" type="button" aria-label="Účet">
+              <span class="avatar" id="avatar">B</span>
+              <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small><span id="profilePlanIcon">◇</span> <span id="profilePlan">Člen</span> · <span id="memberStatus">Aktívne</span></small></span>
+            </button>
+            <button id="profileMenuToggle" class="profile-toggle" type="button" aria-controls="profileMenu" aria-expanded="false">⌄</button>
+            <div id="profileMenu" class="profile-menu" hidden>
+              <button id="profileAdminLink" data-route="admin" type="button" hidden><span>⚙</span><span><strong>Admin</strong><small>Control center</small></span></button>
+              <button id="headerLogoutButton" type="button"><span>↪</span><span><strong>Odhlásiť sa</strong><small>Ukončiť reláciu</small></span></button>
+            </div>
+            <span id="accountHoverTooltip" class="account-hover-tooltip" role="tooltip" hidden>
+              <strong id="tooltipAccountName">BlinQ User</strong><span id="tooltipAccountEmail">—</span><b id="tooltipAccountPlan">Člen</b><b id="tooltipAccountRemaining">—</b>
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-nav-row">
+        <nav id="mainNavigation" class="main-navigation" aria-label="Hlavná navigácia"></nav>
+        <label class="global-search"><span>⌕</span><input id="headerSearchInput" type="search" placeholder="Hľadať turnaje, hráčov…" /></label>
+      </div>
+      <button id="menuToggle" class="legacy-nav-hook" hidden></button>
+      <div class="legacy-nav-hook" hidden><strong id="headerTime">—</strong><span id="headerDate">—</span><span id="headerModelState">Produkcia</span></div>
+    </header>
+
+    <main id="mainContent" class="site-main" tabindex="-1">
+      <section id="routeHeading" class="route-heading" hidden>
+        <span id="pageEyebrow">TENISOVÁ ANALYTIKA</span><h1 id="pageTitle">Prehľad</h1><p id="pageSubtitle">BlinQ</p><span id="todayLabel" hidden></span>
+      </section>
+      <section id="staleNotice" class="inline-notice" hidden></section>
+
+      <div id="predictionsView">
+        <section id="dashboardHero" class="hero-shell" aria-label="BlinQ hero"></section>
+        <section id="bannerTop" class="promo-zone"></section>
+
+        <section id="dailyHub" class="daily-panel">
+          <div class="daily-panel-head">
+            <div class="daily-title-group">
+              <span class="daily-mark"><i></i></span>
+              <div><small>BLINQ DAILY INTELLIGENCE</small><h2>Tipy dňa</h2></div>
+            </div>
+            <div class="daily-meta" id="dailyHubMeta">
+              <span class="daily-date"><i>◫</i><b id="dailyHubMetaDate">Dnešný výber</b></span>
+              <strong id="dailyHubMetaCount">0 zápasov</strong>
+              <span class="daily-promise">Profesionálna analýza.<br/>Reálne príležitosti.</span>
+            </div>
+          </div>
+          <div class="daily-tabs-row">
+            <div id="dailyHubTabs" class="daily-tabs" role="tablist"></div>
+            <button id="dailyHubExpand" class="daily-expand" type="button">Zobraziť všetky tipy →</button>
+          </div>
+          <div class="table-scroller">
+            <table class="daily-hub-table"><thead id="dailyHubHead"></thead><tbody id="dailyHubBody"></tbody></table>
+          </div>
+          <div id="dailyHubEmpty" class="daily-empty" hidden>V tejto kategórii zatiaľ nie sú dostupné tipy.</div>
+        </section>
+
+        <section class="intel-strip" aria-label="BlinQ intelligence">
+          <article><span class="intel-dot violet">◉</span><div><strong>Pokročilé dáta</strong><small>Viac ako 50+ metrík</small></div></article>
+          <article><span class="intel-dot green">▥</span><div><strong>AI modely</strong><small>Point-in-time analýza</small></div></article>
+          <article><span class="intel-dot gold">◇</span><div><strong>Value príležitosti</strong><small>Oddelené od confidence</small></div></article>
+          <article><span class="intel-dot violet">●</span><div><strong>Tenisová inteligencia</strong><small>Ranking · forma · povrch · H2H</small></div></article>
+          <aside><strong>BET SMARTER.</strong><span>PLAY BRIGHTER.</span></aside>
+        </section>
+
+        <section id="bannerMid" class="promo-zone"></section>
+      </div>
+
+      <section id="routePanel" class="route-panel" hidden></section>
+
+      <section class="vip-rail">
+        <div class="vip-brand"><span>♛</span><div><strong>BlinQ VIP</strong><small>Prémiové tipy. Hlbšie dáta. Väčší prehľad.</small></div></div>
+        <div class="vip-benefits">
+          <div><span>⌁</span><div><strong>Pokročilé modely</strong><small>Viac tipov každý deň</small></div></div>
+          <div><span>◫</span><div><strong>Detailné štatistiky</strong><small>Hlbší kontext zápasu</small></div></div>
+          <div><span>◎</span><div><strong>Exkluzívna komunita</strong><small>Pre vážnych hráčov</small></div></div>
+        </div>
+        <a class="vip-cta" href="#account" data-route="account">Zobraziť plány →</a>
+      </section>
+
+      <footer class="site-footer">
+        <div class="footer-left"><img src="/assets/blinq_logo.svg" alt="BlinQ" /><span>© 2026 BlinQ</span><nav id="footerLearnNavigation"></nav></div>
+        <div class="footer-right"><span class="system-status"><i></i><strong>Všetky systémy funkčné</strong><small id="footerModelState">Produkčný feed</small></span><nav id="footerLanguages" class="languages"><span>JAZYK</span><a href="?lang=sk#predictions" data-lang="sk" class="active">SK</a><a href="?lang=cz#predictions" data-lang="cz">CZ</a><a href="?lang=en#predictions" data-lang="en">EN</a></nav></div>
+      </footer>
+    </main>
+
+    <nav id="mobileTabs" class="mobile-tabs" aria-label="Rýchla navigácia"><a data-route="predictions" href="#predictions">⌂<span>Prehľad</span></a><a data-route="results" href="#results">✓<span>Výsledky</span></a><a data-route="account" href="#account">✦<span>Plány</span></a></nav>
+
+    <!-- Runtime hooks kept strictly for application logic; never used as visible layout. -->
+    <div class="runtime-hooks" aria-hidden="true">
+      <div id="overviewTitle"></div><div id="overviewDescription"></div><div id="syncBar"><span id="syncStatus"></span><button id="syncRefresh"></button></div>
+      <div id="dashboardSectionSwitcher"><div id="dashboardSectionToggles"></div><span id="dashboardSectionsStatus"></span></div><div id="dashboardDisabledSections"></div>
+      <div id="bannerBottom"></div><div id="dailyHubInsightBoard"><div id="dailyHubInsightMain"></div></div>
+      <section id="predictionsPanel"><span id="updatedAt"></span><span id="matchCount"></span><button id="refreshButton"></button><div id="predictionGrid"></div><a id="primeSeeAllCard"><span id="primeSeeAllCardCount"></span></a></section>
+      <section id="topDailyPanel"></section><section id="valuePanel"></section><section id="acePanel"></section><section id="sgPanel"></section><section id="doublesPanel"></section><section id="resultsPreviewPanel"><div id="resultsPreviewContent"></div><span id="resultsPreviewCount"></span><span id="resultsSeeAllCardCount"></span></section><section id="bttsBonusPanel"></section>
+      <input id="searchInput"/><select id="tourFilter"><option value=""></option></select><select id="tournamentFilter"><option value=""></option></select><select id="surfaceFilter"><option value=""></option></select><select id="confidenceFilter"><option value=""></option></select><button id="prevPick"></button><button id="nextPick"></button>
+      <div id="carouselDots"></div>
+    </div>
+  </div>
+
+  <dialog id="authDialog" class="auth-dialog" aria-labelledby="authTitle">
+    <div class="auth-card">
+      <img class="auth-logo" src="/assets/blinq_logo.svg" alt="BlinQ" />
+      <div class="auth-copy"><span>STATISTICAL ENGINE · BACKSTAGETALKS</span><h2 id="authTitle">Vitaj späť.</h2><p id="authSubtitle">Prihlás sa do svojho tenisového analytického priestoru.</p></div>
+      <form id="authForm">
+        <label id="nameLabel" hidden>Zobrazované meno<input id="authName" autocomplete="name" maxlength="80" /></label>
+        <label id="emailLabel">E-mail<input id="authEmail" type="email" autocomplete="email" required placeholder="Zadaj svoj e-mail" /></label>
+        <label id="passwordLabel">Heslo<span class="password-row"><input id="authPassword" type="password" autocomplete="current-password" required placeholder="Zadaj svoje heslo" /><button id="authPasswordToggle" type="button">Zobraziť</button></span></label>
+        <p id="authMessage" role="status"></p><button id="authSubmit" class="primary-button" type="submit">Prihlásiť sa</button>
+      </form>
+      <div class="auth-links"><button id="switchSignup" type="button">Vytvoriť účet</button><button id="switchReset" type="button">Zabudnuté heslo</button><button id="resendVerification" type="button" hidden>Poslať overovací e-mail znova</button></div>
+      <nav id="authLanguages" class="languages"><a class="active" data-lang="sk" href="?lang=sk">SK</a><a data-lang="cz" href="?lang=cz">CZ</a><a data-lang="en" href="?lang=en">EN</a></nav>
+    </div>
+  </dialog>
+
+  <dialog id="accountDialog" class="account-dialog" aria-labelledby="accountDialogTitle"><button id="accountDialogClose" class="dialog-close" type="button">×</button><div id="accountDialogContent"></div></dialog>
+  <dialog id="matchDialog" class="match-dialog" aria-label="Analýza zápasu"><button id="dialogClose" class="dialog-close" type="button">×</button><div id="dialogContent"></div></dialog>
+  <dialog id="upgradeDialog" class="upgrade-dialog" aria-labelledby="upgradeDialogTitle"><button id="upgradeDialogClose" class="dialog-close" type="button">×</button><div id="upgradeDialogContent"></div></dialog>
+
+  <template id="predictionTemplate"><article class="prediction-card"><div class="card-meta"><span class="tour"></span><span class="time"></span><span class="surface"></span></div><div class="players-row"><div class="player player-a"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div><div class="vs">VS</div><div class="player player-b"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div></div><div class="data-depth-row" hidden></div><div class="pick-row"><div><small>Náš tip</small><strong class="pick-name"></strong></div><div><div class="probability"></div><span class="confidence"></span></div></div><div class="betting-row" hidden><span class="betting-odds"></span><span class="betting-data"></span><span class="betting-surface"></span><span class="betting-form"></span><button class="analysis-link" type="button">Detail →</button></div><div class="signals"></div></article></template>
+</body>
+</html>
