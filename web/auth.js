@@ -281,11 +281,12 @@
     const s = await restore();
     return json('/api/v1/feed', {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
   }
-  async function matchIntelligence(player1Id, player2Id, surface = '') {
+  async function matchIntelligence(player1Id, player2Id, surface = '', customId = '') {
     const params = new URLSearchParams({
       player1_id: String(player1Id || ''),
       player2_id: String(player2Id || ''),
       surface: String(surface || ''),
+      custom_id: String(customId || ''),
     });
     return apiWithSession(`/api/v1/match-intelligence?${params.toString()}`);
   }

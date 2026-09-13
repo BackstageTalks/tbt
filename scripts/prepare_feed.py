@@ -240,6 +240,12 @@ def _merge_player_profile(player: dict, profiles: dict[str, dict], photos: set[s
         ("country_code", "country_code"),
         ("country_code3", "country_code3"),
         ("country_name", "country_name"),
+        ("birth_date", "birth_date"),
+        ("birth_timestamp", "birth_timestamp"),
+        ("height_cm", "height_cm"),
+        ("hand", "hand"),
+        ("birthplace", "birthplace"),
+        ("residence", "residence"),
     ):
         if profile.get(source) not in (None, ""):
             player[target] = profile.get(source)

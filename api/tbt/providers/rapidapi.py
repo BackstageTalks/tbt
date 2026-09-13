@@ -338,6 +338,69 @@ class RapidTennisClient:
             enrichment=True,
         )
 
+    def _get_optional_json(self, path: str) -> Any:
+        """GET optional provider JSON; 204/404 mean unavailable, not fatal."""
+        url = f"{self.cfg.rapidapi_base_url}{path}"
+        self._throttle()
+        if self.request_limit is not None and self.request_count >= self.request_limit:
+            raise RequestBudgetExceeded("Per-run request limit exhausted")
+        if self.rate_limit_remaining == 0:
+            raise RequestBudgetExceeded("Provider reports no remaining requests")
+        if self.request_budget is not None:
+            self.request_budget(self.client, self.cfg, enrichment=True)
+        self._last_request_at = time.monotonic()
+        self.request_count += 1
+        response = self.client.get(url, headers=self.headers)
+        remaining = response.headers.get("x-ratelimit-requests-remaining")
+        if remaining is not None:
+            self.rate_limit_remaining = safe_int(remaining)
+        if response.status_code in {204, 404}:
+            return {}
+        if response.status_code == 429:
+            raise ProviderError(f"RapidAPI HTTP 429 for {path}")
+        if response.status_code >= 400:
+            raise ProviderError(
+                f"RapidAPI HTTP {response.status_code} for {path}: {response.text[:300]}"
+            )
+        if not response.content:
+            return {}
+        return response.json()
+
+    def player_details(self, player_id: str | int) -> Any:
+        """Current player profile metadata for presentation only.
+
+        TennisApi exposes getTennisPlayerDetails under the player resource.
+        A compatibility fallback is retained because older RapidAPI revisions
+        used a /details suffix.
+        """
+        for path in (
+            f"/api/tennis/player/{player_id}",
+            f"/api/tennis/player/{player_id}/details",
+        ):
+            payload = self._get_optional_json(path)
+            if payload:
+                return payload
+        return {}
+
+    def head_to_head_history(self, custom_id: str) -> Any:
+        """Direct H2H history for a provider match customId.
+
+        The primary path matches TennisApi's getHeadToHeadHistory contract.
+        The event alias is kept as a compatibility fallback for provider
+        revisions. 204/404 simply fall back to reconstructed point-in-time H2H.
+        """
+        token = str(custom_id or "").strip()
+        if not token or len(token) > 64:
+            return {}
+        for path in (
+            f"/api/tennis/match/{token}/h2h",
+            f"/api/tennis/event/{token}/h2h",
+        ):
+            payload = self._get_optional_json(path)
+            if payload:
+                return payload
+        return {}
+
     def previous_player_matches(self, player_id: str | int, page: int = 0) -> Any:
         """Previous matches for one player, newest first.
 
@@ -361,10 +424,14 @@ class RapidTennisClient:
 
     def player_near_matches(self, player_id: str | int) -> Any:
         """Nearest previous/next player events from TennisApi."""
-        return self._get(
+        for path in (
+            f"/api/tennis/player/{player_id}/events/near",
             f"/api/tennis/player/{player_id}/near-events",
-            enrichment=True,
-        )
+        ):
+            payload = self._get_optional_json(path)
+            if payload:
+                return payload
+        return {}
 
     def event_statistics(self, event_id: str | int) -> Any:
         """Post-match event statistics; coverage is provider/event dependent."""

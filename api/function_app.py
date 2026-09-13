@@ -40,7 +40,7 @@ from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.6.3"
+RELEASE = "6.6.4"
 API_VERSION = "3.5.1"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -317,6 +317,94 @@ def _provider_events(payload):
     return RapidTennisClient._data(payload)
 
 
+
+def _feed_match_intelligence(player1_id, player2_id, surface=""):
+    """Return serving-feed analytics without any live provider dependency."""
+    try:
+        feed = read_feed(FEED)
+    except Exception:
+        return None
+    target1, target2 = str(player1_id), str(player2_id)
+    keys = (
+        "upcoming", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
+        "value_picks", "value", "doubles_picks", "doubles", "ace_picks",
+        "aces", "sg_picks", "sets_games", "set_game_picks",
+    )
+    rows = []
+    for key in keys:
+        value = feed.get(key) if isinstance(feed, dict) else None
+        if isinstance(value, list):
+            rows.extend(value)
+    markets = feed.get("markets") if isinstance(feed, dict) else None
+    if isinstance(markets, dict):
+        for value in markets.values():
+            if isinstance(value, list):
+                rows.extend(value)
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+        p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+        ids = (str(p1.get("id") or ""), str(p2.get("id") or ""))
+        if set(ids) != {target1, target2}:
+            continue
+        result = {"source": "serving_feed", "surface": _surface_family(surface or row.get("surface")), "custom_id": row.get("custom_id") or ""}
+        for label, player in (("player1", p1), ("player2", p2)):
+            presentation = player.get("presentation") if isinstance(player.get("presentation"), dict) else {}
+            result[label] = {
+                "rank": player.get("rank"),
+                "previous_rank": player.get("previous_rank"),
+                "best_rank": player.get("best_rank"),
+                "ranking_points": player.get("ranking_points"),
+                "country_code": player.get("country_code") or "",
+                "birth_date": player.get("birth_date"),
+                "height_cm": player.get("height_cm"),
+                "hand": player.get("hand"),
+                "birthplace": player.get("birthplace"),
+                "residence": player.get("residence"),
+                "presentation": presentation,
+            }
+        pp1 = result["player1"].get("presentation") or {}
+        result["h2h"] = {
+            "player1_wins": pp1.get("h2h_wins"),
+            "player2_wins": pp1.get("h2h_losses"),
+            "matches": (pp1.get("h2h_wins") or 0) + (pp1.get("h2h_losses") or 0) if pp1.get("h2h_wins") is not None and pp1.get("h2h_losses") is not None else None,
+            "source": "point_in_time_feed",
+        }
+        return result
+    return None
+
+
+def _h2h_from_provider_payload(payload, player1_id, player2_id):
+    events = RapidTennisClient._data(payload)
+    if not events and isinstance(payload, dict) and isinstance(payload.get("events"), list):
+        events = [row for row in payload["events"] if isinstance(row, dict)]
+    if not events:
+        return None
+    return _h2h_from_events(events, player1_id, player2_id)
+
+
+def _player_detail_summary(payload):
+    if not isinstance(payload, dict):
+        return {}
+    row = payload
+    for key in ("player", "team", "data", "result"):
+        value = row.get(key)
+        if isinstance(value, dict):
+            row = value
+            break
+    country = row.get("country") if isinstance(row.get("country"), dict) else {}
+    birth_ts = row.get("dateOfBirthTimestamp") or row.get("birthTimestamp") or row.get("birth_timestamp")
+    return {
+        "country_code": country.get("alpha2") or country.get("code") or "",
+        "birth_date": row.get("dateOfBirth") or row.get("birthDate") or row.get("birth_date"),
+        "birth_timestamp": birth_ts,
+        "height_cm": row.get("height") or row.get("heightCm") or row.get("height_cm"),
+        "hand": row.get("plays") or row.get("hand") or row.get("handedness") or row.get("playsHand"),
+        "birthplace": row.get("birthplace") or row.get("birthPlace") or row.get("placeOfBirth"),
+        "residence": row.get("residence") or row.get("currentResidence"),
+    }
+
 def _cached_match_intelligence(key):
     now = time.monotonic()
     with _MATCH_INTELLIGENCE_CACHE_LOCK:
@@ -356,16 +444,25 @@ def match_intelligence(req):
         p1 = str(req.params.get("player1_id") or "").strip()
         p2 = str(req.params.get("player2_id") or "").strip()
         surface = str(req.params.get("surface") or "").strip()[:48]
+        custom_id = str(req.params.get("custom_id") or "").strip()[:64]
         if not p1.isdigit() or not p2.isdigit() or len(p1) > 12 or len(p2) > 12:
             return response({"error": "invalid_player_ids"}, 400)
-        key = f"{p1}:{p2}:{_surface_family(surface)}"
+        key = f"{p1}:{p2}:{_surface_family(surface)}:{custom_id}"
         cached = _cached_match_intelligence(key)
         if cached is not None:
             return response({**cached, "cached": True})
 
-        client = RapidTennisClient(settings)
+        feed_result = _feed_match_intelligence(p1, p2, surface)
+        try:
+            client = RapidTennisClient(settings)
+        except Exception:
+            if feed_result is not None:
+                _store_match_intelligence(key, feed_result)
+                return response({**feed_result, "cached": False, "live_provider": False})
+            raise
         histories = {}
         rankings = {}
+        details = {}
         for pid in (p1, p2):
             events = []
             seen = set()
@@ -392,8 +489,20 @@ def match_intelligence(req):
             except Exception:
                 logging.exception("Current ranking enrichment unavailable for player %s", pid)
                 rankings[pid] = {}
+            try:
+                details[pid] = _player_detail_summary(client.player_details(pid))
+            except Exception:
+                logging.exception("Player detail enrichment unavailable for player %s", pid)
+                details[pid] = {}
 
-        h2h = _h2h_from_events(histories[p1], p1, p2)
+        h2h = None
+        if custom_id:
+            try:
+                h2h = _h2h_from_provider_payload(client.head_to_head_history(custom_id), p1, p2)
+            except Exception:
+                logging.exception("Direct H2H enrichment unavailable for %s", custom_id)
+        if not h2h or not h2h.get("matches"):
+            h2h = _h2h_from_events(histories[p1], p1, p2)
         # If the second player's recent history includes older mutual matches,
         # merge them without double-counting provider event ids.
         p1_h2h_ids = {str(row.get("id") or "") for row in _completed_player_events(histories[p1], p1)
@@ -425,7 +534,14 @@ def match_intelligence(req):
                 "h2h_losses": h2h.get("player2_wins" if opponent_wins_key == "player1_wins" else "player1_wins"),
                 "h2h_matches": h2h.get("matches"),
             }
-            result[label] = {**rankings.get(pid, {}), "presentation": profile}
+            base = {}
+            if feed_result and isinstance(feed_result.get(label), dict):
+                base.update(feed_result.get(label) or {})
+            base.update({k: v for k, v in details.get(pid, {}).items() if v not in (None, "")})
+            base.update({k: v for k, v in rankings.get(pid, {}).items() if v not in (None, "")})
+            base["presentation"] = {**((base.get("presentation") or {}) if isinstance(base.get("presentation"), dict) else {}), **profile}
+            result[label] = base
+        result["live_provider"] = True
         _store_match_intelligence(key, result)
         return response({**result, "cached": False})
     except AuthUnavailable:

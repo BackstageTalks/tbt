@@ -1334,7 +1334,7 @@
     const p1=String(row?.player1?.id||''),p2=String(row?.player2?.id||'');
     if(!/^\d{1,12}$/.test(p1)||!/^\d{1,12}$/.test(p2))return;
     row.__liveIntelligenceLoading=true;
-    BlinqAuth.matchIntelligence(p1,p2,row?.surface||'').then(payload=>{
+    BlinqAuth.matchIntelligence(p1,p2,row?.surface||'',row?.custom_id||row?.customId||'').then(payload=>{
       mergeLiveMatchIntelligence(row,payload);
       row.__liveIntelligenceLoading=false;
       const dialog=$('matchDialog');

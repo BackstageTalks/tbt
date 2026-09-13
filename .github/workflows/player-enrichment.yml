@@ -18,6 +18,11 @@ on:
         required: true
         default: "100"
         type: string
+      max_player_detail_requests:
+        description: "Maximum current player-detail API requests this run"
+        required: true
+        default: "250"
+        type: string
       max_tournament_logo_requests:
         description: "Maximum tournament-logo API requests this run"
         required: true
@@ -80,6 +85,7 @@ jobs:
             --max-players "${{ inputs.max_players }}"
             --max-photo-requests "${{ inputs.max_photo_requests }}"
             --max-fallback-ranking-requests "${{ inputs.max_fallback_ranking_requests }}"
+            --max-player-detail-requests "${{ inputs.max_player_detail_requests }}"
             --max-tournament-logo-requests "${{ inputs.max_tournament_logo_requests }}"
           )
           if [[ "${{ inputs.refresh_photos }}" == "true" ]]; then ARGS+=(--refresh-photos); fi

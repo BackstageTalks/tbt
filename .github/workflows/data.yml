@@ -127,14 +127,28 @@ jobs:
             if [[ "$PROMOTE" == true ]]; then args+=(--promote); fi
             python scripts/pipeline.py "${args[@]}"
           fi
+      - name: Refresh presentation metadata for current feed
+        if: env.MODE == 'refresh'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The prediction candidate is already immutable in tbt-predictions-v1.
+          # Refresh presentation-only metadata/assets before assembling the
+          # serving feed so rank/country/photos/logos/profile details are always
+          # available without requiring live RapidAPI access from Azure.
+          python scripts/enrich_player_cards.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --max-players 0 \
+            --max-photo-requests 250 \
+            --max-fallback-ranking-requests 120 \
+            --max-player-detail-requests 250 \
+            --max-tournament-logo-requests 120
+
       - name: Prepare refreshed serving feed and cached player assets
         if: env.MODE == 'refresh'
         shell: bash
         run: |
           set -euo pipefail
-          # pipeline refresh commits the immutable prediction candidate first.
-          # Rebuild the deploy snapshot from that release and attach optional
-          # presentation-only player rank/country/photo metadata.
           python scripts/prepare_feed.py
           test -s api/data/feed.json
 

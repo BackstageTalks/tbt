@@ -127,7 +127,10 @@ def predict(model, history, upcoming, now=None):
         profile1["h2h_losses"] = h2h_p2
         profile2["h2h_wins"] = h2h_p2
         profile2["h2h_losses"] = h2h_p1
-        rows.append({"id": match.match_id, "event_id": event_id(match), "tour": match.tour.upper(),
+        provider_custom_id = ""
+        if isinstance(match.provider_payload, dict):
+            provider_custom_id = str(match.provider_payload.get("customId") or match.provider_payload.get("custom_id") or "").strip()
+        rows.append({"id": match.match_id, "event_id": event_id(match), "custom_id": provider_custom_id, "tour": match.tour.upper(),
             "scheduled_at": match.scheduled_at.isoformat(), "tournament": match.tournament,
             "tournament_id": str(match.tournament_id or ""),
             "tournament_logo_id": tournament_logo_id,

@@ -136,9 +136,52 @@ def _ranking_rows(payload: Any) -> list[dict[str, Any]]:
     return [payload]
 
 
+def profile_from_player_details(payload: Any, *, assumed_player_id: str | int) -> dict[str, Any]:
+    """Normalise optional player profile fields from getTennisPlayerDetails."""
+    if not isinstance(payload, dict):
+        return {"id": str(assumed_player_id)}
+    row = payload
+    for key in ("player", "team", "data", "result"):
+        value = row.get(key)
+        if isinstance(value, dict):
+            row = value
+            break
+    country = _as_dict(row.get("country"))
+    alpha2 = _first(country, "alpha2", "code", "countryCode")
+    alpha3 = _first(country, "alpha3")
+    birth_ts = safe_int(_first(row, "dateOfBirthTimestamp", "birthTimestamp", "birth_timestamp"))
+    birth_date = _first(row, "dateOfBirth", "birthDate", "birth_date")
+    if not birth_date and birth_ts:
+        try:
+            birth_date = datetime.fromtimestamp(birth_ts, tz=timezone.utc).date().isoformat()
+        except (ValueError, OSError, OverflowError):
+            birth_date = None
+    height = _first(row, "height", "heightCm", "height_cm")
+    try:
+        height_cm = int(round(float(height))) if height not in (None, "") else None
+    except (TypeError, ValueError):
+        height_cm = None
+    hand = _first(row, "plays", "hand", "handedness", "playsHand", "playerHand")
+    birthplace = _first(row, "birthplace", "birthPlace", "placeOfBirth", "birth_place")
+    residence = _first(row, "residence", "currentResidence", "resides")
+    return {
+        "id": str(_first(row, "id", "playerId", "teamId") or assumed_player_id),
+        "name": str(_first(row, "name", "fullName", "shortName") or "").strip(),
+        "country_code": str(alpha2).upper() if alpha2 else None,
+        "country_code3": str(alpha3).upper() if alpha3 else None,
+        "country_name": str(country.get("name") or "").strip() or None,
+        "birth_date": str(birth_date) if birth_date else None,
+        "birth_timestamp": birth_ts if birth_ts and birth_ts > 0 else None,
+        "height_cm": height_cm if height_cm and 120 <= height_cm <= 230 else None,
+        "hand": str(hand).strip() if hand else None,
+        "birthplace": str(birthplace).strip() if birthplace else None,
+        "residence": str(residence).strip() if residence else None,
+    }
+
+
 def _merge_profile(base: dict[str, Any], update: dict[str, Any], *, source: str) -> dict[str, Any]:
     merged = dict(base)
-    for key in ("name", "rank", "previous_rank", "best_rank", "ranking_points", "country_code", "country_code3", "country_name", "tour"):
+    for key in ("name", "rank", "previous_rank", "best_rank", "ranking_points", "country_code", "country_code3", "country_name", "tour", "birth_date", "birth_timestamp", "height_cm", "hand", "birthplace", "residence"):
         value = update.get(key)
         if value not in (None, ""):
             merged[key] = value
@@ -317,6 +360,7 @@ def main() -> None:
     parser.add_argument("--max-photo-requests", type=int, default=250)
     parser.add_argument("--max-tournament-logo-requests", type=int, default=120)
     parser.add_argument("--max-fallback-ranking-requests", type=int, default=100)
+    parser.add_argument("--max-player-detail-requests", type=int, default=250)
     parser.add_argument("--refresh-photos", action="store_true")
     parser.add_argument(
         "--cache-dir",
@@ -329,6 +373,7 @@ def main() -> None:
         ("max_photo_requests", args.max_photo_requests),
         ("max_tournament_logo_requests", args.max_tournament_logo_requests),
         ("max_fallback_ranking_requests", args.max_fallback_ranking_requests),
+        ("max_player_detail_requests", args.max_player_detail_requests),
     ):
         if value < 0:
             parser.error(f"{name} must be >= 0")
@@ -386,7 +431,7 @@ def main() -> None:
     }
 
     provider = RapidTennisClient(request_budget=None)
-    provider.request_limit = 2 + args.max_fallback_ranking_requests + args.max_photo_requests + args.max_tournament_logo_requests
+    provider.request_limit = 2 + args.max_fallback_ranking_requests + args.max_player_detail_requests + args.max_photo_requests + args.max_tournament_logo_requests
     report: dict[str, Any] = {
         "schema": 1,
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -396,6 +441,8 @@ def main() -> None:
         "ranking_snapshot_matches": 0,
         "fallback_ranking_requests": 0,
         "fallback_ranking_matches": 0,
+        "player_detail_requests": 0,
+        "player_detail_matches": 0,
         "photo_requests": 0,
         "photos_downloaded": 0,
         "photos_cached": 0,
@@ -472,6 +519,30 @@ def main() -> None:
             except Exception as exc:
                 report["errors"].append(
                     f"ranking {player_id} {item['name']}: {type(exc).__name__}: {exc}"
+                )
+
+        detail_budget = args.max_player_detail_requests
+        for item in players:
+            if detail_budget <= 0:
+                break
+            player_id = item["id"]
+            try:
+                report["player_detail_requests"] += 1
+                detail_budget -= 1
+                detail = profile_from_player_details(
+                    provider.player_details(player_id), assumed_player_id=player_id
+                )
+                if any(detail.get(key) not in (None, "") for key in ("birth_date", "height_cm", "hand", "country_code", "birthplace", "residence")):
+                    profiles[player_id] = _merge_profile(
+                        profiles[player_id], detail, source=profiles[player_id].get("ranking_source") or "player_details"
+                    )
+                    report["player_detail_matches"] += 1
+            except RequestBudgetExceeded as exc:
+                report["errors"].append(f"player detail request budget stopped: {exc}")
+                break
+            except Exception as exc:
+                report["errors"].append(
+                    f"player details {player_id} {item['name']}: {type(exc).__name__}: {exc}"
                 )
 
         photo_budget = args.max_photo_requests
