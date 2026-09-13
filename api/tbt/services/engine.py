@@ -20,6 +20,25 @@ def event_id(match):
     return str(next((raw.get(k) for k in ("_tbt_provider_event_id", "provider_event_id", "event_id", "eventId", "id") if raw.get(k)), match.match_id))
 
 
+def _provider_player_country(payload, *, player1):
+    """Best-effort ISO-2 country extraction from TennisApi event payload."""
+    if not isinstance(payload, dict):
+        return ""
+    keys = ("homeTeam", "home_team", "player1", "participant1", "player_1") if player1 else ("awayTeam", "away_team", "player2", "participant2", "player_2")
+    side = next((payload.get(k) for k in keys if isinstance(payload.get(k), dict)), {})
+    candidates = []
+    if isinstance(side, dict):
+        candidates.extend([side.get("country_code"), side.get("countryCode"), side.get("countryAlpha2"), side.get("country_code2")])
+        country = side.get("country")
+        if isinstance(country, dict):
+            candidates.extend([country.get("alpha2"), country.get("code"), country.get("iso2"), country.get("countryCode")])
+    for value in candidates:
+        text = str(value or "").strip().upper()
+        if len(text) == 2 and text.isalpha():
+            return text
+    return ""
+
+
 def _recent_form_summary(state, *, surface=None, limit=10):
     """Point-in-time recent form for presentation only.
 
@@ -118,11 +137,15 @@ def predict(model, history, upcoming, now=None):
             "player1": {
                 "id": match.player1_id, "name": match.player1_name,
                 "probability": p, "rank": match.player1_rank,
+                "country_code": _provider_player_country(match.provider_payload, player1=True),
+                "photo_url": f"/api/v1/player-image/{match.player1_id}" if str(match.player1_id or "").isdigit() else "",
                 "presentation": profile1,
             },
             "player2": {
                 "id": match.player2_id, "name": match.player2_name,
                 "probability": 1 - p, "rank": match.player2_rank,
+                "country_code": _provider_player_country(match.provider_payload, player1=False),
+                "photo_url": f"/api/v1/player-image/{match.player2_id}" if str(match.player2_id or "").isdigit() else "",
                 "presentation": profile2,
             },
             "winner_id": winner, "confidence": max(p, 1 - p),

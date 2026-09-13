@@ -40,7 +40,7 @@ from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.5.54"
+RELEASE = "6.5.55"
 API_VERSION = "3.5.1"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -185,6 +185,26 @@ def auth_profile(req):
         return response({"error": "account_storage_unavailable"}, 503)
 
 
+
+
+@app.route(route="v1/player-image/{player_id}", methods=["GET"])
+def player_image_proxy(req):
+    """Serve provider player artwork without exposing the RapidAPI key."""
+    raw = str((req.route_params or {}).get("player_id") or "").strip()
+    if not raw.isdigit() or not (1 <= len(raw) <= 12):
+        return func.HttpResponse(status_code=404)
+    try:
+        result = RapidTennisClient(settings).player_image(raw)
+    except Exception:
+        logging.exception("Player image unavailable for %s", raw)
+        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=300"})
+    if not result:
+        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=3600"})
+    data, content_type = result
+    allowed = {"image/png", "image/jpeg", "image/webp", "image/svg+xml", "image/gif"}
+    if content_type not in allowed:
+        content_type = "image/png"
+    return func.HttpResponse(body=data, status_code=200, mimetype=content_type, headers={"Cache-Control": "public, max-age=86400, stale-while-revalidate=604800"})
 
 
 @app.route(route="v1/tournament-logo/{tournament_id}", methods=["GET"])

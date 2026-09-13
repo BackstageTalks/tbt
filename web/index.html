@@ -7,14 +7,14 @@
 <meta content="BlinQ tenisová analytika — live predzápasové pravdepodobnosti, výsledky a analýza modelu." name="description"/>
 <title>BlinQ · Tenisová analytika</title>
 <link href="/assets/blinq_favi.png" rel="icon" type="image/png"/>
-<link href="/styles.css?v=6554" rel="stylesheet"/>
-<link href="/responsive.css?v=6554" rel="stylesheet"/>
-<link href="/premium.css?v=6554" rel="stylesheet"/>
-<link href="/premium-v2.css?v=6554" rel="stylesheet"/>
-<link href="/final-ui.css?v=6554" rel="stylesheet"/>
-<script defer="" src="/auth.js?v=6554"></script>
-<script defer="" src="/responsive.js?v=6554"></script>
-<script defer="" src="/app.js?v=6554"></script>
+<link href="/styles.css?v=6555" rel="stylesheet"/>
+<link href="/responsive.css?v=6555" rel="stylesheet"/>
+<link href="/premium.css?v=6555" rel="stylesheet"/>
+<link href="/premium-v2.css?v=6555" rel="stylesheet"/>
+<link href="/final-ui.css?v=6555" rel="stylesheet"/>
+<script defer="" src="/auth.js?v=6555"></script>
+<script defer="" src="/responsive.js?v=6555"></script>
+<script defer="" src="/app.js?v=6555"></script>
 </head><body id="blinqPremium">
 <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
 <noscript><p class="no-script">BlinQ needs JavaScript to sign in and load current predictions. Please enable it in your browser.</p></noscript>
@@ -44,7 +44,7 @@
 <section aria-label="BlinQ komunita a promo odkazy" class="header-feature-strip" id="headerFeatureStrip"></section>
 <div class="topbar-actions dashboard-account-actions">
 <button class="btn top-upgrade" data-route="account" id="topUpgradeButton" type="button"><span aria-hidden="true">✦</span><span id="topUpgradeLabel">Plány</span></button>
-<button class="btn admin-quick" data-route="admin" hidden id="adminQuickButton" type="button"><span aria-hidden="true">⚙</span><span>Admin</span></button>
+<button class="top-notification" id="topNotification" type="button" aria-label="Upozornenia"><span aria-hidden="true">♢</span><i aria-hidden="true"></i></button><button class="btn admin-quick" data-route="admin" hidden id="adminQuickButton" type="button"><span aria-hidden="true">⚙</span><span>Admin</span></button>
 <div class="profile-shell" id="profileShell">
 <button aria-label="Open account and membership" class="profile-button profile-button-large" id="profileButton" type="button">
 <span class="profile-avatar-anchor">
@@ -92,10 +92,10 @@
 <section aria-label="Advertising row above dashboard picks" class="promo-grid ad-row" id="bannerTop"></section>
 <section class="daily-hub" id="dailyHub">
   <div class="daily-hub-head">
-    <div class="daily-hub-title"><small>BLINQ DAILY INTELLIGENCE</small><h2>Tipy dňa</h2></div>
+    <div class="daily-hub-title"><span class="daily-hub-mark" aria-hidden="true"><i></i></span><div><small>BLINQ DAILY INTELLIGENCE</small><h2>Tipy dňa</h2></div></div>
     <div class="daily-hub-head-right">
       <div class="daily-hub-meta" id="dailyHubMeta"><span class="daily-hub-date"><i aria-hidden="true">◫</i><b id="dailyHubMetaDate">Dnešný výber</b></span><strong id="dailyHubMetaCount">0 zápasov</strong></div>
-      <button class="daily-hub-expand" id="dailyHubExpand" type="button">Zobraziť viac</button>
+      <button class="daily-hub-expand" id="dailyHubExpand" type="button">Zobraziť všetky tipy →</button><span class="daily-hub-promise">Profesionálna analýza.<br>Reálne príležitosti.</span>
     </div>
   </div>
   <div class="daily-hub-tabs" id="dailyHubTabs" role="tablist"></div>
@@ -112,6 +112,7 @@
   <article><span class="intel-icon intel-green">▥</span><div><strong>AI modely</strong><small>Point-in-time analýza bez leakage</small></div></article>
   <article><span class="intel-icon intel-gold">◇</span><div><strong>Value príležitosti</strong><small>Oddelené od hlavného confidence výberu</small></div></article>
   <article><span class="intel-icon intel-violet">●</span><div><strong>Tenisová inteligencia</strong><small>Ranking · forma · povrch · H2H</small></div></article>
+  <aside class="intel-slogan"><strong>BET SMARTER.</strong><span>PLAY BRIGHTER.</span></aside>
 </section>
 <div class="legacy-dashboard-panels" hidden aria-hidden="true">
 <section class="picks-panel prime-panel" data-ui-element="PRIME_PICKS_PANEL" id="predictionsPanel">
@@ -181,6 +182,7 @@
 <section aria-label="Disabled dashboard sections" class="dashboard-disabled-sections" hidden="" id="dashboardDisabledSections"></section>
 </div>
 <section class="route-panel" hidden="" id="routePanel"></section>
+<div class="footer-composition">
 <section aria-label="BlinQ VIP benefits" class="vip-bottom-rail" data-ui-element="VIP_BOTTOM_RAIL">
 <div class="vip-bottom-brand"><span class="vip-bottom-icon">♛</span><div><strong>BlinQ VIP</strong><small>Prémiové tipy. Hlbšie dáta. Vyššia úspešnosť.</small></div></div>
 <div class="vip-bottom-benefits">
@@ -204,6 +206,7 @@
 </div>
 </div>
 </footer>
+</div>
 </main>
 <nav aria-label="Rýchla navigácia" class="mobile-tabs" id="mobileTabs"><a data-route="predictions" href="#predictions"><span aria-hidden="true">⌂</span>Prehľad</a><a data-route="results" href="#results"><span aria-hidden="true">✓</span>Výsledky</a><a data-route="account" href="#account"><span aria-hidden="true">✦</span>Plány</a></nav>
 </div>

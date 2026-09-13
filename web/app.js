@@ -14,7 +14,7 @@
   const fmtClock = () => new Intl.DateTimeFormat(localeTag,{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
   const initials = name => String(name || 'B').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
   const flagEmoji = code => { const value=String(code||'').trim().toUpperCase(); if(!/^[A-Z]{2}$/.test(value))return ''; return [...value].map(ch=>String.fromCodePoint(127397+ch.charCodeAt(0))).join(''); };
-  const safePhotoUrl = value => { const url=String(value||'').trim(); if(/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)&&!url.split('/').includes('..'))return url; if(/^\/api\/v1\/tournament-logo\/[0-9]{1,12}$/.test(url))return url; if(/^https:\/\//i.test(url)){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}} return ''; };
+  const safePhotoUrl = value => { const url=String(value||'').trim(); if(/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)&&!url.split('/').includes('..'))return url; if(/^\/api\/v1\/(?:tournament-logo|player-image)\/[0-9]{1,12}$/.test(url))return url; if(/^https:\/\//i.test(url)){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}} return ''; };
   const safeUiAsset = value => { const url=String(value||'').trim(); if(!/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)||url.split('/').includes('..'))return ''; return url; };
   const avatarAssetSrc = value => { const url=safeUiAsset(value); return url ? `${url}?v=v6544` : ''; };
   function playerFallbackUrl(tour){
@@ -185,7 +185,7 @@
           state.ui.content_rows=mergeConfig(state.uiSource.content_rows||{},runtime.config.content_rows||{});
           state.ui.header_cta=mergeConfig(state.uiSource.header_cta||{},runtime.config.header_cta||{});
           state.ui.hero_banner=mergeConfig(state.uiSource.hero_banner||{enabled:true,slot_count:1,rotation_seconds:10,auto_rotate:true,show_dots:true,pause_on_hover:true},runtime.config.hero_banner||{});
-          // 6.5.54 visual migration: reset only the first hero COPY to the approved base while preserving any admin-managed image, link, schedule and access. Once published under this revision, future edits are preserved.
+          // 6.5.55 visual migration: reset only the first hero COPY to the approved base while preserving any admin-managed image, link, schedule and access. Once published under this revision, future edits are preserved.
           const srcHero=state.uiSource?.elements?.HERO_BANNER_1?.content,liveHero=state.ui?.elements?.HERO_BANNER_1?.content;
           if(srcHero&&liveHero){['eyebrow','headline','accent_text','text','button_text','theme','show_copy','creative_mode'].forEach(k=>{liveHero[k]=srcHero[k];});}
         }
@@ -951,7 +951,7 @@
     const name=player?.name||'—';
     const rank=firstFinite(player?.rank,player?.ranking,player?.current_rank);
     const country=player?.country_code||player?.country_code2||player?.country_code3||player?.country?.alpha2||player?.country?.alpha3||'';
-    const photo=player?.photo_url||player?.image_url||player?.photo||'';
+    const photo=player?.photo_url||player?.image_url||player?.photo||(String(player?.id||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${player.id}`:'');
     const flag=flagEmoji(String(country||'').toUpperCase());
     const rankText=rank!=null&&rank>0?'#'+Math.trunc(rank):'—';
     const tourText=String(tour||'').toUpperCase();
