@@ -151,6 +151,7 @@ jobs:
           set -euo pipefail
           python scripts/prepare_feed.py
           test -s api/data/feed.json
+          python scripts/verify_presentation_feed.py api/data/feed.json --summary
 
       - name: Deploy refreshed feed and application
         if: env.MODE == 'refresh'

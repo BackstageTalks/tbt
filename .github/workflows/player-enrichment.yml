@@ -126,3 +126,51 @@ jobs:
             .cache/tbt/player-enrichment.log
           if-no-files-found: error
           retention-days: 14
+
+
+  deploy:
+    name: Deploy enriched player cards
+    needs: enrich
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    concurrency:
+      group: tbt-production-deploy
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Prepare serving feed from freshly published enrichment
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          python scripts/prepare_feed.py
+          test -s api/data/feed.json
+          python scripts/verify_presentation_feed.py api/data/feed.json --summary
+
+      - name: Deploy enriched BlinQ feed and application
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: upload
+          app_location: web
+          api_location: api
+          output_location: ''
+          skip_app_build: true
+
+      - name: Confirm deployed prediction publication
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/confirm_prediction_publication.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --deployed-feed api/data/feed.json
