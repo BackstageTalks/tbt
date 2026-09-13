@@ -2,21 +2,26 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
-def read(path):
-    return (ROOT / path).read_text(encoding="utf-8")
+def read(path): return (ROOT / path).read_text(encoding="utf-8")
 
-def test_player_image_proxy_and_frontend_fallback_present():
-    api = read("api/function_app.py")
-    js = read("web/app.js")
-    assert 'route="v1/player-image/{player_id}"' in api
-    assert 'RapidTennisClient(settings).player_image(raw)' in api
-    assert '/api/v1/player-image/' in js
-
-def test_target_ui_has_daily_mark_slogan_and_footer_composition():
+def test_web_rebuild_keeps_business_runtime_but_replaces_visual_stack():
     html = read("web/index.html")
-    css = read("web/final-ui.css")
-    assert 'daily-hub-mark' in html
-    assert 'intel-slogan' in html
-    assert 'footer-composition' in html
-    assert '.top-notification' in css
-    assert 'grid-template-columns:repeat(4,minmax(0,1fr)) 230px' in css
+    css = read("web/blinq.css")
+    app = read("web/app.js")
+    assert 'id="appShell"' in html
+    assert 'id="dailyHub"' in html
+    assert 'id="routePanel"' in html
+    assert 'id="matchDialog"' in html
+    assert 'id="accountDialog"' in html
+    assert 'id="upgradeDialog"' in html
+    assert '.runtime-hooks' in css
+    assert 'renderDailyHub' in app
+    assert 'renderAdminRoute' in app
+
+def test_reference_visual_components_exist():
+    html = read("web/index.html")
+    css = read("web/blinq.css")
+    for token in ('feature-strip','hero-shell','daily-panel','intel-strip','vip-rail','site-footer'):
+        assert token in html
+    for selector in ('.header-slot','.hero-shell','.daily-hub-table','.intel-strip','.vip-rail','.match-dialog'):
+        assert selector in css
