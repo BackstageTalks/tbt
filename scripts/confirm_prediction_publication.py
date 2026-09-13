@@ -47,7 +47,7 @@ def _publication_candidate_view(value):
 
     result = {}
     for key, item in value.items():
-        if key == "player_assets":
+        if key in {"player_assets", "tournament_assets", "tournament_logo_url"}:
             continue
         if key in ("player1", "player2") and isinstance(item, dict):
             result[key] = {

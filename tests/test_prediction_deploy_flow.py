@@ -234,6 +234,13 @@ def test_confirm_allows_player_presentation_enrichment_only(monkeypatch, tmp_pat
         "photos_deployed": 727,
         "presentation_only": True,
     }
+    deployed["tournament_assets"] = {
+        "schema": 1,
+        "profiles_cached": 310,
+        "logos_deployed": 64,
+        "presentation_only": True,
+    }
+    deployed["upcoming"][0]["tournament_logo_url"] = "/assets/tournaments/42.webp"
     deployed["upcoming"][0]["player1"].update({
         "rank": 4,
         "country_code": "US",
