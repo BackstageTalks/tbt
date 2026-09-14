@@ -18,6 +18,17 @@ ALPHA3_TO2 = {
     "TWN":"TW","UKR":"UA","URY":"UY","USA":"US","UZB":"UZ","VEN":"VE",
     "ZAF":"ZA",
 }
+# Common IOC/provider aliases that are not ISO-3166 alpha-3. Tennis feeds
+# frequently use these codes in player payloads. Values remain explicit so we
+# never guess a country from a player name.
+PROVIDER_TO2 = {
+    "BAH":"BS", "BAR":"BB", "BER":"BM", "BUL":"BG", "CHI":"CL",
+    "CRC":"CR", "CRO":"HR", "CYP":"CY", "ENG":"GB", "ESA":"SV",
+    "GER":"DE", "GRE":"GR", "GUA":"GT", "INA":"ID", "ISL":"IS",
+    "LAT":"LV", "MAS":"MY", "NED":"NL", "NIR":"GB", "PAR":"PY",
+    "POR":"PT", "PUR":"PR", "ROM":"RO", "RSA":"ZA", "SCO":"GB",
+    "SLO":"SI", "SUI":"CH", "URU":"UY", "VIE":"VN", "WAL":"GB",
+}
 
 
 def normalize_country_code(value: object) -> str:
@@ -26,5 +37,5 @@ def normalize_country_code(value: object) -> str:
     if len(code) == 2 and code.isalpha():
         return code
     if len(code) == 3 and code.isalpha():
-        return ALPHA3_TO2.get(code, "")
+        return ALPHA3_TO2.get(code) or PROVIDER_TO2.get(code, "")
     return ""

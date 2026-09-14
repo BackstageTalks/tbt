@@ -4,16 +4,16 @@ import json
 ROOT=Path(__file__).resolve().parents[1]
 INDEX=(ROOT/'web/index.html').read_text(encoding='utf-8')
 APP=(ROOT/'web/app.js').read_text(encoding='utf-8')
-CSS=(ROOT/'web/redesign-678.css').read_text(encoding='utf-8')
+CSS=(ROOT/'web/redesign-680.css').read_text(encoding='utf-8')
 BACKEND=(ROOT/'api/function_app.py').read_text(encoding='utf-8')
 UI=json.loads((ROOT/'web/ui-config.json').read_text(encoding='utf-8'))
 
-def test_release_678_and_active_redesign_asset():
-    assert UI['ui_revision']=='6.7.8'
-    assert UI['revision']=='6.7.8'
-    assert 'RELEASE = "6.7.8"' in BACKEND
-    assert '/redesign-678.css?v=678' in INDEX
-    assert (ROOT/'web/redesign-678.css').exists()
+def test_release_680_and_active_redesign_asset():
+    assert UI['ui_revision']=='6.8.0'
+    assert UI['revision']=='6.8.0'
+    assert 'RELEASE = "6.8.0"' in BACKEND
+    assert '/redesign-680.css?v=680' in INDEX
+    assert (ROOT/'web/redesign-680.css').exists()
 
 def test_reference_header_has_no_visible_search_and_keeps_private_feed_bell():
     header=INDEX.split('<header class="site-header dashboard-topbar reference-topbar">',1)[1].split('</header>',1)[0]
@@ -24,8 +24,8 @@ def test_reference_header_has_no_visible_search_and_keeps_private_feed_bell():
 
 def test_reference_hero_uses_current_blinq_branding_and_new_asset():
     hero=UI['elements']['HERO_BANNER_1']['content']
-    assert hero['image_url']=='/assets/hero-reference-v678.webp'
-    assert (ROOT/'web/assets/hero-reference-v678.webp').exists()
+    assert hero['image_url']=='/assets/hero-player-v680.webp'
+    assert (ROOT/'web/assets/hero-player-v680.webp').exists()
     assert '/assets/blinq_logo.svg' in INDEX
     assert hero['eyebrow']=='DÁTA. KONTEXT. LEPŠIE ROZHODNUTIA.'
     assert hero['headline']=='Tennis intelligence'
@@ -88,4 +88,8 @@ def test_old_header_feature_slots_are_not_visible_in_reference_header():
 def test_reference_layout_is_wide_without_horizontal_table_scroll():
     assert '1900px' in CSS
     assert 'overflow-x:hidden!important' in CSS
-    assert 'grid-template-columns:minmax(0,1fr) 360px!important' in CSS
+    assert 'grid-template-columns:minmax(0,1fr) 310px!important' in CSS
+    assert 'height:205px!important' in CSS
+    assert 'height:70px!important' in CSS
+    assert 'height:55px!important' in CSS
+    assert 'min-height:100px!important' in CSS

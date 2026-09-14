@@ -1874,10 +1874,10 @@
         "ad_hidden_fallback": "internal",
         "active_from": "",
         "active_until": "",
-        "image_url": "/assets/hero-reference-v678.webp",
-        "mobile_image_url": "/assets/hero-reference-v678.webp",
+        "image_url": "/assets/hero-player-v680.webp",
+        "mobile_image_url": "/assets/hero-player-v680.webp",
         "image_fit": "cover",
-        "image_position": "center 35%",
+        "image_position": "center center",
         "creative_mode": "split",
         "show_copy": true,
         "sponsored": false,
@@ -3320,7 +3320,7 @@
       }
     }
   },
-  "ui_revision": "6.7.8",
+  "ui_revision": "6.8.0",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3365,7 +3365,7 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "6.7.8",
+  "revision": "6.8.0",
   "footer": {
     "copyright": "© 2026 BlinQ",
     "system_status": "Všetky systémy funkčné",

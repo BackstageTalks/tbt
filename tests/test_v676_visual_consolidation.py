@@ -7,10 +7,10 @@ INDEX = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8')
 UI = (ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8')
 
 
-def test_cache_and_ui_revision_are_677():
-    assert '?v=678' in INDEX
-    assert '"ui_revision": "6.7.8"' in UI
-    assert '"revision": "6.7.8"' in UI
+def test_cache_and_ui_revision_are_680():
+    assert '?v=680' in INDEX
+    assert '"ui_revision": "6.8.0"' in UI
+    assert '"revision": "6.8.0"' in UI
 
 
 def test_account_modal_has_inline_telegram_profile():

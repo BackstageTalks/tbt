@@ -12,12 +12,12 @@ BACKEND = (ROOT / "api/function_app.py").read_text(encoding="utf-8")
 ADMIN_STORAGE = (ROOT / "api/tbt/services/admin_storage.py").read_text(encoding="utf-8")
 
 
-def test_release_cache_exactly_677():
-    assert UI["ui_revision"] == "6.7.8"
-    assert UI["revision"] == "6.7.8"
-    assert 'RELEASE = "6.7.8"' in BACKEND
+def test_release_cache_exactly_680():
+    assert UI["ui_revision"] == "6.8.0"
+    assert UI["revision"] == "6.8.0"
+    assert 'RELEASE = "6.8.0"' in BACKEND
     for asset in ("styles.css", "responsive.css", "premium.css", "blinq.css", "auth.js", "responsive.js", "app.js"):
-        assert f"/{asset}?v=678" in INDEX
+        assert f"/{asset}?v=680" in INDEX
 
 
 def test_top_upgrade_and_admin_buttons_are_removed_but_admin_stays_in_profile_menu():

@@ -6,19 +6,19 @@ ROOT = Path(__file__).resolve().parents[1]
 def read(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
-def test_release_and_cache_are_677():
+def test_release_and_cache_are_680():
     cfg = json.loads(read("web/ui-config.json"))
-    assert cfg["ui_revision"] == "6.7.8"
-    assert cfg["revision"] == "6.7.8"
-    assert 'RELEASE = "6.7.8"' in read("api/function_app.py")
+    assert cfg["ui_revision"] == "6.8.0"
+    assert cfg["revision"] == "6.8.0"
+    assert 'RELEASE = "6.8.0"' in read("api/function_app.py")
     html = read("web/index.html")
-    assert '/blinq.css?v=678' in html
+    assert '/blinq.css?v=680' in html
     for asset in ("auth.js", "responsive.js", "app.js"):
-        assert f'/{asset}?v=678' in html
+        assert f'/{asset}?v=680' in html
 
 def test_new_web_uses_one_design_system_not_legacy_css_stack():
     html = read("web/index.html")
-    assert '/blinq.css?v=678' in html
+    assert '/blinq.css?v=680' in html
     assert 'media="not all"' in html
     assert "premium-v2.css?v=" not in html
     assert "final-ui.css?v=" not in html
