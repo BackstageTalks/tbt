@@ -169,15 +169,17 @@ def validate_ui_config(payload: object) -> dict:
     daily_hub = dashboard.get("daily_hub") or {}
     if not isinstance(daily_hub, dict) or not isinstance(daily_hub.get("enabled"), bool):
         raise ValueError("Invalid Daily Picks hub configuration")
-    if daily_hub.get("default_tab") not in {"daily", "value", "ace", "games"}:
+    if daily_hub.get("default_tab") not in {"daily", "prime", "top", "value", "ace", "games", "doubles"}:
         raise ValueError("Invalid Daily Picks default tab")
     for field in ("preview_rows", "expand_rows"):
         value = daily_hub.get(field)
         if not isinstance(value, int) or not 1 <= value <= 20:
             raise ValueError(f"Invalid Daily Picks setting: {field}")
     hub_tabs = daily_hub.get("tabs") or {}
-    if not isinstance(hub_tabs, dict) or set(hub_tabs) != {"daily", "value", "ace", "games"}:
-        raise ValueError("Daily Picks hub must contain daily/value/ace/games tabs")
+    required_hub_tabs = {"daily", "value", "ace", "games"}
+    allowed_hub_tabs = required_hub_tabs | {"prime", "top", "doubles"}
+    if not isinstance(hub_tabs, dict) or not required_hub_tabs.issubset(hub_tabs) or not set(hub_tabs).issubset(allowed_hub_tabs):
+        raise ValueError("Daily Picks hub must contain the core tabs and only supported consolidated tabs")
     for tab_id, tab in hub_tabs.items():
         if not isinstance(tab, dict) or not isinstance(tab.get("enabled"), bool):
             raise ValueError(f"Invalid Daily Picks tab: {tab_id}")

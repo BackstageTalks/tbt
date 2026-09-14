@@ -344,7 +344,7 @@
         "campaign_id": "",
         "advertiser_id": "blinq",
         "ad_hidden_fallback": "internal",
-        "enabled": true,
+        "enabled": false,
         "active_from": "",
         "active_until": "",
         "image_url": "",
@@ -399,7 +399,7 @@
         "campaign_id": "",
         "advertiser_id": "blinq",
         "ad_hidden_fallback": "internal",
-        "enabled": true,
+        "enabled": false,
         "active_from": "",
         "active_until": "",
         "image_url": "",
@@ -454,7 +454,7 @@
         "campaign_id": "",
         "advertiser_id": "blinq",
         "ad_hidden_fallback": "internal",
-        "enabled": true,
+        "enabled": false,
         "active_from": "",
         "active_until": "",
         "image_url": "",
@@ -509,7 +509,7 @@
         "campaign_id": "",
         "advertiser_id": "blinq",
         "ad_hidden_fallback": "internal",
-        "enabled": true,
+        "enabled": false,
         "active_from": "",
         "active_until": "",
         "image_url": "",
@@ -1516,21 +1516,21 @@
       }
     },
     "CONTENT_MID_1": {
-      "label": "Middle external slot 1",
+      "label": "Pokročilé dáta",
       "zone": "content_mid",
       "kind": "large_banner",
       "order": 61,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "Middle external slot 1",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
-        "link": "#account",
-        "route": "account",
+        "eyebrow": "BLINQ DATA",
+        "headline": "Pokročilé dáta",
+        "text": "50+ metrík · forma · povrch · H2H",
+        "button_text": "Dáta a metodika",
+        "link": "#model_data",
+        "route": "model_data",
         "theme": "blue",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
+        "advertiser_id": "blinq",
         "ad_hidden_fallback": "rss",
         "enabled": true,
         "active_from": "",
@@ -1540,7 +1540,9 @@
         "image_fit": "cover",
         "image_position": "center",
         "span": 1,
-        "type": "rss"
+        "type": "promo",
+        "creative_mode": "split",
+        "show_copy": true
       },
       "watermark": {
         "enabled": false,
@@ -1570,21 +1572,21 @@
       }
     },
     "CONTENT_MID_2": {
-      "label": "Middle external slot 2",
+      "label": "Model bez leakage",
       "zone": "content_mid",
       "kind": "large_banner",
       "order": 62,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "Middle external slot 2",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
-        "link": "#account",
-        "route": "account",
-        "theme": "purple",
+        "eyebrow": "BLINQ MODEL",
+        "headline": "Model bez leakage",
+        "text": "Point-in-time pipeline · kalibrácia · audit",
+        "button_text": "Ako model funguje",
+        "link": "#methodology",
+        "route": "methodology",
+        "theme": "green",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
+        "advertiser_id": "blinq",
         "ad_hidden_fallback": "rss",
         "enabled": true,
         "active_from": "",
@@ -1594,7 +1596,9 @@
         "image_fit": "cover",
         "image_position": "center",
         "span": 1,
-        "type": "rss"
+        "type": "promo",
+        "creative_mode": "split",
+        "show_copy": true
       },
       "watermark": {
         "enabled": false,
@@ -1624,21 +1628,21 @@
       }
     },
     "CONTENT_MID_3": {
-      "label": "Middle external slot 3",
+      "label": "Value príležitosti",
       "zone": "content_mid",
       "kind": "large_banner",
       "order": 63,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "Middle external slot 3",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
-        "link": "#account",
-        "route": "account",
-        "theme": "green",
+        "eyebrow": "BLINQ VALUE",
+        "headline": "Value príležitosti",
+        "text": "Oddelené od confidence · transparentný edge",
+        "button_text": "Pozrieť výsledky",
+        "link": "#results",
+        "route": "results",
+        "theme": "gold",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
+        "advertiser_id": "blinq",
         "ad_hidden_fallback": "rss",
         "enabled": true,
         "active_from": "",
@@ -1648,7 +1652,9 @@
         "image_fit": "cover",
         "image_position": "center",
         "span": 1,
-        "type": "rss"
+        "type": "promo",
+        "creative_mode": "split",
+        "show_copy": true
       },
       "watermark": {
         "enabled": false,
@@ -1678,21 +1684,21 @@
       }
     },
     "CONTENT_MID_4": {
-      "label": "Middle external slot 4",
+      "label": "Komunita a premium",
       "zone": "content_mid",
       "kind": "large_banner",
       "order": 64,
       "content": {
-        "eyebrow": "PARTNER SLOT",
-        "headline": "Middle external slot 4",
-        "text": "Fixed advertising/content position.",
-        "button_text": "Open",
+        "eyebrow": "BLINQ COMMUNITY",
+        "headline": "Komunita a premium",
+        "text": "Telegram · VIP obsah · nové funkcie",
+        "button_text": "Otvoriť plány",
         "link": "#account",
         "route": "account",
         "theme": "violet",
         "sponsored": false,
         "campaign_id": "",
-        "advertiser_id": "",
+        "advertiser_id": "blinq",
         "ad_hidden_fallback": "rss",
         "enabled": true,
         "active_from": "",
@@ -1702,7 +1708,9 @@
         "image_fit": "cover",
         "image_position": "center",
         "span": 1,
-        "type": "rss"
+        "type": "promo",
+        "creative_mode": "split",
+        "show_copy": true
       },
       "watermark": {
         "enabled": false,
@@ -1876,7 +1884,7 @@
         "eyebrow": "BLINQ STATISTICAL ENGINE",
         "headline": "Dáta. Analýza.",
         "accent_text": "Lepšie rozhodnutia.",
-        "text": "Pokročilá tenisová analytika pre informované rozhodnutia.",
+        "text": "Tenisová inteligencia, ktorá spája model, kontext a transparentné výsledky.",
         "button_text": "",
         "theme": "violet",
         "icon": "",
@@ -3097,11 +3105,155 @@
               "see_all": true
             }
           }
+        },
+        "prime": {
+          "label": "Prime tipy",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "rookie": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "pro": {
+              "visible_rows": 10,
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            }
+          }
+        },
+        "top": {
+          "label": "Top tipy",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "rookie": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "pro": {
+              "visible_rows": 10,
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            }
+          }
+        },
+        "doubles": {
+          "label": "Štvorhra",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "rookie": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "pro": {
+              "visible_rows": 10,
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": false
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true
+            }
+          }
         }
       }
     }
   },
-  "ui_revision": "6.6.7",
+  "ui_revision": "6.6.6",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3146,5 +3298,5 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "6.6.7"
+  "revision": "6.6.6"
 }

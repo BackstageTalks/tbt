@@ -243,34 +243,14 @@ def test_confirm_allows_player_presentation_enrichment_only(monkeypatch, tmp_pat
     deployed["upcoming"][0]["tournament_logo_url"] = "/assets/tournaments/42.webp"
     deployed["upcoming"][0]["player1"].update({
         "rank": 4,
-        "previous_rank": 5,
-        "best_rank": 2,
-        "ranking_points": 6230,
         "country_code": "US",
         "country_code3": "USA",
         "country_name": "United States",
-        "birth_date": "1998-01-02",
-        "birth_timestamp": 883699200,
-        "height_cm": 188,
-        "hand": "right",
-        "birthplace": "Test City",
-        "residence": "Test Residence",
         "photo_url": "/assets/players/A.webp",
     })
     deployed["upcoming"][0]["player2"].update({
         "rank": 8,
-        "previous_rank": 7,
-        "best_rank": 6,
-        "ranking_points": 3920,
         "country_code": "ES",
-        "country_code3": "ESP",
-        "country_name": "Spain",
-        "birth_date": "1999-03-04",
-        "birth_timestamp": 920505600,
-        "height_cm": 183,
-        "hand": "left",
-        "birthplace": "Other City",
-        "residence": "Other Residence",
         "photo_url": "/assets/players/B.webp",
     })
 

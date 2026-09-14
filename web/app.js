@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'banners', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, dailyHubSelected:{daily:'',value:'',ace:'',games:''} };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'banners', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminSelectedUser:null, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:''} };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -213,6 +213,18 @@
     const clean=state.uiSource?.assets?.account_avatars;
     if(clean)state.ui.assets={...(state.ui.assets||{}),account_avatars:clone(clean)};
     Object.values(state.ui.plans||{}).forEach(plan=>{if(plan&&typeof plan==='object')delete plan.marketing_avatar;});
+    // 6.6.8: add the consolidated Daily Hub tabs even when an older runtime
+    // config is still published. Existing plan rules remain untouched.
+    const sourceTabs=state.uiSource?.dashboard?.daily_hub?.tabs||{},liveHub=state.ui.dashboard?.daily_hub;
+    if(liveHub){liveHub.tabs=liveHub.tabs||{};['prime','top','doubles'].forEach(tab=>{if(!liveHub.tabs[tab]&&sourceTabs[tab])liveHub.tabs[tab]=clone(sourceTabs[tab]);});}
+    // Replace only untouched stock middle placeholders with the new internal
+    // information banners. Admin-edited or campaign-managed content survives.
+    for(let i=1;i<=4;i++){
+      const id=`CONTENT_MID_${i}`,live=state.ui?.elements?.[id],src=state.uiSource?.elements?.[id];
+      const headline=String(live?.content?.headline||'');
+      const untouched=/^Middle external slot/i.test(headline)||/^PARTNER SLOT$/i.test(String(live?.content?.eyebrow||''));
+      if(live&&src&&untouched){live.content={...clone(src.content),active_from:live.content?.active_from||'',active_until:live.content?.active_until||''};}
+    }
     if(state.adminTab==='feeds')state.adminTab='banners';
   }
 
@@ -868,7 +880,7 @@
     return state.ui?.dashboard?.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};
   }
   function dailyHubEntitlement(tab){
-    const key=tab==='games'?'sg':tab;
+    const key=tab==='games'?'sg':tab==='top'?'top_daily':tab;
     return state.feed?.entitlements?.sections?.[key]||{visible_picks:'ALL',blur_remaining:false,enabled:true,total:0,returned:0};
   }
   function dailyHubRows(tab){
@@ -884,13 +896,16 @@
       });
       return out.sort((a,b)=>(marketProbability(b)||0)-(marketProbability(a)||0));
     }
+    if(tab==='prime')return marketRows('prime');
+    if(tab==='top')return marketRows('top_daily');
     if(tab==='value')return marketRows('value');
     if(tab==='ace')return marketRows('ace').filter(aceHasApiLine);
     if(tab==='games')return marketRows('sg').filter(row=>String(row?.projection_unit||'').toLowerCase()==='games'||String(row?.market_type||row?.market||'').toLowerCase().includes('game'));
+    if(tab==='doubles')return marketRows('doubles');
     return [];
   }
   function dailyHubTabLabel(tab){
-    return {daily:lcopy('Daily Picks','Daily Picks','Daily Picks'),value:lcopy('Value Picks','Value Picks','Value Picks'),ace:lcopy('Aces','Esá','Esa'),games:lcopy('Games','Gemy','Gemy')}[tab]||tab;
+    return {daily:lcopy('Daily Picks','Daily Picks','Daily Picks'),prime:lcopy('Prime Picks','Prime tipy','Prime tipy'),top:lcopy('Top Bets','Top tipy','Top tipy'),value:lcopy('Value Picks','Value tipy','Value tipy'),ace:lcopy('Aces','Esá','Esa'),games:lcopy('Games','Gemy','Gemy'),doubles:lcopy('Doubles','Štvorhra','Čtyřhra')}[tab]||tab;
   }
   function dailyHubColumns(tab){
     if(tab==='value')return ['ČAS','TURNAJ','ZÁPAS','TIP','KURZ','BLINQ %','TRH','EV',''];
@@ -1171,7 +1186,7 @@
   }
   function dailyHubLockedRow(tab,index){
     const colspan=dailyHubColumns(tab).length;
-    return `<tr class="hub-row-locked" data-upgrade-plan="${escapeHtml(firstUnlockPlan(tab==='daily'?'top_daily':tab==='games'?'sg':tab,index))}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}"><td colspan="${colspan}"><span>🔒</span><b>Prémiový tip</b><small>Odomkni ďalší riadok podľa úrovne členstva.</small></td></tr>`;
+    return `<tr class="hub-row-locked" data-upgrade-plan="${escapeHtml(firstUnlockPlan(tab==='daily'?'top_daily':tab==='top'?'top_daily':tab==='games'?'sg':tab,index))}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}"><td colspan="${colspan}"><span>🔒</span><b>Prémiový tip</b><small>Odomkni ďalší riadok podľa úrovne členstva.</small></td></tr>`;
   }
   function renderDailyHub(){
     const host=$('dailyHub');
@@ -1180,7 +1195,7 @@
     const cfg=dailyHubConfig();
     host.hidden=cfg.enabled===false;
     if(host.hidden){ const board=$('dailyHubInsightBoard'); if(board) board.hidden=true; return; }
-    const tabs=['daily','value','ace','games'].filter(tab=>{const ent=dailyHubEntitlement(tab);const tc=cfg.tabs?.[tab]||{};return tc.enabled!==false&&ent.enabled!==false;});
+    const tabs=['daily','prime','top','value','ace','games','doubles'].filter(tab=>{const ent=dailyHubEntitlement(tab);const tc=cfg.tabs?.[tab]||{};return tc.enabled!==false&&ent.enabled!==false;});
     if(!tabs.length){ host.hidden=true; const board=$('dailyHubInsightBoard'); if(board) board.hidden=true; return; }
     if(!tabs.includes(state.dailyHubTab)) state.dailyHubTab=tabs.includes(cfg.default_tab)?cfg.default_tab:tabs[0];
     $('dailyHubTabs').innerHTML=tabs.map(tab=>{const rows=dailyHubRows(tab),ent=dailyHubEntitlement(tab);const total=Number(ent.total);const count=Number.isFinite(total)?total:rows.length;return `<button type="button" role="tab" aria-selected="${tab===state.dailyHubTab?'true':'false'}" class="daily-hub-tab${tab===state.dailyHubTab?' active':''}" data-daily-hub-tab="${tab}"><span>${escapeHtml(dailyHubTabLabel(tab))}</span><b>${count}</b></button>`;}).join('');
@@ -1419,8 +1434,10 @@
       if(filters.surface&&String(row?.surface||'').toLowerCase()!==filters.surface)return false;
       if(Number.isFinite(windowDays)&&windowDays>0){const ts=new Date(row?.scheduled_at||0).getTime();if(!Number.isFinite(ts)||ts<now-windowDays*86400000)return false;}
       const category=filters.category||'all';
+      const pubs=issuedMarketPublications(row);
+      if(!pubs.length)return false;
       if(['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category)&&!resultTags(row).includes(category))return false;
-      return typeof row?.result?.correct==='boolean';
+      return pubs.some(p=>typeof p?.result?.correct==='boolean');
     });
   }
   function renderResultsFilters(){
@@ -1430,20 +1447,34 @@
     const option=(value,label,selected)=>`<option value="${escapeHtml(value)}"${value===selected?' selected':''}>${escapeHtml(label)}</option>`;
     return `<div class="results-filter-bar"><label>${escapeHtml(publicText('Category'))}<select id="resultsCategory">${['all','prime','top_daily','value','doubles','ace','double_faults','sets','games'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select></label><label>${escapeHtml(publicText('Tour'))}<select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select></label><label>${escapeHtml(publicText('Surface'))}<select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select></label><label>${escapeHtml(publicText('Period'))}<select id="resultsWindow">${[['all',publicText('All time')],['7',publicText('7 days')],['30',publicText('30 days')],['90',publicText('90 days')]].map(([v,l])=>option(v,l,filters.window||'all')).join('')}</select></label></div>`;
   }
+  function settledPublishedEntries(rows,category='all'){
+    const specific=['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category);
+    const unique=new Map();
+    (rows||[]).forEach(row=>{
+      const pubs=issuedMarketPublications(row).filter(p=>!specific||p.section===category).filter(p=>typeof p?.result?.correct==='boolean');
+      pubs.forEach((publication,index)=>{
+        const key=String(publication.selection_key||publication.publication_key||`${row?.id||row?.event_id||row?.scheduled_at||''}::${publication.section||''}::${publication.selection_id||publication.selection||index}`);
+        const current=unique.get(key);
+        if(!current||new Date(publication.issued_at)<new Date(current.publication.issued_at))unique.set(key,{row,publication});
+      });
+    });
+    return [...unique.values()].sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
+  }
   function localResultMetrics(rows,category){
-    const coreWins=rows.filter(r=>r?.result?.correct===true).length;
-    const publications=rows.map(r=>resultPublication(r,category)).filter(Boolean);
-    const unique=new Map();publications.forEach(p=>{const key=String(p.selection_key||p.publication_key||'');if(!key)return;if(!unique.has(key)||new Date(p.issued_at)<new Date(unique.get(key).issued_at))unique.set(key,p);});
-    const bets=[...unique.values()].filter(p=>p?.result&&typeof p.result.correct==='boolean');
-    const betWins=bets.filter(p=>p.result.correct===true).length,profit=bets.reduce((sum,p)=>sum+Number(p.result.profit_units||0),0),stake=bets.reduce((sum,p)=>sum+Number(p.result.staked_units||0),0),odds=bets.map(p=>Number(p.odds)).filter(Number.isFinite);
-    const categoryIsBet=['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category);const wins=categoryIsBet?betWins:coreWins;const sample=categoryIsBet?bets.length:rows.length;
-    return {wins,losses:Math.max(0,sample-wins),sample,hit:sample?wins/sample:null,avgOdds:odds.length?odds.reduce((a,b)=>a+b,0)/odds.length:null,roi:stake?profit/stake:null,profit,oddsSample:bets.length};
+    const entries=settledPublishedEntries(rows,category);
+    const pubs=entries.map(entry=>entry.publication);
+    const wins=pubs.filter(p=>p.result?.correct===true).length;
+    const profit=pubs.reduce((sum,p)=>sum+Number(p.result?.profit_units||0),0);
+    const stake=pubs.reduce((sum,p)=>sum+Number(p.result?.staked_units||0),0);
+    const odds=pubs.map(p=>Number(p.odds)).filter(Number.isFinite);
+    const sample=pubs.length;
+    return {wins,losses:Math.max(0,sample-wins),sample,hit:sample?wins/sample:null,avgOdds:odds.length?odds.reduce((a,b)=>a+b,0)/odds.length:null,roi:stake?profit/stake:null,profit,oddsSample:odds.length};
   }
   function renderResults(){
-    const rows=filteredResults(),category=state.resultsFilters?.category||'all';
-    if(!rows.length)return '<div class="state-card">No settled published predictions match these filters yet.</div>';
-    const body=rows.slice(0,250).map(r=>{const p1=r.player1||{},p2=r.player2||{},publication=resultPublication(r,category),marketMode=Boolean(publication&&['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category));const correct=marketMode?publication?.result?.correct:r?.result?.correct;const pickId=marketMode?publication?.selection_id:r?.winner_id;const pickName=marketMode?(publication?.selection||'—'):(pickId===p1.id?p1.name:pickId===p2.id?p2.name:'—');const probability=marketMode?Number(publication?.model_probability):Number(r?.confidence);const odds=Number(publication?.odds),units=Number(publication?.result?.profit_units);const tags=resultTags(r).map(t=>`<span class="result-tag ${escapeHtml(t)}">${escapeHtml(resultCategoryLabel(t))}</span>`).join('');return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags||'<span class="result-tag">Model</span>'}</td><td><strong>${escapeHtml(p1.name||'Player 1')}</strong><small>vs ${escapeHtml(p2.name||'Player 2')} · ${escapeHtml(r.tournament||'')}</small></td><td>${escapeHtml(pickName)}</td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td><b class="${correct?'correct':'wrong'}">${correct===true?'✓ WON':correct===false?'× LOST':'—'}</b></td><td class="${Number.isFinite(units)&&units>=0?'correct':'wrong'}">${Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`}).join('');
-    return `<div class="admin-table-wrap results-table-wrap"><table class="admin-analytics-table results-table"><thead><tr><th>Date</th><th>Category</th><th>Match</th><th>Pick</th><th>Probability</th><th>Odds</th><th>Result</th><th>Units</th></tr></thead><tbody>${body}</tbody></table></div>${rows.length>250?`<div class="results-limit-note">Showing latest 250 of ${rows.length} matching settled rows in the serving snapshot.</div>`:''}`;
+    const rows=filteredResults(),category=state.resultsFilters?.category||'all',entries=settledPublishedEntries(rows,category);
+    if(!entries.length)return '<div class="state-card">Zatiaľ nie sú dostupné vyhodnotené publikované tipy pre tento filter.</div>';
+    const body=entries.slice(0,250).map(({row:r,publication})=>{const p1=r.player1||{},p2=r.player2||{};const correct=publication?.result?.correct;const pickId=publication?.selection_id;const pickName=publication?.selection||(pickId===p1.id?p1.name:pickId===p2.id?p2.name:'—');const probability=Number(publication?.model_probability);const odds=Number(publication?.odds),units=Number(publication?.result?.profit_units);const tag=String(publication?.section||'');const tags=`<span class="result-tag ${escapeHtml(tag)}">${escapeHtml(resultCategoryLabel(tag||'all'))}</span>`;return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td><strong>${escapeHtml(p1.name||'Player 1')}</strong><small>vs ${escapeHtml(p2.name||'Player 2')} · ${escapeHtml(r.tournament||'')}</small></td><td>${escapeHtml(pickName)}</td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td><b class="${correct?'correct':'wrong'}">${correct===true?'✓ VÝHRA':correct===false?'× PREHRA':'—'}</b></td><td class="${Number.isFinite(units)&&units>=0?'correct':'wrong'}">${Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`}).join('');
+    return `<div class="admin-table-wrap results-table-wrap"><table class="admin-analytics-table results-table"><thead><tr><th>Dátum</th><th>Kategória</th><th>Zápas</th><th>Tip</th><th>BlinQ %</th><th>Kurz</th><th>Výsledok</th><th>Jednotky</th></tr></thead><tbody>${body}</tbody></table></div>${entries.length>250?`<div class="results-limit-note">Zobrazených posledných 250 z ${entries.length} vyhodnotených publikovaných tipov.</div>`:''}`;
   }
   function wireResultsFilters(){
     [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface'],['resultsWindow','window']].forEach(([id,key])=>{const el=$(id);if(el)el.onchange=()=>{state.resultsFilters[key]=el.value;renderRoute('results');};});
@@ -1644,7 +1675,7 @@
   function renderAdminLayout(){
     const copyOptions=accessContexts.filter(id=>id!==state.adminPlan).map(id=>`<option value="${id}">${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</option>`).join('');
     const ordered=orderedDashboardKeys(state.adminPlan);
-    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>SPRÁVA PRÍSTUPOV</small><h2>Sekcie a prístupy</h2><p>Vyber úroveň členstva a nastav, čo má daný používateľ vidieť. Globálne prepínače platia pre všetkých; voľba SKRYTÉ odstráni sekciu iba pre zvolenú úroveň.</p></div><button class="btn btn-ghost" type="button" data-admin-action="preview">Náhľad ako ${escapeHtml(accessLabel(state.adminPlan))}</button></div><div class="admin-level-picker"><span>Upraviť pravidlá pre</span>${adminLevelChips(state.adminPlan,'admin-plan-chip',true)}</div><div class="admin-copy-strip"><label>Skopírovať túto úroveň z<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Skopírovať všetky pravidlá → ${escapeHtml(accessLabel(state.adminPlan))}</button><small>Skopíruje prístupy, počty tipov, poradie, rozmazanie a oprávnenia bannerov.</small></div><div class="admin-daily-hub-settings"><div class="admin-subsection-heading"><div><strong>Prístupy k Tipom dňa</strong><span>Jeden panel pre celý dashboard. Nastav počet ostrých riadkov od vrchu, blur zvyšku, možnosť rozbaliť celú ponuku a prípadne tab úplne vypni.</span></div></div><div class="admin-hub-global-note"><b>${escapeHtml(accessLabel(state.adminPlan))}</b><span>Domovská stránka štandardne zobrazí prvých 10 pozícií. Ak má level povolené „Rozbaliť všetko“, používateľ si otvorí celý aktuálny zoznam bez zmeny stránky.</span></div><div class="admin-daily-hub-grid">${['daily','value','ace','games'].map(tab=>{const hub=dailyHubConfig(),tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{};return `<article class="admin-hub-tab-card" data-admin-hub-tab-card="${tab}"><div class="admin-hub-tab-head"><strong>${escapeHtml(dailyHubTabLabel(tab))}</strong><small>${escapeHtml(accessLabel(state.adminPlan))}</small></div><label class="admin-toggle-line"><input type="checkbox" data-admin-hub-field="tab_enabled" data-admin-hub-tab="${tab}" ${rule.tab_enabled!==false?'checked':''}><span>Tab zapnutý</span></label><label><span>Ostré riadky od vrchu</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}">${[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,'ALL'].map(v=>`<option value="${v}"${String(rule.visible_rows).toUpperCase()===String(v).toUpperCase()?' selected':''}>${v}</option>`).join('')}</select></label><label class="admin-toggle-line"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''}><span>Rozmazať zvyšok</span></label><label class="admin-toggle-line"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''}><span>Rozbaliť všetko</span></label></article>`}).join('')}</div></div><div class="admin-subsection-heading"><div><strong>Sekcie tipov na dashboarde</strong><span>Použi rýchle nastavenie alebo detailne nastav počet viditeľných tipov, poradie a rozmazanie.</span></div></div><div class="admin-section-list">${ordered.map(renderAdminSectionCard).join('')}</div><div class="admin-subsection-heading"><div><strong>Ďalšie stránky</strong><span>OTVORENÉ = dostupné, VIDITEĽNÉ · ZAMKNUTÉ = zobrazené, ale uzamknuté, SKRYTÉ = pre danú úroveň sa nezobrazia.</span></div></div><div class="admin-section-list admin-page-list">${['results','btts'].map(renderAdminPageCard).join('')}</div></section>`;
+    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>SPRÁVA PRÍSTUPOV</small><h2>Sekcie a prístupy</h2><p>Vyber úroveň členstva a nastav, čo má daný používateľ vidieť. Globálne prepínače platia pre všetkých; voľba SKRYTÉ odstráni sekciu iba pre zvolenú úroveň.</p></div><button class="btn btn-ghost" type="button" data-admin-action="preview">Náhľad ako ${escapeHtml(accessLabel(state.adminPlan))}</button></div><div class="admin-level-picker"><span>Upraviť pravidlá pre</span>${adminLevelChips(state.adminPlan,'admin-plan-chip',true)}</div><div class="admin-copy-strip"><label>Skopírovať túto úroveň z<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Skopírovať všetky pravidlá → ${escapeHtml(accessLabel(state.adminPlan))}</button><small>Skopíruje prístupy, počty tipov, poradie, rozmazanie a oprávnenia bannerov.</small></div><div class="admin-daily-hub-settings"><div class="admin-subsection-heading"><div><strong>Prístupy k Tipom dňa</strong><span>Jeden panel pre celý dashboard. Nastav počet ostrých riadkov od vrchu, blur zvyšku, možnosť rozbaliť celú ponuku a prípadne tab úplne vypni.</span></div></div><div class="admin-hub-global-note"><b>${escapeHtml(accessLabel(state.adminPlan))}</b><span>Domovská stránka štandardne zobrazí prvých 10 pozícií. Ak má level povolené „Rozbaliť všetko“, používateľ si otvorí celý aktuálny zoznam bez zmeny stránky.</span></div><div class="admin-daily-hub-grid">${['daily','prime','top','value','ace','games','doubles'].map(tab=>{const hub=dailyHubConfig(),tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{};return `<article class="admin-hub-tab-card" data-admin-hub-tab-card="${tab}"><div class="admin-hub-tab-head"><strong>${escapeHtml(dailyHubTabLabel(tab))}</strong><small>${escapeHtml(accessLabel(state.adminPlan))}</small></div><label class="admin-toggle-line"><input type="checkbox" data-admin-hub-field="tab_enabled" data-admin-hub-tab="${tab}" ${rule.tab_enabled!==false?'checked':''}><span>Tab zapnutý</span></label><label><span>Ostré riadky od vrchu</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}">${[0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,'ALL'].map(v=>`<option value="${v}"${String(rule.visible_rows).toUpperCase()===String(v).toUpperCase()?' selected':''}>${v}</option>`).join('')}</select></label><label class="admin-toggle-line"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''}><span>Rozmazať zvyšok</span></label><label class="admin-toggle-line"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''}><span>Rozbaliť všetko</span></label></article>`}).join('')}</div></div><div class="admin-subsection-heading"><div><strong>Sekcie tipov na dashboarde</strong><span>Použi rýchle nastavenie alebo detailne nastav počet viditeľných tipov, poradie a rozmazanie.</span></div></div><div class="admin-section-list">${ordered.map(renderAdminSectionCard).join('')}</div><div class="admin-subsection-heading"><div><strong>Ďalšie stránky</strong><span>OTVORENÉ = dostupné, VIDITEĽNÉ · ZAMKNUTÉ = zobrazené, ale uzamknuté, SKRYTÉ = pre danú úroveň sa nezobrazia.</span></div></div><div class="admin-section-list admin-page-list">${['results','btts'].map(renderAdminPageCard).join('')}</div></section>`;
   }
 
 

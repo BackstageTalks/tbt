@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#05111f" />
   <title>BlinQ · Tennis Intelligence</title>
   <link rel="icon" href="/assets/blinq_favi.png" type="image/png" />
-  <link rel="stylesheet" href="/styles.css?v=667" media="not all" />
-  <link rel="stylesheet" href="/responsive.css?v=667" media="not all" />
-  <link rel="stylesheet" href="/premium.css?v=667" media="not all" />
-  <link rel="stylesheet" href="/blinq.css?v=667" />
-  <script defer src="/auth.js?v=667"></script>
-  <script defer src="/responsive.js?v=667"></script>
-  <script defer src="/app.js?v=667"></script>
+  <link rel="stylesheet" href="/styles.css?v=666" media="not all" />
+  <link rel="stylesheet" href="/responsive.css?v=666" media="not all" />
+  <link rel="stylesheet" href="/premium.css?v=666" media="not all" />
+  <link rel="stylesheet" href="/blinq.css?v=666" />
+  <script defer src="/auth.js?v=666"></script>
+  <script defer src="/responsive.js?v=666"></script>
+  <script defer src="/app.js?v=666"></script>
 </head>
 <body id="blinqPremium" class="blinq-home">
   <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
@@ -50,8 +50,8 @@
         <section id="headerFeatureStrip" class="feature-strip" aria-label="BlinQ promo"></section>
 
         <div class="header-actions">
+          <label class="global-search global-search-top"><span>⌕</span><input id="headerSearchInput" type="search" placeholder="Hľadať turnaj alebo hráča…" /></label>
           <button id="topUpgradeButton" class="plans-button" type="button" data-route="account"><span>✦</span><strong id="topUpgradeLabel">Plány</strong></button>
-          <button id="topNotification" class="notification-button" type="button" aria-label="Upozornenia"><span>♢</span><i></i></button>
           <button id="adminQuickButton" class="admin-quick" type="button" data-route="admin" hidden>Admin</button>
           <div id="profileShell" class="profile-shell">
             <button id="profileButton" class="profile-button" type="button" aria-label="Účet">
@@ -70,9 +70,8 @@
         </div>
       </div>
 
-      <div class="header-nav-row">
+      <div class="header-nav-row" hidden aria-hidden="true">
         <nav id="mainNavigation" class="main-navigation" aria-label="Hlavná navigácia"></nav>
-        <label class="global-search"><span>⌕</span><input id="headerSearchInput" type="search" placeholder="Hľadať turnaje, hráčov…" /></label>
       </div>
       <button id="menuToggle" class="legacy-nav-hook" hidden></button>
       <div class="legacy-nav-hook" hidden><strong id="headerTime">—</strong><span id="headerDate">—</span><span id="headerModelState">Produkcia</span></div>
@@ -97,6 +96,7 @@
             <div class="daily-meta" id="dailyHubMeta">
               <span class="daily-date"><i>◫</i><b id="dailyHubMetaDate">Dnešný výber</b></span>
               <strong id="dailyHubMetaCount">0 zápasov</strong>
+              <a class="daily-results-link" href="#results" data-route="results">Výsledky →</a>
               <span class="daily-promise">Profesionálna analýza.<br/>Reálne príležitosti.</span>
             </div>
           </div>
@@ -110,15 +110,7 @@
           <div id="dailyHubEmpty" class="daily-empty" hidden>V tejto kategórii zatiaľ nie sú dostupné tipy.</div>
         </section>
 
-        <section class="intel-strip" aria-label="BlinQ intelligence">
-          <article><span class="intel-dot violet">◉</span><div><strong>Pokročilé dáta</strong><small>Viac ako 50+ metrík</small></div></article>
-          <article><span class="intel-dot green">▥</span><div><strong>AI modely</strong><small>Point-in-time analýza</small></div></article>
-          <article><span class="intel-dot gold">◇</span><div><strong>Value príležitosti</strong><small>Oddelené od confidence</small></div></article>
-          <article><span class="intel-dot violet">●</span><div><strong>Tenisová inteligencia</strong><small>Ranking · forma · povrch · H2H</small></div></article>
-          <aside><strong>BET SMARTER.</strong><span>PLAY BRIGHTER.</span></aside>
-        </section>
-
-        <section id="bannerMid" class="promo-zone"></section>
+        <section id="bannerMid" class="promo-zone info-banner-zone" aria-label="BlinQ info bannery"></section><span class="legacy-component-marker" data-component="intel-strip" hidden></span>
       </div>
 
       <section id="routePanel" class="route-panel" hidden></section>
