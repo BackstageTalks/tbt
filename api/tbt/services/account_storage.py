@@ -42,8 +42,14 @@ def _public_entity(entity: dict | None) -> dict:
         "telegram_nick": str(row.get("telegram_nick") or "")[:33],
         "avatar_variant": avatar,
         "payment_reference": str(row.get("payment_reference") or "")[:120],
+        # Admin-only operational metadata. These values are intentionally kept
+        # outside Firebase custom claims and are never returned by public_account().
+        "tg_private_member": bool(row.get("tg_private_member", False)),
+        "admin_note": str(row.get("admin_note") or "")[:500],
         "profile_updated_at": row.get("profile_updated_at"),
         "access_metadata_updated_at": row.get("access_metadata_updated_at"),
+        "admin_metadata_updated_at": row.get("admin_metadata_updated_at"),
+        "admin_metadata_updated_by": str(row.get("admin_metadata_updated_by") or "")[:256],
     }
 
 
@@ -138,6 +144,86 @@ def save_profile_metadata(user_id: object, payload: object) -> dict:
     merged = load_account_metadata(uid)
     return {**merged, "display_name": values["display_name"]}
 
+
+
+def normalize_admin_metadata_update(payload: object) -> dict:
+    """Validate admin-only account operations metadata.
+
+    Telegram verification is deliberately out of scope for v1. The user supplies
+    a nickname and the operator manually tracks whether the account is currently
+    present in the private Telegram group.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid admin metadata update")
+    allowed = {"tg_private_member", "admin_note"}
+    unknown = set(payload) - allowed
+    if unknown:
+        raise ValueError("Unsupported admin metadata field")
+
+    values = {}
+    if "tg_private_member" in payload:
+        if not isinstance(payload.get("tg_private_member"), bool):
+            raise ValueError("TG Private membership must be true or false")
+        values["tg_private_member"] = payload["tg_private_member"]
+    if "admin_note" in payload:
+        note = str(payload.get("admin_note") or "").strip()
+        if len(note) > 500:
+            raise ValueError("Admin note is too long")
+        values["admin_note"] = note
+    return values
+
+
+def save_admin_metadata(user_id: object, payload: object, *, actor_id: object = "") -> dict:
+    uid = str(user_id or "").strip()
+    key = _key(uid)
+    values = normalize_admin_metadata_update(payload)
+    now = datetime.now(timezone.utc).isoformat()
+    entity = {
+        "PartitionKey": "account",
+        "RowKey": key,
+        "user_id": uid,
+        "admin_metadata_updated_at": now,
+        "admin_metadata_updated_by": str(actor_id or "")[:256],
+        **values,
+    }
+    client = _table(ACCOUNT_TABLE)
+    try:
+        client.upsert_entity(entity, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save account admin metadata") from exc
+    return load_account_metadata(uid)
+
+
+def record_admin_metadata_audit(*, actor_id: object, target_id: object, before: dict, after: dict) -> None:
+    actor = str(actor_id or "").strip()[:256]
+    target = str(target_id or "").strip()[:256]
+    if not actor or not target:
+        raise ValueError("Audit actor and target are required")
+    now = datetime.now(timezone.utc)
+    before_safe = {
+        "tg_private_member": bool((before or {}).get("tg_private_member", False)),
+        "admin_note": str((before or {}).get("admin_note") or "")[:500],
+    }
+    after_safe = {
+        "tg_private_member": bool((after or {}).get("tg_private_member", False)),
+        "admin_note": str((after or {}).get("admin_note") or "")[:500],
+    }
+    entity = {
+        "PartitionKey": now.strftime("%Y%m"),
+        "RowKey": f"{int(now.timestamp()*1000):013d}-{uuid.uuid4().hex}",
+        "actor_id": actor,
+        "target_id": target,
+        "action": "account_admin_metadata_update",
+        "outcome": "success",
+        "before_json": json.dumps(before_safe, ensure_ascii=False, separators=(",", ":")),
+        "after_json": json.dumps(after_safe, ensure_ascii=False, separators=(",", ":")),
+        "occurred_at": now.isoformat(),
+    }
+    client = _table(AUDIT_TABLE)
+    try:
+        client.create_entity(entity)
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to store account audit record") from exc
 
 def save_payment_reference(user_id: object, value: object, *, actor_id: object = "") -> dict:
     uid = str(user_id or "").strip()

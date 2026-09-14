@@ -8,17 +8,17 @@ def read(path):
 
 def test_release_and_cache_are_6600():
     cfg = json.loads(read("web/ui-config.json"))
-    assert cfg["ui_revision"] == "6.6.6"
-    assert cfg["revision"] == "6.6.6"
-    assert 'RELEASE = "6.6.6"' in read("api/function_app.py")
+    assert cfg["ui_revision"] == "6.6.9"
+    assert cfg["revision"] == "6.6.9"
+    assert 'RELEASE = "6.6.9"' in read("api/function_app.py")
     html = read("web/index.html")
-    assert '/blinq.css?v=666' in html
+    assert '/blinq.css?v=669' in html
     for asset in ("auth.js", "responsive.js", "app.js"):
-        assert f'/{asset}?v=666' in html
+        assert f'/{asset}?v=669' in html
 
 def test_new_web_uses_one_design_system_not_legacy_css_stack():
     html = read("web/index.html")
-    assert '/blinq.css?v=666' in html
+    assert '/blinq.css?v=669' in html
     assert 'media="not all"' in html
     assert "premium-v2.css?v=" not in html
     assert "final-ui.css?v=" not in html

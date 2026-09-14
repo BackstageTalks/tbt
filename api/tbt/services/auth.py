@@ -346,7 +346,7 @@ def public_account(user, *, cfg=None, now=None, profile=None):
         "id": user["id"],
         "email": user.get("email", ""),
         "email_verified": bool(user.get("email_verified", False)),
-        "name": str(metadata.get("display_name") or metadata.get("name") or "BlinQ Member")[:80],
+        "name": str(telegram_nick or user.get("email") or "BlinQ Member")[:80],
         "created_at": user.get("created_at"),
         "last_sign_in_at": user.get("last_sign_in_at"),
         **access,

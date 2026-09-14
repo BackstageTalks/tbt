@@ -37,6 +37,7 @@ function response(status, payload) {
       if (url === '/api/v1/auth/config') return response(200, {enabled:true,provider:'firebase',project_id:'blinq-182'});
       if (target.includes('accounts:signUp')) return response(200, {idToken:'signup-token',refreshToken:'signup-refresh',expiresIn:'3600'});
       if (target.includes('accounts:update')) return response(200, {idToken:'signup-token'});
+      if (url === '/api/v1/auth/profile') return response(200, {telegram_nick:'@member_test'});
       if (target.includes('accounts:sendOobCode')) return response(200, {email:'member@example.com'});
       if (target.includes('accounts:signInWithPassword')) return response(200, {idToken:'login-token',refreshToken:'login-refresh',expiresIn:'3600'});
       if (target.includes('accounts:lookup')) return response(200, {users:[{email:'member@example.com',emailVerified:verified}]});
@@ -48,8 +49,11 @@ function response(status, payload) {
   vm.runInContext(fs.readFileSync('web/auth.js', 'utf8'), context, {filename:'web/auth.js'});
 
   await context.BlinqAuth.init();
-  const signup = await context.BlinqAuth.signUp('member@example.com', 'password123', 'Member');
+  const signup = await context.BlinqAuth.signUp('member@example.com', 'password123', '@member_test');
   assert.strictEqual(signup.verification_required, true);
+  const profileSave = calls.find(call => call.url === '/api/v1/auth/profile');
+  assert(profileSave, 'signup must save the Telegram nickname');
+  assert.strictEqual(profileSave.body.telegram_nick, '@member_test');
   const verifyMail = calls.find(call => call.url.includes('accounts:sendOobCode') && call.body.requestType === 'VERIFY_EMAIL');
   assert(verifyMail, 'signup must request a Firebase VERIFY_EMAIL mail');
   assert.strictEqual(context.localStorage.getItem('blinq_v4_session'), null, 'signup must not leave an active app session before verification');

@@ -19,11 +19,14 @@ from tbt.services.auth import (
     update_firebase_profile,
     verify_user,
 )
-from tbt.services.admin_accounts import list_users, update_user_access
+from tbt.services.admin_accounts import get_user, list_users, tg_private_state, update_user_access
 from tbt.services.account_storage import (
     load_account_metadata,
     load_account_metadata_many,
     normalize_profile_update,
+    normalize_admin_metadata_update,
+    record_admin_metadata_audit,
+    save_admin_metadata,
     save_profile_metadata,
 )
 from tbt.services.admin_storage import (
@@ -40,8 +43,8 @@ from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.6.6"
-API_VERSION = "3.5.1"
+RELEASE = "6.6.9"
+API_VERSION = "3.6.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
 # instance-local: durable analytics remains in Table Storage, while this only absorbs accidental
@@ -127,11 +130,14 @@ def _admin_user(req):
 def _admin_account_row(user, profile=None):
     profile = profile if isinstance(profile, dict) else _profile_for(user, required=True)
     account = public_account(user, cfg=settings, profile=profile)
+    tg_state = tg_private_state(account, profile)
     return {
         **account,
         "created_at": user.get("created_at"),
         "last_sign_in_at": user.get("last_sign_in_at"),
         "payment_reference": str(profile.get("payment_reference") or "")[:120],
+        **tg_state,
+        "admin_note": str(profile.get("admin_note") or "")[:500],
     }
 
 
@@ -167,8 +173,6 @@ def auth_profile(req):
         user = _verified_user(req)
         if not user:
             return response({"error": "unauthorized"}, 401)
-        if not bool(user.get("email_verified", False)):
-            return response({"error": "email_not_verified"}, 403)
         if is_suspended(user):
             return response({"error": "account_suspended"}, 403)
         if auth_provider(settings) != "firebase":
@@ -178,8 +182,13 @@ def auth_profile(req):
         except ValueError:
             return response({"error": "invalid_json"}, 400)
         normalized = normalize_profile_update(payload)
+        verified = bool(user.get("email_verified", False))
+        # New accounts may store only their Telegram nickname before email
+        # verification so registration can stay one-step. This grants no access.
+        if not verified and set((payload or {}).keys()) - {"telegram_nick"}:
+            return response({"error": "email_not_verified"}, 403)
         firebase_payload = {}
-        if isinstance(payload, dict) and "display_name" in payload:
+        if verified and isinstance(payload, dict) and "display_name" in payload:
             firebase_payload["display_name"] = normalized["display_name"]
         updated = update_firebase_profile(settings, user.get("id"), firebase_payload)
         profile = save_profile_metadata(user.get("id"), payload)
@@ -747,6 +756,47 @@ def admin_user_access(req):
     except (TypeError, KeyError):
         logging.exception("Admin access update failed")
         return response({"error": "admin_update_unavailable"}, 503)
+
+@app.route(route="v1/admin/users/{user_id}/metadata", methods=["PUT"])
+def admin_user_metadata(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        user_id = str((req.route_params or {}).get("user_id") or "").strip()
+        if not user_id:
+            return response({"error": "invalid_user_id"}, 400)
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        normalized = normalize_admin_metadata_update(payload)
+        # Ensure the target exists in Firebase before writing operational metadata.
+        target = get_user(settings, user_id)
+        before = load_account_metadata(user_id)
+        after = save_admin_metadata(user_id, normalized, actor_id=str(actor.get("id") or ""))
+        try:
+            record_admin_metadata_audit(
+                actor_id=str(actor.get("id") or ""),
+                target_id=user_id,
+                before=before,
+                after=after,
+            )
+        except AdminStorageUnavailable:
+            # The metadata itself is already stored. Keep the operation successful,
+            # matching access-update audit semantics.
+            logging.exception("Admin account metadata audit unavailable")
+        return response(_admin_account_row(target, after))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except (TypeError, KeyError):
+        logging.exception("Admin metadata update failed")
+        return response({"error": "admin_update_unavailable"}, 503)
+
 
 @app.route(route="v1/admin/ui-config", methods=["PUT"])
 def admin_ui_config(req):

@@ -29,6 +29,29 @@ ALLOWED_STATUSES = {"active", "expired", "suspended", "lifetime"}
 ALLOWED_ROLES = {"user", "admin"}
 
 
+def tg_private_state(account: dict, profile: dict | None = None) -> dict:
+    """Return the manual Telegram Private operational state for an account."""
+    profile = profile if isinstance(profile, dict) else {}
+    member = bool(profile.get("tg_private_member", False))
+    eligible = (
+        str((account or {}).get("status") or "").lower() in {"active", "lifetime"}
+        and str((account or {}).get("plan") or "").lower() in {"elite", "legend", "goat"}
+    )
+    if eligible and not member:
+        action = "add"
+    elif not eligible and member:
+        action = "remove"
+    elif eligible and member:
+        action = "ok"
+    else:
+        action = "none"
+    return {
+        "tg_private_member": member,
+        "tg_private_eligible": eligible,
+        "tg_private_action": action,
+    }
+
+
 def _firebase_list_users(cfg, *, page=1, per_page=100):
     _, firebase_auth, _ = _firebase_modules()
     app = firebase_app(cfg)

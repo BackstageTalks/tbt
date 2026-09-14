@@ -192,30 +192,29 @@
     return signInFirebase(String(email || '').trim().toLowerCase(), password);
   }
 
-  async function signUpFirebase(email, password, name) {
+  async function signUpFirebase(email, password, telegramNick) {
     const data = await json(firebaseEndpoint('signUp'), {
       method: 'POST',
       body: JSON.stringify({email, password, returnSecureToken: true}),
     });
-    let current = data;
-    const displayName = String(name || '').trim().slice(0, 80);
-    if (displayName) {
-      current = await json(firebaseEndpoint('update'), {
-        method: 'POST',
-        body: JSON.stringify({idToken: data.idToken, displayName, returnSecureToken: true}),
+    const nick = String(telegramNick || '').trim();
+    if (nick) {
+      await json('/api/v1/auth/profile', {
+        method: 'PUT',
+        headers: {'X-Blinq-Access-Token': data.idToken},
+        body: JSON.stringify({telegram_nick: nick}),
       });
-      current.refreshToken = current.refreshToken || data.refreshToken;
     }
     await json(firebaseEndpoint('sendOobCode'), {
       method: 'POST',
-      body: JSON.stringify({requestType: 'VERIFY_EMAIL', idToken: current.idToken}),
+      body: JSON.stringify({requestType: 'VERIFY_EMAIL', idToken: data.idToken}),
     });
     clear();
     return {verification_required: true, email: String(email || '').trim()};
   }
-  async function signUp(email, password, name) {
+  async function signUp(email, password, telegramNick) {
     provider();
-    return signUpFirebase(String(email || '').trim().toLowerCase(), password, name);
+    return signUpFirebase(String(email || '').trim().toLowerCase(), password, telegramNick);
   }
 
   async function resendVerification() {
@@ -298,6 +297,11 @@
       method: 'PUT', body: JSON.stringify(payload || {}),
     });
   }
+  async function adminUpdateMetadata(userId, payload) {
+    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/metadata`, {
+      method: 'PUT', body: JSON.stringify(payload || {}),
+    });
+  }
   async function runtimeUiConfig() { return json('/api/v1/ui-config'); }
   async function contentNews() { return json('/api/v1/content/news'); }
   async function bannerEvent(payload, keepalive = false) {
@@ -312,7 +316,7 @@
 
   window.BlinqAuth = {
     init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
-    adminUsers, adminUpdateAccess, runtimeUiConfig, contentNews,
+    adminUsers, adminUpdateAccess, adminUpdateMetadata, runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear,
   };
 })();
