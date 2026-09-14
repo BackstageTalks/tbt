@@ -25,7 +25,7 @@
     "rookie": {
       "label": "BlinQ ROOKIE",
       "enabled": true,
-      "note": "Limited daily picks; first 3 days free after registration.",
+      "note": "Limited daily predictions; first 3 days free after registration.",
       "duration_days": 30,
       "trial_hours": 72,
       "lifetime": false,
@@ -203,7 +203,7 @@
       "order": 2,
       "content": {
         "eyebrow": "BLINQ VIP",
-        "headline": "Premium Picks",
+        "headline": "Premium Predictions",
         "text": "Higher value. Better decisions.",
         "link": "",
         "route": "",
@@ -335,7 +335,7 @@
       "content": {
         "eyebrow": "BLINQ PRO",
         "headline": "Start with Prime",
-        "text": "Unlock more daily picks and the core BlinQ workflow.",
+        "text": "Unlock more daily predictions and the core BlinQ workflow.",
         "button_text": "See PRO",
         "link": "#account",
         "route": "account",
@@ -548,12 +548,12 @@
       }
     },
     "PRIME_PICKS_PANEL": {
-      "label": "Prime Picks panel",
+      "label": "Prime Predictions panel",
       "zone": "predictions",
       "kind": "panel",
       "order": 50,
       "content": {
-        "label": "Prime Picks panel"
+        "label": "Prime Predictions panel"
       },
       "watermark": {
         "enabled": false,
@@ -1068,12 +1068,12 @@
       }
     },
     "SIDEBAR_PRIME": {
-      "label": "Prime Picks",
+      "label": "Prime Predictions",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 2,
       "content": {
-        "label": "Prime Picks",
+        "label": "Prime Predictions",
         "route": "prime",
         "icon": "✦"
       },
@@ -1093,12 +1093,12 @@
       }
     },
     "SIDEBAR_TOP_DAILY": {
-      "label": "Top Bets",
+      "label": "TOP Predictions",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 3,
       "content": {
-        "label": "Top Bets",
+        "label": "TOP Predictions",
         "route": "top_daily",
         "icon": "★"
       },
@@ -1118,12 +1118,12 @@
       }
     },
     "SIDEBAR_VALUE": {
-      "label": "Value Picks",
+      "label": "Value Predictions",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 4,
       "content": {
-        "label": "Value Picks",
+        "label": "Value Predictions",
         "route": "value",
         "icon": "◇"
       },
@@ -1253,7 +1253,7 @@
         "type": "internal",
         "eyebrow": "VIP",
         "headline": "VIP Telegram",
-        "text": "Exclusive picks & live updates.",
+        "text": "Exclusive predictions & live updates.",
         "button_text": "Open",
         "link": "#account",
         "route": "account",
@@ -1357,7 +1357,7 @@
         "type": "promo",
         "eyebrow": "ELITE",
         "headline": "Upgrade to Elite",
-        "text": "Unlock premium picks and analytics.",
+        "text": "Unlock premium predictions and analytics.",
         "button_text": "Upgrade",
         "link": "#account",
         "route": "account",
@@ -1401,12 +1401,12 @@
       }
     },
     "TOP_DAILY_PANEL": {
-      "label": "Top Bets panel",
+      "label": "TOP Predictions panel",
       "zone": "predictions",
       "kind": "panel",
       "order": 60,
       "content": {
-        "label": "Top Bets panel"
+        "label": "TOP Predictions panel"
       },
       "watermark": {
         "enabled": false,
@@ -1424,12 +1424,12 @@
       }
     },
     "VALUE_PICKS_PANEL": {
-      "label": "Value Picks panel",
+      "label": "Value Predictions panel",
       "zone": "predictions",
       "kind": "panel",
       "order": 70,
       "content": {
-        "label": "Value Picks panel"
+        "label": "Value Predictions panel"
       },
       "watermark": {
         "enabled": false,
@@ -2321,7 +2321,7 @@
       "fallback_only_if_core_count_below": 5
     },
     "top_daily": {
-      "label": "Top Bets",
+      "label": "TOP Predictions",
       "internal_key": "top_daily",
       "limit": null,
       "markets": [
@@ -2360,7 +2360,7 @@
       "fallback_only_if_core_count_below": 5
     },
     "value": {
-      "label": "Value Picks",
+      "label": "Value Predictions",
       "limit": null,
       "selection_mode": "probability_plus_close_odds",
       "objective": "probability_plus_close_odds",
@@ -2466,7 +2466,7 @@
     ],
     "sections": {
       "prime": {
-        "label": "Prime Picks",
+        "label": "Prime Predictions",
         "panel_id": "predictionsPanel",
         "sidebar_element": "SIDEBAR_PRIME",
         "sidebar_enabled": false,
@@ -2519,7 +2519,7 @@
         }
       },
       "top_daily": {
-        "label": "Top Bets",
+        "label": "TOP Predictions",
         "panel_id": "topDailyPanel",
         "sidebar_element": "SIDEBAR_TOP_DAILY",
         "sidebar_enabled": true,
@@ -2572,7 +2572,7 @@
         }
       },
       "value": {
-        "label": "Value Picks",
+        "label": "Value Predictions",
         "panel_id": "valuePanel",
         "sidebar_element": "SIDEBAR_VALUE",
         "sidebar_enabled": true,
@@ -2963,7 +2963,7 @@
           }
         },
         "value": {
-          "label": "Value Picks",
+          "label": "Value Predictions",
           "enabled": true,
           "plans": {
             "trial": {
@@ -3107,7 +3107,7 @@
           }
         },
         "prime": {
-          "label": "Prime tipy",
+          "label": "Prime",
           "enabled": false,
           "plans": {
             "trial": {
@@ -3253,7 +3253,7 @@
       }
     }
   },
-  "ui_revision": "6.7.4",
+  "ui_revision": "6.7.6",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3298,5 +3298,5 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "6.7.4"
+  "revision": "6.7.6"
 }

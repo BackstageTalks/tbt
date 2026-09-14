@@ -15,11 +15,13 @@ from tbt.services.auth import (
     is_admin,
     is_suspended,
     public_account,
+    profile_claims,
+    mirror_profile_claims,
     request_authorization,
     update_firebase_profile,
     verify_user,
 )
-from tbt.services.admin_accounts import get_user, list_users, tg_private_state, update_user_access
+from tbt.services.admin_accounts import get_user, list_users, mirror_admin_metadata_claims, tg_private_state, update_user_access
 from tbt.services.account_storage import (
     load_account_metadata,
     load_account_metadata_many,
@@ -32,6 +34,7 @@ from tbt.services.account_storage import (
 from tbt.services.admin_storage import (
     AdminStorageUnavailable,
     admin_storage_backend,
+    admin_storage_diagnostics,
     banner_analytics_summary,
     load_runtime_ui_config,
     record_banner_event,
@@ -44,7 +47,7 @@ from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.7.4"
+RELEASE = "6.7.6"
 API_VERSION = "3.7.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -106,13 +109,32 @@ def _verified_user(req):
 def _profile_for(user, *, required=False):
     if not user:
         return {}
+    fallback = profile_claims(user)
     try:
-        return load_account_metadata(user.get("id"))
+        stored = load_account_metadata(user.get("id"))
     except AdminStorageUnavailable:
         if required:
             raise
-        logging.exception("Account metadata storage unavailable")
-        return {}
+        logging.warning("Account metadata storage unavailable; using Firebase claim mirror")
+        return fallback
+
+    # Durable storage is authoritative once a field has actually been written.
+    merged = dict(fallback)
+    if stored.get("telegram_nick"):
+        merged["telegram_nick"] = stored["telegram_nick"]
+    if stored.get("avatar_variant"):
+        merged["avatar_variant"] = stored["avatar_variant"]
+    if stored.get("admin_metadata_updated_at") is not None:
+        merged["tg_private_member"] = bool(stored.get("tg_private_member", False))
+    for key in (
+        "payment_reference", "admin_note", "profile_updated_at",
+        "access_metadata_updated_at", "admin_metadata_updated_at",
+        "admin_metadata_updated_by",
+    ):
+        if stored.get(key) not in (None, ""):
+            merged[key] = stored.get(key)
+    merged["storage_fallback"] = False
+    return merged
 
 
 def _admin_user(req):
@@ -129,7 +151,7 @@ def _admin_user(req):
 
 
 def _admin_account_row(user, profile=None):
-    profile = profile if isinstance(profile, dict) else _profile_for(user, required=True)
+    profile = profile if isinstance(profile, dict) else _profile_for(user, required=False)
     account = public_account(user, cfg=settings, profile=profile)
     tg_state = tg_private_state(account, profile)
     return {
@@ -192,8 +214,19 @@ def auth_profile(req):
         if verified and isinstance(payload, dict) and "display_name" in payload:
             firebase_payload["display_name"] = normalized["display_name"]
         updated = update_firebase_profile(settings, user.get("id"), firebase_payload)
-        profile = save_profile_metadata(user.get("id"), payload)
-        return response(public_account(updated, cfg=settings, profile=profile))
+        # Mirror the small non-sensitive profile fields into Firebase claims so
+        # Telegram/avatar identity survives a temporary admin-storage outage.
+        updated = mirror_profile_claims(settings, user.get("id"), payload)
+        try:
+            profile = save_profile_metadata(user.get("id"), payload)
+            storage_warning = None
+        except AdminStorageUnavailable:
+            profile = profile_claims(updated)
+            storage_warning = "profile_storage_fallback"
+        result = public_account(updated, cfg=settings, profile=profile)
+        if storage_warning:
+            result["storage_warning"] = storage_warning
+        return response(result)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AuthUnavailable:
@@ -703,8 +736,8 @@ def admin_diagnostics(req):
         actor, denied = _admin_user(req)
         if denied:
             return denied
-        backend = admin_storage_backend()
-        storage_ok = backend != "unavailable"
+        storage = admin_storage_diagnostics()
+        storage_ok = storage.get("backend") != "unavailable"
         users_ok = False
         try:
             list_users(settings, page=1, per_page=1)
@@ -724,10 +757,13 @@ def admin_diagnostics(req):
         if not storage_ok:
             problems.append("admin_storage_unavailable")
         return response({
-            "ok": bool(storage_ok and users_ok),
+            "ok": bool(users_ok),
+            "accounts_ready": bool(users_ok),
+            "content_storage_ready": bool(storage_ok),
             "release": RELEASE,
             "auth_provider": auth_provider(settings),
-            "admin_storage": backend,
+            "admin_storage": storage.get("backend"),
+            "storage": storage,
             "firebase_server_configured": firebase_server_configured,
             "firebase_admin_users": users_ok,
             "problems": problems,
@@ -748,13 +784,21 @@ def admin_users(req):
         except (TypeError, ValueError):
             return response({"error": "invalid_pagination"}, 400)
         users = list_users(settings, page=page, per_page=per_page)
-        profiles = load_account_metadata_many([user.get("id") for user in users])
-        return response({
+        storage_warning = None
+        try:
+            profiles = load_account_metadata_many([user.get("id") for user in users])
+        except AdminStorageUnavailable:
+            profiles = {str(user.get("id") or ""): profile_claims(user) for user in users}
+            storage_warning = "operational_metadata_fallback"
+        payload = {
             "users": [_admin_account_row(user, profiles.get(str(user.get("id") or ""), {})) for user in users],
             "page": page,
             "per_page": per_page,
             "actor_id": actor.get("id"),
-        })
+        }
+        if storage_warning:
+            payload["storage_warning"] = storage_warning
+        return response(payload)
     except AuthUnavailable:
         return response({"error": "admin_auth_unavailable"}, 503)
     except AdminStorageUnavailable:
@@ -813,22 +857,30 @@ def admin_user_metadata(req):
         except ValueError:
             return response({"error": "invalid_json"}, 400)
         normalized = normalize_admin_metadata_update(payload)
-        # Ensure the target exists in Firebase before writing operational metadata.
         target = get_user(settings, user_id)
-        before = load_account_metadata(user_id)
-        after = save_admin_metadata(user_id, normalized, actor_id=str(actor.get("id") or ""))
+        # TG Private is mirrored in a tiny Firebase claim so manual group
+        # operations continue even if the optional metadata store is down.
+        target = mirror_admin_metadata_claims(settings, user_id, normalized)
+        storage_warning = None
         try:
-            record_admin_metadata_audit(
-                actor_id=str(actor.get("id") or ""),
-                target_id=user_id,
-                before=before,
-                after=after,
-            )
+            before = load_account_metadata(user_id)
+            after = save_admin_metadata(user_id, normalized, actor_id=str(actor.get("id") or ""))
+            try:
+                record_admin_metadata_audit(
+                    actor_id=str(actor.get("id") or ""),
+                    target_id=user_id,
+                    before=before,
+                    after=after,
+                )
+            except AdminStorageUnavailable:
+                logging.warning("Admin account metadata audit unavailable")
         except AdminStorageUnavailable:
-            # The metadata itself is already stored. Keep the operation successful,
-            # matching access-update audit semantics.
-            logging.exception("Admin account metadata audit unavailable")
-        return response(_admin_account_row(target, after))
+            after = profile_claims(target)
+            storage_warning = "admin_note_not_persisted" if "admin_note" in normalized else "operational_metadata_fallback"
+        row = _admin_account_row(target, after)
+        if storage_warning:
+            row["storage_warning"] = storage_warning
+        return response(row)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AuthUnavailable:

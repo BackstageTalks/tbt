@@ -16,6 +16,7 @@ from .auth import (
     firebase_configured,
     firebase_get_user,
     firebase_user_to_dict,
+    profile_claims,
 )
 from .account_storage import (
     load_account_metadata,
@@ -51,6 +52,26 @@ def tg_private_state(account: dict, profile: dict | None = None) -> dict:
         "tg_private_action": action,
     }
 
+
+
+def mirror_admin_metadata_claims(cfg, user_id, payload):
+    """Mirror TG Private membership into Firebase claims as a storage fallback."""
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise ValueError("Invalid user id")
+    _, firebase_auth, _ = _firebase_modules()
+    app = firebase_app(cfg)
+    try:
+        record = firebase_auth.get_user(uid, app=app)
+        claims = dict(record.custom_claims or {})
+        if "tg_private_member" in payload:
+            claims["blinq_tg_private_member"] = bool(payload.get("tg_private_member"))
+        firebase_auth.set_custom_user_claims(uid, claims, app=app)
+        return firebase_user_to_dict(firebase_auth.get_user(uid, app=app))
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise AuthUnavailable("Firebase admin service temporarily unavailable") from exc
 
 def _firebase_list_users(cfg, *, page=1, per_page=100):
     _, firebase_auth, _ = _firebase_modules()
@@ -169,7 +190,7 @@ def _apply_access_metadata(app, changes):
     # Remove legacy non-authorization data from the next claim write.
     for key in (
         "blinq_payment_reference", "blinq_access_updated_at",
-        "blinq_access_updated_by", "blinq_avatar_variant", "blinq_hide_ads",
+        "blinq_access_updated_by", "blinq_hide_ads",
     ):
         app.pop(key, None)
     return app
@@ -179,60 +200,71 @@ def _update_firebase_user_access(cfg, user_id, changes, *, actor_id=""):
     _, firebase_auth, _ = _firebase_modules()
     app = firebase_app(cfg)
     uid = str(user_id).strip()
+    storage_warning = ""
     try:
         record = firebase_auth.get_user(uid, app=app)
         before_user = firebase_user_to_dict(record)
         before_access = account_access(before_user, cfg=cfg)
 
-        # Make storage/audit availability a precondition for the authoritative
-        # Firebase claim mutation. The request audit gives us an append-only
-        # trace even if the worker dies immediately after Firebase accepts it.
-        previous_meta = load_account_metadata(uid)
-        previous_reference = previous_meta.get("payment_reference", "")
-        intended_after = {
-            **before_access,
-            "role": changes["role"],
-            "plan": changes["plan"] or ("admin" if changes["role"] == "admin" else "expired"),
-            "status": changes["status"],
-            "expires_at": changes["expires_at"],
-        }
-        record_access_audit(
-            actor_id=actor_id, target_id=uid, before=before_access,
-            after=intended_after, outcome="requested",
-        )
-        desired_reference = changes.get("payment_reference", "") if changes.get("payment_reference_present") else previous_reference
-        save_payment_reference(uid, desired_reference, actor_id=actor_id)
+        previous_reference = ""
+        storage_ready = True
+        try:
+            previous_meta = load_account_metadata(uid)
+            previous_reference = previous_meta.get("payment_reference", "")
+            intended_after = {
+                **before_access,
+                "role": changes["role"],
+                "plan": changes["plan"] or ("admin" if changes["role"] == "admin" else "expired"),
+                "status": changes["status"],
+                "expires_at": changes["expires_at"],
+            }
+            record_access_audit(
+                actor_id=actor_id, target_id=uid, before=before_access,
+                after=intended_after, outcome="requested",
+            )
+            desired_reference = changes.get("payment_reference", "") if changes.get("payment_reference_present") else previous_reference
+            save_payment_reference(uid, desired_reference, actor_id=actor_id)
+        except AdminStorageUnavailable:
+            # Core access management must remain available even when the optional
+            # operational metadata store is down. Payment reference/audit are
+            # skipped and clearly reported to the caller.
+            storage_ready = False
+            storage_warning = "operational_metadata_not_persisted"
 
         claims = _apply_access_metadata(record.custom_claims or {}, changes)
         try:
             firebase_auth.set_custom_user_claims(uid, claims, app=app)
         except Exception:
-            try:
-                save_payment_reference(uid, previous_reference, actor_id=actor_id)
-                record_access_audit(
-                    actor_id=actor_id, target_id=uid, before=before_access,
-                    after=before_access, outcome="failed",
-                )
-            except Exception:
-                pass
+            if storage_ready:
+                try:
+                    save_payment_reference(uid, previous_reference, actor_id=actor_id)
+                    record_access_audit(
+                        actor_id=actor_id, target_id=uid, before=before_access,
+                        after=before_access, outcome="failed",
+                    )
+                except Exception:
+                    pass
             raise
 
         updated = firebase_auth.get_user(uid, app=app)
         updated_user = firebase_user_to_dict(updated)
         after_access = account_access(updated_user, cfg=cfg)
-        # A success marker is useful but must not turn an already-applied
-        # Firebase authorization change into a misleading 503 response.
-        try:
-            record_access_audit(
-                actor_id=actor_id, target_id=uid, before=before_access,
-                after=after_access, outcome="success",
-            )
-        except AdminStorageUnavailable:
-            pass
+        if storage_ready:
+            try:
+                record_access_audit(
+                    actor_id=actor_id, target_id=uid, before=before_access,
+                    after=after_access, outcome="success",
+                )
+            except AdminStorageUnavailable:
+                storage_warning = "audit_not_persisted"
+        if storage_warning:
+            updated_user["admin_storage_warning"] = storage_warning
         return updated_user
-    except (ValueError, AdminStorageUnavailable):
+    except ValueError:
         raise
     except Exception as exc:
+        if isinstance(exc, AuthUnavailable):
+            raise
         raise AuthUnavailable("Firebase admin service temporarily unavailable") from exc
 
 def update_user_access(cfg, user_id, payload, *, actor_id="", client=None):

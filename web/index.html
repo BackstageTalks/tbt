@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#05111f" />
   <title>BlinQ · Tennis Intelligence</title>
   <link rel="icon" href="/assets/blinq_favi.png" type="image/png" />
-  <link rel="stylesheet" href="/styles.css?v=674" media="not all" />
-  <link rel="stylesheet" href="/responsive.css?v=674" media="not all" />
-  <link rel="stylesheet" href="/premium.css?v=674" media="not all" />
-  <link rel="stylesheet" href="/blinq.css?v=674" />
-  <script defer src="/auth.js?v=674"></script>
-  <script defer src="/responsive.js?v=674"></script>
-  <script defer src="/app.js?v=674"></script>
+  <link rel="stylesheet" href="/styles.css?v=676" media="not all" />
+  <link rel="stylesheet" href="/responsive.css?v=676" media="not all" />
+  <link rel="stylesheet" href="/premium.css?v=676" media="not all" />
+  <link rel="stylesheet" href="/blinq.css?v=676" />
+  <script defer src="/auth.js?v=676"></script>
+  <script defer src="/responsive.js?v=676"></script>
+  <script defer src="/app.js?v=676"></script>
 </head>
 <body id="blinqPremium" class="blinq-home">
   <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
@@ -59,7 +59,7 @@
             </button>
             <button id="profileMenuToggle" class="profile-toggle" type="button" aria-controls="profileMenu" aria-expanded="false">⌄</button>
             <div id="profileMenu" class="profile-menu" hidden>
-              <button id="profileAdminLink" data-route="admin" type="button" hidden><span>⚙</span><span><strong>Admin</strong><small>Control center</small></span></button>
+              <button id="profileAdminLink" data-route="admin" type="button" hidden><span>⚙</span><span><strong>Admin</strong><small>Admin centrum</small></span></button>
               <button id="headerLogoutButton" type="button"><span>↪</span><span><strong>Odhlásiť sa</strong><small>Ukončiť reláciu</small></span></button>
             </div>
             <span id="accountHoverTooltip" class="account-hover-tooltip" role="tooltip" hidden>
@@ -94,7 +94,7 @@
             </div>
             <div class="daily-meta" id="dailyHubMeta">
               <span class="daily-date"><i>◫</i><b id="dailyHubMetaDate">Dnešný výber</b></span>
-              <span class="daily-promise">Profesionálna analýza.<br/>Reálne príležitosti.</span>
+              <span class="daily-promise">Profesionálna analýza.<br/>Reálne dáta.</span>
             </div>
           </div>
           <div class="daily-tabs-row">
@@ -113,11 +113,11 @@
       <section id="routePanel" class="route-panel" hidden></section>
 
       <section class="vip-rail">
-        <div class="vip-brand"><span>♛</span><div><strong>BlinQ VIP</strong><small>Prémiové tipy. Hlbšie dáta. Väčší prehľad.</small></div></div>
+        <div class="vip-brand"><span>♛</span><div><strong>BlinQ VIP</strong><small>Prémiové predikcie. Hlbšie dáta. Väčší prehľad.</small></div></div>
         <div class="vip-benefits">
-          <div><span>⌁</span><div><strong>Pokročilé modely</strong><small>Viac tipov každý deň</small></div></div>
+          <div><span>⌁</span><div><strong>Pokročilé modely</strong><small>Viac predikcií každý deň</small></div></div>
           <div><span>◫</span><div><strong>Detailné štatistiky</strong><small>Hlbší kontext zápasu</small></div></div>
-          <div><span>◎</span><div><strong>Exkluzívna komunita</strong><small>Pre vážnych hráčov</small></div></div>
+          <div><span>◎</span><div><strong>Exkluzívna komunita</strong><small>Pre aktívnych členov</small></div></div>
         </div>
         <a class="vip-cta" href="#account" data-route="account">Zobraziť plány →</a>
       </section>
@@ -161,6 +161,6 @@
   <dialog id="matchDialog" class="match-dialog" aria-label="Analýza zápasu"><button id="dialogClose" class="dialog-close" type="button">×</button><div id="dialogContent"></div></dialog>
   <dialog id="upgradeDialog" class="upgrade-dialog" aria-labelledby="upgradeDialogTitle"><button id="upgradeDialogClose" class="dialog-close" type="button">×</button><div id="upgradeDialogContent"></div></dialog>
 
-  <template id="predictionTemplate"><article class="prediction-card"><div class="card-meta"><span class="tour"></span><span class="time"></span><span class="surface"></span></div><div class="players-row"><div class="player player-a"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div><div class="vs">VS</div><div class="player player-b"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div></div><div class="data-depth-row" hidden></div><div class="pick-row"><div><small>Náš tip</small><strong class="pick-name"></strong></div><div><div class="probability"></div><span class="confidence"></span></div></div><div class="betting-row" hidden><span class="betting-odds"></span><span class="betting-data"></span><span class="betting-surface"></span><span class="betting-form"></span><button class="analysis-link" type="button">Detail →</button></div><div class="signals"></div></article></template>
+  <template id="predictionTemplate"><article class="prediction-card"><div class="card-meta"><span class="tour"></span><span class="time"></span><span class="surface"></span></div><div class="players-row"><div class="player player-a"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div><div class="vs">VS</div><div class="player player-b"><span class="player-avatar"></span><strong class="player-name"></strong><small class="player-rank"></small></div></div><div class="data-depth-row" hidden></div><div class="pick-row"><div><small>Naša predikcia</small><strong class="pick-name"></strong></div><div><div class="probability"></div><span class="confidence"></span></div></div><div class="betting-row" hidden><span class="betting-odds"></span><span class="betting-data"></span><span class="betting-surface"></span><span class="betting-form"></span><button class="analysis-link" type="button">Detail →</button></div><div class="signals"></div></article></template>
 </body>
 </html>

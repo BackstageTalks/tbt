@@ -5,24 +5,24 @@
     "rookie": {
       "enabled": true,
       "label": "BlinQ ROOKIE",
-      "card_title": "Ochutnávka BlinQ",
-      "description": "Základný prístup pre nových používateľov a rýchly úvod do denného feedu.",
-      "cta_label": "Vybrať Rookie",
+      "card_title": "Základný vstup",
+      "description": "Základný prístup do BlinQ a ochutnávka denného prehľadu.",
+      "cta_label": "Vybrať ROOKIE",
       "payment_url": ""
     },
     "pro": {
       "enabled": true,
       "label": "BlinQ PRO",
       "card_title": "Plný denný prehľad",
-      "description": "Lepší Rookie s plným dashboardom a denným prístupom k hlavným predikciám.",
+      "description": "Plný dashboard a denný prístup k hlavným predikciám BlinQ.",
       "cta_label": "Upgrade na PRO",
       "payment_url": "https://backstagetalks.tipsterpage.com/sk0yd2u0/sk"
     },
     "elite": {
       "enabled": true,
       "label": "BlinQ ELITE",
-      "card_title": "Premium vstup",
-      "description": "VIP skupina, See All a Overview. Tu začína premium úroveň BlinQ.",
+      "card_title": "Premium prístup",
+      "description": "VIP skupina, celá ponuka a rozšírený prehľad. Tu začína premium úroveň BlinQ.",
       "cta_label": "Upgrade na ELITE",
       "payment_url": "https://backstagetalks.tipsterpage.com/qYBLxlL0/sk"
     },
@@ -31,15 +31,15 @@
       "label": "BlinQ LEGEND",
       "card_title": "Dlhodobý premium prístup",
       "description": "Rozšírený ELITE prístup s výsledkami a pokročilými štatistikami výkonu.",
-      "cta_label": "Otvoriť Legend",
+      "cta_label": "Upgrade na LEGEND",
       "payment_url": "https://t.me/+5ANwTY1STQExOTY0"
     },
     "goat": {
       "enabled": true,
       "label": "BlinQ GOAT",
-      "card_title": "Súkromná najvyššia úroveň",
+      "card_title": "Najvyššia úroveň BlinQ",
       "description": "Doživotný prístup, všetky funkcie BlinQ a partner/reklamné výhody pre vybraných členov.",
-      "cta_label": "Požiadať o prístup",
+      "cta_label": "Požiadať o GOAT",
       "invite_only": true,
       "invite_url": "",
       "payment_url": ""

@@ -81,7 +81,7 @@
       const details = document.createElement('details');
       details.className = 'selection-details';
       const summary = document.createElement('summary');
-      summary.textContent = uiText('How these picks are selected','Ako sa tieto tipy vyberajú','Jak se tyto tipy vybírají');
+      summary.textContent = uiText('How these predictions are selected','Ako sa tieto predikcie vyberajú','Jak se tyto predikce vybírají');
       rule.replaceWith(details);
       details.append(summary, rule);
     });

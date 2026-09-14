@@ -225,6 +225,69 @@ def update_firebase_profile(cfg, user_id, payload):
     except Exception as exc:
         raise AuthUnavailable("Identity service temporarily unavailable") from exc
 
+
+def profile_claims(user) -> dict:
+    """Read the tiny non-sensitive profile mirror stored in Firebase claims.
+
+    Durable account storage remains preferred. These claims keep Telegram/avatar
+    identity available when Azure Table/Firestore is temporarily unavailable.
+    """
+    app = (user or {}).get("app_metadata") or {}
+    telegram = str(app.get("blinq_telegram_nick") or "").strip()[:33]
+    avatar = str(app.get("blinq_avatar_variant") or "").strip().lower()
+    if avatar not in {"m", "w"}:
+        avatar = ""
+    return {
+        "telegram_nick": telegram,
+        "avatar_variant": avatar,
+        "tg_private_member": bool(app.get("blinq_tg_private_member", False)),
+        "payment_reference": "",
+        "admin_note": "",
+        "profile_updated_at": None,
+        "access_metadata_updated_at": None,
+        "admin_metadata_updated_at": None,
+        "admin_metadata_updated_by": "",
+        "storage_fallback": True,
+    }
+
+
+def mirror_profile_claims(cfg, user_id, payload):
+    """Mirror Telegram/avatar fields into Firebase custom claims.
+
+    This is intentionally limited to small, non-sensitive fields. Admin notes and
+    payment references never enter ID tokens.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid profile update")
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise ValueError("Invalid user id")
+    _, firebase_auth, _ = _firebase_modules()
+    app = firebase_app(cfg)
+    try:
+        record = firebase_auth.get_user(uid, app=app)
+        claims = dict(record.custom_claims or {})
+        if "telegram_nick" in payload:
+            value = str(payload.get("telegram_nick") or "").strip()[:33]
+            if value:
+                claims["blinq_telegram_nick"] = value
+            else:
+                claims.pop("blinq_telegram_nick", None)
+        avatar_key = "blinq_avatar_variant" if "blinq_avatar_variant" in payload else "avatar_variant"
+        if avatar_key in payload:
+            value = str(payload.get(avatar_key) or "").strip().lower()
+            if value in {"m", "w"}:
+                claims["blinq_avatar_variant"] = value
+            else:
+                claims.pop("blinq_avatar_variant", None)
+        firebase_auth.set_custom_user_claims(uid, claims, app=app)
+        updated = firebase_auth.get_user(uid, app=app)
+        return firebase_user_to_dict(updated)
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise AuthUnavailable("Identity service temporarily unavailable") from exc
+
 def _parse_utc(value):
     if not isinstance(value, str) or not value.strip():
         return None

@@ -117,15 +117,57 @@ class _FirestoreTableAdapter:
         return [dict(snap.to_dict() or {}) for snap in query.stream()]
 
 
-def admin_storage_backend() -> str:
-    """Report which durable admin store will be used in this runtime."""
-    if _connection_string():
-        return "azure_table"
+def _firestore_health() -> bool:
     try:
-        _FirestoreTableAdapter("Health")
-        return "firestore"
-    except AdminStorageUnavailable:
-        return "unavailable"
+        adapter = _FirestoreTableAdapter("Health")
+        # Force one read so a project without an enabled Firestore database is
+        # not incorrectly reported as healthy just because the SDK initialized.
+        adapter.query_entities(query_filter="PartitionKey eq '__blinq_health__'")
+        return True
+    except Exception:
+        return False
+
+
+def _azure_table_health() -> bool:
+    connection = _connection_string()
+    if not connection:
+        return False
+    try:
+        from azure.data.tables import TableServiceClient
+        service = TableServiceClient.from_connection_string(connection)
+        try:
+            service.create_table_if_not_exists("BlinQAdminHealth")
+        except AttributeError:
+            try:
+                service.create_table("BlinQAdminHealth")
+            except Exception:
+                pass
+        client = service.get_table_client("BlinQAdminHealth")
+        # Materialize at most one page. An empty table is still a healthy store.
+        list(client.query_entities("PartitionKey eq '__blinq_health__'", results_per_page=1).by_page())[:1]
+        return True
+    except Exception:
+        return False
+
+
+def admin_storage_diagnostics() -> dict:
+    """Return safe admin-storage health without exposing connection details."""
+    azure_configured = bool(_connection_string())
+    azure_available = _azure_table_health() if azure_configured else False
+    firestore_available = _firestore_health()
+    backend = "azure_table" if azure_available else "firestore" if firestore_available else "unavailable"
+    return {
+        "backend": backend,
+        "azure_configured": azure_configured,
+        "azure_available": azure_available,
+        "firestore_available": firestore_available,
+        "requires_persistent_store": backend == "unavailable",
+    }
+
+
+def admin_storage_backend() -> str:
+    """Report which durable admin store is actually reachable in this runtime."""
+    return str(admin_storage_diagnostics().get("backend") or "unavailable")
 
 
 def _table(name: str):

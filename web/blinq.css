@@ -410,3 +410,313 @@ body#blinqPremium .admin-banner-group+.admin-banner-group{margin-top:16px!import
   body#blinqPremium .daily-tabs-row{align-items:stretch!important}
   body#blinqPremium .daily-expand{min-width:0!important;white-space:nowrap!important}
 }
+
+/* v6.7.5 — unified public/admin typography and cleaner admin hierarchy */
+body#blinqPremium{font-size:14px!important}
+body#blinqPremium .route-heading{padding:22px 6px 16px!important}
+body#blinqPremium .route-heading>span{font-size:10px!important;letter-spacing:.14em!important}
+body#blinqPremium .route-heading h1{font-size:30px!important;line-height:1.08!important;margin:6px 0 7px!important;letter-spacing:-.025em!important}
+body#blinqPremium .route-heading p{font-size:14px!important;line-height:1.45!important;color:#8fb1c6!important}
+
+body#blinqPremium .header-feature-card strong,body#blinqPremium .header-feature-item strong,body#blinqPremium .header-slot-copy strong{font-size:12px!important;line-height:1.25!important}
+body#blinqPremium .header-feature-card small,body#blinqPremium .header-feature-item small,body#blinqPremium .header-slot-copy span{font-size:10px!important;line-height:1.3!important}
+body#blinqPremium .header-slot-copy small{font-size:8px!important;letter-spacing:.08em!important}
+body#blinqPremium .header-slot-cta{font-size:9px!important}
+
+body#blinqPremium .daily-title-group h2{font-size:23px!important;letter-spacing:-.02em!important}
+body#blinqPremium .daily-hub-tab{font-size:12px!important;font-weight:850!important;min-height:40px!important}
+body#blinqPremium .daily-hub-tab b{font-size:10px!important}
+body#blinqPremium .daily-expand{font-size:11px!important}
+body#blinqPremium .daily-hub-table th{font-size:9px!important;letter-spacing:.11em!important}
+body#blinqPremium .daily-hub-table td{font-size:12.5px!important;line-height:1.35!important}
+body#blinqPremium .hub-tournament-copy b,body#blinqPremium .hub-player-copy>b{font-size:12.5px!important;line-height:1.25!important}
+body#blinqPremium .hub-tournament-copy small,body#blinqPremium .hub-player-meta{font-size:9px!important;line-height:1.3!important}
+body#blinqPremium .hub-detail{font-size:11px!important;min-height:36px!important}
+body#blinqPremium .daily-promise{font-size:10px!important;line-height:1.45!important}
+
+body#blinqPremium .vip-brand strong{font-size:13px!important}
+body#blinqPremium .vip-brand small,body#blinqPremium .vip-benefits small{font-size:10px!important;line-height:1.35!important}
+body#blinqPremium .vip-benefits strong{font-size:11px!important}
+body#blinqPremium .vip-cta{font-size:11px!important}
+
+body#blinqPremium .admin-console-v675{display:grid!important;gap:14px!important}
+body#blinqPremium .admin-control-toolbar{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:18px!important;padding:2px 0 2px!important}
+body#blinqPremium .admin-control-toolbar-copy{display:grid!important;gap:3px!important;min-width:0!important}
+body#blinqPremium .admin-control-toolbar-copy strong{font-size:15px!important;line-height:1.2!important;color:#eff7fb!important}
+body#blinqPremium .admin-control-toolbar-copy span{font-size:11px!important;line-height:1.4!important;color:#7f9eb2!important}
+body#blinqPremium .admin-global-actions{display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:8px!important;flex-wrap:wrap!important}
+body#blinqPremium .admin-global-actions .btn,body#blinqPremium .admin-global-actions summary{font-size:11px!important;min-height:38px!important}
+body#blinqPremium .admin-account-direct-note{font-size:11px!important;color:#8db0c4!important;white-space:nowrap!important}
+body#blinqPremium .admin-account-direct-note span{color:#54eda3!important}
+
+body#blinqPremium .admin-runtime-note{display:flex!important;align-items:flex-start!important;gap:10px!important;padding:10px 13px!important;border:1px solid #315069!important;border-radius:10px!important;background:#081b28!important}
+body#blinqPremium .admin-runtime-note strong{font-size:11px!important;white-space:nowrap!important}
+body#blinqPremium .admin-runtime-note span{font-size:10.5px!important;line-height:1.45!important;color:#9cb4c3!important}
+body#blinqPremium .admin-runtime-note.is-warning{border-color:#705c25!important;background:rgba(104,76,18,.13)!important}
+body#blinqPremium .admin-runtime-note.is-warning strong{color:#f4d277!important}
+body#blinqPremium .admin-runtime-note.is-error{border-color:#83414a!important;background:rgba(115,34,45,.14)!important}
+body#blinqPremium .admin-runtime-note.is-error strong{color:#ff9ca7!important}
+
+body#blinqPremium .admin-tabs-v675{margin:0!important;gap:8px!important}
+body#blinqPremium .admin-tabs-v675 button{min-height:64px!important;padding:11px 13px!important;border-radius:10px!important}
+body#blinqPremium .admin-tabs-v675 button strong{font-size:12px!important;line-height:1.2!important}
+body#blinqPremium .admin-tabs-v675 button small{font-size:9.5px!important;line-height:1.35!important;margin-top:4px!important}
+
+body#blinqPremium .admin-panel-v675 .admin-ux-heading{margin-bottom:16px!important}
+body#blinqPremium .admin-panel-v675 .admin-ux-heading small,body#blinqPremium .admin-panel-v675 .admin-subsection-heading small{font-size:9px!important;letter-spacing:.11em!important}
+body#blinqPremium .admin-panel-v675 .admin-ux-heading h2{font-size:25px!important;line-height:1.1!important;margin:4px 0 7px!important}
+body#blinqPremium .admin-panel-v675 .admin-ux-heading p,body#blinqPremium .admin-panel-v675 .admin-subsection-heading span{font-size:12px!important;line-height:1.5!important;color:#83a6ba!important}
+body#blinqPremium .admin-panel-v675 label{font-size:10.5px!important;line-height:1.35!important;color:#a9c0cf!important}
+body#blinqPremium .admin-panel-v675 input,body#blinqPremium .admin-panel-v675 select,body#blinqPremium .admin-panel-v675 textarea{font-size:12px!important;line-height:1.35!important;min-height:38px!important}
+body#blinqPremium .admin-panel-v675 textarea{min-height:76px!important}
+body#blinqPremium .admin-panel-v675 .btn{font-size:11px!important;min-height:38px!important}
+body#blinqPremium .admin-note{display:flex!important;align-items:flex-start!important;gap:8px!important;padding:10px 12px!important;border-radius:9px!important}
+body#blinqPremium .admin-note strong{font-size:11px!important}
+body#blinqPremium .admin-note span{font-size:10.5px!important;line-height:1.45!important}
+body#blinqPremium .admin-note-warning{border-color:#665625!important;background:rgba(107,82,21,.12)!important}
+body#blinqPremium .admin-note-warning strong{color:#efd17b!important}
+
+body#blinqPremium .admin-account-stats>div{min-height:62px!important;padding:11px 13px!important}
+body#blinqPremium .admin-account-stats small{font-size:8.5px!important;letter-spacing:.09em!important}
+body#blinqPremium .admin-account-stats strong{font-size:19px!important}
+body#blinqPremium .admin-account-quickfilters button{font-size:9.5px!important;min-height:32px!important}
+body#blinqPremium .admin-user-table-head{font-size:8.5px!important;letter-spacing:.08em!important}
+body#blinqPremium .admin-user-table-row{font-size:11px!important;min-height:48px!important}
+body#blinqPremium .admin-user-table-row .admin-user-email,body#blinqPremium .admin-user-table-row .admin-user-tg{font-size:11px!important}
+body#blinqPremium .admin-user-table-row .admin-user-plan,body#blinqPremium .admin-user-table-row .admin-user-status{font-size:9.5px!important}
+
+body#blinqPremium .account-modal-head h2{font-size:25px!important;letter-spacing:-.02em!important}
+body#blinqPremium .account-modal-head p{font-size:13px!important}
+body#blinqPremium .account-modal-section-title h3{font-size:20px!important}
+body#blinqPremium .account-modal-plan small{font-size:9px!important}
+body#blinqPremium .account-modal-plan strong{font-size:14px!important}
+body#blinqPremium .account-modal-plan span{font-size:10.5px!important}
+
+@media(max-width:900px){
+  body#blinqPremium .admin-control-toolbar{align-items:flex-start!important;flex-direction:column!important}
+  body#blinqPremium .admin-global-actions{width:100%!important;justify-content:flex-start!important}
+  body#blinqPremium .admin-runtime-note{flex-direction:column!important;gap:4px!important}
+  body#blinqPremium .admin-account-direct-note{white-space:normal!important}
+}
+
+/* ========================================================================== */
+/* BlinQ 6.7.6 — consolidated visual system / account / admin polish          */
+/* ========================================================================== */
+body#blinqPremium{
+  --v676-panel:#071a28;
+  --v676-panel-2:#091f2f;
+  --v676-line:#21475e;
+  --v676-line-soft:rgba(48,91,117,.58);
+  --v676-muted:#8ba7b9;
+  --v676-text:#f2f7fa;
+  --v676-purple:#8156f5;
+  --v676-green:#45e995;
+  font-size:14px!important;
+}
+body#blinqPremium .btn,
+body#blinqPremium button,
+body#blinqPremium input,
+body#blinqPremium select,
+body#blinqPremium textarea{font-family:inherit!important}
+body#blinqPremium .btn{border-radius:9px!important;font-weight:800!important;letter-spacing:0!important}
+body#blinqPremium input,
+body#blinqPremium select,
+body#blinqPremium textarea{border-radius:9px!important}
+
+/* Account modal: Telegram/avatar belongs to the main account card, not a second panel. */
+body#blinqPremium .account-dialog{width:min(94vw,960px)!important;max-height:min(92vh,900px)!important;overflow:auto!important;padding:26px!important;border-radius:18px!important}
+body#blinqPremium .account-dialog .dialog-close{top:18px!important;right:18px!important;width:38px!important;height:38px!important;border-radius:11px!important;background:#0a2030!important;border:1px solid #31556c!important;color:#c8d9e4!important;box-shadow:none!important}
+body#blinqPremium .account-dialog .dialog-close:hover{background:#102b3d!important;border-color:#47748e!important;color:#fff!important}
+body#blinqPremium .account-modal-head{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:18px!important;padding:0 54px 16px 0!important;border-bottom:1px solid rgba(39,79,103,.48)!important}
+body#blinqPremium .account-modal-head small{font-size:9px!important;letter-spacing:.15em!important;color:#a077ff!important}
+body#blinqPremium .account-modal-head h2{margin:5px 0 0!important;font-size:25px!important;line-height:1.15!important;overflow-wrap:anywhere!important}
+body#blinqPremium .account-modal-head p{display:flex!important;align-items:center!important;gap:6px!important;margin:6px 0 0!important;color:#8fa9ba!important;font-size:12px!important}
+body#blinqPremium .account-modal-head p .admin-tg-icon{width:14px!important;height:14px!important;fill:#66b8ff!important}
+body#blinqPremium .account-verified{font-size:10px!important;white-space:nowrap!important;padding:7px 10px!important}
+
+body#blinqPremium .account-modal-main-card{display:grid!important;grid-template-columns:minmax(180px,.85fr) minmax(210px,1.15fr) 150px auto!important;gap:12px!important;align-items:end!important;margin-top:16px!important;padding:16px!important;border:1px solid #24506a!important;border-radius:14px!important;background:linear-gradient(145deg,rgba(7,28,43,.94),rgba(5,20,31,.98))!important}
+body#blinqPremium .account-modal-access{display:flex!important;align-items:center!important;gap:12px!important;align-self:center!important}
+body#blinqPremium .account-modal-avatar{width:58px!important;height:58px!important;flex:0 0 58px!important;border:1px solid #41667d!important;border-radius:50%!important;overflow:hidden!important}
+body#blinqPremium .account-modal-access small{display:block!important;font-size:9px!important;letter-spacing:.06em!important;color:#9eb3c0!important}
+body#blinqPremium .account-modal-access strong{display:block!important;margin-top:2px!important;font-size:20px!important;color:#fff!important}
+body#blinqPremium .account-modal-access span{display:block!important;margin-top:3px!important;font-size:10px!important;color:#7f9cad!important}
+body#blinqPremium .account-inline-field{display:grid!important;gap:5px!important;min-width:0!important;font-size:10px!important;color:#9eb4c2!important}
+body#blinqPremium .account-inline-field>span{display:flex!important;align-items:center!important;gap:5px!important;font-weight:750!important}
+body#blinqPremium .account-inline-field .admin-tg-icon{width:13px!important;height:13px!important;fill:#66b8ff!important}
+body#blinqPremium .account-inline-field input,
+body#blinqPremium .account-inline-field select{width:100%!important;height:42px!important;padding:0 10px!important;border:1px solid #2a526a!important;background:#061724!important;color:#f1f6f9!important;font-size:13px!important}
+body#blinqPremium .account-profile-save{height:42px!important;min-width:116px!important;white-space:nowrap!important}
+body#blinqPremium .account-inline-message{grid-column:2/-1!important;min-height:0!important;margin:0!important;font-size:10px!important;color:#78dca8!important}
+body#blinqPremium .account-modal-security{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;margin:10px 0 0!important;padding:0 2px!important}
+body#blinqPremium .account-modal-security>span{font-size:10px!important;color:#738e9f!important}
+body#blinqPremium .account-modal-security>div{display:flex!important;gap:8px!important}
+body#blinqPremium .account-modal-security .btn{min-height:36px!important;padding:0 13px!important;font-size:10px!important}
+body#blinqPremium .account-signout-button{border-color:#5e3945!important;color:#eab2bd!important}
+
+body#blinqPremium .account-modal-plans{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:11px!important;margin-top:20px!important}
+body#blinqPremium .account-modal-section-title{grid-column:1/-1!important;display:flex!important;align-items:end!important;justify-content:space-between!important;gap:20px!important;margin-bottom:1px!important}
+body#blinqPremium .account-modal-section-title small{display:block!important;font-size:9px!important;letter-spacing:.13em!important;color:#a076ff!important}
+body#blinqPremium .account-modal-section-title h3{margin:3px 0 0!important;font-size:20px!important}
+body#blinqPremium .account-modal-section-title p{margin:0!important;max-width:440px!important;text-align:right!important;font-size:10px!important;line-height:1.4!important;color:#748fa0!important}
+body#blinqPremium .account-modal-plan{position:relative!important;display:grid!important;grid-template-columns:92px minmax(0,1fr) auto!important;align-items:center!important;gap:13px!important;min-height:112px!important;padding:14px!important;border:1px solid #21475e!important;border-radius:13px!important;background:linear-gradient(145deg,#071b2a,#061521)!important;overflow:hidden!important}
+body#blinqPremium .account-modal-plan.plan-goat{grid-column:1/-1!important;width:calc(50% - 5.5px)!important;justify-self:center!important;border-color:#735d22!important;background:linear-gradient(145deg,#17180d,#081a23 74%)!important}
+body#blinqPremium .account-modal-plan.is-current{border-color:#318b62!important;box-shadow:inset 3px 0 0 #46e894!important}
+body#blinqPremium .account-modal-plan-copy{min-width:0!important}
+body#blinqPremium .account-modal-plan-copy small{font-size:8px!important;letter-spacing:.11em!important;color:#a17cff!important}
+body#blinqPremium .account-modal-plan-copy strong{display:block!important;margin-top:2px!important;font-size:14px!important;line-height:1.2!important;color:#f1f7fa!important;white-space:normal!important;overflow:visible!important}
+body#blinqPremium .account-modal-plan-copy span{display:block!important;margin-top:4px!important;font-size:10px!important;line-height:1.4!important;color:#809caf!important;display:-webkit-box!important;-webkit-line-clamp:2!important;-webkit-box-orient:vertical!important;overflow:hidden!important}
+body#blinqPremium .account-plan-current,
+body#blinqPremium .account-plan-upgrade{display:inline-flex!important;align-items:center!important;justify-content:center!important;min-height:34px!important;padding:0 11px!important;border:1px solid #3bd980!important;border-radius:8px!important;background:rgba(31,139,88,.10)!important;color:#71eda9!important;font-size:9px!important;font-weight:850!important;text-decoration:none!important;white-space:nowrap!important}
+body#blinqPremium .account-plan-current{border-color:#2c7757!important;color:#76d9a6!important}
+body#blinqPremium .account-plan-upgrade.is-disabled{border-color:#334b5a!important;color:#77909f!important;background:rgba(11,33,47,.55)!important;cursor:default!important}
+body#blinqPremium .account-modal-plan .plan-avatar-pair{width:86px!important;height:58px!important}
+body#blinqPremium .account-modal-plan .plan-avatar-chip{width:56px!important;height:56px!important}
+body#blinqPremium .account-modal-plan .plan-avatar-chip.is-back{left:30px!important;top:2px!important}
+body#blinqPremium .account-modal-plan .plan-card-avatar{width:58px!important;height:58px!important}
+
+/* Full account route uses the same rhythm. */
+body#blinqPremium .account-overview-v676{gap:14px!important}
+body#blinqPremium .account-profile-card-v676{padding:20px!important}
+body#blinqPremium .account-profile-form-v676{grid-template-columns:minmax(0,1fr) 180px auto!important;align-items:end!important;gap:10px!important;margin-top:15px!important}
+body#blinqPremium .account-profile-form-v676 .form-message{grid-column:1/-1!important;margin:0!important}
+body#blinqPremium .account-access-actions{display:flex!important;gap:8px!important;margin-top:14px!important}
+
+/* Public plan cards — consistent 3 + 1 + centered GOAT hierarchy. */
+body#blinqPremium .account-plan-grid{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:13px!important}
+body#blinqPremium .account-plan-grid>.membership-card{grid-column:span 2!important;min-height:238px!important;padding:18px!important;border-radius:14px!important}
+body#blinqPremium .account-plan-grid>.membership-card.plan-legend{grid-column:2/span 2!important}
+body#blinqPremium .account-plan-grid>.membership-card.plan-goat{grid-column:4/span 2!important}
+body#blinqPremium .membership-card .plan-avatar-pair{width:96px!important;height:62px!important}
+body#blinqPremium .membership-card .plan-avatar-chip{width:58px!important;height:58px!important}
+body#blinqPremium .membership-card .plan-avatar-chip.is-back{left:36px!important;top:3px!important}
+body#blinqPremium .membership-card-copy strong{font-size:16px!important;line-height:1.25!important}
+body#blinqPremium .membership-card-copy p{font-size:11.5px!important;line-height:1.55!important;min-height:54px!important}
+body#blinqPremium .membership-cta{width:max-content!important;min-height:38px!important;padding:0 13px!important}
+
+/* Admin: one clear control surface, no nested giant headline feel. */
+body#blinqPremium.blq-admin .route-heading,
+body#blinqPremium.blinq-admin .route-heading{padding-bottom:12px!important}
+body#blinqPremium .admin-console-v675{gap:12px!important}
+body#blinqPremium .admin-control-toolbar{padding:11px 14px!important;border:1px solid var(--v676-line-soft)!important;border-radius:12px!important;background:rgba(7,25,38,.72)!important}
+body#blinqPremium .admin-control-toolbar-copy strong{font-size:14px!important}
+body#blinqPremium .admin-control-toolbar-copy span{font-size:10.5px!important}
+body#blinqPremium .admin-global-actions .btn{min-height:34px!important;padding:0 11px!important;font-size:10px!important}
+body#blinqPremium .admin-account-direct-note{display:inline-flex!important;align-items:center!important;gap:6px!important;padding:7px 9px!important;border:1px solid rgba(47,116,82,.45)!important;border-radius:8px!important;background:rgba(21,84,58,.10)!important;font-size:9.5px!important}
+body#blinqPremium .admin-runtime-note{padding:9px 12px!important;margin:0!important}
+body#blinqPremium .admin-runtime-note strong{font-size:10px!important}
+body#blinqPremium .admin-runtime-note span{font-size:10px!important}
+
+body#blinqPremium .admin-tabs-v675{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:7px!important}
+body#blinqPremium .admin-tabs-v675 button{min-width:0!important;min-height:58px!important;padding:10px 11px!important;border-radius:10px!important;text-align:left!important}
+body#blinqPremium .admin-tabs-v675 button strong{font-size:11px!important}
+body#blinqPremium .admin-tabs-v675 button small{font-size:8.5px!important;white-space:normal!important}
+body#blinqPremium .admin-tabs-v675 button.active{background:linear-gradient(135deg,#8054f4,#6540dc)!important;border-color:#8e69f5!important;box-shadow:0 8px 22px rgba(71,39,149,.18)!important}
+body#blinqPremium .admin-panel-v675{padding-top:4px!important}
+body#blinqPremium .admin-ux-section{display:grid!important;gap:13px!important}
+body#blinqPremium .admin-panel-v675 .admin-ux-heading{margin:0!important;padding:4px 1px 0!important}
+body#blinqPremium .admin-panel-v675 .admin-ux-heading h2{font-size:23px!important;margin:3px 0 5px!important}
+body#blinqPremium .admin-panel-v675 .admin-ux-heading p{max-width:920px!important;margin:0!important;font-size:11px!important;line-height:1.45!important}
+body#blinqPremium .admin-subsection-heading{margin:8px 0 2px!important}
+body#blinqPremium .admin-subsection-heading strong{font-size:13px!important}
+body#blinqPremium .admin-subsection-heading span{font-size:10px!important}
+
+body#blinqPremium .admin-accounts-unavailable{display:grid!important;grid-template-columns:42px minmax(0,1fr) auto!important;align-items:center!important;gap:13px!important;padding:16px!important;border:1px solid #81505a!important;border-radius:12px!important;background:linear-gradient(145deg,rgba(98,31,43,.16),rgba(6,23,35,.94))!important}
+body#blinqPremium .admin-accounts-unavailable-icon{display:grid!important;place-items:center!important;width:38px!important;height:38px!important;border-radius:10px!important;background:rgba(190,70,87,.16)!important;border:1px solid rgba(215,88,103,.55)!important;color:#ff98a4!important;font-size:18px!important;font-weight:900!important}
+body#blinqPremium .admin-accounts-unavailable strong{font-size:12px!important;color:#ffd1d6!important}
+body#blinqPremium .admin-accounts-unavailable p{margin:4px 0!important;font-size:10.5px!important;color:#c69aa2!important}
+body#blinqPremium .admin-accounts-unavailable small{font-size:9.5px!important;line-height:1.4!important;color:#839eaf!important}
+body#blinqPremium .admin-accounts-unavailable .btn{min-width:104px!important}
+
+body#blinqPremium .admin-account-stats{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:8px!important}
+body#blinqPremium .admin-account-stats>div{min-height:58px!important;border-radius:10px!important}
+body#blinqPremium .admin-account-quickfilters{gap:6px!important}
+body#blinqPremium .admin-account-quickfilters button{padding:6px 9px!important;border-radius:999px!important}
+body#blinqPremium .admin-accounts-toolbar{padding:12px!important;border:1px solid var(--v676-line-soft)!important;border-radius:11px!important;background:rgba(6,23,35,.72)!important}
+body#blinqPremium .admin-user-table-row{border-radius:8px!important}
+body#blinqPremium .admin-user-editor{border-radius:13px!important}
+
+/* Admin plan editor. */
+body#blinqPremium .admin-plan-hierarchy{display:grid!important;grid-template-columns:repeat(9,minmax(0,auto))!important;align-items:center!important;justify-content:start!important;gap:7px!important;padding:12px!important;border:1px solid var(--v676-line-soft)!important;border-radius:12px!important;background:rgba(6,23,35,.66)!important}
+body#blinqPremium .admin-plan-level{min-height:54px!important;padding:8px 11px!important;border-radius:9px!important}
+body#blinqPremium .admin-plan-level b{font-size:10px!important}
+body#blinqPremium .admin-plan-editor{display:grid!important;gap:12px!important;padding:16px!important;border:1px solid var(--v676-line-soft)!important;border-radius:13px!important;background:rgba(6,23,35,.72)!important}
+body#blinqPremium .admin-plan-editor-preview{display:grid!important;grid-template-columns:auto minmax(0,1fr) auto!important;gap:13px!important;align-items:center!important;padding-bottom:12px!important;border-bottom:1px solid rgba(42,78,99,.5)!important}
+body#blinqPremium .admin-plan-editor-preview h3{font-size:19px!important;margin:2px 0!important}
+body#blinqPremium .admin-plan-editor-preview .plan-card-avatar{width:58px!important;height:58px!important}
+
+/* Banner editor — compact library + large, readable editing surface. */
+body#blinqPremium .admin-banner-workspace{display:grid!important;grid-template-columns:300px minmax(0,1fr)!important;gap:13px!important;align-items:start!important}
+body#blinqPremium .admin-banner-library{max-height:calc(100vh - 245px)!important;min-height:520px!important;padding:10px!important;border:1px solid var(--v676-line-soft)!important;border-radius:12px!important;background:rgba(6,23,35,.72)!important}
+body#blinqPremium .admin-banner-group{display:grid!important;gap:6px!important}
+body#blinqPremium .admin-banner-group+.admin-banner-group{padding-top:12px!important;border-top:1px solid rgba(41,77,99,.45)!important}
+body#blinqPremium .admin-banner-group-head{gap:8px!important}
+body#blinqPremium .admin-banner-group-head strong{font-size:11px!important}
+body#blinqPremium .admin-banner-group-head span{font-size:8.5px!important;color:#7390a2!important}
+body#blinqPremium .admin-banner-library-card{min-height:50px!important;padding:8px!important;border-radius:9px!important}
+body#blinqPremium .admin-banner-library-card strong{font-size:10.5px!important}
+body#blinqPremium .admin-banner-library-card small,body#blinqPremium .admin-banner-library-card em{font-size:7.5px!important}
+body#blinqPremium .admin-banner-editor{display:grid!important;gap:12px!important;padding:16px!important;border:1px solid var(--v676-line-soft)!important;border-radius:13px!important;background:rgba(6,23,35,.72)!important}
+body#blinqPremium .admin-banner-editor-head h2{font-size:20px!important;margin:3px 0!important}
+body#blinqPremium .admin-banner-editor-head p{font-size:9px!important;color:#708c9f!important}
+body#blinqPremium .admin-banner-preview-wrap{border-radius:12px!important;overflow:hidden!important}
+body#blinqPremium .admin-form-section{padding:13px!important;border:1px solid rgba(43,82,105,.5)!important;border-radius:11px!important;background:rgba(5,21,32,.64)!important}
+body#blinqPremium .admin-form-section-title{margin-bottom:10px!important}
+body#blinqPremium .admin-form-section-title strong{font-size:12px!important}
+body#blinqPremium .admin-form-section-title span{font-size:9.5px!important}
+body#blinqPremium .admin-form-grid{gap:10px!important}
+body#blinqPremium .field-hint-box{margin-bottom:10px!important;padding:9px 11px!important;border-radius:8px!important;font-size:9.5px!important;color:#92aebe!important;background:#071b29!important;border:1px solid rgba(43,83,108,.58)!important}
+
+/* Daily-offer cards in Admin are easier to scan. */
+body#blinqPremium .admin-daily-hub-grid{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:9px!important}
+body#blinqPremium .admin-hub-tab-card{min-height:198px!important;padding:12px!important;border-radius:11px!important}
+body#blinqPremium .admin-hub-tab-head strong{font-size:12px!important}
+body#blinqPremium .admin-hub-tab-head small{font-size:8px!important}
+body#blinqPremium .admin-section-list{gap:9px!important}
+
+/* Dialogs/detail surfaces use one close-button and spacing system. */
+body#blinqPremium .match-dialog,body#blinqPremium .upgrade-dialog{border-radius:17px!important}
+body#blinqPremium .match-dialog .dialog-close,body#blinqPremium .upgrade-dialog .dialog-close{width:38px!important;height:38px!important;border-radius:10px!important;display:grid!important;place-items:center!important}
+body#blinqPremium .state-card,body#blinqPremium .route-sub,body#blinqPremium .metric-card{border-radius:12px!important}
+
+@media(max-width:1180px){
+  body#blinqPremium .admin-tabs-v675{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+  body#blinqPremium .admin-daily-hub-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  body#blinqPremium .admin-banner-workspace{grid-template-columns:260px minmax(0,1fr)!important}
+  body#blinqPremium .account-modal-main-card{grid-template-columns:minmax(180px,1fr) minmax(210px,1fr) 150px!important}
+  body#blinqPremium .account-profile-save{grid-column:3!important}
+  body#blinqPremium .account-inline-message{grid-column:1/-1!important}
+}
+@media(max-width:900px){
+  body#blinqPremium .account-dialog{padding:20px!important}
+  body#blinqPremium .account-modal-main-card{grid-template-columns:1fr 1fr!important;align-items:end!important}
+  body#blinqPremium .account-modal-access{grid-column:1/-1!important}
+  body#blinqPremium .account-profile-save{grid-column:auto!important}
+  body#blinqPremium .account-inline-message{grid-column:1/-1!important}
+  body#blinqPremium .account-modal-plans{grid-template-columns:1fr!important}
+  body#blinqPremium .account-modal-plan.plan-goat{grid-column:auto!important;width:100%!important}
+  body#blinqPremium .account-modal-section-title{display:block!important}
+  body#blinqPremium .account-modal-section-title p{text-align:left!important;margin-top:5px!important}
+  body#blinqPremium .admin-tabs-v675{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  body#blinqPremium .admin-banner-workspace{grid-template-columns:1fr!important}
+  body#blinqPremium .admin-banner-library{max-height:none!important;min-height:0!important}
+  body#blinqPremium .admin-daily-hub-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body#blinqPremium .admin-account-stats{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  body#blinqPremium .account-profile-form-v676{grid-template-columns:1fr!important}
+}
+@media(max-width:620px){
+  body#blinqPremium .account-dialog{width:calc(100vw - 12px)!important;padding:16px!important}
+  body#blinqPremium .account-modal-head{display:block!important;padding-right:42px!important}
+  body#blinqPremium .account-verified{display:inline-flex!important;margin-top:8px!important}
+  body#blinqPremium .account-modal-main-card{grid-template-columns:1fr!important}
+  body#blinqPremium .account-modal-access,body#blinqPremium .account-inline-message{grid-column:auto!important}
+  body#blinqPremium .account-modal-security{align-items:flex-start!important;flex-direction:column!important}
+  body#blinqPremium .account-modal-plan{grid-template-columns:78px minmax(0,1fr)!important}
+  body#blinqPremium .account-modal-plan .account-plan-upgrade,body#blinqPremium .account-modal-plan .account-plan-current{grid-column:2!important;width:max-content!important}
+  body#blinqPremium .admin-tabs-v675{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body#blinqPremium .admin-daily-hub-grid{grid-template-columns:1fr!important}
+  body#blinqPremium .admin-account-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body#blinqPremium .admin-accounts-unavailable{grid-template-columns:34px 1fr!important}
+  body#blinqPremium .admin-accounts-unavailable .btn{grid-column:2!important;width:max-content!important}
+  body#blinqPremium .account-plan-grid{grid-template-columns:1fr!important}
+  body#blinqPremium .account-plan-grid>.membership-card,body#blinqPremium .account-plan-grid>.membership-card.plan-legend,body#blinqPremium .account-plan-grid>.membership-card.plan-goat{grid-column:auto!important}
+}

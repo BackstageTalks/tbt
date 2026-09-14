@@ -185,7 +185,7 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["prime"]["hard_odds_band"] is True
     assert rules["prime"]["max_negative_expected_value"] is None
     assert rules["prime"]["limit"] == 30
-    assert rules["top_daily"]["label"] == "Top Bets"
+    assert rules["top_daily"]["label"] == "TOP Predictions"
     assert rules["top_daily"]["limit"] is None
     assert rules["top_daily"]["presentation_preview_limit"] == 10
     assert rules["top_daily"]["target_count"] == 10
@@ -244,7 +244,7 @@ def test_public_sidebar_is_betting_first_and_admin_is_isolated_at_bottom():
     )
     nav = {item["content"]["route"]: item["content"]["label"] for item in nav_items}
     assert list(nav) == ["predictions", "prime", "top_daily", "value", "doubles", "ace", "sg", "results", "btts"]
-    assert nav["prime"] == "Prime Picks"
+    assert nav["prime"] == "Prime Predictions"
     for removed in ("tournaments", "players", "stats", "model", "backtests", "account"):
         assert removed not in nav
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
