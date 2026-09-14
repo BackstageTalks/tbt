@@ -12,7 +12,7 @@ BACKEND = (ROOT / "api/function_app.py").read_text(encoding="utf-8")
 ADMIN_STORAGE = (ROOT / "api/tbt/services/admin_storage.py").read_text(encoding="utf-8")
 
 
-def test_release_cache_exactly_678():
+def test_release_cache_exactly_677():
     assert UI["ui_revision"] == "6.7.8"
     assert UI["revision"] == "6.7.8"
     assert 'RELEASE = "6.7.8"' in BACKEND
@@ -65,7 +65,7 @@ def test_membership_copy_cta_and_links_are_json_managed_and_exact():
 
 
 def test_daily_hub_requested_labels_results_and_elite_lock_are_in_code():
-    assert 'id="dailyHubTabs"' in INDEX and 'id="dailyHubMetaDate"' in INDEX
+    assert '<h2>Dnešné predikcie <span>BlinQ Intelligence</span></h2>' in INDEX
     assert "daily-hub-results" in APP
     assert "Zobraziť celú ponuku" in APP
     assert "showUpgradePrompt('elite'" in APP
@@ -88,11 +88,11 @@ def test_vip_rail_is_not_hardcoded_and_is_fully_json_admin_managed():
     assert '<strong>BlinQ VIP</strong>' not in INDEX
     vip = UI["elements"]["VIP_RAIL"]
     assert vip["kind"] == "large_banner" and vip["zone"] == "vip_rail"
-    for field in ("headline", "text", "button_text", "link", "image_url", "mobile_image_url", "benefit_1_title", "benefit_1_text", "benefit_2_title", "benefit_2_text", "benefit_3_title", "benefit_3_text", "benefit_4_title", "benefit_4_text"):
+    for field in ("headline", "text", "button_text", "link", "image_url", "mobile_image_url", "benefit_1_title", "benefit_1_text", "benefit_2_title", "benefit_2_text", "benefit_3_title", "benefit_3_text"):
         assert field in vip["content"]
     assert "function renderVipRail()" in APP
     assert "bannerLibraryButton('VIP_RAIL',1,'vip')" in APP
-    for field in ("benefit_1_title", "benefit_2_title", "benefit_3_title", "benefit_4_title"):
+    for field in ("benefit_1_title", "benefit_2_title", "benefit_3_title"):
         assert f'data-simple-banner-field="{field}"' in APP
 
 

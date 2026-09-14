@@ -23,6 +23,8 @@ class AdminStorageUnavailable(RuntimeError):
 
 UI_TABLE = "BlinQAdminConfig"
 ANALYTICS_TABLE = "BlinQBannerAnalytics"
+INSIGHTS_TABLE = "BlinQInsights"
+INSIGHT_READS_TABLE = "BlinQInsightReads"
 _VALID_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
 _VALID_BANNER_SLOT = re.compile(r"^(?:HEADER_BANNER_[1-4]|HERO_BANNER_[1-5]|CONTENT_(?:TOP|MID|BOTTOM)_[1-4]|SIDEBAR_PROMO_[1-3]|VIP_RAIL)$")
 
@@ -103,6 +105,9 @@ class _FirestoreTableAdapter:
         except Exception as exc:
             # Audit row keys are UUID-backed, so a collision is exceptional.
             raise exc
+
+    def delete_entity(self, *, partition_key, row_key):
+        self._collection.document(self._doc_id(partition_key, row_key)).delete()
 
     def query_entities(self, query_filter=None):
         query = self._collection
@@ -614,3 +619,230 @@ def banner_analytics_summary(*, days: int = 30) -> dict:
         },
         "campaigns": serialized,
     }
+
+
+# --- BlinQ Insights / private member feed ---------------------------------
+_INSIGHT_LEVELS = ("rookie", "pro", "elite", "legend", "goat")
+_INSIGHT_TYPES = {"info", "insight", "alert", "vip"}
+_INSIGHT_PRIORITIES = {"normal", "important", "critical"}
+
+
+def _iso_or_blank(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("Invalid insight date/time") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid insight")
+    base = dict(existing or {})
+    title = str(payload.get("title", base.get("title", "")) or "").strip()
+    body = str(payload.get("body", base.get("body", "")) or "").strip()
+    if not title or len(title) > 140:
+        raise ValueError("Insight title must contain 1–140 characters")
+    if not body or len(body) > 4000:
+        raise ValueError("Insight body must contain 1–4000 characters")
+    insight_type = str(payload.get("type", base.get("type", "insight")) or "insight").strip().lower()
+    priority = str(payload.get("priority", base.get("priority", "normal")) or "normal").strip().lower()
+    if insight_type not in _INSIGHT_TYPES:
+        raise ValueError("Invalid insight type")
+    if priority not in _INSIGHT_PRIORITIES:
+        raise ValueError("Invalid insight priority")
+    raw_levels = payload.get("levels", base.get("levels", ["elite", "legend", "goat"]))
+    if not isinstance(raw_levels, list):
+        raise ValueError("Insight levels must be a list")
+    levels = []
+    for raw in raw_levels:
+        level = str(raw or "").strip().lower()
+        if level not in _INSIGHT_LEVELS:
+            raise ValueError("Invalid insight level")
+        if level not in levels:
+            levels.append(level)
+    if not levels:
+        raise ValueError("Select at least one insight level")
+    link = str(payload.get("link", base.get("link", "")) or "").strip()
+    if link and not _valid_destination(link, allow_internal=True):
+        raise ValueError("Insight link must use HTTPS or a same-origin path")
+    link_label = str(payload.get("link_label", base.get("link_label", "")) or "").strip()[:80]
+    match_id = str(payload.get("match_id", base.get("match_id", "")) or "").strip()
+    if match_id and not _VALID_ID.fullmatch(match_id):
+        raise ValueError("Invalid insight match id")
+    active = bool(payload.get("active", base.get("active", True)))
+    pinned = bool(payload.get("pinned", base.get("pinned", False)))
+    active_from = _iso_or_blank(payload.get("active_from", base.get("active_from", "")))
+    active_until = _iso_or_blank(payload.get("active_until", base.get("active_until", "")))
+    if active_from and active_until and active_until <= active_from:
+        raise ValueError("Insight active_until must be after active_from")
+    return {
+        "title": title,
+        "body": body,
+        "type": insight_type,
+        "priority": priority,
+        "levels": levels,
+        "link": link,
+        "link_label": link_label,
+        "match_id": match_id,
+        "active": active,
+        "pinned": pinned,
+        "active_from": active_from,
+        "active_until": active_until,
+    }
+
+
+def _insight_from_entity(entity: dict) -> dict:
+    levels = []
+    try:
+        levels = json.loads(entity.get("levels_json") or "[]")
+    except (TypeError, ValueError):
+        levels = []
+    return {
+        "id": str(entity.get("RowKey") or ""),
+        "title": str(entity.get("title") or ""),
+        "body": str(entity.get("body") or ""),
+        "type": str(entity.get("type") or "insight"),
+        "priority": str(entity.get("priority") or "normal"),
+        "levels": [str(v) for v in levels if str(v) in _INSIGHT_LEVELS],
+        "link": str(entity.get("link") or ""),
+        "link_label": str(entity.get("link_label") or ""),
+        "match_id": str(entity.get("match_id") or ""),
+        "active": bool(entity.get("active", True)),
+        "pinned": bool(entity.get("pinned", False)),
+        "active_from": str(entity.get("active_from") or ""),
+        "active_until": str(entity.get("active_until") or ""),
+        "created_at": str(entity.get("created_at") or ""),
+        "updated_at": str(entity.get("updated_at") or ""),
+        "created_by": str(entity.get("created_by") or ""),
+        "read_count": int(entity.get("read_count") or 0),
+    }
+
+
+def save_insight(payload: object, *, actor_id: str = "", insight_id: str = "") -> dict:
+    client = _table(INSIGHTS_TABLE)
+    existing_entity = None
+    if insight_id:
+        if not _VALID_ID.fullmatch(insight_id):
+            raise ValueError("Invalid insight id")
+        try:
+            existing_entity = client.get_entity(partition_key="insights", row_key=insight_id)
+        except Exception as exc:
+            status = getattr(exc, "status_code", None)
+            missing = status == 404 or "notfound" in exc.__class__.__name__.lower() or isinstance(exc, KeyError)
+            if missing:
+                raise ValueError("Unknown insight") from exc
+            raise AdminStorageUnavailable("Unable to load insight") from exc
+    existing = _insight_from_entity(existing_entity) if existing_entity else None
+    clean = normalize_insight(payload, existing=existing)
+    now = datetime.now(timezone.utc).isoformat()
+    row_key = insight_id or f"msg-{int(datetime.now(timezone.utc).timestamp()*1000):013d}-{uuid.uuid4().hex[:10]}"
+    entity = {
+        "PartitionKey": "insights",
+        "RowKey": row_key,
+        **{k: v for k, v in clean.items() if k != "levels"},
+        "levels_json": json.dumps(clean["levels"], separators=(",", ":")),
+        "created_at": (existing_entity or {}).get("created_at") or now,
+        "updated_at": now,
+        "created_by": (existing_entity or {}).get("created_by") or str(actor_id or "")[:256],
+        "updated_by": str(actor_id or "")[:256],
+        "read_count": int((existing_entity or {}).get("read_count") or 0),
+    }
+    try:
+        client.upsert_entity(entity, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save insight") from exc
+    return _insight_from_entity(entity)
+
+
+def delete_insight(insight_id: str) -> dict:
+    if not _VALID_ID.fullmatch(str(insight_id or "")):
+        raise ValueError("Invalid insight id")
+    client = _table(INSIGHTS_TABLE)
+    try:
+        client.delete_entity(partition_key="insights", row_key=insight_id)
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        if status == 404 or "notfound" in exc.__class__.__name__.lower() or isinstance(exc, KeyError):
+            return {"deleted": False}
+        raise AdminStorageUnavailable("Unable to delete insight") from exc
+    return {"deleted": True}
+
+
+def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool = False, limit: int = 100) -> dict:
+    plan = str(plan or "").strip().lower()
+    now = datetime.now(timezone.utc)
+    try:
+        rows = list(_table(INSIGHTS_TABLE).query_entities(query_filter="PartitionKey eq 'insights'"))
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to list insights") from exc
+    read_ids: set[str] = set()
+    if user_id:
+        try:
+            reads = _table(INSIGHT_READS_TABLE).query_entities(query_filter=f"PartitionKey eq 'user:{str(user_id)[:256]}'")
+            read_ids = {str(row.get("RowKey") or "") for row in reads}
+        except Exception as exc:
+            raise AdminStorageUnavailable("Unable to load insight read state") from exc
+    items = []
+    for entity in rows:
+        item = _insight_from_entity(entity)
+        if not include_inactive:
+            if not item["active"] or (plan and plan not in item["levels"]):
+                continue
+            try:
+                starts = datetime.fromisoformat(item["active_from"]) if item["active_from"] else None
+                ends = datetime.fromisoformat(item["active_until"]) if item["active_until"] else None
+            except ValueError:
+                continue
+            if starts and starts > now:
+                continue
+            if ends and ends <= now:
+                continue
+        item["read"] = item["id"] in read_ids if user_id else False
+        items.append(item)
+    items.sort(key=lambda row: (not bool(row.get("pinned")), str(row.get("created_at") or "")), reverse=False)
+    # Pinned first; within each group newest first.
+    items = sorted(items, key=lambda row: str(row.get("created_at") or ""), reverse=True)
+    items = sorted(items, key=lambda row: not bool(row.get("pinned")))
+    items = items[:max(1, min(250, int(limit or 100)))]
+    return {"items": items, "unread": sum(1 for row in items if not row.get("read"))}
+
+
+def mark_insight_read(*, insight_id: str, user_id: str) -> dict:
+    insight_id = str(insight_id or "").strip()
+    user_id = str(user_id or "").strip()
+    if not _VALID_ID.fullmatch(insight_id) or not user_id:
+        raise ValueError("Invalid insight read marker")
+    insights = _table(INSIGHTS_TABLE)
+    reads = _table(INSIGHT_READS_TABLE)
+    try:
+        entity = insights.get_entity(partition_key="insights", row_key=insight_id)
+    except Exception as exc:
+        raise ValueError("Unknown insight") from exc
+    read_entity = {
+        "PartitionKey": f"user:{user_id[:256]}",
+        "RowKey": insight_id,
+        "read_at": datetime.now(timezone.utc).isoformat(),
+    }
+    try:
+        reads.create_entity(read_entity)
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        name = exc.__class__.__name__.lower()
+        # Already read is idempotent. Firestore and Azure use different conflict types.
+        if status != 409 and "alreadyexists" not in name and "resourceexists" not in name:
+            raise AdminStorageUnavailable("Unable to save insight read state") from exc
+        return {"read": True, "already_read": True}
+    entity["read_count"] = int(entity.get("read_count") or 0) + 1
+    entity["updated_at"] = entity.get("updated_at") or datetime.now(timezone.utc).isoformat()
+    try:
+        insights.upsert_entity(entity, mode="replace")
+    except Exception:
+        # Read state is authoritative; aggregate count is best effort.
+        pass
+    return {"read": True, "already_read": False}

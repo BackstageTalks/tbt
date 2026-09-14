@@ -289,6 +289,24 @@
     });
     return apiWithSession(`/api/v1/match-intelligence?${params.toString()}`);
   }
+  async function insights() {
+    return apiWithSession('/api/v1/insights');
+  }
+  async function markInsightRead(insightId) {
+    return apiWithSession(`/api/v1/insights/${encodeURIComponent(insightId)}/read`, {method: 'POST'});
+  }
+  async function adminInsights() {
+    return apiWithSession('/api/v1/admin/insights');
+  }
+  async function adminCreateInsight(payload) {
+    return apiWithSession('/api/v1/admin/insights', {method: 'POST', body: JSON.stringify(payload || {})});
+  }
+  async function adminUpdateInsight(insightId, payload) {
+    return apiWithSession(`/api/v1/admin/insights/${encodeURIComponent(insightId)}`, {method: 'PUT', body: JSON.stringify(payload || {})});
+  }
+  async function adminDeleteInsight(insightId) {
+    return apiWithSession(`/api/v1/admin/insights/${encodeURIComponent(insightId)}`, {method: 'DELETE'});
+  }
   async function adminDiagnostics() {
     return apiWithSession('/api/v1/admin/diagnostics');
   }
@@ -319,6 +337,7 @@
 
   window.BlinqAuth = {
     init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
+    insights, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear,
   };

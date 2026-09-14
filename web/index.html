@@ -10,7 +10,6 @@
   <link rel="stylesheet" href="/responsive.css?v=678" media="not all" />
   <link rel="stylesheet" href="/premium.css?v=678" media="not all" />
   <link rel="stylesheet" href="/blinq.css?v=678" />
-  <link rel="stylesheet" href="/redesign-678.css?v=678" />
   <script defer src="/auth.js?v=678"></script>
   <script defer src="/responsive.js?v=678"></script>
   <script defer src="/app.js?v=678"></script>
@@ -39,35 +38,23 @@
       <div id="sidebarPromoZone"></div>
     </aside>
 
-    <header class="site-header dashboard-topbar reference-topbar">
+    <header class="site-header dashboard-topbar">
       <div class="header-top">
         <a class="brand" href="#predictions" data-route="predictions" aria-label="BlinQ home">
           <span class="brand-lockup brand-lockup-header">
             <img src="/assets/blinq_logo.svg" alt="BlinQ" />
-            <span class="brand-tagline">TENNIS INTELLIGENCE</span>
+            <span class="brand-tagline">TENNIS INSIGHTS FOR A SMARTER YOU</span>
           </span>
         </a>
-        <nav class="reference-nav" aria-label="Hlavná navigácia">
-          <a href="#predictions" data-route="predictions" class="active">Predikcie</a>
-          <a href="#results" data-route="results">Štatistiky</a>
-          <a href="#model_data" data-route="model_data">Modely</a>
-          <button id="communityNavButton" type="button">Komunita</button>
-          <a href="#account" data-route="account">BlinQ VIP</a>
-        </nav>
+
+        <section id="headerFeatureStrip" class="feature-strip" aria-label="BlinQ promo"></section>
+
         <div class="header-actions">
-          <div class="notification-shell">
-            <button id="notificationButton" class="notification-button" type="button" aria-label="BlinQ správy" aria-expanded="false" aria-controls="notificationPanel">
-              <svg class="notification-bell-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9Z"/><path d="M10 21h4"/></svg><b id="notificationBadge" hidden>0</b>
-            </button>
-            <aside id="notificationPanel" class="notification-panel" hidden aria-label="BlinQ Insights">
-              <header><div><small>BLINQ PRIVATE FEED</small><strong>BlinQ Insights</strong></div><button id="notificationClose" type="button" aria-label="Zavrieť">×</button></header>
-              <div id="notificationList" class="notification-list"></div>
-            </aside>
-          </div>
+          <button id="insightBell" class="insight-bell" type="button" aria-label="BlinQ Insights" aria-controls="insightDrawer" aria-expanded="false"><span aria-hidden="true" class="insight-bell-icon"><svg viewBox="0 0 24 24" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><b id="insightUnread" hidden>0</b></button>
           <div id="profileShell" class="profile-shell">
             <button id="profileButton" class="profile-button" type="button" aria-label="Účet">
               <span class="avatar" id="avatar">B</span>
-              <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small class="profile-meta-primary"><span id="profilePlan">Člen</span></small><small class="profile-meta-secondary"><span id="profileTelegram">TG —</span> · <span id="profileRegisteredEmail">—</span> · <span id="profileRemaining">—</span></small><span id="profilePlanIcon" hidden>◇</span><span id="memberStatus" hidden>Aktívne</span></span>
+              <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small class="profile-meta-primary"><span id="profileTelegram">TG —</span> · <span id="profilePlan">Člen</span></small><small class="profile-meta-secondary"><span id="profileRegisteredEmail">—</span> · <span id="profileRemaining">—</span></small><span id="profilePlanIcon" hidden>◇</span><span id="memberStatus" hidden>Aktívne</span></span>
             </button>
             <button id="profileMenuToggle" class="profile-toggle" type="button" aria-controls="profileMenu" aria-expanded="false">⌄</button>
             <div id="profileMenu" class="profile-menu" hidden>
@@ -80,8 +67,10 @@
           </div>
         </div>
       </div>
-      <section id="headerFeatureStrip" class="feature-strip" hidden aria-hidden="true"></section>
-      <div class="header-nav-row" hidden aria-hidden="true"><nav id="mainNavigation" class="main-navigation"></nav></div>
+
+      <div class="header-nav-row" hidden aria-hidden="true">
+        <nav id="mainNavigation" class="main-navigation" aria-label="Hlavná navigácia"></nav>
+      </div>
       <button id="menuToggle" class="legacy-nav-hook" hidden></button>
       <div class="legacy-nav-hook" hidden><strong id="headerTime">—</strong><span id="headerDate">—</span><span id="headerModelState">Produkcia</span></div>
     </header>
@@ -92,28 +81,39 @@
       </section>
       <section id="staleNotice" class="inline-notice" hidden></section>
 
-      <div id="predictionsView" class="reference-dashboard">
+      <div id="predictionsView">
         <section id="dashboardHero" class="hero-shell" aria-label="BlinQ hero"></section>
-        <section id="dashboardKpis" class="dashboard-kpis" aria-label="BlinQ štatistiky"></section>
-        <div class="dashboard-content-grid">
-          <section id="dailyHub" class="daily-panel">
-            <div class="daily-tabs-row">
-              <div id="dailyHubTabs" class="daily-tabs" role="tablist"></div>
-              <div class="daily-meta" id="dailyHubMeta"><span class="daily-date"><i>◫</i><b id="dailyHubMetaDate">Dnešný výber</b></span></div>
-              <button id="dailyHubExpand" class="daily-expand" type="button">Zobraziť celú ponuku →</button>
-            </div>
-            <div class="table-scroller">
-              <table class="daily-hub-table"><thead id="dailyHubHead"></thead><tbody id="dailyHubBody"></tbody></table>
-            </div>
-            <div id="dailyHubEmpty" class="daily-empty" hidden>V tejto kategórii zatiaľ nie sú dostupné predikcie.</div>
-          </section>
-          <aside id="dashboardRightRail" class="dashboard-right-rail" aria-live="polite">
-            <div id="dashboardSidebarDefault"></div>
-            <div id="dashboardMatchDetail" hidden></div>
+        <section id="bannerTop" class="promo-zone"></section>
+
+        <div id="dashboardContentGrid" class="dashboard-content-grid">
+          <div class="dashboard-primary-column">
+            <section id="dashboardKpis" class="dashboard-kpis" aria-label="BlinQ prehľad"></section>
+            <section id="dailyHub" class="daily-panel">
+              <div class="daily-panel-head">
+                <div class="daily-title-group">
+                  <span class="daily-mark"><i></i></span>
+                  <h2>Dnešné predikcie <span>BlinQ Intelligence</span></h2>
+                </div>
+                <div class="daily-meta" id="dailyHubMeta">
+                  <span class="daily-date"><i>◫</i><b id="dailyHubMetaDate">Dnešný výber</b></span>
+                  <span class="daily-promise">Profesionálna analýza.<br/>Reálne dáta.</span>
+                </div>
+              </div>
+              <div class="daily-tabs-row">
+                <div id="dailyHubTabs" class="daily-tabs" role="tablist"></div>
+                <button id="dailyHubExpand" class="daily-expand" type="button">Zobraziť celú ponuku →</button>
+              </div>
+              <div class="table-scroller">
+                <table class="daily-hub-table"><thead id="dailyHubHead"></thead><tbody id="dailyHubBody"></tbody></table>
+              </div>
+              <div id="dailyHubEmpty" class="daily-empty" hidden>V tejto kategórii zatiaľ nie sú dostupné predikcie.</div>
+            </section>
+            <section id="bannerMid" class="promo-zone info-banner-zone" aria-label="BlinQ info bannery"></section><span class="legacy-component-marker" data-component="intel-strip" hidden></span>
+          </div>
+          <aside id="dashboardRightRail" class="dashboard-right-rail" aria-label="BlinQ detail a insighty">
+            <div id="dashboardRightRailContent"></div>
           </aside>
         </div>
-        <section id="bannerTop" class="promo-zone" hidden></section>
-        <section id="bannerMid" class="promo-zone info-banner-zone" hidden aria-hidden="true"></section><span class="legacy-component-marker" data-component="intel-strip" hidden></span>
       </div>
 
       <section id="routePanel" class="route-panel" hidden></section>
@@ -125,6 +125,13 @@
         <div class="footer-right"><span class="system-status"><i></i><strong>Všetky systémy funkčné</strong><small id="footerModelState">Produkčný feed</small></span><nav id="footerLanguages" class="languages"><span>JAZYK</span><a href="?lang=sk#predictions" data-lang="sk" class="active">SK</a><a href="?lang=cz#predictions" data-lang="cz">CZ</a><a href="?lang=en#predictions" data-lang="en">EN</a></nav></div>
       </footer>
     </main>
+
+    <aside id="insightDrawer" class="insight-drawer" hidden aria-label="BlinQ Insights">
+      <div class="insight-drawer-head"><div><small>BLINQ INSIGHTS</small><h2>Súkromný feed</h2><p id="insightAudienceLabel">ELITE+</p></div><button id="insightDrawerClose" type="button" aria-label="Zavrieť">×</button></div>
+      <div id="insightDrawerStatus" class="insight-drawer-status"></div>
+      <div id="insightDrawerList" class="insight-drawer-list"></div>
+    </aside>
+    <button id="insightBackdrop" class="insight-backdrop" type="button" hidden aria-label="Zavrieť BlinQ Insights"></button>
 
     <nav id="mobileTabs" class="mobile-tabs" aria-label="Rýchla navigácia"><a data-route="predictions" href="#predictions">⌂<span>Prehľad</span></a><a data-route="results" href="#results">✓<span>Výsledky</span></a><a data-route="account" href="#account">✦<span>Plány</span></a></nav>
 

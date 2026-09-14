@@ -39,6 +39,10 @@ from tbt.services.admin_storage import (
     load_runtime_ui_config,
     record_banner_event,
     save_runtime_ui_config,
+    list_insights,
+    save_insight,
+    delete_insight,
+    mark_insight_read,
 )
 from tbt.services.content_news import news_pool
 from tbt.services.feed import read_feed, visible_feed
@@ -48,7 +52,7 @@ from tbt.services.entitlements import filter_feed_for_access
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
 RELEASE = "6.7.8"
-API_VERSION = "3.7.0"
+API_VERSION = "3.8.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
 # instance-local: durable analytics remains in Table Storage, while this only absorbs accidental
@@ -730,6 +734,71 @@ def feed(req):
 
 
 
+
+
+def _insight_plan_for_user(user):
+    """Resolve the membership level used by the private BlinQ Insights feed."""
+    profile = _profile_for(user, required=False)
+    account = public_account(user, cfg=settings, profile=profile)
+    if account.get("is_admin") or str(account.get("role") or "").lower() == "admin":
+        # Admins may preview every active audience in the public drawer.
+        return ""
+    status = str(account.get("status") or "expired").lower()
+    if status == "trial":
+        return "rookie"
+    if status not in {"active", "lifetime"}:
+        return "expired"
+    return str(account.get("plan") or "expired").lower()
+
+
+@app.route(route="v1/insights", methods=["GET"])
+def insights_feed(req):
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if not bool(user.get("email_verified", False)):
+            return response({"error": "email_not_verified"}, 403)
+        if is_suspended(user):
+            return response({"error": "account_suspended"}, 403)
+        plan = _insight_plan_for_user(user)
+        if plan == "expired":
+            return response({"items": [], "unread": 0})
+        payload = list_insights(plan=plan, user_id=str(user.get("id") or ""), include_inactive=False, limit=100)
+        return response(payload)
+    except AdminStorageUnavailable:
+        # Insights are optional presentation content. A storage outage must not
+        # break the dashboard/feed itself.
+        return response({"items": [], "unread": 0, "storage_unavailable": True})
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/insights/{insight_id}/read", methods=["POST"])
+def insights_mark_read(req):
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if not bool(user.get("email_verified", False)):
+            return response({"error": "email_not_verified"}, 403)
+        if is_suspended(user):
+            return response({"error": "account_suspended"}, 403)
+        insight_id = str((req.route_params or {}).get("insight_id") or "")
+        # Verify that the message is actually visible to the caller before
+        # accepting a read marker.
+        plan = _insight_plan_for_user(user)
+        visible = list_insights(plan=plan, user_id=str(user.get("id") or ""), include_inactive=False, limit=250)
+        if not any(str(item.get("id") or "") == insight_id for item in visible.get("items", [])):
+            return response({"error": "insight_not_available"}, 404)
+        return response(mark_insight_read(insight_id=insight_id, user_id=str(user.get("id") or "")))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
 @app.route(route="v1/admin/diagnostics", methods=["GET"])
 def admin_diagnostics(req):
     try:
@@ -891,6 +960,50 @@ def admin_user_metadata(req):
         logging.exception("Admin metadata update failed")
         return response({"error": "admin_update_unavailable"}, 503)
 
+
+
+
+@app.route(route="v1/admin/insights", methods=["GET", "POST"])
+def admin_insights(req):
+    try:
+        admin, failure = _admin_user(req)
+        if failure:
+            return failure
+        if req.method == "GET":
+            return response(list_insights(include_inactive=True, limit=250))
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        return response(save_insight(payload, actor_id=str(admin.get("id") or "")), 201)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/insights/{insight_id}", methods=["PUT", "DELETE"])
+def admin_insight_item(req):
+    try:
+        admin, failure = _admin_user(req)
+        if failure:
+            return failure
+        insight_id = str((req.route_params or {}).get("insight_id") or "")
+        if req.method == "DELETE":
+            return response(delete_insight(insight_id))
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        return response(save_insight(payload, actor_id=str(admin.get("id") or ""), insight_id=insight_id))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
 
 @app.route(route="v1/admin/ui-config", methods=["PUT"])
 def admin_ui_config(req):

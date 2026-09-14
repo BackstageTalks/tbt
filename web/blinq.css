@@ -809,3 +809,195 @@ body#blinqPremium .profile-copy strong{font-size:11px!important;line-height:1.2!
 body#blinqPremium .profile-copy small{display:block!important;max-width:210px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
 body#blinqPremium .profile-meta-primary{color:#b8cada!important}
 body#blinqPremium .profile-meta-secondary{color:#6f8da0!important;font-size:8.5px!important}
+
+/* ========================================================================
+   BlinQ 6.7.8 — private Insights feed + in-page match detail rail
+   ======================================================================== */
+body#blinqPremium .app-shell{width:min(100%,1780px)!important;padding-left:20px!important;padding-right:20px!important}
+body#blinqPremium .header-actions{display:flex!important;align-items:stretch!important;gap:10px!important}
+body#blinqPremium .insight-bell{position:relative;display:grid;place-items:center;width:48px;min-width:48px;height:68px;border:1px solid #193f53;border-radius:11px;background:#061722;color:#c4d5df;font-size:20px;cursor:pointer}
+body#blinqPremium .insight-bell:hover,body#blinqPremium .insight-bell.has-unread{border-color:#248a61;color:#63f0a4;background:#082119}
+body#blinqPremium .insight-bell>b{position:absolute;right:5px;top:5px;min-width:17px;height:17px;padding:0 4px;display:grid;place-items:center;border-radius:999px;background:#35e98c;color:#03140c;font-size:8px;font-weight:950;box-shadow:0 0 0 3px #061722}
+body#blinqPremium .insight-bell[hidden]{display:none!important}
+body#blinqPremium .insight-bell-icon{display:grid;place-items:center;width:21px;height:21px}
+body#blinqPremium .insight-bell-icon svg{display:block;width:21px;height:21px}
+
+body#blinqPremium .dashboard-content-grid{display:grid;grid-template-columns:minmax(0,1fr) 330px;gap:14px;align-items:start;margin-top:12px}
+body#blinqPremium .dashboard-primary-column{min-width:0}
+body#blinqPremium .dashboard-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-bottom:10px}
+body#blinqPremium .dashboard-kpi{min-width:0;min-height:70px;display:flex;align-items:center;gap:12px;padding:11px 13px;border:1px solid #173a4d;border-radius:9px;background:linear-gradient(180deg,#071a24,#05151e)}
+body#blinqPremium .dashboard-kpi>span{width:38px;height:38px;flex:0 0 38px;display:grid;place-items:center;border-radius:8px;background:#08281e;color:#4cf29a;font-size:17px}
+body#blinqPremium .dashboard-kpi small{display:block;color:#7896a7;font-size:7px;font-weight:900;letter-spacing:.12em}
+body#blinqPremium .dashboard-kpi strong{display:block;margin-top:2px;color:#f2f8fb;font-size:20px;line-height:1}
+body#blinqPremium .dashboard-kpi p{margin:3px 0 0;color:#587484;font-size:7px}
+body#blinqPremium .daily-panel{margin-top:0!important;border-radius:10px!important}
+body#blinqPremium .daily-panel-head{display:none!important}
+body#blinqPremium .daily-tabs-row{padding:9px 12px 8px!important;border-bottom:1px solid #143749}
+body#blinqPremium .daily-hub-table{min-width:980px!important}
+body#blinqPremium .daily-hub-table th{padding-left:11px!important;padding-right:11px!important;font-size:8px!important}
+body#blinqPremium .daily-hub-table td{height:61px!important;padding:7px 11px!important;font-size:10px!important}
+body#blinqPremium .hub-player-copy strong,body#blinqPremium .hub-player-meta strong{max-width:128px!important;font-size:10px!important}
+body#blinqPremium .hub-player-copy small,body#blinqPremium .hub-player-meta small{font-size:7.5px!important}
+body#blinqPremium .hub-player img,body#blinqPremium .hub-player-avatar,body#blinqPremium .hub-avatar{width:32px!important;height:32px!important}
+body#blinqPremium .hub-tournament-logo,body#blinqPremium .hub-tour-logo,body#blinqPremium .hub-tournament-badge{width:36px!important;height:36px!important}
+body#blinqPremium .hub-prob{font-size:13px!important}
+body#blinqPremium .hub-detail{padding:6px 9px!important;font-size:9px!important}
+body#blinqPremium .table-scroller{overflow-x:auto;scrollbar-width:thin}
+
+body#blinqPremium .dashboard-right-rail{min-width:0;position:sticky;top:12px;display:block}
+body#blinqPremium .dashboard-right-rail>div{display:grid;gap:10px}
+body#blinqPremium .rail-quote,body#blinqPremium .rail-highlight,body#blinqPremium .rail-advantage,body#blinqPremium .rail-match-detail{border:1px solid #17394d;border-radius:9px;background:linear-gradient(180deg,#071a24,#05141d);overflow:hidden}
+body#blinqPremium .rail-quote{padding:14px 16px;min-height:78px;display:grid;align-content:center;background:radial-gradient(circle at 90% 20%,rgba(50,232,145,.08),transparent 42%),linear-gradient(180deg,#071a24,#05141d)}
+body#blinqPremium .rail-quote blockquote{margin:0;color:#d7e5ec;font-size:13px;font-style:italic;line-height:1.42}
+body#blinqPremium .rail-quote span{margin-top:8px;color:#708c9c;font-size:7px}
+body#blinqPremium .rail-highlight-head{display:flex;align-items:center;justify-content:space-between;padding:11px 12px;border-bottom:1px solid #17394d}
+body#blinqPremium .rail-highlight-head h3{margin:0;font-size:14px}
+body#blinqPremium .rail-highlight-head span{border:1px solid #1c7d55;border-radius:999px;padding:4px 7px;color:#58efa0;font-size:7px}
+body#blinqPremium .rail-highlight-media{position:relative;min-height:255px;background:radial-gradient(circle at 60% 30%,#16372e,#06161f 68%);overflow:hidden}
+body#blinqPremium .rail-highlight-media>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center top;filter:saturate(.72) contrast(1.02)}
+body#blinqPremium .rail-highlight-media:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(3,13,18,.06),rgba(3,13,18,.18) 35%,rgba(2,12,17,.92) 87%)}
+body#blinqPremium .rail-highlight-overlay{position:absolute;z-index:2;left:13px;right:13px;bottom:13px;display:grid;justify-items:start}
+body#blinqPremium .rail-highlight-overlay small{color:#40efa0;font-size:7px;font-weight:900;letter-spacing:.12em}
+body#blinqPremium .rail-highlight-overlay strong{margin-top:3px;font-size:19px;line-height:1.05}
+body#blinqPremium .rail-highlight-overlay p{margin:5px 0 3px;color:#b6c8d2;font-size:8px}
+body#blinqPremium .rail-highlight-overlay b{color:#55f29e;font-size:9px}
+body#blinqPremium .rail-highlight-overlay button{margin-top:10px;border:0;border-radius:7px;background:#48ed93;color:#022014;padding:8px 11px;font-size:9px;font-weight:900;cursor:pointer}
+body#blinqPremium .rail-advantage{padding:12px}
+body#blinqPremium .rail-section-title{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:9px}
+body#blinqPremium .rail-section-title h3{margin:0;font-size:14px}
+body#blinqPremium .rail-section-title small,body#blinqPremium .rail-section-title span{color:#6d8999;font-size:7px}
+body#blinqPremium .rail-advantage-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;border-top:1px solid #17394d;padding-top:10px}
+body#blinqPremium .rail-advantage-grid span{min-width:0;border-right:1px solid #17394d}
+body#blinqPremium .rail-advantage-grid span:last-child{border-right:0}
+body#blinqPremium .rail-advantage-grid strong{display:block;color:#ecf6f9;font-size:16px}
+body#blinqPremium .rail-advantage-grid span:nth-child(2) strong{color:#46ef97}
+body#blinqPremium .rail-advantage-grid small{display:block;margin-top:3px;color:#6c8797;font-size:6.5px}
+body#blinqPremium .rail-spark{height:42px;margin-top:10px;display:flex;align-items:end;gap:2px;border-bottom:1px solid #19513c;background:linear-gradient(180deg,transparent,rgba(44,238,140,.05))}
+body#blinqPremium .rail-spark i{flex:1;height:var(--h,30%);background:linear-gradient(180deg,#55f3a1,rgba(40,213,125,.08));border-top:1px solid #54f1a0;clip-path:polygon(0 65%,30% 35%,55% 55%,100% 15%,100% 100%,0 100%)}
+body#blinqPremium .rail-spark i:nth-child(1){--h:38%}body#blinqPremium .rail-spark i:nth-child(2){--h:52%}body#blinqPremium .rail-spark i:nth-child(3){--h:46%}body#blinqPremium .rail-spark i:nth-child(4){--h:58%}body#blinqPremium .rail-spark i:nth-child(5){--h:50%}body#blinqPremium .rail-spark i:nth-child(6){--h:62%}body#blinqPremium .rail-spark i:nth-child(7){--h:84%}
+body#blinqPremium .rail-quote-bottom{min-height:82px}
+body#blinqPremium .rail-empty{padding:22px;border:1px solid #17394d;border-radius:9px;color:#708b9a;font-size:10px}
+
+/* Match detail is embedded into the right rail instead of opening a modal. */
+body#blinqPremium .rail-match-detail{max-height:calc(100vh - 28px);overflow:auto;scrollbar-width:thin}
+body#blinqPremium .rail-match-head{position:sticky;top:0;z-index:3;display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:12px;background:rgba(5,20,29,.96);backdrop-filter:blur(10px);border-bottom:1px solid #17394d}
+body#blinqPremium .rail-match-head small{display:block;color:#9b78ff;font-size:7px;font-weight:900;letter-spacing:.08em}
+body#blinqPremium .rail-match-head h2{margin:4px 0 0;font-size:15px;line-height:1.2}
+body#blinqPremium .rail-match-head h2 span{color:#668493;font-weight:600}
+body#blinqPremium .rail-match-head button{width:28px;height:28px;flex:0 0 28px;border:1px solid #2b5469;border-radius:8px;background:#08202d;color:#bed0da;font-size:17px;cursor:pointer}
+body#blinqPremium .rail-pick{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:10px;padding:10px 11px;border:1px solid #1c5268;border-radius:9px;background:#071e2b}
+body#blinqPremium .rail-pick small{display:block;color:#718d9e;font-size:6.5px;letter-spacing:.1em}
+body#blinqPremium .rail-pick strong{display:block;margin-top:2px;font-size:12px}
+body#blinqPremium .rail-pick>b{color:#4df39b;font-size:24px}
+body#blinqPremium .rail-player-pair{display:grid;grid-template-columns:1fr 1fr;gap:7px;padding:0 10px 10px}
+body#blinqPremium .rail-player-pair .insight-player-card{min-width:0;padding:9px;border-radius:9px}
+body#blinqPremium .rail-player-pair .insight-player-head{display:grid;grid-template-columns:36px minmax(0,1fr);gap:7px;padding-right:0!important}
+body#blinqPremium .rail-player-pair .insight-player-head .hub-avatar{width:36px!important;height:36px!important}
+body#blinqPremium .rail-player-pair .insight-player-head h4{font-size:9px!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body#blinqPremium .rail-player-pair .insight-player-head p{font-size:6.5px!important}
+body#blinqPremium .rail-player-pair .insight-picked-badge{display:none}
+body#blinqPremium .rail-player-pair .insight-player-metrics{grid-template-columns:1fr!important;gap:4px!important;margin-top:7px!important}
+body#blinqPremium .rail-player-pair .insight-player-metrics>span{padding:5px 6px!important}
+body#blinqPremium .rail-player-pair .insight-player-metrics small{font-size:6px!important}
+body#blinqPremium .rail-player-pair .insight-player-metrics strong{font-size:8px!important}
+body#blinqPremium .rail-compare,body#blinqPremium .rail-motivation,body#blinqPremium .rail-radar,body#blinqPremium .rail-history{margin:0 10px 10px;padding:10px;border:1px solid #173c50;border-radius:9px;background:#061722}
+body#blinqPremium .rail-compare-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;padding:6px 0;border-top:1px solid #123345;font-size:8px}
+body#blinqPremium .rail-compare-row:first-of-type{border-top:0}
+body#blinqPremium .rail-compare-row span{color:#7895a5}
+body#blinqPremium .rail-compare-row strong{color:#50efa0}body#blinqPremium .rail-compare-row b{color:#aa8aff}
+body#blinqPremium .motivation-grid{display:grid;grid-template-columns:1fr;gap:6px}
+body#blinqPremium .motivation-card{position:relative;padding:8px;border:1px solid #173c50;border-radius:8px;background:#071925}
+body#blinqPremium .motivation-card small{display:block;color:#718d9e;font-size:6px;letter-spacing:.08em}
+body#blinqPremium .motivation-card strong{display:block;margin-top:2px;font-size:9px;padding-right:48px}
+body#blinqPremium .motivation-card .motivation-score{position:absolute;right:8px;top:8px;color:#91a4af;font-size:12px}
+body#blinqPremium .motivation-card .motivation-score.is-positive{color:#4cf29a}
+body#blinqPremium .motivation-card p{margin:6px 0 0;color:#708b9b;font-size:7px;line-height:1.4}
+body#blinqPremium .motivation-note{margin:7px 0 0;color:#5f7b8c;font-size:6.5px;line-height:1.4}
+body#blinqPremium .rail-radar .insight-radar-svg{width:100%;max-width:270px;margin:auto}
+body#blinqPremium .rail-radar .insight-radar-head h3{font-size:12px!important}
+body#blinqPremium .rail-radar .insight-radar-legend{font-size:6px!important}
+body#blinqPremium .rail-radar .insight-radar-label{font-size:7px!important}
+body#blinqPremium .rail-history .match-history-wrap{grid-template-columns:1fr!important;border:0!important;background:transparent!important}
+body#blinqPremium .rail-history .match-history-card{padding:8px!important;border:1px solid #173c50!important;border-radius:8px!important;background:#071925!important}
+body#blinqPremium .rail-history .match-history-card+.match-history-card{margin-top:6px;border-left:1px solid #173c50!important}
+body#blinqPremium .rail-history .match-history-grid{gap:4px!important}
+body#blinqPremium .rail-history .match-history-grid span{padding:5px!important}
+body#blinqPremium .rail-history .match-history-grid small{font-size:5.8px!important}body#blinqPremium .rail-history .match-history-grid b{font-size:7.5px!important}
+body#blinqPremium .rail-match-detail .match-intelligence-status{margin:0 10px 10px!important;font-size:7px!important}
+body#blinqPremium .rail-match-footer{display:flex;justify-content:space-between;gap:8px;padding:0 10px 12px;color:#668292;font-size:6.5px}
+
+/* Private member feed drawer. */
+body#blinqPremium .insight-backdrop{position:fixed;inset:0;z-index:190;border:0;background:rgba(0,7,12,.54);backdrop-filter:blur(2px)}
+body#blinqPremium .insight-drawer{position:fixed;z-index:200;right:14px;top:14px;bottom:14px;width:min(430px,calc(100vw - 28px));border:1px solid #21495e;border-radius:14px;background:linear-gradient(180deg,#071a26,#04121b);box-shadow:0 24px 70px rgba(0,0,0,.48);overflow:hidden}
+body#blinqPremium .insight-drawer[hidden],body#blinqPremium .insight-backdrop[hidden]{display:none!important}
+body#blinqPremium .insight-drawer-head{display:flex;justify-content:space-between;gap:14px;padding:17px 18px 13px;border-bottom:1px solid #17394d}
+body#blinqPremium .insight-drawer-head small{color:#51efa0;font-size:7px;font-weight:900;letter-spacing:.14em}
+body#blinqPremium .insight-drawer-head h2{margin:4px 0 2px;font-size:20px}
+body#blinqPremium .insight-drawer-head p{margin:0;color:#8065e9;font-size:9px;font-weight:850}
+body#blinqPremium .insight-drawer-head button{width:32px;height:32px;border:1px solid #244d62;border-radius:8px;background:#08202d;color:#c3d5df;font-size:18px}
+body#blinqPremium .insight-drawer-status{padding:8px 18px;border-bottom:1px solid #133547;color:#6f8b9b;font-size:8px}
+body#blinqPremium .insight-drawer-list{height:calc(100% - 101px);overflow:auto;padding:10px;display:grid;align-content:start;gap:8px}
+body#blinqPremium .insight-feed-item{padding:12px;border:1px solid #173b50;border-radius:10px;background:#061722}
+body#blinqPremium .insight-feed-item.is-unread{border-color:#2c805b;box-shadow:inset 3px 0 0 #43ee97;background:linear-gradient(135deg,rgba(25,79,56,.14),#061722 42%)}
+body#blinqPremium .insight-feed-item.priority-critical{border-color:#8f4050}body#blinqPremium .insight-feed-item.priority-important{border-color:#80631d}
+body#blinqPremium .insight-feed-item>header{display:flex;justify-content:space-between;gap:8px;align-items:center}
+body#blinqPremium .insight-feed-item>header div{display:flex;gap:5px;align-items:center}
+body#blinqPremium .insight-feed-item>header span{color:#55efa0;font-size:7px;font-weight:900;text-transform:uppercase;letter-spacing:.1em}
+body#blinqPremium .insight-feed-item>header b{padding:2px 5px;border-radius:999px;background:#2e245c;color:#b9a9ff;font-size:6px}
+body#blinqPremium .insight-feed-item time{color:#5e7989;font-size:6.5px}
+body#blinqPremium .insight-feed-item h3{margin:7px 0 5px;font-size:13px}
+body#blinqPremium .insight-feed-item p{margin:0;color:#a7bcc8;font-size:9px;line-height:1.5;white-space:pre-wrap}
+body#blinqPremium .insight-feed-item footer{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-top:9px;padding-top:8px;border-top:1px solid #123446}
+body#blinqPremium .insight-feed-item footer small{color:#7662dc;font-size:7px;font-weight:850}
+body#blinqPremium .insight-feed-item footer button,body#blinqPremium .insight-feed-item footer a{border:0;background:transparent;color:#55efa0;font-size:8px;font-weight:850;text-decoration:none;padding:0;cursor:pointer}
+body#blinqPremium .insight-feed-empty{padding:28px 16px;text-align:center;color:#6f8a9a;font-size:10px}
+
+/* Admin composer for BlinQ Insights. */
+body#blinqPremium .admin-tabs-v675{grid-template-columns:repeat(8,minmax(0,1fr))!important}
+body#blinqPremium .admin-insights-grid{display:grid;grid-template-columns:minmax(360px,.8fr) minmax(420px,1.2fr);gap:14px;align-items:start}
+body#blinqPremium .admin-insight-composer{display:grid;gap:11px;padding:15px;border:1px solid #21475d;border-radius:12px;background:#061722;position:sticky;top:10px}
+body#blinqPremium .admin-insight-composer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+body#blinqPremium .admin-insight-composer-head small{color:#8f70f6;font-size:7px;font-weight:900;letter-spacing:.11em}
+body#blinqPremium .admin-insight-composer-head h3{margin:4px 0 0;font-size:16px}
+body#blinqPremium .admin-insight-composer-head>span{padding:4px 7px;border:1px solid #2a7554;border-radius:999px;color:#65eaa6;font-size:7px}
+body#blinqPremium .admin-insight-composer>label,body#blinqPremium .admin-insight-composer .admin-form-grid>label{display:grid;gap:5px;color:#7593a5;font-size:8px;font-weight:800}
+body#blinqPremium .admin-insight-composer input,body#blinqPremium .admin-insight-composer select,body#blinqPremium .admin-insight-composer textarea{width:100%;border:1px solid #21475d;border-radius:8px;background:#04131d;color:#edf7fa;padding:9px 10px;font-size:11px;outline:none}
+body#blinqPremium .admin-insight-composer textarea{resize:vertical;min-height:122px}
+body#blinqPremium .admin-insight-audience{margin:0;padding:10px;border:1px solid #1b4054;border-radius:9px}
+body#blinqPremium .admin-insight-audience legend{padding:0 5px;color:#7896a8;font-size:8px;font-weight:850}
+body#blinqPremium .admin-insight-audience>div{display:flex;gap:6px;flex-wrap:wrap}
+body#blinqPremium .admin-insight-level{display:flex!important;align-items:center;gap:5px!important;padding:6px 8px;border:1px solid #234b61;border-radius:999px;background:#071b28;color:#d6e5ec!important;font-size:8px!important}
+body#blinqPremium .admin-insight-level input{width:auto!important;margin:0;accent-color:#48e997}
+body#blinqPremium .admin-insight-audience>small{display:block;margin-top:7px;color:#5f7d8e;font-size:7px}
+body#blinqPremium .admin-insight-flags{display:flex;gap:14px}.admin-insight-flags label{display:flex;align-items:center;gap:6px;color:#a8bdc8;font-size:9px}.admin-insight-flags input{width:auto!important;accent-color:#49ec99}
+body#blinqPremium .admin-insight-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}body#blinqPremium .admin-insight-actions span{color:#d8aeb7;font-size:8px}
+body#blinqPremium .admin-insight-list{display:grid;gap:7px}
+body#blinqPremium .admin-insight-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:12px;border:1px solid #1b4155;border-radius:10px;background:#061722}
+body#blinqPremium .admin-insight-row.is-inactive{opacity:.58}.admin-insight-row.priority-critical{border-color:#78404c}.admin-insight-row.priority-important{border-color:#6b591f}
+body#blinqPremium .admin-insight-row span{color:#51efa0;font-size:7px;font-weight:900;letter-spacing:.08em}.admin-insight-row strong{display:block;margin-top:3px;font-size:11px}.admin-insight-row p{margin:4px 0;color:#8da7b5;font-size:8.5px;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}.admin-insight-row small{color:#5f7c8d;font-size:7px}
+body#blinqPremium .admin-insight-row-actions{display:flex;gap:5px;align-items:center}.admin-insight-row-actions .btn{min-height:30px!important;font-size:8px!important}.admin-insight-row-actions .danger{border-color:#6d3643!important;color:#e898a8!important}
+
+@media(max-width:1280px){
+  body#blinqPremium .dashboard-content-grid{grid-template-columns:minmax(0,1fr) 300px}
+  body#blinqPremium .dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  body#blinqPremium .admin-insights-grid{grid-template-columns:1fr}
+  body#blinqPremium .admin-insight-composer{position:static}
+  body#blinqPremium .admin-tabs-v675{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+}
+@media(max-width:980px){
+  body#blinqPremium .dashboard-content-grid{grid-template-columns:1fr}
+  body#blinqPremium .dashboard-right-rail{position:static}
+  body#blinqPremium .rail-match-detail{max-height:none}
+  body#blinqPremium .dashboard-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(max-width:760px){
+  body#blinqPremium .app-shell{padding-left:9px!important;padding-right:9px!important}
+  body#blinqPremium .insight-bell{width:42px;min-width:42px;height:54px}
+  body#blinqPremium .dashboard-kpis{grid-template-columns:1fr 1fr}
+  body#blinqPremium .dashboard-kpi{min-height:62px;padding:9px}
+  body#blinqPremium .dashboard-kpi>span{width:32px;height:32px;flex-basis:32px}
+  body#blinqPremium .dashboard-kpi strong{font-size:16px}
+  body#blinqPremium .rail-player-pair{grid-template-columns:1fr}
+  body#blinqPremium .insight-drawer{right:6px;top:6px;bottom:6px;width:calc(100vw - 12px)}
+  body#blinqPremium .admin-insight-row{grid-template-columns:1fr}.admin-insight-row-actions{justify-content:flex-start}
+}

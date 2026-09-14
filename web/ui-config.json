@@ -1874,19 +1874,19 @@
         "ad_hidden_fallback": "internal",
         "active_from": "",
         "active_until": "",
-        "image_url": "/assets/hero-reference-v678.webp",
-        "mobile_image_url": "/assets/hero-reference-v678.webp",
+        "image_url": "",
+        "mobile_image_url": "",
         "image_fit": "cover",
         "image_position": "center",
         "creative_mode": "split",
         "show_copy": true,
         "sponsored": false,
-        "eyebrow": "DÁTA. KONTEXT. LEPŠIE ROZHODNUTIA.",
-        "headline": "Tennis intelligence",
-        "accent_text": "for a smarter tomorrow.",
-        "text": "BlinQ analyzuje stovky dátových signálov, aby ti priniesol presnejšie predikcie, hlbší kontext a reálne výhody.",
+        "eyebrow": "BLINQ STATISTICAL ENGINE",
+        "headline": "Dáta. Analýza.",
+        "accent_text": "Lepšie rozhodnutia.",
+        "text": "Tenisová inteligencia, ktorá spája model, kontext a transparentné výsledky.",
         "button_text": "",
-        "theme": "green",
+        "theme": "violet",
         "icon": "",
         "link": "",
         "route": "",
@@ -1926,7 +1926,7 @@
       "order": 2,
       "content": {
         "type": "promo",
-        "enabled": false,
+        "enabled": true,
         "campaign_id": "",
         "advertiser_id": "blinq",
         "ad_hidden_fallback": "internal",
@@ -1984,7 +1984,7 @@
       "order": 3,
       "content": {
         "type": "promo",
-        "enabled": false,
+        "enabled": true,
         "campaign_id": "",
         "advertiser_id": "blinq",
         "ad_hidden_fallback": "internal",
@@ -2159,18 +2159,18 @@
       "content": {
         "eyebrow": "BLINQ ČLENSTVO",
         "headline": "BlinQ VIP",
-        "text": "Tennis intelligence for a smarter tomorrow.",
+        "text": "Prémiové predikcie. Hlbšie dáta. Väčší prehľad.",
         "button_text": "Zobraziť plány",
         "link": "#account",
         "route": "account",
         "theme": "gold",
         "icon": "♛",
-        "benefit_1_title": "Prémiové predikcie",
-        "benefit_1_text": "Hlbšie dáta. Väčší prehľad.",
-        "benefit_2_title": "Pokročilé modely",
-        "benefit_2_text": "Viac než len štatistiky.",
-        "benefit_3_title": "Detailné štatistiky",
-        "benefit_3_text": "Kontext v každom zápase.",
+        "benefit_1_title": "Pokročilé modely",
+        "benefit_1_text": "Viac predikcií každý deň",
+        "benefit_2_title": "Detailné štatistiky",
+        "benefit_2_text": "Hlbší kontext zápasu",
+        "benefit_3_title": "Exkluzívna komunita",
+        "benefit_3_text": "Pre aktívnych členov",
         "enabled": true,
         "show_copy": true,
         "image_url": "",
@@ -2184,9 +2184,7 @@
         "ad_hidden_fallback": "internal",
         "type": "promo",
         "sponsored": false,
-        "plan_id": "",
-        "benefit_4_title": "Exkluzívna komunita",
-        "benefit_4_text": "Diskusie. Insighty. Výhoda."
+        "plan_id": ""
       },
       "watermark": {
         "enabled": false,
@@ -3341,16 +3339,18 @@
     }
   },
   "header_cta": {
-    "enabled": false,
-    "slot_count": 0
+    "label": "HEADER CTA / TELEGRAM",
+    "enabled": true,
+    "slot_count": 3,
+    "mobile_mode": "carousel"
   },
   "hero_banner": {
     "label": "MAIN ROTATING BANNER",
     "enabled": true,
-    "slot_count": 1,
-    "rotation_seconds": 12,
-    "auto_rotate": false,
-    "show_dots": false,
+    "slot_count": 3,
+    "rotation_seconds": 8,
+    "auto_rotate": true,
+    "show_dots": true,
     "pause_on_hover": true
   },
   "rss": {
@@ -3401,16 +3401,5 @@
         "order": 105
       }
     ]
-  },
-  "notifications": {
-    "enabled": true,
-    "default_levels": [
-      "elite",
-      "legend",
-      "goat"
-    ],
-    "messages": [],
-    "label": "BlinQ Insights",
-    "eyebrow": "BLINQ PRIVATE FEED"
   }
 }
