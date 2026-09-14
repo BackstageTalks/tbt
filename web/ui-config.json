@@ -2915,7 +2915,7 @@
       "expand_rows": 20,
       "tabs": {
         "daily": {
-          "label": "Daily Picks",
+          "label": "Prehľad",
           "enabled": true,
           "plans": {
             "trial": {
@@ -3155,7 +3155,7 @@
           }
         },
         "top": {
-          "label": "Top tipy",
+          "label": "TOP",
           "enabled": true,
           "plans": {
             "trial": {

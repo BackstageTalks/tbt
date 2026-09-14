@@ -294,3 +294,98 @@ body#blinqPremium .result-tag{font-size:7px!important;padding:3px 6px!important;
 .admin-level-rule-caption b{color:#bba4ff!important}
 @media(max-width:1180px){.admin-tabs{grid-template-columns:repeat(4,minmax(135px,1fr))!important}}
 @media(max-width:760px){.daily-hub-table td{height:74px!important;padding:8px 11px!important;font-size:12px!important}.hub-tournament-logo,.hub-tour-logo{width:46px!important;height:46px!important;flex-basis:46px!important}.hub-avatar{width:38px!important;height:38px!important;flex-basis:38px!important}.hub-player-copy>b{font-size:11.5px!important}.hub-tournament-copy b{font-size:12px!important}.admin-tabs{display:flex!important;overflow-x:auto!important;gap:6px!important}.admin-tabs button{flex:0 0 145px!important}}
+
+
+/* v6.7.1 account / membership polish */
+body#blinqPremium .hub-logo-code.single{display:grid!important;place-items:center!important;width:100%!important;height:100%!important}
+body#blinqPremium .hub-logo-code.single b{font-size:12px!important;letter-spacing:.08em!important;line-height:1.05!important}
+body#blinqPremium .hub-logo-code.single small{display:none!important}
+
+body#blinqPremium .account-profile-head{grid-template-columns:auto minmax(0,1fr) auto!important;align-items:center!important}
+body#blinqPremium .account-profile-head-actions{display:grid!important;gap:10px!important;justify-items:end!important}
+body#blinqPremium .account-head-buttons{display:flex!important;gap:8px!important;flex-wrap:wrap!important;justify-content:flex-end!important}
+body#blinqPremium .account-profile-head h2,body#blinqPremium .account-access-card h2{font-size:24px!important;line-height:1.1!important}
+body#blinqPremium .account-profile-head p,body#blinqPremium .account-access-status{font-size:13px!important}
+body#blinqPremium .account-card-kicker{font-size:11px!important}
+body#blinqPremium .account-profile-form{grid-template-columns:minmax(0,1fr) 190px!important;gap:14px!important}
+body#blinqPremium .account-profile-form label{font-size:12px!important}
+body#blinqPremium .account-profile-form input,body#blinqPremium .account-profile-form select{height:46px!important;font-size:14px!important}
+body#blinqPremium .account-profile-form .form-message{grid-column:1 / -1!important;font-size:12px!important;min-height:20px!important}
+
+body#blinqPremium .account-modal-summary{grid-template-columns:auto minmax(0,1fr) auto auto auto!important}
+body#blinqPremium .account-modal-summary strong{font-size:20px!important}
+body#blinqPremium .account-modal-summary span{font-size:12px!important}
+body#blinqPremium .account-modal-profile summary{font-size:12px!important}
+body#blinqPremium .account-modal-profile form{grid-template-columns:minmax(0,1fr) 180px!important;align-items:end!important}
+body#blinqPremium .account-modal-profile label{font-size:11px!important}
+body#blinqPremium .account-modal-profile input,body#blinqPremium .account-modal-profile select{height:40px!important;font-size:14px!important}
+body#blinqPremium .account-modal-profile .form-message{grid-column:1 / -1!important;font-size:12px!important;min-height:18px!important}
+
+body#blinqPremium .account-plan-grid{display:grid!important;grid-template-columns:repeat(6,minmax(0,1fr))!important;gap:14px!important;align-items:stretch!important}
+body#blinqPremium .account-plan-grid>.membership-card{grid-column:span 2!important;max-width:none!important;min-width:0!important;min-height:236px!important;padding:18px!important;gap:12px!important}
+body#blinqPremium .account-plan-grid>.membership-card.plan-legend{grid-column:2 / span 2!important}
+body#blinqPremium .account-plan-grid>.membership-card.plan-goat{grid-column:4 / span 2!important}
+body#blinqPremium .membership-card-copy small{font-size:12px!important}
+body#blinqPremium .membership-card-copy strong{font-size:16px!important;line-height:1.2!important}
+body#blinqPremium .membership-card-copy p{font-size:13px!important;line-height:1.58!important;min-height:62px!important}
+body#blinqPremium .membership-cta,body#blinqPremium .membership-current,body#blinqPremium .membership-unavailable{min-height:42px!important;font-size:13px!important}
+body#blinqPremium .membership-badge{font-size:10px!important}
+
+body#blinqPremium .plan-avatar-pair{position:relative!important;display:block!important;width:88px!important;height:56px!important}
+body#blinqPremium .plan-avatar-chip{position:absolute!important;top:0!important;left:0!important;width:52px!important;height:52px!important;border-radius:50%!important;overflow:hidden!important;border:2px solid rgba(47,77,104,.95)!important;background:#07131f!important;box-shadow:0 12px 28px rgba(0,0,0,.24)!important}
+body#blinqPremium .plan-avatar-chip.is-back{left:34px!important;top:4px!important;z-index:0!important;opacity:.96!important}
+body#blinqPremium .plan-avatar-chip img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important}
+body#blinqPremium .plan-avatar-pair.plan-goat .plan-avatar-chip,.plan-avatar-pair.plan-legend .plan-avatar-chip{border-color:rgba(164,128,38,.95)!important}
+
+@media (max-width: 980px){
+  body#blinqPremium .account-profile-head{grid-template-columns:auto 1fr!important}
+  body#blinqPremium .account-profile-head-actions{grid-column:1 / -1!important;justify-items:start!important}
+  body#blinqPremium .account-head-buttons{justify-content:flex-start!important}
+  body#blinqPremium .account-modal-summary{grid-template-columns:auto 1fr!important}
+  body#blinqPremium .account-modal-summary .btn{grid-column:auto!important}
+  body#blinqPremium .account-modal-profile form{grid-template-columns:1fr!important}
+  body#blinqPremium .account-plan-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body#blinqPremium .account-plan-grid>.membership-card,body#blinqPremium .account-plan-grid>.membership-card.plan-legend,body#blinqPremium .account-plan-grid>.membership-card.plan-goat{grid-column:auto!important}
+}
+@media (max-width: 560px){
+  body#blinqPremium .account-profile-form{grid-template-columns:1fr!important}
+  body#blinqPremium .account-plan-grid{grid-template-columns:1fr!important}
+}
+
+
+/* v6.7.2 headline / logo / modal alignment / membership grid */
+body#blinqPremium .brand{position:relative!important;overflow:hidden!important;align-items:flex-end!important}
+body#blinqPremium .brand-lockup-header{position:relative!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;min-height:54px!important;width:100%!important}
+body#blinqPremium .brand-lockup-header img{width:112px!important;max-height:42px!important;margin-top:-2px!important}
+body#blinqPremium .brand-lockup-header .brand-tagline{position:absolute!important;left:50%!important;bottom:2px!important;transform:translateX(-50%)!important;max-width:132px!important;margin:0!important;font-size:5.1px!important;line-height:1.1!important;letter-spacing:.14em!important;white-space:nowrap!important}
+
+body#blinqPremium .daily-title-group h2{font-size:24px!important}
+body#blinqPremium .daily-title-group h2 span{display:inline!important}
+
+body#blinqPremium .account-dialog .dialog-close{position:absolute!important;top:16px!important;right:16px!important;float:none!important;margin:0!important;display:grid!important;place-items:center!important;width:38px!important;height:38px!important;border-radius:50%!important;font-size:24px!important;line-height:1!important}
+body#blinqPremium .account-modal-head{padding-right:64px!important}
+body#blinqPremium .account-modal-profile{border:1px solid rgba(35,78,101,.9)!important;border-radius:16px!important;background:rgba(7,24,37,.6)!important;padding:10px 14px 14px!important}
+body#blinqPremium .account-modal-profile summary{cursor:pointer!important;font-size:13px!important;font-weight:800!important;list-style:none!important}
+body#blinqPremium .account-modal-profile summary::-webkit-details-marker{display:none!important}
+body#blinqPremium .account-modal-profile form{margin-top:14px!important}
+body#blinqPremium .account-modal-profile input::placeholder{color:#8da2b2!important}
+body#blinqPremium .account-modal-plan{grid-template-columns:72px 1fr auto!important;gap:14px!important;align-items:center!important}
+body#blinqPremium .account-modal-plan strong{font-size:16px!important}
+body#blinqPremium .account-modal-plan span{font-size:12px!important;line-height:1.45!important}
+body#blinqPremium .account-modal-plan a,body#blinqPremium .account-modal-plan b,body#blinqPremium .account-modal-plan em{font-size:12px!important;white-space:nowrap!important}
+
+body#blinqPremium .account-plan-grid{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+body#blinqPremium .account-plan-grid>.membership-card{grid-column:span 2!important;min-height:246px!important}
+body#blinqPremium .account-plan-grid>.membership-card.plan-goat{grid-column:3 / span 2!important}
+body#blinqPremium .plan-avatar-pair{width:98px!important;height:64px!important}
+body#blinqPremium .plan-avatar-chip{width:60px!important;height:60px!important}
+body#blinqPremium .plan-avatar-chip.is-back{left:38px!important;top:4px!important}
+body#blinqPremium .membership-card-copy p{min-height:70px!important}
+
+body#blinqPremium .hub-player-meta .hub-flag{font-size:14px!important;line-height:1!important;display:inline-flex!important;align-items:center!important}
+
+@media(max-width:760px){
+  body#blinqPremium .brand-lockup-header img{width:84px!important;max-height:31px!important}
+  body#blinqPremium .brand-lockup-header .brand-tagline{max-width:88px!important;font-size:3.6px!important;bottom:1px!important}
+  body#blinqPremium .daily-title-group h2{font-size:18px!important}
+}

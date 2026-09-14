@@ -1,11 +1,48 @@
 {
-  "schema": 2,
+  "schema": 3,
   "currency": "EUR",
   "plans": {
-    "rookie": {"payment_url": "", "price": "", "billing_label": ""},
-    "pro": {"payment_url": "", "price": "", "billing_label": ""},
-    "elite": {"payment_url": "", "price": "", "billing_label": ""},
-    "legend": {"payment_url": "", "price": "", "billing_label": ""},
-    "goat": {"payment_url": "", "price": "", "billing_label": "", "invite_url": ""}
+    "rookie": {
+      "enabled": true,
+      "label": "BlinQ ROOKIE",
+      "card_title": "Ochutnávka BlinQ",
+      "description": "Základný prístup pre nových používateľov a rýchly úvod do denného feedu.",
+      "cta_label": "Vybrať Rookie",
+      "payment_url": ""
+    },
+    "pro": {
+      "enabled": true,
+      "label": "BlinQ PRO",
+      "card_title": "Plný denný prehľad",
+      "description": "Lepší Rookie s plným dashboardom a denným prístupom k hlavným predikciám.",
+      "cta_label": "Upgrade na PRO",
+      "payment_url": "https://backstagetalks.tipsterpage.com/sk0yd2u0/sk"
+    },
+    "elite": {
+      "enabled": true,
+      "label": "BlinQ ELITE",
+      "card_title": "Premium vstup",
+      "description": "VIP skupina, See All a Overview. Tu začína premium úroveň BlinQ.",
+      "cta_label": "Upgrade na ELITE",
+      "payment_url": "https://backstagetalks.tipsterpage.com/qYBLxlL0/sk"
+    },
+    "legend": {
+      "enabled": true,
+      "label": "BlinQ LEGEND",
+      "card_title": "Dlhodobý premium prístup",
+      "description": "Rozšírený ELITE prístup s výsledkami a pokročilými štatistikami výkonu.",
+      "cta_label": "Otvoriť Legend",
+      "payment_url": "https://t.me/+5ANwTY1STQExOTY0"
+    },
+    "goat": {
+      "enabled": true,
+      "label": "BlinQ GOAT",
+      "card_title": "Súkromná najvyššia úroveň",
+      "description": "Doživotný prístup, všetky funkcie BlinQ a partner/reklamné výhody pre vybraných členov.",
+      "cta_label": "Požiadať o prístup",
+      "invite_only": true,
+      "invite_url": "",
+      "payment_url": ""
+    }
   }
 }
