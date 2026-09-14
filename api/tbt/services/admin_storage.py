@@ -1,7 +1,7 @@
 """Persistent admin UI configuration and banner analytics.
 
-The store uses Azure Table Storage, not Firebase. Firebase Auth is the runtime
-identity provider; tennis history is kept outside the identity layer.
+The store prefers Azure Table Storage and can fall back to Firebase Firestore.
+Firebase Auth remains the runtime identity provider; tennis history stays outside the identity layer.
 On Azure Functions, AzureWebJobsStorage is used automatically unless
 BLINQ_ADMIN_STORAGE_CONNECTION_STRING is supplied.
 """
@@ -24,7 +24,7 @@ class AdminStorageUnavailable(RuntimeError):
 UI_TABLE = "BlinQAdminConfig"
 ANALYTICS_TABLE = "BlinQBannerAnalytics"
 _VALID_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
-_VALID_BANNER_SLOT = re.compile(r"^(?:HEADER_BANNER_[1-4]|HERO_BANNER_[1-5]|CONTENT_(?:TOP|MID|BOTTOM)_[1-4]|SIDEBAR_PROMO_[1-3])$")
+_VALID_BANNER_SLOT = re.compile(r"^(?:HEADER_BANNER_[1-4]|HERO_BANNER_[1-5]|CONTENT_(?:TOP|MID|BOTTOM)_[1-4]|SIDEBAR_PROMO_[1-3]|VIP_RAIL)$")
 
 
 def _valid_destination(value: object, *, allow_internal: bool = True) -> bool:
@@ -441,7 +441,7 @@ def validate_ui_config(payload: object) -> dict:
     if not isinstance(hero, dict) or not isinstance(hero.get("enabled", True), bool):
         raise ValueError("Invalid main banner configuration")
     hero_count = hero.get("slot_count", 0)
-    if not isinstance(hero_count, int) or not 0 <= hero_count <= 4:
+    if not isinstance(hero_count, int) or not 0 <= hero_count <= 5:
         raise ValueError("Invalid main banner slide count")
     rotation = hero.get("rotation_seconds", 10)
     if not isinstance(rotation, (int, float)) or not 3 <= float(rotation) <= 300:

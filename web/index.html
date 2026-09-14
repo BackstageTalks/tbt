@@ -6,13 +6,13 @@
   <meta name="theme-color" content="#05111f" />
   <title>BlinQ · Tennis Intelligence</title>
   <link rel="icon" href="/assets/blinq_favi.png" type="image/png" />
-  <link rel="stylesheet" href="/styles.css?v=676" media="not all" />
-  <link rel="stylesheet" href="/responsive.css?v=676" media="not all" />
-  <link rel="stylesheet" href="/premium.css?v=676" media="not all" />
-  <link rel="stylesheet" href="/blinq.css?v=676" />
-  <script defer src="/auth.js?v=676"></script>
-  <script defer src="/responsive.js?v=676"></script>
-  <script defer src="/app.js?v=676"></script>
+  <link rel="stylesheet" href="/styles.css?v=677" media="not all" />
+  <link rel="stylesheet" href="/responsive.css?v=677" media="not all" />
+  <link rel="stylesheet" href="/premium.css?v=677" media="not all" />
+  <link rel="stylesheet" href="/blinq.css?v=677" />
+  <script defer src="/auth.js?v=677"></script>
+  <script defer src="/responsive.js?v=677"></script>
+  <script defer src="/app.js?v=677"></script>
 </head>
 <body id="blinqPremium" class="blinq-home">
   <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
@@ -50,12 +50,10 @@
         <section id="headerFeatureStrip" class="feature-strip" aria-label="BlinQ promo"></section>
 
         <div class="header-actions">
-          <button id="topUpgradeButton" class="plans-button" type="button" data-route="account"><span>✦</span><strong id="topUpgradeLabel">Plány</strong></button>
-          <button id="adminQuickButton" class="admin-quick" type="button" data-route="admin" hidden>Admin</button>
           <div id="profileShell" class="profile-shell">
             <button id="profileButton" class="profile-button" type="button" aria-label="Účet">
               <span class="avatar" id="avatar">B</span>
-              <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small><span id="profilePlanIcon">◇</span> <span id="profilePlan">Člen</span> · <span id="memberStatus">Aktívne</span></small></span>
+              <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small class="profile-meta-primary"><span id="profileTelegram">TG —</span> · <span id="profilePlan">Člen</span></small><small class="profile-meta-secondary"><span id="profileRegisteredEmail">—</span> · <span id="profileRemaining">—</span></small><span id="profilePlanIcon" hidden>◇</span><span id="memberStatus" hidden>Aktívne</span></span>
             </button>
             <button id="profileMenuToggle" class="profile-toggle" type="button" aria-controls="profileMenu" aria-expanded="false">⌄</button>
             <div id="profileMenu" class="profile-menu" hidden>
@@ -112,18 +110,10 @@
 
       <section id="routePanel" class="route-panel" hidden></section>
 
-      <section class="vip-rail">
-        <div class="vip-brand"><span>♛</span><div><strong>BlinQ VIP</strong><small>Prémiové predikcie. Hlbšie dáta. Väčší prehľad.</small></div></div>
-        <div class="vip-benefits">
-          <div><span>⌁</span><div><strong>Pokročilé modely</strong><small>Viac predikcií každý deň</small></div></div>
-          <div><span>◫</span><div><strong>Detailné štatistiky</strong><small>Hlbší kontext zápasu</small></div></div>
-          <div><span>◎</span><div><strong>Exkluzívna komunita</strong><small>Pre aktívnych členov</small></div></div>
-        </div>
-        <a class="vip-cta" href="#account" data-route="account">Zobraziť plány →</a>
-      </section>
+      <section id="vipRail" class="vip-rail" aria-label="BlinQ členstvo"></section>
 
       <footer class="site-footer">
-        <div class="footer-left"><img src="/assets/blinq_logo.svg" alt="BlinQ" /><span>© 2026 BlinQ</span><nav id="footerLearnNavigation"></nav></div>
+        <div class="footer-left"><img src="/assets/blinq_logo.svg" alt="BlinQ" /><span id="footerCopyright">© 2026 BlinQ</span><nav id="footerLearnNavigation"></nav></div>
         <div class="footer-right"><span class="system-status"><i></i><strong>Všetky systémy funkčné</strong><small id="footerModelState">Produkčný feed</small></span><nav id="footerLanguages" class="languages"><span>JAZYK</span><a href="?lang=sk#predictions" data-lang="sk" class="active">SK</a><a href="?lang=cz#predictions" data-lang="cz">CZ</a><a href="?lang=en#predictions" data-lang="en">EN</a></nav></div>
       </footer>
     </main>

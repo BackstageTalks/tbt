@@ -46,10 +46,12 @@ def test_access_claim_update_preserves_profile_fallback_claims():
 
 def test_public_static_copy_avoids_slovak_tipy_and_bety():
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8").lower()
+    ui = (ROOT / "web" / "ui-config.json").read_text(encoding="utf-8").lower()
     assert "tipy" not in html
     assert "bety" not in html
     assert "naša predikcia" in html
-    assert "prémiové predikcie" in html
+    # The VIP rail is JSON/admin managed in 6.7.7 instead of hardcoded in index.html.
+    assert "prémiové predikcie" in ui
 
 
 def test_admin_route_has_single_page_title_source():

@@ -720,3 +720,92 @@ body#blinqPremium .state-card,body#blinqPremium .route-sub,body#blinqPremium .me
   body#blinqPremium .account-plan-grid{grid-template-columns:1fr!important}
   body#blinqPremium .account-plan-grid>.membership-card,body#blinqPremium .account-plan-grid>.membership-card.plan-legend,body#blinqPremium .account-plan-grid>.membership-card.plan-goat{grid-column:auto!important}
 }
+
+/* BlinQ 6.7.7 — strictly validated final visual corrections */
+body#blinqPremium .header-actions{display:flex!important;align-items:stretch!important;justify-content:flex-end!important;min-width:270px!important}
+body#blinqPremium .profile-shell{min-width:270px!important;max-width:320px!important;width:auto!important}
+body#blinqPremium .profile-copy strong{max-width:180px!important}
+
+body#blinqPremium .account-dialog{max-width:1040px!important;width:min(1040px,calc(100vw - 32px))!important;overflow-x:hidden!important}
+body#blinqPremium .account-modal-main-card{display:grid!important;grid-template-columns:190px minmax(0,1fr) 210px 150px auto!important;grid-template-areas:"access facts telegram avatar save" "access facts message message message"!important;gap:12px!important;align-items:end!important;padding:18px!important;overflow:hidden!important}
+body#blinqPremium .account-modal-access{grid-area:access!important;align-self:stretch!important;min-width:0!important}
+body#blinqPremium .account-profile-facts{grid-area:facts!important;display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important;min-width:0!important}
+body#blinqPremium .account-profile-facts>span{display:block!important;min-width:0!important;padding:8px 10px!important;border:1px solid rgba(31,75,98,.7)!important;border-radius:9px!important;background:rgba(4,17,28,.42)!important}
+body#blinqPremium .account-profile-facts small{display:block!important;font-size:8px!important;letter-spacing:.08em!important;color:#6f93a8!important;text-transform:uppercase!important}
+body#blinqPremium .account-profile-facts strong{display:block!important;margin-top:3px!important;font-size:11px!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;color:#eef7fb!important}
+body#blinqPremium .account-inline-telegram{grid-area:telegram!important;min-width:0!important}
+body#blinqPremium .account-inline-avatar{grid-area:avatar!important;min-width:0!important}
+body#blinqPremium .account-profile-save{grid-area:save!important;min-width:118px!important;height:42px!important}
+body#blinqPremium .account-inline-message{grid-area:message!important;margin:0!important;min-height:16px!important}
+body#blinqPremium .account-modal-security{margin-top:10px!important;padding:9px 12px!important}
+body#blinqPremium .account-modal-section-title{margin-bottom:9px!important}
+body#blinqPremium .account-modal-section-title h3{margin:0!important;font-size:17px!important}
+
+/* Modal plans: exactly 2 + 2 + centered GOAT. */
+body#blinqPremium .account-modal-plans{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:11px!important;margin-top:16px!important;overflow:hidden!important}
+body#blinqPremium .account-modal-plans>.account-modal-section-title{grid-column:1/-1!important}
+body#blinqPremium .account-modal-plan{display:grid!important;grid-template-columns:94px minmax(0,1fr)!important;grid-template-rows:auto auto!important;gap:10px 12px!important;min-width:0!important;min-height:126px!important;padding:14px!important;overflow:hidden!important}
+body#blinqPremium .account-modal-plan.plan-goat{grid-column:1/-1!important;width:calc(50% - 5.5px)!important;justify-self:center!important}
+body#blinqPremium .account-modal-plan .plan-avatar-pair{grid-row:1/3!important;width:90px!important;height:66px!important;align-self:center!important}
+body#blinqPremium .account-modal-plan .plan-avatar-chip{width:62px!important;height:62px!important}
+body#blinqPremium .account-modal-plan .plan-avatar-chip.is-back{left:28px!important;top:4px!important}
+body#blinqPremium .account-modal-plan-copy{min-width:0!important;align-self:end!important}
+body#blinqPremium .account-modal-plan-copy strong{font-size:14px!important;white-space:normal!important;overflow:visible!important}
+body#blinqPremium .account-modal-plan-copy span{font-size:9.5px!important;line-height:1.35!important;-webkit-line-clamp:2!important}
+body#blinqPremium .account-modal-plan .account-plan-upgrade,body#blinqPremium .account-modal-plan .account-plan-current{grid-column:2!important;grid-row:2!important;justify-self:start!important;align-self:start!important;max-width:100%!important;min-width:0!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body#blinqPremium .account-plan-upgrade.is-disabled,body#blinqPremium .membership-cta.is-disabled{opacity:.46!important;cursor:not-allowed!important}
+
+/* Full account page plans: also 2 + 2 + centered GOAT, no accidental 3-column row. */
+body#blinqPremium .account-plan-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:13px!important}
+body#blinqPremium .account-plan-grid>.membership-card{grid-column:auto!important;min-width:0!important;min-height:224px!important}
+body#blinqPremium .account-plan-grid>.membership-card.plan-goat{grid-column:1/-1!important;width:calc(50% - 6.5px)!important;justify-self:center!important}
+body#blinqPremium .membership-card .plan-avatar-pair{width:106px!important;height:70px!important}
+body#blinqPremium .membership-card .plan-avatar-chip{width:66px!important;height:66px!important}
+body#blinqPremium .membership-card .plan-avatar-chip.is-back{left:40px!important;top:4px!important}
+
+/* VIP rail: the entire visual is now JSON/admin-managed, including background and copy. */
+body#blinqPremium .vip-rail{position:relative!important;display:block!important;overflow:hidden!important;padding:0!important;min-height:66px!important}
+body#blinqPremium .vip-rail[hidden]{display:none!important}
+body#blinqPremium .vip-rail-picture{position:absolute!important;inset:0!important;z-index:0!important;display:block!important}
+body#blinqPremium .vip-rail-picture img{width:100%!important;height:100%!important;object-fit:cover!important;opacity:.42!important}
+body#blinqPremium .vip-rail-content{position:relative!important;z-index:1!important;display:grid!important;grid-template-columns:1.3fr 3fr auto!important;gap:14px!important;align-items:center!important;padding:9px 10px!important;min-height:66px!important;background:linear-gradient(90deg,rgba(27,22,5,.92),rgba(21,21,9,.84) 60%,rgba(33,25,4,.9))!important}
+body#blinqPremium .vip-cta.is-link-locked{filter:saturate(.65)!important}
+
+/* Admin 6.7.7: keep editors readable and bounded instead of one long dense strip. */
+body#blinqPremium .admin-banner-workspace{grid-template-columns:minmax(235px,280px) minmax(0,1fr)!important;gap:16px!important}
+body#blinqPremium .admin-banner-editor{min-width:0!important;overflow:hidden!important}
+body#blinqPremium .admin-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:11px!important}
+body#blinqPremium .admin-form-grid .span-2{grid-column:1/-1!important}
+body#blinqPremium .admin-banner-library{max-height:calc(100vh - 210px)!important;overflow:auto!important;align-self:start!important;position:sticky!important;top:12px!important}
+body#blinqPremium .admin-banner-library-card strong{white-space:normal!important;line-height:1.25!important}
+body#blinqPremium .admin-banner-editor input,body#blinqPremium .admin-banner-editor select,body#blinqPremium .admin-banner-editor textarea{min-height:39px!important;font-size:12px!important}
+body#blinqPremium .admin-accounts-grid input,body#blinqPremium .admin-accounts-grid select{min-height:39px!important;font-size:12px!important}
+
+@media(max-width:1100px){
+  body#blinqPremium .header-actions{min-width:0!important}
+  body#blinqPremium .profile-shell{min-width:230px!important}
+  body#blinqPremium .account-modal-main-card{grid-template-columns:170px 1fr 1fr!important;grid-template-areas:"access facts facts" "telegram avatar save" "message message message"!important}
+  body#blinqPremium .vip-rail-content{grid-template-columns:1fr!important}
+  body#blinqPremium .vip-cta{justify-self:end!important}
+  body#blinqPremium .admin-banner-workspace{grid-template-columns:1fr!important}
+  body#blinqPremium .admin-banner-library{position:static!important;max-height:none!important}
+}
+@media(max-width:760px){
+  body#blinqPremium .profile-shell{min-width:52px!important;width:52px!important}
+  body#blinqPremium .account-dialog{width:calc(100vw - 16px)!important}
+  body#blinqPremium .account-modal-main-card{grid-template-columns:1fr!important;grid-template-areas:"access" "facts" "telegram" "avatar" "save" "message"!important}
+  body#blinqPremium .account-profile-facts{grid-template-columns:1fr 1fr!important}
+  body#blinqPremium .account-modal-plans{grid-template-columns:1fr!important}
+  body#blinqPremium .account-modal-plan.plan-goat{grid-column:auto!important;width:100%!important}
+  body#blinqPremium .account-plan-grid{grid-template-columns:1fr!important}
+  body#blinqPremium .account-plan-grid>.membership-card.plan-goat{grid-column:auto!important;width:100%!important}
+  body#blinqPremium .vip-rail-content{grid-template-columns:1fr auto!important}
+  body#blinqPremium .vip-benefits{display:none!important}
+  body#blinqPremium .admin-form-grid{grid-template-columns:1fr!important}
+  body#blinqPremium .admin-form-grid .span-2{grid-column:auto!important}
+}
+body#blinqPremium .profile-copy{min-width:0!important;max-width:220px!important}
+body#blinqPremium .profile-copy strong{font-size:11px!important;line-height:1.2!important}
+body#blinqPremium .profile-copy small{display:block!important;max-width:210px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body#blinqPremium .profile-meta-primary{color:#b8cada!important}
+body#blinqPremium .profile-meta-secondary{color:#6f8da0!important;font-size:8.5px!important}

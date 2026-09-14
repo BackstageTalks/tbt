@@ -6,19 +6,19 @@ ROOT = Path(__file__).resolve().parents[1]
 def read(path):
     return (ROOT / path).read_text(encoding="utf-8")
 
-def test_release_and_cache_are_6600():
+def test_release_and_cache_are_677():
     cfg = json.loads(read("web/ui-config.json"))
-    assert cfg["ui_revision"] == "6.7.6"
-    assert cfg["revision"] == "6.7.6"
-    assert 'RELEASE = "6.7.6"' in read("api/function_app.py")
+    assert cfg["ui_revision"] == "6.7.7"
+    assert cfg["revision"] == "6.7.7"
+    assert 'RELEASE = "6.7.7"' in read("api/function_app.py")
     html = read("web/index.html")
-    assert '/blinq.css?v=676' in html
+    assert '/blinq.css?v=677' in html
     for asset in ("auth.js", "responsive.js", "app.js"):
-        assert f'/{asset}?v=676' in html
+        assert f'/{asset}?v=677' in html
 
 def test_new_web_uses_one_design_system_not_legacy_css_stack():
     html = read("web/index.html")
-    assert '/blinq.css?v=676' in html
+    assert '/blinq.css?v=677' in html
     assert 'media="not all"' in html
     assert "premium-v2.css?v=" not in html
     assert "final-ui.css?v=" not in html
@@ -57,7 +57,7 @@ def test_account_is_modal_and_admin_controls_are_reachable():
     app = read("web/app.js")
     assert 'id="accountDialog"' in html
     assert "openAccountDialog()" in app
-    assert "adminQuickButton" in html
+    assert "adminQuickButton" not in html
     assert "profileAdminLink" in html
     assert "publishUiConfig" in app
     assert "Bannery a odkazy" in app

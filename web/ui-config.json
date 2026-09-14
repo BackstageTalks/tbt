@@ -105,37 +105,37 @@
     "learn": [
       {
         "id": "how_blinq_works",
-        "enabled": true,
-        "label": "How BlinQ Works",
+        "label": "Ako funguje BlinQ",
         "href": "#how_blinq_works",
+        "enabled": true,
         "order": 101
       },
       {
         "id": "methodology",
-        "enabled": true,
-        "label": "Methodology",
+        "label": "Metodika",
         "href": "#methodology",
+        "enabled": true,
         "order": 102
       },
       {
         "id": "model_data",
-        "enabled": true,
-        "label": "Model & Data",
+        "label": "Model a dáta",
         "href": "#model_data",
+        "enabled": true,
         "order": 103
       },
       {
         "id": "faq",
-        "enabled": true,
         "label": "FAQ",
         "href": "#faq",
+        "enabled": true,
         "order": 104
       },
       {
         "id": "responsible_use",
-        "enabled": true,
-        "label": "Responsible Use",
+        "label": "Zodpovedné používanie",
         "href": "#responsible_use",
+        "enabled": true,
         "order": 105
       }
     ]
@@ -149,7 +149,7 @@
       "content": {
         "eyebrow": "COMMUNITY",
         "headline": "Join our Telegram Community",
-        "text": "News · Picks · Discussions",
+        "text": "News · Predictions · Discussions",
         "link": "",
         "route": "",
         "theme": "blue",
@@ -1143,12 +1143,12 @@
       }
     },
     "SIDEBAR_ACE": {
-      "label": "Ace Picks",
+      "label": "Ace Predictions",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 6,
       "content": {
-        "label": "Ace Picks",
+        "label": "Ace Predictions",
         "route": "ace",
         "icon": "♠"
       },
@@ -1168,12 +1168,12 @@
       }
     },
     "SIDEBAR_SG": {
-      "label": "S/G Picks",
+      "label": "S/G Predictions",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 7,
       "content": {
-        "label": "S/G Picks",
+        "label": "S/G Predictions",
         "route": "sg",
         "icon": "▥"
       },
@@ -1447,12 +1447,12 @@
       }
     },
     "ACE_PICKS_PANEL": {
-      "label": "Ace Picks panel",
+      "label": "Ace Predictions panel",
       "zone": "predictions",
       "kind": "panel",
       "order": 80,
       "content": {
-        "label": "Ace Picks panel"
+        "label": "Ace Predictions panel"
       },
       "watermark": {
         "enabled": false,
@@ -1470,12 +1470,12 @@
       }
     },
     "SG_PICKS_PANEL": {
-      "label": "S/G Picks panel",
+      "label": "S/G Predictions panel",
       "zone": "predictions",
       "kind": "panel",
       "order": 90,
       "content": {
-        "label": "S/G Picks panel"
+        "label": "S/G Predictions panel"
       },
       "watermark": {
         "enabled": false,
@@ -1765,7 +1765,7 @@
       }
     },
     "DOUBLES_PANEL": {
-      "label": "Doubles Picks panel",
+      "label": "Doubles Predictions panel",
       "zone": "dashboard",
       "kind": "panel",
       "order": 75,
@@ -1942,7 +1942,7 @@
         "eyebrow": "COMMUNITY",
         "headline": "Join the BlinQ",
         "accent_text": "Telegram Community",
-        "text": "News · Picks · Discussions",
+        "text": "News · Predictions · Discussions",
         "button_text": "JOIN",
         "theme": "blue",
         "icon": "",
@@ -2130,6 +2130,68 @@
         "preset": "violet",
         "position": "bottom-right",
         "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
+    },
+    "VIP_RAIL": {
+      "label": "BlinQ VIP membership rail",
+      "zone": "vip_rail",
+      "kind": "large_banner",
+      "order": 95,
+      "content": {
+        "eyebrow": "BLINQ ČLENSTVO",
+        "headline": "BlinQ VIP",
+        "text": "Prémiové predikcie. Hlbšie dáta. Väčší prehľad.",
+        "button_text": "Zobraziť plány",
+        "link": "#account",
+        "route": "account",
+        "theme": "gold",
+        "icon": "♛",
+        "benefit_1_title": "Pokročilé modely",
+        "benefit_1_text": "Viac predikcií každý deň",
+        "benefit_2_title": "Detailné štatistiky",
+        "benefit_2_text": "Hlbší kontext zápasu",
+        "benefit_3_title": "Exkluzívna komunita",
+        "benefit_3_text": "Pre aktívnych členov",
+        "enabled": true,
+        "show_copy": true,
+        "image_url": "",
+        "mobile_image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "active_from": "",
+        "active_until": "",
+        "campaign_id": "",
+        "advertiser_id": "blinq",
+        "ad_hidden_fallback": "internal",
+        "type": "promo",
+        "sponsored": false,
+        "plan_id": ""
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "",
+        "preset": "gold",
+        "position": "bottom-right",
+        "opacity": 0.3,
         "size": 1.0
       },
       "access": {
@@ -2625,7 +2687,7 @@
         }
       },
       "ace": {
-        "label": "Ace Picks",
+        "label": "Ace Predictions",
         "panel_id": "acePanel",
         "sidebar_element": "SIDEBAR_ACE",
         "sidebar_enabled": true,
@@ -2678,7 +2740,7 @@
         }
       },
       "sg": {
-        "label": "S/G Picks",
+        "label": "S/G Predictions",
         "panel_id": "sgPanel",
         "sidebar_element": "SIDEBAR_SG",
         "sidebar_enabled": true,
@@ -2963,7 +3025,7 @@
           }
         },
         "value": {
-          "label": "Value Predictions",
+          "label": "Value",
           "enabled": true,
           "plans": {
             "trial": {
@@ -3011,7 +3073,7 @@
           }
         },
         "ace": {
-          "label": "Aces",
+          "label": "Esá",
           "enabled": true,
           "plans": {
             "trial": {
@@ -3059,7 +3121,7 @@
           }
         },
         "games": {
-          "label": "Games",
+          "label": "Gemy",
           "enabled": true,
           "plans": {
             "trial": {
@@ -3253,7 +3315,7 @@
       }
     }
   },
-  "ui_revision": "6.7.6",
+  "ui_revision": "6.7.7",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3298,5 +3360,46 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "6.7.6"
+  "revision": "6.7.7",
+  "footer": {
+    "copyright": "© 2026 BlinQ",
+    "system_status": "Všetky systémy funkčné",
+    "links": [
+      {
+        "id": "how_blinq_works",
+        "label": "Ako funguje BlinQ",
+        "href": "#how_blinq_works",
+        "enabled": true,
+        "order": 101
+      },
+      {
+        "id": "methodology",
+        "label": "Metodika",
+        "href": "#methodology",
+        "enabled": true,
+        "order": 102
+      },
+      {
+        "id": "model_data",
+        "label": "Model a dáta",
+        "href": "#model_data",
+        "enabled": true,
+        "order": 103
+      },
+      {
+        "id": "faq",
+        "label": "FAQ",
+        "href": "#faq",
+        "enabled": true,
+        "order": 104
+      },
+      {
+        "id": "responsible_use",
+        "label": "Zodpovedné používanie",
+        "href": "#responsible_use",
+        "enabled": true,
+        "order": 105
+      }
+    ]
+  }
 }
