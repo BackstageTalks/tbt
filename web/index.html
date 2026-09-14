@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="/responsive.css?v=678" media="not all" />
   <link rel="stylesheet" href="/premium.css?v=678" media="not all" />
   <link rel="stylesheet" href="/blinq.css?v=678" />
+  <link rel="stylesheet" href="/redesign-678.css?v=678" />
   <script defer src="/auth.js?v=678"></script>
   <script defer src="/responsive.js?v=678"></script>
   <script defer src="/app.js?v=678"></script>
@@ -38,7 +39,7 @@
       <div id="sidebarPromoZone"></div>
     </aside>
 
-    <header class="site-header dashboard-topbar">
+    <header class="site-header dashboard-topbar reference-topbar">
       <div class="header-top">
         <a class="brand" href="#predictions" data-route="predictions" aria-label="BlinQ home">
           <span class="brand-lockup brand-lockup-header">
@@ -48,6 +49,13 @@
         </a>
 
         <section id="headerFeatureStrip" class="feature-strip" aria-label="BlinQ promo"></section>
+        <nav class="reference-navigation" aria-label="Hlavná navigácia">
+          <a href="#predictions" data-route="predictions" class="active">Predikcie</a>
+          <a href="#results" data-route="results">Štatistiky</a>
+          <a href="#model_data" data-route="model_data">Modely</a>
+          <button type="button" data-open-insights>Komunita</button>
+          <a href="#account" data-route="account">BlinQ VIP</a>
+        </nav>
 
         <div class="header-actions">
           <button id="insightBell" class="insight-bell" type="button" aria-label="BlinQ Insights" aria-controls="insightDrawer" aria-expanded="false"><span aria-hidden="true" class="insight-bell-icon"><svg viewBox="0 0 24 24" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><b id="insightUnread" hidden>0</b></button>
@@ -111,7 +119,10 @@
             <section id="bannerMid" class="promo-zone info-banner-zone" aria-label="BlinQ info bannery"></section><span class="legacy-component-marker" data-component="intel-strip" hidden></span>
           </div>
           <aside id="dashboardRightRail" class="dashboard-right-rail" aria-label="BlinQ detail a insighty">
-            <div id="dashboardRightRailContent"></div>
+            <div id="dashboardSidebarDefault" class="dashboard-sidebar-default">
+              <div id="dashboardRightRailContent"></div>
+            </div>
+            <div id="dashboardSidebarMatch" class="dashboard-sidebar-match" hidden></div>
           </aside>
         </div>
       </div>

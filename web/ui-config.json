@@ -1874,23 +1874,25 @@
         "ad_hidden_fallback": "internal",
         "active_from": "",
         "active_until": "",
-        "image_url": "",
-        "mobile_image_url": "",
+        "image_url": "/assets/hero-reference-v678.webp",
+        "mobile_image_url": "/assets/hero-reference-v678.webp",
         "image_fit": "cover",
-        "image_position": "center",
+        "image_position": "center 35%",
         "creative_mode": "split",
         "show_copy": true,
         "sponsored": false,
-        "eyebrow": "BLINQ STATISTICAL ENGINE",
-        "headline": "Dáta. Analýza.",
-        "accent_text": "Lepšie rozhodnutia.",
-        "text": "Tenisová inteligencia, ktorá spája model, kontext a transparentné výsledky.",
+        "eyebrow": "DÁTA. KONTEXT. LEPŠIE ROZHODNUTIA.",
+        "headline": "Tennis intelligence",
+        "accent_text": "for a smarter tomorrow.",
+        "text": "BlinQ analyzuje stovky dátových signálov, aby ti priniesol presnejšie predikcie, hlbší kontext a reálne výhody.",
         "button_text": "",
-        "theme": "violet",
+        "theme": "green",
         "icon": "",
         "link": "",
         "route": "",
-        "plan_id": ""
+        "plan_id": "",
+        "legacy_copy_reference": "Dáta. Analýza.",
+        "legacy_accent_reference": "Lepšie rozhodnutia."
       },
       "watermark": {
         "enabled": false,
@@ -2165,12 +2167,12 @@
         "route": "account",
         "theme": "gold",
         "icon": "♛",
-        "benefit_1_title": "Pokročilé modely",
-        "benefit_1_text": "Viac predikcií každý deň",
-        "benefit_2_title": "Detailné štatistiky",
-        "benefit_2_text": "Hlbší kontext zápasu",
-        "benefit_3_title": "Exkluzívna komunita",
-        "benefit_3_text": "Pre aktívnych členov",
+        "benefit_1_title": "Prémiové predikcie",
+        "benefit_1_text": "Hlbšie dáta. Väčší prehľad.",
+        "benefit_2_title": "Pokročilé modely",
+        "benefit_2_text": "Viac než len štatistiky.",
+        "benefit_3_title": "Detailné štatistiky",
+        "benefit_3_text": "Kontext v každom zápase.",
         "enabled": true,
         "show_copy": true,
         "image_url": "",
@@ -2184,7 +2186,10 @@
         "ad_hidden_fallback": "internal",
         "type": "promo",
         "sponsored": false,
-        "plan_id": ""
+        "plan_id": "",
+        "benefit_4_title": "Exkluzívna komunita",
+        "benefit_4_text": "Diskusie. Insighty. Výhoda.",
+        "brand_logo": "/assets/blinq_logo.svg"
       },
       "watermark": {
         "enabled": false,
@@ -3340,8 +3345,8 @@
   },
   "header_cta": {
     "label": "HEADER CTA / TELEGRAM",
-    "enabled": true,
-    "slot_count": 3,
+    "enabled": false,
+    "slot_count": 0,
     "mobile_mode": "carousel"
   },
   "hero_banner": {
@@ -3401,5 +3406,27 @@
         "order": 105
       }
     ]
+  },
+  "notifications": {
+    "enabled": true,
+    "label": "BlinQ Insights",
+    "mode": "one_way",
+    "one_way": true,
+    "default_min_level": "elite",
+    "default_levels": [
+      "elite",
+      "legend",
+      "goat"
+    ],
+    "editable_levels": [
+      "rookie",
+      "pro",
+      "elite",
+      "legend",
+      "goat"
+    ],
+    "show_bell": true,
+    "allow_user_replies": false,
+    "read_tracking": true
   }
 }
