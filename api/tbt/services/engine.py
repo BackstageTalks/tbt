@@ -13,6 +13,7 @@ from .prediction_quality import coverage, subgroup_report
 from .data_quality import audit_history
 from .training import _enforce_rank_provenance
 from .publication import confirm_publication
+from .countries import normalize_country_code
 
 
 def event_id(match):
@@ -28,14 +29,20 @@ def _provider_player_country(payload, *, player1):
     side = next((payload.get(k) for k in keys if isinstance(payload.get(k), dict)), {})
     candidates = []
     if isinstance(side, dict):
-        candidates.extend([side.get("country_code"), side.get("countryCode"), side.get("countryAlpha2"), side.get("country_code2")])
+        candidates.extend([
+            side.get("country_code"), side.get("countryCode"), side.get("countryAlpha2"),
+            side.get("country_code2"), side.get("countryAlpha3"), side.get("country_code3"),
+        ])
         country = side.get("country")
         if isinstance(country, dict):
-            candidates.extend([country.get("alpha2"), country.get("code"), country.get("iso2"), country.get("countryCode")])
+            candidates.extend([
+                country.get("alpha2"), country.get("alpha3"), country.get("code"),
+                country.get("iso2"), country.get("iso3"), country.get("countryCode"),
+            ])
     for value in candidates:
-        text = str(value or "").strip().upper()
-        if len(text) == 2 and text.isalpha():
-            return text
+        normalized = normalize_country_code(value)
+        if normalized:
+            return normalized
     return ""
 
 

@@ -1146,11 +1146,13 @@ class FeatureBuilder:
             and humidity is not None
         )
 
+        # Static environment is known independently of weather.  Historical
+        # archive weather remains research-only until genuine pre-match forecast
+        # snapshots exist, but venue geometry/elevation is point-in-time safe.
         environment_known = float(
             current_lat is not None
             and current_lon is not None
             and current_alt is not None
-            and weather_known
         )
 
         # Raw weather is identical for both players and therefore cannot

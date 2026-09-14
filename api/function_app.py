@@ -31,6 +31,7 @@ from tbt.services.account_storage import (
 )
 from tbt.services.admin_storage import (
     AdminStorageUnavailable,
+    admin_storage_backend,
     banner_analytics_summary,
     load_runtime_ui_config,
     record_banner_event,
@@ -43,8 +44,8 @@ from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.7.0"
-API_VERSION = "3.6.0"
+RELEASE = "6.7.4"
+API_VERSION = "3.7.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
 # instance-local: durable analytics remains in Table Storage, while this only absorbs accidental
@@ -693,6 +694,47 @@ def feed(req):
         logging.exception("Serving feed unavailable")
         return response({"error": "feed_unavailable"}, 503)
 
+
+
+
+@app.route(route="v1/admin/diagnostics", methods=["GET"])
+def admin_diagnostics(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        backend = admin_storage_backend()
+        storage_ok = backend != "unavailable"
+        users_ok = False
+        try:
+            list_users(settings, page=1, per_page=1)
+            users_ok = True
+        except Exception:
+            users_ok = False
+        firebase_server_configured = bool(
+            str(getattr(settings, "firebase_project_id", "") or "").strip()
+            and str(getattr(settings, "firebase_client_email", "") or "").strip()
+            and str(getattr(settings, "firebase_private_key", "") or "").strip()
+        )
+        problems = []
+        if not firebase_server_configured:
+            problems.append("firebase_admin_credentials_missing")
+        elif not users_ok:
+            problems.append("firebase_admin_users_unavailable")
+        if not storage_ok:
+            problems.append("admin_storage_unavailable")
+        return response({
+            "ok": bool(storage_ok and users_ok),
+            "release": RELEASE,
+            "auth_provider": auth_provider(settings),
+            "admin_storage": backend,
+            "firebase_server_configured": firebase_server_configured,
+            "firebase_admin_users": users_ok,
+            "problems": problems,
+            "actor_id": actor.get("id"),
+        }, 200)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
 
 @app.route(route="v1/admin/users", methods=["GET"])
 def admin_users(req):

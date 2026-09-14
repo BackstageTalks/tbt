@@ -49,26 +49,114 @@ def _connection_string() -> str:
     ).strip()
 
 
+class _FirestoreTableAdapter:
+    """Small Azure-Table-compatible adapter backed by Firebase Firestore.
+
+    Azure Table Storage remains the preferred store when configured. Firestore is
+    a zero-extra-secret fallback because BlinQ already has Firebase Admin
+    credentials for Auth. Only the tiny subset of Table operations used by BlinQ
+    is implemented here.
+    """
+
+    def __init__(self, name: str):
+        try:
+            from firebase_admin import firestore
+            from .auth import firebase_app
+            from ..config import settings
+            app = firebase_app(settings)
+            self._db = firestore.client(app=app)
+        except Exception as exc:
+            raise AdminStorageUnavailable(
+                "Admin storage is not configured. Configure Azure storage or enable Firestore for the Firebase project."
+            ) from exc
+        safe = re.sub(r"[^A-Za-z0-9_-]+", "_", str(name or "table"))[:80]
+        self._collection = self._db.collection(f"blinq_{safe}")
+
+    @staticmethod
+    def _doc_id(partition_key: object, row_key: object) -> str:
+        raw = f"{partition_key}\0{row_key}".encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()
+
+    def get_entity(self, *, partition_key, row_key):
+        snap = self._collection.document(self._doc_id(partition_key, row_key)).get()
+        if not snap.exists:
+            raise KeyError(str(row_key))
+        return dict(snap.to_dict() or {})
+
+    def upsert_entity(self, entity, mode=None):
+        row = dict(entity or {})
+        pk, rk = row.get("PartitionKey"), row.get("RowKey")
+        if pk is None or rk is None:
+            raise ValueError("PartitionKey and RowKey are required")
+        self._collection.document(self._doc_id(pk, rk)).set(
+            row, merge=str(mode or "").lower() == "merge"
+        )
+
+    def create_entity(self, entity):
+        row = dict(entity or {})
+        pk, rk = row.get("PartitionKey"), row.get("RowKey")
+        if pk is None or rk is None:
+            raise ValueError("PartitionKey and RowKey are required")
+        ref = self._collection.document(self._doc_id(pk, rk))
+        try:
+            ref.create(row)
+        except Exception as exc:
+            # Audit row keys are UUID-backed, so a collision is exceptional.
+            raise exc
+
+    def query_entities(self, query_filter=None):
+        query = self._collection
+        marker = "PartitionKey eq '"
+        if query_filter and marker in str(query_filter):
+            partition = str(query_filter).split(marker, 1)[1].split("'", 1)[0]
+            try:
+                query = query.where("PartitionKey", "==", partition)
+            except TypeError:  # newer google-cloud-firestore prefers FieldFilter
+                from google.cloud.firestore_v1.base_query import FieldFilter
+                query = query.where(filter=FieldFilter("PartitionKey", "==", partition))
+        return [dict(snap.to_dict() or {}) for snap in query.stream()]
+
+
+def admin_storage_backend() -> str:
+    """Report which durable admin store will be used in this runtime."""
+    if _connection_string():
+        return "azure_table"
+    try:
+        _FirestoreTableAdapter("Health")
+        return "firestore"
+    except AdminStorageUnavailable:
+        return "unavailable"
+
+
 def _table(name: str):
     connection = _connection_string()
     if not connection:
-        raise AdminStorageUnavailable("Admin storage is not configured")
+        return _FirestoreTableAdapter(name)
     try:
         from azure.data.tables import TableServiceClient
     except ImportError as exc:
-        raise AdminStorageUnavailable("azure-data-tables is unavailable") from exc
+        # Firebase is a valid fallback even if the optional Azure SDK is absent.
+        try:
+            return _FirestoreTableAdapter(name)
+        except AdminStorageUnavailable:
+            raise AdminStorageUnavailable("azure-data-tables is unavailable") from exc
     try:
         service = TableServiceClient.from_connection_string(connection)
         client = service.get_table_client(name)
         client.create_table()
         return client
     except Exception as exc:  # SDK-specific errors vary by transport/version.
-        # create_table raises when the table already exists; retry opening it.
         try:
             service = TableServiceClient.from_connection_string(connection)
             return service.get_table_client(name)
-        except Exception as inner:
-            raise AdminStorageUnavailable("Admin storage is unavailable") from inner
+        except Exception:
+            # If Azure storage credentials are broken during a deployment, keep
+            # the admin usable via the same Firebase project instead of silently
+            # losing all account controls.
+            try:
+                return _FirestoreTableAdapter(name)
+            except AdminStorageUnavailable as inner:
+                raise AdminStorageUnavailable("Admin storage is unavailable") from inner
 
 
 def load_runtime_ui_config() -> dict | None:

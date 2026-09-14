@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [history, statistics, ace-statistics, sg-scores, history-audit, history-integrity-repair, history-repair, train, backtest, refresh]
+        options: [history, statistics, ace-statistics, sg-scores, history-audit, history-integrity-repair, history-repair, production-preflight, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -117,6 +117,33 @@ jobs:
             python scripts/repair_history_bundle_integrity.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == history-repair ]]; then
             python scripts/repair_history_self_match.py --data-repository "$TBT_DATA_REPOSITORY"
+          elif [[ "$MODE" == production-preflight ]]; then
+            python - <<'PY'
+            from pathlib import Path
+            import sys
+            sys.path.insert(0, 'scripts')
+            from release_store import ReleaseStore
+            repository = __import__('os').environ['TBT_DATA_REPOSITORY']
+            history = ReleaseStore(repository, 'tbt-data-v1', Path('.cache/tbt/history'))
+            history.download()
+            assets = ReleaseStore(repository, 'tbt-player-assets-v1', Path('.cache/tbt/player-assets'))
+            names = assets._asset_names()
+            if 'player_profiles.json' in names:
+                assets.download(extra_names=('player_profiles.json',))
+            PY
+            profiles=()
+            if [[ -s .cache/tbt/player-assets/player_profiles.json ]]; then
+              profiles=(--profiles .cache/tbt/player-assets/player_profiles.json)
+            fi
+            python scripts/build_player_master.py \
+              --history-dir .cache/tbt/history \
+              "${profiles[@]}" \
+              --out .cache/tbt/production/player_master.json \
+              --csv .cache/tbt/production/player_master.csv
+            python scripts/build_production_training_table.py \
+              --history-dir .cache/tbt/history \
+              --out .cache/tbt/production/training_table.parquet \
+              --report .cache/tbt/production/training_table_report.json
           else
             args=(
               "$MODE"
@@ -127,6 +154,18 @@ jobs:
             if [[ "$PROMOTE" == true ]]; then args+=(--promote); fi
             python scripts/pipeline.py "${args[@]}"
           fi
+      - name: Upload production preflight artifacts
+        if: env.MODE == 'production-preflight'
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-production-preflight
+          path: |
+            .cache/tbt/production/player_master.json
+            .cache/tbt/production/player_master.csv
+            .cache/tbt/production/training_table.parquet
+            .cache/tbt/production/training_table_report.json
+          if-no-files-found: error
+
       - name: Refresh presentation metadata for current feed
         if: env.MODE == 'refresh'
         shell: bash

@@ -774,6 +774,14 @@ def train_from_matches(
                 "method"
             ]
         ),
+        "static_environment_features_enabled": True,
+        "static_environment_features": [
+            "travel_km_advantage", "travel_known",
+            "altitude_change_advantage", "altitude_change_known",
+            "altitude_serve_interaction", "indoor",
+        ],
+        "historical_weather_training_enabled": False,
+        "historical_weather_reason": "waiting_for_point_in_time_pre_match_forecast_snapshots",
         **production_model.metadata,
     }
 

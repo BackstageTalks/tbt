@@ -47,5 +47,7 @@ def test_frontend_expand_is_entitlement_gated_and_expands_to_all_rows():
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "canExpand=ent.see_all===true&&allCount>preview" in app
     assert "limit=(state.dailyHubExpanded&&canExpand)?allCount:preview" in app
-    assert "expand.hidden=!canExpand" in app
+    assert "const hasMore=allCount>preview" in app
+    assert "expand.hidden=!hasMore" in app
+    assert "showUpgradePrompt('elite'" in app
     assert 'data-admin-hub-field="see_all"' in app

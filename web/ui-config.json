@@ -3253,7 +3253,7 @@
       }
     }
   },
-  "ui_revision": "6.7.0",
+  "ui_revision": "6.7.4",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3298,5 +3298,5 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "6.7.0"
+  "revision": "6.7.4"
 }

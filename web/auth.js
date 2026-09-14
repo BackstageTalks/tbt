@@ -289,6 +289,9 @@
     });
     return apiWithSession(`/api/v1/match-intelligence?${params.toString()}`);
   }
+  async function adminDiagnostics() {
+    return apiWithSession('/api/v1/admin/diagnostics');
+  }
   async function adminUsers(page = 1, perPage = 100) {
     return apiWithSession(`/api/v1/admin/users?page=${encodeURIComponent(page)}&per_page=${encodeURIComponent(perPage)}`);
   }
@@ -316,7 +319,7 @@
 
   window.BlinqAuth = {
     init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
-    adminUsers, adminUpdateAccess, adminUpdateMetadata, runtimeUiConfig, contentNews,
+    adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear,
   };
 })();

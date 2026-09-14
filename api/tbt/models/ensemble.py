@@ -53,7 +53,7 @@ class TennisEnsemble:
         self.objective = objective
         # Archive weather is an observation, not a forecast known before kickoff.
         # Re-enable only after storing point-in-time forecast provenance.
-        self.excluded_features = {"weather_serve_interaction", "weather_known", "environment_known"}
+        self.excluded_features = {"weather_serve_interaction", "weather_known"}
         self.feature_names = list(FEATURE_NAMES if feature_names is None else feature_names)
         unknown = set(self.feature_names) - set(FEATURE_NAMES)
         if unknown:

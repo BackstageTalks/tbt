@@ -87,3 +87,10 @@ def test_legacy_champion_keeps_original_prediction_path(fitted):
     linear, boost = legacy._raw_pair(legacy._matrix(cal))
     expected = np.clip(legacy.calibrator.predict(legacy._blend(linear, boost)), .01, .99)
     assert np.allclose(legacy.predict_proba(cal), expected)
+
+
+def test_static_environment_is_not_masked_with_archive_weather():
+    model = TennisEnsemble()
+    assert "weather_serve_interaction" in model.excluded_features
+    assert "weather_known" in model.excluded_features
+    assert "environment_known" not in model.excluded_features

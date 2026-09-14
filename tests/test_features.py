@@ -68,3 +68,20 @@ def test_explicitly_training_eligible_weather_can_be_read(match_factory):
     values = FeatureBuilder._weather_values(match)
     assert values["temperature_c"] == 20.0
     assert values["wind_speed_kmh"] == 10.0
+
+
+def test_static_environment_is_known_without_historical_weather(match_factory):
+    match = match_factory("env-static", "A", "B", None, day=4)
+    match.indoor = True
+    match.provider_payload = {
+        "_tbt_environment": {
+            "venue_resolved": True,
+            "training_eligible_weather": False,
+            "venue": {"latitude": 48.15, "longitude": 17.11, "elevation_m": 170.0},
+            "weather": {"temperature_c": 31.0, "relative_humidity_pct": 70.0, "wind_speed_kmh": 20.0},
+        }
+    }
+    snapshot = FeatureBuilder().snapshot(match)
+    assert snapshot["environment_known"] == 1.0
+    assert snapshot["weather_known"] == 0.0
+    assert snapshot["indoor"] == 1.0

@@ -11,6 +11,7 @@ from pathlib import Path
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.services.feed import empty_feed, read_feed
+from tbt.services.countries import normalize_country_code
 from tbt.services.publication import (
     validate_market_publication_candidate,
     restore_published_market_snapshots,
@@ -249,6 +250,9 @@ def _merge_player_profile(player: dict, profiles: dict[str, dict], photos: set[s
     ):
         if profile.get(source) not in (None, ""):
             player[target] = profile.get(source)
+    normalized_country = normalize_country_code(player.get("country_code") or player.get("country_code3"))
+    if normalized_country:
+        player["country_code"] = normalized_country
     photo_file = Path(str(profile.get("photo_file") or "")).name
     if photo_file and photo_file in photos:
         player["photo_url"] = f"/assets/players/{photo_file}"
