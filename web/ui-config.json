@@ -2469,8 +2469,8 @@
         "label": "Prime Picks",
         "panel_id": "predictionsPanel",
         "sidebar_element": "SIDEBAR_PRIME",
-        "sidebar_enabled": true,
-        "dashboard_enabled": true,
+        "sidebar_enabled": false,
+        "dashboard_enabled": false,
         "dashboard_order": 1,
         "preview_limit": 5,
         "plans": {
@@ -3108,7 +3108,7 @@
         },
         "prime": {
           "label": "Prime tipy",
-          "enabled": true,
+          "enabled": false,
           "plans": {
             "trial": {
               "visible_rows": 3,
@@ -3253,7 +3253,7 @@
       }
     }
   },
-  "ui_revision": "6.6.9",
+  "ui_revision": "6.7.0",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3298,5 +3298,5 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "6.6.9"
+  "revision": "6.7.0"
 }

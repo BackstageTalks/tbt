@@ -10,7 +10,7 @@ def test_admin_primary_ui_is_slovak():
     for text in [
         "Admin centrum",
         "Bannery a odkazy",
-        "Sekcie a prístupy",
+        "Kategórie, tipy a prístupy",
         "Uložiť koncept",
         "Publikovať zmeny",
         "Prime tipy",

@@ -43,7 +43,7 @@ from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.6.9"
+RELEASE = "6.7.0"
 API_VERSION = "3.6.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally

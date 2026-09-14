@@ -250,3 +250,47 @@ body#blinqPremium .result-tag{font-size:7px!important;padding:3px 6px!important;
 .admin-identity-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;padding:12px 15px;border-bottom:1px solid #18384d;background:#051521}.admin-identity-grid>div{min-width:0;padding:8px 9px;border:1px solid #1a3a50;border-radius:8px;background:#061824}.admin-identity-grid small{display:block;color:#66869a;font-size:7px;font-weight:850;letter-spacing:.07em;text-transform:uppercase}.admin-identity-grid strong{display:block;margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#dcecf4;font-size:9px}.admin-identity-grid .is-uid{grid-column:span 2}.admin-tg-private-editor .admin-form-section-title strong{display:flex;align-items:center;gap:6px}.admin-tg-private-status{display:grid;grid-template-columns:1fr 1fr 1.45fr;gap:8px;align-items:center;margin-bottom:10px}.admin-tg-private-status>div,.admin-tg-member-toggle{min-height:52px;padding:9px 10px;border:1px solid #1d465d;border-radius:9px;background:#061724}.admin-tg-private-status small{display:block;color:#6f8fa2;font-size:7px;text-transform:uppercase;letter-spacing:.07em}.admin-tg-private-status strong{font-size:10px}.admin-tg-member-toggle{display:flex!important;align-items:center;gap:8px!important;color:#dcebf2!important;font-size:9px!important}.admin-tg-member-toggle input{accent-color:#42d895}.admin-tg-warning{margin:0 0 10px;padding:8px 10px;border-radius:8px;font-size:9px;line-height:1.4}.admin-tg-warning.is-remove{border:1px solid #7d3447;background:#261019;color:#ff9aac}.admin-tg-warning.is-add{border:1px solid #226d4e;background:#09231a;color:#7aebb0}.admin-user-editor textarea#adminUserNote{min-height:62px;resize:vertical}
 @media(max-width:1320px){.admin-accounts-grid-v669{grid-template-columns:1fr!important}.admin-user-list-v669{max-height:520px!important}.admin-accounts-toolbar-v669{grid-template-columns:repeat(3,minmax(0,1fr))!important}.admin-accounts-toolbar-v669 .search-box{grid-column:span 2}.admin-account-datefilters{grid-template-columns:repeat(4,minmax(0,1fr))}.admin-filtered-count{justify-self:start}.admin-account-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:850px){.admin-user-table-head{display:none}.admin-user-table-row{grid-template-columns:minmax(130px,1fr) minmax(150px,1.2fr) 72px 72px}.admin-user-table-row .admin-user-expiry{display:none}.admin-user-table-row .admin-user-tg-member{display:none}.admin-tg-action{justify-self:end}.admin-accounts-toolbar-v669{grid-template-columns:1fr 1fr!important}.admin-accounts-toolbar-v669 .search-box{grid-column:1/-1}.admin-account-datefilters{grid-template-columns:1fr 1fr}.admin-account-stats{grid-template-columns:1fr 1fr}.admin-identity-grid{grid-template-columns:1fr 1fr}.admin-identity-grid .is-uid{grid-column:1/-1}.admin-tg-private-status{grid-template-columns:1fr}.admin-account-datefilters .btn{white-space:normal}}
+
+
+/* ========================================================================
+   BlinQ 6.7.0 — public readability + admin discoverability
+   ======================================================================== */
+.header-actions .global-search,.global-search-top{display:none!important}
+.daily-hub-table th{font-size:10px!important;letter-spacing:.105em!important;padding-left:16px!important;padding-right:16px!important}
+.daily-hub-table td{height:82px!important;padding:10px 16px!important;font-size:13px!important}
+.daily-hub-table td:first-child{font-size:14px!important}
+.daily-hub-table td>strong{font-size:13px!important}
+.hub-prob{font-size:17px!important}
+.hub-tournament-logo,.hub-tour-logo{width:52px!important;height:52px!important;flex:0 0 52px!important;border-radius:11px!important}
+.hub-tournament-logo.has-image{background:#f4f7f9!important;padding:3px!important}
+.hub-tournament-logo.has-image img{padding:1px!important}
+.hub-tournament-copy b{font-size:13px!important;max-width:225px!important;line-height:1.18!important}
+.hub-tournament-copy small{font-size:10px!important;max-width:225px!important;line-height:1.25!important;margin-top:2px!important}
+.hub-player-copy>b{font-size:12.5px!important;max-width:170px!important}
+.hub-player-meta{font-size:9px!important;gap:5px!important;margin-top:2px!important}
+.hub-player-meta .hub-tour,.hub-player-meta .hub-rank{font-size:9px!important}
+.hub-avatar{width:42px!important;height:42px!important;flex-basis:42px!important}
+.hub-match{min-width:340px!important;gap:10px!important}
+.hub-detail{font-size:12px!important;padding:9px 14px!important}
+.daily-hub-tab{font-size:12.5px!important}
+.hub-logo-fallback{position:absolute!important;inset:0!important;display:none!important;place-items:center!important;background:linear-gradient(145deg,#0a2639,#071b29)!important;color:#eaf8ff!important;padding:3px!important}
+.hub-tournament-logo{position:relative!important;overflow:hidden!important}
+.hub-tournament-logo.logo-failed .hub-logo-fallback,.hub-tournament-logo img[hidden]+.hub-logo-fallback{display:grid!important}
+.hub-tournament-logo.logo-failed img{display:none!important}
+.hub-tournament-badge .hub-logo-code{width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.hub-logo-code{line-height:1!important;text-align:center}
+.hub-logo-code b{display:block;font-size:10px!important;letter-spacing:.04em;color:#7df4b5!important}
+.hub-logo-code small{display:block;margin-top:4px;font-size:12px!important;font-weight:950!important;letter-spacing:.02em;color:#f5fbff!important}
+.admin-tabs{display:grid!important;grid-template-columns:repeat(7,minmax(0,1fr))!important;gap:8px!important;flex-wrap:initial!important}
+.admin-tabs button{min-height:62px!important;padding:10px 12px!important;text-align:left!important}
+.admin-tabs button strong{display:block!important;font-size:12px!important}
+.admin-tabs button small{display:block!important;margin-top:3px!important;color:#83a0b3!important;font-size:9px!important;line-height:1.25!important}
+.admin-tabs button.active small{color:#e8dcff!important}
+.admin-hub-tab-card.is-global-off{opacity:.62!important;border-color:#4c3944!important;background:#11131b!important}
+.admin-hub-tab-card.is-global-off .admin-hub-tab-head small{color:#ff8096!important}
+.admin-global-category-toggle{padding:8px 9px!important;border:1px solid #235473!important;border-radius:8px!important;background:#071c2a!important}
+.admin-global-category-toggle span{font-weight:850!important;color:#e8f4fa!important}
+.admin-level-rule-caption{margin:8px 0 2px;padding-top:8px;border-top:1px solid #173b50;color:#7896a9;font-size:9px!important}
+.admin-level-rule-caption b{color:#bba4ff!important}
+@media(max-width:1180px){.admin-tabs{grid-template-columns:repeat(4,minmax(135px,1fr))!important}}
+@media(max-width:760px){.daily-hub-table td{height:74px!important;padding:8px 11px!important;font-size:12px!important}.hub-tournament-logo,.hub-tour-logo{width:46px!important;height:46px!important;flex-basis:46px!important}.hub-avatar{width:38px!important;height:38px!important;flex-basis:38px!important}.hub-player-copy>b{font-size:11.5px!important}.hub-tournament-copy b{font-size:12px!important}.admin-tabs{display:flex!important;overflow-x:auto!important;gap:6px!important}.admin-tabs button{flex:0 0 145px!important}}
