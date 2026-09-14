@@ -26,3 +26,14 @@ def test_player_master_emits_country_rank_and_identity_diagnostics():
     assert 'latest_rank_coverage' in script
     assert 'duplicate_name_groups' in script
     assert 'players_missing_country' in script
+
+
+def test_production_preflight_uses_script_not_fragile_shell_heredoc():
+    workflow = read('.github/workflows/data.yml')
+    assert 'scripts/download_production_preflight_inputs.py' in workflow
+    production_block = workflow.split('elif [[ "$MODE" == production-preflight ]]', 1)[1].split('else', 1)[0]
+    assert "python - <<'PY'" not in production_block
+    helper = read('scripts/download_production_preflight_inputs.py')
+    assert "ReleaseStore(repository, 'tbt-data-v1'" in helper
+    assert "ReleaseStore(repository, 'tbt-player-assets-v1'" in helper
+    assert "player_profiles.json" in helper

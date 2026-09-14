@@ -118,19 +118,7 @@ jobs:
           elif [[ "$MODE" == history-repair ]]; then
             python scripts/repair_history_self_match.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == production-preflight ]]; then
-            python - <<'PY'
-            from pathlib import Path
-            import sys
-            sys.path.insert(0, 'scripts')
-            from release_store import ReleaseStore
-            repository = __import__('os').environ['TBT_DATA_REPOSITORY']
-            history = ReleaseStore(repository, 'tbt-data-v1', Path('.cache/tbt/history'))
-            history.download()
-            assets = ReleaseStore(repository, 'tbt-player-assets-v1', Path('.cache/tbt/player-assets'))
-            names = assets._asset_names()
-            if 'player_profiles.json' in names:
-                assets.download(extra_names=('player_profiles.json',))
-            PY
+            python scripts/download_production_preflight_inputs.py
             profiles=()
             if [[ -s .cache/tbt/player-assets/player_profiles.json ]]; then
               profiles=(--profiles .cache/tbt/player-assets/player_profiles.json)
