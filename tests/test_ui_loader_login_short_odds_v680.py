@@ -10,6 +10,9 @@ def test_loader_is_ball_rally_without_progress_track():
     assert 'class="boot-tennis-rally"' in INDEX
     assert 'class="boot-tennis-ball"' in INDEX
     assert 'class="boot-tennis-track"' not in INDEX
+    assert 'class="boot-tennis-net"' in INDEX
+    assert 'class="boot-tennis-court"' in INDEX
+    assert "boot-tennis-net::before" in CSS
     assert "@keyframes blinqRallyBall" in CSS
     assert "animation:blinqRallyBall" in CSS
 
@@ -31,6 +34,6 @@ def test_short_odds_public_labels_replace_prime_in_results_and_cards():
 
 
 def test_frontend_cache_bust_for_final_ui_pass():
-    assert '/blinq.css?v=6806' in INDEX
-    assert '/app.js?v=6806' in INDEX
-    assert '/assets/blinq_loading_tennis.webp?v=6806' in INDEX
+    assert '/blinq.css?v=6807' in INDEX
+    assert '/app.js?v=6807' in INDEX
+    assert '/assets/blinq_loading_tennis.webp?v=6807' in INDEX
