@@ -41,6 +41,14 @@ _POLICY = {
 # server remains the authorization boundary: runtime values are capped here.
 _RUNTIME_PICK_CAP = 10
 
+# BlinQ Board is an advanced, non-public model workspace. It is intentionally
+# independent of bookmaker price: rows qualify on model confidence and evidence
+# quality only, then expose odds merely as optional context when a snapshot exists.
+BOARD_MIN_PROBABILITY = 0.65
+BOARD_MIN_DATA_DEPTH = 0.80
+BOARD_MIN_SURFACE_MATCHES = 5
+BOARD_PLANS = {"legend", "goat", "admin"}
+
 
 
 def effective_plan(access: dict) -> str:
@@ -133,6 +141,70 @@ def _limit_rows(rows: list, limit: object) -> list:
     return deepcopy(rows[:n])
 
 
+def _number(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number
+
+
+def _board_probability(row: dict) -> float:
+    for value in (
+        row.get("blinq_probability"),
+        (row.get("betting") or {}).get("blinq_probability") if isinstance(row.get("betting"), dict) else None,
+        row.get("confidence"),
+        row.get("raw_model_confidence"),
+    ):
+        number = _number(value)
+        if number is not None:
+            return number / 100.0 if number > 1 else number
+    values = []
+    for key in ("player1", "player2"):
+        player = row.get(key) if isinstance(row.get(key), dict) else {}
+        number = _number(player.get("probability"))
+        if number is not None:
+            values.append(number / 100.0 if number > 1 else number)
+    return max(values, default=0.0)
+
+
+def _board_surface_samples(row: dict) -> tuple[int, int]:
+    quality = row.get("quality") if isinstance(row.get("quality"), dict) else {}
+    counts = []
+    for key in ("player1", "player2"):
+        player = quality.get(key) if isinstance(quality.get(key), dict) else {}
+        number = _number(player.get("surface_matches"))
+        counts.append(max(0, int(number or 0)))
+    return counts[0], counts[1]
+
+
+def _board_row_eligible(row: dict) -> bool:
+    if not isinstance(row, dict):
+        return False
+    surface = str(row.get("surface") or row.get("court_surface") or "").strip().lower()
+    if not surface or surface == "unknown":
+        return False
+    depth = _number(row.get("data_depth"))
+    if depth is None:
+        depth = _number(row.get("probability_reliability"))
+    p1_surface, p2_surface = _board_surface_samples(row)
+    return (
+        _board_probability(row) >= BOARD_MIN_PROBABILITY
+        and (depth or 0.0) >= BOARD_MIN_DATA_DEPTH
+        and p1_surface >= BOARD_MIN_SURFACE_MATCHES
+        and p2_surface >= BOARD_MIN_SURFACE_MATCHES
+    )
+
+
+def _board_rows(payload: dict, key: str) -> list[dict]:
+    rows = payload.get(key) if isinstance(payload.get(key), list) else []
+    eligible = [row for row in rows if _board_row_eligible(row)]
+    return sorted(
+        eligible,
+        key=lambda row: (-_board_probability(row), str(row.get("scheduled_at") or row.get("date") or "")),
+    )
+
+
 def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: dict | None = None) -> dict:
     plan = effective_plan(access)
     if plan == "suspended":
@@ -156,6 +228,24 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
         see_all=(runtime_rule[2] if runtime_rule else hard_see_all) and hard_see_all
         enabled=(runtime_rule[3] if runtime_rule else True)
         sections[section]={"visible_picks":limit,"see_all":bool(see_all),"blur_remaining":bool(blur),"enabled":bool(enabled),"total":len(rows),"returned":returned,"locked_count":max(0,len(rows)-returned)}
+    board_rows = _board_rows(payload, "upcoming")
+    board_enabled = plan in BOARD_PLANS
+    runtime_board = None if plan == "admin" else _admin_hub_rule(ui_config, "board", plan)
+    if runtime_board is not None:
+        board_enabled = board_enabled and bool(runtime_board[3])
+    sections["board"] = {
+        "visible_picks": "ALL" if board_enabled else 0,
+        "see_all": bool(board_enabled),
+        "blur_remaining": False,
+        "enabled": bool(board_enabled),
+        "total": len(board_rows) if board_enabled else 0,
+        "returned": len(board_rows) if board_enabled else 0,
+        "locked_count": 0,
+        "min_probability": BOARD_MIN_PROBABILITY,
+        "min_data_depth": BOARD_MIN_DATA_DEPTH,
+        "min_surface_matches_each": BOARD_MIN_SURFACE_MATCHES,
+        "official_prediction": False,
+    }
     return {"plan":plan,"sections":sections,"results":True,"performance":True}
 
 
@@ -164,6 +254,16 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     manifest=entitlement_manifest(access,payload,ui_config)
     if manifest["plan"]=="suspended": raise PermissionError("account_suspended")
     result=deepcopy(payload)
+
+    board_enabled = bool(manifest.get("sections", {}).get("board", {}).get("enabled"))
+    result["board_upcoming"] = _board_rows(payload, "upcoming") if board_enabled else []
+    result["board_results"] = _board_rows(payload, "results") if board_enabled else []
+    result["board_meta"] = {
+        "official_prediction": False,
+        "min_probability": BOARD_MIN_PROBABILITY,
+        "min_data_depth": BOARD_MIN_DATA_DEPTH,
+        "min_surface_matches_each": BOARD_MIN_SURFACE_MATCHES,
+    } if board_enabled else {"official_prediction": False, "locked": True}
 
     daily_all=_daily_rows(payload)
     daily_limit=manifest["sections"]["daily"]["visible_picks"]

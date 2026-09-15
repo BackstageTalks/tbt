@@ -24,3 +24,24 @@ def test_public_low_odds_label_is_short_odds():
     cfg = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     assert cfg["dashboard"]["sections"]["prime"]["label"] == "Short Odds"
     assert cfg["dashboard"]["daily_hub"]["tabs"]["top"]["label"] == "Short Odds"
+
+
+def test_blinq_board_is_last_tab_and_restricted_to_legend_goat():
+    cfg = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    board = cfg["dashboard"]["daily_hub"]["tabs"]["board"]
+    assert board["label"] == "BlinQ Board"
+    assert board["plans"]["elite"]["tab_enabled"] is False
+    assert board["plans"]["legend"]["visible_rows"] == "ALL"
+    assert board["plans"]["goat"]["visible_rows"] == "ALL"
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert "['daily','calendar','top','value','ace','games','doubles','board']" in app
+    assert "Modelový výber · nie je oficiálna publikovaná predikcia" in app
+    assert "state.boardMode==='results'" in app
+
+
+def test_blinq_board_has_separate_live_results_ui():
+    html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
+    assert 'id="dailyHubBoardMode"' in html
+    assert 'data-board-mode="live"' in html
+    assert 'data-board-mode="results"' in html
+    assert 'id="dailyHubBoardNotice"' in html

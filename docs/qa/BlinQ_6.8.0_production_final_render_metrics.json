@@ -7,9 +7,46 @@
     "hero": 203,
     "grid": 1448,
     "rail": 338,
+    "railTop": 356,
+    "dailyTop": 356,
+    "railDailyTopDelta": 0,
     "dailyOverflow": 0,
-    "detailButtons": 10,
+    "detailButtons": 7,
     "highlightVisible": false
+  },
+  "board_live": {
+    "visible": true,
+    "rows": 10,
+    "notice": "Modelový výber · nie je oficiálna publikovaná predikcia\n                \n                  Aktívne\n                  Výsledky",
+    "modeButtons": [
+      {
+        "label": "Aktívne",
+        "active": true
+      },
+      {
+        "label": "Výsledky",
+        "active": false
+      }
+    ],
+    "expandHidden": true
+  },
+  "board_results": {
+    "rows": 4,
+    "head": [
+      "DÁTUM",
+      "TURNAJ",
+      "ZÁPAS",
+      "MODEL VÝBER",
+      "KURZ",
+      "BLINQ %",
+      "VÝSLEDOK"
+    ],
+    "outcomes": [
+      "WIN",
+      "LOSS",
+      "WIN",
+      "WIN"
+    ]
   },
   "results": {
     "route": "#results",

@@ -76,3 +76,55 @@ def test_admin_runtime_can_set_zero_to_ten_rows_per_category():
     assert len(data["ace_picks"]) == 5
     assert len(data["sg_picks"]) == 2
     assert manifest["sections"]["prime"]["see_all"] is False
+
+
+def board_row(i=1, *, probability=.68, depth=.90, p1_surface=12, p2_surface=11, odds=None):
+    item = row(i)
+    item.update({
+        "surface": "hard",
+        "blinq_probability": probability,
+        "data_depth": depth,
+        "quality": {
+            "player1": {"surface_matches": p1_surface},
+            "player2": {"surface_matches": p2_surface},
+        },
+    })
+    if odds is None:
+        item.pop("odds", None)
+        item["betting"] = {}
+    else:
+        item["odds"] = odds
+        item["betting"] = {"odds": odds}
+    return item
+
+
+def test_blinq_board_is_legend_goat_admin_only_and_does_not_require_odds():
+    payload = feed(0)
+    payload["upcoming"] = [
+        board_row(1, probability=.68, odds=None),
+        board_row(2, probability=.64, odds=1.8),
+        board_row(3, probability=.71, depth=.79, odds=2.1),
+        board_row(4, probability=.72, p1_surface=4, odds=1.3),
+    ]
+    for plan in ("rookie", "pro", "elite"):
+        data, manifest = filter_feed_for_access(payload, {"status": "active", "plan": plan})
+        assert data["board_upcoming"] == []
+        assert manifest["sections"]["board"]["enabled"] is False
+    for plan in ("legend", "goat"):
+        data, manifest = filter_feed_for_access(payload, {"status": "active", "plan": plan})
+        assert [item["event_id"] for item in data["board_upcoming"]] == ["1"]
+        assert data["board_upcoming"][0].get("odds") is None
+        assert data["board_meta"]["official_prediction"] is False
+        assert manifest["sections"]["board"]["official_prediction"] is False
+
+
+def test_blinq_board_results_are_separate_from_official_results():
+    payload = feed(0)
+    settled = board_row(9, probability=.70, odds=None)
+    settled["result"] = {"correct": True, "status": "settled"}
+    payload["results"] = [settled]
+    data, _ = filter_feed_for_access(payload, {"status": "active", "plan": "legend"})
+    assert len(data["board_results"]) == 1
+    assert data["board_results"][0]["event_id"] == "9"
+    # The ordinary Results payload stays intact; Board owns only a derived view.
+    assert data["results"] == payload["results"]
