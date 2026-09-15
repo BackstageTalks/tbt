@@ -6,6 +6,7 @@ from functools import lru_cache
 from typing import Any
 import time
 import unicodedata
+import re
 
 import httpx
 
@@ -270,40 +271,196 @@ def _as_dict(value: Any) -> dict[str, Any]:
 _GENERIC_TOURNAMENT_TOKENS = {
     "atp", "wta", "men", "women", "mens", "womens", "qualifying",
     "qualification", "singles", "doubles", "open", "grand slam",
+    "challenger", "challengers", "itf", "final", "finals",
 }
+
+# High-confidence canonical tennis locations. These are deliberately venue/city
+# mappings, not fuzzy guesses. They let historical provider label variants share
+# the same static environment record (coordinates/elevation/timezone).
 _LOCATION_ALIASES = {
+    # United States / Canada
     "winston salem": "Winston-Salem, North Carolina, US",
     "winston-salem": "Winston-Salem, North Carolina, US",
     "miami": "Miami, Florida, US",
     "miami usa": "Miami, Florida, US",
+    "miami united states": "Miami, Florida, US",
     "indian wells": "Indian Wells, California, US",
     "indian wells usa": "Indian Wells, California, US",
     "us open": "New York, New York, US",
-    "wimbledon": "London, England, GB",
+    "flushing meadows": "New York, New York, US",
     "cincinnati": "Mason, Ohio, US",
-    "dubai": "Dubai, AE",
+    "cincinnati usa": "Mason, Ohio, US",
+    "washington": "Washington, District of Columbia, US",
+    "washington dc": "Washington, District of Columbia, US",
+    "newport": "Newport, Rhode Island, US",
+    "delray beach": "Delray Beach, Florida, US",
+    "houston": "Houston, Texas, US",
+    "charleston": "Charleston, South Carolina, US",
+    "atlanta": "Atlanta, Georgia, US",
+    "dallas": "Dallas, Texas, US",
+    "san diego": "San Diego, California, US",
+    "toronto": "Toronto, Ontario, CA",
+    "toronto canada": "Toronto, Ontario, CA",
+    "montreal": "Montreal, Quebec, CA",
+    "montreal canada": "Montreal, Quebec, CA",
+    "vancouver": "Vancouver, British Columbia, CA",
+
+    # Great Britain / Europe
+    "wimbledon": "London, England, GB",
+    "nottingham": "Nottingham, England, GB",
+    "nottingham great britain": "Nottingham, England, GB",
     "eastbourne": "Eastbourne, England, GB",
+    "queens club": "London, England, GB",
+    "queens": "London, England, GB",
+    "birmingham": "Birmingham, England, GB",
+    "rome": "Rome, IT",
+    "roma": "Rome, IT",
+    "milan": "Milan, IT",
+    "milano": "Milan, IT",
+    "turin": "Turin, IT",
+    "torino": "Turin, IT",
+    "madrid": "Madrid, ES",
+    "barcelona": "Barcelona, ES",
+    "valencia": "Valencia, ES",
+    "seville": "Seville, ES",
+    "sevilla": "Seville, ES",
+    "paris": "Paris, FR",
+    "roland garros": "Paris, FR",
+    "lyon": "Lyon, FR",
+    "marseille": "Marseille, FR",
+    "metz": "Metz, FR",
+    "montpellier": "Montpellier, FR",
+    "monte carlo": "Monaco, MC",
+    "monte-carlo": "Monaco, MC",
+    "hamburg": "Hamburg, DE",
+    "munich": "Munich, DE",
+    "muenchen": "Munich, DE",
+    "berlin": "Berlin, DE",
+    "stuttgart": "Stuttgart, DE",
+    "halle": "Halle, North Rhine-Westphalia, DE",
+    "vienna": "Vienna, AT",
+    "wien": "Vienna, AT",
+    "basel": "Basel, CH",
+    "geneva": "Geneva, CH",
+    "gstaad": "Gstaad, CH",
+    "rotterdam": "Rotterdam, NL",
+    "s-hertogenbosch": "'s-Hertogenbosch, NL",
+    "hertogenbosch": "'s-Hertogenbosch, NL",
+    "antwerp": "Antwerp, BE",
+    "brussels": "Brussels, BE",
+    "stockholm": "Stockholm, SE",
+    "bastad": "Båstad, SE",
+    "oslo": "Oslo, NO",
+    "copenhagen": "Copenhagen, DK",
+    "helsinki": "Helsinki, FI",
+    "warsaw": "Warsaw, PL",
+    "warszawa": "Warsaw, PL",
+    "prague": "Prague, CZ",
+    "praha": "Prague, CZ",
+    "budapest": "Budapest, HU",
+    "bucharest": "Bucharest, RO",
+    "iasi": "Iași, RO",
+    "iasi romania": "Iași, RO",
+    "cluj napoca": "Cluj-Napoca, RO",
+    "belgrade": "Belgrade, RS",
+    "kursumlijska banja": "Kuršumlijska Banja, RS",
+    "zagreb": "Zagreb, HR",
+    "umag": "Umag, HR",
+    "ljubljana": "Ljubljana, SI",
+    "bratislava": "Bratislava, SK",
+    "sofia": "Sofia, BG",
+    "athens": "Athens, GR",
+    "istanbul": "Istanbul, TR",
+
+    # Asia / Middle East / Oceania
+    "dubai": "Dubai, AE",
+    "abu dhabi": "Abu Dhabi, AE",
+    "doha": "Doha, QA",
+    "riyadh": "Riyadh, SA",
+    "tel aviv": "Tel Aviv, IL",
+    "beijing": "Beijing, CN",
+    "shanghai": "Shanghai, CN",
+    "shanghai china": "Shanghai, CN",
+    "chengdu": "Chengdu, Sichuan, CN",
+    "wuhan": "Wuhan, Hubei, CN",
+    "zhuhai": "Zhuhai, Guangdong, CN",
+    "hong kong": "Hong Kong, HK",
+    "tokyo": "Tokyo, JP",
+    "osaka": "Osaka, JP",
+    "seoul": "Seoul, KR",
+    "singapore": "Singapore, SG",
+    "bangkok": "Bangkok, TH",
+    "pune": "Pune, IN",
+    "chennai": "Chennai, IN",
+    "new delhi": "New Delhi, IN",
+    "delhi": "New Delhi, IN",
+    "melbourne": "Melbourne, Victoria, AU",
+    "sydney": "Sydney, New South Wales, AU",
+    "brisbane": "Brisbane, Queensland, AU",
     "adelaide 2": "Adelaide, South Australia, AU",
     "adelaide": "Adelaide, South Australia, AU",
-    "washington": "Washington, District of Columbia, US",
-    "kursumlijska banja": "Kuršumlijska Banja, RS",
+    "perth": "Perth, Western Australia, AU",
+    "auckland": "Auckland, NZ",
+
+    # Latin America / Africa
+    "bogota": "Bogotá, CO",
+    "bogota colombia": "Bogotá, CO",
+    "barranquilla": "Barranquilla, CO",
+    "medellin": "Medellín, CO",
+    "buenos aires": "Buenos Aires, AR",
+    "cordoba": "Córdoba, AR",
+    "sao paulo": "São Paulo, BR",
+    "rio de janeiro": "Rio de Janeiro, BR",
+    "florianopolis": "Florianópolis, BR",
+    "santiago": "Santiago, CL",
+    "lima": "Lima, PE",
+    "acapulco": "Acapulco, MX",
+    "guadalajara": "Guadalajara, MX",
+    "cancun": "Cancún, MX",
+    "mexico city": "Mexico City, MX",
+    "marrakech": "Marrakesh, MA",
+    "rabat": "Rabat, MA",
+    "tunis": "Tunis, TN",
+    "cairo": "Cairo, EG",
 }
+
+# Provider suffixes that describe draw/category rather than geography. Removing
+# these before alias matching catches variants like
+# "Kursumlijska Banja, Singles Qualifying, M-ITF-SRB-01A" without fuzzy matching.
+_TOURNAMENT_NOISE_RE = re.compile(
+    r"\b(?:singles?|doubles?|qualifying|qualification|men(?:'s|s)?|women(?:'s|s)?|"
+    r"atp|wta|challenger|challengers|grand\s+slam|round\s+of\s+\d+|"
+    r"m-?itf-[a-z]{3}-?\w*|w-?itf-[a-z]{3}-?\w*|m\d{2,3}|w\d{2,3})\b",
+    re.IGNORECASE,
+)
+
+
+def _alias_key(value: Any) -> str:
+    text = _normal(_clean_location_token(value))
+    text = _TOURNAMENT_NOISE_RE.sub(" ", text)
+    text = " ".join(text.replace("/", " ").replace("-", " ").replace(",", " ").split())
+    return text.strip()
 
 
 def _tournament_alias(value: Any) -> str | None:
     """Resolve only high-confidence tennis tournament/location aliases.
 
     Provider tournament labels frequently add gender/qualifying/ITF suffixes.
-    Matching is deliberately conservative and only covers known location names;
-    unknown labels still go through the normal fail-closed resolver.
+    Matching remains conservative: only explicit known city/event names are used.
     """
-    text = _normal(_clean_location_token(value))
-    if not text:
+    raw = _normal(_clean_location_token(value))
+    cleaned = _alias_key(value)
+    if not raw:
         return None
-    # Exact/starts-with aliases cover labels such as ``US Open, Men`` and
-    # ``Kursumlijska Banja, Singles Qualifying, M-ITF-SRB-...``.
     for key in sorted(_LOCATION_ALIASES, key=len, reverse=True):
-        if text == key or text.startswith(key + ",") or text.startswith(key + " "):
+        normalized_key = _normal(key)
+        if (
+            raw == normalized_key
+            or raw.startswith(normalized_key + ",")
+            or raw.startswith(normalized_key + " ")
+            or cleaned == normalized_key
+            or cleaned.startswith(normalized_key + " ")
+        ):
             return _LOCATION_ALIASES[key]
     return None
 

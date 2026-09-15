@@ -11,6 +11,13 @@
     "detailButtons": 10,
     "highlightVisible": false
   },
+  "results": {
+    "route": "#results",
+    "overflow": 0,
+    "metrics": 6,
+    "filters": 4,
+    "table": false
+  },
   "detail": {
     "railDetail": true,
     "modalOpen": false,

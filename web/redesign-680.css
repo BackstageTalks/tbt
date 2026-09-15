@@ -850,3 +850,71 @@ body#blinqPremium .context-signal.tone-negative strong{color:#ef8d8d!important}
   body#blinqPremium .rail-native-slides{min-height:376px}
   body#blinqPremium .rail-native-copy>strong{font-size:23px}
 }
+
+/* 6.8.0 FINAL visual system — shared across all public routes. */
+body#blinqPremium{
+  background:
+    radial-gradient(900px 520px at 12% 6%,rgba(47,239,151,.055),transparent 62%),
+    radial-gradient(760px 520px at 88% 18%,rgba(27,116,95,.08),transparent 66%),
+    linear-gradient(180deg,#03120f 0%,#020d0c 48%,#03120f 100%)!important;
+  background-attachment:fixed!important;
+}
+body#blinqPremium .site-main{position:relative!important;isolation:isolate}
+body#blinqPremium .site-main:before{
+  content:"";position:fixed;z-index:-1;pointer-events:none;inset:58px 0 0;
+  background:
+    linear-gradient(115deg,transparent 0 36%,rgba(53,239,159,.018) 36.1% 36.35%,transparent 36.45% 100%),
+    repeating-linear-gradient(90deg,transparent 0 119px,rgba(122,191,167,.012) 120px,transparent 121px);
+  mask-image:linear-gradient(180deg,rgba(0,0,0,.82),rgba(0,0,0,.18));
+}
+
+/* Public sub-pages inherit the homepage glass/green language instead of the
+   legacy blue/purple palette. Geometry stays content-led and responsive. */
+body#blinqPremium.blinq-route .site-main{padding:0 16px 22px!important}
+body#blinqPremium.blinq-route .route-heading{max-width:1880px;margin:0 auto;padding:26px 6px 15px!important}
+body#blinqPremium.blinq-route .route-heading>span{color:var(--bq-green)!important;font-size:7.5px!important;font-weight:900!important;letter-spacing:.18em!important}
+body#blinqPremium.blinq-route .route-heading h1{margin:7px 0 5px!important;font-size:28px!important;line-height:1.04!important;letter-spacing:-.035em!important;color:#f3f8f6!important}
+body#blinqPremium.blinq-route .route-heading p{max-width:760px!important;margin:0!important;color:#8ca099!important;font-size:10px!important;line-height:1.55!important}
+body#blinqPremium.blinq-route .route-panel{max-width:1880px!important;margin:0 auto!important;padding:14px!important;border:1px solid rgba(126,182,161,.16)!important;border-radius:12px!important;background:linear-gradient(180deg,rgba(7,26,24,.91),rgba(4,18,16,.94))!important;box-shadow:0 18px 70px rgba(0,0,0,.16)!important}
+body#blinqPremium.blinq-route .route-card-clean{padding:0!important;border:0!important;background:transparent!important;box-shadow:none!important}
+body#blinqPremium.blinq-route .route-sub,
+body#blinqPremium.blinq-route .state-card,
+body#blinqPremium.blinq-route .account-panel,
+body#blinqPremium.blinq-route .account-side{
+  border-color:rgba(126,182,161,.16)!important;
+  background:linear-gradient(180deg,#081c19,#061613)!important;
+  color:#dce8e3!important;
+}
+body#blinqPremium.blinq-route .route-sub h3{font-size:14px!important;color:#f1f7f4!important}
+body#blinqPremium.blinq-route .route-sub p,body#blinqPremium.blinq-route .static-copy{color:#8fa39b!important;font-size:9.5px!important;line-height:1.65!important}
+body#blinqPremium.blinq-route .metric-cards{gap:8px!important;margin-bottom:12px!important}
+body#blinqPremium.blinq-route .metric-card{padding:11px 12px!important;border-color:rgba(126,182,161,.18)!important;border-radius:8px!important;background:linear-gradient(180deg,#09201c,#071714)!important}
+body#blinqPremium.blinq-route .metric-card small{color:#6f8f83!important;font-size:6px!important;letter-spacing:.11em!important}
+body#blinqPremium.blinq-route .metric-card strong{margin-top:5px!important;color:#f0f6f3!important;font-size:17px!important;letter-spacing:-.02em!important}
+body#blinqPremium.blinq-route .metric-card span{margin-top:3px!important;color:#6e837c!important;font-size:6.2px!important}
+body#blinqPremium.blinq-route .results-filter-bar{gap:8px!important;padding:11px!important;border-color:rgba(126,182,161,.16)!important;border-radius:9px!important;background:#071916!important}
+body#blinqPremium.blinq-route .results-filter-bar label{gap:5px!important;color:#6f8e82!important;font-size:6.2px!important;letter-spacing:.07em!important}
+body#blinqPremium.blinq-route .results-filter-bar select,
+body#blinqPremium.blinq-route .route-panel select,
+body#blinqPremium.blinq-route .route-panel input,
+body#blinqPremium.blinq-route .route-panel textarea{border-color:#1c4638!important;background:#061512!important;color:#e4eeea!important;box-shadow:none!important}
+body#blinqPremium.blinq-route .results-filter-bar select:focus,
+body#blinqPremium.blinq-route .route-panel select:focus,
+body#blinqPremium.blinq-route .route-panel input:focus{border-color:#38d88d!important;outline:none!important}
+body#blinqPremium.blinq-route .admin-table-wrap{border:1px solid rgba(126,182,161,.16)!important;border-radius:8px!important;background:#061512!important;overflow:auto!important}
+body#blinqPremium.blinq-route .admin-analytics-table{font-size:8px!important}
+body#blinqPremium.blinq-route .admin-analytics-table th{padding:9px 10px!important;background:#091c19!important;color:#6e8f82!important;border-color:#17392f!important;font-size:6px!important;letter-spacing:.08em!important}
+body#blinqPremium.blinq-route .admin-analytics-table td{padding:10px!important;color:#c7d7d1!important;border-color:#13342a!important}
+body#blinqPremium.blinq-route .admin-analytics-table td strong{color:#edf5f1!important;font-size:8.2px!important}
+body#blinqPremium.blinq-route .admin-analytics-table td small{color:#687f76!important;font-size:6.2px!important}
+body#blinqPremium.blinq-route .results-table .correct{color:#42e897!important}
+body#blinqPremium.blinq-route .results-table .wrong{color:#e98787!important}
+body#blinqPremium.blinq-route .result-tag{border-color:#215040!important;background:#0a251e!important;color:#8feeb9!important}
+body#blinqPremium.blinq-route .btn-primary,
+body#blinqPremium.blinq-route .primary-button{border-color:#3aef9b!important;background:linear-gradient(135deg,#42efa0,#2bd585)!important;color:#052016!important}
+body#blinqPremium.blinq-route .btn-ghost{border-color:#24513f!important;background:#071b16!important;color:#b6c9c1!important}
+
+@media(max-width:1080px){
+  body#blinqPremium.blinq-route .site-main{padding-left:8px!important;padding-right:8px!important}
+  body#blinqPremium.blinq-route .route-heading h1{font-size:24px!important}
+}
