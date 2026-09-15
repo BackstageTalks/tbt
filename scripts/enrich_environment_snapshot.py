@@ -12,6 +12,7 @@ from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions, write_year_partition
 from tbt.services.environment import (
+    OpenMeteoBudgetExceeded,
     OpenMeteoClient,
     environment_payload,
     location_candidates,
@@ -51,6 +52,15 @@ def main() -> None:
     parser.add_argument("--limit", type=int, default=0, help="0 = all matches in range")
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
+        "--static-only", action="store_true",
+        help="Resolve venue/coordinates/elevation/timezone only; do not fetch historical weather.",
+    )
+    parser.add_argument(
+        "--complete-static", action="store_true",
+        help="With --static-only, process rows with missing OR unresolved environment and skip resolved rows.",
+    )
+    parser.add_argument("--max-requests", type=int, default=4000, help="Open-Meteo request cap for a resumable run")
+    parser.add_argument(
         "--retry-unresolved",
         action="store_true",
         help=(
@@ -71,12 +81,16 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if os.getenv("TBT_WEATHER_RESEARCH") != "true":
-        parser.error("Set TBT_WEATHER_RESEARCH=true only for evaluation/noncommercial use")
+    if not args.static_only and os.getenv("TBT_WEATHER_RESEARCH") != "true":
+        parser.error("Set TBT_WEATHER_RESEARCH=true only when historical weather research is requested")
+    if args.complete_static and not args.static_only:
+        parser.error("--complete-static requires --static-only")
+    if not 1 <= args.max_requests <= 12000:
+        parser.error("--max-requests must be 1..12000")
     if args.limit < 0:
         parser.error("limit must be >= 0")
-    if args.force and args.retry_unresolved:
-        parser.error("--force and --retry-unresolved are mutually exclusive")
+    if args.force and (args.retry_unresolved or args.complete_static):
+        parser.error("--force cannot be combined with --retry-unresolved/--complete-static")
 
     start = parse_utc(args.start)
     end = parse_utc(args.end)
@@ -116,17 +130,21 @@ def main() -> None:
         "dry_run": bool(args.dry_run),
         "resume_mode": (
             "force_all" if args.force else
+            "complete_static" if args.complete_static else
             "retry_unresolved" if args.retry_unresolved else
             "missing_only"
         ),
-        "weather_policy": "historical_archive_posthoc_research_only",
+        "static_only": bool(args.static_only),
+        "max_requests": int(args.max_requests),
+        "weather_policy": "not_requested_static_only" if args.static_only else "historical_archive_posthoc_research_only",
         "training_eligible_weather": False,
+        "budget_exhausted": False,
         "resolved_details": [],
         "unresolved_details": [],
         "error_details": [],
     }
 
-    client = OpenMeteoClient(request_limit=None)
+    client = OpenMeteoClient(request_limit=args.max_requests)
     changed_years: set[int] = set()
     published_years: set[int] = set()
     dirty_since_checkpoint = 0
@@ -170,7 +188,13 @@ def main() -> None:
             existing = payload.get("_tbt_environment")
             has_existing = isinstance(existing, dict) and bool(existing)
             if not args.force:
-                if args.retry_unresolved:
+                if args.complete_static:
+                    # One resumable static-data completion pass: fill missing rows and
+                    # retry unresolved rows, but never spend requests on already-resolved venues.
+                    if has_existing and existing.get("venue_resolved") is True:
+                        report["already_enriched"] += 1
+                        continue
+                elif args.retry_unresolved:
                     # Second-pass mode: only retry rows that were actually attempted
                     # and failed venue resolution. Missing rows wait for the normal pass.
                     if not has_existing or existing.get("venue_resolved") is True:
@@ -196,8 +220,12 @@ def main() -> None:
                     payload,
                     match.tournament,
                     match.scheduled_at,
-                    include_weather=(match.indoor is not True),
+                    include_weather=(not args.static_only and match.indoor is not True),
                 )
+            except OpenMeteoBudgetExceeded:
+                report["budget_exhausted"] = True
+                checkpoint()
+                break
             except Exception as exc:
                 report["errors"] += 1
                 if len(report["error_details"]) < args.diagnostics_limit:

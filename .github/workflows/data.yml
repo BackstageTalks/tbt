@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [history, statistics, ace-statistics, sg-scores, history-audit, history-integrity-repair, history-repair, production-preflight, train, backtest, refresh]
+        options: [history, statistics, ace-statistics, sg-scores, environment-static, history-audit, history-integrity-repair, history-repair, production-preflight, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -111,6 +111,16 @@ jobs:
               --lookback-days "$SG_LOOKBACK_DAYS" \
               --target-samples "$SG_TARGET_SAMPLES" \
               --max-requests "$MAX_REQUESTS"
+          elif [[ "$MODE" == environment-static ]]; then
+            end_date="$END_DATE"
+            if [[ -z "$end_date" ]]; then end_date="$(date -u +%F)"; fi
+            start_date="$START_DATE"
+            if [[ -z "$start_date" ]]; then start_date="$(date -u -d "$end_date - $LOOKBACK_DAYS days" +%F)"; fi
+            python scripts/enrich_environment_snapshot.py \
+              --data-repository "$TBT_DATA_REPOSITORY" \
+              --start "$start_date" --end "$end_date" \
+              --static-only --complete-static \
+              --max-requests "$MAX_REQUESTS"
           elif [[ "$MODE" == history-audit ]]; then
             python scripts/audit_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == history-integrity-repair ]]; then
@@ -118,7 +128,19 @@ jobs:
           elif [[ "$MODE" == history-repair ]]; then
             python scripts/repair_history_self_match.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == production-preflight ]]; then
-            python scripts/download_production_preflight_inputs.py
+            python - <<'PY'
+            from pathlib import Path
+            import sys
+            sys.path.insert(0, 'scripts')
+            from release_store import ReleaseStore
+            repository = __import__('os').environ['TBT_DATA_REPOSITORY']
+            history = ReleaseStore(repository, 'tbt-data-v1', Path('.cache/tbt/history'))
+            history.download()
+            assets = ReleaseStore(repository, 'tbt-player-assets-v1', Path('.cache/tbt/player-assets'))
+            names = assets._asset_names()
+            if 'player_profiles.json' in names:
+                assets.download(extra_names=('player_profiles.json',))
+            PY
             profiles=()
             if [[ -s .cache/tbt/player-assets/player_profiles.json ]]; then
               profiles=(--profiles .cache/tbt/player-assets/player_profiles.json)
@@ -143,11 +165,15 @@ jobs:
             python scripts/audit_training_leakage.py \
               --history-dir .cache/tbt/history \
               --report .cache/tbt/production/leakage_audit_report.json
+            python scripts/audit_statistics_inventory.py \
+              --history-dir .cache/tbt/history \
+              --out .cache/tbt/production/statistics_inventory_report.json
             python scripts/build_production_readiness_report.py \
               --player-report .cache/tbt/production/player_master_report.json \
               --tournament-report .cache/tbt/production/tournament_venue_report.json \
               --training-report .cache/tbt/production/training_table_report.json \
               --leakage-report .cache/tbt/production/leakage_audit_report.json \
+              --statistics-report .cache/tbt/production/statistics_inventory_report.json \
               --out .cache/tbt/production/readiness_report.json \
               --markdown .cache/tbt/production/readiness_report.md
           else
@@ -177,6 +203,7 @@ jobs:
             .cache/tbt/production/training_table.parquet
             .cache/tbt/production/training_table_report.json
             .cache/tbt/production/leakage_audit_report.json
+            .cache/tbt/production/statistics_inventory_report.json
             .cache/tbt/production/readiness_report.json
             .cache/tbt/production/readiness_report.md
           if-no-files-found: error

@@ -28,12 +28,15 @@ def test_player_master_emits_country_rank_and_identity_diagnostics():
     assert 'players_missing_country' in script
 
 
-def test_production_preflight_uses_script_not_fragile_shell_heredoc():
+def test_production_preflight_audits_actual_statistics_inventory_and_uploads_report():
     workflow = read('.github/workflows/data.yml')
-    assert 'scripts/download_production_preflight_inputs.py' in workflow
-    production_block = workflow.split('elif [[ "$MODE" == production-preflight ]]', 1)[1].split('else', 1)[0]
-    assert "python - <<'PY'" not in production_block
-    helper = read('scripts/download_production_preflight_inputs.py')
-    assert "ReleaseStore(repository, 'tbt-data-v1'" in helper
-    assert "ReleaseStore(repository, 'tbt-player-assets-v1'" in helper
-    assert "player_profiles.json" in helper
+    assert 'scripts/audit_statistics_inventory.py' in workflow
+    assert 'statistics_inventory_report.json' in workflow
+    assert '--statistics-report .cache/tbt/production/statistics_inventory_report.json' in workflow
+
+
+def test_static_environment_has_single_resumable_workflow_mode():
+    workflow = read('.github/workflows/data.yml')
+    assert 'environment-static' in workflow
+    assert '--static-only --complete-static' in workflow
+    assert '--max-requests "$MAX_REQUESTS"' in workflow

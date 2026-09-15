@@ -130,3 +130,56 @@ def test_preflight_builds_combined_readiness_report_and_uploads_it():
     )
     assert report['status'] == 'ready'
     assert report['candidate_training']['historical_weather'] is False
+
+
+def test_data_finalize_resolved_venue_backfills_geo_into_masters_when_provider_location_missing():
+    m = _match('geo', datetime(2025,3,1,tzinfo=timezone.utc), 'GER')
+    # Simulate compact history where provider tournament geography was absent but
+    # the point-in-time environment resolver stored a validated locality.
+    m.provider_payload = {
+        'tournament': {'id':'77','name':'Test Open'},
+        '_tbt_environment': {
+            'venue_resolved': True,
+            'venue': {
+                'name':'Berlin','country':'Germany','latitude':52.52,'longitude':13.405,
+                'elevation_m':34.0,'timezone':'Europe/Berlin',
+            },
+        },
+    }
+    tournaments, venues, report = build_tournament_venue_master.build([m])
+    assert tournaments[0]['country_code'] == 'DE'
+    assert tournaments[0]['city'] == 'Berlin'
+    assert venues[0]['country_code'] == 'DE'
+    assert venues[0]['city'] == 'Berlin'
+    assert report['match_weighted_coverage']['country'] == 1.0
+    assert report['match_weighted_coverage']['coordinates'] == 1.0
+
+
+def test_data_finalize_training_does_not_claim_es_ready_when_quality_coverage_is_zero():
+    frame = pd.DataFrame({
+        'scheduled_at': pd.to_datetime(['2025-01-01T12:00:00Z']),
+        'tour':['atp'], 'year':['2025'], 'surface':['hard'],
+        'stats_known_both':[0.0], 'environment_known':[1.0],
+        'travel_known':[1.0], 'altitude_change_known':[1.0],
+        'indoor_known':[1.0], 'weather_known':[0.0],
+        **{name:[0.0] for name in build_production_training_table.FEATURE_NAMES if name not in {'stats_known_both','environment_known','travel_known','altitude_change_known','weather_known'}},
+    })
+    report = build_production_training_table.build_report(frame, {'with_statistics':1}, {})
+    assert report['event_statistics']['raw_statistics_match_rate'] == 1.0
+    assert report['event_statistics']['ready_for_candidate_eval'] is False
+    assert report['candidate_feature_groups']['event_statistics']['eligible_for_candidate'] is False
+    assert report['candidate_feature_groups']['static_environment']['eligible_for_candidate'] is True
+
+
+def test_data_finalize_readiness_uses_real_candidate_flags_not_hardcoded_es_true():
+    report = build_production_readiness_report.build(
+        {'players':10,'country_coverage':1.0,'latest_rank_coverage':1.0,'duplicate_name_groups':0},
+        {'tournaments':2,'venues':2,'tournament_coverage':{'country':1.0,'city':1.0},'venue_coverage':{'coordinates':1.0,'elevation':1.0,'timezone':1.0},'match_weighted_coverage':{'country':1.0,'city':1.0,'coordinates':1.0,'elevation':1.0,'timezone':1.0},'identity_diagnostics':{}},
+        {'rows':100,'event_statistics':{'stats_known_both_rate':0.0,'ready_for_candidate_eval':False,'raw_statistics_match_rate':0.2},'static_environment':{'venue_environment_known_rate':0.9,'ready_for_candidate_eval':True},'candidate_feature_groups':{'event_statistics':{'ready_for_candidate_eval':False},'static_environment':{'ready_for_candidate_eval':True}}},
+        {'status':'pass'},
+        {'any_stats_rate':0.2,'both_players_quality_ready_rate':0.0,'stat_key_counts':{'p1_aces':20}},
+    )
+    assert report['candidate_training']['event_statistics'] is False
+    assert report['candidate_training']['static_environment'] is True
+    assert 'event_statistics_not_ready_for_candidate_eval' in report['warnings']
+    assert report['statistics_diagnostics']['top_stat_keys'][0] == ('p1_aces', 20)

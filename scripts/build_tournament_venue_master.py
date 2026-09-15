@@ -82,6 +82,16 @@ def _resolved_venue(payload: Any) -> dict[str, Any]:
     return venue
 
 
+def _resolved_location(resolved: dict[str, Any]) -> dict[str, str]:
+    if not resolved:
+        return {"country_code": "", "city": ""}
+    return {
+        "country_code": normalize_country_code(resolved.get("country")),
+        # Open-Meteo geocoding Venue.name is the resolved city/locality name.
+        "city": _text(resolved.get("name")),
+    }
+
+
 def _tournament_key(match) -> str:
     tour = _text(match.tour).lower() or "unknown"
     tournament_id = _text(match.tournament_id)
@@ -139,14 +149,30 @@ def build(matches) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str
     venue_cities: dict[str, Counter] = defaultdict(Counter)
     venue_countries: dict[str, Counter] = defaultdict(Counter)
     venue_timezones: dict[str, Counter] = defaultdict(Counter)
+    match_coverage = Counter()
 
     for match in matches:
         tkey = _tournament_key(match)
         ts = match.scheduled_at.isoformat()
         loc = _payload_location(match.provider_payload)
         resolved = _resolved_venue(match.provider_payload)
+        resolved_loc = _resolved_location(resolved)
         vkey = _venue_key(match, loc, resolved)
         tournament_venues[tkey].add(vkey)
+
+        match_coverage["matches"] += 1
+        if loc.get("country_code") or resolved_loc.get("country_code"):
+            match_coverage["country"] += 1
+        if loc.get("city") or resolved_loc.get("city"):
+            match_coverage["city"] += 1
+        if resolved:
+            match_coverage["venue_resolved"] += 1
+            if resolved.get("latitude") not in (None, "") and resolved.get("longitude") not in (None, ""):
+                match_coverage["coordinates"] += 1
+            if resolved.get("elevation_m") not in (None, ""):
+                match_coverage["elevation"] += 1
+            if resolved.get("timezone") not in (None, ""):
+                match_coverage["timezone"] += 1
 
         row = tournaments.setdefault(tkey, {
             "tournament_key": tkey,
@@ -156,8 +182,8 @@ def build(matches) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str
             "level": _text(match.tournament_level),
             "surface": _text(match.surface).lower(),
             "indoor": match.indoor,
-            "city": loc.get("city", ""),
-            "country_code": loc.get("country_code", ""),
+            "city": loc.get("city", "") or resolved_loc.get("city", ""),
+            "country_code": loc.get("country_code", "") or resolved_loc.get("country_code", ""),
             "first_seen": ts,
             "last_seen": ts,
             "matches_seen": 0,
@@ -181,17 +207,19 @@ def build(matches) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str
             tournament_surfaces[tkey][_text(match.surface).lower()] += 1
         if match.indoor is not None:
             tournament_indoor[tkey][bool(match.indoor)] += 1
-        if loc.get("city"):
-            tournament_cities[tkey][loc["city"]] += 1
-        if loc.get("country_code"):
-            tournament_countries[tkey][loc["country_code"]] += 1
+        tournament_city = loc.get("city") or resolved_loc.get("city")
+        tournament_country = loc.get("country_code") or resolved_loc.get("country_code")
+        if tournament_city:
+            tournament_cities[tkey][tournament_city] += 1
+        if tournament_country:
+            tournament_countries[tkey][tournament_country] += 1
 
         vrow = venues.setdefault(vkey, {
             "venue_key": vkey,
             "provider_venue_id": loc.get("venue_id", ""),
             "name": loc.get("venue_name", "") or _text(resolved.get("name")),
-            "city": loc.get("city", ""),
-            "country_code": loc.get("country_code", "") or normalize_country_code(resolved.get("country")),
+            "city": loc.get("city", "") or resolved_loc.get("city", ""),
+            "country_code": loc.get("country_code", "") or resolved_loc.get("country_code", ""),
             "latitude": None,
             "longitude": None,
             "elevation_m": None,
@@ -217,11 +245,13 @@ def build(matches) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str
             if resolved.get("timezone"):
                 venue_timezones[vkey][_text(resolved.get("timezone"))] += 1
             if resolved.get("name"):
-                venue_names[vkey][_text(resolved.get("name"))] += 1
-            if resolved.get("country"):
-                code = normalize_country_code(resolved.get("country"))
-                if code:
-                    venue_countries[vkey][code] += 1
+                resolved_name = _text(resolved.get("name"))
+                venue_names[vkey][resolved_name] += 1
+                # The environment resolver returns an exact geocoder locality in name.
+                if not loc.get("city"):
+                    venue_cities[vkey][resolved_name] += 1
+            if resolved_loc.get("country_code"):
+                venue_countries[vkey][resolved_loc["country_code"]] += 1
         if loc.get("venue_name"):
             venue_names[vkey][loc["venue_name"]] += 1
         if loc.get("city"):
@@ -328,6 +358,10 @@ def build(matches) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str
             "coordinates": round(sum(r["latitude"] is not None and r["longitude"] is not None for r in venue_rows) / max(1, total_v), 6),
             "elevation": round(sum(r["elevation_m"] is not None for r in venue_rows) / max(1, total_v), 6),
             "timezone": round(sum(bool(r["timezone"]) for r in venue_rows) / max(1, total_v), 6),
+        },
+        "match_weighted_coverage": {
+            key: round(match_coverage[key] / max(1, match_coverage["matches"]), 6)
+            for key in ("country", "city", "venue_resolved", "coordinates", "elevation", "timezone")
         },
         "by_tour": by_tour,
         "identity_diagnostics": {

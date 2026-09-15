@@ -16,6 +16,27 @@ def _compact_country(value: Any) -> dict[str, Any] | None:
     return None
 
 
+def _compact_team(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    compact: dict[str, Any] = {}
+    for key in ("id", "name"):
+        if value.get(key) not in (None, ""):
+            compact[key] = value.get(key)
+    country = _compact_country(value.get("country"))
+    if country is not None:
+        compact["country"] = country
+    for source, target in (
+        ("country_code", "country_code"),
+        ("countryCode", "countryCode"),
+        ("countryAlpha2", "countryAlpha2"),
+        ("countryAlpha3", "countryAlpha3"),
+    ):
+        if value.get(source) not in (None, ""):
+            compact[target] = value.get(source)
+    return compact or None
+
+
 def minimize_provider_payload(
     payload: Any,
     *,
@@ -64,6 +85,14 @@ def minimize_provider_payload(
     event = raw.get("event") if isinstance(raw.get("event"), dict) else {}
     if event.get("id") not in (None, ""):
         out["event"] = {"id": event.get("id")}
+
+    # Preserve only the tiny player identity/country context required by the
+    # presentation player master. This is intentionally not a historical-rank
+    # source and therefore cannot leak current ranking into model training.
+    for key in ("homeTeam", "awayTeam", "home_team", "away_team"):
+        compact_team = _compact_team(raw.get(key))
+        if compact_team is not None:
+            out[key] = compact_team
 
     tournament = raw.get("tournament") if isinstance(raw.get("tournament"), dict) else {}
     unique = (

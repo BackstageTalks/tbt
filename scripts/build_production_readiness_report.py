@@ -27,7 +27,8 @@ def _pct(value: Any) -> str:
         return "—"
 
 
-def build(player: dict, tournament: dict, training: dict, leakage: dict) -> dict[str, Any]:
+def build(player: dict, tournament: dict, training: dict, leakage: dict, statistics: dict | None = None) -> dict[str, Any]:
+    statistics = statistics or {}
     blockers: list[str] = []
     warnings: list[str] = []
     if leakage.get("status") != "pass":
@@ -41,6 +42,12 @@ def build(player: dict, tournament: dict, training: dict, leakage: dict) -> dict
     vv = tournament.get("venue_coverage") or {}
     sc = training.get("event_statistics") or {}
     ec = training.get("static_environment") or {}
+    mw = tournament.get("match_weighted_coverage") or {}
+    candidate_groups = training.get("candidate_feature_groups") or {}
+    es_group = candidate_groups.get("event_statistics") or {}
+    env_group = candidate_groups.get("static_environment") or {}
+    es_ready = bool(es_group.get("ready_for_candidate_eval", sc.get("ready_for_candidate_eval", float(sc.get("stats_known_both_rate") or 0) > 0)))
+    env_ready = bool(env_group.get("ready_for_candidate_eval", ec.get("ready_for_candidate_eval", float(ec.get("venue_environment_known_rate") or 0) > 0)))
 
     if pc < 0.98:
         warnings.append("player_country_coverage_below_98pct")
@@ -54,8 +61,12 @@ def build(player: dict, tournament: dict, training: dict, leakage: dict) -> dict
         warnings.append("venue_elevation_coverage_below_80pct")
     if float(ec.get("venue_environment_known_rate") or 0) < 0.80:
         warnings.append("static_environment_match_coverage_below_80pct")
-    if float(sc.get("stats_known_both_rate") or 0) < 0.70:
+    if not es_ready:
+        warnings.append("event_statistics_not_ready_for_candidate_eval")
+    elif float(sc.get("stats_known_both_rate") or 0) < 0.70:
         warnings.append("event_statistics_match_coverage_below_70pct")
+    if not env_ready:
+        warnings.append("static_environment_not_ready_for_candidate_eval")
 
     duplicate_groups = int(((tournament.get("identity_diagnostics") or {}).get("potential_duplicate_signature_groups") or 0))
     if duplicate_groups:
@@ -76,8 +87,14 @@ def build(player: dict, tournament: dict, training: dict, leakage: dict) -> dict
             "venue_coordinates": vv.get("coordinates"),
             "venue_elevation": vv.get("elevation"),
             "venue_timezone": vv.get("timezone"),
+            "match_weighted_tournament_country": mw.get("country"),
+            "match_weighted_tournament_city": mw.get("city"),
+            "match_weighted_venue_coordinates": mw.get("coordinates"),
+            "match_weighted_venue_elevation": mw.get("elevation"),
+            "match_weighted_venue_timezone": mw.get("timezone"),
             "static_environment_matches": ec.get("venue_environment_known_rate"),
             "event_statistics_both_players": sc.get("stats_known_both_rate"),
+            "raw_statistics_matches": sc.get("raw_statistics_match_rate", statistics.get("any_stats_rate")),
         },
         "counts": {
             "players": player.get("players"),
@@ -88,15 +105,21 @@ def build(player: dict, tournament: dict, training: dict, leakage: dict) -> dict
             "duplicate_player_name_groups": player.get("duplicate_name_groups"),
         },
         "candidate_training": {
-            "event_statistics": True,
-            "static_environment": True,
+            "event_statistics": es_ready,
+            "static_environment": env_ready,
             "historical_weather": False,
             "historical_weather_reason": "requires genuine point-in-time pre-match forecast snapshots",
         },
+        "statistics_diagnostics": {
+            "any_stats_rate": statistics.get("any_stats_rate", sc.get("raw_statistics_match_rate")),
+            "both_players_quality_ready_rate": statistics.get("both_players_quality_ready_rate", sc.get("stats_known_both_rate")),
+            "top_stat_keys": list((statistics.get("stat_key_counts") or {}).items())[:20],
+        },
         "next_actions": [
-            "review blockers and identity/coverage warnings",
-            "run leakage audit until PASS",
-            "retrain candidate with ES + static environment",
+            "review identity/coverage warnings; no leakage blocker is present" if not blockers else "resolve leakage/data blockers first",
+            "backfill or redesign ES only if both-player serve+return quality is actually available",
+            "complete recent static-environment enrichment before final candidate comparison",
+            "retrain only feature groups marked ready_for_candidate_eval",
             "run chronological holdout/backtest + ablation",
             "promote only if candidate gate passes",
         ],
@@ -122,16 +145,28 @@ def markdown(report: dict[str, Any]) -> str:
         "tournament_city": "Tournament city",
         "venue_coordinates": "Venue coordinates",
         "venue_elevation": "Venue elevation",
-        "venue_timezone": "Venue timezone",
+        "venue_timezone": "Venue timezone (unique entities)",
+        "match_weighted_tournament_country": "Tournament country (match-weighted)",
+        "match_weighted_tournament_city": "Tournament city (match-weighted)",
+        "match_weighted_venue_coordinates": "Venue coordinates (match-weighted)",
+        "match_weighted_venue_elevation": "Venue elevation (match-weighted)",
+        "match_weighted_venue_timezone": "Venue timezone (match-weighted)",
         "static_environment_matches": "Static environment in training rows",
         "event_statistics_both_players": "ES for both players in training rows",
+        "raw_statistics_matches": "Rows carrying any raw statistics",
     }
     lines += [f"| {labels[k]} | {_pct(c.get(k))} |" for k in labels]
     lines += ["", "## Blockers"]
     lines += [f"- {x}" for x in report.get("blockers") or []] or ["- none"]
     lines += ["", "## Warnings"]
     lines += [f"- {x}" for x in report.get("warnings") or []] or ["- none"]
-    lines += ["", "## Candidate feature policy", "", "- ES: eligible", "- Static environment: eligible", "- Historical/post-hoc weather: **not eligible**", ""]
+    candidate = report.get("candidate_training") or {}
+    lines += [
+        "", "## Candidate feature policy", "",
+        f"- ES: {'ready' if candidate.get('event_statistics') else '**not ready**'}",
+        f"- Static environment: {'ready' if candidate.get('static_environment') else '**not ready**'}",
+        "- Historical/post-hoc weather: **not eligible**", "",
+    ]
     return "\n".join(lines)
 
 
@@ -141,10 +176,15 @@ def main() -> None:
     ap.add_argument("--tournament-report", required=True)
     ap.add_argument("--training-report", required=True)
     ap.add_argument("--leakage-report", required=True)
+    ap.add_argument("--statistics-report", default="")
     ap.add_argument("--out", default=".cache/tbt/production/readiness_report.json")
     ap.add_argument("--markdown", default=".cache/tbt/production/readiness_report.md")
     args = ap.parse_args()
-    report = build(_load(args.player_report), _load(args.tournament_report), _load(args.training_report), _load(args.leakage_report))
+    report = build(
+        _load(args.player_report), _load(args.tournament_report),
+        _load(args.training_report), _load(args.leakage_report),
+        _load(args.statistics_report) if args.statistics_report else {},
+    )
     out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     md = Path(args.markdown); md.parent.mkdir(parents=True, exist_ok=True)

@@ -62,6 +62,14 @@ def _group_coverage(frame: pd.DataFrame, column: str) -> dict[str, Any]:
 
 
 def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> dict[str, Any]:
+    es_rate = _mean(frame, "stats_known_both")
+    env_rate = _mean(frame, "environment_known")
+    raw_stats_matches = int((quality or {}).get("with_statistics") or 0)
+    raw_stats_rate = (raw_stats_matches / len(frame)) if len(frame) else 0.0
+    # Schema eligibility means the feature group is safe by provenance. Data
+    # readiness separately answers whether this concrete history can evaluate it.
+    es_ready = es_rate > 0.0
+    env_ready = env_rate > 0.0
     return {
         "schema": 2,
         "rows": int(len(frame)),
@@ -75,16 +83,20 @@ def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> d
         "feature_missing_rate": _missing_rates(frame, list(FEATURE_NAMES)),
         "static_environment": {
             "training_eligible": True,
+            "ready_for_candidate_eval": env_ready,
             "features": STATIC_ENV_FEATURES,
             "travel_known_rate": _mean(frame, "travel_known"),
             "altitude_change_known_rate": _mean(frame, "altitude_change_known"),
             "indoor_known_rate": _mean(frame, "indoor_known"),
-            "venue_environment_known_rate": _mean(frame, "environment_known"),
+            "venue_environment_known_rate": env_rate,
         },
         "event_statistics": {
             "training_eligible": True,
+            "ready_for_candidate_eval": es_ready,
             "features": ES_FEATURES,
-            "stats_known_both_rate": _mean(frame, "stats_known_both"),
+            "stats_known_both_rate": es_rate,
+            "raw_statistics_matches": raw_stats_matches,
+            "raw_statistics_match_rate": raw_stats_rate,
         },
         "historical_weather": {
             "training_eligible": False,
@@ -99,8 +111,18 @@ def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> d
             "by_surface": _group_coverage(frame, "surface"),
         },
         "candidate_feature_groups": {
-            "event_statistics": {"eligible_for_candidate": True, "features": ES_FEATURES},
-            "static_environment": {"eligible_for_candidate": True, "features": STATIC_ENV_FEATURES},
+            "event_statistics": {
+                "schema_eligible": True,
+                "eligible_for_candidate": es_ready,
+                "ready_for_candidate_eval": es_ready,
+                "features": ES_FEATURES,
+            },
+            "static_environment": {
+                "schema_eligible": True,
+                "eligible_for_candidate": env_ready,
+                "ready_for_candidate_eval": env_ready,
+                "features": STATIC_ENV_FEATURES,
+            },
             "historical_weather": {"eligible_for_candidate": False, "features": WEATHER_RESEARCH_FEATURES},
         },
     }

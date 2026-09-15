@@ -30,12 +30,50 @@ PROVIDER_TO2 = {
     "SLO":"SI", "SUI":"CH", "URU":"UY", "VIE":"VN", "WAL":"GB",
 }
 
+# Open-Meteo venue resolution returns canonical country *names* rather than
+# ISO codes. These aliases are explicit presentation/environment mappings, not
+# player-name guesses. They are safe for venue/master normalization.
+COUNTRY_NAME_TO2 = {
+    "albania":"AL","argentina":"AR","australia":"AU","austria":"AT",
+    "belarus":"BY","belgium":"BE","bolivia":"BO","bosnia and herzegovina":"BA",
+    "brazil":"BR","bulgaria":"BG","canada":"CA","chile":"CL","china":"CN",
+    "colombia":"CO","costa rica":"CR","croatia":"HR","cyprus":"CY",
+    "czechia":"CZ","czech republic":"CZ","denmark":"DK","dominican republic":"DO",
+    "ecuador":"EC","egypt":"EG","el salvador":"SV","estonia":"EE","finland":"FI",
+    "france":"FR","georgia":"GE","germany":"DE","greece":"GR","hong kong":"HK",
+    "hungary":"HU","iceland":"IS","india":"IN","indonesia":"ID","ireland":"IE",
+    "israel":"IL","italy":"IT","japan":"JP","kazakhstan":"KZ","latvia":"LV",
+    "lebanon":"LB","lithuania":"LT","luxembourg":"LU","malaysia":"MY",
+    "mexico":"MX","moldova":"MD","republic of moldova":"MD","monaco":"MC",
+    "montenegro":"ME","morocco":"MA","netherlands":"NL","new zealand":"NZ",
+    "north macedonia":"MK","norway":"NO","paraguay":"PY","peru":"PE",
+    "philippines":"PH","poland":"PL","portugal":"PT","puerto rico":"PR",
+    "romania":"RO","russia":"RU","russian federation":"RU","saudi arabia":"SA",
+    "serbia":"RS","singapore":"SG","slovakia":"SK","slovenia":"SI",
+    "south africa":"ZA","south korea":"KR","republic of korea":"KR","korea, republic of":"KR",
+    "spain":"ES","sweden":"SE","switzerland":"CH","taiwan":"TW",
+    "taiwan, province of china":"TW","thailand":"TH","tunisia":"TN","turkey":"TR",
+    "turkiye":"TR","türkiye":"TR","ukraine":"UA","united arab emirates":"AE",
+    "united kingdom":"GB","great britain":"GB","england":"GB","scotland":"GB",
+    "united states":"US","united states of america":"US","uruguay":"UY",
+    "uzbekistan":"UZ","venezuela":"VE","vietnam":"VN","viet nam":"VN",
+    "bahrain":"BH","barbados":"BB","bermuda":"BM","guatemala":"GT",
+    "qatar":"QA","panama":"PA","jamaica":"JM","trinidad and tobago":"TT",
+    "armenia":"AM","azerbaijan":"AZ","kyrgyzstan":"KG","tajikistan":"TJ",
+}
+
 
 def normalize_country_code(value: object) -> str:
     """Return an uppercase ISO-3166 alpha-2 code or an empty string."""
-    code = str(value or "").strip().upper()
+    raw = str(value or "").strip()
+    code = raw.upper()
     if len(code) == 2 and code.isalpha():
         return code
     if len(code) == 3 and code.isalpha():
-        return ALPHA3_TO2.get(code) or PROVIDER_TO2.get(code, "")
-    return ""
+        found = ALPHA3_TO2.get(code) or PROVIDER_TO2.get(code, "")
+        if found:
+            return found
+    # Country names here come from explicit provider/geocoder country fields.
+    # Never call this function with a player or tournament *name* as a proxy.
+    name = raw.casefold().replace("’", "'")
+    return COUNTRY_NAME_TO2.get(name, "")
