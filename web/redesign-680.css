@@ -605,3 +605,196 @@ body#blinqPremium #dashboardSidebarMatch[hidden]{display:none!important}
     color:#f4f8f6!important;background:#123044!important;box-shadow:inset 0 -2px 0 #8b5cf6!important;
   }
 }
+
+/* === 6.8.0 visual parity hotfix — approved 1448×1086 reference === */
+@media (min-width:1081px){
+  /* Header parity: compact wordmark, search, notification separator, compact account. */
+  body#blinqPremium .reference-topbar .header-top{
+    grid-template-columns:108px minmax(410px,1fr) 244px 238px!important;
+    gap:16px!important;padding:0 32px!important;height:60px!important;min-height:60px!important;
+  }
+  body#blinqPremium .reference-topbar .brand{width:96px!important;height:60px!important;display:flex!important;align-items:center!important}
+  body#blinqPremium .brand-source-logo{display:none!important}
+  body#blinqPremium .reference-wordmark{display:grid!important;align-content:center!important;justify-items:start!important;line-height:1!important;color:#f7faf9!important}
+  body#blinqPremium .reference-wordmark strong{font-size:26px!important;line-height:.9!important;letter-spacing:-.045em!important;font-weight:850!important;color:#f7faf9!important}
+  body#blinqPremium .reference-wordmark strong span{color:#36efa0!important;font-weight:600!important}
+  body#blinqPremium .reference-wordmark small{margin-top:5px!important;font-size:4.5px!important;line-height:1!important;letter-spacing:.22em!important;color:#7c8e93!important;font-weight:750!important}
+  body#blinqPremium .reference-navigation{height:60px!important;gap:31px!important}
+  body#blinqPremium .reference-navigation a,body#blinqPremium .reference-navigation button{font-size:11.5px!important}
+  body#blinqPremium .reference-search{
+    height:36px!important;align-self:center!important;display:flex!important;align-items:center!important;gap:9px!important;
+    padding:0 12px!important;border:1px solid rgba(102,132,143,.28)!important;border-radius:6px!important;background:#0a171d!important;color:#91a2a8!important;
+  }
+  body#blinqPremium .reference-search>span{font-size:18px!important;line-height:1!important;transform:rotate(-18deg)!important;color:#9babb1!important}
+  body#blinqPremium .reference-search input{min-width:0!important;width:100%!important;border:0!important;outline:0!important;background:transparent!important;color:#dbe4e6!important;font:500 8.5px/1.2 Inter,"Segoe UI",Arial,sans-serif!important;padding:0!important}
+  body#blinqPremium .reference-search input::placeholder{color:#7d8d93!important;opacity:1!important}
+  body#blinqPremium .reference-topbar .header-actions{height:60px!important;gap:0!important;justify-content:flex-end!important}
+  body#blinqPremium .reference-topbar .insight-bell{width:47px!important;min-width:47px!important;height:38px!important;margin-right:10px!important}
+  body#blinqPremium .reference-topbar .profile-shell{
+    min-width:181px!important;max-width:181px!important;height:48px!important;border:0!important;border-left:1px solid rgba(107,136,145,.22)!important;border-radius:0!important;background:transparent!important;padding-left:12px!important;
+  }
+  body#blinqPremium .reference-topbar .profile-button{min-height:48px!important;padding:4px 2px 4px 0!important;gap:8px!important}
+  body#blinqPremium .reference-topbar .avatar{width:36px!important;height:36px!important;flex-basis:36px!important}
+  body#blinqPremium .reference-topbar .profile-copy{max-width:108px!important}
+  body#blinqPremium .reference-topbar .profile-copy strong{max-width:108px!important;font-size:8.5px!important;line-height:1.2!important}
+  body#blinqPremium .reference-topbar .profile-meta-primary{display:block!important;margin-top:2px!important;font-size:7px!important;color:#9badb2!important}
+  body#blinqPremium .reference-topbar .profile-meta-secondary,body#blinqPremium #profileTelegram{display:none!important}
+  body#blinqPremium .reference-topbar .profile-toggle{width:24px!important;border-left:0!important;font-size:11px!important}
+
+  /* Hero dimensions already matched closely; tune copy to the supplied reference. */
+  body#blinqPremium #dashboardHero,body#blinqPremium #dashboardHero .dashboard-hero,body#blinqPremium #dashboardHero .hero-slide{height:203px!important;min-height:203px!important}
+  body#blinqPremium #dashboardHero .dashboard-hero-copy,body#blinqPremium #dashboardHero .hero-copy{left:49px!important;top:50%!important;width:510px!important}
+  body#blinqPremium #dashboardHero .dashboard-hero-copy h2,body#blinqPremium #dashboardHero .hero-copy h2{font-size:41px!important;line-height:1.01!important}
+  body#blinqPremium #dashboardHero .dashboard-hero-copy p,body#blinqPremium #dashboardHero .hero-copy p{font-size:10.5px!important;max-width:460px!important}
+
+  /* Main board spacing and KPI cards. */
+  body#blinqPremium .dashboard-content-grid{grid-template-columns:minmax(0,1fr) 310px!important;gap:18px!important;padding:12px 32px 0!important}
+  body#blinqPremium .dashboard-kpis{gap:10px!important;margin-bottom:10px!important}
+  body#blinqPremium .dashboard-kpi{height:70px!important;min-height:70px!important;background:linear-gradient(180deg,#0b181e,#08151a)!important}
+  body#blinqPremium .dashboard-kpi>span{width:38px!important;height:38px!important;flex-basis:38px!important;border-radius:6px!important;background:#0b3026!important}
+  body#blinqPremium .dashboard-kpi>span svg{width:20px!important;height:20px!important;display:block!important;stroke:#35efa0!important;fill:none!important;stroke-width:1.8!important}
+  body#blinqPremium .dashboard-kpi small{font-size:6.7px!important}
+  body#blinqPremium .dashboard-kpi strong{font-size:19px!important}
+  body#blinqPremium .dashboard-kpi p{font-size:6.9px!important;color:#7c8e93!important}
+  body#blinqPremium .dashboard-kpi .kpi-trend{display:inline-flex!important;margin-left:8px!important;color:#35efa0!important;font-size:7.2px!important;font-weight:850!important;vertical-align:middle!important}
+
+  /* Target daily-navigation composition. */
+  body#blinqPremium .daily-tabs-row{height:58px!important;min-height:58px!important;padding:0 14px!important;gap:10px!important;background:#09171c!important}
+  body#blinqPremium .daily-tabs{height:58px!important;gap:25px!important;flex:1 1 auto!important;min-width:0!important;overflow:hidden!important}
+  body#blinqPremium .daily-hub-tab{height:58px!important;font-size:9.5px!important;font-weight:650!important}
+  body#blinqPremium .daily-hub-tab:first-child{font-size:12px!important;color:#b9c8c8!important;font-weight:800!important}
+  body#blinqPremium .daily-hub-tab:first-child.active{color:#35efa0!important}
+  body#blinqPremium .daily-hub-results{display:none!important}
+  body#blinqPremium .daily-toolbar{margin-left:auto!important;display:flex!important;align-items:center!important;gap:12px!important;flex:0 0 auto!important;height:58px!important}
+  body#blinqPremium .daily-toolbar-date{display:flex!important;align-items:center!important;gap:6px!important;color:#d3dcde!important;white-space:nowrap!important;font-size:7.8px!important}
+  body#blinqPremium .daily-toolbar-date>span{color:#9eafb5!important;font-size:11px!important}
+  body#blinqPremium .daily-toolbar-date b{font-weight:550!important}
+  body#blinqPremium .daily-tournament-filter{width:122px!important;height:32px!important;display:block!important}
+  body#blinqPremium .daily-tournament-filter select{width:100%!important;height:32px!important;padding:0 28px 0 10px!important;border:1px solid rgba(97,132,143,.32)!important;border-radius:6px!important;background:#0b1a20!important;color:#e5edef!important;font:650 7.5px/1 Inter,"Segoe UI",Arial,sans-serif!important;outline:0!important}
+  body#blinqPremium .daily-expand{width:30px!important;min-width:30px!important;height:30px!important;min-height:30px!important;padding:0!important;border-radius:6px!important;font-size:11px!important;color:#35efa0!important;background:#0b1d21!important}
+  body#blinqPremium .daily-expand[hidden]{display:none!important}
+
+  /* Table parity: slightly denser rows but larger/readable names. */
+  body#blinqPremium .daily-hub-table th{height:29px!important;padding:0 9px!important;font-size:6.1px!important}
+  body#blinqPremium .daily-hub-table td{height:52px!important;padding:5px 9px!important;font-size:9.3px!important}
+  body#blinqPremium .daily-hub-table td:first-child{font-size:9.8px!important}
+  body#blinqPremium .hub-tournament-logo,body#blinqPremium .hub-tour-logo,body#blinqPremium .hub-tournament-badge{width:31px!important;height:31px!important;flex-basis:31px!important}
+  body#blinqPremium .hub-avatar,body#blinqPremium .hub-player img,body#blinqPremium .hub-player-avatar{width:31px!important;height:31px!important;flex:0 0 31px!important;border:2px solid rgba(218,236,230,.88)!important;box-shadow:0 0 0 1px rgba(53,239,160,.32)!important}
+  body#blinqPremium .hub-player-copy>b{font-size:9.2px!important;max-width:126px!important}
+  body#blinqPremium .hub-player-meta,body#blinqPremium .hub-player-meta .hub-tour,body#blinqPremium .hub-player-meta .hub-rank{font-size:6.4px!important}
+  body#blinqPremium .hub-prob{font-size:12px!important}
+  body#blinqPremium .hub-detail{min-height:30px!important;font-size:7.8px!important;padding:0 10px!important}
+
+  /* Right rail: target typography/copy rhythm. */
+  body#blinqPremium .dashboard-right-rail>div{gap:10px!important}
+  body#blinqPremium .rail-quote{min-height:100px!important;padding:16px 18px!important}
+  body#blinqPremium .rail-quote blockquote{font-size:12.5px!important;line-height:1.42!important}
+  body#blinqPremium .rail-highlight-head{min-height:48px!important;padding:11px 14px!important}
+  body#blinqPremium .rail-highlight-head h3{font-size:14px!important}
+  body#blinqPremium .rail-highlight-head span{font-size:6.2px!important}
+  body#blinqPremium .rail-highlight-media{min-height:260px!important}
+  body#blinqPremium .rail-highlight-media>.rail-highlight-bg{object-position:center center!important;filter:saturate(.82) brightness(.72) contrast(1.05)!important}
+  body#blinqPremium .rail-highlight-overlay{left:16px!important;right:14px!important;bottom:15px!important}
+  body#blinqPremium .rail-highlight-overlay strong{font-size:17px!important;line-height:1.08!important;max-width:245px!important}
+  body#blinqPremium .rail-highlight-overlay p{font-size:8.4px!important;line-height:1.43!important;max-width:250px!important}
+  body#blinqPremium .rail-highlight-overlay button{padding:9px 14px!important;font-size:8px!important}
+  body#blinqPremium .rail-advantage{min-height:182px!important;padding:14px!important}
+  body#blinqPremium .rail-section-title h3{font-size:14px!important}
+  body#blinqPremium .rail-section-title .rail-info{display:inline-grid!important;place-items:center!important;width:12px!important;height:12px!important;border:1px solid #71858b!important;border-radius:50%!important;font-size:7px!important;color:#9babad!important;margin-left:4px!important}
+  body#blinqPremium .rail-advantage-grid strong{font-size:15px!important}
+  body#blinqPremium .rail-advantage-grid small{font-size:6px!important}
+  body#blinqPremium .rail-spark{height:56px!important;margin-top:10px!important}
+  body#blinqPremium .rail-spark-caption{margin:5px 0 0!important;color:#71858a!important;font-size:6.4px!important;line-height:1.35!important}
+  body#blinqPremium .rail-quote-bottom{position:relative!important;min-height:86px!important;padding:16px 18px 14px 45px!important}
+  body#blinqPremium .rail-quote-bottom:before{content:'“';position:absolute;left:16px;top:7px;color:#51666d;font:700 42px/1 Georgia,serif}
+
+  /* Footer/VIP strip parity. */
+  body#blinqPremium .vip-rail{margin:12px 32px 0!important;height:60px!important;min-height:60px!important;background:#071015!important}
+  body#blinqPremium .vip-rail-content{grid-template-columns:205px repeat(4,minmax(0,1fr)) 126px!important;gap:8px!important;height:60px!important;min-height:60px!important}
+  body#blinqPremium .vip-brand{display:flex!important;align-items:center!important;gap:11px!important;min-width:0!important}
+  body#blinqPremium .vip-brand>img{display:none!important}
+  body#blinqPremium .vip-brand .reference-wordmark strong{font-size:24px!important}
+  body#blinqPremium .vip-brand .reference-wordmark small{display:none!important}
+  body#blinqPremium .vip-tagline{max-width:118px!important;color:#697d83!important;font-size:6.2px!important;line-height:1.3!important}
+  body#blinqPremium .vip-benefits>div{gap:8px!important;padding:7px 8px!important}
+  body#blinqPremium .vip-benefits>div>span{color:#dce7e5!important;font-size:14px!important}
+  body#blinqPremium .vip-benefits strong{font-size:7.7px!important;color:#e5eeee!important}
+  body#blinqPremium .vip-benefits small{font-size:6px!important;color:#6f8187!important}
+  body#blinqPremium .vip-cta{min-height:38px!important;font-size:8px!important}
+}
+
+@media (min-width:1081px) and (max-width:1320px){
+  body#blinqPremium .reference-topbar .header-top{grid-template-columns:94px minmax(330px,1fr) 210px 198px!important;padding-inline:18px!important;gap:10px!important}
+  body#blinqPremium .reference-navigation{gap:20px!important}
+  body#blinqPremium .reference-search{padding-inline:9px!important}
+  body#blinqPremium .reference-topbar .profile-shell{min-width:150px!important;max-width:150px!important;padding-left:8px!important}
+  body#blinqPremium .reference-topbar .profile-copy{max-width:84px!important}
+  body#blinqPremium .daily-tabs{gap:15px!important}
+  body#blinqPremium .daily-hub-tab{font-size:8.4px!important}
+  body#blinqPremium .daily-hub-tab:first-child{font-size:10px!important}
+  body#blinqPremium .daily-toolbar-date{display:none!important}
+  body#blinqPremium .daily-tournament-filter{width:108px!important}
+  body#blinqPremium .vip-rail-content{grid-template-columns:160px repeat(4,minmax(0,1fr)) 108px!important}
+}
+
+/* === 6.8.0 visual reference parity final corrections === */
+@media (min-width:1081px){
+  /* The approved reference uses taller prediction rows; this also removes the
+     oversized empty band before the footer at 1086px. */
+  body#blinqPremium .daily-hub-table th{height:30px!important}
+  body#blinqPremium .daily-hub-table td{height:55px!important;padding-top:6px!important;padding-bottom:6px!important}
+
+  /* Never let the old gold VIP badge rule style the new BlinQ wordmark. */
+  body#blinqPremium .vip-brand>.reference-wordmark{
+    width:auto!important;height:auto!important;min-width:0!important;border-radius:0!important;
+    display:grid!important;place-items:initial!important;align-content:center!important;justify-items:start!important;
+    background:transparent!important;color:#f7faf9!important;padding:0!important;
+  }
+  body#blinqPremium .vip-brand>.reference-wordmark strong{display:block!important;color:#f7faf9!important;font-size:24px!important;line-height:.9!important;letter-spacing:-.045em!important}
+  body#blinqPremium .vip-brand>.reference-wordmark strong span{color:#36efa0!important;font-weight:600!important}
+  body#blinqPremium .vip-brand>.reference-wordmark small{display:none!important}
+
+  /* Reference rail is a little taller than the previous implementation. */
+  body#blinqPremium .rail-highlight-media{min-height:270px!important}
+  body#blinqPremium .rail-advantage{min-height:184px!important}
+  body#blinqPremium .vip-rail{margin-top:14px!important}
+
+  /* Keep filter/search toolbars inside their own columns, never the document. */
+  body#blinqPremium .daily-tabs-row,body#blinqPremium .daily-tabs,body#blinqPremium .daily-toolbar{min-width:0!important}
+  body#blinqPremium .daily-tabs{overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none!important}
+  body#blinqPremium .daily-tabs::-webkit-scrollbar{display:none!important}
+}
+
+@media (min-width:1081px) and (max-width:1320px){
+  body#blinqPremium .dashboard-content-grid{grid-template-columns:minmax(0,1fr) 286px!important;gap:10px!important;padding-inline:18px!important}
+  body#blinqPremium .dashboard-right-rail{width:auto!important;min-width:0!important}
+  body#blinqPremium .daily-tabs{gap:12px!important}
+  body#blinqPremium .daily-toolbar{gap:6px!important}
+  body#blinqPremium .daily-tournament-filter{width:104px!important;flex:0 0 104px!important}
+  body#blinqPremium .vip-rail{margin-inline:18px!important}
+  body#blinqPremium .vip-rail-content{grid-template-columns:138px repeat(4,minmax(0,1fr)) 102px!important;gap:4px!important}
+  body#blinqPremium .vip-tagline{display:none!important}
+  body#blinqPremium .vip-benefits>div{padding-inline:4px!important;gap:5px!important}
+}
+
+@media (min-width:1081px){
+  /* The reference header starts at y=0; the legacy shell added 14px above it. */
+  body#blinqPremium .reference-topbar{padding-top:0!important}
+  body#blinqPremium .reference-topbar .header-actions{min-width:0!important;width:auto!important}
+  body#blinqPremium .vip-brand>.vip-tagline{
+    width:auto!important;height:auto!important;min-width:0!important;border-radius:0!important;
+    display:block!important;place-items:initial!important;background:transparent!important;
+    padding:0!important;color:#697d83!important;
+  }
+}
+
+@media (min-width:1321px){
+  /* Exact column proportions from the approved 1448px reference. */
+  body#blinqPremium .dashboard-content-grid{grid-template-columns:minmax(0,1fr) 338px!important;gap:16px!important}
+}
+@media (min-width:1081px){
+  /* Card separation in the supplied reference is intentional; the legacy DOM
+     wrapper swallowed the grid gap, so apply it to the actual card host. */
+  body#blinqPremium #dashboardRightRailContent{display:grid!important;gap:10px!important;min-width:0!important}
+  body#blinqPremium .rail-highlight-media{min-height:260px!important}
+}

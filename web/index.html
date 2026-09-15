@@ -42,10 +42,8 @@
     <header class="site-header dashboard-topbar reference-topbar">
       <div class="header-top">
         <a class="brand" href="#predictions" data-route="predictions" aria-label="BlinQ home">
-          <span class="brand-lockup brand-lockup-header">
-            <img src="/assets/blinq_logo.svg" alt="BlinQ" />
-            <span class="brand-tagline">TENNIS INSIGHTS FOR A SMARTER YOU</span>
-          </span>
+          <span class="reference-wordmark" aria-hidden="true"><strong>Blin<span>Q</span></strong><small>TENNIS INTELLIGENCE</small></span>
+          <img class="brand-source-logo" src="/assets/blinq_logo.svg" alt="" aria-hidden="true" />
         </a>
 
         <section id="headerFeatureStrip" class="feature-strip" aria-label="BlinQ promo"></section>
@@ -57,12 +55,17 @@
           <a href="#account" data-route="account">BlinQ VIP</a>
         </nav>
 
+        <label class="reference-search" aria-label="Hľadať hráča, turnaj alebo krajinu">
+          <span aria-hidden="true">⌕</span>
+          <input id="dashboardSearch" type="search" autocomplete="off" placeholder="Hľadať hráča, turnaj alebo krajinu..." />
+        </label>
+
         <div class="header-actions">
           <button id="insightBell" class="insight-bell" type="button" aria-label="BlinQ Insights" aria-controls="insightDrawer" aria-expanded="false"><span aria-hidden="true" class="insight-bell-icon"><svg viewBox="0 0 24 24" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><b id="insightUnread" hidden>0</b></button>
           <div id="profileShell" class="profile-shell">
             <button id="profileButton" class="profile-button" type="button" aria-label="Účet">
               <span class="avatar" id="avatar">B</span>
-              <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small class="profile-meta-primary"><span id="profileTelegram">TG —</span> · <span id="profilePlan">Člen</span></small><small class="profile-meta-secondary"><span id="profileRegisteredEmail">—</span> · <span id="profileRemaining">—</span></small><span id="profilePlanIcon" hidden>◇</span><span id="memberStatus" hidden>Aktívne</span></span>
+              <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small class="profile-meta-primary"><span id="profilePlan">Člen</span><span id="profileTelegram" hidden>TG —</span></small><small class="profile-meta-secondary" hidden><span id="profileRegisteredEmail">—</span><span id="profileRemaining">—</span></small><span id="profilePlanIcon" hidden>◇</span><span id="memberStatus" hidden>Aktívne</span></span>
             </button>
             <button id="profileMenuToggle" class="profile-toggle" type="button" aria-controls="profileMenu" aria-expanded="false">⌄</button>
             <div id="profileMenu" class="profile-menu" hidden>
@@ -109,7 +112,11 @@
               </div>
               <div class="daily-tabs-row">
                 <div id="dailyHubTabs" class="daily-tabs" role="tablist"></div>
-                <button id="dailyHubExpand" class="daily-expand" type="button">Zobraziť celú ponuku →</button>
+                <div class="daily-toolbar">
+                  <span class="daily-toolbar-date"><span aria-hidden="true">▣</span><b id="dailyHubToolbarDate">Dnešný výber</b></span>
+                  <label class="daily-tournament-filter"><select id="dailyHubTournamentFilter" aria-label="Turnaj"><option value="">Všetky turnaje</option></select></label>
+                  <button id="dailyHubExpand" class="daily-expand" type="button" aria-label="Zobraziť celú ponuku">↗</button>
+                </div>
               </div>
               <div class="table-scroller">
                 <table class="daily-hub-table"><thead id="dailyHubHead"></thead><tbody id="dailyHubBody"></tbody></table>

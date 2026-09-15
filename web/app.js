@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{quick:'all',q:'',plan:'all',status:'all',tg:'all',dateField:'created_at',dateFrom:'',dateTo:'',sort:'telegram'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:''}, railMatch:null, railMatchTab:'overview', railDetailTab:'overview', insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'' };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{quick:'all',q:'',plan:'all',status:'all',tg:'all',dateField:'created_at',dateFrom:'',dateTo:'',sort:'telegram'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:''}, railMatch:null, railMatchTab:'overview', railDetailTab:'overview', insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'' };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -140,7 +140,7 @@
   const lcopy=(en,sk,cz=sk)=>locale==='sk'?sk:locale==='cz'?cz:en;
   function translatePublicDom(root=document){
     if(locale==='en'||!root)return;
-    const shouldSkip=node=>{const el=node?.parentElement;return Boolean(el?.closest?.('.admin-route,.admin-canvas,.admin-inspector,.admin-toolbar,.admin-tabbar,.admin-accounts-grid,.admin-plan-grid'))};
+    const shouldSkip=node=>{const el=node?.parentElement;return Boolean(el?.closest?.('.admin-route,.admin-canvas,.admin-inspector,.admin-toolbar,.admin-tabbar,.admin-accounts-grid,.admin-plan-grid,.reference-wordmark'))};
     const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);const nodes=[];while(walker.nextNode())nodes.push(walker.currentNode);
     nodes.forEach(node=>{if(shouldSkip(node))return;const raw=node.nodeValue||'';const core=raw.trim();if(!core)return;const translated=publicText(core);if(translated!==core)node.nodeValue=raw.replace(core,translated);});
     root.querySelectorAll?.('[placeholder],[aria-label],[title]').forEach(el=>{if(el.closest?.('.admin-route,.admin-canvas,.admin-inspector,.admin-toolbar,.admin-tabbar'))return;['placeholder','aria-label','title'].forEach(attr=>{if(!el.hasAttribute(attr))return;const raw=el.getAttribute(attr);const translated=publicText(raw);if(translated!==raw)el.setAttribute(attr,translated);});});
@@ -780,14 +780,14 @@
     const benefits=[1,2,3,4].map((n,i)=>{const title=c[`benefit_${n}_title`]||'',text=c[`benefit_${n}_text`]||'',icon=['♛','⌁','◫','◎'][i];return title||text?`<div><span>${icon}</span><div><strong>${escapeHtml(title)}</strong><small>${escapeHtml(text)}</small></div></div>`:'';}).join('');
     const route=String(c.route||''),href=safeLink(c.link,route?`#${route}`:'#account'),clickable=bannerClickAllowed(item),lockedPlan=clickable?'':firstBannerClickPlan(item),finalHref=clickable?href:'#';
     const brandLogo=safeUiAsset(c.brand_logo||'/assets/blinq_logo.svg');
-    host.innerHTML=`${picture}<div class="vip-rail-content"><div class="vip-brand">${brandLogo?`<img src="${escapeHtml(brandLogo)}" alt="BlinQ">`:`<span>${escapeHtml(c.icon||'♛')}</span>`}<div><strong>${escapeHtml(c.headline||'BlinQ VIP')}</strong><small>${escapeHtml(c.text||'')}</small></div></div><div class="vip-benefits">${benefits}</div><a class="vip-cta${clickable?'':' is-link-locked'}" href="${escapeHtml(finalHref)}" ${clickable&&route?`data-route="${escapeHtml(route)}"`:''} ${!clickable?`data-upgrade-plan="${escapeHtml(lockedPlan)}" data-upgrade-section="${escapeHtml(c.headline||'BlinQ VIP')}"`:''}>${!clickable?'🔒 '+escapeHtml(upgradePlanLabel(lockedPlan).replace(/^BlinQ\s+/i,'')):escapeHtml(c.button_text||'Zobraziť plány')+' →'}</a></div>`;
+    host.innerHTML=`${picture}<div class="vip-rail-content"><div class="vip-brand">${brandLogo?`<img src="${escapeHtml(brandLogo)}" alt="" aria-hidden="true">`:''}<span class="reference-wordmark reference-wordmark-footer" aria-hidden="true"><strong>Blin<span>Q</span></strong></span><span class="vip-tagline">${escapeHtml(lcopy('Tennis intelligence for a smarter tomorrow.','Tenisová inteligencia pre lepší zajtrajšok.','Tenisová inteligence pro lepší zítřek.'))}</span><div hidden><strong>${escapeHtml(c.headline||'BlinQ VIP')}</strong><small>${escapeHtml(c.text||'')}</small></div></div><div class="vip-benefits">${benefits}</div><a class="vip-cta${clickable?'':' is-link-locked'}" href="${escapeHtml(finalHref)}" ${clickable&&route?`data-route="${escapeHtml(route)}"`:''} ${!clickable?`data-upgrade-plan="${escapeHtml(lockedPlan)}" data-upgrade-section="${escapeHtml(c.headline||'BlinQ VIP')}"`:''}>${!clickable?'🔒 '+escapeHtml(upgradePlanLabel(lockedPlan).replace(/^BlinQ\s+/i,'')):escapeHtml(c.button_text||'Zobraziť plány')+' →'}</a></div>`;
   }
   function renderFooterConfig(){
     const footer=state.ui?.footer||{};
     const copyright=$('footerCopyright');if(copyright)copyright.textContent=String(footer.copyright||'© 2026 BlinQ');
     const status=document.querySelector('.system-status strong');if(status)status.textContent=String(footer.system_status||'Všetky systémy funkčné');
   }
-  function renderAllUiContent(){ if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); renderHeaderSlots(); renderHeroBanner(); renderBanners(); renderSidebarPromos(); renderVipRail(); renderFooterConfig(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); if(state.railMatch)renderMatchRail();else renderDashboardRightRailDefault(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); translatePublicDom(document.body); }
+  function renderAllUiContent(){ if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); renderHeaderSlots(); renderHeroBanner(); renderBanners(); renderSidebarPromos(); renderVipRail(); renderFooterConfig(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); if(state.railMatch)renderMatchRail();else renderDashboardRightRailDefault(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); translatePublicDom(document.body); }
 
   function auth(mode='login'){
     feedGeneration++;
@@ -929,13 +929,21 @@
     const accuracy=Number(perf?.accuracy);
     const avgOdds=odds.length?odds.reduce((a,b)=>a+b,0)/odds.length:null;
     const avgEdge=edges.length?edges.reduce((a,b)=>a+b,0)/edges.length:null;
+    const icons={
+      board:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M10 20V6M15 20v-8M20 20V3"/></svg>',
+      target:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/><path d="M17 7l3-3M17 4h3v3"/></svg>',
+      chart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l5-5 4 3 7-9"/><path d="M15 7h5v5"/></svg>',
+      coins:'<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>'
+    };
+    const rawDelta=firstFinite(perf?.accuracy_delta,perf?.accuracy_change,perf?.trend_accuracy,perf?.last_7d_delta);
+    const delta=rawDelta==null?'':`${rawDelta>0?'+':''}${(rawDelta*(Math.abs(rawDelta)<=1?100:1)).toFixed(1)}%`;
     const cards=[
-      ['▥',lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(rows.length),lcopy('matches','zápasov','zápasů')],
-      ['◎',lcopy('MODEL SUCCESS','MODEL ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—',lcopy('published results','publikované výsledky','publikované výsledky')],
-      ['↗',lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),lcopy('current board','aktuálny výber','aktuální výběr')],
-      ['◎',lcopy('AVERAGE EDGE','PRIEMERNÝ EDGE','PRŮMĚRNÝ EDGE'),avgEdge==null?'—':`${avgEdge>0?'+':''}${(avgEdge*(Math.abs(avgEdge)<=1?100:1)).toFixed(1)}%`,lcopy('current board','aktuálny výber','aktuální výběr')]
+      [icons.board,lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(rows.length),lcopy('matches','zápasov','zápasů'),''],
+      [icons.target,lcopy('MODEL SUCCESS','MODEL ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—',lcopy('(last 7 days)','(posledných 7 dní)','(posledních 7 dní)'),delta],
+      [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'',''],
+      [icons.coins,lcopy('AVERAGE EDGE','PRIEMERNÝ EDGE','PRŮMĚRNÝ EDGE'),avgEdge==null?'—':`${avgEdge>0?'+':''}${(avgEdge*(Math.abs(avgEdge)<=1?100:1)).toFixed(1)}%`,'','']
     ];
-    host.innerHTML=cards.map(([icon,label,value,note])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><p>${escapeHtml(note)}</p></div></article>`).join('');
+    host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
   }
   function highlightRow(){
     return dashboardDailyRows()[0]||dailyHubRows('top')[0]||dailyHubRows('value')[0]||null;
@@ -957,7 +965,7 @@
       highlight=`<article class="rail-highlight"><div class="rail-highlight-head"><h3>${escapeHtml(lcopy("Today's highlight",'Dnešný highlight','Dnešní highlight'))}</h3><span>Premium insight</span></div><div class="rail-highlight-media"><img class="rail-highlight-bg" src="${contextual}" alt="" loading="lazy"><div class="rail-highlight-overlay"><small>PREVIEW</small><strong>${escapeHtml(lcopy('Power of context: why surface matters more than you think','Sila kontextu: Prečo povrch mení viac ako si myslíš','Síla kontextu: Proč povrch mění víc, než si myslíš'))}</strong><p>${escapeHtml(lcopy('Same players, different story. Surface, altitude and form change the probabilities.','Na rovnakom hráčovi, dve rozdielne story. Analyzujeme, ako povrch, nadmorská výška a forma menia pravdepodobnosti.','Stejný hráč, jiný příběh. Povrch, nadmořská výška a forma mění pravděpodobnosti.'))}</p><button type="button" data-rail-open-highlight="${escapeHtml(eventKey(row))}">${escapeHtml(lcopy('Read analysis','Prečítať analýzu','Přečíst analýzu'))} →</button></div></div></article>`;
     }
     const accuracy=Number(p?.accuracy);
-    host.innerHTML=`<article class="rail-quote"><blockquote>„${escapeHtml(lcopy('Data change tennis from emotion to knowledge.','Dáta menia tenis z emócií na poznanie.','Data mění tenis z emocí na poznání.'))}“</blockquote><span>— BlinQ Intelligence</span></article>${highlight}<article class="rail-advantage"><div class="rail-section-title"><div><h3>${escapeHtml(lcopy('Model advantage','Modelová výhoda','Modelová výhoda'))}</h3></div><small>${escapeHtml(lcopy('Current selection','Aktuálny výber','Aktuální výběr'))}</small></div><div class="rail-advantage-grid"><span><strong>${Number.isFinite(accuracy)?pct(accuracy):'—'}</strong><small>${escapeHtml(lcopy('Success','Úspešnosť','Úspěšnost'))}</small></span><span><strong>${avgEdge==null?'—':`${avgEdge>0?'+':''}${(avgEdge*(Math.abs(avgEdge)<=1?100:1)).toFixed(1)}%`}</strong><small>${escapeHtml(lcopy('Average edge','Priemerný edge','Průměrný edge'))}</small></span><span><strong>${rows.length}</strong><small>${escapeHtml(lcopy('Predictions','Predikcií','Predikcí'))}</small></span></div><div class="rail-spark" aria-hidden="true"><svg viewBox="0 0 300 58" preserveAspectRatio="none"><defs><linearGradient id="railSparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3cf09a" stop-opacity=".34"/><stop offset="1" stop-color="#3cf09a" stop-opacity="0"/></linearGradient></defs><path class="rail-spark-fill" d="M0 44 L14 38 L28 40 L42 31 L56 28 L70 35 L84 29 L98 36 L112 39 L126 33 L140 36 L154 31 L168 34 L182 30 L196 27 L210 21 L224 31 L238 34 L252 40 L266 33 L280 35 L300 17 L300 58 L0 58 Z"/><polyline points="0,44 14,38 28,40 42,31 56,28 70,35 84,29 98,36 112,39 126,33 140,36 154,31 168,34 182,30 196,27 210,21 224,31 238,34 252,40 266,33 280,35 300,17"/></svg></div></article><article class="rail-quote rail-quote-bottom"><blockquote>„${escapeHtml(lcopy('Tennis is complex. Our analysis gives it a clearer picture.','Tenis je komplexný. Naše analýzy ti dávajú jasnejší obraz.','Tenis je komplexní. Naše analýzy ti dávají jasnější obraz.'))}“</blockquote><span>— BlinQ Intelligence</span></article>`;
+    host.innerHTML=`<article class="rail-quote"><blockquote>„${escapeHtml(lcopy('Data change tennis from emotion to knowledge.','Dáta menia tenis z emócií na poznanie.','Data mění tenis z emocí na poznání.'))}“</blockquote><span>— BlinQ Intelligence</span></article>${highlight}<article class="rail-advantage"><div class="rail-section-title"><div><h3>${escapeHtml(lcopy('Model advantage','Modelová výhoda','Modelová výhoda'))} <span class="rail-info">?</span></h3></div><small>${escapeHtml(lcopy('Last 30 days','Posledných 30 dní','Posledních 30 dní'))}</small></div><div class="rail-advantage-grid"><span><strong>${Number.isFinite(accuracy)?pct(accuracy):'—'}</strong><small>${escapeHtml(lcopy('Success','Úspešnosť','Úspěšnost'))}</small></span><span><strong>${avgEdge==null?'—':`${avgEdge>0?'+':''}${(avgEdge*(Math.abs(avgEdge)<=1?100:1)).toFixed(1)}%`}</strong><small>${escapeHtml(lcopy('Average edge','Priemerný edge','Průměrný edge'))}</small></span><span><strong>${escapeHtml(String(firstFinite(p?.analyzed_matches,p?.analysed_matches,p?.published)||rows.length))}</strong><small>${escapeHtml(lcopy('Analyzed matches','Analyzovaných zápasov','Analyzovaných zápasů'))}</small></span></div><div class="rail-spark" aria-hidden="true"><svg viewBox="0 0 300 58" preserveAspectRatio="none"><defs><linearGradient id="railSparkFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3cf09a" stop-opacity=".34"/><stop offset="1" stop-color="#3cf09a" stop-opacity="0"/></linearGradient></defs><path class="rail-spark-fill" d="M0 44 L14 38 L28 40 L42 31 L56 28 L70 35 L84 29 L98 36 L112 39 L126 33 L140 36 L154 31 L168 34 L182 30 L196 27 L210 21 L224 31 L238 34 L252 40 L266 33 L280 35 L300 17 L300 58 L0 58 Z"/><polyline points="0,44 14,38 28,40 42,31 56,28 70,35 84,29 98,36 112,39 126,33 140,36 154,31 168,34 182,30 196,27 210,21 224,31 238,34 252,40 266,33 280,35 300,17"/></svg></div><p class="rail-spark-caption">${escapeHtml(lcopy('Consistent performance through data, not chance.','Konzistentná výkonnosť vďaka dátam, nie náhode.','Konzistentní výkonnost díky datům, ne náhodě.'))}</p></article><article class="rail-quote rail-quote-bottom"><blockquote>„${escapeHtml(lcopy('Tennis is complex. Our analysis gives it a clearer picture.','Tenis je komplexný. Naše analýzy ti dávajú jasnejší obraz.','Tenis je komplexní. Naše analýzy ti dávají jasnější obraz.'))}“</blockquote><span>— BlinQ Intelligence</span></article>`;
   }
   function findRowByEventId(id){
     const target=String(id||'');
@@ -1074,7 +1082,7 @@
     return state.ui?.dashboard?.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};
   }
   function dailyHubEntitlement(tab){
-    const key=tab==='games'?'sg':tab==='top'?'top_daily':tab;
+    const key=tab==='calendar'?'daily':tab==='games'?'sg':tab==='top'?'top_daily':tab;
     return state.feed?.entitlements?.sections?.[key]||{visible_picks:'ALL',blur_remaining:false,enabled:true,total:0,returned:0};
   }
   function dailyHubRows(tab){
@@ -1090,6 +1098,7 @@
       });
       return out.sort((a,b)=>(marketProbability(b)||0)-(marketProbability(a)||0));
     }
+    if(tab==='calendar')return Array.isArray(state.feed?.upcoming)?state.feed.upcoming:[];
     if(tab==='prime')return marketRows('prime');
     if(tab==='top')return marketRows('top_daily');
     if(tab==='value')return marketRows('value');
@@ -1099,7 +1108,18 @@
     return [];
   }
   function dailyHubTabLabel(tab){
-    return {daily:lcopy('Overview','Prehľad','Přehled'),prime:lcopy('Prime','Prime','Prime'),top:lcopy('TOP','TOP','TOP'),value:lcopy('Value','Value','Value'),ace:lcopy('Aces','Esá','Esa'),games:lcopy('Games','Gemy','Gemy'),doubles:lcopy('Doubles','Štvorhra','Čtyřhra')}[tab]||tab;
+    return {daily:lcopy('Today predictions','Dnešné predikcie','Dnešní predikce'),calendar:lcopy('Calendar','Kalendár','Kalendář'),prime:lcopy('Prime','Prime','Prime'),top:lcopy('TOP opportunities','TOP príležitosti','TOP příležitosti'),value:lcopy('Value','Value','Value'),ace:lcopy('Aces','Esá','Esa'),games:lcopy('Games','Gemy','Gemy'),doubles:lcopy('Doubles','Štvorhra','Čtyřhra')}[tab]||tab;
+  }
+  function dashboardFilteredRows(rows){
+    const q=String(state.dashboardSearch||'').trim().toLocaleLowerCase();
+    const tournament=String(state.dailyHubTournament||'').trim();
+    return (Array.isArray(rows)?rows:[]).filter(row=>{
+      if(tournament&&String(row?.tournament||row?.competition||'')!==tournament)return false;
+      if(!q)return true;
+      const p1=row?.player1||{},p2=row?.player2||{};
+      const hay=[row?.tournament,row?.competition,row?.tournament_city,row?.tournament_country_code,row?.tour,row?.surface,p1?.name,p2?.name,p1?.country_code,p2?.country_code,row?.player1_name,row?.player2_name].filter(Boolean).join(' ').toLocaleLowerCase();
+      return hay.includes(q);
+    });
   }
   function dailyHubColumns(tab){
     if(tab==='value')return ['ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %','TRH','EV',''];
@@ -1405,12 +1425,12 @@
     const cfg=dailyHubConfig();
     host.hidden=cfg.enabled===false;
     if(host.hidden){ const board=$('dailyHubInsightBoard'); if(board) board.hidden=true; return; }
-    const tabs=['daily','prime','top','value','ace','games','doubles'].filter(tab=>{const ent=dailyHubEntitlement(tab);const tc=cfg.tabs?.[tab]||{};return tc.enabled!==false&&ent.enabled!==false;});
+    const tabs=['daily','calendar','top','value','ace','games','doubles'].filter(tab=>{const ent=dailyHubEntitlement(tab);const tc=cfg.tabs?.[tab]||{};return tc.enabled!==false&&ent.enabled!==false;});
     if(!tabs.length){ host.hidden=true; const board=$('dailyHubInsightBoard'); if(board) board.hidden=true; return; }
     if(!tabs.includes(state.dailyHubTab)) state.dailyHubTab=tabs.includes(cfg.default_tab)?cfg.default_tab:tabs[0];
     const settledResults=(state.feed?.results||[]).filter(row=>typeof row?.result?.correct==='boolean').length;
     $('dailyHubTabs').innerHTML=tabs.map(tab=>{const rows=dailyHubRows(tab),ent=dailyHubEntitlement(tab);const total=Number(ent.total);const count=Number.isFinite(total)?total:rows.length;return `<button type="button" role="tab" aria-selected="${tab===state.dailyHubTab?'true':'false'}" class="daily-hub-tab${tab===state.dailyHubTab?' active':''}" data-daily-hub-tab="${tab}"><span>${escapeHtml(dailyHubTabLabel(tab))}</span><b>${count}</b></button>`;}).join('')+`<button type="button" class="daily-hub-tab daily-hub-results" data-route="results"><span>${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}</span>${settledResults?`<b>${settledResults}</b>`:''}</button>`;
-    const tab=state.dailyHubTab,rows=dailyHubRows(tab),ent=dailyHubEntitlement(tab);const total=Number(ent.total);const allCount=Number.isFinite(total)?Math.max(total,rows.length):rows.length;const preview=Math.max(1,Number(cfg.preview_rows)||10),canExpand=ent.see_all===true&&allCount>preview,limit=(state.dailyHubExpanded&&canExpand)?allCount:preview;const shown=Math.min(allCount,limit);
+    const tab=state.dailyHubTab,sourceRows=dailyHubRows(tab),rows=dashboardFilteredRows(sourceRows),ent=dailyHubEntitlement(tab);const total=Number(ent.total);const filtering=Boolean(String(state.dashboardSearch||'').trim()||String(state.dailyHubTournament||'').trim());const allCount=filtering?rows.length:(Number.isFinite(total)?Math.max(total,rows.length):rows.length);const preview=Math.max(1,Number(cfg.preview_rows)||10),canExpand=ent.see_all===true&&allCount>preview,limit=(state.dailyHubExpanded&&canExpand)?allCount:preview;const shown=Math.min(allCount,limit);
     $('dailyHubHead').innerHTML=`<tr>${dailyHubColumns(tab).map(c=>`<th>${escapeHtml(c)}</th>`).join('')}</tr>`;
     const out=[];
     for(let i=0;i<shown;i++){
@@ -1420,8 +1440,15 @@
     $('dailyHubBody').innerHTML=out.join('');
     host.querySelectorAll('img[data-tournament-logo]').forEach(img=>{img.addEventListener('error',()=>{img.hidden=true;img.parentElement?.classList.add('logo-failed');},{once:true});});
     $('dailyHubEmpty').hidden=Boolean(out.length);
-    const metaDate=$('dailyHubMetaDate'); if(metaDate){ const first=rows[0]; const raw=first?.scheduled_at||first?.date||first?.start_time||first?.start_at||''; const d=raw?new Date(raw):new Date(); metaDate.textContent=Number.isNaN(d.getTime())?'Dnešný výber':new Intl.DateTimeFormat(locale==='en'?'en-GB':locale==='cz'?'cs-CZ':'sk-SK',{weekday:'long',day:'numeric',month:'long'}).format(d); }
-    const expand=$('dailyHubExpand'); if(expand){ const hasMore=allCount>preview; expand.hidden=!hasMore; expand.textContent=state.dailyHubExpanded?lcopy('Show less','Zobraziť menej','Zobrazit méně'):lcopy('Show full offer','Zobraziť celú ponuku','Zobrazit celou nabídku'); expand.dataset.expanded=state.dailyHubExpanded?'1':'0'; expand.dataset.locked=ent.see_all===true?'0':'1'; expand.setAttribute('aria-expanded',state.dailyHubExpanded?'true':'false'); }
+    const first=rows[0]||sourceRows[0]; const raw=first?.scheduled_at||first?.date||first?.start_time||first?.start_at||''; const d=raw?new Date(raw):new Date(); const dateText=Number.isNaN(d.getTime())?lcopy('Today selection','Dnešný výber','Dnešní výběr'):new Intl.DateTimeFormat(locale==='en'?'en-GB':locale==='cz'?'cs-CZ':'sk-SK',{weekday:'long',day:'numeric',month:'long'}).format(d);
+    const metaDate=$('dailyHubMetaDate'); if(metaDate)metaDate.textContent=dateText; const toolbarDate=$('dailyHubToolbarDate');if(toolbarDate)toolbarDate.textContent=dateText;
+    const tournamentSelect=$('dailyHubTournamentFilter');if(tournamentSelect){
+      const options=[...new Set(dailyHubRows(tab).map(row=>String(row?.tournament||row?.competition||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b));
+      const current=String(state.dailyHubTournament||'');
+      tournamentSelect.innerHTML=`<option value="">${escapeHtml(lcopy('All tournaments','Všetky turnaje','Všechny turnaje'))}</option>`+options.map(name=>`<option value="${escapeHtml(name)}"${name===current?' selected':''}>${escapeHtml(name)}</option>`).join('');
+      if(current&&!options.includes(current)){state.dailyHubTournament='';tournamentSelect.value='';}
+    }
+    const expand=$('dailyHubExpand'); if(expand){ const hasMore=allCount>preview; expand.hidden=!hasMore; expand.title=state.dailyHubExpanded?lcopy('Show less','Zobraziť menej','Zobrazit méně'):lcopy('Show full offer','Zobraziť celú ponuku','Zobrazit celou nabídku'); expand.textContent=state.dailyHubExpanded?'↙':'↗'; expand.dataset.expanded=state.dailyHubExpanded?'1':'0'; expand.dataset.locked=ent.see_all===true?'0':'1'; expand.setAttribute('aria-expanded',state.dailyHubExpanded?'true':'false'); }
   }
 
 
@@ -1605,10 +1632,19 @@
   };
   const routeMeta=locale==='sk'?{...routeMetaEn,...routeMetaSk}:locale==='cz'?{...routeMetaEn,...routeMetaCz}:routeMetaEn;
 
+  function wireDashboardSearch(){
+    const input=$('dashboardSearch');if(!input||input.dataset.wired==='1')return;input.dataset.wired='1';
+    input.addEventListener('input',()=>{state.dashboardSearch=input.value||'';state.dailyHubExpanded=false;renderDailyHub();});
+    input.addEventListener('keydown',event=>{if(event.key==='Escape'){input.value='';state.dashboardSearch='';renderDailyHub();input.blur();}});
+  }
+
   function wireDailyHub(){
     const hub=$('dailyHub');
     if(!hub||hub.dataset.wired==='1') return;
     hub.dataset.wired='1';
+    hub.addEventListener('change',event=>{
+      if(event.target?.id==='dailyHubTournamentFilter'){state.dailyHubTournament=event.target.value||'';state.dailyHubExpanded=false;renderDailyHub();}
+    });
     hub.addEventListener('click',event=>{
       const tab=event.target.closest('[data-daily-hub-tab]');
       if(tab){ state.dailyHubTab=tab.dataset.dailyHubTab; state.dailyHubExpanded=false; renderDailyHub(); return; }
@@ -2489,7 +2525,7 @@
       $('profileName').textContent=a.name||a.email||publicText('BlinQ User');
       const resolvedPlan=accountPlan();
       const planLabel=a.plan_label||state.ui?.plans?.[resolvedPlan]?.label||a.plan||publicText('Member');
-      $('profilePlan').textContent=planLabel;
+      $('profilePlan').textContent=(a.is_admin||String(a.role||'').toLowerCase()==='admin')?'Admin':planLabel;
       const profileTelegram=$('profileTelegram');if(profileTelegram)profileTelegram.textContent=String(a.telegram_nick||'TG —');
       const profileRegisteredEmail=$('profileRegisteredEmail');if(profileRegisteredEmail)profileRegisteredEmail.textContent=a.email||'—';
       const profileRemaining=$('profileRemaining');if(profileRemaining){const status=String(a.status||'active').toLowerCase();profileRemaining.textContent=status==='lifetime'?publicText('Lifetime'):a.expires_at?remainingLabel(a.expires_at):(status==='active'?publicText('Active'):publicText(status));}
