@@ -1109,3 +1109,109 @@ body#blinqPremium .account-page-avatar-choice>span{font-weight:750!important}
   body#blinqPremium .account-profile-facts strong{text-align:left!important}
   body#blinqPremium .account-modal-plan{grid-template-columns:112px minmax(0,1fr)!important}
 }
+
+/* ========================================================================
+   6.8.0 POLISH 2 — readable typography, animated loader, link rail, flags
+   ======================================================================== */
+/* Loading visual: half the previous footprint; tennis ball is a live layer. */
+body#blinqPremium#blinqPremium .boot-tennis-card{
+  position:relative!important;
+  width:min(280px,72vw)!important;
+  max-height:min(310px,62vh)!important;
+  animation:none!important;
+}
+body#blinqPremium#blinqPremium .boot-tennis-card img{
+  width:100%!important;
+  max-height:62vh!important;
+  filter:drop-shadow(0 14px 34px rgba(0,0,0,.34))!important;
+}
+body#blinqPremium#blinqPremium .boot-tennis-ball{
+  position:absolute!important;
+  left:27%!important;
+  top:58%!important;
+  width:10px!important;
+  height:10px!important;
+  border-radius:50%!important;
+  background:#c8ff15!important;
+  border:1px solid rgba(239,255,145,.9)!important;
+  box-shadow:0 0 7px #baff00,0 0 16px rgba(174,255,0,.72)!important;
+  z-index:3!important;
+  pointer-events:none!important;
+  animation:blinqBallPingPong 1.35s cubic-bezier(.45,.02,.55,.98) infinite alternate!important;
+}
+@keyframes blinqBallPingPong{
+  0%{left:27%;top:59%;transform:translate(-50%,-50%) scale(.88)}
+  24%{left:39%;top:53%;transform:translate(-50%,-50%) scale(1)}
+  50%{left:51%;top:50%;transform:translate(-50%,-50%) scale(1.05)}
+  76%{left:63%;top:53%;transform:translate(-50%,-50%) scale(1)}
+  100%{left:75%;top:59%;transform:translate(-50%,-50%) scale(.88)}
+}
+@media(max-width:700px){body#blinqPremium#blinqPremium .boot-tennis-card{width:min(250px,76vw)!important}}
+@media(prefers-reduced-motion:reduce){body#blinqPremium#blinqPremium .boot-tennis-ball{animation:none!important;left:51%!important;top:51%!important}}
+
+/* Bottom strip is a configurable set of four link cards; no forced BlinQ lockup. */
+body#blinqPremium#blinqPremium .vip-rail{min-height:72px!important;height:auto!important}
+body#blinqPremium#blinqPremium .vip-rail-content.vip-links-only{
+  min-height:72px!important;height:auto!important;
+  display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:16px!important;
+  align-items:center!important;padding:8px 12px!important;
+}
+body#blinqPremium#blinqPremium .vip-links-only .vip-benefits{
+  display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:10px!important;
+}
+body#blinqPremium#blinqPremium .vip-link-card{
+  min-width:0!important;min-height:54px!important;display:grid!important;grid-template-columns:32px minmax(0,1fr)!important;
+  align-items:center!important;gap:9px!important;padding:7px 9px!important;border:1px solid transparent!important;
+  border-radius:9px!important;background:transparent!important;color:inherit!important;text-decoration:none!important;
+  transition:border-color .16s ease,background .16s ease,transform .16s ease!important;
+}
+body#blinqPremium#blinqPremium .vip-link-card:hover{border-color:rgba(53,235,153,.28)!important;background:rgba(50,232,150,.045)!important;transform:translateY(-1px)!important}
+body#blinqPremium#blinqPremium .vip-link-icon{width:28px!important;height:28px!important;display:grid!important;place-items:center!important;color:#dce7e5!important;font-size:17px!important}
+body#blinqPremium#blinqPremium .vip-link-icon img{width:24px!important;height:24px!important;object-fit:contain!important}
+body#blinqPremium#blinqPremium .vip-link-copy{display:block!important;min-width:0!important}
+body#blinqPremium#blinqPremium .vip-link-card strong{display:block!important;color:#edf5f2!important;font-size:var(--vip-title-size,14px)!important;line-height:1.15!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body#blinqPremium#blinqPremium .vip-link-card small{display:block!important;margin-top:3px!important;color:#81958f!important;font-size:var(--vip-text-size,11px)!important;line-height:1.25!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body#blinqPremium#blinqPremium .vip-links-only .vip-cta{min-height:44px!important;font-size:11.5px!important;padding:0 18px!important}
+
+/* Player flags must remain clearly visible next to rank/tour. */
+body#blinqPremium#blinqPremium .hub-player-meta .hub-flag{font-size:14px!important;line-height:1!important;margin-right:2px!important;filter:saturate(1.05)!important}
+body#blinqPremium#blinqPremium .hub-player-meta{font-size:9.2px!important;gap:4px!important}
+body#blinqPremium#blinqPremium .hub-player-copy>b{font-size:11.8px!important}
+body#blinqPremium#blinqPremium .hub-type-logo{display:block!important;width:100%!important;height:100%!important;object-fit:contain!important;padding:0!important}
+body#blinqPremium#blinqPremium .hub-logo-code.single{padding:2px!important}
+body#blinqPremium#blinqPremium .hub-logo-code.single b{display:none!important}
+
+/* Dashboard typography: use the available space instead of microcopy. */
+body#blinqPremium#blinqPremium .daily-hub-tab{font-size:11.5px!important;padding:9px 12px!important}
+body#blinqPremium#blinqPremium .daily-hub-table th{font-size:8.8px!important;letter-spacing:.11em!important}
+body#blinqPremium#blinqPremium .daily-hub-table td{font-size:11.4px!important}
+body#blinqPremium#blinqPremium .daily-hub-table td:first-child{font-size:11.8px!important}
+body#blinqPremium#blinqPremium .hub-tournament-copy b{font-size:11.8px!important}
+body#blinqPremium#blinqPremium .hub-tournament-copy small{font-size:8.5px!important}
+body#blinqPremium#blinqPremium .hub-detail{font-size:10.5px!important}
+body#blinqPremium#blinqPremium .hub-prob{font-size:14px!important}
+
+/* Results page typography and VOID settlement state. */
+body#blinqPremium#blinqPremium.blinq-route .results-filter-bar label{font-size:9px!important;letter-spacing:.055em!important}
+body#blinqPremium#blinqPremium.blinq-route .results-filter-bar select{font-size:11.5px!important;min-height:40px!important}
+body#blinqPremium#blinqPremium.blinq-route .metric-card small{font-size:8.5px!important}
+body#blinqPremium#blinqPremium.blinq-route .metric-card strong{font-size:19px!important}
+body#blinqPremium#blinqPremium.blinq-route .metric-card span{font-size:8.5px!important}
+body#blinqPremium#blinqPremium.blinq-route .results-section-head h3{font-size:16px!important}
+body#blinqPremium#blinqPremium.blinq-route .results-section-head p{font-size:10.5px!important;line-height:1.5!important}
+body#blinqPremium#blinqPremium.blinq-route .results-table th{font-size:8.5px!important;letter-spacing:.06em!important}
+body#blinqPremium#blinqPremium.blinq-route .results-table td{font-size:10.8px!important;line-height:1.35!important;padding-top:10px!important;padding-bottom:10px!important}
+body#blinqPremium#blinqPremium.blinq-route .results-table td strong{font-size:11px!important}
+body#blinqPremium#blinqPremium.blinq-route .results-table td small{font-size:8.2px!important;margin-top:3px!important}
+body#blinqPremium#blinqPremium .results-table .void{color:#e1c56a!important}
+body#blinqPremium#blinqPremium .results-table .void-reason{display:block!important;color:#8e8364!important;font-size:7.5px!important}
+
+@media(max-width:1100px){
+  body#blinqPremium#blinqPremium .vip-links-only .vip-benefits{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:760px){
+  body#blinqPremium#blinqPremium .vip-rail-content.vip-links-only{grid-template-columns:1fr!important}
+  body#blinqPremium#blinqPremium .vip-links-only .vip-benefits{grid-template-columns:1fr 1fr!important}
+  body#blinqPremium#blinqPremium .vip-link-card small{display:none!important}
+  body#blinqPremium#blinqPremium .vip-links-only .vip-cta{justify-self:stretch!important}
+}
