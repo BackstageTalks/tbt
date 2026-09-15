@@ -605,7 +605,7 @@ def test_proven_distinct_collision_ids_are_stable_across_incremental_merge(match
     assert len(again) == 2
 
 
-def test_history_downloader_refuses_ambiguous_synthetic_id_collision(match_factory):
+def test_history_downloader_quarantines_ambiguous_synthetic_id_collision(match_factory):
     import download_tennis_history as downloader
 
     base = match_factory("collision", "A", "B", "A")
@@ -617,12 +617,26 @@ def test_history_downloader_refuses_ambiguous_synthetic_id_collision(match_facto
         def matches_for_day(self, tour, day, historical):
             return [a, b] if tour == "atp" else []
 
-    with pytest.raises(ValueError, match="Ambiguous match identity collision"):
-        downloader.download_days(
-            Provider(), [], {"completed_days": []},
-            base.scheduled_at.date(), base.scheduled_at.date(),
-            lambda years, publish=False: None,
-        )
+    matches = []
+    progress = {"completed_days": []}
+    quarantine = []
+    checkpoints = []
+
+    downloader.download_days(
+        Provider(), matches, progress,
+        base.scheduled_at.date(), base.scheduled_at.date(),
+        lambda years, publish=False: checkpoints.append((set(years), publish)),
+        quarantine,
+    )
+
+    # Ambiguous provider identities must not poison canonical history or block
+    # the whole history run. They are quarantined for later diagnostics.
+    assert matches == []
+    assert progress["completed_days"] == [base.scheduled_at.date().isoformat()]
+    assert len(quarantine) == 2
+    assert {row["provider_event_id"] for row in quarantine} == {"101", "202"}
+    assert {row["reason"] for row in quarantine} == {"incoming_ambiguous_identity_collision"}
+    assert checkpoints == [(set(), False)]
 
 
 def test_history_downloader_persists_proven_distinct_synthetic_id_collisions(
