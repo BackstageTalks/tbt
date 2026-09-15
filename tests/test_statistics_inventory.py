@@ -22,5 +22,9 @@ def test_statistics_inventory_separates_raw_counts_from_es_quality_readiness():
     assert report['any_stats_matches'] == 2
     assert report['both_players_quality_ready'] == 1
     assert report['both_players_quality_ready_rate'] == 0.5
+    assert report['quality_capable_matches'] == 1
+    assert report['quality_capable_rate'] == 0.5
+    assert report['ace_df_only_matches'] == 1
+    assert report['ace_df_only_share_of_stats'] == 0.5
     assert report['stat_key_counts']['p1_aces'] == 1
     assert report['interpretation']['raw_stats_are_not_es'] is True

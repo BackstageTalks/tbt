@@ -30,8 +30,22 @@ def build(matches) -> dict[str, Any]:
     both_quality = 0
     p1_quality = 0
     p2_quality = 0
+    quality_capable_matches = 0
+    both_players_quality_signals = 0
+    ace_df_only_matches = 0
     by_year = defaultdict(lambda: Counter())
     by_tour = defaultdict(lambda: Counter())
+
+    quality_suffixes = {
+        "service_points_won", "first_serve_win", "second_serve_win",
+        "ace_rate", "return_points_won", "break_points_won",
+    }
+    count_only_keys = {
+        "p1_aces", "p2_aces", "p1_double_faults", "p2_double_faults",
+    }
+
+    def quality_signal(stats: dict[str, Any], prefix: str) -> bool:
+        return any(stats.get(f"{prefix}_{suffix}") is not None for suffix in quality_suffixes)
 
     for match in matches:
         rows += 1
@@ -47,7 +61,17 @@ def build(matches) -> dict[str, Any]:
             any_stats += 1
             by_year[year]["any_stats"] += 1
             by_tour[tour]["any_stats"] += 1
-            key_counts.update(str(k) for k, v in stats.items() if v is not None)
+            populated = {str(k) for k, v in stats.items() if v is not None}
+            key_counts.update(populated)
+            qsig1 = quality_signal(stats, "p1")
+            qsig2 = quality_signal(stats, "p2")
+            quality_capable_matches += int(qsig1 or qsig2)
+            both_players_quality_signals += int(qsig1 and qsig2)
+            ace_df_only_matches += int(bool(populated) and populated.issubset(count_only_keys))
+            by_year[year]["quality_capable"] += int(qsig1 or qsig2)
+            by_tour[tour]["quality_capable"] += int(qsig1 or qsig2)
+            by_year[year]["ace_df_only"] += int(bool(populated) and populated.issubset(count_only_keys))
+            by_tour[tour]["ace_df_only"] += int(bool(populated) and populated.issubset(count_only_keys))
         q1 = _quality_ready(stats, "p1")
         q2 = _quality_ready(stats, "p2")
         p1_quality += int(q1)
@@ -58,20 +82,31 @@ def build(matches) -> dict[str, Any]:
 
     def segment(counter: Counter) -> dict[str, Any]:
         denom = int(counter.get("completed") or 0)
+        any_count = int(counter.get("any_stats") or 0)
         return {
             "completed": denom,
-            "any_stats": int(counter.get("any_stats") or 0),
-            "any_stats_rate": round(counter.get("any_stats", 0) / max(1, denom), 6),
+            "any_stats": any_count,
+            "any_stats_rate": round(any_count / max(1, denom), 6),
+            "quality_capable": int(counter.get("quality_capable") or 0),
+            "quality_capable_rate": round(counter.get("quality_capable", 0) / max(1, denom), 6),
+            "ace_df_only": int(counter.get("ace_df_only") or 0),
+            "ace_df_only_share_of_stats": round(counter.get("ace_df_only", 0) / max(1, any_count), 6),
             "both_quality": int(counter.get("both_quality") or 0),
             "both_quality_rate": round(counter.get("both_quality", 0) / max(1, denom), 6),
         }
 
     return {
-        "schema": 1,
+        "schema": 2,
         "rows": rows,
         "completed": completed,
         "any_stats_matches": any_stats,
         "any_stats_rate": round(any_stats / max(1, completed), 6),
+        "quality_capable_matches": quality_capable_matches,
+        "quality_capable_rate": round(quality_capable_matches / max(1, completed), 6),
+        "both_players_quality_signal_matches": both_players_quality_signals,
+        "both_players_quality_signal_rate": round(both_players_quality_signals / max(1, completed), 6),
+        "ace_df_only_matches": ace_df_only_matches,
+        "ace_df_only_share_of_stats": round(ace_df_only_matches / max(1, any_stats), 6),
         "p1_quality_ready": p1_quality,
         "p2_quality_ready": p2_quality,
         "both_players_quality_ready": both_quality,
@@ -83,6 +118,7 @@ def build(matches) -> dict[str, Any]:
             "raw_stats_are_not_es": True,
             "es_requires_both_players_serve_and_return_quality": True,
             "raw_ace_double_fault_counts_are_not_promoted_to_rates_without_denominators": True,
+            "quality_capable_means_at_least_one_supported_serve_or_return_signal_not_full_es_readiness": True,
         },
     }
 

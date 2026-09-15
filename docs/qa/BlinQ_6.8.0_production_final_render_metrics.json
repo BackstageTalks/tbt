@@ -1,0 +1,41 @@
+{
+  "dashboard": {
+    "width": 1448,
+    "scrollWidth": 1448,
+    "height": 1090,
+    "shell": 1448,
+    "hero": 205,
+    "grid": 1448,
+    "rail": 310,
+    "dailyOverflow": 0,
+    "detailButtons": 10,
+    "highlightVisible": true
+  },
+  "detail": {
+    "railDetail": true,
+    "modalOpen": false,
+    "highlightVisible": false,
+    "tabs": [
+      "Prehľad",
+      "Štatistiky",
+      "Radar",
+      "História"
+    ],
+    "motivation": true,
+    "overflow": 0
+  },
+  "narrow": {
+    "width": 1212,
+    "scrollWidth": 1212,
+    "overflow": 0,
+    "rail": 286
+  },
+  "admin": {
+    "width": 1600,
+    "scrollWidth": 1600,
+    "overflow": 0,
+    "adminVisible": true,
+    "saveVisible": true
+  },
+  "console_errors": []
+}

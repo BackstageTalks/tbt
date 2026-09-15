@@ -115,7 +115,9 @@ def test_training_report_has_segmented_es_and_static_env_coverage_and_blocks_wea
     report = build_production_training_table.build_report(frame, {}, {})
     assert report['coverage']['by_tour']['atp']['stats_known_both_rate'] == 1.0
     assert report['candidate_feature_groups']['static_environment']['eligible_for_candidate'] is True
-    assert report['candidate_feature_groups']['event_statistics']['eligible_for_candidate'] is True
+    assert report['candidate_feature_groups']['event_statistics']['eligible_for_candidate'] is False
+    assert report['candidate_feature_groups']['event_statistics']['has_observations'] is True
+    assert report['candidate_feature_groups']['event_statistics']['min_coverage'] == 0.70
     assert report['candidate_feature_groups']['historical_weather']['eligible_for_candidate'] is False
 
 
@@ -183,3 +185,49 @@ def test_data_finalize_readiness_uses_real_candidate_flags_not_hardcoded_es_true
     assert report['candidate_training']['static_environment'] is True
     assert 'event_statistics_not_ready_for_candidate_eval' in report['warnings']
     assert report['statistics_diagnostics']['top_stat_keys'][0] == ('p1_aces', 20)
+
+
+def test_data_readiness_requires_meaningful_coverage_not_one_observation():
+    frame = pd.DataFrame({
+        'scheduled_at': pd.to_datetime([f'2025-01-{day:02d}T12:00:00Z' for day in range(1, 11)]),
+        'tour':['atp']*10, 'year':['2025']*10, 'surface':['hard']*10,
+        'stats_known_both':[1.0]+[0.0]*9,
+        'environment_known':[1.0]*3+[0.0]*7,
+        'travel_known':[1.0]*10, 'altitude_change_known':[1.0]*10,
+        'indoor_known':[1.0]*10, 'weather_known':[0.0]*10,
+        **{name:[0.0]*10 for name in build_production_training_table.FEATURE_NAMES if name not in {'stats_known_both','environment_known','travel_known','altitude_change_known','weather_known'}},
+    })
+    report = build_production_training_table.build_report(frame, {'with_statistics':1}, {})
+    assert report['event_statistics']['has_observations'] is True
+    assert report['event_statistics']['ready_for_candidate_eval'] is False
+    assert report['static_environment']['has_observations'] is True
+    assert report['static_environment']['ready_for_candidate_eval'] is False
+
+
+def test_readiness_prefers_match_weighted_geo_over_historical_entity_tail():
+    report = build_production_readiness_report.build(
+        {'players':10,'country_coverage':1.0,'latest_rank_coverage':1.0,'duplicate_name_groups':0},
+        {
+            'tournaments':100,'venues':100,
+            'tournament_coverage':{'country':0.10,'city':0.10},
+            'venue_coverage':{'coordinates':0.10,'elevation':0.10,'timezone':0.10},
+            'match_weighted_coverage':{'country':0.99,'city':0.99,'coordinates':0.95,'elevation':0.85,'timezone':0.95},
+            'identity_diagnostics':{},
+        },
+        {
+            'rows':1000,
+            'event_statistics':{'stats_known_both_rate':0.75,'ready_for_candidate_eval':True,'readiness_min_coverage':0.70},
+            'static_environment':{'venue_environment_known_rate':0.85,'ready_for_candidate_eval':True,'readiness_min_coverage':0.80},
+        },
+        {'status':'pass'},
+        {'any_stats_rate':0.80,'quality_capable_rate':0.78,'both_players_quality_ready_rate':0.75},
+    )
+    assert 'match_weighted_tournament_country_coverage_below_95pct' not in report['warnings']
+    assert 'match_weighted_venue_coordinate_coverage_below_90pct' not in report['warnings']
+    assert 'match_weighted_venue_elevation_coverage_below_80pct' not in report['warnings']
+    assert report['candidate_training'] == {
+        'event_statistics': True, 'static_environment': True,
+        'historical_weather': False,
+        'historical_weather_reason': 'requires genuine point-in-time pre-match forecast snapshots',
+    }
+    assert report['recommended_sequence'] == ['train','backtest-ablation','promotion-gate']

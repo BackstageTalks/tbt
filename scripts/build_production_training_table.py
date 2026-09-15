@@ -22,6 +22,13 @@ STATIC_ENV_FEATURES = [
 WEATHER_RESEARCH_FEATURES = ["weather_serve_interaction", "weather_known"]
 ES_FEATURES = ["serve_quality_diff", "return_quality_diff", "stats_known_both"]
 
+# Coverage gates are data-readiness gates, not model-quality/promotion gates.
+# They prevent a handful of enriched rows from being mislabeled as enough to
+# run a meaningful candidate ablation. Promotion still depends on the later
+# chronological holdout/backtest governance.
+ES_READY_MIN_COVERAGE = 0.70
+STATIC_ENV_READY_MIN_COVERAGE = 0.80
+
 
 def _mean(frame: pd.DataFrame, name: str) -> float:
     if name not in frame or frame.empty:
@@ -67,9 +74,13 @@ def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> d
     raw_stats_matches = int((quality or {}).get("with_statistics") or 0)
     raw_stats_rate = (raw_stats_matches / len(frame)) if len(frame) else 0.0
     # Schema eligibility means the feature group is safe by provenance. Data
-    # readiness separately answers whether this concrete history can evaluate it.
-    es_ready = es_rate > 0.0
-    env_ready = env_rate > 0.0
+    # readiness separately answers whether this concrete history has enough
+    # coverage for a meaningful candidate evaluation. A few observed rows are
+    # explicitly not enough to declare a group ready.
+    es_observed = es_rate > 0.0
+    env_observed = env_rate > 0.0
+    es_ready = es_rate >= ES_READY_MIN_COVERAGE
+    env_ready = env_rate >= STATIC_ENV_READY_MIN_COVERAGE
     return {
         "schema": 2,
         "rows": int(len(frame)),
@@ -83,7 +94,9 @@ def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> d
         "feature_missing_rate": _missing_rates(frame, list(FEATURE_NAMES)),
         "static_environment": {
             "training_eligible": True,
+            "has_observations": env_observed,
             "ready_for_candidate_eval": env_ready,
+            "readiness_min_coverage": STATIC_ENV_READY_MIN_COVERAGE,
             "features": STATIC_ENV_FEATURES,
             "travel_known_rate": _mean(frame, "travel_known"),
             "altitude_change_known_rate": _mean(frame, "altitude_change_known"),
@@ -92,7 +105,9 @@ def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> d
         },
         "event_statistics": {
             "training_eligible": True,
+            "has_observations": es_observed,
             "ready_for_candidate_eval": es_ready,
+            "readiness_min_coverage": ES_READY_MIN_COVERAGE,
             "features": ES_FEATURES,
             "stats_known_both_rate": es_rate,
             "raw_statistics_matches": raw_stats_matches,
@@ -113,14 +128,20 @@ def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> d
         "candidate_feature_groups": {
             "event_statistics": {
                 "schema_eligible": True,
+                "has_observations": es_observed,
                 "eligible_for_candidate": es_ready,
                 "ready_for_candidate_eval": es_ready,
+                "coverage": es_rate,
+                "min_coverage": ES_READY_MIN_COVERAGE,
                 "features": ES_FEATURES,
             },
             "static_environment": {
                 "schema_eligible": True,
+                "has_observations": env_observed,
                 "eligible_for_candidate": env_ready,
                 "ready_for_candidate_eval": env_ready,
+                "coverage": env_rate,
+                "min_coverage": STATIC_ENV_READY_MIN_COVERAGE,
                 "features": STATIC_ENV_FEATURES,
             },
             "historical_weather": {"eligible_for_candidate": False, "features": WEATHER_RESEARCH_FEATURES},
