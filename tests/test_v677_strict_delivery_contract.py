@@ -70,8 +70,8 @@ def test_daily_hub_requested_labels_results_and_elite_lock_are_in_code():
     assert "Zobraziť celú ponuku" in APP
     assert "showUpgradePrompt('elite'" in APP
     tabs = UI["dashboard"]["daily_hub"]["tabs"]
-    assert tabs["daily"]["label"] == "Prehľad"
-    assert tabs["top"]["label"] == "TOP"
+    assert tabs["daily"]["label"] == "TOP"
+    assert tabs["top"]["label"] == "Short Odds"
     assert tabs["value"]["label"] == "Value"
 
 

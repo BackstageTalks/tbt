@@ -244,7 +244,7 @@ def test_public_sidebar_is_betting_first_and_admin_is_isolated_at_bottom():
     )
     nav = {item["content"]["route"]: item["content"]["label"] for item in nav_items}
     assert list(nav) == ["predictions", "prime", "top_daily", "value", "doubles", "ace", "sg", "results", "btts"]
-    assert nav["prime"] == "Prime Predictions"
+    assert nav["prime"] == "Short Odds"
     for removed in ("tournaments", "players", "stats", "model", "backtests", "account"):
         assert removed not in nav
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")

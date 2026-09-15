@@ -1281,3 +1281,142 @@ body#blinqPremium#blinqPremium .result-tag{font-size:10px!important;padding:5px 
 
 /* Page background image is directly replaceable in web/assets/custom/site-background.png. */
 body#blinqPremium{background-image:var(--blinq-page-bg-overlay),var(--blinq-page-bg),var(--blinq-page-bg-fallback)!important;background-position:center,var(--blinq-page-bg-position,center top),center top!important;background-size:cover,var(--blinq-page-bg-size,cover),cover!important;background-attachment:fixed!important;background-repeat:no-repeat!important;}
+
+/* ========================================================================
+   6.8.0 POLISH 3 — header controls, compact account, finished private feed
+   ======================================================================== */
+body#blinqPremium .reference-search{
+  height:38px!important;min-width:245px!important;padding:0 12px!important;gap:9px!important;
+  border:1px solid rgba(75,129,121,.34)!important;border-radius:10px!important;
+  background:linear-gradient(180deg,rgba(9,29,28,.94),rgba(5,21,20,.96))!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025),0 6px 22px rgba(0,0,0,.14)!important;
+  transition:border-color .18s ease,box-shadow .18s ease,background .18s ease!important;
+}
+body#blinqPremium .reference-search:focus-within{border-color:rgba(67,234,157,.72)!important;background:#071d19!important;box-shadow:0 0 0 3px rgba(58,235,156,.08),0 8px 24px rgba(0,0,0,.18)!important}
+body#blinqPremium .reference-search-icon{width:17px!important;height:17px!important;display:grid!important;place-items:center!important;color:#8ba49d!important;transform:none!important}
+body#blinqPremium .reference-search-icon svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round}
+body#blinqPremium .reference-search input{font-size:10px!important;color:#e0ebe7!important}
+body#blinqPremium .reference-search input::placeholder{color:#718780!important}
+body#blinqPremium .profile-toggle{width:38px!important;height:38px!important;border-left:1px solid rgba(84,128,115,.22)!important;border-radius:0!important;color:#9bb1a9!important;display:grid!important;place-items:center!important}
+body#blinqPremium .profile-toggle svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;transition:transform .18s ease}
+body#blinqPremium .profile-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+
+body#blinqPremium .rail-native-controls>button{display:grid!important;place-items:center!important;width:30px!important;height:30px!important;border-color:#245844!important;background:linear-gradient(180deg,#0a251d,#071b16)!important;color:#69e9a5!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.025)!important;transition:.16s ease!important}
+body#blinqPremium .rail-native-controls>button:hover{border-color:#3ddd96!important;background:#0b2d22!important;transform:translateY(-1px)!important}
+body#blinqPremium .rail-native-controls>button svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+body#blinqPremium .rail-native-dots button{width:5px!important;height:5px!important;background:#3b5d52!important}
+body#blinqPremium .rail-native-dots button.is-active{width:19px!important;background:#43e99a!important}
+body#blinqPremium .rail-native-controls span{font-size:7px!important;color:#8aa198!important}
+
+/* Account: one compact information block + one editor block. */
+body#blinqPremium .account-dialog{width:min(1080px,calc(100vw - 36px))!important;max-width:1080px!important;padding:28px 30px 30px!important;border-color:#24536a!important;background:linear-gradient(180deg,#071d2a,#061925 52%,#061720)!important}
+body#blinqPremium .account-dialog .dialog-close{top:18px!important;right:18px!important;width:38px!important;height:38px!important;border-radius:11px!important;border-color:#2b5970!important;background:#0a2533!important;color:#c5d9e1!important;font-size:20px!important;transition:.16s ease!important}
+body#blinqPremium .account-dialog .dialog-close:hover{border-color:#49d99a!important;color:#52eaa2!important;background:#0a2b25!important}
+body#blinqPremium .account-modal-head{padding-right:58px!important;align-items:center!important;margin-bottom:16px!important}
+body#blinqPremium .account-modal-head h2{font-size:24px!important;line-height:1.05!important;margin-top:5px!important}
+body#blinqPremium .account-verified{position:static!important;padding:6px 10px!important;border-radius:999px!important;font-size:9px!important;white-space:nowrap!important}
+body#blinqPremium .account-modal-main-card-v2{display:grid!important;grid-template-columns:205px minmax(330px,1fr) 245px!important;grid-template-areas:"access facts editor"!important;gap:18px!important;padding:18px 20px!important;align-items:stretch!important;border-radius:12px!important;background:linear-gradient(180deg,#071f2c,#061b27)!important}
+body#blinqPremium .account-modal-main-card-v2 .account-modal-access{grid-area:access!important;display:flex!important;align-items:center!important;gap:13px!important;padding:0 18px 0 0!important;border-right:1px solid rgba(54,102,125,.44)!important;border-bottom:0!important}
+body#blinqPremium .account-modal-avatar{width:62px!important;height:62px!important;flex:0 0 62px!important}
+body#blinqPremium .account-access-copy{min-width:0;display:grid;gap:4px}
+body#blinqPremium .account-access-copy small{font-size:7px!important;color:#7f98a5!important;letter-spacing:.08em!important}
+body#blinqPremium .account-access-copy strong{font-size:21px!important;line-height:1!important;color:#f1f6f8!important}
+body#blinqPremium .account-access-status{display:flex!important;align-items:center!important;gap:5px!important;color:#78939d!important;font-size:8px!important}
+body#blinqPremium .account-access-status i{width:6px;height:6px;border-radius:50%;background:#43e99a;box-shadow:0 0 10px rgba(67,233,154,.45)}
+body#blinqPremium .account-profile-facts{grid-area:facts!important;display:grid!important;align-content:center!important;gap:0!important;border:0!important}
+body#blinqPremium .account-profile-facts>span{min-height:47px!important;padding:8px 10px!important;grid-template-columns:126px minmax(0,1fr)!important;border-bottom:1px solid rgba(44,88,108,.48)!important}
+body#blinqPremium .account-profile-facts>span:last-child{border-bottom:0!important}
+body#blinqPremium .account-profile-facts small{font-size:7.5px!important;color:#76909e!important}
+body#blinqPremium .account-profile-facts strong{font-size:11.5px!important;color:#e6eef1!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body#blinqPremium .account-profile-facts strong em{font-style:normal;color:#70b99a;font-size:9px;font-weight:750}
+body#blinqPremium .account-profile-editor{grid-area:editor!important;display:grid!important;grid-template-rows:auto auto auto auto auto!important;gap:8px!important;align-content:center!important;padding-left:2px!important}
+body#blinqPremium .account-profile-editor-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:1px}
+body#blinqPremium .account-profile-editor-head small{color:#8c71ee;font-size:7px;font-weight:900;letter-spacing:.1em}
+body#blinqPremium .account-profile-editor-head span{color:#6b8b80;font-size:7px}
+body#blinqPremium .account-profile-editor .account-inline-field{display:grid!important;gap:5px!important}
+body#blinqPremium .account-profile-editor .account-inline-field>span{font-size:8px!important;color:#92a9b3!important;font-weight:800!important}
+body#blinqPremium .account-profile-editor input{height:39px!important;background:#061722!important;border-color:#2b5367!important}
+body#blinqPremium .account-profile-editor .avatar-sex-toggle button{height:39px!important}
+body#blinqPremium .account-profile-editor .account-profile-save{height:39px!important;margin-top:1px!important;background:linear-gradient(135deg,#3eea9b,#2bd98b)!important;color:#052116!important}
+body#blinqPremium .account-inline-message{min-height:14px!important;margin:0!important;font-size:7px!important}
+
+/* Membership catalogue: reduce empty space, align art/copy/CTA on one axis. */
+body#blinqPremium .account-modal-plans{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px 12px!important;margin-top:14px!important}
+body#blinqPremium .account-modal-section-title{grid-column:1/-1!important;display:flex!important;align-items:end!important;justify-content:space-between!important;gap:14px!important;margin:0 0 4px!important}
+body#blinqPremium .account-modal-section-title small{font-size:8px!important;color:#9b76ff!important;letter-spacing:.12em!important;font-weight:900!important}
+body#blinqPremium .account-modal-section-title span{font-size:8px!important;color:#6f8893!important}
+body#blinqPremium .account-modal-plan{display:grid!important;grid-template-columns:104px minmax(0,1fr) auto!important;grid-template-rows:1fr!important;align-items:center!important;gap:13px!important;min-height:104px!important;padding:12px 14px!important;border-radius:11px!important}
+body#blinqPremium .account-modal-plan.plan-goat{grid-column:1/-1!important;width:64%!important;min-width:540px!important;justify-self:center!important}
+body#blinqPremium .account-modal-plan .plan-avatar-pair{grid-row:auto!important;width:98px!important;height:64px!important;align-self:center!important}
+body#blinqPremium .account-modal-plan .plan-avatar-chip{top:50%!important;width:60px!important;height:60px!important;transform:translateY(-50%)!important}
+body#blinqPremium .account-modal-plan .plan-avatar-chip:first-child{left:0!important;z-index:2!important}
+body#blinqPremium .account-modal-plan .plan-avatar-chip.is-back{left:38px!important;top:50%!important;z-index:1!important}
+body#blinqPremium .account-modal-plan-copy{align-self:center!important;display:grid!important;gap:2px!important;min-width:0!important}
+body#blinqPremium .account-modal-plan-copy small{font-size:7px!important;letter-spacing:.1em!important}
+body#blinqPremium .account-modal-plan-copy strong{font-size:14px!important;line-height:1.1!important}
+body#blinqPremium .account-modal-plan-copy span{font-size:8.5px!important;line-height:1.35!important;display:block!important;overflow:visible!important;-webkit-line-clamp:unset!important}
+body#blinqPremium .account-modal-plan .account-plan-upgrade,body#blinqPremium .account-modal-plan .account-plan-current{grid-column:3!important;grid-row:1!important;align-self:center!important;justify-self:end!important;min-width:max-content!important;height:36px!important;display:inline-flex!important;align-items:center!important;padding:0 11px!important;font-size:9px!important;border-radius:8px!important}
+body#blinqPremium .account-modal-plan .account-plan-current{border:1px solid #315b4c!important;color:#74d9aa!important;background:#092018!important}
+
+/* Finished private feed drawer. */
+body#blinqPremium .insight-drawer{width:min(470px,calc(100vw - 28px))!important;border-color:#255567!important;border-radius:16px!important;background:linear-gradient(180deg,#071d28,#04151d)!important;box-shadow:0 28px 90px rgba(0,0,0,.56),0 0 60px rgba(36,218,147,.05)!important}
+body#blinqPremium .insight-drawer-head{padding:18px 20px 14px!important;align-items:flex-start!important}
+body#blinqPremium .insight-drawer-head small{font-size:7.5px!important;color:#50e99d!important}
+body#blinqPremium .insight-drawer-head h2{font-size:22px!important;letter-spacing:-.02em!important;margin:5px 0 4px!important}
+body#blinqPremium .insight-drawer-head p{display:inline-flex!important;width:max-content!important;padding:3px 7px!important;border:1px solid rgba(151,112,246,.35)!important;border-radius:999px!important;background:rgba(112,78,218,.12)!important;color:#ae8fff!important;font-size:7px!important}
+body#blinqPremium .insight-drawer-head button{width:34px!important;height:34px!important;border-radius:10px!important;cursor:pointer!important;transition:.16s ease!important}
+body#blinqPremium .insight-drawer-head button:hover{border-color:#48df9a!important;color:#54eda4!important;background:#092820!important}
+body#blinqPremium .insight-drawer-status{display:flex!important;align-items:center!important;gap:7px!important;padding:9px 20px!important;font-size:7.5px!important;color:#78949d!important;background:rgba(4,19,25,.58)!important}
+body#blinqPremium .insight-drawer-status strong{color:#a8bbc2!important;font-size:7.5px!important}
+body#blinqPremium .insight-drawer-status>span:last-child{margin-left:auto;color:#5f7880}
+body#blinqPremium .insight-status-dot{width:6px;height:6px;border-radius:50%;background:#45e69a;box-shadow:0 0 10px rgba(69,230,154,.42)}
+body#blinqPremium .insight-status-dot.is-loading{animation:insightPulse 1s infinite alternate}.insight-status-dot.is-offline{background:#d18a5d;box-shadow:none}
+@keyframes insightPulse{to{opacity:.3;transform:scale(.75)}}
+body#blinqPremium .insight-drawer-toolbar{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:9px!important;padding:10px 12px!important;border-bottom:1px solid #173846!important;background:#061922!important}
+body#blinqPremium .insight-filter-tabs{display:flex;gap:5px;min-width:0}
+body#blinqPremium .insight-filter-tabs button{height:30px;padding:0 10px;border:1px solid #214653;border-radius:8px;background:#071c25;color:#78939d;font-size:8px;font-weight:800;cursor:pointer}
+body#blinqPremium .insight-filter-tabs button:hover{color:#b8cbc4;border-color:#33725a}.insight-filter-tabs button.is-active{border-color:#36d98d!important;background:#09281f!important;color:#55eca3!important}
+body#blinqPremium .insight-filter-tabs button b{margin-left:4px;padding:1px 5px;border-radius:999px;background:#38dc90;color:#062018;font-size:6px}
+body#blinqPremium .insight-read-all{border:0;background:transparent;color:#67c99e;font-size:7.5px;font-weight:800;cursor:pointer;white-space:nowrap}
+body#blinqPremium .insight-read-all:hover{color:#4be99d}
+body#blinqPremium .insight-drawer-list{height:calc(100% - 154px)!important;padding:12px!important;gap:9px!important}
+body#blinqPremium .insight-feed-item{display:grid!important;grid-template-columns:34px minmax(0,1fr)!important;gap:10px!important;padding:12px!important;border-radius:11px!important;background:linear-gradient(180deg,#071c25,#061820)!important;transition:border-color .16s ease,transform .16s ease,background .16s ease!important}
+body#blinqPremium .insight-feed-item:hover{transform:translateY(-1px);border-color:#2b5d55!important}
+body#blinqPremium .insight-feed-item.is-unread{border-color:#2b7054!important;background:linear-gradient(135deg,rgba(42,121,82,.13),#071b24 42%)!important;box-shadow:inset 3px 0 0 #3be592!important}
+body#blinqPremium .insight-feed-icon{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;border:1px solid #285348;background:#09241e;color:#50e99d;font-weight:900;font-size:13px}
+body#blinqPremium .insight-feed-icon.type-alert{border-color:#6b4c39;background:#271a13;color:#e7a36f}.insight-feed-icon.type-vip{border-color:#66532d;background:#251e0f;color:#e7c26c}.insight-feed-icon.type-info{border-color:#2c5164;background:#0a202b;color:#76c8e8}
+body#blinqPremium .insight-feed-content{min-width:0}
+body#blinqPremium .insight-feed-content>header{display:flex;justify-content:space-between;gap:8px;align-items:center}
+body#blinqPremium .insight-feed-content>header div{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+body#blinqPremium .insight-feed-content>header span{color:#58e9a0;font-size:6.5px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}
+body#blinqPremium .insight-feed-content>header b,body#blinqPremium .insight-feed-content>header em{padding:2px 5px;border-radius:999px;font-size:5.5px;font-style:normal;font-weight:900;letter-spacing:.06em}
+body#blinqPremium .insight-feed-content>header b{background:#2e2854;color:#baa7ff}.insight-feed-content>header em{background:#2fd988;color:#062018}
+body#blinqPremium .insight-feed-content time{font-size:6.5px;color:#5e7882;white-space:nowrap}
+body#blinqPremium .insight-feed-content h3{margin:7px 0 5px!important;font-size:14px!important;line-height:1.2!important;color:#eff6f3!important}
+body#blinqPremium .insight-feed-content p{margin:0!important;color:#98aea9!important;font-size:9px!important;line-height:1.55!important;white-space:pre-wrap}
+body#blinqPremium .insight-feed-content footer{display:flex;align-items:center;justify-content:space-between;gap:9px;margin-top:10px;padding-top:8px;border-top:1px solid #17363f}
+body#blinqPremium .insight-feed-content footer small{font-size:6.5px;color:#a184f7;font-weight:850}
+body#blinqPremium .insight-feed-content footer button,body#blinqPremium .insight-feed-content footer a{display:inline-flex;align-items:center;gap:3px;border:0;background:transparent;color:#56e9a0;font-size:8px;font-weight:850;text-decoration:none;cursor:pointer;padding:0}
+body#blinqPremium .insight-feed-content footer svg{width:12px;height:12px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+body#blinqPremium .insight-feed-empty{min-height:220px!important;padding:35px 24px!important;display:grid!important;place-items:center!important;align-content:center!important;gap:8px!important;text-align:center!important;border:1px dashed #214350!important;border-radius:12px!important;background:linear-gradient(180deg,rgba(8,28,35,.52),rgba(4,19,25,.3))!important}
+body#blinqPremium .insight-feed-empty i{width:38px;height:38px;display:grid;place-items:center;border:1px solid #275948;border-radius:50%;background:#09251e;color:#4de69b;font-style:normal;font-size:16px}
+body#blinqPremium .insight-feed-empty strong{color:#d8e6e1;font-size:12px}.insight-feed-empty p{max-width:300px;margin:0;color:#718b93;font-size:8.5px;line-height:1.55}.insight-feed-loading span{width:28px;height:28px;border:2px solid #244d46;border-top-color:#42e496;border-radius:50%;animation:insightSpin .7s linear infinite}@keyframes insightSpin{to{transform:rotate(360deg)}}
+
+@media(max-width:900px){
+  body#blinqPremium .reference-search{min-width:190px!important}
+  body#blinqPremium .account-modal-main-card-v2{grid-template-columns:1fr 1fr!important;grid-template-areas:"access facts" "editor editor"!important}
+  body#blinqPremium .account-profile-editor{grid-template-columns:1fr 1fr auto!important;grid-template-rows:auto auto!important;align-items:end!important}
+  body#blinqPremium .account-profile-editor-head{grid-column:1/-1!important}
+  body#blinqPremium .account-modal-plan{grid-template-columns:92px minmax(0,1fr)!important;grid-template-rows:auto auto!important}
+  body#blinqPremium .account-modal-plan .account-plan-upgrade,body#blinqPremium .account-modal-plan .account-plan-current{grid-column:2!important;grid-row:2!important;justify-self:start!important}
+  body#blinqPremium .account-modal-plan.plan-goat{width:100%!important;min-width:0!important}
+}
+@media(max-width:620px){
+  body#blinqPremium .account-dialog{padding:20px 16px 24px!important}
+  body#blinqPremium .account-modal-main-card-v2{grid-template-columns:1fr!important;grid-template-areas:"access" "facts" "editor"!important}
+  body#blinqPremium .account-modal-main-card-v2 .account-modal-access{border-right:0!important;border-bottom:1px solid rgba(54,102,125,.44)!important;padding:0 0 14px!important}
+  body#blinqPremium .account-profile-editor{grid-template-columns:1fr!important}
+  body#blinqPremium .account-modal-plans{grid-template-columns:1fr!important}
+  body#blinqPremium .account-modal-plan.plan-goat{grid-column:auto!important}
+  body#blinqPremium .account-modal-section-title span{display:none!important}
+}

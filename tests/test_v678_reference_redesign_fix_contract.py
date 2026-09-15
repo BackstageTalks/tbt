@@ -35,8 +35,8 @@ def test_reference_hero_uses_current_blinq_branding_and_new_asset():
 
 def test_daily_dashboard_keeps_agreed_tabs_and_reference_table_columns():
     tabs=UI['dashboard']['daily_hub']['tabs']
-    assert tabs['daily']['label']=='Prehľad'
-    assert tabs['top']['label']=='TOP'
+    assert tabs['daily']['label']=='TOP'
+    assert tabs['top']['label']=='Short Odds'
     assert tabs['value']['label']=='Value'
     assert '`<button type="button" class="daily-hub-tab daily-hub-results"' in APP
     assert "return ['ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %','DETAIL']" in APP

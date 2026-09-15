@@ -1,8 +1,8 @@
 """Server-owned BlinQ membership entitlements.
 
-Runtime admin configuration may only *narrow* the hard server policy.  This
-keeps the browser from becoming the authorization source while still allowing
-an administrator to choose how many rows each membership level may receive.
+Runtime admin configuration controls the visible row count inside a hard
+server-side cap.  Repository defaults remain conservative when runtime storage
+is unavailable, while published admin rules may explicitly set 0..10 rows.
 """
 from __future__ import annotations
 
@@ -20,22 +20,27 @@ SECTION_TO_FEED_KEY = {
 
 _POLICY = {
     "expired": {
-        "daily": (1, False), "prime": (1, False), "top_daily": (0, False), "value": (0, False),
-        "doubles": (1, False), "ace": (0, False), "sg": (0, False),
+        "daily": (0, False), "prime": (0, False), "top_daily": (0, False), "value": (0, False),
+        "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "rookie": {
-        "daily": (3, False), "prime": (3, False), "top_daily": (2, False), "value": (3, False),
-        "doubles": (1, False), "ace": (3, False), "sg": (3, False),
+        "daily": (1, False), "prime": (1, False), "top_daily": (1, False), "value": (1, False),
+        "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "pro": {
-        "daily": (10, False), "prime": (5, True), "top_daily": (5, True), "value": (10, False),
-        "doubles": (5, True), "ace": (10, False), "sg": (10, False),
+        "daily": (3, False), "prime": (3, False), "top_daily": (3, False), "value": (3, False),
+        "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "elite": {key: ("ALL", True) for key in ["daily", *SECTION_TO_FEED_KEY]},
     "legend": {key: ("ALL", True) for key in ["daily", *SECTION_TO_FEED_KEY]},
     "goat": {key: ("ALL", True) for key in ["daily", *SECTION_TO_FEED_KEY]},
     "admin": {key: ("ALL", True) for key in ["daily", *SECTION_TO_FEED_KEY]},
 }
+
+# Admin may explicitly configure 0..10 visible picks for every category.  The
+# server remains the authorization boundary: runtime values are capped here.
+_RUNTIME_PICK_CAP = 10
+
 
 
 def effective_plan(access: dict) -> str:
@@ -136,12 +141,16 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
     payload = payload or {}
     sections = {}
     source_map={"daily":_daily_rows(payload), **{section:(payload.get(feed_key) if isinstance(payload.get(feed_key),list) else []) for section,feed_key in SECTION_TO_FEED_KEY.items()}}
-    tab_map={"daily":"daily","value":"value","ace":"ace","sg":"games"}
+    tab_map={"daily":"daily","prime":"top","top_daily":"daily","value":"value","doubles":"doubles","ace":"ace","sg":"games"}
     for section, rows in source_map.items():
-        hard_limit, hard_see_all = policy.get(section, (0,False))
+        default_limit, hard_see_all = policy.get(section, (0,False))
         runtime_rule=_admin_hub_rule(ui_config, tab_map[section], plan) if section in tab_map else None
-        runtime_limit=runtime_rule[0] if runtime_rule else None
-        limit=_narrow_limit(hard_limit,runtime_limit)
+        if runtime_rule:
+            runtime_limit=runtime_rule[0]
+            hard_cap="ALL" if plan in {"elite","legend","goat","admin"} else _RUNTIME_PICK_CAP
+            limit=_narrow_limit(hard_cap,runtime_limit)
+        else:
+            limit=default_limit
         returned=len(rows) if str(limit).upper()=="ALL" else min(len(rows),max(0,int(limit)))
         blur=runtime_rule[1] if runtime_rule else (str(limit).upper()!="ALL" and returned<len(rows))
         see_all=(runtime_rule[2] if runtime_rule else hard_see_all) and hard_see_all

@@ -51,7 +51,7 @@
         </nav>
 
         <label class="reference-search" aria-label="Hľadať hráča, turnaj alebo krajinu">
-          <span aria-hidden="true">⌕</span>
+          <span class="reference-search-icon" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><circle cx="11" cy="11" r="6.5"></circle><path d="m16 16 4 4"></path></svg></span>
           <input id="dashboardSearch" type="search" autocomplete="off" placeholder="Hľadať hráča, turnaj alebo krajinu..." />
         </label>
 
@@ -62,7 +62,7 @@
               <span class="avatar" id="avatar">B</span>
               <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small class="profile-meta-primary"><span id="profilePlan">Člen</span><span id="profileTelegram" hidden>TG —</span></small><small class="profile-meta-secondary" hidden><span id="profileRegisteredEmail">—</span><span id="profileRemaining">—</span></small><span id="profilePlanIcon" hidden>◇</span><span id="memberStatus" hidden>Aktívne</span></span>
             </button>
-            <button id="profileMenuToggle" class="profile-toggle" type="button" aria-controls="profileMenu" aria-expanded="false">⌄</button>
+            <button id="profileMenuToggle" class="profile-toggle" type="button" aria-controls="profileMenu" aria-expanded="false" aria-label="Otvoriť menu účtu"><svg viewBox="0 0 20 20" focusable="false" aria-hidden="true"><path d="m5.5 7.5 4.5 4.5 4.5-4.5"></path></svg></button>
             <div id="profileMenu" class="profile-menu" hidden>
               <button id="profileAdminLink" data-route="admin" type="button" hidden><span>⚙</span><span><strong>Admin</strong><small>Admin centrum</small></span></button>
               <button id="headerLogoutButton" type="button"><span>↪</span><span><strong>Odhlásiť sa</strong><small>Ukončiť reláciu</small></span></button>
@@ -142,6 +142,7 @@
     <aside id="insightDrawer" class="insight-drawer" hidden aria-label="BlinQ Insights">
       <div class="insight-drawer-head"><div><small>BLINQ INSIGHTS</small><h2>Súkromný feed</h2><p id="insightAudienceLabel">ELITE+</p></div><button id="insightDrawerClose" type="button" aria-label="Zavrieť">×</button></div>
       <div id="insightDrawerStatus" class="insight-drawer-status"></div>
+      <div id="insightDrawerToolbar" class="insight-drawer-toolbar"></div>
       <div id="insightDrawerList" class="insight-drawer-list"></div>
     </aside>
     <button id="insightBackdrop" class="insight-backdrop" type="button" hidden aria-label="Zavrieť BlinQ Insights"></button>

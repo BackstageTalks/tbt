@@ -324,7 +324,7 @@ def validate_ui_config(payload: object) -> dict:
             if not isinstance(rule, dict):
                 raise ValueError(f"Missing Daily Picks entitlement {tab_id}/{plan_id}")
             visible = rule.get("visible_rows")
-            if not (visible == "ALL" or isinstance(visible, int) and 0 <= visible <= 20):
+            if not (visible == "ALL" or isinstance(visible, int) and 0 <= visible <= 10):
                 raise ValueError(f"Invalid Daily Picks row count {tab_id}/{plan_id}")
             if not isinstance(rule.get("blur_remaining"), bool) or not isinstance(rule.get("tab_enabled"), bool) or not isinstance(rule.get("see_all", False), bool):
                 raise ValueError(f"Invalid Daily Picks entitlement flags {tab_id}/{plan_id}")
@@ -355,7 +355,7 @@ def validate_ui_config(payload: object) -> dict:
             if not isinstance(entitlement, dict):
                 raise ValueError(f"Missing dashboard entitlement {section_id}/{plan_id}")
             visible = entitlement.get("visible_picks")
-            if not (visible == "ALL" or isinstance(visible, int) and 0 <= visible <= 20):
+            if not (visible == "ALL" or isinstance(visible, int) and 0 <= visible <= 10):
                 raise ValueError(f"Invalid visible pick count for {section_id}/{plan_id}")
             if not isinstance(entitlement.get("blur_remaining"), bool) or not isinstance(entitlement.get("see_all"), bool):
                 raise ValueError(f"Invalid dashboard entitlement flags for {section_id}/{plan_id}")

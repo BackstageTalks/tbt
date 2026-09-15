@@ -20,26 +20,26 @@ def _rows(n):
     ]
 
 
-def test_default_daily_hub_access_is_three_ten_all():
+def test_default_daily_hub_access_is_one_three_all():
     cfg = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     daily = cfg["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"]
     assert cfg["dashboard"]["daily_hub"]["preview_rows"] == 10
-    assert daily["rookie"]["visible_rows"] == 3
+    assert daily["rookie"]["visible_rows"] == 1
     assert daily["rookie"]["see_all"] is False
-    assert daily["pro"]["visible_rows"] == 10
+    assert daily["pro"]["visible_rows"] == 3
     assert daily["pro"]["see_all"] is False
     assert daily["elite"]["visible_rows"] == "ALL"
     assert daily["elite"]["see_all"] is True
 
 
-def test_server_hard_policy_blocks_expand_before_elite():
+def test_server_policy_keeps_full_offer_elite_only():
     cfg = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     payload = {"prime_picks": _rows(16), "top_daily_picks": [], "value_picks": [], "ace_picks": [], "sg_picks": []}
     rookie = entitlement_manifest({"status": "active", "plan": "rookie"}, payload, cfg)["sections"]["daily"]
     pro = entitlement_manifest({"status": "active", "plan": "pro"}, payload, cfg)["sections"]["daily"]
     elite = entitlement_manifest({"status": "active", "plan": "elite"}, payload, cfg)["sections"]["daily"]
-    assert rookie["visible_picks"] == 3 and rookie["see_all"] is False
-    assert pro["visible_picks"] == 10 and pro["see_all"] is False
+    assert rookie["visible_picks"] == 1 and rookie["see_all"] is False
+    assert pro["visible_picks"] == 3 and pro["see_all"] is False
     assert elite["visible_picks"] == "ALL" and elite["see_all"] is True
 
 

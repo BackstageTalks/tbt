@@ -1068,12 +1068,12 @@
       }
     },
     "SIDEBAR_PRIME": {
-      "label": "Prime Predictions",
+      "label": "Short Odds",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 2,
       "content": {
-        "label": "Prime Predictions",
+        "label": "Short Odds",
         "route": "prime",
         "icon": "✦"
       },
@@ -2310,6 +2310,11 @@
       3,
       4,
       5,
+      6,
+      7,
+      8,
+      9,
+      10,
       "ALL"
     ]
   },
@@ -2606,7 +2611,7 @@
     ],
     "sections": {
       "prime": {
-        "label": "Prime Predictions",
+        "label": "Short Odds",
         "panel_id": "predictionsPanel",
         "sidebar_element": "SIDEBAR_PRIME",
         "sidebar_enabled": false,
@@ -2615,27 +2620,27 @@
         "preview_limit": 5,
         "plans": {
           "trial": {
-            "visible_picks": 3,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 1
-          },
-          "expired": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 1
           },
+          "expired": {
+            "visible_picks": 0,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 1
+          },
           "rookie": {
-            "visible_picks": 3,
+            "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 1
           },
           "pro": {
-            "visible_picks": 5,
-            "blur_remaining": false,
-            "see_all": true,
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": false,
             "order": 1
           },
           "elite": {
@@ -2668,27 +2673,27 @@
         "preview_limit": 5,
         "plans": {
           "trial": {
-            "visible_picks": 2,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 2
-          },
-          "expired": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 2
           },
+          "expired": {
+            "visible_picks": 0,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 2
+          },
           "rookie": {
-            "visible_picks": 2,
+            "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
             "order": 2
           },
           "pro": {
-            "visible_picks": 5,
+            "visible_picks": 3,
             "blur_remaining": true,
-            "see_all": true,
+            "see_all": false,
             "order": 2
           },
           "elite": {
@@ -2727,7 +2732,7 @@
             "order": 4
           },
           "expired": {
-            "visible_picks": 1,
+            "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
             "order": 4
@@ -2741,7 +2746,7 @@
           "pro": {
             "visible_picks": 3,
             "blur_remaining": true,
-            "see_all": true,
+            "see_all": false,
             "order": 4
           },
           "elite": {
@@ -2774,27 +2779,27 @@
         "preview_limit": 5,
         "plans": {
           "trial": {
-            "visible_picks": 1,
+            "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
             "order": 3
           },
           "expired": {
-            "visible_picks": 1,
+            "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
             "order": 3
           },
           "rookie": {
-            "visible_picks": 1,
+            "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
             "order": 3
           },
           "pro": {
-            "visible_picks": 3,
+            "visible_picks": 0,
             "blur_remaining": true,
-            "see_all": true,
+            "see_all": false,
             "order": 3
           },
           "elite": {
@@ -2827,27 +2832,27 @@
         "preview_limit": 5,
         "plans": {
           "trial": {
-            "visible_picks": 1,
+            "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
             "order": 6
           },
           "expired": {
-            "visible_picks": 1,
+            "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
             "order": 6
           },
           "rookie": {
-            "visible_picks": 1,
+            "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
             "order": 6
           },
           "pro": {
-            "visible_picks": 3,
+            "visible_picks": 0,
             "blur_remaining": true,
-            "see_all": true,
+            "see_all": false,
             "order": 6
           },
           "elite": {
@@ -2880,27 +2885,27 @@
         "preview_limit": 5,
         "plans": {
           "trial": {
-            "visible_picks": 1,
+            "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
             "order": 5
           },
           "expired": {
-            "visible_picks": 1,
+            "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
             "order": 5
           },
           "rookie": {
-            "visible_picks": 1,
+            "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
             "order": 5
           },
           "pro": {
-            "visible_picks": 3,
+            "visible_picks": 0,
             "blur_remaining": true,
-            "see_all": true,
+            "see_all": false,
             "order": 5
           },
           "elite": {
@@ -3055,11 +3060,11 @@
       "expand_rows": 20,
       "tabs": {
         "daily": {
-          "label": "Prehľad",
+          "label": "TOP",
           "enabled": true,
           "plans": {
             "trial": {
-              "visible_rows": 3,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
@@ -3071,14 +3076,14 @@
               "see_all": false
             },
             "rookie": {
-              "visible_rows": 3,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
             "pro": {
-              "visible_rows": 10,
-              "blur_remaining": false,
+              "visible_rows": 3,
+              "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
@@ -3107,7 +3112,7 @@
           "enabled": true,
           "plans": {
             "trial": {
-              "visible_rows": 3,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
@@ -3119,14 +3124,14 @@
               "see_all": false
             },
             "rookie": {
-              "visible_rows": 3,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
             "pro": {
-              "visible_rows": 10,
-              "blur_remaining": false,
+              "visible_rows": 3,
+              "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
@@ -3155,7 +3160,7 @@
           "enabled": true,
           "plans": {
             "trial": {
-              "visible_rows": 3,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
@@ -3167,14 +3172,14 @@
               "see_all": false
             },
             "rookie": {
-              "visible_rows": 3,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
             "pro": {
-              "visible_rows": 10,
-              "blur_remaining": false,
+              "visible_rows": 0,
+              "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
@@ -3203,7 +3208,7 @@
           "enabled": true,
           "plans": {
             "trial": {
-              "visible_rows": 3,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
@@ -3215,14 +3220,14 @@
               "see_all": false
             },
             "rookie": {
-              "visible_rows": 3,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
             "pro": {
-              "visible_rows": 10,
-              "blur_remaining": false,
+              "visible_rows": 0,
+              "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
@@ -3247,11 +3252,11 @@
           }
         },
         "prime": {
-          "label": "Prime",
+          "label": "Short Odds",
           "enabled": false,
           "plans": {
             "trial": {
-              "visible_rows": 3,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
@@ -3263,14 +3268,14 @@
               "see_all": false
             },
             "rookie": {
-              "visible_rows": 3,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
             "pro": {
-              "visible_rows": 10,
-              "blur_remaining": false,
+              "visible_rows": 3,
+              "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
@@ -3295,11 +3300,11 @@
           }
         },
         "top": {
-          "label": "TOP",
+          "label": "Short Odds",
           "enabled": true,
           "plans": {
             "trial": {
-              "visible_rows": 3,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
@@ -3311,14 +3316,14 @@
               "see_all": false
             },
             "rookie": {
-              "visible_rows": 3,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
             "pro": {
-              "visible_rows": 10,
-              "blur_remaining": false,
+              "visible_rows": 3,
+              "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
@@ -3347,7 +3352,7 @@
           "enabled": true,
           "plans": {
             "trial": {
-              "visible_rows": 3,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
@@ -3359,14 +3364,14 @@
               "see_all": false
             },
             "rookie": {
-              "visible_rows": 3,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
             "pro": {
-              "visible_rows": 10,
-              "blur_remaining": false,
+              "visible_rows": 0,
+              "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
