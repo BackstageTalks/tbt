@@ -236,8 +236,10 @@ def test_readiness_prefers_match_weighted_geo_over_historical_entity_tail():
 
 def test_v680_visual_polish_loading_ads_and_account_selector_contract():
     blinq_css = (ROOT / 'web/blinq.css').read_text(encoding='utf-8')
-    assert '/assets/blinq_loading_tennis.webp' in INDEX
-    assert (ROOT / 'web/assets/blinq_loading_tennis.webp').is_file()
+    assert '/assets/blinq_loading_tennis_v2.webp' in INDEX
+    assert (ROOT / 'web/assets/blinq_loading_tennis_v2.webp').is_file()
+    polish_css = (ROOT / 'web/polish-681.css').read_text(encoding='utf-8')
+    assert '@keyframes bq-loader-rally' in polish_css
     # The right rail is an advertising surface; no forced BlinQ lockup lives inside slides.
     rail_fn = APP[APP.index('function railPromoSlideHtml'):APP.index('function clearRailPromoRotation')]
     assert 'rail-native-brand' not in rail_fn

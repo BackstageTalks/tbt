@@ -55,7 +55,11 @@ def test_inline_match_detail_has_four_requested_tabs_and_close_back_to_sidebar()
     for label in ('Prehľad','Štatistiky','Radar','História'):
         assert label in detail
     assert 'data-rail-close-match' in detail
-    assert 'renderMotivationPanel(row)' in detail
+    assert 'data-rail-open-modal' in detail
+
+    modal=APP.split('function matchDetailHtml',1)[1].split('function openMatchPopout',1)[0]
+    assert 'renderMotivationPanel(row)' in modal
+    assert 'data-match-popout' in modal
 
 def test_private_feed_defaults_to_elite_plus_but_message_audience_is_editable():
     cfg=UI['notifications']
