@@ -39,7 +39,7 @@ def test_daily_dashboard_keeps_agreed_tabs_and_reference_table_columns():
     assert tabs['top']['label']=='TOP'
     assert tabs['value']['label']=='Value'
     assert '`<button type="button" class="daily-hub-tab daily-hub-results"' in APP
-    assert "return ['ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %','EDGE','DETAIL']" in APP
+    assert "return ['ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %','DETAIL']" in APP
 
 def test_match_detail_is_inline_right_rail_on_predictions_route():
     assert 'id="dashboardRightRail"' in INDEX

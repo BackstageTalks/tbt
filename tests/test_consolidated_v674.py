@@ -10,7 +10,7 @@ def read(path):
 def test_daily_offer_copy_and_lock_are_consolidated():
     html = read("web/index.html")
     app = read("web/app.js")
-    assert "Dnešné predikcie" in html
+    assert "TOP predikcie" in html
     assert "Zobraziť celú ponuku" in html
     assert "Dnešné bety" not in html
     assert "daily-hub-results" in app

@@ -22,7 +22,7 @@ def test_preview_requires_future_odds_and_70_percent():
 def test_value_priority_top_under_150_daily_from_150():
     assert 'function valuePickIds()' in APP
     assert "!valueIds.has(dailyPickIdentity(row))&&Number.isFinite(odds)&&odds>=1.50" in APP
-    assert "!valueIds.has(dailyPickIdentity(row))&&Number.isFinite(odds)&&odds>1&&odds<1.50" in APP
+    assert "!valueIds.has(dailyPickIdentity(row))&&Number.isFinite(odds)&&odds>=1.25&&odds<1.50" in APP
 
 
 def test_results_have_24h_and_void_contract():

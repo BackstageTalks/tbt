@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{quick:'all',q:'',plan:'all',status:'all',tg:'all',dateField:'created_at',dateFrom:'',dateTo:'',sort:'telegram'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:''}, railMatch:null, railMatchTab:'overview', railDetailTab:'overview', insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', railPromoIndex:0, railPromoTimer:null, railPromoPaused:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{quick:'all',q:'',plan:'all',status:'all',tg:'all',dateField:'created_at',dateFrom:'',dateTo:'',sort:'telegram'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all'}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:''}, railMatch:null, railMatchTab:'overview', railDetailTab:'overview', insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', railPromoIndex:0, railPromoTimer:null, railPromoPaused:false, presentationConfig:null };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -165,6 +165,30 @@
     .filter(item=>(!kind||item.kind===kind)&&(!zone||item.zone===zone))
     .sort((a,b)=>Number(a.order||0)-Number(b.order||0));
 
+  function bannerCreativeStyle(c={}){
+    const n=(v,min,max,fallback)=>{const x=Number(v);return Number.isFinite(x)?Math.max(min,Math.min(max,x)):fallback;};
+    const vars=[`--creative-headline-size:${n(c.headline_size,16,72,36)}px`,`--creative-text-size:${n(c.text_size,9,28,14)}px`,`--creative-eyebrow-size:${n(c.eyebrow_size,7,18,10)}px`,`--creative-delay:${n(c.animation_delay_ms,0,5000,80)}ms`];
+    if(c.headline_color)vars.push(`--creative-headline-color:${String(c.headline_color)}`);if(c.text_color)vars.push(`--creative-text-color:${String(c.text_color)}`);if(c.overlay)vars.push(`--creative-overlay:${String(c.overlay)}`);
+    return `style="${escapeHtml(vars.join(';'))}"`;
+  }
+  function bannerCreativeClasses(c={}){
+    const mode=String(c.mode||c.creative_mode||'native').toLowerCase()==='ads'?'ads':'native';
+    const pos=String(c.text_position||'left-center').replace(/[^a-z0-9_-]/gi,'');
+    const effect=String(c.effect||'fade-up').replace(/[^a-z0-9_-]/gi,'');
+    return ` creative-${mode} creative-pos-${pos} creative-effect-${effect}`;
+  }
+  async function loadEditablePresentationConfig(){
+    try{
+      const [tiers,banners,footer,theme]=await Promise.all([getJSON('/config/membership-tiers.json'),getJSON('/config/banners.json'),getJSON('/config/footer-links.json'),getJSON('/config/site-theme.json')]);
+      state.presentationConfig={tiers,banners,footer,theme};
+      Object.entries(tiers?.tiers||{}).forEach(([id,data])=>{if(!state.ui?.plans?.[id])return;const p=state.ui.plans[id];['label','card_title','description','short_description','cta_label','invite_only'].forEach(k=>{if(data[k]!==undefined)p[k]=data[k];});const u=safeExternalUrl(data.url||'');if(u)p.url=u;else if(data.url==='')p.url='';});
+      const hero=banners?.main_banner||{};if(state.ui){state.ui.hero_banner={...(state.ui.hero_banner||{}),rotation_seconds:hero.rotation_seconds??state.ui.hero_banner?.rotation_seconds,auto_rotate:hero.auto_rotate??state.ui.hero_banner?.auto_rotate,show_dots:hero.show_dots??state.ui.hero_banner?.show_dots,slot_count:Array.isArray(hero.slides)?Math.min(5,hero.slides.filter(x=>x?.enabled!==false).length):state.ui.hero_banner?.slot_count};}
+      (hero.slides||[]).slice(0,5).forEach((row,i)=>{const item=state.ui?.elements?.[`HERO_BANNER_${i+1}`];if(item){item.content={...(item.content||{}),...row};}});
+      const small=banners?.home_small_banners||{};(small.slides||[]).slice(0,4).forEach((row,i)=>{const item=state.ui?.elements?.[`SIDEBAR_PROMO_${i+1}`];if(item){item.content={...(item.content||{}),...row};}});
+      const rail=state.ui?.elements?.VIP_RAIL;if(rail&&footer){const c=rail.content=rail.content||{};(footer.links||[]).slice(0,4).forEach((row,i)=>{const n=i+1;c[`benefit_${n}_title`]=row.enabled===false?'':row.title||'';c[`benefit_${n}_text`]=row.text||'';c[`benefit_${n}_title_size`]=row.title_size||15;c[`benefit_${n}_text_size`]=row.text_size||12;c[`benefit_${n}_icon`]=row.icon||'';c[`benefit_${n}_icon_url`]=row.icon_url||'';c[`benefit_${n}_link`]=row.link||'#predictions';});if(footer.cta){c.button_text=footer.cta.label||c.button_text;c.link=footer.cta.link||c.link;}};
+      const bg=theme?.background||{};const style=document.documentElement.style;style.setProperty('--blinq-page-bg',`url("${String(bg.image||bg.fallback||'')}")`);style.setProperty('--blinq-page-bg-fallback',`url("${String(bg.fallback||'')}")`);style.setProperty('--blinq-page-bg-position',String(bg.position||'center top'));style.setProperty('--blinq-page-bg-size',String(bg.size||'cover'));style.setProperty('--blinq-page-bg-opacity',String(bg.enabled===false?0:(Number(bg.opacity)||0.2)));style.setProperty('--blinq-page-bg-overlay',String(bg.overlay||'linear-gradient(rgba(0,9,13,.8),rgba(0,9,13,.95))'));if(theme?.login?.background_image)style.setProperty('--blinq-login-bg',`url("${String(theme.login.background_image)}")`);if(theme?.login?.card_width)style.setProperty('--blinq-login-width',`${Number(theme.login.card_width)}px`);if(theme?.login?.logo_width)style.setProperty('--blinq-login-logo-width',`${Number(theme.login.logo_width)}px`);
+    }catch{}
+  }
   async function loadUiConfig() {
     try {
       state.uiSource = await getJSON('/ui-config.json');
@@ -219,6 +243,7 @@
         if(data.button_text!==undefined) plan.cta_label=data.button_text;
       });
     } catch {}
+    await loadEditablePresentationConfig();
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -637,7 +662,7 @@
     const titleHtml=accent?`<h2><span>${title}</span><strong>${escapeHtml(accent)}</strong></h2>`:`<h2><strong>${title}</strong></h2>`;
     const copy=showCopy?`<div class="dashboard-hero-copy"><small>${escapeHtml(c.eyebrow||'BLINQ')}</small>${titleHtml}<p>${escapeHtml(c.text||'')}</p>${c.button_text?`<b class="hero-slide-cta">${escapeHtml(c.button_text)} →</b>`:''}</div>`:'';
     const clickable=bannerClickAllowed(item),lockedPlan=clickable?'':firstBannerClickPlan(item),finalHref=clickable?href:'#';
-    return `<a class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}${clickable?'':' is-link-locked'}" href="${escapeHtml(finalHref)}" ${clickable&&external?'target="_blank" rel="noopener"':''} ${clickable&&route&&!external?`data-route="${escapeHtml(route)}"`:''} ${!clickable?`data-upgrade-plan="${escapeHtml(lockedPlan)}" data-upgrade-section="${escapeHtml(c.headline||item.label||'Premium banner')}"`:''} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${sponsored}${image}${copy}${art}${watermarkHtml(item)}</a>`;
+    return `<a class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}${clickable?'':' is-link-locked'}" ${bannerCreativeStyle(c)} href="${escapeHtml(finalHref)}" ${clickable&&external?'target="_blank" rel="noopener"':''} ${clickable&&route&&!external?`data-route="${escapeHtml(route)}"`:''} ${!clickable?`data-upgrade-plan="${escapeHtml(lockedPlan)}" data-upgrade-section="${escapeHtml(c.headline||item.label||'Premium banner')}"`:''} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${sponsored}${image}${copy}${art}${watermarkHtml(item)}</a>`;
   }
   function clearHeroRotation(){
     if(state.heroTimer){clearInterval(state.heroTimer);state.heroTimer=null;}
@@ -992,7 +1017,7 @@
     const sponsored=c.sponsored===true||c.type==='advertisement';
     const image=safePhotoUrl(c.image_url||'');
     const attrs=`${clickable&&route&&!external?`data-route="${escapeHtml(route)}"`:''} ${!clickable?`data-upgrade-plan="${escapeHtml(lockedPlan)}" data-upgrade-section="${escapeHtml(c.headline||item.label||'Premium banner')}"`:''} data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)}`;
-    return `<a class="rail-native-banner theme-${theme}${index===state.railPromoIndex?' is-active':''}" href="${escapeHtml(finalHref)}" ${clickable&&external?'target="_blank" rel="noopener"':''} ${attrs} data-rail-promo-slide="${index}" aria-hidden="${index===state.railPromoIndex?'false':'true'}">${image?`<img src="${escapeHtml(image)}" alt="" loading="lazy">`:''}<span class="rail-native-glow" aria-hidden="true"></span><div class="rail-native-copy">${sponsored?`<small class="rail-sponsored">${escapeHtml(lcopy('Sponsored','Sponzorované','Sponzorováno'))}</small>`:`<small>${escapeHtml(c.eyebrow||'BLINQ')}</small>`}<strong>${escapeHtml(c.headline||item.label||'BlinQ')}</strong><p>${escapeHtml(c.text||'')}</p><b>${escapeHtml(c.button_text||lcopy('Open','Otvoriť','Otevřít'))} →</b></div>${watermarkHtml(item)}</a>`;
+    return `<a class="rail-native-banner theme-${theme}${bannerCreativeClasses(c)}${index===state.railPromoIndex?' is-active':''}" ${bannerCreativeStyle(c)} href="${escapeHtml(finalHref)}" ${clickable&&external?'target="_blank" rel="noopener"':''} ${attrs} data-rail-promo-slide="${index}" aria-hidden="${index===state.railPromoIndex?'false':'true'}">${image?`<img src="${escapeHtml(image)}" alt="" loading="lazy">`:''}<span class="rail-native-glow" aria-hidden="true"></span><div class="rail-native-copy">${sponsored?`<small class="rail-sponsored">${escapeHtml(lcopy('Sponsored','Sponzorované','Sponzorováno'))}</small>`:`<small>${escapeHtml(c.eyebrow||'BLINQ')}</small>`}<strong>${escapeHtml(c.headline||item.label||'BlinQ')}</strong><p>${escapeHtml(c.text||'')}</p><b>${escapeHtml(c.button_text||lcopy('Open','Otvoriť','Otevřít'))} →</b></div>${watermarkHtml(item)}</a>`;
   }
   function setRailPromoSlide(index,restart=false){
     const host=$('dashboardRightRailContent'),slides=[...(host?.querySelectorAll('[data-rail-promo-slide]')||[])];
@@ -1152,12 +1177,13 @@
     return out;
   }
   function valuePickIds(){ return new Set((marketRows('value')||[]).map(dailyPickIdentity)); }
+  function offerSurfaceEligible(row){return String(row?.surface||row?.court_surface||'').trim().toLowerCase()!=='unknown'&&Boolean(String(row?.surface||row?.court_surface||'').trim());}
   function dailyHubRows(tab){
     const valueIds=valuePickIds();
     if(tab==='daily'){
       return mergedPrimeRows().filter(row=>{
         const odds=Number(row?.odds??row?.betting?.odds);
-        return !valueIds.has(dailyPickIdentity(row))&&Number.isFinite(odds)&&odds>=1.50;
+        return offerSurfaceEligible(row)&&!valueIds.has(dailyPickIdentity(row))&&Number.isFinite(odds)&&odds>=1.50;
       }).sort((a,b)=>(marketProbability(b)||0)-(marketProbability(a)||0));
     }
     if(tab==='calendar'){
@@ -1167,24 +1193,24 @@
         const odds=Number(row?.odds??row?.betting?.odds);
         const prob=Number(marketProbability(row));
         const pct=Number.isFinite(prob)?(prob<=1?prob*100:prob):0;
-        return Number.isFinite(ts)&&ts>now&&Number.isFinite(odds)&&odds>1&&pct>=70;
+        return offerSurfaceEligible(row)&&Number.isFinite(ts)&&ts>now&&Number.isFinite(odds)&&odds>1&&pct>=70;
       }).sort((a,b)=>new Date(a?.scheduled_at||0)-new Date(b?.scheduled_at||0));
     }
-    if(tab==='prime')return marketRows('prime');
+    if(tab==='prime')return marketRows('prime').filter(offerSurfaceEligible);
     if(tab==='top'){
       return mergedPrimeRows().filter(row=>{
         const odds=Number(row?.odds??row?.betting?.odds);
-        return !valueIds.has(dailyPickIdentity(row))&&Number.isFinite(odds)&&odds>1&&odds<1.50;
+        return offerSurfaceEligible(row)&&!valueIds.has(dailyPickIdentity(row))&&Number.isFinite(odds)&&odds>=1.25&&odds<1.50;
       }).sort((a,b)=>(marketProbability(b)||0)-(marketProbability(a)||0));
     }
-    if(tab==='value')return marketRows('value');
-    if(tab==='ace')return marketRows('ace').filter(aceHasApiLine);
-    if(tab==='games')return marketRows('sg').filter(row=>String(row?.projection_unit||'').toLowerCase()==='games'||String(row?.market_type||row?.market||'').toLowerCase().includes('game'));
-    if(tab==='doubles')return marketRows('doubles');
+    if(tab==='value')return marketRows('value').filter(offerSurfaceEligible);
+    if(tab==='ace')return marketRows('ace').filter(offerSurfaceEligible).filter(aceHasApiLine);
+    if(tab==='games')return marketRows('sg').filter(offerSurfaceEligible).filter(row=>String(row?.projection_unit||'').toLowerCase()==='games'||String(row?.market_type||row?.market||'').toLowerCase().includes('game'));
+    if(tab==='doubles')return marketRows('doubles').filter(offerSurfaceEligible);
     return [];
   }
   function dailyHubTabLabel(tab){
-    return {daily:lcopy('Today predictions','Dnešné predikcie','Dnešní predikce'),calendar:'Preview',prime:lcopy('Prime','Prime','Prime'),top:lcopy('TOP opportunities','TOP príležitosti','TOP příležitosti'),value:lcopy('Value','Value','Value'),ace:lcopy('Aces','Esá','Esa'),games:lcopy('Games','Gemy','Gemy'),doubles:lcopy('Doubles','Štvorhra','Čtyřhra')}[tab]||tab;
+    return {daily:lcopy('TOP predictions','TOP predikcie','TOP predikce'),calendar:'Preview',prime:lcopy('Prime predictions','Prime predikcie','Prime predikce'),top:lcopy('Prime predictions','Prime predikcie','Prime predikce'),value:lcopy('Value','Value','Value'),ace:lcopy('Aces','Esá','Esa'),games:lcopy('Sets & Games','Sety a gamy','Sety a gamy'),doubles:lcopy('Doubles','Štvorhra','Čtyřhra')}[tab]||tab;
   }
   function dashboardFilteredRows(rows){
     const q=String(state.dashboardSearch||'').trim().toLocaleLowerCase();
@@ -1201,7 +1227,7 @@
     if(tab==='value')return ['ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %','TRH','EV',''];
     if(tab==='ace')return ['ČAS','TURNAJ','ZÁPAS','PREDIKCIA','HRANICA','MODEL','DÁTA',''];
     if(tab==='games')return ['ČAS','TURNAJ','ZÁPAS','PREDIKCIA','HRANICA','MODEL','DÁTA',''];
-    return ['ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %','EDGE','DETAIL'];
+    return ['ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %','DETAIL'];
   }
   function safeNum(value){ const n=Number(value); return Number.isFinite(n)?n:null; }
   function clampValue(value,min=0,max=100){ const n=Number(value); if(!Number.isFinite(n)) return min; return Math.max(min,Math.min(max,n)); }
@@ -1498,7 +1524,7 @@
     const rowClass=active?' class="hub-row-active"':'';
     if(tab==='value'){const ev=Number(row?.expected_value??row?.betting?.expected_value);return `<tr${rowClass} data-hub-event="${key}"><td>${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td><strong>${escapeHtml(pick)}</strong></td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td><b class="hub-prob">${probability==null?'—':pct(probability)}</b></td><td>${escapeHtml(closeMarketLabel(row))}</td><td class="metric-positive">${Number.isFinite(ev)?`${ev>0?'+':''}${(ev*(Math.abs(ev)<=1?100:1)).toFixed(1)}%`:'—'}</td><td><button class="hub-detail" type="button" data-hub-detail>Detail →</button></td></tr>`;}
     if(tab==='ace'||tab==='games'){const projection=Number(row?.projection),line=apiMarketLine(row),side=tab==='ace'?aceLineSide(row):String(row?.side||row?.prediction_side||'');return `<tr${rowClass} data-hub-event="${key}"><td>${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td><strong>${escapeHtml(pick)}</strong></td><td>${Number.isFinite(line)?`${escapeHtml(side)} ${line.toFixed(1)}`.trim():'—'}</td><td><b class="hub-prob">${Number.isFinite(projection)?projection.toFixed(1):'—'}</b></td><td>${escapeHtml(data)}</td><td><button class="hub-detail" type="button" data-hub-detail>Detail →</button></td></tr>`;}
-    const edge=Number(row?.edge??row?.betting?.edge); return `<tr${rowClass} data-hub-event="${key}"><td>${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td><strong>${escapeHtml(pick)}</strong></td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td><b class="hub-prob">${probability==null?'—':pct(probability)}</b></td><td class="metric-positive">${Number.isFinite(edge)?`${edge>0?'+':''}${(edge*(Math.abs(edge)<=1?100:1)).toFixed(1)}%`:'—'}</td><td><button class="hub-detail" type="button" data-hub-detail>Detail →</button></td></tr>`;
+    return `<tr${rowClass} data-hub-event="${key}"><td>${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td><strong>${escapeHtml(pick)}</strong></td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td><b class="hub-prob">${probability==null?'—':pct(probability)}</b></td><td><button class="hub-detail" type="button" data-hub-detail>Detail →</button></td></tr>`;
   }
   function dailyHubLockedRow(tab,index){
     const colspan=dailyHubColumns(tab).length;
@@ -1754,7 +1780,7 @@
     issuedMarketPublications(row).forEach(p=>{const section=String(p.section||'');if(section&&!tags.includes(section))tags.push(section);});
     return tags;
   }
-  function resultCategoryLabel(value){const en=({all:'All published',prime:'Prime',top_daily:'TOP Prediction',value:'Value',doubles:'Doubles',ace:'Aces',double_faults:'Double Faults',sets:'Sets',games:'Games'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP Prediction':'TOP predikcie','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets':'Sety','Games':'Hry'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP Prediction':'TOP predikce','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets':'Sety','Games':'Hry'})[en]||en;return en;}
+  function resultCategoryLabel(value){const en=({all:'All published',prime:'Prime',top_daily:'TOP Prediction',value:'Value',doubles:'Doubles',ace:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets & Games',games:'Sets & Games'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP Prediction':'TOP predikcie','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP Prediction':'TOP predikce','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy'})[en]||en;return en;}
   function resultPublication(row,category='all'){
     const pubs=issuedMarketPublications(row);
     const filtered=['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category)?pubs.filter(p=>p.section===category):pubs;
@@ -1774,27 +1800,27 @@
     const filters=state.resultsFilters||{},now=Date.now(),windowDays=Number(filters.window);
     return (state.feed.results||[]).filter(row=>{
       if(filters.tour&&String(row?.tour||'').toUpperCase()!==filters.tour)return false;
-      if(filters.surface&&String(row?.surface||'').toLowerCase()!==filters.surface)return false;
+      if(filters.surface){const raw=String(row?.surface||'').toLowerCase();const mapped=raw==='indoor_hard'?'hard':raw;if(mapped!==filters.surface)return false;}else if(String(row?.surface||'').toLowerCase()==='unknown')return false;
       if(Number.isFinite(windowDays)&&windowDays>0){const ts=new Date(row?.scheduled_at||0).getTime();if(!Number.isFinite(ts)||ts<now-windowDays*86400000)return false;}
       const category=filters.category||'all';
       const pubs=issuedMarketPublications(row);
       if(!pubs.length)return false;
-      if(['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category)&&!resultTags(row).includes(category))return false;
+      if(category==='sg'&&!resultTags(row).some(tag=>tag==='sets'||tag==='games'))return false;if(['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category)&&!resultTags(row).includes(category))return false;
       return pubs.some(p=>publicationOutcome(p).kind!=='pending');
     });
   }
   function renderResultsFilters(){
     const rows=state.feed.results||[],filters=state.resultsFilters||{};
     const tours=[...new Set(rows.map(r=>String(r?.tour||'').toUpperCase()).filter(Boolean))].sort();
-    const surfaces=[...new Set(rows.map(r=>String(r?.surface||'').toLowerCase()).filter(Boolean))].sort();
+    const surfaces=[...new Set(rows.map(r=>{const v=String(r?.surface||'').toLowerCase();return v==='indoor_hard'?'hard':v;}).filter(v=>v&&v!=='unknown'))].sort();
     const option=(value,label,selected)=>`<option value="${escapeHtml(value)}"${value===selected?' selected':''}>${escapeHtml(label)}</option>`;
-    return `<div class="results-filter-bar"><label>${escapeHtml(publicText('Category'))}<select id="resultsCategory">${['all','prime','top_daily','value','doubles','ace','double_faults','sets','games'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select></label><label>${escapeHtml(publicText('Tour'))}<select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select></label><label>${escapeHtml(publicText('Surface'))}<select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select></label><label>${escapeHtml(publicText('Period'))}<select id="resultsWindow">${[['all',publicText('All time')],['1',publicText('24 hours')],['7',publicText('7 days')],['30',publicText('30 days')],['90',publicText('90 days')]].map(([v,l])=>option(v,l,filters.window||'all')).join('')}</select></label></div>`;
+    return `<div class="results-filter-bar"><label>${escapeHtml(publicText('Category'))}<select id="resultsCategory">${['all','prime','top_daily','value','doubles','ace','double_faults','sg'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select></label><label>${escapeHtml(publicText('Tour'))}<select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select></label><label>${escapeHtml(publicText('Surface'))}<select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select></label><label>${escapeHtml(publicText('Period'))}<select id="resultsWindow">${[['all',publicText('All time')],['1',publicText('24 hours')],['7',publicText('7 days')],['30',publicText('30 days')],['90',publicText('90 days')]].map(([v,l])=>option(v,l,filters.window||'all')).join('')}</select></label></div>`;
   }
   function settledPublishedEntries(rows,category='all'){
     const specific=['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category);
     const unique=new Map();
     (rows||[]).forEach(row=>{
-      const pubs=issuedMarketPublications(row).filter(p=>!specific||p.section===category).filter(p=>publicationOutcome(p).kind!=='pending');
+      const pubs=issuedMarketPublications(row).filter(p=>category==='sg'?['sets','games'].includes(p.section):(!specific||p.section===category)).filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
         const key=String(publication.selection_key||publication.publication_key||`${row?.id||row?.event_id||row?.scheduled_at||''}::${publication.section||''}::${publication.selection_id||publication.selection||index}`);
         const current=unique.get(key);
@@ -2447,7 +2473,7 @@
   function renderPlanCardsForAccount(){
     const current=accountPlan();
     const plans=Object.entries(state.ui?.plans||{}).filter(([id,p])=>!['trial','expired'].includes(id)&&p.enabled!==false).sort((a,b)=>Number(a[1]?.order||99)-Number(b[1]?.order||99));
-    return `<div class="account-plan-grid">${plans.map(([id,p])=>{const url=safeExternalUrl(p.url),active=current===id,restricted=Boolean(p.invite_only||p.verified_only),title=p.card_title||p.label||id.toUpperCase();let action='';if(active)action='<span class="membership-current">AKTUÁLNY</span>';else if(restricted){const invite=safeExternalUrl(p.invite_url||p.url);action=invite?`<a class="btn btn-ghost membership-cta invite-only" href="${escapeHtml(invite)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Požiadať o prístup')} →</a>`:`<button class="btn btn-ghost membership-cta invite-only" type="button" data-goat-request>${escapeHtml(p.cta_label||'Požiadať o prístup')}</button>`;}else if(url)action=`<a class="btn btn-primary membership-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Upgrade')} →</a>`;else action=`<button class="btn btn-ghost membership-cta is-disabled" type="button" disabled>${escapeHtml(p.cta_label||'Upgrade')}</button>`;return `<article class="membership-card plan-${escapeHtml(id)}${active?' current-plan':''}${restricted?' restricted-plan':''}">${planAvatarPairHtml(id,p)}<div class="membership-card-copy"><small>${escapeHtml(p.label||id.toUpperCase())}</small><strong>${escapeHtml(title)}</strong><p>${escapeHtml(p.description||p.note||'')}</p></div>${restricted?'<span class="membership-badge">INVITE ONLY</span>':''}${action}</article>`}).join('')}</div>`;
+    return `<div class="account-plan-grid">${plans.map(([id,p])=>{const url=safeExternalUrl(p.url),active=current===id,restricted=Boolean(p.invite_only||p.verified_only),title=p.card_title||p.label||id.toUpperCase();let action='';if(active)action='<span class="membership-current">AKTUÁLNY</span>';else if(restricted){const invite=safeExternalUrl(p.invite_url||p.url);action=invite?`<a class="btn btn-ghost membership-cta invite-only" href="${escapeHtml(invite)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Požiadať o prístup')} →</a>`:`<button class="btn btn-ghost membership-cta invite-only" type="button" data-goat-request>${escapeHtml(p.cta_label||'Požiadať o prístup')}</button>`;}else if(url)action=`<a class="btn btn-primary membership-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Upgrade')} →</a>`;else action=`<button class="btn btn-primary membership-cta" type="button" data-plan-link-missing="${escapeHtml(id)}">${escapeHtml(p.cta_label||'Upgrade')} →</button>`;return `<article class="membership-card plan-${escapeHtml(id)}${active?' current-plan':''}${restricted?' restricted-plan':''}">${planAvatarPairHtml(id,p)}<div class="membership-card-copy"><small>${escapeHtml(p.label||id.toUpperCase())}</small><strong>${escapeHtml(title)}</strong><p>${escapeHtml(p.description||p.note||'')}</p></div>${restricted?'<span class="membership-badge">INVITE ONLY</span>':''}${action}</article>`}).join('')}</div>`;
   }
   function renderAccountModal(){
     const a=state.feed?.account||{},status=String(a.status||'expired').toLowerCase(),plan=accountPlan(),planCfg=state.ui?.plans?.[plan]||{},planLabel=a.plan_label||planCfg.label||plan;
@@ -2458,25 +2484,25 @@
       const p=state.ui.plans[id]||{},url=safeExternalUrl(p.url||''),invite=safeExternalUrl(p.invite_url||p.url||''),current=id===plan;
       const action=current
         ?'<span class="account-plan-current">AKTUÁLNY</span>'
-        :(p.invite_only?(invite?`<a class="account-plan-upgrade" href="${escapeHtml(invite)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Požiadať o prístup')} →</a>`:`<button class="account-plan-upgrade is-disabled" type="button" data-goat-request>${escapeHtml(p.cta_label||'Požiadať o prístup')}</button>`):(url?`<a class="account-plan-upgrade" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Upgrade')} →</a>`:`<button class="account-plan-upgrade is-disabled" type="button" disabled>${escapeHtml(p.cta_label||'Upgrade')}</button>`));
+        :(p.invite_only?(invite?`<a class="account-plan-upgrade" href="${escapeHtml(invite)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Požiadať o prístup')} →</a>`:`<button class="account-plan-upgrade is-disabled" type="button" data-goat-request>${escapeHtml(p.cta_label||'Požiadať o prístup')}</button>`):(url?`<a class="account-plan-upgrade" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(p.cta_label||'Upgrade')} →</a>`:`<button class="account-plan-upgrade" type="button" data-plan-link-missing="${escapeHtml(id)}">${escapeHtml(p.cta_label||'Upgrade')} →</button>`));
       return `<article class="account-modal-plan plan-${escapeHtml(id)}${current?' is-current':''}">${planAvatarPairHtml(id,p)}<div class="account-modal-plan-copy"><small>${escapeHtml(id.toUpperCase())}</small><strong>${escapeHtml(p.label||id.toUpperCase())}</strong><span>${escapeHtml(p.description||p.note||'')}</span></div>${action}</article>`;
     }).join('');
     return `<div class="account-modal-head"><div><small>BLINQ ÚČET</small><h2 id="accountDialogTitle">Tvoj BlinQ účet</h2></div><span class="account-verified ${verified?'is-verified':'needs-verification'}">${verified?'✓ E-mail overený':'! E-mail neoverený'}</span></div>
       <form id="accountModalProfileForm" class="account-modal-main-card">
         <div class="account-modal-access"><div class="account-modal-avatar" id="accountModalAvatar">${escapeHtml(accountAvatarFallback(a))}</div><div><small>AKTUÁLNY PRÍSTUP</small><strong>${escapeHtml(planLabel)}</strong><span>${escapeHtml(expiry)}</span></div></div>
-        <div class="account-profile-facts"><span><small>Registrovaný e-mail</small><strong>${escapeHtml(a.email||'—')}</strong></span><span><small>Telegram nick</small><strong>${escapeHtml(tg||'Nenastavený')}</strong></span><span><small>Úroveň</small><strong>${escapeHtml(planLabel)}</strong></span><span><small>Platnosť</small><strong>${escapeHtml(expiry)}</strong></span></div>
+        <div class="account-profile-facts"><span><small>Registrovaný e-mail</small><strong>${escapeHtml(a.email||'—')}</strong></span><span><small>Telegram nick</small><strong>${escapeHtml(tg||'Nenastavený')}</strong></span><span><small>Úroveň</small><strong>${escapeHtml(`${planLabel} · ${expiry}`)}</strong></span><span><small>Platnosť</small><strong>${escapeHtml(expiry)}</strong></span></div>
         <label class="account-inline-field account-inline-telegram"><span>${adminTelegramIcon()} Telegram nick</span><input id="accountModalTelegram" maxlength="33" value="${escapeHtml(tg)}" placeholder="@username"></label>
         <div class="account-inline-field account-inline-avatar"><span>Avatar</span><div class="avatar-sex-toggle" role="group" aria-label="Avatar"><button type="button" data-avatar-variant="m" class="${a.avatar_variant==='w'?'':'is-active'}" aria-label="Mužský avatar" aria-pressed="${a.avatar_variant==='w'?'false':'true'}">♂</button><button type="button" data-avatar-variant="w" class="${a.avatar_variant==='w'?'is-active':''}" aria-label="Ženský avatar" aria-pressed="${a.avatar_variant==='w'?'true':'false'}">♀</button></div><input id="accountModalAvatarVariant" type="hidden" value="${a.avatar_variant==='w'?'w':'m'}"></div>
         <button class="btn btn-primary account-profile-save" type="submit">Uložiť profil</button>
         <p id="accountModalMessage" class="form-message account-inline-message"></p>
       </form>
-      <div class="account-modal-security"><span>Zabezpečenie účtu</span><div><button class="btn btn-ghost" id="accountModalPassword" type="button">Obnoviť heslo</button><button class="btn btn-ghost account-signout-button" id="accountModalSignOut" type="button">Odhlásiť sa</button></div></div>
-      <div class="account-modal-plans"><div class="account-modal-section-title"><small>BLINQ ČLENSTVO</small><h3>Plány</h3></div>${plans}</div>`;
+      <div class="account-modal-plans"><div class="account-modal-section-title"><small>BLINQ ČLENSTVO</small></div>${plans}</div>`;
   }
   function openAccountDialog(){
     const d=$('accountDialog'),host=$('accountDialogContent');if(!d||!host)return;host.innerHTML=renderAccountModal();setAccountAvatar($('accountModalAvatar'),state.feed?.account||{});
     const form=$('accountModalProfileForm');if(form)form.onsubmit=async e=>{e.preventDefault();const m=$('accountModalMessage');m.textContent='Ukladám…';try{await BlinqAuth.update({data:{telegram_nick:$('accountModalTelegram').value.trim(),blinq_avatar_variant:$('accountModalAvatarVariant').value}});m.textContent='Profil uložený.';await loadFeed(false);openAccountDialog();}catch(err){m.textContent=err.message;}};
     host.querySelectorAll('[data-avatar-variant]').forEach(button=>button.onclick=()=>{const value=button.dataset.avatarVariant||'m',input=$('accountModalAvatarVariant');if(input)input.value=value;host.querySelectorAll('[data-avatar-variant]').forEach(node=>{const active=node===button;node.classList.toggle('is-active',active);node.setAttribute('aria-pressed',active?'true':'false');});setAccountAvatar($('accountModalAvatar'),{...(state.feed?.account||{}),avatar_variant:value});});
+    host.querySelectorAll('[data-plan-link-missing]').forEach(button=>button.onclick=()=>showStatus(`Doplň odkaz pre ${button.dataset.planLinkMissing?.toUpperCase()||'plán'} v web/config/membership-tiers.json.`));
     const reset=$('accountModalPassword');if(reset)reset.onclick=async()=>{try{await BlinqAuth.reset(state.feed?.account?.email||'');showStatus('E-mail na obnovu hesla bol odoslaný.');}catch(err){showStatus(err.message);}};
     const out=$('accountModalSignOut');if(out)out.onclick=()=>{d.close();signOutCurrentSession();};
     if(!d.open)d.showModal();
@@ -2495,6 +2521,7 @@
     const a=state.feed?.account||{};setAccountAvatar($('accountPageAvatar'),a);
     const form=$('accountProfileForm');if(form)form.onsubmit=async event=>{event.preventDefault();const message=$('accountProfileMessage');message.textContent=publicText('Saving…');try{await BlinqAuth.update({data:{telegram_nick:$('accountTelegramNick').value.trim(),blinq_avatar_variant:$('accountAvatarVariant').value}});message.textContent=publicText('Profile updated.');await loadFeed(false);}catch(error){message.textContent=error.message;}};
     document.querySelectorAll('[data-avatar-page-variant]').forEach(button=>button.onclick=()=>{const value=button.dataset.avatarPageVariant||'m',input=$('accountAvatarVariant');if(input)input.value=value;document.querySelectorAll('[data-avatar-page-variant]').forEach(node=>{const active=node===button;node.classList.toggle('is-active',active);node.setAttribute('aria-pressed',active?'true':'false');});setAccountAvatar($('accountPageAvatar'),{...a,avatar_variant:value});});
+    document.querySelectorAll('[data-plan-link-missing]').forEach(button=>button.onclick=()=>{const message=$('accountProfileMessage');if(message)message.textContent=`Doplň odkaz pre ${button.dataset.planLinkMissing?.toUpperCase()||'plán'} v web/config/membership-tiers.json.`;});
     const reset=$('accountPasswordReset');if(reset)reset.onclick=async()=>{const message=$('accountProfileMessage');message.textContent=publicText('Sending recovery email…');try{await BlinqAuth.reset(a.email);message.textContent=publicText('Password reset email sent.');}catch(error){message.textContent=error.message;}};
     const logout=$('accountSignOut');if(logout)logout.onclick=signOutCurrentSession;
     document.querySelectorAll('[data-goat-request]').forEach(button=>button.onclick=()=>{const nick=String(state.feed?.account?.telegram_nick||'').trim();const input=$('accountTelegramNick');const message=$('accountProfileMessage');if(!nick){if(message)message.textContent='Add your Telegram nick first, save the profile, then request GOAT access.';input?.focus();return;}if(message)message.textContent=`GOAT is invite-only. Your Telegram ${nick.startsWith('@')?nick:`@${nick}`} is saved; configure the GOAT invite contact URL in Admin → Membership to make this button open the request chat.`;});

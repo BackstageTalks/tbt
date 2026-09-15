@@ -51,6 +51,12 @@ FEATURE_NAMES = [
 ]
 
 
+def stats_surface_key(surface: str) -> str:
+    """Surface bucket used by performance statistics. Indoor hard shares the hard pool; indoor remains a separate feature."""
+    value = str(surface or "unknown").strip().lower()
+    return "hard" if value == "indoor_hard" else value
+
+
 @dataclass
 class RecentPerformance:
     played_at: datetime
@@ -839,11 +845,11 @@ class FeatureBuilder:
         )
 
         s1 = p1.get_surface_elo(
-            match.surface
+            stats_surface_key(match.surface)
         )
 
         s2 = p2.get_surface_elo(
-            match.surface
+            stats_surface_key(match.surface)
         )
 
         blended1 = (
@@ -1470,34 +1476,32 @@ class FeatureBuilder:
             ),
         )
 
-        if (
-            match.surface
-            != "unknown"
-        ):
+        surface_key = stats_surface_key(match.surface)
+        if surface_key != "unknown":
             old_s1 = (
                 p1.surface_elo.get(
-                    match.surface,
+                    surface_key,
                     p1.overall_elo,
                 )
             )
 
             old_s2 = (
                 p2.surface_elo.get(
-                    match.surface,
+                    surface_key,
                     p2.overall_elo,
                 )
             )
 
             sm1 = (
                 p1.surface_matches.get(
-                    match.surface,
+                    surface_key,
                     0,
                 )
             )
 
             sm2 = (
                 p2.surface_matches.get(
-                    match.surface,
+                    surface_key,
                     0,
                 )
             )
@@ -1512,21 +1516,21 @@ class FeatureBuilder:
             )
 
             p1.surface_elo[
-                match.surface
+                surface_key
             ] = ns1
 
             p2.surface_elo[
-                match.surface
+                surface_key
             ] = ns2
 
             p1.surface_matches[
-                match.surface
+                surface_key
             ] = (
                 sm1 + 1
             )
 
             p2.surface_matches[
-                match.surface
+                surface_key
             ] = (
                 sm2 + 1
             )
@@ -1754,8 +1758,8 @@ class FeatureBuilder:
                 rows.append(
                     {
                         **features,
-                        "surface_history_count": min(self._state(oriented, True).surface_matches.get(oriented.surface, 0),
-                                                     self._state(oriented, False).surface_matches.get(oriented.surface, 0)),
+                        "surface_history_count": min(self._state(oriented, True).surface_matches.get(stats_surface_key(oriented.surface), 0),
+                                                     self._state(oriented, False).surface_matches.get(stats_surface_key(oriented.surface), 0)),
                         "target": (
                             target
                         ),

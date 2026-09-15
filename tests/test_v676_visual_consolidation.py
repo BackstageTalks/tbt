@@ -16,7 +16,7 @@ def test_cache_and_ui_revision_are_680():
 def test_account_modal_has_inline_telegram_profile():
     assert 'account-modal-main-card' in APP
     assert 'account-inline-telegram' in APP
-    assert 'account-modal-security' in APP
+    assert 'account-modal-security' not in APP
     assert '<details class="account-modal-profile"' not in APP
 
 

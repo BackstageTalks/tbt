@@ -42,7 +42,7 @@ def test_account_modal_has_inline_profile_no_standalone_telegram_panel():
     assert 'Registrovaný e-mail' in APP
     assert 'Telegram nick' in APP
     assert '<details class="account-modal-profile"' not in APP
-    assert 'Zabezpečenie účtu' in APP
+    assert 'Zabezpečenie účtu' not in APP
 
 
 def test_level_layout_is_two_plus_two_plus_centered_goat_and_avatar_pairs():
@@ -65,7 +65,7 @@ def test_membership_copy_cta_and_links_are_json_managed_and_exact():
 
 
 def test_daily_hub_requested_labels_results_and_elite_lock_are_in_code():
-    assert '<h2>Dnešné predikcie <span>BlinQ Intelligence</span></h2>' in INDEX
+    assert '<h2>TOP predikcie <span>BlinQ Intelligence</span></h2>' in INDEX
     assert "daily-hub-results" in APP
     assert "Zobraziť celú ponuku" in APP
     assert "showUpgradePrompt('elite'" in APP

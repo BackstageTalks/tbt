@@ -1215,3 +1215,69 @@ body#blinqPremium#blinqPremium .results-table .void-reason{display:block!importa
   body#blinqPremium#blinqPremium .vip-link-card small{display:none!important}
   body#blinqPremium#blinqPremium .vip-links-only .vip-cta{justify-self:stretch!important}
 }
+
+
+/* ========================================================================
+   6.8.0 FINAL CONFIGURABLE UI — account alignment, login, ads modes, theme
+   ======================================================================== */
+html,body#blinqPremium{min-height:100%;}
+body#blinqPremium{position:relative;background:#000a0f!important;}
+body#blinqPremium::before{content:"";position:fixed;inset:0;z-index:-2;background-image:var(--blinq-page-bg-overlay),var(--blinq-page-bg),var(--blinq-page-bg-fallback);background-position:center,var(--blinq-page-bg-position,center top),center top;background-size:cover,var(--blinq-page-bg-size,cover),cover;background-repeat:no-repeat;opacity:var(--blinq-page-bg-opacity,.2);pointer-events:none;}
+
+/* Auth screen now shares the BlinQ premium visual system. */
+body#blinqPremium .auth-dialog{max-width:none!important;width:100vw!important;height:100vh!important;max-height:none!important;margin:0!important;border:0!important;background:rgba(0,7,11,.68)!important;padding:0!important;backdrop-filter:blur(12px)!important;}
+body#blinqPremium .auth-dialog::backdrop{background:linear-gradient(135deg,rgba(0,8,12,.86),rgba(1,18,19,.7)),var(--blinq-login-bg,var(--blinq-page-bg));background-size:cover;background-position:center;}
+body#blinqPremium .auth-card{width:min(var(--blinq-login-width,430px),calc(100vw - 32px))!important;margin:min(12vh,110px) auto 32px!important;padding:28px 30px 26px!important;border:1px solid #214d65!important;border-radius:22px!important;background:linear-gradient(180deg,rgba(6,27,40,.96),rgba(3,19,29,.98))!important;box-shadow:0 30px 90px rgba(0,0,0,.5),0 0 50px rgba(24,210,143,.06)!important;}
+body#blinqPremium .auth-logo{width:var(--blinq-login-logo-width,126px)!important;height:auto!important;margin-bottom:26px!important;}
+body#blinqPremium .auth-copy>span{color:#9a77ff!important;font-size:10px!important;letter-spacing:.16em!important;font-weight:850!important;}
+body#blinqPremium .auth-copy h2{font-size:30px!important;line-height:1.05!important;margin:10px 0 8px!important;}
+body#blinqPremium .auth-copy p{font-size:13px!important;color:#9fb4c1!important;margin-bottom:22px!important;}
+body#blinqPremium .auth-card label{font-size:12px!important;color:#d4e0e4!important;gap:7px!important;}
+body#blinqPremium .auth-card input{min-height:45px!important;font-size:13px!important;border-radius:9px!important;}
+body#blinqPremium .auth-card .primary-button{min-height:46px!important;font-size:14px!important;border-radius:9px!important;}
+body#blinqPremium .auth-links button{font-size:11.5px!important;}
+
+/* Membership art shares one exact baseline across every plan. */
+body#blinqPremium .account-modal-plan .plan-avatar-pair,body#blinqPremium .membership-card .plan-avatar-pair{position:relative!important;display:block!important;height:70px!important;width:126px!important;align-self:center!important;}
+body#blinqPremium .account-modal-plan .plan-avatar-chip,body#blinqPremium .membership-card .plan-avatar-chip{position:absolute!important;top:50%!important;transform:translateY(-50%)!important;width:64px!important;height:64px!important;margin:0!important;}
+body#blinqPremium .account-modal-plan .plan-avatar-chip:first-child,body#blinqPremium .membership-card .plan-avatar-chip:first-child{left:0!important;z-index:2!important;}
+body#blinqPremium .account-modal-plan .plan-avatar-chip.is-back,body#blinqPremium .membership-card .plan-avatar-chip.is-back{left:50px!important;z-index:1!important;}
+body#blinqPremium .account-modal-plan .plan-avatar-chip img,body#blinqPremium .membership-card .plan-avatar-chip img{width:100%!important;height:100%!important;object-fit:cover!important;object-position:center!important;}
+body#blinqPremium .account-modal-section-title{margin-bottom:8px!important;}
+body#blinqPremium .account-modal-section-title h3{display:none!important;}
+
+/* Loader: static art + one real moving tennis ball as the progress indicator. */
+body#blinqPremium .boot-tennis-card{width:min(280px,72vw)!important;position:relative!important;overflow:hidden!important;border-radius:18px!important;}
+body#blinqPremium .boot-tennis-mask{position:absolute!important;left:20%!important;right:20%!important;top:52%!important;height:19%!important;background:#071c2c!important;z-index:2!important;border-radius:12px!important;opacity:.96!important;}
+body#blinqPremium .boot-tennis-track{position:absolute!important;left:27%!important;right:27%!important;top:61%!important;height:5px!important;border-radius:999px!important;background:linear-gradient(90deg,#183949,#244c5c)!important;box-shadow:inset 0 0 0 1px rgba(130,195,210,.18)!important;z-index:4!important;}
+body#blinqPremium .boot-tennis-track>i{position:absolute!important;inset:0!important;border-radius:inherit!important;background:linear-gradient(90deg,rgba(183,255,0,.08),rgba(183,255,0,.62),rgba(183,255,0,.08))!important;filter:blur(2px)!important;}
+body#blinqPremium .boot-tennis-track .boot-tennis-ball{top:50%!important;left:0!important;width:13px!important;height:13px!important;background:#ccff1a!important;border:1px solid #efff9c!important;box-shadow:0 0 8px #baff00,0 0 20px rgba(186,255,0,.78)!important;animation:blinqLoadingBall 1.15s ease-in-out infinite alternate!important;}
+@keyframes blinqLoadingBall{from{left:0%;transform:translate(-50%,-50%) scale(.9)}50%{transform:translate(-50%,-70%) scale(1.06)}to{left:100%;transform:translate(-50%,-50%) scale(.9)}}
+
+/* Native/Ads banner JSON controls. */
+body#blinqPremium .dashboard-hero,body#blinqPremium .rail-native-banner{--creative-headline-color:#fff;--creative-text-color:#c8dad6;--creative-overlay:linear-gradient(90deg,rgba(0,15,17,.62),rgba(0,15,17,.08));}
+body#blinqPremium .dashboard-hero.creative-ads::after,body#blinqPremium .rail-native-banner.creative-ads::after{content:"";position:absolute;inset:0;background:var(--creative-overlay);pointer-events:none;z-index:1;}
+body#blinqPremium .dashboard-hero-copy,body#blinqPremium .rail-native-copy{z-index:2!important;}
+body#blinqPremium .dashboard-hero-copy h2{font-size:var(--creative-headline-size,36px)!important;color:var(--creative-headline-color)!important;}
+body#blinqPremium .dashboard-hero-copy p{font-size:var(--creative-text-size,14px)!important;color:var(--creative-text-color)!important;}
+body#blinqPremium .dashboard-hero-copy>small{font-size:var(--creative-eyebrow-size,10px)!important;}
+body#blinqPremium .rail-native-copy strong{font-size:var(--creative-headline-size,26px)!important;color:var(--creative-headline-color)!important;}
+body#blinqPremium .rail-native-copy p{font-size:var(--creative-text-size,12px)!important;color:var(--creative-text-color)!important;}
+body#blinqPremium .rail-native-copy>small{font-size:var(--creative-eyebrow-size,9px)!important;}
+body#blinqPremium .creative-pos-left-bottom .dashboard-hero-copy,body#blinqPremium .creative-pos-left-bottom .rail-native-copy{justify-content:flex-end!important;align-items:flex-start!important;text-align:left!important;}
+body#blinqPremium .creative-pos-center .dashboard-hero-copy,body#blinqPremium .creative-pos-center .rail-native-copy{justify-content:center!important;align-items:center!important;text-align:center!important;}
+body#blinqPremium .creative-pos-right-center .dashboard-hero-copy,body#blinqPremium .creative-pos-right-center .rail-native-copy{justify-content:center!important;align-items:flex-end!important;text-align:right!important;}
+body#blinqPremium .creative-effect-fade-up.is-active .dashboard-hero-copy,body#blinqPremium .creative-effect-fade-up.is-active .rail-native-copy{animation:creativeFadeUp .55s ease both;animation-delay:var(--creative-delay,80ms)!important;}
+body#blinqPremium .creative-effect-fade.is-active .dashboard-hero-copy,body#blinqPremium .creative-effect-fade.is-active .rail-native-copy{animation:creativeFade .55s ease both;animation-delay:var(--creative-delay,80ms)!important;}
+body#blinqPremium .creative-effect-zoom.is-active img{animation:creativeZoom 5s ease both;}
+@keyframes creativeFadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}@keyframes creativeFade{from{opacity:0}to{opacity:1}}@keyframes creativeZoom{from{transform:scale(1.02)}to{transform:scale(1.07)}}
+
+/* Readability pass on result tables. */
+body#blinqPremium#blinqPremium.blinq-route .results-table th{font-size:10px!important;}
+body#blinqPremium#blinqPremium.blinq-route .results-table td{font-size:13.5px!important;padding-top:14px!important;padding-bottom:14px!important;}
+body#blinqPremium#blinqPremium.blinq-route .results-table td strong{font-size:14px!important;}
+body#blinqPremium#blinqPremium.blinq-route .results-table td small{font-size:10.5px!important;}
+body#blinqPremium#blinqPremium .result-tag{font-size:10px!important;padding:5px 8px!important;}
+
+/* Page background image is directly replaceable in web/assets/custom/site-background.png. */
+body#blinqPremium{background-image:var(--blinq-page-bg-overlay),var(--blinq-page-bg),var(--blinq-page-bg-fallback)!important;background-position:center,var(--blinq-page-bg-position,center top),center top!important;background-size:cover,var(--blinq-page-bg-size,cover),cover!important;background-attachment:fixed!important;background-repeat:no-repeat!important;}
