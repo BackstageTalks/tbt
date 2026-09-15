@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "background": {
+    "enabled": true,
+    "image": "/assets/custom/site-background.png",
+    "fallback": "/assets/blinq_background.png",
+    "position": "center top",
+    "size": "cover",
+    "attachment": "fixed",
+    "opacity": 0.2,
+    "overlay": "linear-gradient(180deg,rgba(0,9,13,.72),rgba(0,9,13,.94))"
+  },
+  "login": {
+    "background_image": "/assets/custom/site-background.png",
+    "card_width": 430,
+    "logo_width": 126
+  }
+}
