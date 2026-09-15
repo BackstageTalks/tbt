@@ -15,10 +15,12 @@ def test_release_680_and_active_redesign_asset():
     assert '/redesign-680.css?v=680' in INDEX
     assert (ROOT/'web/redesign-680.css').exists()
 
-def test_reference_header_has_no_visible_search_and_keeps_private_feed_bell():
+def test_reference_header_has_visible_search_and_keeps_private_feed_bell():
     header=INDEX.split('<header class="site-header dashboard-topbar reference-topbar">',1)[1].split('</header>',1)[0]
     assert 'id="insightBell"' in header
-    assert 'type="search"' not in header
+    assert 'id="dashboardSearch"' in header
+    assert 'type="search"' in header
+    assert 'Hľadať hráča, turnaj alebo krajinu...' in header
     assert 'headerSearchInput' not in header
     assert 'Predikcie' in header and 'Štatistiky' in header and 'Modely' in header and 'Komunita' in header and 'BlinQ VIP' in header
 
