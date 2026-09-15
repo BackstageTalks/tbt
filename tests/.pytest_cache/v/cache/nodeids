@@ -1,0 +1,6 @@
+[
+  "test_ui_loader_login_short_odds_v680.py::test_auth_login_hides_signup_only_telegram_field",
+  "test_ui_loader_login_short_odds_v680.py::test_frontend_cache_bust_for_final_ui_pass",
+  "test_ui_loader_login_short_odds_v680.py::test_loader_is_ball_rally_without_progress_track",
+  "test_ui_loader_login_short_odds_v680.py::test_short_odds_public_labels_replace_prime_in_results_and_cards"
+]

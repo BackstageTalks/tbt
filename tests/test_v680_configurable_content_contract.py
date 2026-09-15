@@ -17,10 +17,12 @@ def test_goat_is_regular_upgrade_tier():
     assert goat["cta_label"] == "Upgrade na GOAT"
     assert goat["invite_only"] is False
 
-def test_loader_has_track_and_moving_ball():
+def test_loader_has_single_rally_ball_without_progress_track():
     html=(ROOT/"web"/"index.html").read_text(encoding="utf-8")
     css=(ROOT/"web"/"blinq.css").read_text(encoding="utf-8")
-    assert "boot-tennis-track" in html and "blinqLoadingBall" in css
+    assert "boot-tennis-track" not in html
+    assert "boot-tennis-rally" in html
+    assert "blinqRallyBall" in css
 
 def test_indoor_hard_uses_hard_stats_bucket():
     text=(ROOT/"api"/"tbt"/"services"/"feature_builder.py").read_text(encoding="utf-8")

@@ -334,7 +334,7 @@
       "order": 41,
       "content": {
         "eyebrow": "BLINQ PRO",
-        "headline": "Start with Prime",
+        "headline": "Start with Short Odds",
         "text": "Unlock more daily predictions and the core BlinQ workflow.",
         "button_text": "See PRO",
         "link": "#account",
@@ -548,12 +548,12 @@
       }
     },
     "PRIME_PICKS_PANEL": {
-      "label": "Prime Predictions panel",
+      "label": "Short Odds panel",
       "zone": "predictions",
       "kind": "panel",
       "order": 50,
       "content": {
-        "label": "Prime Predictions panel"
+        "label": "Short Odds panel"
       },
       "watermark": {
         "enabled": false,
@@ -571,7 +571,7 @@
       }
     },
     "TOP_PICK_1": {
-      "label": "Prime Pick card 1",
+      "label": "Short Odds card 1",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 51,
@@ -592,7 +592,7 @@
       }
     },
     "TOP_PICK_2": {
-      "label": "Prime Pick card 2",
+      "label": "Short Odds card 2",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 52,
@@ -613,7 +613,7 @@
       }
     },
     "TOP_PICK_3": {
-      "label": "Prime Pick card 3",
+      "label": "Short Odds card 3",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 53,
@@ -634,7 +634,7 @@
       }
     },
     "TOP_PICK_4": {
-      "label": "Prime Pick card 4",
+      "label": "Short Odds card 4",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 54,
@@ -655,7 +655,7 @@
       }
     },
     "TOP_PICK_5": {
-      "label": "Prime Pick card 5",
+      "label": "Short Odds card 5",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 55,
@@ -676,7 +676,7 @@
       }
     },
     "TOP_PICK_6": {
-      "label": "Prime Pick card 6",
+      "label": "Short Odds card 6",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 56,
@@ -697,7 +697,7 @@
       }
     },
     "TOP_PICK_7": {
-      "label": "Prime Pick card 7",
+      "label": "Short Odds card 7",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 57,
@@ -718,7 +718,7 @@
       }
     },
     "TOP_PICK_8": {
-      "label": "Prime Pick card 8",
+      "label": "Short Odds card 8",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 58,
@@ -739,7 +739,7 @@
       }
     },
     "TOP_PICK_MORE": {
-      "label": "Prime Pick cards 9+",
+      "label": "Short Odds cards 9+",
       "zone": "predictions",
       "kind": "prediction_card",
       "order": 59,

@@ -1420,3 +1420,285 @@ body#blinqPremium .insight-feed-empty strong{color:#d8e6e1;font-size:12px}.insig
   body#blinqPremium .account-modal-plan.plan-goat{grid-column:auto!important}
   body#blinqPremium .account-modal-section-title span{display:none!important}
 }
+
+
+/* 6.8.0 UI finish — true rally loader + premium auth */
+body#blinqPremium#blinqPremium .boot-tennis-card{
+  width:min(300px,76vw)!important;
+  position:relative!important;
+  overflow:hidden!important;
+  border-radius:18px!important;
+}
+body#blinqPremium#blinqPremium .boot-tennis-card img{
+  display:block!important;
+  width:100%!important;
+  height:auto!important;
+}
+/* Hide the baked-in static ball/trail and centre-net area from the source artwork.
+   The only loading indicator visible above this cleanup layer is the live rally ball. */
+body#blinqPremium#blinqPremium .boot-tennis-cleanup{
+  position:absolute!important;
+  left:35.5%!important;
+  right:35.5%!important;
+  top:36.5%!important;
+  height:31%!important;
+  z-index:3!important;
+  pointer-events:none!important;
+  border-radius:14px!important;
+  background:linear-gradient(180deg,#071c2c 0%,#071c2c 76%,#071b2a 100%)!important;
+  box-shadow:0 0 18px 10px rgba(7,28,44,.96)!important;
+}
+body#blinqPremium#blinqPremium .boot-tennis-racket-cleanup{
+  position:absolute!important;
+  left:31.8%!important;
+  top:46.8%!important;
+  width:6.4%!important;
+  aspect-ratio:1/1!important;
+  transform:translate(-50%,-50%) rotate(-9deg)!important;
+  z-index:4!important;
+  pointer-events:none!important;
+  border-radius:50%!important;
+  background:
+    repeating-linear-gradient(47deg,rgba(159,232,29,.58) 0 1px,transparent 1px 3.5px),
+    repeating-linear-gradient(-47deg,rgba(126,206,19,.48) 0 1px,transparent 1px 3.5px),
+    radial-gradient(circle at 45% 48%,#345514 0 62%,#1c380c 72%,transparent 76%)!important;
+  opacity:.96!important;
+  box-shadow:0 0 7px rgba(98,206,15,.38)!important;
+}
+body#blinqPremium#blinqPremium .boot-tennis-rally{
+  position:absolute!important;
+  inset:0!important;
+  z-index:5!important;
+  pointer-events:none!important;
+  background:none!important;
+  box-shadow:none!important;
+}
+body#blinqPremium#blinqPremium .boot-tennis-rally .boot-tennis-ball{
+  position:absolute!important;
+  left:50%!important;
+  top:46%!important;
+  width:13px!important;
+  height:13px!important;
+  border-radius:50%!important;
+  background:radial-gradient(circle at 36% 32%,#efff83 0 18%,#cbff16 35%,#83da00 100%)!important;
+  border:1px solid rgba(238,255,156,.9)!important;
+  box-shadow:0 0 7px #bdff00,0 0 15px rgba(166,255,0,.68)!important;
+  transform:translate(-50%,-50%);
+  animation:blinqRallyBall 1.7s cubic-bezier(.45,.04,.55,.96) infinite!important;
+  will-change:margin-left,margin-top,transform!important;
+}
+body#blinqPremium#blinqPremium .boot-tennis-rally .boot-tennis-ball::before,
+body#blinqPremium#blinqPremium .boot-tennis-rally .boot-tennis-ball::after{
+  content:""!important;
+  position:absolute!important;
+  inset:2px 3px!important;
+  border-radius:50%!important;
+  border-left:1px solid rgba(34,91,0,.72)!important;
+  transform:rotate(24deg)!important;
+}
+body#blinqPremium#blinqPremium .boot-tennis-rally .boot-tennis-ball::after{
+  border-left:0!important;
+  border-right:1px solid rgba(34,91,0,.72)!important;
+  transform:rotate(-24deg)!important;
+}
+@keyframes blinqRallyBall{
+  0%{margin-left:-19%;margin-top:0;transform:translate(-50%,-50%) rotate(0deg)}
+  12.5%{margin-left:-13%;margin-top:-5%;transform:translate(-50%,-50%) rotate(55deg)}
+  25%{margin-left:0;margin-top:-8.5%;transform:translate(-50%,-50%) rotate(110deg)}
+  37.5%{margin-left:13%;margin-top:-5%;transform:translate(-50%,-50%) rotate(165deg)}
+  50%{margin-left:19%;margin-top:0;transform:translate(-50%,-50%) rotate(220deg)}
+  62.5%{margin-left:13%;margin-top:-5%;transform:translate(-50%,-50%) rotate(275deg)}
+  75%{margin-left:0;margin-top:-8.5%;transform:translate(-50%,-50%) rotate(330deg)}
+  87.5%{margin-left:-13%;margin-top:-5%;transform:translate(-50%,-50%) rotate(385deg)}
+  100%{margin-left:-19%;margin-top:0;transform:translate(-50%,-50%) rotate(440deg)}
+}
+body#blinqPremium#blinqPremium .boot-tennis-mask,
+body#blinqPremium#blinqPremium .boot-tennis-track{display:none!important}
+@media(max-width:700px){
+  body#blinqPremium#blinqPremium .boot-tennis-card{width:min(285px,78vw)!important}
+}
+@media(prefers-reduced-motion:reduce){
+  body#blinqPremium#blinqPremium .boot-tennis-rally .boot-tennis-ball{animation:none!important;left:50%!important;top:39%!important}
+}
+
+/* Premium login: compact, green BlinQ visual language and correct hidden-field behaviour. */
+body#blinqPremium .auth-dialog[open]{
+  display:grid!important;
+  place-items:center!important;
+  position:fixed!important;
+  inset:0!important;
+  width:100vw!important;
+  height:100dvh!important;
+  max-width:none!important;
+  max-height:none!important;
+  margin:0!important;
+  padding:24px!important;
+  overflow:auto!important;
+  border:0!important;
+  background:
+    radial-gradient(circle at 78% 18%,rgba(38,234,158,.12),transparent 29%),
+    radial-gradient(circle at 15% 78%,rgba(18,103,101,.12),transparent 28%),
+    rgba(1,9,14,.84)!important;
+  backdrop-filter:blur(13px)!important;
+}
+body#blinqPremium .auth-dialog::backdrop{
+  background:linear-gradient(145deg,rgba(0,8,12,.92),rgba(0,18,20,.80)),var(--blinq-login-bg,var(--blinq-page-bg))!important;
+  background-size:cover!important;
+  background-position:center!important;
+}
+body#blinqPremium .auth-card{
+  position:relative!important;
+  isolation:isolate!important;
+  width:min(var(--blinq-login-width,420px),100%)!important;
+  margin:0!important;
+  padding:28px 30px 24px!important;
+  border:1px solid rgba(55,139,158,.58)!important;
+  border-radius:22px!important;
+  overflow:hidden!important;
+  background:linear-gradient(155deg,rgba(7,29,41,.985),rgba(3,18,27,.995))!important;
+  box-shadow:0 28px 90px rgba(0,0,0,.54),0 0 0 1px rgba(48,234,165,.025) inset,0 0 54px rgba(34,220,153,.06)!important;
+}
+body#blinqPremium .auth-card::before{
+  content:""!important;
+  position:absolute!important;
+  left:0!important;right:0!important;top:0!important;height:2px!important;
+  background:linear-gradient(90deg,transparent,#35e69c 35%,#52f3c3 65%,transparent)!important;
+  opacity:.9!important;
+  z-index:-1!important;
+}
+body#blinqPremium .auth-card::after{
+  content:""!important;
+  position:absolute!important;
+  width:190px!important;height:190px!important;right:-98px!important;top:-104px!important;
+  border-radius:50%!important;
+  background:radial-gradient(circle,rgba(39,229,157,.09),transparent 68%)!important;
+  pointer-events:none!important;
+  z-index:-1!important;
+}
+body#blinqPremium .auth-card [hidden]{display:none!important}
+body#blinqPremium .auth-logo{
+  width:var(--blinq-login-logo-width,118px)!important;
+  height:auto!important;
+  margin:0 0 22px!important;
+  filter:drop-shadow(0 6px 14px rgba(0,0,0,.22))!important;
+}
+body#blinqPremium .auth-copy{margin:0 0 20px!important}
+body#blinqPremium .auth-copy>span{
+  display:inline-flex!important;
+  align-items:center!important;
+  gap:7px!important;
+  color:#46e7a6!important;
+  font-size:9.5px!important;
+  line-height:1.2!important;
+  letter-spacing:.15em!important;
+  font-weight:900!important;
+  text-transform:uppercase!important;
+}
+body#blinqPremium .auth-copy>span::before{
+  content:""!important;width:6px!important;height:6px!important;border-radius:50%!important;background:#9dff28!important;box-shadow:0 0 12px rgba(157,255,40,.62)!important;
+}
+body#blinqPremium .auth-copy h2{
+  font-size:31px!important;
+  line-height:1.04!important;
+  letter-spacing:-.035em!important;
+  margin:10px 0 7px!important;
+  color:#f5fbfd!important;
+}
+body#blinqPremium .auth-copy p{
+  margin:0!important;
+  font-size:13px!important;
+  line-height:1.5!important;
+  color:#91aab7!important;
+}
+body#blinqPremium .auth-card label{
+  display:block!important;
+  margin:13px 0 0!important;
+  color:#cbd9df!important;
+  font-size:11.5px!important;
+  font-weight:760!important;
+}
+body#blinqPremium .auth-card label[hidden]{display:none!important}
+body#blinqPremium .auth-card input{
+  width:100%!important;
+  min-height:47px!important;
+  margin-top:6px!important;
+  padding:0 13px!important;
+  border:1px solid rgba(67,118,137,.62)!important;
+  border-radius:11px!important;
+  outline:none!important;
+  background:rgba(4,23,34,.86)!important;
+  color:#f4fbfd!important;
+  font-size:13px!important;
+  font-weight:600!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.018) inset!important;
+  transition:border-color .18s ease,box-shadow .18s ease,background .18s ease!important;
+}
+body#blinqPremium .auth-card input::placeholder{color:#718a98!important;font-weight:550!important}
+body#blinqPremium .auth-card input:focus{
+  border-color:#38e3a0!important;
+  background:rgba(4,27,37,.96)!important;
+  box-shadow:0 0 0 3px rgba(56,227,160,.10)!important;
+}
+body#blinqPremium .password-row{display:block!important;position:relative!important}
+body#blinqPremium .password-row input{padding-right:78px!important}
+body#blinqPremium .password-row button{
+  position:absolute!important;
+  right:8px!important;
+  top:13px!important;
+  min-height:31px!important;
+  padding:0 8px!important;
+  border:0!important;
+  border-radius:8px!important;
+  background:rgba(35,76,87,.28)!important;
+  color:#a8bec8!important;
+  font-size:10.5px!important;
+  font-weight:800!important;
+}
+body#blinqPremium .password-row button:hover{color:#49e9aa!important;background:rgba(49,218,157,.10)!important}
+body#blinqPremium .auth-card .primary-button{
+  width:100%!important;
+  min-height:48px!important;
+  margin-top:18px!important;
+  border:1px solid rgba(102,255,195,.48)!important;
+  border-radius:11px!important;
+  background:linear-gradient(100deg,#35e69c,#47efbd)!important;
+  color:#021610!important;
+  font-size:13.5px!important;
+  font-weight:950!important;
+  box-shadow:0 9px 26px rgba(40,225,153,.16)!important;
+}
+body#blinqPremium .auth-card .primary-button:hover{filter:brightness(1.05)!important;transform:translateY(-1px)!important}
+body#blinqPremium #authMessage{min-height:0!important;margin:8px 0 0!important;color:#ffb6b6!important;font-size:11.5px!important}
+body#blinqPremium #authMessage:empty{display:none!important}
+body#blinqPremium .auth-links{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:space-between!important;
+  gap:12px!important;
+  margin:15px 0 16px!important;
+  padding-top:2px!important;
+}
+body#blinqPremium .auth-links button{
+  border:0!important;
+  background:transparent!important;
+  color:#8faab6!important;
+  font-size:11px!important;
+  font-weight:700!important;
+  padding:4px 0!important;
+}
+body#blinqPremium .auth-links button:hover{color:#47e7aa!important}
+body#blinqPremium .auth-card .languages{display:flex!important;gap:7px!important}
+body#blinqPremium .auth-card .languages a{
+  min-width:28px!important;height:25px!important;display:grid!important;place-items:center!important;
+  border:1px solid rgba(70,111,128,.46)!important;border-radius:7px!important;
+  color:#8ea7b3!important;background:rgba(5,22,31,.48)!important;font-size:9.5px!important;font-weight:850!important;text-decoration:none!important;
+}
+body#blinqPremium .auth-card .languages a.active{
+  color:#052018!important;border-color:#3ce7a4!important;background:#3ce7a4!important;box-shadow:0 0 18px rgba(60,231,164,.12)!important;
+}
+@media(max-width:520px){
+  body#blinqPremium .auth-dialog[open]{padding:14px!important}
+  body#blinqPremium .auth-card{padding:24px 20px 20px!important;border-radius:18px!important}
+  body#blinqPremium .auth-copy h2{font-size:28px!important}
+  body#blinqPremium .auth-logo{width:112px!important;margin-bottom:18px!important}
+}
