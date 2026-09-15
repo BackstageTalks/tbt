@@ -1,9 +1,9 @@
 """Validate that presentation enrichment is actually present in the serving feed.
 
 This is a deployment guard, not a model-quality gate. It verifies that a non-empty
-current feed has been merged with the freshly published player/tournament asset
-release before Azure deployment. Provider gaps are allowed for individual rows,
-but a completely un-enriched feed is rejected.
+current feed contains usable point-in-time presentation data. External player and
+tournament image releases are optional because the web client has deterministic
+local fallbacks; temporary asset-release/download failures must not block deploy.
 """
 from __future__ import annotations
 
@@ -126,7 +126,7 @@ def main() -> None:
         return
 
     if report["player_instances"] and not report["player_assets"]:
-        raise SystemExit("Serving feed has current players but no player_assets merge metadata")
+        print("WARNING: player_assets metadata unavailable; using feed fields / initials fallback")
     if report["player_instances"] and report["player_instances_enriched"] == 0:
         raise SystemExit("Serving feed has current players but zero player presentation enrichment")
     # A current prediction release built with the analytics-aware engine must
@@ -138,7 +138,7 @@ def main() -> None:
     if report["rows"] and report["tournament_instances"] == 0:
         raise SystemExit("Serving feed rows contain no tournament IDs; refresh current predictions before deployment")
     if report["tournament_instances"] and not report["tournament_assets"]:
-        raise SystemExit("Serving feed has tournaments but no tournament_assets merge metadata")
+        print("WARNING: tournament_assets metadata unavailable; using local tournament-type fallbacks")
 
     if args.summary:
         print(

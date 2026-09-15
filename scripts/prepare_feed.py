@@ -311,8 +311,21 @@ def _merge_tournament_profiles(payload: dict, profiles: dict[str, dict], logos: 
 def _attach_player_assets(payload: dict, repository: str) -> dict:
     # Presentation metadata is optional. The prediction release remains the sole
     # source of prediction commitments and is validated before this merge. A
-    # temporary player-asset release race/corruption must not block a valid
-    # prediction deployment; fail soft and deploy initials/no current metadata.
+    # temporary player/tournament asset release race or download failure must
+    # never block an otherwise valid prediction deployment. The web client has
+    # local player initials and tournament-type fallback assets.
+    payload.setdefault("player_assets", {
+        "schema": 1,
+        "available": False,
+        "presentation_only": True,
+        "fallback": "initials_or_feed_fields",
+    })
+    payload.setdefault("tournament_assets", {
+        "schema": 1,
+        "available": False,
+        "presentation_only": True,
+        "fallback": "local_tournament_type_assets",
+    })
     if not _release_exists(repository, "tbt-player-assets-v1"):
         return payload
 
@@ -337,10 +350,12 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
         _merge_player_profiles(payload, profiles, photos)
         payload["player_assets"] = {
             "schema": 1,
+            "available": True,
             "generated_at": profile_payload.get("generated_at"),
             "profiles_cached": len(profiles),
             "photos_deployed": len(photos),
             "presentation_only": True,
+            "fallback": "initials_or_feed_fields",
         }
         if {TOURNAMENT_PROFILE_ASSET, TOURNAMENT_LOGO_ASSET} <= assets:
             tournament_profiles, tournament_payload = _load_tournament_profiles(cache / TOURNAMENT_PROFILE_ASSET)
@@ -349,10 +364,12 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
             _merge_tournament_profiles(payload, tournament_profiles, logos)
             payload["tournament_assets"] = {
                 "schema": 1,
+                "available": True,
                 "generated_at": tournament_payload.get("generated_at"),
                 "profiles_cached": len(tournament_profiles),
                 "logos_deployed": len(logos),
                 "presentation_only": True,
+                "fallback": "local_tournament_type_assets",
             }
     except Exception as exc:
         print(f"Optional player assets skipped: {type(exc).__name__}: {exc}")

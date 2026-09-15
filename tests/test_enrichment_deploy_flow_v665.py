@@ -22,11 +22,13 @@ def test_refresh_and_normal_deploy_validate_presentation_merge():
         assert 'scripts/verify_presentation_feed.py api/data/feed.json --summary' in text
 
 
-def test_verifier_guards_completely_unenriched_current_feed():
+def test_verifier_guards_completely_unenriched_current_feed_but_allows_optional_asset_outage():
     text = read('scripts/verify_presentation_feed.py')
     assert 'zero player presentation enrichment' in text
-    assert 'no player_assets merge metadata' in text
-    assert 'no tournament_assets merge metadata' in text
+    assert 'player_assets metadata unavailable' in text
+    assert 'local tournament-type fallbacks' in text
+    assert 'no player_assets merge metadata' not in text
+    assert 'no tournament_assets merge metadata' not in text
 
 
 def test_player_enrichment_refreshes_current_prediction_presentation_first():
