@@ -11,6 +11,7 @@ from typing import Any
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions, write_year_partition
+from tbt.data.history_safety import sanitize_history_identities
 from tbt.services.environment import (
     OpenMeteoBudgetExceeded,
     OpenMeteoClient,
@@ -104,7 +105,7 @@ def main() -> None:
     store.download()
 
     years = range(start.year, end.year + 1)
-    matches = load_partitions(history_dir, years=years)
+    matches, identity_safety = sanitize_history_identities(load_partitions(history_dir, years=years))
     candidates = [
         match
         for match in matches
@@ -117,6 +118,7 @@ def main() -> None:
 
     report: dict[str, Any] = {
         "target": "private-github-release:tbt-data-v1",
+        "identity_safety": identity_safety,
         "supabase_used": False,
         "start": start.isoformat(),
         "end": end.isoformat(),

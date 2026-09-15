@@ -16,6 +16,7 @@ from typing import Any
 
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions
+from tbt.data.history_safety import sanitize_history_identities
 from tbt.services.countries import normalize_country_code
 
 
@@ -233,9 +234,10 @@ def main() -> None:
     parser.add_argument("--report", default=".cache/tbt/player_master_report.json")
     args = parser.parse_args()
 
-    matches = load_partitions(Path(args.history_dir))
+    matches, identity_safety = sanitize_history_identities(load_partitions(Path(args.history_dir)))
     profile_by_tour_id, profile_by_id = _load_profiles(args.profiles)
     rows, report = build(matches, profile_by_tour_id, profile_by_id)
+    report["identity_safety"] = identity_safety
 
     out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps({"schema": 2, "players": rows}, ensure_ascii=False, indent=2), encoding="utf-8")

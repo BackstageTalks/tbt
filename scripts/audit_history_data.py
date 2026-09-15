@@ -1,31 +1,26 @@
-"""Audit private history parquet partitions without loading MatchRecord objects."""
+"""Audit private history parquet partitions without mutating release data."""
 from __future__ import annotations
 
 import argparse
 import json
-import math
 import os
+from collections import Counter, defaultdict
 from pathlib import Path
 
 import pandas as pd
 
 from _bootstrap import ROOT
 from release_store import ReleaseStore
+from repair_history_data import invalid_reason, clean_text
 
 
-NULLISH_TEXT = {"", "nan", "none", "null", "<na>", "nat"}
-
-
-def clean_text(value) -> str:
-    if value is None:
-        return ""
-    try:
-        if pd.isna(value):
-            return ""
-    except (TypeError, ValueError):
-        pass
-    text = str(value).strip()
-    return "" if text.casefold() in NULLISH_TEXT else text
+PROVIDER_KEYS = (
+    "_tbt_provider_event_id",
+    "provider_event_id",
+    "event_id",
+    "eventId",
+    "id",
+)
 
 
 def row_preview(row: dict) -> dict:
@@ -46,9 +41,29 @@ def row_preview(row: dict) -> dict:
     return {key: clean_text(row.get(key)) for key in keep}
 
 
-def audit_partition(path: Path) -> tuple[dict, list[dict]]:
+def provider_event_id(row: dict) -> str:
+    raw = row.get("provider_context_json")
+    if raw in (None, ""):
+        return ""
+    try:
+        data = raw if isinstance(raw, dict) else json.loads(str(raw))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return ""
+    if not isinstance(data, dict):
+        return ""
+    for key in PROVIDER_KEYS:
+        value = data.get(key)
+        if value not in (None, ""):
+            return str(value)
+    event = data.get("event") if isinstance(data.get("event"), dict) else {}
+    value = event.get("id")
+    return str(value) if value not in (None, "") else ""
+
+
+def audit_partition(path: Path) -> tuple[dict, list[dict], list[dict]]:
     frame = pd.read_parquet(path, engine="pyarrow")
     issues: list[dict] = []
+    identities: list[dict] = []
 
     required_columns = {
         "match_id",
@@ -65,41 +80,30 @@ def audit_partition(path: Path) -> tuple[dict, list[dict]]:
                 "fatal": f"missing columns: {', '.join(missing_columns)}",
             },
             issues,
+            identities,
         )
 
     for idx, row in enumerate(frame.to_dict(orient="records"), start=1):
-        match_id = clean_text(row.get("match_id"))
-        p1 = clean_text(row.get("player1_id"))
-        p2 = clean_text(row.get("player2_id"))
-
-        row_issues = []
-
-        if not match_id:
-            row_issues.append("missing_match_id")
-        if not p1:
-            row_issues.append("missing_player1_id")
-        if not p2:
-            row_issues.append("missing_player2_id")
-        if p1 and p2 and p1 == p2:
-            row_issues.append("identical_player_ids")
-
-        raw_dt = row.get("scheduled_at")
-        try:
-            parsed = pd.to_datetime(raw_dt, utc=True, errors="raise")
-            if pd.isna(parsed):
-                raise ValueError("NaT")
-        except Exception:
-            row_issues.append("invalid_scheduled_at")
-
-        if row_issues:
+        reason = invalid_reason(row)
+        if reason:
             issues.append(
                 {
                     "file": path.name,
                     "row": idx,
-                    "issues": row_issues,
+                    "issues": [reason],
                     "record": row_preview(row),
                 }
             )
+            continue
+        identities.append(
+            {
+                "file": path.name,
+                "row": idx,
+                "match_id": clean_text(row.get("match_id")),
+                "provider_event_id": provider_event_id(row),
+                "record": row_preview(row),
+            }
+        )
 
     counts: dict[str, int] = {}
     for issue in issues:
@@ -114,7 +118,28 @@ def audit_partition(path: Path) -> tuple[dict, list[dict]]:
             "counts": counts,
         },
         issues,
+        identities,
     )
+
+
+def _duplicate_details(identities: list[dict], field: str, reason: str) -> list[dict]:
+    grouped = defaultdict(list)
+    for item in identities:
+        value = item.get(field)
+        if value:
+            grouped[str(value)].append(item)
+    output = []
+    for value, rows in grouped.items():
+        if len(rows) < 2:
+            continue
+        output.append(
+            {
+                "reason": reason,
+                "identity": value,
+                "rows": rows,
+            }
+        )
+    return output
 
 
 def main():
@@ -127,7 +152,7 @@ def main():
         "--max-details",
         type=int,
         default=100,
-        help="Maximum invalid rows printed to the log.",
+        help="Maximum issue groups printed to the log.",
     )
     args = parser.parse_args()
 
@@ -141,18 +166,33 @@ def main():
 
     summaries = []
     all_issues = []
+    identities = []
 
     for path in partitions:
-        summary, issues = audit_partition(path)
+        summary, issues, partition_identities = audit_partition(path)
         summaries.append(summary)
         all_issues.extend(issues)
+        identities.extend(partition_identities)
+
+    duplicate_match = _duplicate_details(
+        identities, "match_id", "duplicate_match_id"
+    )
+    duplicate_provider = _duplicate_details(
+        identities, "provider_event_id", "duplicate_provider_event_id"
+    )
+    duplicate_groups = duplicate_match + duplicate_provider
 
     report = {
+        "schema": 2,
         "partitions": summaries,
         "total_rows": sum(item.get("rows", 0) for item in summaries),
         "invalid_rows": len(all_issues),
-        "details": all_issues[: args.max_details],
-        "details_truncated": max(0, len(all_issues) - args.max_details),
+        "duplicate_match_id_groups": len(duplicate_match),
+        "duplicate_provider_event_id_groups": len(duplicate_provider),
+        "details": (all_issues + duplicate_groups)[: args.max_details],
+        "details_truncated": max(
+            0, len(all_issues) + len(duplicate_groups) - args.max_details
+        ),
     }
 
     report_path = directory / "history_audit_report.json"
@@ -163,10 +203,12 @@ def main():
 
     print(json.dumps(report, indent=2, ensure_ascii=False, default=str))
 
-    if all_issues:
+    total_problem_groups = len(all_issues) + len(duplicate_groups)
+    if total_problem_groups:
         raise SystemExit(
-            f"History audit found {len(all_issues)} invalid row(s). "
-            "See history_audit_report.json output above."
+            f"History audit found {len(all_issues)} invalid row(s) and "
+            f"{len(duplicate_groups)} duplicate identity group(s). "
+            "Run mode=history-repair before training/refresh."
         )
 
 

@@ -16,6 +16,7 @@ from pathlib import Path
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions, sync_year_partition
+from tbt.data.history_safety import sanitize_history_identities
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.score_enrichment import ScoreEnricher
@@ -91,7 +92,9 @@ def main() -> None:
     if not player_ids:
         raise SystemExit("Current prediction feed contains no upcoming player IDs")
 
-    matches = load_partitions(history_dir)
+    matches, identity_safety = sanitize_history_identities(load_partitions(history_dir))
+    if identity_safety.get("changed"):
+        print(json.dumps({"history_safety": identity_safety}, ensure_ascii=False), flush=True)
     now = datetime.now(timezone.utc)
     cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
     oldest = cutoff - timedelta(days=args.lookback_days)

@@ -14,6 +14,7 @@ from typing import Any
 
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions
+from tbt.data.history_safety import sanitize_history_identities
 from tbt.models.feature_builder import FeatureBuilder
 
 
@@ -128,7 +129,9 @@ def main() -> None:
     ap.add_argument("--history-dir", default=".cache/tbt/history")
     ap.add_argument("--out", default=".cache/tbt/production/statistics_inventory_report.json")
     args = ap.parse_args()
-    report = build(load_partitions(Path(args.history_dir)))
+    matches, identity_safety = sanitize_history_identities(load_partitions(Path(args.history_dir)))
+    report = build(matches)
+    report["identity_safety"] = identity_safety
     out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))

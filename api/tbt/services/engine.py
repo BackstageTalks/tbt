@@ -82,12 +82,33 @@ def _presentation_player_profile(builder, match, *, player1):
     state = builder._state(match, player1)
     overall = _recent_form_summary(state, limit=35)
     surface = _recent_form_summary(state, surface=match.surface, limit=35)
+    current_lat, current_lon, current_alt = builder._venue_values(match)
+    travel_km = builder._haversine_km(
+        state.last_latitude, state.last_longitude, current_lat, current_lon
+    )
+    altitude_change_m = (
+        abs(float(current_alt) - float(state.last_altitude_m))
+        if current_alt is not None and state.last_altitude_m is not None
+        else None
+    )
     return {
         "history_matches": int(state.matches),
         "surface_history_matches": int(state.surface_matches.get(match.surface, 0)),
         "recent_form": overall,
         "surface_form": surface,
-        "meaning": "point_in_time_recent_results_not_model_probability",
+        "context": {
+            "rest_days": round(float(builder._rest_days(state, match.scheduled_at)), 2),
+            "matches_3d": int(builder._matches_in_window(state, match.scheduled_at, 3.0)),
+            "matches_7d": int(builder._matches_in_window(state, match.scheduled_at, 7.0)),
+            "travel_km": None if travel_km is None else round(float(travel_km), 1),
+            "altitude_change_m": None if altitude_change_m is None else round(float(altitude_change_m), 1),
+            "venue_altitude_m": None if current_alt is None else round(float(current_alt), 1),
+            "overall_elo": round(float(state.overall_elo), 1),
+            "surface_elo": round(float(state.get_surface_elo(match.surface)), 1),
+            "surface_matches": int(state.surface_matches.get(match.surface, 0)),
+            "point_in_time": True,
+        },
+        "meaning": "point_in_time_recent_results_and_context_not_model_probability",
     }
 
 

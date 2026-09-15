@@ -10,6 +10,7 @@ import pandas as pd
 
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions
+from tbt.data.history_safety import sanitize_history_identities
 from tbt.models.feature_builder import FEATURE_NAMES, FeatureBuilder
 from tbt.services.data_quality import audit_history
 from tbt.services.training import _enforce_rank_provenance
@@ -156,7 +157,7 @@ def main() -> None:
     parser.add_argument("--report", default=".cache/tbt/training_table_report.json")
     args = parser.parse_args()
 
-    matches = load_partitions(Path(args.history_dir))
+    matches, identity_safety = sanitize_history_identities(load_partitions(Path(args.history_dir)))
     matches, quality = audit_history(matches)
     matches, rank_provenance = _enforce_rank_provenance(matches)
     frame = FeatureBuilder().build_training_frame(matches).sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
@@ -175,6 +176,7 @@ def main() -> None:
     frame.to_parquet(out, index=False, engine="pyarrow")
 
     report = build_report(frame, quality, rank_provenance)
+    report["identity_safety"] = identity_safety
     report["output"] = str(out)
     report_path = Path(args.report); report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2, default=str), encoding="utf-8")

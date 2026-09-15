@@ -14,11 +14,10 @@ from release_store import ReleaseStore
 from tbt.config import settings
 from tbt.data.history_snapshot import (
     load_partitions,
-    merge_matches,
     sync_year_partition,
     _provider_event_id,
-    _canonical_match_id,
 )
+from tbt.data.history_safety import sanitize_history_identities, merge_trusted_history_batch
 from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.engine import predict, reconcile_ledger, serving_feed
@@ -131,62 +130,19 @@ def _holdout_already_used(history, fingerprint):
     )
 
 
-def _duplicate_match_ids(matches):
-    counts = {}
-    for match in matches:
-        key = str(match.match_id)
-        counts[key] = counts.get(key, 0) + 1
-    return {key for key, count in counts.items() if count > 1}
-
-
 def _merge_refresh_batch_safely(matches, incoming, *, day, tour):
-    """Merge refresh rows without letting one ambiguous provider collision kill the run.
-
-    History integrity still fails closed: if the existing snapshot is already
-    ambiguous we abort.  If a *new* batch creates an unresolved canonical-id
-    collision, every incoming row for that canonical id is quarantined and the
-    previously stored history is kept unchanged for that identity.
-    """
-    existing_duplicates = _duplicate_match_ids(matches)
-    if existing_duplicates:
-        raise ValueError(
-            "Existing history contains ambiguous match identity collisions: "
-            + ", ".join(sorted(existing_duplicates)[:10])
-        )
-
-    merged = merge_matches(matches, incoming)
-    collisions = _duplicate_match_ids(merged)
-    if not collisions:
-        return merged, list(incoming)
-
-    quarantined = [
-        match for match in incoming
-        if _canonical_match_id(match) in collisions
-        or str(match.match_id) in collisions
-    ]
-    safe_incoming = [match for match in incoming if match not in quarantined]
-    merged = merge_matches(matches, safe_incoming)
-
-    remaining = _duplicate_match_ids(merged)
-    if remaining:
-        raise ValueError(
-            "Ambiguous match identity collision remains after quarantine: "
-            + ", ".join(sorted(remaining)[:10])
-        )
-
-    print(json.dumps({
-        "warning": "ambiguous_match_identity_quarantined",
-        "day": day.isoformat(),
-        "tour": tour,
-        "canonical_ids": sorted(collisions),
-        "rows_skipped": len(quarantined),
-        "provider_event_ids": sorted({
-            provider_id
-            for match in quarantined
-            if (provider_id := _provider_event_id(match)) is not None
-        }),
-    }), flush=True)
-    return merged, safe_incoming
+    """Quarantine only ambiguous incoming identities; preserve canonical history."""
+    merged, accepted, safety = merge_trusted_history_batch(matches, incoming)
+    if safety.get("quarantined_rows"):
+        print(json.dumps({
+            "warning": "ambiguous_match_identity_quarantined",
+            "day": day.isoformat(),
+            "tour": tour,
+            "rows_skipped": safety.get("quarantined_rows"),
+            "details": safety.get("rows"),
+            "collision": safety.get("collision"),
+        }, ensure_ascii=False), flush=True)
+    return merged, accepted
 
 
 def _refresh_history(provider, matches, history_dir, history_store, start, end):
@@ -339,6 +295,9 @@ def main():
     history_store = ReleaseStore(args.data_repository, "tbt-data-v1", history_dir)
     history_store.download()
     matches = load_partitions(history_dir)
+    matches, history_safety = sanitize_history_identities(matches)
+    if history_safety.get("changed"):
+        print(json.dumps({"history_safety": history_safety}, ensure_ascii=False), flush=True)
     model_dir = cache / "model"
     if args.mode == "backtest":
         report = clean(walk_forward_backtest(matches))

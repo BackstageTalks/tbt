@@ -34,6 +34,11 @@ on:
         required: true
         default: false
         type: boolean
+      static_only:
+        description: "Static venue/geo only (recommended; no historical weather)"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
   contents: read
@@ -72,7 +77,9 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
-          test "$TBT_WEATHER_RESEARCH" = "true" || { echo 'TBT_WEATHER_RESEARCH must be true'; exit 1; }
+          if [[ "${{ inputs.static_only }}" != "true" ]]; then
+            test "$TBT_WEATHER_RESEARCH" = "true" || { echo 'TBT_WEATHER_RESEARCH must be true for historical weather research'; exit 1; }
+          fi
           visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
           test "$visibility" = "PRIVATE" || { echo 'Refusing non-private data repository'; exit 1; }
 
@@ -88,5 +95,9 @@ jobs:
           )
           if [[ "${{ inputs.mode }}" == "dry-run" ]]; then ARGS+=(--dry-run); fi
           if [[ "${{ inputs.force }}" == "true" ]]; then ARGS+=(--force); fi
-          if [[ "${{ inputs.retry_unresolved }}" == "true" ]]; then ARGS+=(--retry-unresolved); fi
+          if [[ "${{ inputs.static_only }}" == "true" ]]; then
+            ARGS+=(--static-only --complete-static)
+          elif [[ "${{ inputs.retry_unresolved }}" == "true" ]]; then
+            ARGS+=(--retry-unresolved)
+          fi
           python scripts/enrich_environment_snapshot.py "${ARGS[@]}"

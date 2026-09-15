@@ -798,3 +798,55 @@ body#blinqPremium #dashboardSidebarMatch[hidden]{display:none!important}
   body#blinqPremium #dashboardRightRailContent{display:grid!important;gap:10px!important;min-width:0!important}
   body#blinqPremium .rail-highlight-media{min-height:260px!important}
 }
+
+/* 6.8.0 FINAL rail: 4 native banners by default; match detail replaces rail. */
+body#blinqPremium .reference-topbar .reference-wordmark{display:none!important}
+body#blinqPremium .reference-topbar .brand-source-logo{display:block!important;width:92px!important;height:auto!important;object-fit:contain!important}
+body#blinqPremium .vip-brand .vip-brand-logo{display:block!important;width:76px!important;height:auto!important;object-fit:contain!important}
+
+body#blinqPremium .rail-native-carousel{position:relative;min-height:710px;height:100%;border:1px solid var(--bq-line)!important;border-radius:8px;background:#071815;overflow:hidden}
+body#blinqPremium .rail-native-slides{position:relative;min-height:666px;height:calc(100% - 44px)}
+body#blinqPremium .rail-native-banner{position:absolute;inset:0;display:grid;align-content:end;text-decoration:none;color:#eef7f3;opacity:0;visibility:hidden;pointer-events:none;transition:opacity .25s ease;overflow:hidden;background:
+  radial-gradient(circle at 76% 17%,rgba(56,239,157,.18),transparent 35%),
+  radial-gradient(circle at 18% 76%,rgba(75,91,201,.13),transparent 42%),
+  linear-gradient(155deg,#0a211c 0%,#061613 52%,#04100f 100%)}
+body#blinqPremium .rail-native-banner.is-active{opacity:1;visibility:visible;pointer-events:auto}
+body#blinqPremium .rail-native-banner>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;filter:saturate(.74) brightness(.56) contrast(1.05)}
+body#blinqPremium .rail-native-banner:after{content:"";position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,12,10,.04),rgba(2,12,10,.22) 40%,rgba(2,12,10,.94) 82%)}
+body#blinqPremium .rail-native-glow{position:absolute;z-index:1;right:-55px;top:90px;width:220px;height:220px;border-radius:50%;background:radial-gradient(circle,rgba(57,239,153,.17),transparent 65%)}
+body#blinqPremium .rail-native-copy{position:relative;z-index:3;padding:24px 22px 86px;display:grid;justify-items:start}
+body#blinqPremium .rail-native-copy>small{color:var(--bq-green);font-size:7px;font-weight:900;letter-spacing:.15em;text-transform:uppercase}
+body#blinqPremium .rail-native-copy .rail-sponsored{padding:4px 7px;border:1px solid rgba(78,239,157,.32);border-radius:999px;background:rgba(4,28,20,.72);color:#8cf4ba}
+body#blinqPremium .rail-native-copy>strong{max-width:260px;margin-top:8px;font-size:28px;line-height:1.02;letter-spacing:-.035em}
+body#blinqPremium .rail-native-copy>p{max-width:270px;margin:10px 0 0;color:#aec2ba;font-size:10px;line-height:1.55}
+body#blinqPremium .rail-native-copy>b{margin-top:18px;padding:9px 12px;border-radius:6px;background:var(--bq-green);color:#032016;font-size:8px;font-weight:900}
+body#blinqPremium .rail-native-brand{position:absolute;z-index:4;left:20px;right:20px;bottom:23px;display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid rgba(92,137,120,.22);padding-top:12px}
+body#blinqPremium .rail-native-brand img{width:70px;height:auto;display:block}
+body#blinqPremium .rail-native-brand span{color:#6e857d;font-size:6px;letter-spacing:.08em;text-transform:uppercase}
+body#blinqPremium .rail-native-controls{height:44px;display:grid;grid-template-columns:30px 1fr auto 30px;align-items:center;gap:8px;padding:0 10px;border-top:1px solid var(--bq-line);background:#061411}
+body#blinqPremium .rail-native-controls>button{width:27px;height:27px;border:1px solid #1b4938;border-radius:6px;background:#082019;color:#80eeb5;font-size:17px;cursor:pointer}
+body#blinqPremium .rail-native-dots{display:flex;align-items:center;justify-content:center;gap:6px}
+body#blinqPremium .rail-native-dots button{width:6px;height:6px;padding:0;border:0;border-radius:50%;background:#35584b;cursor:pointer}
+body#blinqPremium .rail-native-dots button.is-active{width:18px;border-radius:999px;background:var(--bq-green)}
+body#blinqPremium .rail-native-controls span{color:#6c847b;font-size:6.5px;font-weight:800}
+
+body#blinqPremium .rail-context{padding:10px!important}
+body#blinqPremium .rail-context .motivation-grid{display:grid!important;grid-template-columns:1fr!important;gap:8px!important}
+body#blinqPremium .context-card{padding:9px!important}
+body#blinqPremium .context-card>header{display:flex;align-items:flex-start;justify-content:space-between;gap:8px}
+body#blinqPremium .context-card>header strong{padding-right:0!important;font-size:9px!important}
+body#blinqPremium .context-card .motivation-score{position:static!important;flex:0 0 auto;padding:3px 6px;border:1px solid #285447;border-radius:999px;background:#09231c;font-size:7px!important}
+body#blinqPremium .context-signal-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:8px}
+body#blinqPremium .context-signal{min-width:0;padding:6px;border:1px solid #153b30;border-radius:6px;background:#071c17}
+body#blinqPremium .context-signal small{font-size:5.5px!important;color:#6f8d82!important;letter-spacing:.03em!important;text-transform:none!important}
+body#blinqPremium .context-signal strong{margin-top:2px!important;padding:0!important;font-size:7.3px!important;color:#dce9e4!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body#blinqPremium .context-signal em{display:block;margin-top:1px;color:#647d74;font-size:5.2px;font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body#blinqPremium .context-signal.tone-positive strong{color:#4ced9a!important}
+body#blinqPremium .context-signal.tone-warning strong{color:#e0c36c!important}
+body#blinqPremium .context-signal.tone-negative strong{color:#ef8d8d!important}
+
+@media(max-width:1080px){
+  body#blinqPremium .rail-native-carousel{min-height:420px}
+  body#blinqPremium .rail-native-slides{min-height:376px}
+  body#blinqPremium .rail-native-copy>strong{font-size:23px}
+}

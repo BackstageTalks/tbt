@@ -26,7 +26,7 @@ ANALYTICS_TABLE = "BlinQBannerAnalytics"
 INSIGHTS_TABLE = "BlinQInsights"
 INSIGHT_READS_TABLE = "BlinQInsightReads"
 _VALID_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
-_VALID_BANNER_SLOT = re.compile(r"^(?:HEADER_BANNER_[1-4]|HERO_BANNER_[1-5]|CONTENT_(?:TOP|MID|BOTTOM)_[1-4]|SIDEBAR_PROMO_[1-3]|VIP_RAIL)$")
+_VALID_BANNER_SLOT = re.compile(r"^(?:HEADER_BANNER_[1-4]|HERO_BANNER_[1-5]|CONTENT_(?:TOP|MID|BOTTOM)_[1-4]|SIDEBAR_PROMO_[1-4]|VIP_RAIL)$")
 
 
 def _valid_destination(value: object, *, allow_internal: bool = True) -> bool:
@@ -262,7 +262,7 @@ def validate_ui_config(payload: object) -> dict:
         *(f"CONTENT_TOP_{i}" for i in range(1, 5)),
         *(f"CONTENT_MID_{i}" for i in range(1, 5)),
         *(f"CONTENT_BOTTOM_{i}" for i in range(1, 5)),
-        "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3",
+        "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3", "SIDEBAR_PROMO_4",
         "PRIME_PICKS_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
         "DOUBLES_PANEL", "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "RESULTS_PANEL",
         "BTTS_BONUS_PANEL", "FOOTER_SYSTEM",

@@ -18,7 +18,7 @@ def test_admin_layout_has_fixed_slot_inventory_and_access_states():
     assert {f"CONTENT_MID_{i}" for i in range(1, 5)} <= set(elements)
     assert {f"CONTENT_BOTTOM_{i}" for i in range(1, 5)} <= set(elements)
     assert {
-        "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3",
+        "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3", "SIDEBAR_PROMO_4",
         "PRIME_PICKS_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
         "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "DOUBLES_PANEL", "BTTS_BONUS_PANEL", "FOOTER_SYSTEM",
     } <= set(elements)

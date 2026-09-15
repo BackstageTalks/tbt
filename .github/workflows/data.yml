@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [history, statistics, ace-statistics, sg-scores, environment-static, history-audit, history-integrity-repair, history-repair, production-preflight, train, backtest, refresh]
+        options: [history, statistics, ace-statistics, sg-scores, environment-static, history-audit, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -94,6 +94,11 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          # Writer runs start from a physically clean canonical release. The repair
+          # is a no-op when history is already clean and rewrites only affected years.
+          if [[ "$MODE" == history || "$MODE" == statistics ]]; then
+            python scripts/repair_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
+          fi
           if [[ "$MODE" == history || "$MODE" == statistics ]]; then
             args=(--publish --data-repository "$TBT_DATA_REPOSITORY" --mode "$MODE" --lookback-days "$LOOKBACK_DAYS" --max-requests "$MAX_REQUESTS")
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
@@ -126,6 +131,8 @@ jobs:
           elif [[ "$MODE" == history-integrity-repair ]]; then
             python scripts/repair_history_bundle_integrity.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == history-repair ]]; then
+            python scripts/repair_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
+          elif [[ "$MODE" == history-self-match-repair ]]; then
             python scripts/repair_history_self_match.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == production-preflight ]]; then
             python scripts/download_production_preflight_inputs.py
@@ -174,6 +181,14 @@ jobs:
             if [[ "$PROMOTE" == true ]]; then args+=(--promote); fi
             python scripts/pipeline.py "${args[@]}"
           fi
+      - name: Upload history repair diagnostics
+        if: ${{ always() && (env.MODE == 'history-repair' || env.MODE == 'history' || env.MODE == 'statistics') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-history-repair-${{ github.run_id }}
+          path: .cache/tbt/history-repair-all/history_repair_report.json
+          if-no-files-found: ignore
+
       - name: Upload production preflight artifacts
         if: env.MODE == 'production-preflight'
         uses: actions/upload-artifact@v4

@@ -20,6 +20,7 @@ from typing import Any, Iterable
 from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions
+from tbt.data.history_safety import sanitize_history_identities
 from tbt.schemas import MatchRecord
 
 CORE_WEATHER_FIELDS = (
@@ -262,7 +263,8 @@ def main() -> None:
     history_dir = Path(args.history_dir)
     store = ReleaseStore(args.data_repository, "tbt-data-v1", history_dir)
     download_committed_history(store, history_dir)
-    matches = [match for match in load_partitions(history_dir) if match.is_completed]
+    matches, identity_safety = sanitize_history_identities(load_partitions(history_dir))
+    matches = [match for match in matches if match.is_completed]
     if start is not None:
         matches = [m for m in matches if m.scheduled_at.astimezone(timezone.utc) >= start]
     if end is not None:

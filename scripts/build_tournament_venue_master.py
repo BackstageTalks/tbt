@@ -15,6 +15,7 @@ from typing import Any
 
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions
+from tbt.data.history_safety import sanitize_history_identities
 from tbt.services.countries import normalize_country_code
 
 
@@ -394,8 +395,9 @@ def main() -> None:
     parser.add_argument("--report", default=".cache/tbt/production/tournament_venue_report.json")
     args = parser.parse_args()
 
-    matches = load_partitions(Path(args.history_dir))
+    matches, identity_safety = sanitize_history_identities(load_partitions(Path(args.history_dir)))
     tournament_rows, venue_rows, report = build(matches)
+    report["identity_safety"] = identity_safety
 
     t_out = Path(args.tournaments_out); t_out.parent.mkdir(parents=True, exist_ok=True)
     t_out.write_text(json.dumps({"schema": 2, "tournaments": tournament_rows}, ensure_ascii=False, indent=2), encoding="utf-8")

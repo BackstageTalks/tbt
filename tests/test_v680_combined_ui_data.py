@@ -47,14 +47,15 @@ def test_v680_reference_layout_is_active_and_uses_player_hero():
     assert 'color:#f7faf9!important' in CSS
 
 
-def test_v680_right_rail_uses_context_image_and_small_actual_player_avatar():
-    assert 'class="rail-highlight-bg"' in APP
-    assert "const contextual='/assets/highlight-reference-v680.webp'" in APP
-    assert (ROOT / 'web/assets/highlight-reference-v680.webp').is_file()
-    assert '.rail-highlight-avatar{display:none!important}' in CSS
+def test_v680_right_rail_uses_native_four_banner_carousel_and_inline_match_detail():
+    assert 'function railPromoItems()' in APP
+    assert "elementList('sidebar_promo','sidebar').slice(0,4)" in APP
+    assert 'class="rail-native-carousel"' in APP
+    assert 'data-rail-promo-dot' in APP
     assert 'selectMatchInRail(current,state.dailyHubTab)' in APP
     assert 'renderSidebarMatchDetail' in APP
     assert 'renderMotivationPanel(row)' in APP
+    assert 'SIDEBAR_PROMO_4' in (ROOT / 'web/ui-config.json').read_text(encoding='utf-8')
 
 
 def test_v680_sidebar_hidden_state_really_replaces_highlight_with_match_detail():

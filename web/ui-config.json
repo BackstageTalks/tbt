@@ -2217,6 +2217,59 @@
         "legend": true,
         "goat": true
       }
+    },
+    "SIDEBAR_PROMO_4": {
+      "label": "Partner / Sponsored",
+      "zone": "sidebar",
+      "kind": "sidebar_promo",
+      "order": 23,
+      "content": {
+        "type": "advertisement",
+        "eyebrow": "PARTNER",
+        "headline": "Partner BlinQ",
+        "text": "Natívny partnerský priestor v BlinQ.",
+        "button_text": "Viac",
+        "link": "#account",
+        "route": "account",
+        "theme": "green",
+        "campaign_id": "",
+        "advertiser_id": "",
+        "ad_hidden_fallback": "auto",
+        "enabled": true,
+        "active_from": "",
+        "active_until": "",
+        "image_url": "",
+        "image_fit": "cover",
+        "image_position": "center",
+        "mobile_image_url": "",
+        "sponsored": true
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "violet",
+        "position": "bottom-right",
+        "opacity": 0.42,
+        "size": 1.0
+      },
+      "access": {
+        "trial": "active",
+        "expired": "active",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      },
+      "click_access": {
+        "trial": true,
+        "expired": true,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      }
     }
   },
   "admin": {

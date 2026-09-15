@@ -18,6 +18,7 @@ from tbt.data.history_snapshot import (
     sync_year_partition,
     _provider_event_id,
 )
+from tbt.data.history_safety import sanitize_history_identities, quarantine_budget, merge_trusted_history_batch
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.statistics_enrichment import StatisticsEnricher
@@ -49,39 +50,61 @@ def merge_match(existing, incoming):
     return result if result.player1_id == incoming.player1_id else result.swapped()
 
 
-def _merge_completed_rows(matches, completed_rows, provider_years):
-    affected_years = {
-        match.scheduled_at.astimezone(timezone.utc).year
-        for match in completed_rows
-    }
-    for match in completed_rows:
-        provider_id = _provider_event_id(match)
-        if provider_id is not None and provider_id in provider_years:
-            affected_years.add(provider_years[provider_id])
-
-    current = list(matches.values()) if isinstance(matches, dict) else list(matches)
-    merged = merge_matches(current, completed_rows)
-    ids = [str(match.match_id) for match in merged]
-    if len(ids) != len(set(ids)):
-        raise ValueError(
-            "Ambiguous match identity collision; refusing to checkpoint history"
+def _history_identity_counter(rows):
+    from collections import Counter
+    return Counter(
+        (
+            str(match.match_id or ""),
+            str(_provider_event_id(match) or ""),
+            match.scheduled_at.isoformat(),
+            str(match.player1_id or ""),
+            str(match.player2_id or ""),
         )
+        for match in rows
+    )
+
+
+def _merge_completed_rows(matches, completed_rows, provider_years, quarantine=None):
+    """Merge a provider batch without letting one bad identity block the day."""
+    before = list(matches.values()) if isinstance(matches, dict) else list(matches)
+    final, accepted_incoming, safety = merge_trusted_history_batch(before, completed_rows)
+
+    if safety.get("quarantined_rows"):
+        if quarantine is not None:
+            quarantine.extend(safety.get("rows") or [])
+        print(json.dumps({"provider_identity_quarantine": safety}, ensure_ascii=False), flush=True)
+
     if isinstance(matches, dict):
         matches.clear()
-        matches.update({match.match_id: match for match in merged})
+        matches.update({match.match_id: match for match in final})
     else:
-        matches[:] = merged
+        matches[:] = final
 
-    for match in completed_rows:
+    for match in accepted_incoming:
         provider_id = _provider_event_id(match)
         if provider_id is not None:
-            provider_years[provider_id] = (
+            provider_years[str(provider_id)] = (
                 match.scheduled_at.astimezone(timezone.utc).year
             )
+
+    years = {
+        int(match.scheduled_at.astimezone(timezone.utc).year)
+        for match in [*before, *final]
+    }
+    affected_years = set()
+    for year in years:
+        left = _history_identity_counter(
+            m for m in before if m.scheduled_at.astimezone(timezone.utc).year == year
+        )
+        right = _history_identity_counter(
+            m for m in final if m.scheduled_at.astimezone(timezone.utc).year == year
+        )
+        if left != right:
+            affected_years.add(year)
     return affected_years
 
 
-def download_days(provider, matches, progress, start, end, checkpoint):
+def download_days(provider, matches, progress, start, end, checkpoint, quarantine=None):
     """Newest first. Mark a day complete only after BOTH tours succeed."""
     done = set(progress.get("completed_days", []))
     current = list(matches.values()) if isinstance(matches, dict) else list(matches)
@@ -101,7 +124,7 @@ def download_days(provider, matches, progress, start, end, checkpoint):
             affected_years = set()
             if completed_rows:
                 affected_years = _merge_completed_rows(
-                    matches, completed_rows, provider_years
+                    matches, completed_rows, provider_years, quarantine
                 )
             done.add(day.isoformat())
             progress["completed_days"] = sorted(done)
@@ -144,7 +167,37 @@ def main():
     # No rolling reservation ledger is used for history/statistics downloads.
     allocation = args.max_requests
     rows = load_partitions(directory) if list(directory.glob("history-*.parquet")) else []
-    matches = list(rows)
+    matches, history_safety = sanitize_history_identities(rows)
+    if history_safety.get("changed"):
+        print(json.dumps({"history_safety": history_safety}, ensure_ascii=False), flush=True)
+        limit = quarantine_budget(len(rows))
+        if int(history_safety.get("quarantined_rows") or 0) > limit:
+            raise ValueError(
+                f"History identity corruption exceeds automatic safety budget {limit}; "
+                "run mode=history-repair for diagnostics"
+            )
+        # Persist the deterministic safety cleanup before spending provider calls.
+        # This removes legacy duplicate identity corruption from the private release
+        # and makes the run resumable even if the provider budget is later exhausted.
+        if store:
+            repaired_paths = []
+            repaired_removals = []
+            for year in history_safety.get("affected_years", []):
+                path, was_removed = sync_year_partition(
+                    matches, directory, int(year),
+                    extra_manifest={"identity_safety_repair": "automatic"},
+                )
+                if path is not None:
+                    repaired_paths.append(path)
+                elif was_removed:
+                    repaired_removals.append(f"history-{int(year):04d}.parquet")
+            manifest_file = directory / "history_manifest.json"
+            if manifest_file.is_file():
+                repaired_paths.append(manifest_file)
+            safety_report = directory / "history_identity_safety_report.json"
+            write_json(safety_report, history_safety)
+            repaired_paths.append(safety_report)
+            store.upload_bundle(repaired_paths, remove_names=repaired_removals)
     progress_file = directory / "download_progress.json"
     progress = read_json(progress_file, {"schema": 1, "completed_days": []})
     if progress.get("schema") != 1:
@@ -193,13 +246,14 @@ def main():
     provider = RapidTennisClient(request_budget=None)
     provider.request_limit = allocation
     report = Counter()
+    provider_quarantine = []
     enricher = None
     primary_error = None
     primary_traceback = None
     secondary_errors = []
     try:
         if args.mode == "history":
-            download_days(provider, matches, progress, start, end, checkpoint)
+            download_days(provider, matches, progress, start, end, checkpoint, provider_quarantine)
         else:
             enricher = StatisticsEnricher(provider, directory / "statistics_cache.sqlite")
             changed = set()
@@ -237,11 +291,27 @@ def main():
         report["stored_matches"] = len(matches)
         report["completed_days"] = len(progress["completed_days"])
         report["allocated_requests"] = allocation
+        if provider_quarantine:
+            report["provider_identity_quarantined"] = len(provider_quarantine)
         try:
             write_json(directory / "download_report.json", dict(report))
             print(json.dumps(dict(report), indent=2), flush=True)
         except Exception as exc:
             secondary_errors.append(("download report", exc))
+
+        try:
+            if provider_quarantine:
+                quarantine_path = directory / "history_provider_quarantine.json"
+                write_json(quarantine_path, {
+                    "schema": 1,
+                    "count": len(provider_quarantine),
+                    "rows": provider_quarantine,
+                    "policy": "skip ambiguous incoming provider identities; preserve canonical history",
+                })
+                if store:
+                    store.upload_bundle([quarantine_path])
+        except Exception as exc:
+            secondary_errors.append(("provider quarantine report", exc))
 
         try:
             provider.client.close()

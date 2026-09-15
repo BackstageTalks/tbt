@@ -87,12 +87,12 @@ def test_daily_detail_uses_in_page_right_rail_not_match_modal():
 def test_match_rail_contains_requested_motivation_context_and_is_not_claimed_as_model_feature():
     assert "function motivationContext(row,side)" in APP
     assert "function renderMotivationPanel(row)" in APP
-    assert "<h3>Motivation</h3>" in APP
+    assert "Motivation & readiness" in APP
     assert "renderMotivationPanel(row)" in APP
-    assert "Zatiaľ nejde o natrénovanú modelovú feature." in APP
+    assert "psychický stav neodhadujeme" in APP
     assert "qualification" in APP.lower()
-    assert "Home-country event" in APP
-    assert "High-tier event" in APP
+    assert "Home factor" in APP
+    assert "Event tier" in APP
 
 
 def test_insight_match_deep_link_opens_same_right_rail():

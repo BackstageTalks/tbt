@@ -16,6 +16,7 @@ import pandas as pd
 
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions
+from tbt.data.history_safety import sanitize_history_identities
 from tbt.models.feature_builder import FEATURE_NAMES, FeatureBuilder
 from tbt.services.data_quality import audit_history
 from tbt.services.training import _enforce_rank_provenance
@@ -43,7 +44,7 @@ def _posthoc_weather_training_violation(match) -> bool:
 
 
 def audit(history_dir: Path) -> dict[str, Any]:
-    raw = load_partitions(history_dir)
+    raw, identity_safety = sanitize_history_identities(load_partitions(history_dir))
     accepted, quality = audit_history(raw)
     cleaned, rank = _enforce_rank_provenance(accepted)
     frame = FeatureBuilder().build_training_frame(cleaned).sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
@@ -92,6 +93,7 @@ def audit(history_dir: Path) -> dict[str, Any]:
         "status": "pass" if not failed else "fail",
         "rows": int(len(frame)),
         "history_quality": quality,
+        "identity_safety": identity_safety,
         "rank_provenance": rank,
         "checks": checks,
         "failed_checks": failed,
