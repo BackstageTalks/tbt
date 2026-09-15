@@ -13,8 +13,9 @@ def test_release_and_cache_are_680():
     assert 'RELEASE = "6.8.0"' in read("api/function_app.py")
     html = read("web/index.html")
     assert '/blinq.css?v=680' in html
-    for asset in ("auth.js", "responsive.js", "app.js"):
+    for asset in ("auth.js", "responsive.js"):
         assert f'/{asset}?v=680' in html
+    assert '/app.js?v=680' in html
 
 def test_new_web_uses_one_design_system_not_legacy_css_stack():
     html = read("web/index.html")
