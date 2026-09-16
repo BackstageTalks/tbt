@@ -1,0 +1,146 @@
+/* BlinQ 6.8.6 — unified authentication polish */
+
+body#blinqPremium .auth-card{
+  width:min(var(--blinq-login-width,430px),100%)!important;
+  padding:30px 30px 24px!important;
+}
+body#blinqPremium .auth-logo{
+  display:block!important;
+  width:132px!important;
+  max-width:42%!important;
+  margin:0 auto 27px!important;
+}
+body#blinqPremium .auth-copy{
+  margin:0 0 21px!important;
+  text-align:center!important;
+}
+body#blinqPremium .auth-copy>span{display:none!important}
+body#blinqPremium .auth-copy h2{
+  max-width:360px!important;
+  margin:0 auto!important;
+  color:#f7fbfd!important;
+  font-size:27px!important;
+  line-height:1.12!important;
+  letter-spacing:-.035em!important;
+  text-wrap:balance!important;
+}
+body#blinqPremium .auth-copy p{display:none!important}
+
+body#blinqPremium .auth-card label{
+  margin:14px 0 0!important;
+  color:#d3e0e5!important;
+  font-size:12.5px!important;
+  line-height:1.25!important;
+}
+body#blinqPremium .auth-field-label{
+  display:flex!important;
+  align-items:center!important;
+  gap:6px!important;
+  min-height:18px!important;
+}
+body#blinqPremium .auth-required{
+  display:none;
+  color:#37e5a1!important;
+  font-size:14px!important;
+  line-height:1!important;
+  font-weight:950!important;
+}
+body#blinqPremium .auth-dialog[data-mode="signup"] .auth-required{display:inline!important}
+body#blinqPremium .auth-telegram-icon{
+  width:15px!important;
+  height:15px!important;
+  flex:0 0 15px!important;
+  fill:#39e7a2!important;
+  filter:drop-shadow(0 0 5px rgba(57,231,162,.15))!important;
+}
+body#blinqPremium .auth-card input{
+  min-height:49px!important;
+  margin-top:7px!important;
+  font-size:14px!important;
+}
+body#blinqPremium .password-row button{
+  top:15px!important;
+  font-size:10.5px!important;
+}
+
+/* Keep the terms confirmation intentionally small and secondary. */
+body#blinqPremium .auth-card label.auth-consent{
+  display:flex!important;
+  align-items:flex-start!important;
+  gap:8px!important;
+  margin-top:13px!important;
+  padding:9px 10px!important;
+  border:1px solid rgba(76,136,151,.22)!important;
+  border-radius:9px!important;
+  background:rgba(4,22,30,.48)!important;
+  color:#91a7b1!important;
+  font-size:10px!important;
+  line-height:1.42!important;
+  font-weight:560!important;
+}
+body#blinqPremium .auth-card label.auth-consent[hidden]{display:none!important}
+body#blinqPremium .auth-card label.auth-consent input[type="checkbox"]{
+  appearance:none!important;
+  -webkit-appearance:none!important;
+  width:15px!important;
+  min-width:15px!important;
+  height:15px!important;
+  min-height:15px!important;
+  margin:1px 0 0!important;
+  padding:0!important;
+  border:1px solid rgba(82,169,153,.72)!important;
+  border-radius:4px!important;
+  background:#061a22!important;
+  box-shadow:none!important;
+  cursor:pointer!important;
+}
+body#blinqPremium .auth-card label.auth-consent input[type="checkbox"]:checked{
+  border-color:#39e7a2!important;
+  background-color:#39e7a2!important;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.3 8.2 6.5 11.2 12.8 4.8' fill='none' stroke='%23031510' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")!important;
+  background-position:center!important;
+  background-repeat:no-repeat!important;
+  background-size:13px 13px!important;
+}
+body#blinqPremium .auth-card label.auth-consent input[type="checkbox"]:focus-visible{
+  outline:none!important;
+  box-shadow:0 0 0 3px rgba(57,231,162,.12)!important;
+}
+body#blinqPremium .auth-card label.auth-consent button{
+  border:0!important;
+  padding:0!important;
+  background:transparent!important;
+  color:#39e7a2!important;
+  font:inherit!important;
+  font-weight:700!important;
+  text-decoration:underline!important;
+  text-decoration-color:rgba(57,231,162,.38)!important;
+  text-underline-offset:2px!important;
+  cursor:pointer!important;
+}
+body#blinqPremium .auth-card label.auth-consent button:hover{color:#75f1c1!important}
+
+body#blinqPremium .auth-card .primary-button{
+  min-height:49px!important;
+  margin-top:17px!important;
+  font-size:14px!important;
+}
+body#blinqPremium .auth-links{
+  margin:16px 0 17px!important;
+}
+body#blinqPremium .auth-links button{
+  font-size:11.5px!important;
+  color:#91a9b4!important;
+}
+body#blinqPremium .auth-card .languages{
+  justify-content:center!important;
+}
+
+@media(max-width:520px){
+  body#blinqPremium .auth-card{padding:25px 20px 20px!important}
+  body#blinqPremium .auth-logo{width:118px!important;margin-bottom:23px!important}
+  body#blinqPremium .auth-copy h2{font-size:25px!important;max-width:310px!important}
+  body#blinqPremium .auth-card label{font-size:12px!important}
+  body#blinqPremium .auth-card input{min-height:47px!important;font-size:13.5px!important}
+  body#blinqPremium .auth-card label.auth-consent{font-size:9.5px!important;padding:8px 9px!important}
+}
