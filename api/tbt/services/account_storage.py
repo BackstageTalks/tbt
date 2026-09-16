@@ -50,6 +50,9 @@ def _public_entity(entity: dict | None) -> dict:
         "access_metadata_updated_at": row.get("access_metadata_updated_at"),
         "admin_metadata_updated_at": row.get("admin_metadata_updated_at"),
         "admin_metadata_updated_by": str(row.get("admin_metadata_updated_by") or "")[:256],
+        "legal_consent_version": str(row.get("legal_consent_version") or "")[:40],
+        "legal_consent_locale": str(row.get("legal_consent_locale") or "")[:8],
+        "legal_consent_at": row.get("legal_consent_at"),
     }
 
 
@@ -92,7 +95,7 @@ def load_account_metadata_many(user_ids: list[object]) -> dict[str, dict]:
 def normalize_profile_update(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Invalid profile update")
-    allowed = {"telegram_nick", "blinq_avatar_variant", "display_name"}
+    allowed = {"telegram_nick", "blinq_avatar_variant", "display_name", "legal_consent_version", "legal_consent_locale"}
     unknown = set(payload) - allowed
     if unknown:
         raise ValueError("Unsupported profile field")
@@ -112,10 +115,19 @@ def normalize_profile_update(payload: object) -> dict:
     if len(display_name) > 80:
         raise ValueError("Display name is too long")
 
+    legal_consent_version = str(payload.get("legal_consent_version") or "").strip()
+    if len(legal_consent_version) > 40:
+        raise ValueError("Legal consent version is too long")
+    legal_consent_locale = str(payload.get("legal_consent_locale") or "").strip().lower()
+    if legal_consent_locale and legal_consent_locale not in {"sk", "cz", "en"}:
+        raise ValueError("Invalid legal consent locale")
+
     return {
         "telegram_nick": telegram,
         "avatar_variant": avatar,
         "display_name": display_name,
+        "legal_consent_version": legal_consent_version,
+        "legal_consent_locale": legal_consent_locale,
     }
 
 
@@ -136,6 +148,12 @@ def save_profile_metadata(user_id: object, payload: object) -> dict:
         entity["telegram_nick"] = values["telegram_nick"]
     if "blinq_avatar_variant" in payload:
         entity["avatar_variant"] = values["avatar_variant"]
+    if "legal_consent_version" in payload:
+        # The timestamp is server-generated so registration records cannot forge
+        # when consent was captured. The version identifies the JSON legal copy.
+        entity["legal_consent_version"] = values["legal_consent_version"]
+        entity["legal_consent_locale"] = values["legal_consent_locale"] or "sk"
+        entity["legal_consent_at"] = now
     client = _table(ACCOUNT_TABLE)
     try:
         client.upsert_entity(entity, mode="merge")
@@ -273,3 +291,158 @@ def record_access_audit(*, actor_id: object, target_id: object, before: dict, af
         client.create_entity(entity)
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to store account audit record") from exc
+
+PAYMENTS_TABLE = "BlinQPayments"
+
+
+def _safe_iso(value: object, *, required: bool = False) -> str:
+    text = str(value or "").strip()
+    if not text:
+        if required:
+            raise ValueError("Date is required")
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("Invalid date") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def normalize_manual_payment(payload: object) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid payment")
+    amount_raw = payload.get("amount")
+    try:
+        amount = round(float(amount_raw), 2)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid payment amount") from exc
+    if amount < 0 or amount > 1_000_000:
+        raise ValueError("Invalid payment amount")
+    currency = str(payload.get("currency") or "EUR").strip().upper()
+    if not re.fullmatch(r"[A-Z]{3}", currency):
+        raise ValueError("Invalid payment currency")
+    plan = str(payload.get("plan") or "").strip().lower()
+    if plan not in {"rookie", "pro", "elite", "legend", "goat", "admin", "other"}:
+        raise ValueError("Invalid payment plan")
+    reference = str(payload.get("reference") or "").strip()[:120]
+    note = str(payload.get("note") or "").strip()[:500]
+    status = str(payload.get("status") or "confirmed").strip().lower()
+    if status not in {"confirmed", "pending", "refunded", "cancelled"}:
+        raise ValueError("Invalid payment status")
+    return {
+        "amount": amount,
+        "currency": currency,
+        "plan": plan,
+        "reference": reference,
+        "note": note,
+        "status": status,
+        "paid_at": _safe_iso(payload.get("paid_at") or datetime.now(timezone.utc).isoformat(), required=True),
+        "valid_from": _safe_iso(payload.get("valid_from")),
+        "valid_until": _safe_iso(payload.get("valid_until")),
+    }
+
+
+def record_manual_payment(user_id: object, payload: object, *, actor_id: object = "") -> dict:
+    uid = str(user_id or "").strip()
+    _key(uid)
+    actor = str(actor_id or "").strip()[:256]
+    if not actor:
+        raise ValueError("Payment actor is required")
+    values = normalize_manual_payment(payload)
+    now = datetime.now(timezone.utc)
+    payment_id = f"pay_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:10]}"
+    entity = {
+        "PartitionKey": f"user:{_key(uid)}",
+        "RowKey": f"{int(now.timestamp()*1000):013d}-{uuid.uuid4().hex}",
+        "payment_id": payment_id,
+        "user_id": uid,
+        "actor_id": actor,
+        "created_at": now.isoformat(),
+        **values,
+    }
+    try:
+        _table(PAYMENTS_TABLE).create_entity(entity)
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to store manual payment") from exc
+    # Keep the most recent reference on the account row for quick filtering.
+    if values.get("reference"):
+        save_payment_reference(uid, values["reference"], actor_id=actor)
+    return {k: v for k, v in entity.items() if k not in {"PartitionKey", "RowKey"}}
+
+
+def list_manual_payments(user_id: object, *, limit: int = 100) -> list[dict]:
+    uid = str(user_id or "").strip()
+    key = _key(uid)
+    limit = max(1, min(500, int(limit)))
+    try:
+        rows = list(_table(PAYMENTS_TABLE).query_entities(query_filter=f"PartitionKey eq 'user:{key}'"))
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to load manual payments") from exc
+    rows.sort(key=lambda row: str(row.get("created_at") or row.get("paid_at") or ""), reverse=True)
+    out = []
+    for row in rows[:limit]:
+        if str(row.get("user_id") or "") != uid:
+            continue
+        out.append({
+            "payment_id": str(row.get("payment_id") or ""),
+            "user_id": uid,
+            "actor_id": str(row.get("actor_id") or ""),
+            "amount": float(row.get("amount") or 0),
+            "currency": str(row.get("currency") or "EUR"),
+            "plan": str(row.get("plan") or ""),
+            "reference": str(row.get("reference") or ""),
+            "note": str(row.get("note") or ""),
+            "status": str(row.get("status") or "confirmed"),
+            "paid_at": row.get("paid_at"),
+            "valid_from": row.get("valid_from"),
+            "valid_until": row.get("valid_until"),
+            "created_at": row.get("created_at"),
+        })
+    return out
+
+
+def list_account_audit(*, target_id: object = "", limit: int = 100, months: int = 12) -> list[dict]:
+    """Return recent access/admin audit records for the admin UI."""
+    target = str(target_id or "").strip()
+    limit = max(1, min(500, int(limit)))
+    months = max(1, min(36, int(months)))
+    now = datetime.now(timezone.utc)
+    month_keys = []
+    year, month = now.year, now.month
+    for _ in range(months):
+        month_keys.append(f"{year:04d}{month:02d}")
+        month -= 1
+        if month == 0:
+            month = 12
+            year -= 1
+    rows = []
+    client = _table(AUDIT_TABLE)
+    try:
+        for partition in month_keys:
+            for row in client.query_entities(query_filter=f"PartitionKey eq '{partition}'"):
+                if target and str(row.get("target_id") or "") != target:
+                    continue
+                rows.append(row)
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to load account audit") from exc
+    rows.sort(key=lambda row: str(row.get("occurred_at") or ""), reverse=True)
+    result = []
+    for row in rows[:limit]:
+        def parse_json(field):
+            try:
+                value = json.loads(str(row.get(field) or "{}"))
+                return value if isinstance(value, dict) else {}
+            except ValueError:
+                return {}
+        result.append({
+            "actor_id": str(row.get("actor_id") or ""),
+            "target_id": str(row.get("target_id") or ""),
+            "action": str(row.get("action") or ""),
+            "outcome": str(row.get("outcome") or ""),
+            "occurred_at": row.get("occurred_at"),
+            "before": parse_json("before_json"),
+            "after": parse_json("after_json"),
+        })
+    return result

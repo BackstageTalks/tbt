@@ -192,17 +192,25 @@
     return signInFirebase(String(email || '').trim().toLowerCase(), password);
   }
 
-  async function signUpFirebase(email, password, telegramNick) {
+  async function signUpFirebase(email, password, telegramNick, legalConsent = {}) {
     const data = await json(firebaseEndpoint('signUp'), {
       method: 'POST',
       body: JSON.stringify({email, password, returnSecureToken: true}),
     });
     const nick = String(telegramNick || '').trim();
-    if (nick) {
+    const legalVersion = String(legalConsent?.version || '').trim();
+    const legalLocale = String(legalConsent?.locale || 'sk').trim().toLowerCase();
+    const profilePayload = {};
+    if (nick) profilePayload.telegram_nick = nick;
+    if (legalVersion) {
+      profilePayload.legal_consent_version = legalVersion;
+      profilePayload.legal_consent_locale = ['sk','cz','en'].includes(legalLocale) ? legalLocale : 'sk';
+    }
+    if (Object.keys(profilePayload).length) {
       await json('/api/v1/auth/profile', {
         method: 'PUT',
         headers: {'X-Blinq-Access-Token': data.idToken},
-        body: JSON.stringify({telegram_nick: nick}),
+        body: JSON.stringify(profilePayload),
       });
     }
     await json(firebaseEndpoint('sendOobCode'), {
@@ -212,9 +220,9 @@
     clear();
     return {verification_required: true, email: String(email || '').trim()};
   }
-  async function signUp(email, password, telegramNick) {
+  async function signUp(email, password, telegramNick, legalConsent = {}) {
     provider();
-    return signUpFirebase(String(email || '').trim().toLowerCase(), password, telegramNick);
+    return signUpFirebase(String(email || '').trim().toLowerCase(), password, telegramNick, legalConsent);
   }
 
   async function resendVerification() {
@@ -323,6 +331,30 @@
       method: 'PUT', body: JSON.stringify(payload || {}),
     });
   }
+  async function supportSubmit(payload) {
+    const s = await restore();
+    return json('/api/v1/support', {
+      method: 'POST',
+      headers: s ? {'X-Blinq-Access-Token': s.access_token} : {},
+      body: JSON.stringify(payload || {}),
+    });
+  }
+  async function adminSupport(status = 'all') {
+    return apiWithSession(`/api/v1/admin/support?status=${encodeURIComponent(status)}`);
+  }
+  async function adminUpdateSupport(ticketId, payload) {
+    return apiWithSession(`/api/v1/admin/support/${encodeURIComponent(ticketId)}`, {method: 'PUT', body: JSON.stringify(payload || {})});
+  }
+  async function adminPayments(userId) {
+    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/payments`);
+  }
+  async function adminAddPayment(userId, payload) {
+    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/payments`, {method: 'POST', body: JSON.stringify(payload || {})});
+  }
+  async function adminAudit(targetId = '') {
+    const suffix = targetId ? `?target_id=${encodeURIComponent(targetId)}` : '';
+    return apiWithSession(`/api/v1/admin/audit${suffix}`);
+  }
   async function runtimeUiConfig() { return json('/api/v1/ui-config'); }
   async function contentNews() { return json('/api/v1/content/news'); }
   async function bannerEvent(payload, keepalive = false) {
@@ -338,7 +370,8 @@
   window.BlinqAuth = {
     init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
     insights, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
-    adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, runtimeUiConfig, contentNews,
+    adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, supportSubmit, adminSupport, adminUpdateSupport,
+    adminPayments, adminAddPayment, adminAudit, runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear,
   };
 })();

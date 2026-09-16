@@ -3446,7 +3446,7 @@
       }
     }
   },
-  "ui_revision": "6.8.0",
+  "ui_revision": "6.8.5-professionalization",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3530,6 +3530,34 @@
         "href": "#responsible_use",
         "enabled": true,
         "order": 105
+      },
+      {
+        "id": "terms",
+        "label": "Podmienky",
+        "href": "#terms",
+        "enabled": true,
+        "order": 106
+      },
+      {
+        "id": "privacy",
+        "label": "Súkromie",
+        "href": "#privacy",
+        "enabled": true,
+        "order": 107
+      },
+      {
+        "id": "cookies",
+        "label": "Cookies",
+        "href": "#cookies",
+        "enabled": true,
+        "order": 108
+      },
+      {
+        "id": "support",
+        "label": "Support",
+        "href": "#support",
+        "enabled": true,
+        "order": 109
       }
     ]
   },
