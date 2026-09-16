@@ -1290,6 +1290,30 @@
     if(tab==='ace'||tab==='games'||tab==='sets')return [];
     return [];
   }
+  function dashboardFilteredRows(rows){
+    const source=Array.isArray(rows)?rows:[];
+    const query=String(state.dashboardSearch||'').trim().toLocaleLowerCase();
+    const selectedTournament=String(state.dailyHubTournament||'').trim();
+    // A tournament selection can survive a tab switch. Only apply it when the
+    // selected tournament exists in the current source; otherwise the next
+    // render would appear empty until the select control resets itself.
+    const tournamentActive=selectedTournament&&source.some(row=>String(row?.tournament||row?.competition||'').trim()===selectedTournament);
+    if(!query&&!tournamentActive)return source;
+    return source.filter(row=>{
+      if(tournamentActive&&String(row?.tournament||row?.competition||'').trim()!==selectedTournament)return false;
+      if(!query)return true;
+      const p1=row?.player1||{},p2=row?.player2||{};
+      const searchable=[
+        p1.name,row?.player1_name,p2.name,row?.player2_name,
+        row?.tournament,row?.competition,row?.tour,row?.surface,
+        p1.country_code,p1.country_code2,p1.country_code3,p1.country?.name,
+        p2.country_code,p2.country_code2,p2.country_code3,p2.country?.name,
+        row?.tournament_country_code,row?.country_code,row?.venue_country_code,
+        row?.country,row?.venue_country
+      ].filter(value=>value!==undefined&&value!==null).join(' ').toLocaleLowerCase();
+      return searchable.includes(query);
+    });
+  }
   function dailyHubTabLabel(tab){
     return {daily:'TOP',value:'VALUE',ace:'ESA',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
   }
@@ -1816,7 +1840,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq.css?v=7000"><link rel="stylesheet" href="/redesign-680.css?v=7000"><link rel="stylesheet" href="/polish-681.css?v=7000"><link rel="stylesheet" href="/polish-683.css?v=7000"><link rel="stylesheet" href="/polish-684.css?v=7000"><link rel="stylesheet" href="/polish-685.css?v=7000"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq.css?v=7001"><link rel="stylesheet" href="/redesign-680.css?v=7001"><link rel="stylesheet" href="/polish-681.css?v=7001"><link rel="stylesheet" href="/polish-683.css?v=7001"><link rel="stylesheet" href="/polish-684.css?v=7001"><link rel="stylesheet" href="/polish-685.css?v=7001"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     const row=rowOverride||m?.raw||m;

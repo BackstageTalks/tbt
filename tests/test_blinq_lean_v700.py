@@ -51,3 +51,15 @@ def test_admin_is_visibly_reduced_to_three_sections():
     assert "['banners','Bannery','Hero · background']" in route
     assert "['insights','Správy & LIVE','Premium Info · LIVE']" in route
     assert "campaigns" not in route
+
+
+def test_dashboard_filter_is_defined_and_used_by_daily_hub():
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert "function dashboardFilteredRows(rows){" in app
+    filter_block = app.split("function dashboardFilteredRows(rows){", 1)[1].split("function dailyHubTabLabel", 1)[0]
+    assert "state.dashboardSearch" in filter_block
+    assert "state.dailyHubTournament" in filter_block
+    assert "dailyHubDateFrom" not in filter_block
+    assert "dailyHubDateTo" not in filter_block
+    render = app.split("function renderDailyHub(){", 1)[1].split("function marketPreviewCard", 1)[0]
+    assert "rows=dashboardFilteredRows(sourceRows)" in render
