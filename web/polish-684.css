@@ -1,0 +1,251 @@
+/* BlinQ 6.8.4 — visual cleanup: flags, ranking, tournament identity, banner map and account admin. */
+
+/* Player country / ranking presentation */
+body#blinqPremium .country-flag{
+  display:inline-grid!important;place-items:center!important;width:18px!important;height:12px!important;flex:0 0 18px!important;
+  overflow:hidden!important;border-radius:2px!important;border:1px solid rgba(190,220,232,.32)!important;background:#0b2230!important;
+  box-shadow:0 1px 4px rgba(0,0,0,.24)!important;vertical-align:middle!important;
+}
+body#blinqPremium .country-flag.is-compact{width:16px!important;height:11px!important;flex-basis:16px!important}
+body#blinqPremium .country-flag img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important;padding:0!important}
+body#blinqPremium .country-flag-fallback{display:grid!important;place-items:center!important;width:100%!important;height:100%!important;color:#9ab0bd!important;font-size:6px!important;font-weight:900!important;letter-spacing:.02em!important}
+body#blinqPremium .country-flag-fallback[hidden]{display:none!important}
+body#blinqPremium .hub-player-meta,
+body#blinqPremium .player-rank,
+body#blinqPremium .insight-player-rankline{display:flex!important;flex-direction:row!important;align-items:center!important;gap:5px!important;min-height:14px!important}
+body#blinqPremium .player-rank{justify-content:center!important;margin-top:4px!important;color:#89a3b2!important;font-family:Inter,Manrope,Sora,system-ui,-apple-system,"Segoe UI",sans-serif!important;font-size:10px!important;font-weight:700!important;letter-spacing:.025em!important;font-variant-numeric:tabular-nums!important;line-height:1!important}
+body#blinqPremium .player-rank-number,
+body#blinqPremium .hub-rank{color:#b7c9d2!important;font-weight:800!important;font-variant-numeric:tabular-nums!important;letter-spacing:.025em!important}
+body#blinqPremium .player-rank-tour,
+body#blinqPremium .hub-player-meta .hub-tour{color:#667f8e!important;font-size:8px!important;font-weight:800!important;letter-spacing:.07em!important;text-transform:uppercase!important}
+body#blinqPremium .ranking-movement{margin-left:2px!important;color:#52e99c!important;font-size:9px!important;font-weight:800!important}
+
+/* Tournament identity — actual provider logo first, BlinQ fallback second. */
+body#blinqPremium .match-card-tournament{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important}
+body#blinqPremium .match-card-tournament .hub-tournament-logo,
+body#blinqPremium .results-tournament-inline .hub-tournament-logo{
+  width:24px!important;height:24px!important;flex:0 0 24px!important;border-radius:6px!important;border-color:#254b60!important;background:#0a1f2d!important;padding:1px!important;
+}
+body#blinqPremium .match-card-tournament .hub-tournament-logo.has-image,
+body#blinqPremium .results-tournament-inline .hub-tournament-logo.has-image{background:#f3f6f7!important}
+body#blinqPremium .match-card-tournament .hub-type-logo,
+body#blinqPremium .results-tournament-inline .hub-type-logo{padding:1px!important}
+body#blinqPremium .match-card-tournament-copy{display:block!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+body#blinqPremium .results-match-player{display:flex!important;align-items:center!important;gap:7px!important;min-width:0!important}
+body#blinqPremium .results-match-sub{display:flex!important;align-items:center!important;gap:6px!important;margin-top:5px!important;min-width:0!important;color:#718d9c!important}
+body#blinqPremium .results-match-sub>b{font-weight:700!important;color:#93a9b5!important;white-space:nowrap!important}
+body#blinqPremium .results-tournament-inline{display:inline-flex!important;align-items:center!important;gap:5px!important;margin-left:5px!important;min-width:0!important;color:#708a99!important}
+body#blinqPremium .daily-hub-table .hub-player-meta{gap:5px!important}
+
+/* Admin: reduce visual noise and make task hierarchy obvious. */
+body#blinqPremium.blinq-admin .route-panel{padding:0!important}
+body#blinqPremium .admin-console-v675{gap:10px!important}
+body#blinqPremium .admin-control-toolbar{padding:12px 14px!important;border:1px solid #23485d!important;border-radius:12px!important;background:linear-gradient(180deg,#071b28,#061722)!important;box-shadow:none!important}
+body#blinqPremium .admin-control-toolbar-copy strong{font-size:13px!important}
+body#blinqPremium .admin-control-toolbar-copy span{font-size:9px!important;color:#7894a3!important}
+body#blinqPremium .admin-global-actions{gap:7px!important}
+body#blinqPremium .admin-global-actions .btn{min-height:32px!important;padding:7px 10px!important;font-size:9px!important}
+body#blinqPremium .admin-runtime-note{margin:0!important;padding:10px 12px!important;border-radius:9px!important;font-size:9px!important}
+body#blinqPremium .admin-tabs-v675{display:grid!important;grid-template-columns:repeat(8,minmax(0,1fr))!important;gap:6px!important;margin:0!important}
+body#blinqPremium .admin-tabs-v675 button{min-height:46px!important;padding:8px 10px!important;border-radius:9px!important;background:#071a27!important;border-color:#23495e!important}
+body#blinqPremium .admin-tabs-v675 button strong{font-size:10px!important;line-height:1.15!important}
+body#blinqPremium .admin-tabs-v675 button small{display:none!important}
+body#blinqPremium .admin-tabs-v675 button.active{background:linear-gradient(135deg,#7650e9,#6039d0)!important;border-color:#926df6!important;box-shadow:0 7px 18px rgba(63,34,137,.18)!important}
+body#blinqPremium .admin-panel-v675{padding-top:2px!important}
+body#blinqPremium .admin-ux-heading{margin-bottom:10px!important}
+body#blinqPremium .admin-ux-heading h2{font-size:21px!important;line-height:1.1!important}
+body#blinqPremium .admin-ux-heading p{max-width:760px!important;margin-top:4px!important;font-size:10px!important;line-height:1.45!important}
+
+/* Banner manager: miniature fixed homepage map + inspector. */
+body#blinqPremium .admin-banner-map-controls{display:flex!important;align-items:end!important;gap:8px!important;flex-wrap:wrap!important;margin:0 0 10px!important;padding:9px 10px!important;border:1px solid #1e4053!important;border-radius:10px!important;background:#061722!important}
+body#blinqPremium .admin-banner-map-controls label{display:grid!important;gap:4px!important;min-width:118px!important;color:#7894a3!important;font-size:8px!important;font-weight:800!important;text-transform:uppercase!important;letter-spacing:.06em!important}
+body#blinqPremium .admin-banner-map-controls label.check{display:flex!important;align-items:center!important;gap:6px!important;min-width:auto!important;height:34px!important;padding:0 8px!important;border:1px solid #23485d!important;border-radius:8px!important;color:#a7bac4!important}
+body#blinqPremium .admin-banner-map-controls input[type="checkbox"]{width:14px!important;height:14px!important;min-height:0!important;padding:0!important}
+body#blinqPremium .admin-banner-map-controls select,
+body#blinqPremium .admin-banner-map-controls input[type="number"]{height:34px!important;min-height:34px!important;padding:6px 8px!important;font-size:10px!important}
+body#blinqPremium .admin-banner-map-controls label>span{display:flex!important;align-items:center!important;gap:4px!important;color:#8ca4b2!important}
+body#blinqPremium .admin-banner-map-workspace{display:grid!important;grid-template-columns:minmax(430px,.9fr) minmax(520px,1.1fr)!important;gap:14px!important;align-items:start!important}
+body#blinqPremium .admin-site-map{position:sticky!important;top:12px!important;padding:11px!important;border:1px solid #23485d!important;border-radius:13px!important;background:#04131d!important;box-shadow:0 16px 34px rgba(0,0,0,.18)!important}
+body#blinqPremium .admin-site-map-browser{overflow:hidden!important;border:1px solid #31566a!important;border-radius:10px!important;background:#061622!important}
+body#blinqPremium .admin-site-map-browserbar{display:flex!important;align-items:center!important;gap:5px!important;height:25px!important;padding:0 8px!important;border-bottom:1px solid #213f51!important;background:#081b27!important;color:#668394!important;font-size:7px!important;letter-spacing:.08em!important}
+body#blinqPremium .admin-site-map-browserbar i{width:5px!important;height:5px!important;border-radius:50%!important;background:#486376!important}
+body#blinqPremium .admin-site-map-browserbar span{margin-left:4px!important}
+body#blinqPremium .admin-site-map-header{display:grid!important;grid-template-columns:54px minmax(0,1fr) 46px!important;gap:6px!important;align-items:center!important;padding:7px!important;border-bottom:1px solid #16394a!important}
+body#blinqPremium .admin-site-map-logo{font-size:12px!important;font-weight:950!important;color:#f2f8f6!important}
+body#blinqPremium .admin-site-map-account{font-size:6px!important;font-weight:900!important;color:#71909f!important;text-align:right!important}
+body#blinqPremium .admin-site-map-header-slots{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:4px!important}
+body#blinqPremium .admin-site-map-hero{padding:8px!important;border-bottom:1px solid #16394a!important;background:linear-gradient(110deg,#061722,#08281f)!important}
+body#blinqPremium .admin-site-map-hero>header,
+body#blinqPremium .admin-site-map-row>header,
+body#blinqPremium .admin-site-map-vip>header{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;margin-bottom:5px!important;color:#7993a1!important;font-size:7px!important}
+body#blinqPremium .admin-site-map-hero>header strong,
+body#blinqPremium .admin-site-map-row>header strong,
+body#blinqPremium .admin-site-map-vip>header strong{color:#a8bbc5!important;font-size:7px!important;text-transform:uppercase!important;letter-spacing:.07em!important}
+body#blinqPremium .admin-site-map-hero>div{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:4px!important}
+body#blinqPremium .admin-site-map-content{padding:7px!important;background:#05141f!important}
+body#blinqPremium .admin-site-map-table{display:grid!important;grid-template-columns:1.3fr 1fr 1fr .8fr!important;gap:4px!important;margin:3px 0 7px!important}
+body#blinqPremium .admin-site-map-table span{height:16px!important;border:1px solid #17394b!important;border-radius:3px!important;background:#071c29!important}
+body#blinqPremium .admin-site-map-table.compact{grid-template-columns:repeat(3,1fr)!important;margin-top:7px!important;margin-bottom:0!important}
+body#blinqPremium .admin-site-map-row{margin:6px 0!important;padding:6px!important;border:1px dashed #22485b!important;border-radius:7px!important;background:#061722!important}
+body#blinqPremium .admin-site-map-slots{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:4px!important}
+body#blinqPremium .admin-site-map-vip{padding:7px!important;border-top:1px solid #17394a!important;background:#071a20!important}
+body#blinqPremium .admin-site-slot{position:relative!important;display:grid!important;align-content:end!important;min-width:0!important;min-height:42px!important;padding:6px!important;overflow:hidden!important;border:1px solid #2b5368!important;border-radius:6px!important;background:#08202d!important;color:#dce9ee!important;text-align:left!important;cursor:pointer!important}
+body#blinqPremium .admin-site-slot.header{min-height:28px!important;padding:4px!important}
+body#blinqPremium .admin-site-slot.hero{min-height:58px!important}
+body#blinqPremium .admin-site-slot.content{min-height:38px!important}
+body#blinqPremium .admin-site-slot.vip{min-height:48px!important;width:100%!important}
+body#blinqPremium .admin-site-slot img{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;object-fit:cover!important;opacity:.72!important}
+body#blinqPremium .admin-site-slot-shade{position:absolute!important;inset:0!important;background:linear-gradient(180deg,transparent 10%,rgba(2,10,15,.88))!important}
+body#blinqPremium .admin-site-slot small,
+body#blinqPremium .admin-site-slot strong,
+body#blinqPremium .admin-site-slot em{position:relative!important;z-index:2!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important}
+body#blinqPremium .admin-site-slot small{color:#65e2a3!important;font-size:6px!important;font-weight:900!important;letter-spacing:.05em!important;text-transform:uppercase!important}
+body#blinqPremium .admin-site-slot strong{margin-top:2px!important;color:#e5f0f3!important;font-size:7px!important;font-weight:850!important}
+body#blinqPremium .admin-site-slot em{display:none!important}
+body#blinqPremium .admin-site-slot:hover{border-color:#4bdc9c!important;transform:translateY(-1px)!important}
+body#blinqPremium .admin-site-slot.selected{border-color:#9a75ff!important;box-shadow:0 0 0 2px rgba(139,98,246,.22),inset 0 0 18px rgba(112,73,221,.18)!important}
+body#blinqPremium .admin-site-slot.selected small{color:#c5b3ff!important}
+body#blinqPremium .admin-site-slot.is-off{opacity:.42!important;filter:saturate(.55)!important}
+body#blinqPremium .admin-site-map-help{margin:8px 3px 0!important;color:#6f8c9a!important;font-size:8.5px!important;line-height:1.45!important}
+body#blinqPremium .admin-banner-manager-v684 .admin-banner-editor{margin:0!important;min-width:0!important}
+body#blinqPremium .admin-banner-manager-v684 .admin-banner-preview-toolbar{margin-top:8px!important}
+
+/* Accounts: dense list on the left, explicit payment / access workflow on the right. */
+body#blinqPremium .admin-account-stats{gap:7px!important;margin-bottom:8px!important}
+body#blinqPremium .admin-account-stats>div{min-height:52px!important;padding:9px 11px!important;border-radius:9px!important}
+body#blinqPremium .admin-account-stats small{font-size:7px!important}
+body#blinqPremium .admin-account-stats strong{font-size:17px!important}
+body#blinqPremium .admin-account-quickfilters{margin:7px 0!important;gap:5px!important}
+body#blinqPremium .admin-account-quickfilters button{min-height:28px!important;padding:5px 9px!important;font-size:8px!important}
+body#blinqPremium .admin-accounts-toolbar-v669{gap:7px!important;padding:8px!important;border-radius:9px!important}
+body#blinqPremium .admin-account-datefilters{gap:7px!important;margin:7px 0 9px!important;padding:8px!important;border-radius:9px!important}
+body#blinqPremium .admin-user-table-head,
+body#blinqPremium .admin-user-table-row{grid-template-columns:minmax(125px,1.05fr) minmax(155px,1.25fr) 70px 72px 88px 72px 72px 66px!important;gap:6px!important}
+body#blinqPremium .admin-user-table-head{padding:0 10px 5px!important;font-size:7px!important}
+body#blinqPremium .admin-user-table-row{min-height:45px!important;padding:6px 8px!important;border-radius:7px!important}
+body#blinqPremium .admin-user-payment{font-size:7px!important;font-weight:850!important;color:#647f8e!important;text-transform:uppercase!important}
+body#blinqPremium .admin-user-payment.is-matched{color:#55dda0!important}
+body#blinqPremium .admin-accounts-grid-v669{grid-template-columns:minmax(690px,1.35fr) minmax(455px,.9fr)!important;gap:11px!important}
+body#blinqPremium .admin-user-list-v669{max-height:670px!important;padding:5px!important}
+body#blinqPremium .admin-user-editor{border-radius:11px!important}
+body#blinqPremium .admin-user-editor-head{padding-bottom:10px!important}
+body#blinqPremium .admin-form-section{padding:11px!important;border-radius:9px!important}
+body#blinqPremium .admin-form-section-title{margin-bottom:8px!important}
+body#blinqPremium .admin-form-section-title strong{font-size:10px!important}
+body#blinqPremium .admin-form-section-title span{font-size:8.5px!important}
+body#blinqPremium .admin-account-plan-shortcuts{grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:5px!important}
+body#blinqPremium .admin-plan-shortcut{min-height:46px!important;padding:6px!important;border-radius:7px!important}
+body#blinqPremium .admin-plan-shortcut b{font-size:9px!important}
+body#blinqPremium .admin-plan-shortcut small{font-size:7px!important;line-height:1.2!important}
+body#blinqPremium .admin-expiry-shortcuts{display:flex!important;align-items:center!important;gap:5px!important;flex-wrap:wrap!important;margin-top:8px!important;padding-top:8px!important;border-top:1px solid #183b4c!important}
+body#blinqPremium .admin-expiry-shortcuts>span{margin-right:3px!important;color:#7893a1!important;font-size:7.5px!important;font-weight:850!important;text-transform:uppercase!important;letter-spacing:.06em!important}
+body#blinqPremium .admin-expiry-shortcuts button{min-height:27px!important;padding:4px 8px!important;border:1px solid #2a5266!important;border-radius:7px!important;background:#061925!important;color:#a9bec8!important;font-size:8px!important;font-weight:800!important}
+body#blinqPremium .admin-expiry-shortcuts button:hover{border-color:#3cd796!important;color:#60e9a7!important}
+body#blinqPremium .admin-payment-match{border-color:#2b6650!important;background:linear-gradient(180deg,rgba(8,45,34,.56),rgba(6,27,35,.9))!important}
+body#blinqPremium .admin-payment-match input{border-color:#326c58!important}
+body#blinqPremium .admin-user-savebar{position:sticky!important;bottom:0!important;z-index:3!important;margin:0 -1px -1px!important;padding:9px 10px!important;border-top:1px solid #28536a!important;background:rgba(5,20,30,.96)!important;backdrop-filter:blur(8px)!important}
+body#blinqPremium .admin-user-savebar .btn{min-height:34px!important}
+
+@media(max-width:1320px){
+  body#blinqPremium .admin-banner-map-workspace{grid-template-columns:1fr!important}
+  body#blinqPremium .admin-site-map{position:static!important}
+  body#blinqPremium .admin-accounts-grid-v669{grid-template-columns:1fr!important}
+  body#blinqPremium .admin-tabs-v675{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+}
+@media(max-width:850px){
+  body#blinqPremium .admin-banner-map-workspace{display:block!important}
+  body#blinqPremium .admin-site-map{margin-bottom:10px!important;padding:8px!important}
+  body#blinqPremium .admin-site-map-hero>div{grid-template-columns:repeat(3,minmax(0,1fr))!important}
+  body#blinqPremium .admin-site-map-slots{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body#blinqPremium .admin-tabs-v675{display:flex!important;overflow-x:auto!important}
+  body#blinqPremium .admin-tabs-v675 button{flex:0 0 118px!important}
+  body#blinqPremium .admin-user-table-row{grid-template-columns:minmax(120px,1fr) minmax(145px,1.2fr) 62px 64px!important}
+  body#blinqPremium .admin-user-table-row .admin-user-expiry,
+  body#blinqPremium .admin-user-table-row .admin-user-payment,
+  body#blinqPremium .admin-user-table-row .admin-user-tg-member{display:none!important}
+  body#blinqPremium .admin-account-plan-shortcuts{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+
+/* Banner editor controls were previously inherited from a disabled legacy sheet; keep them native in the active layer. */
+body#blinqPremium .admin-banner-editor-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important}
+body#blinqPremium .admin-master-switch{display:flex!important;align-items:center!important;gap:7px!important;width:max-content!important;padding:7px 9px!important;border:1px solid #2b4f64!important;border-radius:8px!important;background:#061824!important;color:#a9bbc5!important;font-size:9px!important;font-weight:800!important}
+body#blinqPremium .admin-banner-editor input[type="checkbox"],
+body#blinqPremium .admin-master-switch input[type="checkbox"],
+body#blinqPremium .admin-banner-access-row input[type="checkbox"]{width:14px!important;height:14px!important;min-height:14px!important;max-height:14px!important;flex:0 0 14px!important;margin:0!important;padding:0!important;accent-color:#7a58ea!important}
+body#blinqPremium .admin-banner-preview-toolbar{display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:wrap!important;padding:4px 0!important}
+body#blinqPremium .admin-banner-preview-toolbar>span{color:#718b99!important;font-size:8px!important;font-weight:850!important;text-transform:uppercase!important;letter-spacing:.06em!important}
+body#blinqPremium .admin-level-chips{display:flex!important;align-items:center!important;gap:4px!important;flex-wrap:wrap!important}
+body#blinqPremium .admin-level-chip{display:inline-flex!important;align-items:center!important;gap:4px!important;min-height:26px!important;padding:4px 7px!important;border:1px solid #294d61!important;border-radius:7px!important;background:#061824!important;color:#8da7b4!important;font-size:8px!important;font-weight:850!important;cursor:pointer!important}
+body#blinqPremium .admin-level-chip.active{border-color:#8e68f1!important;background:#241a54!important;color:#efeaff!important}
+body#blinqPremium .admin-level-chip.top-tier{border-color:#6d5b2b!important}
+body#blinqPremium .admin-level-chip small{padding:1px 3px!important;border-radius:3px!important;background:#c5a346!important;color:#171104!important;font-size:5.5px!important;font-weight:950!important}
+body#blinqPremium .admin-banner-presets{display:flex!important;gap:5px!important;flex-wrap:wrap!important;margin-bottom:8px!important}
+body#blinqPremium .admin-banner-presets .btn{min-height:28px!important;padding:5px 8px!important;font-size:8px!important}
+body#blinqPremium .admin-banner-access-matrix{display:grid!important;gap:5px!important}
+body#blinqPremium .admin-banner-access-row{display:grid!important;grid-template-columns:minmax(90px,1fr) 100px 100px!important;align-items:center!important;gap:7px!important;padding:7px 9px!important;border:1px solid #203f52!important;border-radius:8px!important;background:#061721!important}
+body#blinqPremium .admin-banner-access-row>b{display:flex!important;align-items:center!important;gap:4px!important;color:#b7a5f8!important;font-size:8.5px!important;font-weight:850!important}
+body#blinqPremium .admin-banner-access-row>b small{padding:1px 3px!important;border-radius:3px!important;background:#c7a143!important;color:#171105!important;font-size:5.5px!important}
+body#blinqPremium .admin-banner-access-row label{display:flex!important;align-items:center!important;gap:5px!important;color:#879eaa!important;font-size:8px!important}
+body#blinqPremium .admin-banner-access-all{border-color:#32576b!important;background:#081c28!important}
+body#blinqPremium .admin-advanced{border-top:1px solid #1f4052!important}
+body#blinqPremium .admin-advanced>summary{padding:9px 2px!important;color:#9a84e9!important;font-size:8.5px!important;font-weight:850!important;cursor:pointer!important}
+body#blinqPremium .admin-banner-preview-wrap{overflow:hidden!important;border:1px solid #244a5e!important;border-radius:9px!important;background:#061824!important}
+body#blinqPremium .admin-banner-preview-wrap .simple-banner-preview{min-height:90px!important;margin:0!important;border:0!important}
+
+@media(max-width:620px){
+  body#blinqPremium .admin-banner-access-row{grid-template-columns:1fr 1fr!important}
+  body#blinqPremium .admin-banner-access-row>b{grid-column:1/-1!important}
+}
+
+/* 6.8.4 account editor: active replacement for legacy admin rules that are intentionally not loaded. */
+body#blinqPremium .admin-user-editor-v6522{display:grid!important;gap:0!important;overflow:hidden!important;border:1px solid #23485c!important;border-radius:12px!important;background:#061722!important}
+body#blinqPremium .admin-user-editor-head{display:flex!important;align-items:center!important;gap:11px!important;padding:12px 13px!important;border-bottom:1px solid #1d3d4f!important;background:linear-gradient(105deg,rgba(81,52,174,.17),rgba(5,22,32,.2) 48%,transparent)!important}
+body#blinqPremium .admin-user-editor-head>.avatar{display:grid!important;place-items:center!important;width:38px!important;height:38px!important;min-width:38px!important;min-height:38px!important;max-width:38px!important;max-height:38px!important;flex:0 0 38px!important;padding:0!important;border:1px solid #287296!important;border-radius:50%!important;background:#073752!important;overflow:hidden!important}
+body#blinqPremium .admin-user-editor-head>.avatar svg{width:20px!important;height:20px!important}
+body#blinqPremium .admin-user-editor-head>div{display:grid!important;gap:2px!important;min-width:0!important}
+body#blinqPremium .admin-user-editor-head small{color:#668596!important;font-size:7px!important;line-height:1.2!important}
+body#blinqPremium .admin-user-editor-head h3{margin:0!important;color:#f1f6f8!important;font-size:15px!important;line-height:1.15!important}
+body#blinqPremium .admin-user-editor-head p{margin:0!important;color:#8299a5!important;font-size:8.5px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body#blinqPremium .admin-current-access{margin-left:auto!important;flex:0 0 auto!important;padding:6px 8px!important;border:1px solid #664bd0!important;border-radius:7px!important;background:#1d1645!important;color:#cbbcff!important;font-size:8px!important;font-weight:900!important;letter-spacing:.02em!important}
+body#blinqPremium .admin-identity-grid{padding:9px 11px!important;gap:6px!important;background:#05141e!important}
+body#blinqPremium .admin-identity-grid>div{padding:7px 8px!important;border-radius:7px!important}
+body#blinqPremium .admin-user-editor .admin-form-section{margin:9px 10px 0!important;padding:10px!important}
+body#blinqPremium .admin-user-editor .admin-form-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important}
+body#blinqPremium .admin-user-editor .admin-form-grid .span-2{grid-column:1/-1!important}
+body#blinqPremium .admin-user-editor .admin-form-grid>label,
+body#blinqPremium .admin-user-editor .admin-wide-field{display:grid!important;gap:4px!important;min-width:0!important;color:#7895a4!important;font-size:8px!important;font-weight:800!important}
+body#blinqPremium .admin-user-editor input:not([type="checkbox"]),
+body#blinqPremium .admin-user-editor select,
+body#blinqPremium .admin-user-editor textarea{width:100%!important;min-width:0!important;min-height:34px!important;padding:7px 8px!important;border:1px solid #28536a!important;border-radius:7px!important;background:#051823!important;color:#dce9ee!important;font-size:9.5px!important;outline:none!important;box-shadow:none!important}
+body#blinqPremium .admin-user-editor input:not([type="checkbox"]):focus,
+body#blinqPremium .admin-user-editor select:focus,
+body#blinqPremium .admin-user-editor textarea:focus{border-color:#42d99b!important;box-shadow:0 0 0 2px rgba(66,217,155,.09)!important}
+body#blinqPremium .admin-user-editor .field-hint{color:#6f8996!important;font-size:7px!important}
+body#blinqPremium .admin-account-plan-shortcuts{display:grid!important;margin-top:8px!important}
+body#blinqPremium .admin-plan-shortcut{display:grid!important;align-content:center!important;gap:2px!important;text-align:left!important;border:1px solid #2a4b5e!important;background:#061721!important;color:#c2d0d7!important;cursor:pointer!important}
+body#blinqPremium .admin-plan-shortcut:hover{border-color:#7c5ee2!important;background:#111b31!important}
+body#blinqPremium .admin-plan-shortcut b{color:#e4edf1!important}
+body#blinqPremium .admin-plan-shortcut small{color:#748d99!important}
+body#blinqPremium .admin-plan-shortcut.top-tier{border-color:#66552d!important}
+body#blinqPremium .admin-plan-shortcut.top-tier small{color:#d7b456!important}
+body#blinqPremium .admin-tg-private-status{margin:0!important}
+body#blinqPremium .admin-tg-private-status>div,
+body#blinqPremium .admin-tg-member-toggle{min-height:46px!important;padding:8px 9px!important;border-radius:8px!important}
+body#blinqPremium .admin-tg-member-toggle{display:flex!important;align-items:center!important;gap:7px!important}
+body#blinqPremium .admin-tg-member-toggle input[type="checkbox"]{appearance:auto!important;width:14px!important;height:14px!important;min-width:14px!important;min-height:14px!important;max-width:14px!important;max-height:14px!important;flex:0 0 14px!important;margin:0!important;padding:0!important;accent-color:#39da98!important}
+body#blinqPremium .admin-tg-member-toggle span{font-size:8.5px!important;line-height:1.25!important}
+body#blinqPremium .admin-user-editor textarea#adminUserNote{min-height:58px!important}
+body#blinqPremium .admin-payment-match{box-shadow:inset 3px 0 0 rgba(67,221,157,.55)!important}
+body#blinqPremium .admin-advanced{margin:9px 10px 0!important;padding:0 2px!important}
+body#blinqPremium .admin-user-savebar{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;gap:8px!important;margin-top:9px!important}
+body#blinqPremium .admin-user-savebar>div{display:flex!important;gap:8px!important;flex-wrap:wrap!important;color:#6f8996!important;font-size:7.5px!important}
+body#blinqPremium .admin-user-savebar .form-message{grid-column:1/-1!important;margin:0!important;font-size:8px!important}
+body#blinqPremium .admin-user-savebar .btn{grid-column:2!important;grid-row:1!important;min-width:130px!important}
+body#blinqPremium .admin-self-note{padding:0 10px 9px!important}
+
+@media(max-width:850px){
+  body#blinqPremium .admin-user-editor .admin-form-grid{grid-template-columns:1fr!important}
+  body#blinqPremium .admin-user-editor .admin-form-grid .span-2{grid-column:auto!important}
+  body#blinqPremium .admin-user-savebar{grid-template-columns:1fr!important}
+  body#blinqPremium .admin-user-savebar .btn{grid-column:1!important;grid-row:auto!important;width:100%!important}
+}

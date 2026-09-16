@@ -1,0 +1,53 @@
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+from tbt.services.entitlements import filter_feed_for_access
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _result(hours_ago: int):
+    now = datetime.now(timezone.utc)
+    return {
+        "event_id": f"r{hours_ago}",
+        "scheduled_at": (now - timedelta(hours=hours_ago)).isoformat(),
+        "result": {"correct": True},
+    }
+
+
+def _payload():
+    return {
+        "prime_picks": [], "top_daily_picks": [], "value_picks": [],
+        "ace_picks": [], "sg_picks": [], "doubles_picks": [], "upcoming": [],
+        "results": [_result(12), _result(36), _result(72)],
+        "performance": {"roi": 1.23},
+    }
+
+
+def test_result_history_is_server_limited_by_plan():
+    rookie, rm = filter_feed_for_access(_payload(), {"status": "active", "plan": "rookie"})
+    pro, pm = filter_feed_for_access(_payload(), {"status": "active", "plan": "pro"})
+    elite, em = filter_feed_for_access(_payload(), {"status": "active", "plan": "elite"})
+    assert rm["results_history_hours"] == 24 and len(rookie["results"]) == 1
+    assert pm["results_history_hours"] == 48 and len(pro["results"]) == 2
+    assert em["results_history_hours"] is None and len(elite["results"]) == 3
+    assert rookie["performance"] == {} and pro["performance"] == {}
+    assert elite["performance"] == {"roi": 1.23}
+
+
+def test_public_prediction_board_matches_final_product_tabs():
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    render = app.split("function renderDailyHub(){", 1)[1].split("function marketPreviewCard", 1)[0]
+    assert "['daily','value','ace','games','sets','see_all']" in render
+    assert "{daily:'TOP',value:'VALUE',ace:'ESA',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}" in app
+    assert "if(tab==='daily'){" in app and "state.feed?.daily_picks" in app
+    assert "dailyHubIsComingSoon(tab){return ['ace','games','sets'].includes(tab);}" in app
+
+
+def test_admin_is_visibly_reduced_to_three_sections():
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    route = app.split("function renderAdminRoute(){", 1)[1].split("function rerenderAdmin", 1)[0]
+    assert "['accounts','Účty','Level · platnosť']" in route
+    assert "['banners','Bannery','Hero · background']" in route
+    assert "['insights','Správy & LIVE','Premium Info · LIVE']" in route
+    assert "campaigns" not in route
