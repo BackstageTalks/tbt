@@ -9,7 +9,7 @@ def read(path):
 def test_release_and_cache_are_current():
     cfg = json.loads(read("web/ui-config.json"))
     assert cfg["ui_revision"] == cfg["revision"] == "6.8.6"
-    assert cfg["asset_revision"] == "6860"
+    assert cfg["asset_revision"] == "6864"
     assert 'RELEASE = "6.8.6"' in read("api/function_app.py")
     html = read("web/index.html")
     for asset in ("blinq.css", "auth.js", "responsive.js", "app.js"):
@@ -61,4 +61,4 @@ def test_account_is_modal_and_admin_controls_are_reachable():
     assert "profileAdminLink" in html
     assert "publishUiConfig" in app
     assert "Bannery" in app
-    assert "Sloty · obsah · cielenie" in app
+    assert "Mapa slotov · obsah" in app

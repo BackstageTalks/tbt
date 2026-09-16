@@ -331,6 +331,14 @@
       method: 'PUT', body: JSON.stringify(payload || {}),
     });
   }
+  async function adminUpdateUserProfile(userId, payload) {
+    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/profile`, {
+      method: 'PUT', body: JSON.stringify(payload || {}),
+    });
+  }
+  async function adminDeleteUser(userId) {
+    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}`, {method: 'DELETE'});
+  }
   async function supportSubmit(payload) {
     const s = await restore();
     return json('/api/v1/support', {
@@ -370,7 +378,7 @@
   window.BlinqAuth = {
     init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
     insights, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
-    adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, supportSubmit, adminSupport, adminUpdateSupport,
+    adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser, supportSubmit, adminSupport, adminUpdateSupport,
     adminPayments, adminAddPayment, adminAudit, runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear,
   };

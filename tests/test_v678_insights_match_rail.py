@@ -16,7 +16,7 @@ UI = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))
 
 def test_release_and_cache_are_consistent():
     assert UI["ui_revision"] == UI["revision"] == "6.8.6"
-    assert UI["asset_revision"] == "6860"
+    assert UI["asset_revision"] == "6864"
     assert 'RELEASE = "6.8.6"' in BACKEND
     assert 'API_VERSION = "3.8.6"' in BACKEND
     for asset in ("blinq.css", "auth.js", "app.js"):

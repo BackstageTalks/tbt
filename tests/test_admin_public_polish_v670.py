@@ -21,11 +21,11 @@ def test_prime_is_disabled_by_release_default():
 
 def test_admin_has_clear_operational_tabs_and_global_daily_toggle():
     app = read("web/app.js")
-    assert "['accounts','Používatelia','Účty · prístup · platby']" in app
-    assert "['layout','Denná ponuka','Kategórie · predikcie']" in app
-    assert "['banners','Bannery','Sloty · obsah · cielenie']" in app
+    assert "['accounts','Používatelia','Level · platnosť']" in app
+    assert "['layout','Denná ponuka','Levely · riadky']" in app
+    assert "['banners','Bannery','Mapa slotov · obsah']" in app
     assert 'data-admin-hub-global-field="enabled"' in app
-    assert "adminTab:'accounts'" in app
+    assert "adminTab:'overview'" in app
 
 def test_tournament_logo_has_tier_fallback_and_failure_css():
     app = read("web/app.js")

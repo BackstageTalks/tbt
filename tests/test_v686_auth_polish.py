@@ -7,7 +7,7 @@ def read(name): return (WEB/name).read_text(encoding='utf-8')
 
 def test_auth_polish_asset_and_copy_are_active():
     html=read('index.html'); js=read('app.js')
-    assert '/auth-polish-686.css?v=6860' in html
+    assert '/auth-polish-686.css?v=6864' in html
     assert 'STATISTICAL ENGINE · BACKSTAGETALKS' not in html
     assert 'Vitaj späť.' not in html
     assert "login:'Sign in to your analytics workspace'" in js

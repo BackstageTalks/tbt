@@ -267,6 +267,64 @@ def _update_firebase_user_access(cfg, user_id, changes, *, actor_id=""):
             raise
         raise AuthUnavailable("Firebase admin service temporarily unavailable") from exc
 
+
+
+def update_user_identity(cfg, user_id, payload):
+    """Admin-only update of Firebase identity fields.
+
+    Membership stays separate from identity so an e-mail correction can never
+    accidentally change a user's BlinQ access.
+    """
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid identity update")
+    uid = str(user_id or "").strip()
+    if not uid or len(uid) > 256:
+        raise ValueError("Invalid user id")
+    allowed = {"email", "display_name"}
+    unknown = set(payload) - allowed
+    if unknown:
+        raise ValueError("Unsupported identity field")
+
+    email = str(payload.get("email") or "").strip()
+    display_name = str(payload.get("display_name") or "").strip()
+    if "email" in payload:
+        if not email or len(email) > 254 or "@" not in email or email.startswith("@") or email.endswith("@"):
+            raise ValueError("Invalid e-mail")
+    if len(display_name) > 80:
+        raise ValueError("Display name is too long")
+
+    _, firebase_auth, _ = _firebase_modules()
+    app = firebase_app(cfg)
+    kwargs = {}
+    if "email" in payload:
+        kwargs["email"] = email
+    if "display_name" in payload:
+        kwargs["display_name"] = display_name or None
+    try:
+        if kwargs:
+            firebase_auth.update_user(uid, app=app, **kwargs)
+        return firebase_user_to_dict(firebase_auth.get_user(uid, app=app))
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise AuthUnavailable("Firebase admin service temporarily unavailable") from exc
+
+
+def delete_user_account(cfg, user_id):
+    """Delete a Firebase identity. Durable profile cleanup is handled by API layer."""
+    uid = str(user_id or "").strip()
+    if not uid or len(uid) > 256:
+        raise ValueError("Invalid user id")
+    _, firebase_auth, _ = _firebase_modules()
+    app = firebase_app(cfg)
+    try:
+        firebase_auth.delete_user(uid, app=app)
+        return True
+    except ValueError:
+        raise
+    except Exception as exc:
+        raise AuthUnavailable("Firebase admin service temporarily unavailable") from exc
+
 def update_user_access(cfg, user_id, payload, *, actor_id="", client=None):
     changes = normalize_access_update(payload)
     if not firebase_configured(cfg):

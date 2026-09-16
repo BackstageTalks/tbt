@@ -59,15 +59,20 @@ def test_admin_account_row_marks_valid_group_member_ok():
     assert row["tg_private_action"] == "ok"
 
 
-def test_v669_frontend_contains_account_filters_and_tg_actions():
+def test_frontend_account_manager_keeps_only_simple_filters_and_profile_editing():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     app = (root / "web/app.js").read_text(encoding="utf-8")
     html = (root / "web/index.html").read_text(encoding="utf-8")
     assert "adminUserLevelFilter" in app
     assert "adminUserStatusFilter" in app
-    assert "adminUserDateFrom" in app and "adminUserDateTo" in app
-    assert "copy-tg-nicks" in app
-    assert "TG REMOVE" in app and "TG ADD" in app
+    assert "adminUserSearch" in app
+    assert "adminUserEmail" in app and "adminUserTelegram" in app
+    start=app.index("function renderAdminUserEditor")
+    end=app.index("function renderAdminAccounts", start)
+    editor=app[start:end]
+    assert "TG Private" not in editor
+    assert "Manuálne spárovanie platby" not in editor
     assert "Telegram nickname" in html
     assert "Zobrazované meno" not in html
+

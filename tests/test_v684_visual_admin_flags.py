@@ -46,15 +46,15 @@ def test_banner_admin_uses_clickable_homepage_map():
     assert ".admin-banner-map-workspace" in CSS
 
 
-def test_account_admin_has_manual_payment_and_quick_expiry():
-    assert "Manuálne spárovanie platby" in APP
-    assert 'id="adminPaymentReference"' in APP
-    assert 'data-admin-expiry-days="30"' in APP
-    assert 'data-admin-expiry-days="90"' in APP
-    assert 'data-admin-expiry-days="365"' in APP
-    assert 'data-admin-expiry-days="0"' in APP
-    assert "payment_reference" in APP
-    assert ".admin-payment-match" in CSS
+def test_account_admin_is_simple_and_supports_flexible_expiry():
+    assert 'function renderAdminUserEditor' in APP
+    assert 'Poslať link na obnovu hesla' in APP
+    assert 'data-admin-action="apply-default-term"' in APP
+    assert 'data-admin-action="extend-default-term"' in APP
+    for days in ('30','90','180','365'):
+        assert f'data-admin-expiry-days="{days}"' in APP
+    assert 'adminUserEmail' in APP and 'adminUserTelegram' in APP
+    assert '.admin-simple-plans' in (WEB / 'admin-polish-687.css').read_text(encoding='utf-8')
 
 
 def test_684_visual_layer_is_loaded_with_current_cache():

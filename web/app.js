@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{quick:'all',q:'',plan:'all',status:'all',tg:'all',dateField:'created_at',dateFrom:'',dateTo:'',sort:'telegram'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, boardMode:'live', dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:'',board:''}, railMatch:null, railMatchTab:'overview', railDetailTab:'overview', insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', railPromoIndex:0, railPromoTimer:null, railPromoPaused:false, presentationConfig:null, siteContent:null, adminSupport:null, adminSupportLoading:false, adminSupportError:'', adminSupportStatus:'all', adminPayments:{}, adminAudit:null, adminAuditLoading:false, adminUserAudit:{}, supportSubmitting:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HEADER_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'overview', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, boardMode:'live', dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:'',board:''}, railMatch:null, railMatchTab:'overview', railDetailTab:'overview', insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', railPromoIndex:0, railPromoTimer:null, railPromoPaused:false, presentationConfig:null, siteContent:null, adminSupport:null, adminSupportLoading:false, adminSupportError:'', adminSupportStatus:'all', adminPayments:{}, adminAudit:null, adminAuditLoading:false, adminUserAudit:{}, supportSubmitting:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -465,6 +465,22 @@
   }
 
   function renderNavigation(){
+    // Keep the visible top navigation in sync with the current route.
+    // Secondary prediction routes belong to Predikcie, results to Štatistiky,
+    // and informational model pages to Modely.
+    const predictionRoutes=new Set(['predictions','prime','top_daily','value','doubles','ace','sg','btts']);
+    const modelRoutes=new Set(['model_data','methodology','how_blinq_works']);
+    const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
+    const referenceNav=document.querySelector('.reference-navigation');
+    if(referenceNav){
+      referenceNav.querySelectorAll('[data-route]').forEach(node=>{
+        const active=Boolean(referenceRoute)&&node.dataset.route===referenceRoute;
+        node.classList.toggle('active',active);
+        if(active)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');
+      });
+      const community=referenceNav.querySelector('[data-open-insights]');
+      if(community){community.classList.remove('active');community.removeAttribute('aria-current');}
+    }
     const navIcons={prime:'✦',top_daily:'★',value:'◇',doubles:'◈',ace:'♠',sg:'▥',results:'✓',btts:'⚽'};
     const orderedSections=[...dashboardSectionKeys].filter(id=>id!=='btts').sort((a,b)=>sectionPlanOrder(a)-sectionPlanOrder(b)||Number(dashboardSectionConfig(a).dashboard_order||99)-Number(dashboardSectionConfig(b).dashboard_order||99));
     const primaryNav=[['predictions','Prehľad','⌂'],...orderedSections.map(id=>[id,dashboardSectionConfig(id).label||id,navIcons[id]||'•'])];
@@ -851,6 +867,7 @@
   function saveCookieConsent(value){try{localStorage.setItem(cookieConsentKey,value);}catch{}renderCookieConsent(false);}
   function renderCookieConsent(force=false){
     const host=$('cookieConsent');if(!host)return;
+    if(state.route==='admin'){host.hidden=true;return;}
     const copy=state.siteContent?.cookie_banner?.[contentLocale?.()||locale]||state.siteContent?.cookie_banner?.sk||{};
     const saved=cookieConsentValue();
     host.hidden=Boolean(saved)&&!force;
@@ -1784,7 +1801,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq.css?v=6860"><link rel="stylesheet" href="/redesign-680.css?v=6860"><link rel="stylesheet" href="/polish-681.css?v=6860"><link rel="stylesheet" href="/polish-683.css?v=6860"><link rel="stylesheet" href="/polish-684.css?v=6860"><link rel="stylesheet" href="/polish-685.css?v=6860"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq.css?v=6864"><link rel="stylesheet" href="/redesign-680.css?v=6864"><link rel="stylesheet" href="/polish-681.css?v=6864"><link rel="stylesheet" href="/polish-683.css?v=6864"><link rel="stylesheet" href="/polish-684.css?v=6864"><link rel="stylesheet" href="/polish-685.css?v=6864"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     const row=rowOverride||m?.raw||m;
@@ -1853,7 +1870,7 @@
     };
   }
 
-  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; document.body.classList.toggle('blinq-home',route==='predictions'); document.body.classList.toggle('blinq-admin',route==='admin'); document.body.classList.toggle('blinq-route',route!=='predictions'&&route!=='admin'); const section=dashboardSectionKeys.includes(route)?dashboardSectionConfig(route):null; if(section&&route!=='predictions'&&elementAccess(section.sidebar_element)!=='active'&&state.route!=='admin'){showUpgradePrompt(firstUnlockPlan(route,0,true),section.label||route);route='predictions';} if(route==='admin') state.previewPlan=null; const routeChanged=state.route!==route;state.route=route;if(routeChanged)state.page=0;const meta=routeMeta[route]; const overview=route==='predictions'; const routeHeading=$('routeHeading'); if(routeHeading) routeHeading.hidden=overview; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDailyHub();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push&&location.hash!==`#${route}`) history.pushState(null,'',`#${route}`); window.BlinqUI.routeChanged(route,push); updateLanguageLinks(); document.title=`${meta[1]} · BlinQ`; if(route!=='admin')translatePublicDom(document.body); }
+  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; document.body.classList.toggle('blinq-home',route==='predictions'); document.body.classList.toggle('blinq-admin',route==='admin'); document.body.classList.toggle('blinq-route',route!=='predictions'&&route!=='admin'); const section=dashboardSectionKeys.includes(route)?dashboardSectionConfig(route):null; if(section&&route!=='predictions'&&elementAccess(section.sidebar_element)!=='active'&&state.route!=='admin'){showUpgradePrompt(firstUnlockPlan(route,0,true),section.label||route);route='predictions';} if(route==='admin') state.previewPlan=null; const routeChanged=state.route!==route;state.route=route;renderCookieConsent(false);if(routeChanged)state.page=0;const meta=routeMeta[route]; const overview=route==='predictions'; const routeHeading=$('routeHeading'); if(routeHeading) routeHeading.hidden=overview; $('pageEyebrow').textContent=meta[0]; $('pageTitle').textContent=meta[1]; $('pageSubtitle').textContent=meta[2]; const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDailyHub();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push&&location.hash!==`#${route}`) history.pushState(null,'',`#${route}`); window.BlinqUI.routeChanged(route,push); updateLanguageLinks(); document.title=`${meta[1]} · BlinQ`; if(route!=='admin')translatePublicDom(document.body); }
 
   function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
   function issuedMarketPublications(row){
@@ -1972,8 +1989,8 @@
   }
   function planTermLabel(planId){
     const plan=state.ui?.plans?.[planId]||{};
-    if(plan.lifetime)return 'Unlimited / lifetime';
-    const days=Number(plan.duration_days); return Number.isFinite(days)&&days>0?`${days} days`:'Manual expiration';
+    if(plan.lifetime)return 'Doživotne';
+    const days=Number(plan.duration_days); return Number.isFinite(days)&&days>0?`${days} dní`:'Vlastná platnosť';
   }
   function accessSelect(id, plan){
     const selected=elementAccess(id,plan);
@@ -2151,9 +2168,42 @@
   function renderAdminLayout(){
     const copyOptions=accessContexts.filter(id=>id!==state.adminPlan).map(id=>`<option value="${id}">${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</option>`).join('');
     const ordered=orderedDashboardKeys(state.adminPlan);
-    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>DENNÁ PONUKA</small><h2>Kategórie, predikcie a prístupy</h2><p>Tu zapínaš a vypínaš kategórie na hlavnom paneli a potom nastavíš, koľko z nich vidí ROOKIE / PRO / ELITE / LEGEND / GOAT.</p></div><button class="btn btn-ghost" type="button" data-admin-action="preview">Náhľad ako ${escapeHtml(accessLabel(state.adminPlan))}</button></div><div class="admin-level-picker"><span>Upraviť pravidlá pre</span>${adminLevelChips(state.adminPlan,'admin-plan-chip',true)}</div><div class="admin-copy-strip"><label>Skopírovať túto úroveň z<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Skopírovať všetky pravidlá → ${escapeHtml(accessLabel(state.adminPlan))}</button><small>Skopíruje prístupy, počty predikcií, poradie, rozmazanie a oprávnenia bannerov.</small></div><div class="admin-daily-hub-settings"><div class="admin-subsection-heading"><div><strong>Prístupy k denným predikciám</strong><span>Jeden panel pre celý dashboard. Nastav počet dostupných riadkov od vrchu, blur zvyšku, možnosť otvoriť celú ponuku a prípadne tab úplne vypni.</span></div></div><div class="admin-hub-global-note"><b>${escapeHtml(accessLabel(state.adminPlan))}</b><span>Domovská stránka štandardne zobrazí prvých 10 pozícií. Ak má level povolené „Celá ponuka“, používateľ si otvorí celý aktuálny zoznam bez zmeny stránky.</span></div><div class="admin-daily-hub-grid">${['daily','top','value','ace','games','doubles'].map(tab=>{const hub=dailyHubConfig(),tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{},globalOn=tc.enabled!==false;return `<article class="admin-hub-tab-card${globalOn?'':' is-global-off'}" data-admin-hub-tab-card="${tab}"><div class="admin-hub-tab-head"><strong>${escapeHtml(dailyHubTabLabel(tab))}</strong><small>${globalOn?'LIVE':'VYPNUTÉ'}</small></div><label class="admin-toggle-line admin-global-category-toggle"><input type="checkbox" data-admin-hub-global-field="enabled" data-admin-hub-tab="${tab}" ${globalOn?'checked':''}><span>Kategória globálne zapnutá</span></label><div class="admin-level-rule-caption">Pravidlá pre <b>${escapeHtml(accessLabel(state.adminPlan))}</b></div><label class="admin-toggle-line"><input type="checkbox" data-admin-hub-field="tab_enabled" data-admin-hub-tab="${tab}" ${rule.tab_enabled!==false?'checked':''}><span>Zobraziť pre tento level</span></label><label><span>Ostré riadky od vrchu</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}">${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${String(rule.visible_rows).toUpperCase()===String(v).toUpperCase()?' selected':''}>${v}</option>`).join('')}</select></label><label class="admin-toggle-line"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''}><span>Rozmazať zvyšok</span></label><label class="admin-toggle-line"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''}><span>Celá ponuka</span></label></article>`}).join('')}</div></div><div class="admin-subsection-heading"><div><strong>Sekcie predikcií na dashboarde</strong><span>Použi rýchle nastavenie alebo detailne nastav počet viditeľných predikcií, poradie a rozmazanie.</span></div></div><div class="admin-section-list">${ordered.map(renderAdminSectionCard).join('')}</div><div class="admin-subsection-heading"><div><strong>Ďalšie stránky</strong><span>OTVORENÉ = dostupné, VIDITEĽNÉ · ZAMKNUTÉ = zobrazené, ale uzamknuté, SKRYTÉ = pre danú úroveň sa nezobrazia.</span></div></div><div class="admin-section-list admin-page-list">${['results','btts'].map(renderAdminPageCard).join('')}</div></section>`;
+    const levelLabel=accessLabel(state.adminPlan);
+    const hub=dailyHubConfig();
+    const rows=['daily','top','value','ace','games','doubles'].map(tab=>{
+      const tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{},globalOn=tc.enabled!==false,levelOn=rule.tab_enabled!==false;
+      const visible=String(rule.visible_rows??0).toUpperCase();
+      return `<div class="admin-daily-matrix-row${globalOn?'':' is-global-off'}${levelOn?'':' is-level-off'}" data-admin-hub-tab-card="${tab}">
+        <div class="admin-daily-category"><strong>${escapeHtml(dailyHubTabLabel(tab))}</strong><small>${globalOn?'Na webe':'Globálne vypnuté'}</small></div>
+        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-global-field="enabled" data-admin-hub-tab="${tab}" ${globalOn?'checked':''}><span>Na webe</span></label>
+        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="tab_enabled" data-admin-hub-tab="${tab}" ${levelOn?'checked':''}><span>Pre ${escapeHtml(levelLabel)}</span></label>
+        <label class="admin-daily-row-count"><span>Riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||!levelOn?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label>
+        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||!levelOn?'disabled':''}><span>Zamknúť zvyšok</span></label>
+        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||!levelOn?'disabled':''}><span>Celá ponuka</span></label>
+      </div>`;
+    }).join('');
+    return `<section class="admin-ux-section admin-daily-settings-v687">
+      <div class="admin-admin-guide">
+        <div><span>1</span><strong>Vyber úroveň účtu</strong><small>Všetky pravidlá nižšie upravuješ iba pre zvolený level</small></div>
+        <div><span>2</span><strong>Nastav dennú ponuku</strong><small>Urči, ktoré karty vidí a koľko riadkov má odomknutých</small></div>
+        <div><span>3</span><strong>Publikuj zmeny</strong><small>Až tlačidlo Publikovať prenesie konfiguráciu na live web</small></div>
+      </div>
+      <div class="admin-level-focus-card">
+        <div><small>UPRAVUJEŠ PRÍSTUP PRE</small><strong>${escapeHtml(levelLabel)}</strong><span>Najprv vyber level, potom nastav jeho pravidlá. Globálne vypnutie kategórie ju skryje všetkým.</span></div>
+        ${adminLevelChips(state.adminPlan,'admin-plan-chip',true)}
+      </div>
+      <div class="admin-daily-preset-bar"><div><strong>Rýchle nastavenie pre ${escapeHtml(levelLabel)}</strong><span>Voliteľné. Prepíše iba pravidlá dennej ponuky pre tento level, nie globálne zapnutie kategórií.</span></div><div><button type="button" data-admin-daily-preset="full">Plný prístup</button><button type="button" data-admin-daily-preset="preview3">3 riadky</button><button type="button" data-admin-daily-preset="teaser1">1 riadok</button><button type="button" data-admin-daily-preset="hidden">Skryť všetko</button></div></div>
+      <div class="admin-daily-matrix-card">
+        <header><div><small>DENNÁ PONUKA</small><h3>Čo uvidí ${escapeHtml(levelLabel)}</h3><p>Domovská stránka drží maximálne 10 pozícií. „VŠETKY“ odomkne všetky aktuálne riadky. „Celá ponuka“ dovolí otvoriť rozšírený zoznam.</p></div><button class="btn btn-ghost" type="button" data-admin-action="preview">Náhľad ako ${escapeHtml(levelLabel)}</button></header>
+        <div class="admin-daily-matrix-head"><span>Kategória</span><span>Globálne</span><span>Level</span><span>Viditeľné</span><span>Ďalšie riadky</span><span>Rozšírenie</span></div>
+        <div class="admin-daily-matrix">${rows}</div>
+        <div class="admin-admin-legend"><span><i class="is-global"></i><b>Na webe</b> = kategória existuje pre používateľov</span><span><i class="is-level"></i><b>Pre level</b> = zvolená úroveň ju vidí</span><span><i class="is-lock"></i><b>Zamknúť zvyšok</b> = ďalšie riadky zostanú ako premium teaser</span></div>
+      </div>
+      <details class="admin-compact-tools"><summary>Kopírovať nastavenie z iného levelu</summary><div class="admin-copy-strip"><label>Zdrojová úroveň<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Skopírovať všetky pravidlá → ${escapeHtml(levelLabel)}</button><small>Skopíruje prístupy, počty predikcií, poradie, rozmazanie a oprávnenia bannerov.</small></div></details>
+      <details class="admin-layout-advanced"><summary><span><strong>Rozšírené sekcie dashboardu</strong><small>TOP / Short Odds / Value / Esá / Sety a hry / Štvorhra – poradie, navigácia a limity</small></span><b>Rozbaliť</b></summary><div class="admin-layout-advanced-body"><div class="admin-section-list">${ordered.map(renderAdminSectionCard).join('')}</div></div></details>
+      <details class="admin-layout-advanced"><summary><span><strong>Ďalšie stránky</strong><small>Prístup k Results a ďalším samostatným stránkam</small></span><b>Rozbaliť</b></summary><div class="admin-layout-advanced-body"><div class="admin-section-list admin-page-list">${['results','btts'].map(renderAdminPageCard).join('')}</div></div></details>
+    </section>`;
   }
-
 
   function simpleBannerAudienceRows(id,item){
     item.click_access=item.click_access||{};
@@ -2259,11 +2309,11 @@
   }
   function adminTgActionLabel(user){
     const action=adminTgAction(user);
-    const labels={add:'ADD',remove:'REMOVE',ok:'OK',none:'—'};
+    const labels={add:'PRIDAŤ',remove:'ODSTRÁNIŤ',ok:'OK',none:'—'};
     return `<span class="admin-tg-action is-${action}">${labels[action]}</span>`;
   }
   function adminUserFilterState(){
-    const defaults={quick:'all',q:'',plan:'all',status:'all',tg:'all',dateField:'created_at',dateFrom:'',dateTo:'',sort:'telegram'};
+    const defaults={q:'',plan:'all',status:'all',sort:'email'};
     state.adminUserFilters={...defaults,...(state.adminUserFilters||{})};
     return state.adminUserFilters;
   }
@@ -2273,21 +2323,6 @@
     if(q&&!search.includes(q))return false;
     if(f.plan!=='all'&&plan!==f.plan)return false;
     if(f.status!=='all'&&status!==f.status)return false;
-    const action=adminTgAction(user),member=Boolean(user?.tg_private_member),eligible=adminTgEligible(user);
-    if(f.tg==='in'&&!member)return false;
-    if(f.tg==='out'&&member)return false;
-    if(f.tg==='eligible'&&!eligible)return false;
-    if(f.tg==='add'&&action!=='add')return false;
-    if(f.tg==='remove'&&action!=='remove')return false;
-    if(f.quick==='active'&&!['active','lifetime','trial'].includes(status))return false;
-    if(f.quick==='expired'&&status!=='expired')return false;
-    if(f.quick==='eliteplus'&&!eligible)return false;
-    if(f.quick==='tg-add'&&action!=='add')return false;
-    if(f.quick==='tg-remove'&&action!=='remove')return false;
-    if(f.quick==='no-tg'&&nick)return false;
-    const dateValue=adminUserDateMs(user?.[f.dateField]);
-    if(f.dateFrom){const from=new Date(`${f.dateFrom}T00:00:00`).getTime();if(!dateValue||dateValue<from)return false;}
-    if(f.dateTo){const to=new Date(`${f.dateTo}T23:59:59.999`).getTime();if(!dateValue||dateValue>to)return false;}
     return true;
   }
   function adminSortedUsers(users){
@@ -2295,10 +2330,9 @@
     const text=(u,k)=>String(u?.[k]||'').toLowerCase();
     list.sort((a,b)=>{
       if(sort==='telegram')return text(a,'telegram_nick').localeCompare(text(b,'telegram_nick'))||text(a,'email').localeCompare(text(b,'email'));
-      if(sort==='level')return membershipHierarchy.indexOf(String(b?.plan||''))-membershipHierarchy.indexOf(String(a?.plan||''))||text(a,'telegram_nick').localeCompare(text(b,'telegram_nick'));
+      if(sort==='level')return membershipHierarchy.indexOf(String(b?.plan||''))-membershipHierarchy.indexOf(String(a?.plan||''))||text(a,'email').localeCompare(text(b,'email'));
       if(sort==='expiry'){const av=adminUserDateMs(a?.expires_at)??Number.MAX_SAFE_INTEGER,bv=adminUserDateMs(b?.expires_at)??Number.MAX_SAFE_INTEGER;return av-bv;}
-      if(sort==='created'){return (adminUserDateMs(b?.created_at)||0)-(adminUserDateMs(a?.created_at)||0);}
-      if(sort==='last-login'){return (adminUserDateMs(b?.last_sign_in_at)||0)-(adminUserDateMs(a?.last_sign_in_at)||0);}
+      if(sort==='last-login')return (adminUserDateMs(b?.last_sign_in_at)||0)-(adminUserDateMs(a?.last_sign_in_at)||0);
       return text(a,'email').localeCompare(text(b,'email'));
     });
     return list;
@@ -2329,20 +2363,40 @@
     return `<div class="admin-form-section admin-account-history"><div class="admin-form-section-title compact"><strong>História BlinQ účtu</strong><button class="btn btn-ghost" type="button" data-admin-action="refresh-user-audit">Obnoviť</button></div>${entry.loading?'<div class="admin-payment-empty">Načítavam históriu účtu…</div>':entry.error?`<div class="admin-payment-empty">${escapeHtml(entry.error)}</div>`:rows||'<div class="admin-payment-empty">Zatiaľ bez zaznamenaných zmien účtu.</div>'}</div>`;
   }
   function renderAdminUserEditor(user){
-    if(!user)return '<div class="admin-user-empty">Vyber účet, ktorému chceš upraviť prístup.</div>';
-    const self=String(user.id)===String(state.feed?.account?.id),selectedPlan=user.plan&&!['expired','admin'].includes(user.plan)?user.plan:'',eligible=adminTgEligible(user),action=adminTgAction(user),status=String(user.status||'expired');
-    const identity=[['UID',user.id||'—'],['E-mail',user.email||'—'],['Telegram',user.telegram_nick||'—'],['Vytvorený',fmtDate(user.created_at)],['Posledné prihlásenie',fmtDate(user.last_sign_in_at)],['E-mail',user.email_verified?'OVERENÝ':'NEOVERENÝ']];
-    return `<form id="adminUserForm" class="admin-user-editor admin-user-editor-v6522"><div class="admin-user-editor-head"><span class="avatar admin-tg-avatar">${adminTelegramIcon()}</span><div><small>${escapeHtml(user.id)}</small><h3>${user.telegram_nick?escapeHtml(user.telegram_nick):escapeHtml(user.email||'Používateľ')}</h3><p>${escapeHtml(user.email||'')}</p></div><span class="admin-current-access">${escapeHtml(user.plan_label||user.plan||'BEZ PLÁNU')} · ${escapeHtml(status)}</span></div><div class="admin-identity-grid">${identity.map(([k,v],i)=>`<div${i===0?' class="is-uid"':''}><small>${escapeHtml(k)}</small><strong>${escapeHtml(v)}</strong></div>`).join('')}</div><div class="admin-form-section"><div class="admin-form-section-title"><strong>Členský prístup</strong><span>Vyber úroveň a platnosť. TG Private je oprávnené pre aktívny ELITE, LEGEND a GOAT.</span></div><div class="admin-form-grid"><label>Plán<select id="adminUserPlan">${planSelectOptions(selectedPlan,true)}</select><small class="field-hint" id="adminPlanTerm">${escapeHtml(selectedPlan?planTermLabel(selectedPlan):'Bez plateného plánu')}</small></label><label>Stav<select id="adminUserStatus">${statusSelectOptions(status)}</select></label><label class="span-2">Platnosť do<input id="adminUserExpires" type="datetime-local" value="${escapeHtml(userDateValue(user.expires_at))}" ${status==='lifetime'?'disabled':''}></label></div><div class="admin-account-plan-shortcuts">${membershipHierarchy.filter(id=>state.ui?.plans?.[id]?.enabled!==false).map(id=>`<button type="button" class="admin-plan-shortcut${id==='goat'?' top-tier':''}" data-admin-user-plan="${escapeHtml(id)}"><b>${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</b><small>${escapeHtml(planTermLabel(id))}${id==='goat'?' · TOP':''}</small></button>`).join('')}</div><div class="admin-expiry-shortcuts"><span>Rýchla platnosť</span><button type="button" data-admin-expiry-days="30">+30 dní</button><button type="button" data-admin-expiry-days="90">+90 dní</button><button type="button" data-admin-expiry-days="365">+1 rok</button><button type="button" data-admin-expiry-days="0">Bez expirácie</button></div></div><div class="admin-form-section admin-tg-private-editor"><div class="admin-form-section-title"><strong>${adminTelegramIcon()} TG Private</strong><span>Manuálna evidencia členstva v súkromnej Telegram skupine. Telegram účet sa automaticky neoveruje.</span></div><div class="admin-tg-private-status"><div><small>Eligibility</small><strong>${eligible?'ELITE+ ACTIVE':'NOT ELIGIBLE'}</strong></div><div><small>Odporúčaná akcia</small>${adminTgActionLabel(user)}</div><label class="admin-tg-member-toggle"><input id="adminTgPrivateMember" type="checkbox" ${user.tg_private_member?'checked':''}><span>Aktuálne je v TG Private</span></label></div>${action==='remove'?'<div class="admin-tg-warning is-remove">Používateľ už nemá ELITE+ prístup, ale je označený ako člen TG Private. Manuálne ho odstráň zo skupiny a odškrtni stav.</div>':action==='add'?'<div class="admin-tg-warning is-add">Používateľ má aktívny ELITE+ prístup, ale ešte nie je označený v TG Private.</div>':''}<label class="admin-wide-field">Interná poznámka<textarea id="adminUserNote" maxlength="500" rows="3" placeholder="napr. TG spárovaný, platba manuálne, poznámka k VIP…">${escapeHtml(user.admin_note||'')}</textarea></label></div><div class="admin-form-section admin-payment-match"><div class="admin-form-section-title"><strong>Referencia poslednej platby</strong><span>Voliteľné rýchle pole na filtrovanie účtov; kompletná história je vedená nižšie.</span></div><div class="admin-form-grid"><label class="span-2">Referencia platby<input id="adminPaymentReference" maxlength="120" value="${escapeHtml(user.payment_reference||'')}" placeholder="ID transakcie, VS, poznámka alebo číslo objednávky"></label></div></div>${renderAdminPaymentLedger(user)}${renderAdminUserHistory(user)}<details class="admin-advanced"><summary>Pokročilé · rola účtu</summary><div class="admin-form-grid"><label>Rola<select id="adminUserRole" ${self?'disabled':''}><option value="user"${user.role!=='admin'?' selected':''}>USER</option><option value="admin"${user.role==='admin'?' selected':''}>ADMIN</option></select></label></div></details><div class="admin-user-savebar"><div><span>${adminTelegramLabel(user)}</span><span>Vytvorený ${escapeHtml(fmtDate(user.created_at))}</span><span>Posledné prihlásenie ${escapeHtml(fmtDate(user.last_sign_in_at))}</span></div><p id="adminUserMessage" class="form-message"></p><button class="btn btn-primary" type="submit">Použiť zmeny účtu</button></div>${self?'<small class="admin-muted admin-self-note">Tvoja vlastná ADMIN rola je chránená pred náhodným odstránením.</small>':''}</form>`;
+    if(!user)return `<div class="admin-user-empty admin-user-empty-v687"><strong>Vyber používateľa</strong><span>Klikni na účet vľavo. Potom môžeš upraviť e-mail, Telegram nickname, level a platnosť alebo mu poslať obnovu hesla.</span></div>`;
+    const self=String(user.id)===String(state.feed?.account?.id),isAdmin=String(user.role||'').toLowerCase()==='admin'||String(user.plan||'').toLowerCase()==='admin',selectedPlan=!isAdmin&&user.plan&&!['expired','admin'].includes(user.plan)?String(user.plan):'',status=String(user.status||'expired').toLowerCase();
+    const enabledPlans=membershipHierarchy.filter(id=>state.ui?.plans?.[id]?.enabled!==false);
+    const planButtons=`<button type="button" class="admin-simple-plan reset${!selectedPlan?' active':''}" data-admin-user-plan=""><b>BEZ LEVELU</b><small>bez plateného prístupu</small></button>`+enabledPlans.map(id=>{const active=id===selectedPlan;return `<button type="button" class="admin-simple-plan${active?' active':''}${id==='goat'?' top-tier':''}" data-admin-user-plan="${escapeHtml(id)}"><b>${escapeHtml(String(state.ui?.plans?.[id]?.label||id.toUpperCase()).replace(/^BlinQ\s+/i,''))}</b><small>${escapeHtml(planTermLabel(id))}</small></button>`;}).join('');
+    const currentExpiry=status==='lifetime'?'Doživotne':user.expires_at?`${fmtDate(user.expires_at)} · ${fmtTime(user.expires_at)}`:'Bez platnosti';
+    return `<form id="adminUserForm" class="admin-user-editor admin-user-editor-simple">
+      <div class="admin-user-simple-head"><div><small>UPRAVIŤ ÚČET</small><h3>${escapeHtml(user.telegram_nick||user.email||'Používateľ')}</h3><p>${escapeHtml(user.email||'')}</p></div><span class="admin-current-access">${escapeHtml(user.plan_label||user.plan||'Bez plánu')} · ${escapeHtml(status)}</span></div>
+      <section class="admin-simple-card"><header><div><span>01</span><div><strong>Údaje účtu</strong><small>Ak si používateľ nevie údaje zmeniť sám, oprav ich tu</small></div></div></header><div class="admin-simple-fields">
+        <label>E-mail<input id="adminUserEmail" type="email" required maxlength="254" value="${escapeHtml(user.email||'')}"></label>
+        <label>Telegram nickname<div class="admin-input-with-icon">${adminTelegramIcon()}<input id="adminUserTelegram" maxlength="33" value="${escapeHtml(user.telegram_nick||'')}" placeholder="@nickname"></div></label>
+      </div><div class="admin-user-meta-line"><span>E-mail ${user.email_verified?'overený':'neoverený'}</span><span>Vytvorený ${escapeHtml(fmtDate(user.created_at))}</span><span>Posledné prihlásenie ${escapeHtml(fmtDate(user.last_sign_in_at))}</span></div>
+      <div class="admin-password-reset-row"><div><strong>Obnova hesla</strong><small>Firebase pošle používateľovi e-mail na obnovu hesla</small></div><button class="btn btn-ghost" type="button" data-admin-action="reset-user-password">Poslať link na obnovu hesla</button></div></section>
+      ${isAdmin?`<section class="admin-simple-card admin-admin-account-note"><header><div><span>02</span><div><strong>Admin účet</strong><small>Tento interný účet zostáva ADMIN a nepoužíva členský level ani expiráciu</small></div></div></header></section>`:`<section class="admin-simple-card"><header><div><span>02</span><div><strong>Level a platnosť</strong><small>Vyber level. Predvolenú dĺžku môžeš použiť od dnes alebo pridať k zostávajúcej platnosti</small></div></div><b>Teraz: ${escapeHtml(currentExpiry)}</b></header>
+        <input id="adminUserPlan" type="hidden" value="${escapeHtml(selectedPlan)}"><div class="admin-simple-plans">${planButtons}</div>
+        <div class="admin-simple-expiry"><label>Platnosť do<input id="adminUserExpires" type="datetime-local" value="${escapeHtml(userDateValue(user.expires_at))}" ${selectedPlan==='goat'?'disabled':''}></label><div class="admin-term-actions"><button type="button" data-admin-action="apply-default-term">Použiť predvolenú dĺžku</button><button type="button" data-admin-action="extend-default-term">Predĺžiť o predvolenú dĺžku</button></div></div>
+        <div class="admin-expiry-shortcuts admin-expiry-shortcuts-simple"><span>Rýchlo pridať</span><button type="button" data-admin-expiry-days="30">+30 dní</button><button type="button" data-admin-expiry-days="90">+90 dní</button><button type="button" data-admin-expiry-days="180">+180 dní</button><button type="button" data-admin-expiry-days="365">+365 dní</button></div>
+      </section>`}
+      <div class="admin-user-savebar admin-user-savebar-simple"><p id="adminUserMessage" class="form-message"></p><button class="btn btn-primary" type="submit">Uložiť účet</button></div>
+      ${self?'':`<details class="admin-danger-zone"><summary>Nebezpečná zóna</summary><div><div><strong>Zmazať účet</strong><small>Natrvalo odstráni Firebase účet a jeho profilové údaje</small></div><button type="button" data-admin-action="delete-user">Zmazať účet</button></div></details>`}
+    </form>`;
   }
   function renderAdminAccounts(){
-    const users=Array.isArray(state.adminUsers)?state.adminUsers:[],f=adminUserFilterState(),sorted=adminSortedUsers(users);
-    const countActive=users.filter(u=>['active','lifetime','trial'].includes(String(u.status||'').toLowerCase())).length,countExpired=users.filter(u=>String(u.status||'').toLowerCase()==='expired').length,countElite=users.filter(adminTgEligible).length,countAdd=users.filter(u=>adminTgAction(u)==='add').length,countRemove=users.filter(u=>adminTgAction(u)==='remove').length;
-    const quick=[['all','Všetci',users.length],['active','Aktívne',countActive],['expired','Expirované',countExpired],['eliteplus','ELITE+ aktívne',countElite],['tg-add','TG ADD',countAdd],['tg-remove','TG REMOVE',countRemove],['no-tg','Bez TG',users.filter(u=>!String(u.telegram_nick||'').trim()).length]];
-    if(state.adminUsersError&&!state.adminUsersLoading&&!users.length)return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>ČLENOVIA</small><h2>Účty</h2><p>Levely, expirácie a Telegram spravuješ na jednom mieste.</p></div></div><div class="admin-accounts-unavailable"><span class="admin-accounts-unavailable-icon">!</span><div><strong>Účty sa nenačítali — nejde o nulový počet účtov.</strong><p>${escapeHtml(state.adminUsersError)}</p><small>Otvor Diagnostiku. Ak sú Firebase Admin credentials v poriadku, zoznam účtov funguje aj bez úložiska bannerov.</small></div><button class="btn btn-ghost" type="button" data-admin-action="diagnostics">Diagnostika</button></div></section>`;
-    const rows=state.adminUsersLoading?'<div class="state-card">Načítavam účty…</div>':sorted.length?sorted.map(user=>`<button type="button" class="admin-user-table-row${state.adminSelectedUser?.id===user.id?' selected':''}${adminTgAction(user)==='remove'?' needs-remove':adminTgAction(user)==='add'?' needs-add':''}" data-admin-user="${escapeHtml(user.id)}"><span class="admin-user-tg">${adminTelegramLabel(user)}</span><span class="admin-user-email">${escapeHtml(user.email||'—')}</span><b class="admin-user-plan">${escapeHtml(user.plan_label||user.plan||'—')}</b><em class="admin-user-status is-${escapeHtml(String(user.status||'').toLowerCase())}">${escapeHtml(user.status||'—')}</em><span class="admin-user-expiry">${escapeHtml(user.status==='lifetime'?'Doživotne':fmtDate(user.expires_at))}</span><span class="admin-user-payment ${user.payment_reference?'is-matched':''}">${user.payment_reference?'SPÁROVANÁ':'—'}</span><span class="admin-user-tg-member">${user.tg_private_member?'V SKUPINE':'MIMO'}</span>${adminTgActionLabel(user)}</button>`).join(''):'<div class="admin-user-empty">Nie sú načítané žiadne účty. Správa účtov momentálne nie je dostupná.</div>';
+    const users=Array.isArray(state.adminUsers)?state.adminUsers:[],f=adminUserFilterState(),sorted=adminSortedUsers(users),filtered=adminFilteredUsers();
+    const countActive=users.filter(u=>['active','lifetime','trial'].includes(String(u.status||'').toLowerCase())).length,countSuspended=users.filter(u=>String(u.status||'').toLowerCase()==='suspended').length;
+    if(state.adminUsersError&&!state.adminUsersLoading&&!users.length)return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>POUŽÍVATELIA</small><h2>Správa účtov</h2><p>Jednoduchá správa používateľov BlinQ</p></div></div><div class="admin-accounts-unavailable"><span class="admin-accounts-unavailable-icon">!</span><div><strong>Účty sa nenačítali — nejde o nulový počet účtov.</strong><p>${escapeHtml(state.adminUsersError)}</p></div><button class="btn btn-ghost" type="button" data-admin-action="diagnostics">Diagnostika</button></div></section>`;
+    const rows=state.adminUsersLoading?'<div class="state-card">Načítavam účty…</div>':sorted.length?sorted.map(user=>`<button type="button" class="admin-simple-user-row${state.adminSelectedUser?.id===user.id?' selected':''}" data-admin-user="${escapeHtml(user.id)}"><span class="admin-simple-user-main"><b>${escapeHtml(user.telegram_nick||'Bez TG nicku')}</b><small>${escapeHtml(user.email||'—')}</small></span><span class="admin-simple-level is-${escapeHtml(String(user.plan||'expired'))}">${escapeHtml(String(user.plan_label||user.plan||'—').replace(/^BlinQ\s+/i,''))}</span><span class="admin-simple-expire">${escapeHtml(user.status==='lifetime'?'Doživotne':fmtDate(user.expires_at))}</span><span class="admin-simple-state is-${escapeHtml(String(user.status||'expired').toLowerCase())}">${escapeHtml(user.status||'—')}</span><span class="admin-simple-edit">Upraviť →</span></button>`).join(''):'<div class="admin-user-empty">Nie sú načítané žiadne účty</div>';
     const levelOptions=['all',...membershipHierarchy,'admin'].map(v=>`<option value="${v}"${f.plan===v?' selected':''}>${v==='all'?'Všetky levely':v.toUpperCase()}</option>`).join('');
     const statusOptions=['all','active','trial','expired','lifetime','suspended'].map(v=>`<option value="${v}"${f.status===v?' selected':''}>${v==='all'?'Všetky stavy':v.toUpperCase()}</option>`).join('');
-    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>ČLENOVIA</small><h2>Účty</h2><p>Filtrovanie pre prístupy, expirácie a manuálnu správu TG Private. ELITE, LEGEND a GOAT s aktívnym prístupom sú označení ako eligible.</p></div></div>${state.adminUsersError?`<div class="admin-note admin-note-error"><strong>Správa účtov nie je dostupná</strong><span>${escapeHtml(state.adminUsersError)}</span></div>`:''}${state.adminUsersWarning?`<div class="admin-note admin-note-warning"><strong>Účty sú dostupné v fallback režime</strong><span>${escapeHtml(state.adminUsersWarning)}</span></div>`:''}<div class="admin-account-stats"><div><small>ÚČTOV</small><strong>${users.length}</strong></div><div><small>AKTÍVNE</small><strong>${countActive}</strong></div><div><small>EXPIROVANÉ</small><strong>${countExpired}</strong></div><div><small>ELITE+ AKTÍVNE</small><strong>${countElite}</strong></div><div class="is-add"><small>TG ADD</small><strong>${countAdd}</strong></div><div class="is-remove"><small>TG REMOVE</small><strong>${countRemove}</strong></div></div><div class="admin-account-quickfilters">${quick.map(([id,label,count])=>`<button type="button" data-admin-user-quick="${id}" class="${f.quick===id?'active':''}">${escapeHtml(label)} <b>${count}</b></button>`).join('')}</div><div class="admin-accounts-toolbar admin-accounts-toolbar-v669"><label class="search-box"><span class="admin-search-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5"></circle><path d="m12.2 12.2 4 4"></path></svg></span><input id="adminUserSearch" type="search" value="${escapeHtml(f.q)}" placeholder="E-mail, TG nickname alebo UID…"></label><label>Level<select id="adminUserLevelFilter">${levelOptions}</select></label><label>Status<select id="adminUserStatusFilter">${statusOptions}</select></label><label>TG Private<select id="adminUserTgFilter"><option value="all"${f.tg==='all'?' selected':''}>Všetci</option><option value="eligible"${f.tg==='eligible'?' selected':''}>Má nárok</option><option value="in"${f.tg==='in'?' selected':''}>V skupine</option><option value="out"${f.tg==='out'?' selected':''}>Mimo skupiny</option><option value="add"${f.tg==='add'?' selected':''}>Pridať</option><option value="remove"${f.tg==='remove'?' selected':''}>Odobrať</option></select></label><label>Zoradiť<select id="adminUserSort"><option value="telegram"${f.sort==='telegram'?' selected':''}>TG nickname</option><option value="level"${f.sort==='level'?' selected':''}>Level</option><option value="expiry"${f.sort==='expiry'?' selected':''}>Najbližšia expirácia</option><option value="created"${f.sort==='created'?' selected':''}>Najnovšie účty</option><option value="last-login"${f.sort==='last-login'?' selected':''}>Posledné prihlásenie</option><option value="email"${f.sort==='email'?' selected':''}>E-mail</option></select></label></div><div class="admin-account-datefilters"><label>Dátum podľa<select id="adminUserDateField"><option value="created_at"${f.dateField==='created_at'?' selected':''}>Vytvorenia</option><option value="expires_at"${f.dateField==='expires_at'?' selected':''}>Expirácie</option><option value="last_sign_in_at"${f.dateField==='last_sign_in_at'?' selected':''}>Posledného loginu</option></select></label><label>Od<input id="adminUserDateFrom" type="date" value="${escapeHtml(f.dateFrom)}"></label><label>Do<input id="adminUserDateTo" type="date" value="${escapeHtml(f.dateTo)}"></label><button class="btn btn-ghost" type="button" data-admin-action="reset-user-filters">Vymazať filtre</button><button class="btn btn-ghost" type="button" data-admin-action="copy-tg-nicks">${adminTelegramIcon()} Kopírovať filtrované TG nicky</button><button class="btn btn-ghost icon-text-btn" type="button" data-admin-action="refresh-users"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 6.2A6 6 0 1 0 16 12"></path><path d="M15.5 2.8v3.8h-3.8"></path></svg><span>Obnoviť</span></button><span class="admin-filtered-count">Zobrazených <b id="adminFilteredCount">${adminFilteredUsers().length}</b></span></div><div class="admin-user-table-head"><span>Telegram</span><span>E-mail</span><span>Level</span><span>Status</span><span>Expirácia</span><span>Platba</span><span>TG Private</span><span>Akcia</span></div><div class="admin-accounts-grid admin-accounts-grid-v669"><div class="admin-user-list admin-user-list-v669">${rows}</div>${renderAdminUserEditor(state.adminSelectedUser)}</div></section>`;
+    return `<section class="admin-ux-section admin-accounts-simple"><div class="admin-ux-heading"><div><small>POUŽÍVATELIA</small><h2>Správa účtov</h2><p>Pre 50–100 používateľov stačí tento jednoduchý workflow: nájdi účet → uprav údaje → priraď level a platnosť → ulož</p></div><button class="btn btn-ghost icon-text-btn" type="button" data-admin-action="refresh-users"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 6.2A6 6 0 1 0 16 12"></path><path d="M15.5 2.8v3.8h-3.8"></path></svg><span>Obnoviť</span></button></div>
+      ${state.adminUsersWarning?`<div class="admin-note admin-note-warning"><strong>Profilové úložisko je v náhradnom režime</strong><span>Levely fungujú cez Firebase. Niektoré profilové zmeny môžu čakať na dostupné úložisko.</span></div>`:''}
+      <div class="admin-simple-stats"><span><b>${users.length}</b> účtov</span><span><b>${countActive}</b> aktívnych</span>${countSuspended?`<span><b>${countSuspended}</b> pozastavených</span>`:''}</div>
+      <div class="admin-simple-toolbar"><label class="search-box"><span class="admin-search-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5"></circle><path d="m12.2 12.2 4 4"></path></svg></span><input id="adminUserSearch" type="search" value="${escapeHtml(f.q)}" placeholder="Hľadať e-mail, Telegram alebo UID"></label><label>Level<select id="adminUserLevelFilter">${levelOptions}</select></label><label>Stav<select id="adminUserStatusFilter">${statusOptions}</select></label><label>Zoradiť<select id="adminUserSort"><option value="email"${f.sort==='email'?' selected':''}>E-mail</option><option value="telegram"${f.sort==='telegram'?' selected':''}>Telegram</option><option value="level"${f.sort==='level'?' selected':''}>Level</option><option value="expiry"${f.sort==='expiry'?' selected':''}>Najbližšia expirácia</option><option value="last-login"${f.sort==='last-login'?' selected':''}>Posledné prihlásenie</option></select></label><span>Zobrazených <b id="adminFilteredCount">${filtered.length}</b></span></div>
+      <div class="admin-accounts-split"><div class="admin-simple-user-table"><div class="admin-simple-user-head"><span>Používateľ</span><span>Level</span><span>Platnosť</span><span>Stav</span><span></span></div><div class="admin-simple-user-list">${rows}</div></div><div class="admin-simple-user-editor-wrap">${renderAdminUserEditor(state.adminSelectedUser)}</div></div>
+    </section>`;
   }
   function renderAdminCampaigns(){
     state.ui.advertisers=state.ui.advertisers||{};state.ui.campaigns=state.ui.campaigns||{};
@@ -2454,37 +2508,60 @@
   function renderAdminPages(){
     const pages=state.siteContent?.pages?.sk||{};
     const ids=['how_blinq_works','methodology','model_data','faq','responsible_use','terms','privacy','cookies','support'];
-    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>WEB CONTENT</small><h2>Informačné a právne stránky</h2><p>Texty sú oddelené od HTML v <code>/web/config/site-content.json</code>. Tu vidíš, čo je pripravené na webe.</p></div></div><div class="admin-content-pages">${ids.map(id=>{const page=pages[id]||{};return `<article><div><small>${escapeHtml(id)}</small><strong>${escapeHtml(page.title||id)}</strong><span>${page.sections?.length||page.faq?.length||0} blokov</span></div><a class="btn btn-ghost" href="#${escapeHtml(id)}" data-route="${escapeHtml(id)}">Otvoriť stránku</a></article>`;}).join('')}</div><div class="admin-runtime-note is-warning"><strong>Pred ostrým spustením doplň prevádzkovateľa</strong><span>V site-content.json zostávajú placeholdery pre obchodné meno, IČO, sídlo a kontaktné e-maily. Obsah je pripravený na kontrolu, ale tieto identifikačné údaje musia byť reálne.</span></div></section>`;
+    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>WEB CONTENT</small><h2>Textové stránky</h2><p>Obsah je oddelený od HTML v <code>/web/config/site-content.json</code>. Táto sekcia je určená iba na kontrolu pripravených textov.</p></div></div><div class="admin-content-pages">${ids.map(id=>{const page=pages[id]||{};return `<article><div><small>${escapeHtml(id)}</small><strong>${escapeHtml(page.title||id)}</strong><span>${page.sections?.length||page.faq?.length||0} blokov</span></div><a class="btn btn-ghost" href="#${escapeHtml(id)}" data-route="${escapeHtml(id)}">Otvoriť stránku</a></article>`;}).join('')}</div></section>`;
   }
+  function renderAdminOverview(){
+    const d=state.adminDiagnostics||{},systemReady=Boolean(d.accounts_ready&&d.content_storage_ready);
+    return `<section class="admin-ux-section admin-overview-v687">
+      <div class="admin-overview-hero"><div><small>ZAČNI TU</small><h2>Čo chceš dnes upraviť?</h2><p>Admin je rozdelený podľa úloh. Nemusíš nastavovať všetko. Vyber iba oblasť, ktorú chceš zmeniť.</p></div><span class="admin-overview-health ${systemReady?'is-ok':''}"><i></i>${systemReady?'Systém pripravený':'Skontrolovať systém'}</span></div>
+      <div class="admin-overview-actions">
+        <button type="button" data-admin-tab="accounts"><span>01</span><div><strong>Používateľský účet</strong><small>Upraviť údaje, poslať obnovu hesla, zmeniť level alebo platnosť</small></div><b>Otvoriť</b></button>
+        <button type="button" data-admin-tab="layout"><span>02</span><div><strong>Denná ponuka</strong><small>Nastaviť, čo vidí ROOKIE / PRO / ELITE / LEGEND / GOAT a koľko riadkov je odomknutých</small></div><b>Otvoriť</b></button>
+        <button type="button" data-admin-tab="banners"><span>03</span><div><strong>Bannery a vizuálny obsah</strong><small>Kliknúť na pozíciu v mini náhľade webu a zmeniť obrázok, text, odkaz alebo cielenie</small></div><b>Otvoriť</b></button>
+        <button type="button" data-admin-tab="support"><span>04</span><div><strong>Support</strong><small>Prečítať požiadavky používateľov, pridať internú poznámku a označiť stav</small></div><b>Otvoriť</b></button>
+      </div>
+      <div class="admin-overview-storage"><article><span>UKLADÁ SA OKAMŽITE</span><strong>Používatelia · support</strong><p>Zmeny účtov a supportu sa po potvrdení aplikujú priamo. Nie je potrebné stláčať Publikovať.</p></article><article><span>VYŽADUJE PUBLIKOVANIE</span><strong>Denná ponuka · bannery · plány · kampane</strong><p>Najprv upravíš koncept. Až tlačidlo <b>Publikovať</b> vpravo hore prenesie zmenu na live web.</p></article></div>
+      <div class="admin-overview-checklist"><div><small>NAJČASTEJŠÍ POSTUP</small><strong>Úprava levelu používateľa</strong><p>Používatelia → nájdi účet → vyber plán a platnosť → Použiť zmeny účtu</p></div><div><small>NAJČASTEJŠÍ POSTUP</small><strong>Úprava dennej ponuky</strong><p>Denná ponuka → vyber level → nastav kategórie a počet riadkov → Publikovať</p></div><div><small>NAJČASTEJŠÍ POSTUP</small><strong>Výmena bannera</strong><p>Bannery → klikni na slot v náhľade → uprav obsah → Publikovať</p></div></div>
+      <button type="button" class="admin-overview-system-link" data-admin-tab="system"><span><i></i>Diagnostika a stav systému</span><b>Otvoriť System →</b></button>
+    </section>`;
+  }
+
   function renderAdminRoute(){
     const tabs=[
-      ['accounts','Používatelia','Účty · prístup · platby'],
+      ['overview','Prehľad','Začni tu'],
+      ['accounts','Používatelia','Level · platnosť'],
       ['support','Support','Požiadavky · poznámky'],
-      ['banners','Bannery','Sloty · obsah · cielenie'],
-      ['layout','Denná ponuka','Kategórie · predikcie'],
+      ['layout','Denná ponuka','Levely · riadky'],
+      ['banners','Bannery','Mapa slotov · obsah'],
       ['insights','Komunita','BlinQ Insights · správy'],
       ['plans','Plány','Levely · odkazy'],
       ['campaigns','Kampane','Reklamné kreatívy'],
+      ['pages','Obsah webu','Textové stránky'],
       ['analytics','Analytika','Zobrazenia · kliky'],
-      ['pages','Obsah','Stránky · legal · FAQ'],
-      ['audit','Audit','História zmien'],
       ['system','System','Health · feed · chyby'],
       ['performance','Model','Kvalita · výkon']
     ];
+    const groups=[
+      ['START',['overview']],
+      ['PREVÁDZKA',['accounts','support']],
+      ['OBSAH',['layout','banners','insights','plans','campaigns','pages']],
+      ['KONTROLA',['analytics','system','performance']]
+    ];
     const valid=tabs.map(row=>row[0]);
-    if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={layout:renderAdminLayout,banners:renderAdminBanners,campaigns:renderAdminCampaigns,plans:renderAdminPlans,accounts:renderAdminAccounts,insights:renderAdminInsights,analytics:renderAdminAnalytics,performance:renderAdminPerformance,support:renderAdminSupport,audit:renderAdminAudit,system:renderAdminSystem,pages:renderAdminPages};
-    const panel=(renderers[state.adminTab]||renderAdminAccounts)();
+    if(!valid.includes(state.adminTab))state.adminTab='overview';
+    const renderers={overview:renderAdminOverview,layout:renderAdminLayout,banners:renderAdminBanners,campaigns:renderAdminCampaigns,plans:renderAdminPlans,accounts:renderAdminAccounts,insights:renderAdminInsights,analytics:renderAdminAnalytics,performance:renderAdminPerformance,support:renderAdminSupport,system:renderAdminSystem,pages:renderAdminPages};
+    const panel=(renderers[state.adminTab]||renderAdminOverview)();
     const info={
-      accounts:['Používatelia','Levely, platnosť, TG Private a manuálna história platieb.'],
+      overview:['Admin centrum','Vyber úlohu. Najčastejšie nastavenia sú teraz oddelené od pokročilých nástrojov.'],
+      accounts:['Používatelia','Jednoduchá správa účtov, levelov, platnosti a obnovy hesla.'],
       support:['Support','Manuálne spracovanie požiadaviek používateľov bez externého helpdesku.'],
-      banners:['Bannery','Fixné sloty stránky, flexibilný obsah a kontrolované publikovanie.'],
-      layout:['Denná ponuka','Správa obsahu a prístupov bez zásahu do rozloženia stránky.'],
+      banners:['Bannery','Klikni na konkrétny slot v náhľade stránky a uprav iba jeho obsah.'],
+      layout:['Denná ponuka','Vyber level a nastav, ktoré kategórie a koľko riadkov používateľ uvidí.'],
       insights:['Komunita','Súkromné správy pre zvolené úrovne členstva.'],
       plans:['Plány','Názvy levelov, popisy a externé platobné odkazy.'],
       campaigns:['Kampane','Kreatívy a reklamný obsah v existujúcich slotoch.'],
       analytics:['Analytika','Zobrazenia, kliky a základné vyhodnotenie bannerov.'],
-      pages:['Obsah webu','FAQ, metodika, podmienky, súkromie, cookies a zodpovedné používanie.'],
+      pages:['Obsah webu','Textové informačné stránky uložené v JSON.'],
       audit:['Audit log','Kto, kedy a čo zmenil na používateľských účtoch.'],
       system:['System health','Stav API, feedu, providera, úložísk a posledných chýb.'],
       performance:['Model','Diagnostika kvality modelu a produkčných metrík.']
@@ -2493,7 +2570,7 @@
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny prístupu sa aplikujú okamžite</div>';
     else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy sa publikujú okamžite</div>';
-    else if(configTabs.includes(state.adminTab))contextual=`${state.adminTab==='layout'?'<button class="btn btn-ghost" type="button" data-admin-action="preview-demo">Demo náhľad</button>':''}<button class="btn btn-ghost" type="button" data-admin-action="save-draft">Uložiť koncept</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publikovať</button><details class="admin-more-actions"><summary aria-label="Viac akcií"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="4" cy="10" r="1"></circle><circle cx="10" cy="10" r="1"></circle><circle cx="16" cy="10" r="1"></circle></svg></summary><div><button type="button" data-admin-action="export">Exportovať JSON</button><button type="button" data-admin-action="reset">Zrušiť koncept</button></div></details>`;
+    else if(configTabs.includes(state.adminTab))contextual=`<div class="admin-publish-hint"><span>Koncept</span><i></i><b>Live po publikovaní</b></div>${state.adminTab==='layout'?'<button class="btn btn-ghost" type="button" data-admin-action="preview-demo">Demo náhľad</button>':''}<button class="btn btn-ghost" type="button" data-admin-action="save-draft">Uložiť koncept</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publikovať</button><details class="admin-more-actions"><summary aria-label="Viac akcií"><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="4" cy="10" r="1"></circle><circle cx="10" cy="10" r="1"></circle><circle cx="16" cy="10" r="1"></circle></svg></summary><div><button type="button" data-admin-action="export">Exportovať JSON</button><button type="button" data-admin-action="reset">Zrušiť koncept</button></div></details>`;
     const diag=state.adminDiagnostics;
     let diagText='Skontrolovať systém';
     if(state.adminDiagnosticsLoading)diagText='Kontrolujem…';
@@ -2509,7 +2586,9 @@
       diagNote='<div class="admin-runtime-note is-warning"><strong>Účty fungujú · admin úložisko nie je plne pripravené</strong><span>Prístup funguje cez Firebase, ale globálny obsah, poznámky, platobná história a audit vyžadujú trvalé admin úložisko.</span></div>';
     }
     const diagButton=`<button class="btn btn-ghost admin-diagnostics-button ${diag?.accounts_ready&&diag?.content_storage_ready?'is-ok':diag?'is-warning':''}" type="button" data-admin-tab="system"><span class="admin-health-dot"></span>${escapeHtml(diagText)}</button>`;
-    return `<div class="admin-console admin-console-v685"><aside class="admin-side-nav"><div class="admin-side-brand"><span>BLINQ CONTROL</span><strong>Admin centrum</strong><small>Interný workspace</small></div><nav class="admin-tabs admin-tabs-v685" aria-label="Admin navigácia">${tabs.map(([id,label,hint])=>`<button type="button" class="${state.adminTab===id?'active':''}" data-admin-tab="${id}"><span class="admin-nav-mark"></span><span><strong>${label}</strong><small>${hint}</small></span></button>`).join('')}</nav><div class="admin-side-foot">${diagButton}<a href="#predictions" data-route="predictions"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12M9 5l-5 5 5 5"></path></svg><span>Späť na web</span></a></div></aside><section class="admin-workarea"><header class="admin-workarea-head admin-control-toolbar"><div><small>ADMIN / ${escapeHtml(state.adminTab.toUpperCase())}</small><h2>${escapeHtml(info[0])}</h2><p>${escapeHtml(info[1])}</p></div><div class="admin-global-actions">${contextual}</div></header>${diagNote}<div class="admin-panel admin-panel-v685">${panel}</div></section></div>`;
+    const tabMap=Object.fromEntries(tabs.map(row=>[row[0],row]));
+    const navHtml=groups.map(([group,ids])=>`<div class="admin-nav-group"><span>${escapeHtml(group)}</span>${ids.map(id=>{const row=tabMap[id];if(!row)return '';const [tabId,label,hint]=row;return `<button type="button" class="${state.adminTab===tabId?'active':''}" data-admin-tab="${tabId}"><span class="admin-nav-mark"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(hint)}</small></span></button>`;}).join('')}</div>`).join('');
+    return `<div class="admin-console admin-console-v685 admin-console-v687"><aside class="admin-side-nav"><div class="admin-side-brand"><span>BLINQ CONTROL</span><strong>Admin centrum</strong><small>Jednoduchá správa BlinQ</small></div><nav class="admin-tabs admin-tabs-v685" aria-label="Admin navigácia">${navHtml}</nav><div class="admin-side-foot">${diagButton}<a href="#predictions" data-route="predictions"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12M9 5l-5 5 5 5"></path></svg><span>Späť na web</span></a></div></aside><section class="admin-workarea"><header class="admin-workarea-head admin-control-toolbar"><div><small>ADMIN / ${escapeHtml(state.adminTab.toUpperCase())}</small><h2>${escapeHtml(info[0])}</h2><p>${escapeHtml(info[1])}</p></div><div class="admin-global-actions">${contextual}</div></header>${diagNote}<div class="admin-panel admin-panel-v685">${panel}</div></section></div>`;
   }
 
   function rerenderAdmin(){ if(state.route!=='admin')return; const host=$('routePanel');host.innerHTML=renderAdminRoute();wireAdmin(); }
@@ -2533,7 +2612,7 @@
       state.adminUsersError=all.length>=5000?'Zobrazených prvých 5000 účtov. Pre väčší zoznam treba serverové cursor filtrovanie.':'';state.adminUsers=all;
       if(state.adminSelectedUser)state.adminSelectedUser=state.adminUsers.find(x=>x.id===state.adminSelectedUser.id)||null;
     }catch(error){state.adminUsers=[];state.adminUsersWarning='';state.adminUsersError=error.status===503?'Admin API pre účty nie je dostupné. Otvor Diagnostiku pre presný stav Firebase Admin konfigurácie.':error.message;}
-    finally{state.adminUsersLoading=false;rerenderAdmin();adminApplyUserFilters();if(state.adminSelectedUser){loadAdminPayments(state.adminSelectedUser.id);loadAdminUserAudit(state.adminSelectedUser.id);}}
+    finally{state.adminUsersLoading=false;rerenderAdmin();adminApplyUserFilters();}
   }
 
   async function loadAdminPayments(userId,force=false){
@@ -2572,44 +2651,40 @@
   function setSelectedElement(id){ if(!elements()?.[id])return;state.selectedElement=id;rerenderAdmin(); }
   function updateSelectedContent(field,target){ const item=elements()?.[state.selectedElement];if(!item)return;item.content=item.content||{};item.content[field]=target.type==='checkbox'?target.checked:target.value;if(field==='campaign_id'&&target.value){item.content.type='advertisement';item.content.sponsored=true;}renderAllUiContent(); }
   function updateSelectedWatermark(field,target){ const item=elements()?.[state.selectedElement];if(!item)return;item.watermark=item.watermark||{enabled:false,text:'COMING SOON',preset:'default'};let value=target.type==='checkbox'?target.checked:target.value;if(['opacity','size'].includes(field))value=Number(value);item.watermark[field]=value;renderAllUiContent(); }
-  function setAdminPlanDefaults(planId){
-    const status=$('adminUserStatus'),expiry=$('adminUserExpires'),term=$('adminPlanTerm');
-    if(!status||!expiry)return;
-    if(!planId){status.value='expired';expiry.value='';expiry.disabled=false;if(term)term.textContent='Bez plateného plánu';return;}
-    const plan=state.ui?.plans?.[planId]||{};if(term)term.textContent=planTermLabel(planId);
-    if(plan.lifetime){status.value='lifetime';expiry.value='';expiry.disabled=true;return;}
-    status.value='active';expiry.disabled=false;const date=planDefaultExpiry(planId);expiry.value=userDateValue(date?.toISOString());
-  }
-  async function publishUiConfig(){
-    // Always keep a recoverable browser copy first. If Azure storage is available,
-    // the same validated config is then published globally. Admin UI never becomes a dead end.
-    localStorage.setItem(draftKey(),JSON.stringify(state.ui));
-    try{
-      await BlinqAuth.adminSaveUiConfig(state.ui);
-      state.runtimeConfigLoaded=true;
-      localStorage.removeItem(draftKey());
-      state.uiSource=clone(state.ui);
-      showStatus('Zmeny boli publikované na live webe.');
-    }catch(error){
-      renderAllUiContent();
-      showStatus(error.status===503?'Trvalé admin úložisko nie je dostupné. Zmeny sú uložené lokálne v tomto prehliadači; pre globálne publikovanie zapni Firestore alebo Azure Table.':error.message);
+  function setAdminPlanDefaults(planId, force=false){
+    const expiry=$('adminUserExpires');if(!expiry)return;
+    const plan=state.ui?.plans?.[planId]||{};
+    if(!planId){expiry.value='';expiry.disabled=false;return;}
+    if(plan.lifetime||planId==='goat'){expiry.value='';expiry.disabled=true;return;}
+    expiry.disabled=false;
+    const current=expiry.value?new Date(expiry.value).getTime():0;
+    if(force||!current||current<=Date.now()){
+      const date=planDefaultExpiry(planId);expiry.value=userDateValue(date?.toISOString());
     }
+  }
+  function adminAddDaysToExpiry(days){
+    const expiry=$('adminUserExpires');if(!expiry)return;
+    const current=expiry.value?new Date(expiry.value).getTime():0,base=Math.max(Date.now(),Number.isFinite(current)?current:0);
+    expiry.disabled=false;expiry.value=userDateValue(new Date(base+Math.max(1,Number(days)||1)*86400000).toISOString());
+  }
+  function adminDefaultPlanDays(){
+    const planId=String($('adminUserPlan')?.value||'');const plan=state.ui?.plans?.[planId]||{};return plan.lifetime||planId==='goat'?0:Math.max(1,Number(plan.duration_days)||30);
   }
   function wireAdmin(){
     const host=$('routePanel'); if(!host)return;
     host.onclick=async event=>{
       const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='insights')loadAdminInsights();if(state.adminTab==='analytics')loadBannerAnalytics();if(state.adminTab==='support')loadAdminSupport();if(state.adminTab==='audit')loadAdminAudit();if(state.adminTab==='system')loadAdminDiagnostics(true);return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
+      const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','top','value','ace','games','doubles'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};if(preset==='full'){rule.tab_enabled=true;rule.visible_rows='ALL';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.tab_enabled=true;rule.visible_rows=3;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='teaser1'){rule.tab_enabled=true;rule.visible_rows=1;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.tab_enabled=false;rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Denná ponuka · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
       const bannerPreviewChip=event.target.closest('[data-admin-banner-preview-plan]');if(bannerPreviewChip){state.adminBannerPreviewPlan=bannerPreviewChip.dataset.adminBannerPreviewPlan;rerenderAdmin();return;}
       const planSelect=event.target.closest('[data-admin-plan-select]');if(planSelect){state.adminPlanId=planSelect.dataset.adminPlanSelect;rerenderAdmin();return;}
       const sectionPreset=event.target.closest('[data-section-preset]');if(sectionPreset){const key=sectionPreset.dataset.sectionKey,plan=state.adminPlan,cfg=key?state.ui?.dashboard?.sections?.[key]:null,id=cfg?.sidebar_element,item=id?elements()?.[id]:null;if(cfg&&item&&plan){cfg.plans=cfg.plans||{};cfg.plans[plan]=cfg.plans[plan]||{};item.access=item.access||{};const ent=cfg.plans[plan],preset=sectionPreset.dataset.sectionPreset;if(preset==='full'){item.access[plan]='active';ent.visible_picks='ALL';ent.blur_remaining=false;ent.see_all=true;}else if(preset==='teaser'){item.access[plan]='active';ent.visible_picks=1;ent.blur_remaining=true;ent.see_all=true;}else if(preset==='blurred'){item.access[plan]='locked';ent.visible_picks=0;ent.blur_remaining=true;ent.see_all=false;}else if(preset==='hidden'){item.access[plan]='hidden';ent.visible_picks=0;ent.blur_remaining=true;ent.see_all=false;}if(plan==='rookie'){item.access.trial=item.access[plan];cfg.plans.trial=clone(ent);}state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();showStatus(`${cfg.label||key} · ${accessLabel(plan)} preset applied.`);}return;}
       const bannerPreset=event.target.closest('[data-banner-preset]');if(bannerPreset){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.click_access=item.click_access||{};const preset=bannerPreset.dataset.bannerPreset;accessContexts.forEach(plan=>{let visible=true,click=true;if(preset==='teaser-elite')click=['elite','legend','goat'].includes(plan);if(preset==='pro-only'){visible=['pro','elite','legend','goat'].includes(plan);click=visible;}if(preset==='goat-only'){visible=plan==='goat';click=visible;}item.access[plan]=visible?'active':'hidden';item.click_access[plan]=click;});item.access.trial=item.access.rookie;item.click_access.trial=item.click_access.rookie;renderAllUiContent();rerenderAdmin();}return;}
       const element=event.target.closest('[data-admin-element]');if(element){setSelectedElement(element.dataset.adminElement);return;}
-      const userButton=event.target.closest('[data-admin-user]');if(userButton){state.adminSelectedUser=(state.adminUsers||[]).find(x=>String(x.id)===String(userButton.dataset.adminUser))||null;rerenderAdmin();if(state.adminSelectedUser){loadAdminPayments(state.adminSelectedUser.id);loadAdminUserAudit(state.adminSelectedUser.id);}return;}
+      const userButton=event.target.closest('[data-admin-user]');if(userButton){state.adminSelectedUser=(state.adminUsers||[]).find(x=>String(x.id)===String(userButton.dataset.adminUser))||null;rerenderAdmin();return;}
       const campaignButton=event.target.closest('[data-admin-campaign]');if(campaignButton){state.adminCampaignId=campaignButton.dataset.adminCampaign;rerenderAdmin();return;}
-      const quick=event.target.closest('[data-admin-user-plan]');if(quick){const select=$('adminUserPlan');if(select&&[...select.options].some(o=>o.value===quick.dataset.adminUserPlan)){select.value=quick.dataset.adminUserPlan;setAdminPlanDefaults(select.value);}return;}
-      const expiryQuick=event.target.closest('[data-admin-expiry-days]');if(expiryQuick){const days=Number(expiryQuick.dataset.adminExpiryDays),status=$('adminUserStatus'),expiry=$('adminUserExpires');if(status&&expiry){if(days===0){status.value='lifetime';expiry.value='';expiry.disabled=true;}else{status.value='active';expiry.disabled=false;expiry.value=userDateValue(new Date(Date.now()+Math.max(1,days)*86400000).toISOString());}}return;}
-      const userQuick=event.target.closest('[data-admin-user-quick]');if(userQuick){adminUserFilterState().quick=userQuick.dataset.adminUserQuick||'all';rerenderAdmin();adminApplyUserFilters();return;}
+      const quick=event.target.closest('[data-admin-user-plan]');if(quick){const input=$('adminUserPlan');if(input){input.value=quick.dataset.adminUserPlan;host.querySelectorAll('[data-admin-user-plan]').forEach(btn=>btn.classList.toggle('active',btn===quick));setAdminPlanDefaults(input.value,false);}return;}
+      const expiryQuick=event.target.closest('[data-admin-expiry-days]');if(expiryQuick){adminAddDaysToExpiry(Number(expiryQuick.dataset.adminExpiryDays));return;}
       const supportFilter=event.target.closest('[data-support-filter]');if(supportFilter){state.adminSupportStatus=supportFilter.dataset.supportFilter||'all';state.adminSupport=null;rerenderAdmin();loadAdminSupport(true);return;}
       const actionNode=event.target.closest('[data-admin-action]');const action=actionNode?.dataset.adminAction;if(!action)return;
       if(action==='insight-new'){state.adminInsightEditingId='';rerenderAdmin();return;}
@@ -2637,6 +2712,10 @@
       else if(action==='delete-campaign'){const id=String(actionNode.dataset.entityId||state.adminCampaignId||'');if(id&&state.ui?.campaigns?.[id]){delete state.ui.campaigns[id];Object.values(elements()).forEach(item=>{if(item?.content?.campaign_id===id)item.content.campaign_id='';});state.adminCampaignId=null;renderAllUiContent();rerenderAdmin();}}
       else if(action==='add-rss-source'){state.ui.rss=state.ui.rss||{enabled:true,sources:[]};state.ui.rss.sources=Array.isArray(state.ui.rss.sources)?state.ui.rss.sources:[];const max=Math.max(1,Number(state.ui?.admin?.max_rss_sources)||8);if(state.ui.rss.sources.length>=max){showStatus(`Maximum ${max} RSS sources.`);}else{const used=new Set(state.ui.rss.sources.map(x=>x.id));let n=1;while(used.has(`rss-${n}`))n++;state.ui.rss.sources.push({id:`rss-${n}`,name:`RSS source ${n}`,url:'',enabled:false,priority:0});rerenderAdmin();}}
       else if(action==='delete-rss-source'){const index=Number(actionNode.dataset.sourceIndex);if(Number.isInteger(index)&&index>=0&&index<(state.ui?.rss?.sources||[]).length){state.ui.rss.sources.splice(index,1);rerenderAdmin();}}
+      else if(action==='reset-user-password'){const user=state.adminSelectedUser;if(!user)return;const savedEmail=String(user.email||'').trim(),editedEmail=String($('adminUserEmail')?.value||savedEmail).trim();if(!savedEmail){showStatus('Účet nemá uložený e-mail.');return;}if(editedEmail.toLowerCase()!==savedEmail.toLowerCase()){showStatus('Najprv ulož zmenený e-mail a potom pošli link na obnovu hesla.');return;}try{await BlinqAuth.reset(savedEmail);showStatus(`Link na obnovu hesla bol odoslaný na ${savedEmail}.`);}catch(error){showStatus(error.message||'Obnovu hesla sa nepodarilo odoslať.');}}
+      else if(action==='apply-default-term'){const plan=String($('adminUserPlan')?.value||'');if(!plan){showStatus('Najprv vyber level.');return;}setAdminPlanDefaults(plan,true);}
+      else if(action==='extend-default-term'){const plan=String($('adminUserPlan')?.value||'');if(!plan){showStatus('Najprv vyber level.');return;}if(plan==='goat'){setAdminPlanDefaults(plan,true);showStatus('GOAT má doživotnú platnosť.');return;}adminAddDaysToExpiry(adminDefaultPlanDays());}
+      else if(action==='delete-user'){const user=state.adminSelectedUser;if(!user)return;const confirmation=window.prompt(`Naozaj zmazať účet ${user.email||user.id}?\n\nPre potvrdenie napíš DELETE`);if(confirmation!=='DELETE')return;try{await BlinqAuth.adminDeleteUser(user.id);state.adminUsers=(state.adminUsers||[]).filter(row=>row.id!==user.id);state.adminSelectedUser=null;rerenderAdmin();adminApplyUserFilters();showStatus('Účet bol zmazaný.');}catch(error){showStatus(error.message||'Účet sa nepodarilo zmazať.');}}
       else if(action==='refresh-users')await loadAdminUsers(true);
       else if(action==='refresh-payments'){if(state.adminSelectedUser)await loadAdminPayments(state.adminSelectedUser.id,true);}
       else if(action==='refresh-user-audit'){if(state.adminSelectedUser)await loadAdminUserAudit(state.adminSelectedUser.id,true);}
@@ -2663,7 +2742,7 @@
         try{await BlinqAuth.adminUpdateSupport(id,{status,admin_note:note});state.adminSupport=null;await loadAdminSupport(true);showStatus('Support požiadavka bola uložená.');}catch(error){showStatus(error.message||'Support požiadavku sa nepodarilo uložiť.');}
       }
       else if(action==='refresh-analytics')await loadBannerAnalytics(true);
-      else if(action==='reset-user-filters'){state.adminUserFilters={quick:'all',q:'',plan:'all',status:'all',tg:'all',dateField:'created_at',dateFrom:'',dateTo:'',sort:'telegram'};rerenderAdmin();adminApplyUserFilters();}
+      else if(action==='reset-user-filters'){state.adminUserFilters={q:'',plan:'all',status:'all',sort:'email'};rerenderAdmin();adminApplyUserFilters();}
       else if(action==='copy-tg-nicks'){const nicks=adminFilteredUsers().map(u=>String(u.telegram_nick||'').trim()).filter(Boolean);const text=nicks.join('\n');if(!text){showStatus('V aktuálnom filtri nie sú žiadne Telegram nicky.');return;}try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus(`Skopírovaných ${nicks.length} Telegram nickov.`);}catch{showStatus('Telegram nicky sa nepodarilo skopírovať.');}}
       else if(action==='refresh-analytics')await loadBannerAnalytics(true);
     };
@@ -2672,10 +2751,6 @@
       const uf=adminUserFilterState();
       if(t.id==='adminUserLevelFilter'){uf.plan=t.value;adminApplyUserFilters();return;}
       if(t.id==='adminUserStatusFilter'){uf.status=t.value;adminApplyUserFilters();return;}
-      if(t.id==='adminUserTgFilter'){uf.tg=t.value;adminApplyUserFilters();return;}
-      if(t.id==='adminUserDateField'){uf.dateField=t.value;adminApplyUserFilters();return;}
-      if(t.id==='adminUserDateFrom'){uf.dateFrom=t.value;adminApplyUserFilters();return;}
-      if(t.id==='adminUserDateTo'){uf.dateTo=t.value;adminApplyUserFilters();return;}
       if(t.id==='adminUserSort'){uf.sort=t.value;rerenderAdmin();adminApplyUserFilters();return;}
       if(t.id==='adminPlanSelect'){state.adminPlan=t.value;rerenderAdmin();return;}
       if(t.dataset.adminHeaderCount!==undefined){const count=Math.max(0,Math.min(3,Number(t.value)||0));state.ui.header_cta=state.ui.header_cta||{};state.ui.header_cta.enabled=count>0;state.ui.header_cta.slot_count=count;renderAllUiContent();rerenderAdmin();return;}
@@ -2701,8 +2776,6 @@
       if(matrixRow&&t.dataset.dashboardMatrixField){const sectionRow=t.closest('[data-dashboard-section]'),key=sectionRow?.dataset.dashboardSection,plan=matrixRow.dataset.dashboardPlanRow;if(key&&plan){state.ui.dashboard=state.ui.dashboard||{};state.ui.dashboard.sections=state.ui.dashboard.sections||{};const cfg=state.ui.dashboard.sections[key]=state.ui.dashboard.sections[key]||clone(dashboardSectionFallback[key]||{});cfg.plans=cfg.plans||{};cfg.plans[plan]=cfg.plans[plan]||{};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.dashboardMatrixField==='visible_picks'&&String(value).toUpperCase()!=='ALL')value=Number(value);if(t.dataset.dashboardMatrixField==='order')value=Math.max(1,Math.min(20,Number(value)||Number(cfg.dashboard_order||99)));cfg.plans[plan][t.dataset.dashboardMatrixField]=value;if(plan==='rookie')cfg.plans.trial=clone(cfg.plans.rookie);renderAllUiContent();rerenderAdmin();return;}}
       if(t.dataset.bannerVisiblePlan){const item=elements()?.[state.selectedElement],plan=t.dataset.bannerVisiblePlan;if(item){item.access=item.access||{};item.access[plan]=t.checked?'active':'hidden';if(plan==='rookie')item.access.trial=item.access[plan];renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.bannerClickPlan){const item=elements()?.[state.selectedElement],plan=t.dataset.bannerClickPlan;if(item){item.click_access=item.click_access||{};item.click_access[plan]=t.checked;if(plan==='rookie')item.click_access.trial=t.checked;renderAllUiContent();rerenderAdmin();}return;}
-      if(t.id==='adminUserPlan'){setAdminPlanDefaults(t.value);return;}
-      if(t.id==='adminUserStatus'){const expiry=$('adminUserExpires');if(expiry){expiry.disabled=t.value==='lifetime';if(t.value==='lifetime')expiry.value='';}return;}
       if(t.dataset.adminAccess){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.access[t.dataset.adminAccess]=t.value;if(t.dataset.adminAccess==='rookie')item.access.trial=t.value;rerenderAdmin();}return;}
       if(t.dataset.adminContent){updateSelectedContent(t.dataset.adminContent,t);rerenderAdmin();return;}
       if(t.dataset.adminWatermark){updateSelectedWatermark(t.dataset.adminWatermark,t);rerenderAdmin();return;}
@@ -2715,7 +2788,18 @@
     };
     const search=$('adminUserSearch');if(search)search.oninput=()=>{adminUserFilterState().q=search.value;adminApplyUserFilters();};
     adminApplyUserFilters();
-    const form=$('adminUserForm');if(form)form.onsubmit=async event=>{event.preventDefault();const user=state.adminSelectedUser;if(!user)return;const message=$('adminUserMessage');message.textContent=publicText('Saving…');try{const rawExpiry=$('adminUserExpires').value,status=$('adminUserStatus').value;if(status==='trial')throw new Error('Choose ACTIVE, EXPIRED or SUSPENDED before saving an automatic trial.');const accessPayload={role:$('adminUserRole').disabled?'admin':$('adminUserRole').value,plan:$('adminUserPlan').value,status,expires_at:rawExpiry?new Date(rawExpiry).toISOString():null,payment_reference:$('adminPaymentReference').value.trim()};let updated=await BlinqAuth.adminUpdateAccess(user.id,accessPayload);const metadataPayload={tg_private_member:Boolean($('adminTgPrivateMember')?.checked),admin_note:String($('adminUserNote')?.value||'').trim()};updated=await BlinqAuth.adminUpdateMetadata(user.id,metadataPayload);state.adminUsers=(state.adminUsers||[]).map(row=>row.id===updated.id?updated:row);state.adminSelectedUser=updated;message.textContent=updated?.storage_warning==='admin_note_not_persisted'?'Prístup a TG Private uložené. Interná poznámka čaká na trvalé admin úložisko.':'Zmeny boli uložené.';setTimeout(()=>{rerenderAdmin();adminApplyUserFilters();},350);}catch(error){message.textContent=error.message;}};
+    const form=$('adminUserForm');if(form)form.onsubmit=async event=>{event.preventDefault();const user=state.adminSelectedUser;if(!user)return;const message=$('adminUserMessage');message.textContent='Ukladám…';try{
+      const email=String($('adminUserEmail')?.value||'').trim(),telegram_nick=String($('adminUserTelegram')?.value||'').trim();if(!email)throw new Error('E-mail je povinný.');
+      let updated=await BlinqAuth.adminUpdateUserProfile(user.id,{email,telegram_nick});
+      const existingAdmin=String(user.role||'').toLowerCase()==='admin'||String(user.plan||'').toLowerCase()==='admin',plan=String($('adminUserPlan')?.value||''),rawExpiry=String($('adminUserExpires')?.value||'');
+      let role=existingAdmin?'admin':'user',status='expired',expires_at=null,accessPlan=existingAdmin?'':plan;
+      if(existingAdmin){status='active';}
+      else if(plan==='goat'){status='lifetime';expires_at=null;}
+      else if(plan){if(!rawExpiry)throw new Error('Pre tento level nastav platnosť do.');expires_at=new Date(rawExpiry).toISOString();status=new Date(expires_at).getTime()>Date.now()?'active':'expired';}
+      updated=await BlinqAuth.adminUpdateAccess(user.id,{role,plan:accessPlan,status,expires_at});
+      state.adminUsers=(state.adminUsers||[]).map(row=>row.id===updated.id?updated:row);state.adminSelectedUser=updated;message.textContent='Účet bol uložený.';setTimeout(()=>{rerenderAdmin();adminApplyUserFilters();},300);
+    }catch(error){message.textContent=error.message||'Účet sa nepodarilo uložiť.';}};
+
     const insightForm=$('adminInsightForm');if(insightForm)insightForm.onsubmit=async event=>{event.preventDefault();const message=$('adminInsightMessage');if(message)message.textContent='Publikujem…';try{const levels=[...insightForm.querySelectorAll('input[name="insight_level"]:checked')].map(node=>node.value);if(!levels.length)throw new Error('Vyber aspoň jeden level.');const payload={title:$('adminInsightTitle').value.trim(),body:$('adminInsightBody').value.trim(),type:$('adminInsightType').value,priority:$('adminInsightPriority').value,levels,link:$('adminInsightLink').value.trim(),link_label:$('adminInsightLinkLabel').value.trim(),match_id:$('adminInsightMatchId').value.trim(),active:Boolean($('adminInsightActive').checked),pinned:Boolean($('adminInsightPinned').checked),active_from:$('adminInsightFrom').value?new Date($('adminInsightFrom').value).toISOString():'',active_until:$('adminInsightUntil').value?new Date($('adminInsightUntil').value).toISOString():''};if(state.adminInsightEditingId)await BlinqAuth.adminUpdateInsight(state.adminInsightEditingId,payload);else await BlinqAuth.adminCreateInsight(payload);state.adminInsightEditingId='';state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus('BlinQ Insight bol publikovaný.');}catch(error){if(message)message.textContent=error.message;}};
   }
   function planAvatarHtml(id,p={}){

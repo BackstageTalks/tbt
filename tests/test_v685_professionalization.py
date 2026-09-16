@@ -8,9 +8,9 @@ API = ROOT / 'api'
 
 def test_professionalization_assets_are_loaded():
     html=(WEB/'index.html').read_text(encoding='utf-8')
-    assert '/polish-685.css?v=6860' in html
-    assert '/app.js?v=6860' in html
-    assert '/auth.js?v=6860' in html
+    assert '/polish-685.css?v=6864' in html
+    assert '/app.js?v=6864' in html
+    assert '/auth.js?v=6864' in html
     assert 'publicContentDialog' in html
     assert 'cookieConsent' in html
     assert 'authLegalConsent' in html
@@ -35,7 +35,7 @@ def test_footer_links_expose_legal_and_support_pages():
 
 def test_admin_workspace_contains_new_operational_sections():
     js=(WEB/'app.js').read_text(encoding='utf-8')
-    for marker in ['admin-console-v685', "['support','Support'", "['audit','Audit'", "['system','System'", "['pages','Obsah'"]:
+    for marker in ['admin-console-v685', "['support','Support'", "['system','System'", "['pages','Obsah webu'"]:
         assert marker in js
     assert 'renderAdminSupport' in js
     assert 'renderAdminAudit' in js
@@ -43,19 +43,18 @@ def test_admin_workspace_contains_new_operational_sections():
     assert 'renderAdminPages' in js
 
 
-def test_manual_payment_ledger_and_account_history_exist():
+def test_account_editor_is_intentionally_simple():
     js=(WEB/'app.js').read_text(encoding='utf-8')
-    auth=(WEB/'auth.js').read_text(encoding='utf-8')
-    storage=(API/'tbt'/'services'/'account_storage.py').read_text(encoding='utf-8')
-    assert 'Pridať platbu do histórie' in js
-    assert 'História BlinQ účtu' in js
-    assert 'adminAddPayment' in auth
-    assert 'record_manual_payment' in storage
-    assert 'list_manual_payments' in storage
-    assert 'list_account_audit' in storage
-    # Never nest a second form inside the account editor.
-    assert '<form id="adminPaymentForm"' not in js
-    assert '<div id="adminPaymentForm"' in js
+    start=js.index('function renderAdminUserEditor')
+    end=js.index('function renderAdminAccounts', start)
+    editor=js[start:end]
+    assert 'Poslať link na obnovu hesla' in editor
+    assert 'Level a platnosť' in editor
+    assert 'data-admin-action="apply-default-term"' in editor
+    assert 'data-admin-action="extend-default-term"' in editor
+    assert 'Manuálne spárovanie platby' not in editor
+    assert 'História BlinQ účtu' not in editor
+    assert 'TG Private' not in editor
 
 
 def test_support_and_observability_backend_endpoints_exist():

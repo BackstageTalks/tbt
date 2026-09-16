@@ -21,7 +21,15 @@ from tbt.services.auth import (
     update_firebase_profile,
     verify_user,
 )
-from tbt.services.admin_accounts import get_user, list_users, mirror_admin_metadata_claims, tg_private_state, update_user_access
+from tbt.services.admin_accounts import (
+    delete_user_account,
+    get_user,
+    list_users,
+    mirror_admin_metadata_claims,
+    tg_private_state,
+    update_user_access,
+    update_user_identity,
+)
 from tbt.services.account_storage import (
     load_account_metadata,
     load_account_metadata_many,
@@ -33,6 +41,7 @@ from tbt.services.account_storage import (
     record_manual_payment,
     list_manual_payments,
     list_account_audit,
+    delete_account_metadata,
 )
 from tbt.services.admin_storage import (
     AdminStorageUnavailable,
@@ -991,6 +1000,83 @@ def admin_user_access(req):
     except (TypeError, KeyError):
         logging.exception("Admin access update failed")
         return response({"error": "admin_update_unavailable"}, 503)
+
+@app.route(route="v1/admin/users/{user_id}/profile", methods=["PUT"])
+def admin_user_profile(req):
+    """Let an admin correct the small set of user-owned account fields.
+
+    This intentionally stays separate from level/expiry management.
+    """
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        user_id = str((req.route_params or {}).get("user_id") or "").strip()
+        if not user_id:
+            return response({"error": "invalid_user_id"}, 400)
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        if not isinstance(payload, dict):
+            return response({"error": "invalid_profile_update"}, 400)
+
+        identity_payload = {key: payload[key] for key in ("email", "display_name") if key in payload}
+        profile_payload = {key: payload[key] for key in ("telegram_nick", "display_name") if key in payload}
+        if not identity_payload and not profile_payload:
+            return response({"error": "empty_profile_update"}, 400)
+
+        target = update_user_identity(settings, user_id, identity_payload) if identity_payload else get_user(settings, user_id)
+        profile = _profile_for(target, required=False)
+        storage_warning = None
+        if profile_payload:
+            normalized = normalize_profile_update(profile_payload)
+            target = mirror_profile_claims(settings, user_id, profile_payload)
+            try:
+                profile = save_profile_metadata(user_id, profile_payload)
+            except AdminStorageUnavailable:
+                profile = {**profile_claims(target), **{k: normalized.get(k) for k in ("telegram_nick", "display_name") if k in normalized}}
+                storage_warning = "profile_storage_fallback"
+        row = _admin_account_row(target, profile)
+        if storage_warning:
+            row["storage_warning"] = storage_warning
+        return response(row)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "account_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/users/{user_id}", methods=["DELETE"])
+def admin_user_delete(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        user_id = str((req.route_params or {}).get("user_id") or "").strip()
+        if not user_id:
+            return response({"error": "invalid_user_id"}, 400)
+        if user_id == str(actor.get("id") or ""):
+            return response({"error": "cannot_delete_own_admin_account"}, 409)
+        # Delete identity first: an account that still authenticates is never
+        # reported as deleted merely because optional metadata cleanup failed.
+        delete_user_account(settings, user_id)
+        storage_warning = None
+        try:
+            delete_account_metadata(user_id)
+        except AdminStorageUnavailable:
+            storage_warning = "profile_metadata_cleanup_pending"
+        payload = {"ok": True, "deleted_user_id": user_id}
+        if storage_warning:
+            payload["storage_warning"] = storage_warning
+        return response(payload)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+
 
 @app.route(route="v1/admin/users/{user_id}/metadata", methods=["PUT"])
 def admin_user_metadata(req):

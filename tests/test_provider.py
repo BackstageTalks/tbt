@@ -58,7 +58,7 @@ def test_historical_event_can_mark_away_player_as_winner():
 def test_upcoming_event_has_no_winner():
     raw = {
         "id": "today-123",
-        "startTimestamp": 1748868600,
+        "startTimestamp": 1748868630,
         "homeTeam": {"id": 10, "name": "A", "ranking": 1},
         "awayTeam": {"id": 20, "name": "B", "ranking": 2},
         "status": {"type": "notstarted"},
@@ -81,7 +81,7 @@ def test_upcoming_event_has_no_winner():
 def test_canonical_id_survives_home_away_reordering():
     upcoming = {
         "id": "today-123",
-        "startTimestamp": 1748868600,
+        "startTimestamp": 1748868630,
         "homeTeam": {"id": 10, "name": "A"},
         "awayTeam": {"id": 20, "name": "B"},
         "status": {"type": "notstarted"},
@@ -96,7 +96,7 @@ def test_canonical_id_survives_home_away_reordering():
 
     historical = {
         "id": "game-987",
-        "startTimestamp": 1748868600,
+        "startTimestamp": 1748868630,
         "homeTeam": {"id": 20, "name": "B"},
         "awayTeam": {"id": 10, "name": "A"},
         "winnerCode": 1,

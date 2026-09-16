@@ -92,6 +92,25 @@ def load_account_metadata_many(user_ids: list[object]) -> dict[str, dict]:
         raise AdminStorageUnavailable("Unable to load account metadata") from exc
 
 
+
+
+def delete_account_metadata(user_id: object) -> None:
+    """Delete the single mutable profile row for an account.
+
+    This is intentionally small and does not require an audit/payment ledger.
+    Missing rows are treated as already deleted.
+    """
+    uid = str(user_id or "").strip()
+    key = _key(uid)
+    client = _table(ACCOUNT_TABLE)
+    try:
+        client.delete_entity(partition_key="account", row_key=key)
+    except Exception as exc:
+        if _not_found(exc):
+            return
+        raise AdminStorageUnavailable("Unable to delete account metadata") from exc
+
+
 def normalize_profile_update(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Invalid profile update")

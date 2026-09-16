@@ -171,3 +171,7 @@ body.blinq-admin .dashboard-topbar .reference-search{opacity:.42}
 .admin-system-cards{grid-template-columns:repeat(5,minmax(0,1fr))}
 @media(max-width:1180px){.admin-system-cards{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:620px){.admin-system-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Brand consistency: green actions instead of legacy violet ------------- */
+.cookie-consent-copy>span{color:#2df2ad!important}
+.cookie-consent .btn-primary,.cookie-settings-card .btn-primary{border-color:#2df2ad!important;background:linear-gradient(135deg,#2df2ad,#43e5bd)!important;color:#041510!important;box-shadow:0 8px 24px rgba(45,242,173,.15)!important}
