@@ -1,0 +1,31 @@
+{
+  "checks": {
+    "daily_has_no_date_range": true,
+    "daily_tab_switch_works": true,
+    "board_tab_switch_works": true,
+    "board_mode_switch_works": true,
+    "row_opens_rail_detail": true,
+    "rail_stats_tab_works": true,
+    "full_detail_opens": true,
+    "modal_tab_statistics": true,
+    "modal_tab_radar": true,
+    "modal_tab_history": true,
+    "modal_tab_overview": true,
+    "full_detail_closes": true,
+    "results_has_date_range": true,
+    "custom_range_switches_period": true,
+    "custom_range_persists": true,
+    "clear_range_resets": true,
+    "account_opens": true,
+    "account_close_is_svg": true,
+    "account_closes": true,
+    "private_feed_elite_subtitle_hidden": true,
+    "private_feed_match_opens_detail": true,
+    "private_feed_closes_drawer": true,
+    "no_horizontal_overflow": true,
+    "popout_loads_final_css": true,
+    "rail_actions_are_svg": true
+  },
+  "console_errors": [],
+  "passed": true
+}

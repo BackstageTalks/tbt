@@ -1,0 +1,61 @@
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+WEB = ROOT / "web"
+APP = (WEB / "app.js").read_text(encoding="utf-8")
+INDEX = (WEB / "index.html").read_text(encoding="utf-8")
+CSS = (WEB / "polish-684.css").read_text(encoding="utf-8")
+
+
+def test_local_country_flags_are_packaged_and_used():
+    assert "const flagAssetUrl" in APP
+    assert "/assets/flags/${value.toLowerCase()}.png" in APP
+    assert "flagcdn" not in APP.lower()
+    flags = WEB / "assets" / "flags"
+    for code in ("sk", "us", "gb", "cz", "fr", "de", "es", "it"):
+        assert (flags / f"{code}.png").is_file()
+
+
+def test_player_meta_and_rank_visual_contract():
+    assert "playerMetaHtml" in APP
+    assert "hubPlayerMeta" in APP
+    assert ".hub-rank" in CSS
+    assert "font-variant-numeric:tabular-nums" in CSS
+
+
+def test_tournament_logo_resolver_and_fallback_assets():
+    assert "function tournamentFallbackBadge" in APP
+    assert "/api/v1/tournament-logo/${tournamentId}" in APP
+    assert "team-cup.svg" in APP
+    assert "team-event.svg" in APP
+    assert "utr.svg" in APP
+    assert "wta-125.svg" in APP
+    fallback_dir = WEB / "assets" / "tournament-fallbacks"
+    for name in ("team-cup.svg", "team-event.svg", "utr.svg", "wta-125.svg"):
+        assert (fallback_dir / name).is_file()
+
+
+def test_banner_admin_uses_clickable_homepage_map():
+    assert "function adminBannerMapSlot" in APP
+    assert "function renderAdminBannerMap" in APP
+    assert "admin-site-map" in APP
+    assert "Rozloženie stránky ostáva pevné" in APP
+    assert "data-admin-element" in APP
+    assert ".admin-site-map" in CSS
+    assert ".admin-banner-map-workspace" in CSS
+
+
+def test_account_admin_has_manual_payment_and_quick_expiry():
+    assert "Manuálne spárovanie platby" in APP
+    assert 'id="adminPaymentReference"' in APP
+    assert 'data-admin-expiry-days="30"' in APP
+    assert 'data-admin-expiry-days="90"' in APP
+    assert 'data-admin-expiry-days="365"' in APP
+    assert 'data-admin-expiry-days="0"' in APP
+    assert "payment_reference" in APP
+    assert ".admin-payment-match" in CSS
+
+
+def test_684_assets_are_cache_busted():
+    assert '/polish-684.css?v=6840' in INDEX
+    assert '/app.js?v=6840' in INDEX
