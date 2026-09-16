@@ -1,0 +1,185 @@
+{
+  "desktop_dashboard": {
+    "viewport": [
+      1448,
+      1000
+    ],
+    "docOverflow": 0,
+    "bodyOverflow": 0,
+    "header": {
+      "x": 0,
+      "w": 1448,
+      "h": 61
+    },
+    "visibleDialogs": [],
+    "offscreenButtons": []
+  },
+  "desktop_results": {
+    "viewport": [
+      1448,
+      1000
+    ],
+    "docOverflow": 0,
+    "bodyOverflow": 0,
+    "header": {
+      "x": 0,
+      "w": 1448,
+      "h": 61
+    },
+    "visibleDialogs": [],
+    "offscreenButtons": [],
+    "categories": [
+      "Všetky publikované",
+      "TOP predikcie",
+      "Short Odds",
+      "Value",
+      "Esá",
+      "Dvojchyby",
+      "Sety a gamy",
+      "Štvorhra"
+    ]
+  },
+  "desktop_account": {
+    "viewport": [
+      1448,
+      1000
+    ],
+    "docOverflow": 0,
+    "bodyOverflow": 0,
+    "header": {
+      "x": 0,
+      "w": 1448,
+      "h": 61
+    },
+    "visibleDialogs": [
+      "accountDialog"
+    ],
+    "offscreenButtons": []
+  },
+  "tablet_dashboard": {
+    "viewport": [
+      1024,
+      900
+    ],
+    "docOverflow": 0,
+    "bodyOverflow": 0,
+    "header": {
+      "x": 5,
+      "w": 1014,
+      "h": 73
+    },
+    "visibleDialogs": [],
+    "offscreenButtons": []
+  },
+  "tablet_results": {
+    "viewport": [
+      1024,
+      900
+    ],
+    "docOverflow": 0,
+    "bodyOverflow": 0,
+    "header": {
+      "x": 5,
+      "w": 1014,
+      "h": 73
+    },
+    "visibleDialogs": [],
+    "offscreenButtons": [],
+    "categories": [
+      "Všetky publikované",
+      "TOP predikcie",
+      "Short Odds",
+      "Value",
+      "Esá",
+      "Dvojchyby",
+      "Sety a gamy",
+      "Štvorhra"
+    ]
+  },
+  "tablet_account": {
+    "viewport": [
+      1024,
+      900
+    ],
+    "docOverflow": 0,
+    "bodyOverflow": 0,
+    "header": {
+      "x": 5,
+      "w": 1014,
+      "h": 73
+    },
+    "visibleDialogs": [
+      "accountDialog"
+    ],
+    "offscreenButtons": []
+  },
+  "mobile_dashboard": {
+    "viewport": [
+      390,
+      844
+    ],
+    "docOverflow": 0,
+    "bodyOverflow": 0,
+    "header": {
+      "x": 0,
+      "w": 390,
+      "h": 131
+    },
+    "visibleDialogs": [],
+    "offscreenButtons": []
+  },
+  "mobile_results": {
+    "viewport": [
+      390,
+      844
+    ],
+    "docOverflow": 0,
+    "bodyOverflow": 0,
+    "header": {
+      "x": 0,
+      "w": 390,
+      "h": 131
+    },
+    "visibleDialogs": [],
+    "offscreenButtons": [],
+    "categories": [
+      "Všetky publikované",
+      "TOP predikcie",
+      "Short Odds",
+      "Value",
+      "Esá",
+      "Dvojchyby",
+      "Sety a gamy",
+      "Štvorhra"
+    ]
+  },
+  "mobile_account": {
+    "viewport": [
+      390,
+      844
+    ],
+    "docOverflow": 0,
+    "bodyOverflow": 0,
+    "header": {
+      "x": 0,
+      "w": 390,
+      "h": 131
+    },
+    "visibleDialogs": [
+      "accountDialog"
+    ],
+    "offscreenButtons": []
+  },
+  "loader": {
+    "viewport": [
+      600,
+      600
+    ],
+    "docOverflow": 0,
+    "bodyOverflow": 0,
+    "header": null,
+    "visibleDialogs": [],
+    "offscreenButtons": []
+  },
+  "console_errors": []
+}
