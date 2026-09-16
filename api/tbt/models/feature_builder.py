@@ -318,8 +318,8 @@ class FeatureBuilder:
         for item in recent:
             if (
                 surface
-                and surface != "unknown"
-                and item.surface != surface
+                and stats_surface_key(surface) != "unknown"
+                and stats_surface_key(item.surface) != stats_surface_key(surface)
             ):
                 continue
 
@@ -900,7 +900,7 @@ class FeatureBuilder:
             match.scheduled_at,
             "won",
             180.0,
-            surface=match.surface,
+            surface=stats_surface_key(match.surface),
         )
 
         sf2 = self._decayed_average(
@@ -908,7 +908,7 @@ class FeatureBuilder:
             match.scheduled_at,
             "won",
             180.0,
-            surface=match.surface,
+            surface=stats_surface_key(match.surface),
         )
 
         r1 = match.player1_rank
@@ -1556,7 +1556,7 @@ class FeatureBuilder:
                 match.scheduled_at,
                 p1_won,
                 expected_overall,
-                match.surface,
+                stats_surface_key(match.surface),
                 p1_serve,
                 p1_return,
             )
@@ -1567,7 +1567,7 @@ class FeatureBuilder:
                 match.scheduled_at,
                 1.0 - p1_won,
                 1.0 - expected_overall,
-                match.surface,
+                stats_surface_key(match.surface),
                 p2_serve,
                 p2_return,
             )

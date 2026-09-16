@@ -7,7 +7,7 @@ import json
 import numpy as np
 import pandas as pd
 
-from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES
+from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES, stats_surface_key
 from ..models.metrics import evaluate_probabilities
 from .prediction_quality import coverage, subgroup_report
 from .data_quality import audit_history
@@ -53,8 +53,9 @@ def _recent_form_summary(state, *, surface=None, limit=10):
     cutoff, so these summaries cannot include the event being predicted.
     """
     rows = list(state.recent)
-    if surface and surface != "unknown":
-        rows = [item for item in rows if item.surface == surface]
+    if surface and stats_surface_key(surface) != "unknown":
+        surface_key = stats_surface_key(surface)
+        rows = [item for item in rows if stats_surface_key(item.surface) == surface_key]
     rows = rows[-max(1, int(limit)):]
     if not rows:
         return {"matches": 0, "wins": 0, "win_pct": None, "sequence": []}
@@ -81,7 +82,8 @@ def _h2h_record(builder, match):
 def _presentation_player_profile(builder, match, *, player1):
     state = builder._state(match, player1)
     overall = _recent_form_summary(state, limit=35)
-    surface = _recent_form_summary(state, surface=match.surface, limit=35)
+    surface_key = stats_surface_key(match.surface)
+    surface = _recent_form_summary(state, surface=surface_key, limit=35)
     current_lat, current_lon, current_alt = builder._venue_values(match)
     travel_km = builder._haversine_km(
         state.last_latitude, state.last_longitude, current_lat, current_lon
@@ -93,7 +95,7 @@ def _presentation_player_profile(builder, match, *, player1):
     )
     return {
         "history_matches": int(state.matches),
-        "surface_history_matches": int(state.surface_matches.get(match.surface, 0)),
+        "surface_history_matches": int(state.surface_matches.get(surface_key, 0)),
         "recent_form": overall,
         "surface_form": surface,
         "context": {
@@ -104,8 +106,8 @@ def _presentation_player_profile(builder, match, *, player1):
             "altitude_change_m": None if altitude_change_m is None else round(float(altitude_change_m), 1),
             "venue_altitude_m": None if current_alt is None else round(float(current_alt), 1),
             "overall_elo": round(float(state.overall_elo), 1),
-            "surface_elo": round(float(state.get_surface_elo(match.surface)), 1),
-            "surface_matches": int(state.surface_matches.get(match.surface, 0)),
+            "surface_elo": round(float(state.get_surface_elo(surface_key)), 1),
+            "surface_matches": int(state.surface_matches.get(surface_key, 0)),
             "point_in_time": True,
         },
         "meaning": "point_in_time_recent_results_and_context_not_model_probability",

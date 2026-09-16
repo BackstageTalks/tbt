@@ -14,9 +14,10 @@ def test_loading_is_half_size_and_ball_is_animated_layer():
     assert '@keyframes blinqBallPingPong' in CSS
 
 
-def test_preview_requires_future_odds_and_70_percent():
-    assert "calendar:'Preview'" in APP
-    assert "ts>now&&Number.isFinite(odds)&&odds>1&&pct>=70" in APP
+def test_preview_tab_is_removed_from_daily_hub():
+    assert "calendar:'Preview'" not in APP
+    render=APP.split('function renderDailyHub(){',1)[1].split('function marketPreviewCard',1)[0]
+    assert "['daily','top','value','ace','games','doubles','board']" in render
 
 
 def test_value_priority_top_under_150_daily_from_150():

@@ -34,7 +34,7 @@ def test_blinq_board_is_last_tab_and_restricted_to_legend_goat():
     assert board["plans"]["legend"]["visible_rows"] == "ALL"
     assert board["plans"]["goat"]["visible_rows"] == "ALL"
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    assert "['daily','calendar','top','value','ace','games','doubles','board']" in app
+    assert "['daily','top','value','ace','games','doubles','board']" in app
     assert "Modelový výber · nie je oficiálna publikovaná predikcia" in app
     assert "state.boardMode==='results'" in app
 

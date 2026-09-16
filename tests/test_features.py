@@ -85,3 +85,29 @@ def test_static_environment_is_known_without_historical_weather(match_factory):
     assert snapshot["environment_known"] == 1.0
     assert snapshot["weather_known"] == 0.0
     assert snapshot["indoor"] == 1.0
+
+
+def test_indoor_hard_reuses_hard_surface_form_pool(match_factory):
+    """Indoor hard is hard for statistics/form, while `indoor` remains separate."""
+    builder = FeatureBuilder()
+    builder.update(match_factory("hard-win", "A", "C", "A", day=1, surface="hard"))
+    builder.update(match_factory("hard-loss", "B", "D", "D", day=1, surface="hard"))
+
+    upcoming = match_factory("indoor", "A", "B", None, day=2, surface="indoor_hard")
+    upcoming.indoor = True
+    snapshot = builder.snapshot(upcoming)
+
+    assert snapshot["surface_form_diff"] > 0
+    assert snapshot["indoor"] == 1.0
+    assert builder._state(upcoming, True).surface_matches["hard"] == 1
+    assert builder._state(upcoming, False).surface_matches["hard"] == 1
+
+
+def test_indoor_hard_updates_shared_hard_surface_bucket(match_factory):
+    builder = FeatureBuilder()
+    indoor = match_factory("indoor-result", "A", "B", "A", day=1, surface="indoor_hard")
+    indoor.indoor = True
+    builder.update(indoor)
+
+    assert builder._state(indoor, True).surface_matches["hard"] == 1
+    assert "indoor_hard" not in builder._state(indoor, True).surface_matches

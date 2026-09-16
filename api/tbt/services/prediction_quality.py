@@ -1,6 +1,7 @@
 """Descriptive coverage and out-of-time subgroup diagnostics, never confidence boosts."""
 import pandas as pd
 from ..models.metrics import evaluate_probabilities, wilson_interval
+from ..models.feature_builder import stats_surface_key
 
 
 def history_band(count):
@@ -9,7 +10,8 @@ def history_band(count):
 
 def coverage(builder, match):
     states = [builder._state(match, side) for side in (True, False)]
-    players = [{'matches': s.matches, 'surface_matches': s.surface_matches.get(match.surface, 0)} for s in states]
+    surface_key = stats_surface_key(match.surface)
+    players = [{'matches': s.matches, 'surface_matches': s.surface_matches.get(surface_key, 0)} for s in states]
     return {'player1': players[0], 'player2': players[1],
             'history_band': history_band(min(p['matches'] for p in players)),
             'surface_history_band': history_band(min(p['surface_matches'] for p in players)),

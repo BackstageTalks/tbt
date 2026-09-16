@@ -22,3 +22,16 @@ def test_coverage_is_based_only_on_replayed_history(match_factory):
     assert quality['player1']['matches'] == 1
     assert quality['player1']['surface_matches'] == 0
     assert quality['history_band'] == '0–9'
+
+
+def test_indoor_hard_quality_coverage_uses_shared_hard_bucket(match_factory):
+    from tbt.services.prediction_quality import coverage
+
+    builder = FeatureBuilder()
+    builder.update(match_factory("hard-history", "A", "B", "A", day=1, surface="hard"))
+    upcoming = match_factory("indoor-upcoming", "A", "B", None, day=2, surface="indoor_hard")
+    upcoming.indoor = True
+
+    report = coverage(builder, upcoming)
+    assert report["player1"]["surface_matches"] == 1
+    assert report["player2"]["surface_matches"] == 1
