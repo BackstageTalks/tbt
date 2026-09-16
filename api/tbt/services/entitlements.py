@@ -7,6 +7,7 @@ is unavailable, while published admin rules may explicitly set 0..10 rows.
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 
 
 SECTION_TO_FEED_KEY = {
@@ -48,6 +49,57 @@ BOARD_MIN_PROBABILITY = 0.65
 BOARD_MIN_DATA_DEPTH = 0.80
 BOARD_MIN_SURFACE_MATCHES = 5
 BOARD_PLANS = {"legend", "goat", "admin"}
+
+RESULT_HISTORY_HOURS = {
+    "rookie": 24,
+    "pro": 48,
+    "elite": None,
+    "legend": None,
+    "goat": None,
+    "admin": None,
+    "expired": 0,
+}
+
+
+def _parse_datetime(value) -> datetime | None:
+    if isinstance(value, datetime):
+        dt = value
+    else:
+        text = str(value or "").strip()
+        if not text:
+            return None
+        try:
+            dt = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _result_timestamp(row: dict) -> datetime | None:
+    for key in ("scheduled_at", "date", "start_time", "start_at", "settled_at"):
+        dt = _parse_datetime(row.get(key))
+        if dt is not None:
+            return dt
+    return None
+
+
+def _filter_result_history(rows: list, hours: int | None, now: datetime | None = None) -> list:
+    if hours is None:
+        return deepcopy(rows)
+    if hours <= 0:
+        return []
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    cutoff = now - timedelta(hours=hours)
+    out = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        ts = _result_timestamp(row)
+        if ts is not None and cutoff <= ts <= now + timedelta(hours=6):
+            out.append(deepcopy(row))
+    return out
 
 
 
@@ -208,7 +260,7 @@ def _board_rows(payload: dict, key: str) -> list[dict]:
 def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: dict | None = None) -> dict:
     plan = effective_plan(access)
     if plan == "suspended":
-        return {"plan": plan, "sections": {}, "results": False, "performance": False}
+        return {"plan": plan, "sections": {}, "results": False, "performance": False, "results_history_hours": 0}
     policy = _POLICY.get(plan, _POLICY["expired"])
     payload = payload or {}
     sections = {}
@@ -246,7 +298,14 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
         "min_surface_matches_each": BOARD_MIN_SURFACE_MATCHES,
         "official_prediction": False,
     }
-    return {"plan":plan,"sections":sections,"results":True,"performance":True}
+    history_hours = RESULT_HISTORY_HOURS.get(plan, 0)
+    return {
+        "plan": plan,
+        "sections": sections,
+        "results": history_hours != 0,
+        "performance": history_hours is None,
+        "results_history_hours": history_hours,
+    }
 
 
 def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None = None) -> tuple[dict, dict]:
@@ -254,6 +313,20 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     manifest=entitlement_manifest(access,payload,ui_config)
     if manifest["plan"]=="suspended": raise PermissionError("account_suspended")
     result=deepcopy(payload)
+
+    # Results are a separate entitlement boundary. Low tiers never receive the
+    # full historical array and therefore cannot recover it from the browser.
+    history_hours = manifest.get("results_history_hours")
+    source_results = payload.get("results") if isinstance(payload.get("results"), list) else []
+    result["results"] = _filter_result_history(source_results, history_hours)
+    if history_hours is not None:
+        # Aggregate performance in the published feed may cover all time, so do not
+        # expose it to ROOKIE/PRO. Their UI calculates metrics from the authorized
+        # 24h/48h result slice instead.
+        if "performance" in result:
+            result["performance"] = {}
+        if "betting_performance" in result:
+            result["betting_performance"] = {}
 
     board_enabled = bool(manifest.get("sections", {}).get("board", {}).get("enabled"))
     result["board_upcoming"] = _board_rows(payload, "upcoming") if board_enabled else []
