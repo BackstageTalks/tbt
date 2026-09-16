@@ -52,9 +52,9 @@ def test_private_feed_match_cta_reopens_full_match_detail():
 
 def test_match_popout_inherits_final_polish_layer():
     popout = APP.split('function openMatchPopout(){', 1)[1].split('function openMatch(', 1)[0]
-    assert '/polish-683.css?v=6850' in popout
-    assert '/polish-684.css?v=6850' in popout
-    assert '/polish-685.css?v=6850' in popout
+    assert '/polish-683.css?v=6860' in popout
+    assert '/polish-684.css?v=6860' in popout
+    assert '/polish-685.css?v=6860' in popout
 
 
 def test_admin_delete_icon_buttons_use_svg_close_icons():

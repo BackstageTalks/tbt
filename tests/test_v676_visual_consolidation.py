@@ -10,9 +10,9 @@ UI = (ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8')
 
 def test_cache_and_ui_revision_are_current():
     cfg = json.loads(UI)
-    assert cfg['ui_revision'] == cfg['revision'] == '6.8.5'
-    assert cfg['asset_revision'] == '6850'
-    assert '?v=6850' in INDEX
+    assert cfg['ui_revision'] == cfg['revision'] == '6.8.6'
+    assert cfg['asset_revision'] == '6860'
+    assert '?v=6860' in INDEX
 
 
 def test_account_modal_has_inline_telegram_profile():

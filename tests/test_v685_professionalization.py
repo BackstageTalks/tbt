@@ -8,9 +8,9 @@ API = ROOT / 'api'
 
 def test_professionalization_assets_are_loaded():
     html=(WEB/'index.html').read_text(encoding='utf-8')
-    assert '/polish-685.css?v=6850' in html
-    assert '/app.js?v=6850' in html
-    assert '/auth.js?v=6850' in html
+    assert '/polish-685.css?v=6860' in html
+    assert '/app.js?v=6860' in html
+    assert '/auth.js?v=6860' in html
     assert 'publicContentDialog' in html
     assert 'cookieConsent' in html
     assert 'authLegalConsent' in html

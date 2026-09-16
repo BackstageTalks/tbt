@@ -8,9 +8,9 @@ def read(path):
 
 def test_release_and_cache_are_current():
     cfg = json.loads(read("web/ui-config.json"))
-    assert cfg["ui_revision"] == cfg["revision"] == "6.8.5"
-    assert cfg["asset_revision"] == "6850"
-    assert 'RELEASE = "6.8.5"' in read("api/function_app.py")
+    assert cfg["ui_revision"] == cfg["revision"] == "6.8.6"
+    assert cfg["asset_revision"] == "6860"
+    assert 'RELEASE = "6.8.6"' in read("api/function_app.py")
     html = read("web/index.html")
     for asset in ("blinq.css", "auth.js", "responsive.js", "app.js"):
         assert f'/{asset}?v={cfg["asset_revision"]}' in html

@@ -13,10 +13,10 @@ ADMIN_STORAGE = (ROOT / "api/tbt/services/admin_storage.py").read_text(encoding=
 
 
 def test_release_cache_is_current_and_consistent():
-    assert UI["ui_revision"] == UI["revision"] == "6.8.5"
-    assert UI["asset_revision"] == "6850"
-    assert 'RELEASE = "6.8.5"' in BACKEND
-    assert 'API_VERSION = "3.8.5"' in BACKEND
+    assert UI["ui_revision"] == UI["revision"] == "6.8.6"
+    assert UI["asset_revision"] == "6860"
+    assert 'RELEASE = "6.8.6"' in BACKEND
+    assert 'API_VERSION = "3.8.6"' in BACKEND
     for asset in ("styles.css", "responsive.css", "premium.css", "blinq.css", "auth.js", "responsive.js", "app.js"):
         assert f"/{asset}?v={UI['asset_revision']}" in INDEX
 

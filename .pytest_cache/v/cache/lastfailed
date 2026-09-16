@@ -1,0 +1,10 @@
+{
+  "tests/test_download_end_to_end.py::test_manual_per_run_cap_has_no_rolling_reservation_and_parquet_is_saved": true,
+  "tests/test_remaining_regressions.py::test_rank_provenance_survives_parquet_and_does_not_certify_other_ranks": true,
+  "tests/test_remaining_regressions.py::test_refresh_checkpoints_before_next_day_failure": true,
+  "tests/test_remaining_regressions.py::test_refresh_moves_provider_event_across_year_without_stale_partition[old_time0-new_time0]": true,
+  "tests/test_remaining_regressions.py::test_refresh_moves_provider_event_across_year_without_stale_partition[old_time1-new_time1]": true,
+  "tests/test_remaining_regressions.py::test_history_downloader_persists_proven_distinct_synthetic_id_collisions": true,
+  "tests/test_statistics.py::test_enrichment_cache_identity_and_parquet_roundtrip": true,
+  "tests/test_statistics.py::test_verified_calendar_identity_saves_detail_request_across_runs": true
+}

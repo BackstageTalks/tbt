@@ -56,8 +56,8 @@ from tbt.services.entitlements import filter_feed_for_access
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "6.8.5"
-API_VERSION = "3.8.5"
+RELEASE = "6.8.6"
+API_VERSION = "3.8.6"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
 # instance-local: durable analytics remains in Table Storage, while this only absorbs accidental

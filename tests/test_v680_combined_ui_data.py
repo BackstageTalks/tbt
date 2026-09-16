@@ -37,8 +37,8 @@ def _match(mid: str, ts: datetime, country: str = 'GER', *, name='Player A', ran
 
 def test_v680_reference_layout_is_active_and_uses_player_hero():
     assert f"/redesign-680.css?v={UI['asset_revision']}" in INDEX
-    assert UI['revision'] == UI['ui_revision'] == '6.8.5'
-    assert UI['asset_revision'] == '6850'
+    assert UI['revision'] == UI['ui_revision'] == '6.8.6'
+    assert UI['asset_revision'] == '6860'
     hero = UI['elements']['HERO_BANNER_1']['content']
     assert hero['image_url'] == '/assets/hero-player-v680.webp'
     assert (ROOT / 'web/assets/hero-player-v680.webp').is_file()
