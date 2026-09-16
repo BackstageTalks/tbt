@@ -9,17 +9,24 @@ def test_admin_primary_ui_is_slovak():
     app = read("web/app.js")
     for text in [
         "Admin centrum",
-        "Bannery a odkazy",
-        "Kategórie · predikcie · prístupy",
+        "Používatelia",
+        "Support",
+        "Bannery",
+        "Denná ponuka",
+        "Komunita",
+        "Plány",
+        "Kampane",
+        "Analytika",
+        "Obsah",
+        "Audit",
+        "System",
+        "Model",
         "Uložiť koncept",
-        "Publikovať zmeny",
+        "Publikovať",
         "Prime",
         "TOP",
         "Esá",
         "Štvorhra",
-        "Sety / hry",
-        "Účty",
-        "Kvalita modelu",
     ]:
         assert text in app
 

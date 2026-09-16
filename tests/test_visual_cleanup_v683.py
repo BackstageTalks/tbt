@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
@@ -6,9 +7,13 @@ APP = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
 CSS = (ROOT / "web" / "polish-683.css").read_text(encoding="utf-8")
 
 
-def test_final_polish_stylesheet_is_loaded_last():
-    assert '/polish-683.css?v=6830' in HTML
-    assert HTML.index('/polish-681.css?v=6808') < HTML.index('/polish-683.css?v=6830')
+def test_v683_polish_layer_is_loaded_after_v681():
+    cfg = json.loads((ROOT / 'web/ui-config.json').read_text(encoding='utf-8'))
+    cache = cfg['asset_revision']
+    p681 = f'/polish-681.css?v={cache}'
+    p683 = f'/polish-683.css?v={cache}'
+    assert p683 in HTML
+    assert HTML.index(p681) < HTML.index(p683)
 
 
 def test_close_controls_use_svg_not_platform_multiplication_glyph():
@@ -47,7 +52,9 @@ def test_private_feed_match_cta_reopens_full_match_detail():
 
 def test_match_popout_inherits_final_polish_layer():
     popout = APP.split('function openMatchPopout(){', 1)[1].split('function openMatch(', 1)[0]
-    assert '/polish-683.css?v=6830' in popout
+    assert '/polish-683.css?v=6850' in popout
+    assert '/polish-684.css?v=6850' in popout
+    assert '/polish-685.css?v=6850' in popout
 
 
 def test_admin_delete_icon_buttons_use_svg_close_icons():

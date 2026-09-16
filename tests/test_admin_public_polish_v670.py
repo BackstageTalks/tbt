@@ -21,9 +21,9 @@ def test_prime_is_disabled_by_release_default():
 
 def test_admin_has_clear_operational_tabs_and_global_daily_toggle():
     app = read("web/app.js")
-    assert "['accounts','Účty','Levely · expirácie · Telegram']" in app
-    assert "['layout','Denná ponuka','Kategórie · predikcie · prístupy']" in app
-    assert "['banners','Bannery','Horné CTA · hlavný banner']" in app
+    assert "['accounts','Používatelia','Účty · prístup · platby']" in app
+    assert "['layout','Denná ponuka','Kategórie · predikcie']" in app
+    assert "['banners','Bannery','Sloty · obsah · cielenie']" in app
     assert 'data-admin-hub-global-field="enabled"' in app
     assert "adminTab:'accounts'" in app
 

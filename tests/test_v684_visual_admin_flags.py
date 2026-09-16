@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
@@ -56,6 +57,8 @@ def test_account_admin_has_manual_payment_and_quick_expiry():
     assert ".admin-payment-match" in CSS
 
 
-def test_684_assets_are_cache_busted():
-    assert '/polish-684.css?v=6840' in INDEX
-    assert '/app.js?v=6840' in INDEX
+def test_684_visual_layer_is_loaded_with_current_cache():
+    cfg = json.loads((WEB / 'ui-config.json').read_text(encoding='utf-8'))
+    cache = cfg['asset_revision']
+    assert f'/polish-684.css?v={cache}' in INDEX
+    assert f'/app.js?v={cache}' in INDEX

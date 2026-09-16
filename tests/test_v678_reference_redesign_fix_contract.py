@@ -8,11 +8,11 @@ CSS=(ROOT/'web/redesign-680.css').read_text(encoding='utf-8')
 BACKEND=(ROOT/'api/function_app.py').read_text(encoding='utf-8')
 UI=json.loads((ROOT/'web/ui-config.json').read_text(encoding='utf-8'))
 
-def test_release_680_and_active_redesign_asset():
-    assert UI['ui_revision']=='6.8.0'
-    assert UI['revision']=='6.8.0'
-    assert 'RELEASE = "6.8.0"' in BACKEND
-    assert '/redesign-680.css?v=680' in INDEX
+def test_release_and_active_redesign_asset():
+    assert UI['ui_revision'] == UI['revision'] == '6.8.5'
+    assert UI['asset_revision'] == '6850'
+    assert 'RELEASE = "6.8.5"' in BACKEND
+    assert f"/redesign-680.css?v={UI['asset_revision']}" in INDEX
     assert (ROOT/'web/redesign-680.css').exists()
 
 def test_reference_header_has_visible_search_and_keeps_private_feed_bell():

@@ -12,12 +12,13 @@ BACKEND = (ROOT / "api/function_app.py").read_text(encoding="utf-8")
 ADMIN_STORAGE = (ROOT / "api/tbt/services/admin_storage.py").read_text(encoding="utf-8")
 
 
-def test_release_cache_exactly_680():
-    assert UI["ui_revision"] == "6.8.0"
-    assert UI["revision"] == "6.8.0"
-    assert 'RELEASE = "6.8.0"' in BACKEND
+def test_release_cache_is_current_and_consistent():
+    assert UI["ui_revision"] == UI["revision"] == "6.8.5"
+    assert UI["asset_revision"] == "6850"
+    assert 'RELEASE = "6.8.5"' in BACKEND
+    assert 'API_VERSION = "3.8.5"' in BACKEND
     for asset in ("styles.css", "responsive.css", "premium.css", "blinq.css", "auth.js", "responsive.js", "app.js"):
-        assert f"/{asset}?v=680" in INDEX
+        assert f"/{asset}?v={UI['asset_revision']}" in INDEX
 
 
 def test_top_upgrade_and_admin_buttons_are_removed_but_admin_stays_in_profile_menu():
@@ -91,7 +92,8 @@ def test_vip_rail_is_not_hardcoded_and_is_fully_json_admin_managed():
     for field in ("headline", "text", "button_text", "link", "image_url", "mobile_image_url", "benefit_1_title", "benefit_1_text", "benefit_2_title", "benefit_2_text", "benefit_3_title", "benefit_3_text"):
         assert field in vip["content"]
     assert "function renderVipRail()" in APP
-    assert "bannerLibraryButton('VIP_RAIL',1,'vip')" in APP
+    assert "adminBannerMapSlot('VIP_RAIL','VIP RAIL','vip')" in APP
+    assert "function renderAdminBannerMap()" in APP
     for field in ("benefit_1_title", "benefit_2_title", "benefit_3_title"):
         assert f'data-simple-banner-field="{field}"' in APP
 
@@ -100,14 +102,18 @@ def test_all_banner_editors_support_background_text_cta_and_access():
     for field in ("headline", "text", "button_text", "link", "image_url", "mobile_image_url", "image_fit", "image_position"):
         assert f'data-simple-banner-field="{field}"' in APP
     assert "renderBannerAccessMatrix" in APP
-    assert "HEADER_BANNER_1" in APP and "HERO_BANNER_1" in APP and "CONTENT_TOP_1" in APP and "VIP_RAIL" in APP
+    for element_id in ("HEADER_BANNER_1", "HERO_BANNER_1", "CONTENT_TOP_1", "VIP_RAIL"):
+        assert element_id in UI["elements"]
+    assert "function renderAdminBannerMap()" in APP
 
 
 def test_footer_text_and_links_are_json_managed():
     footer = UI["footer"]
     assert footer["copyright"] == "© 2026 BlinQ"
     assert footer["system_status"] == "Všetky systémy funkčné"
-    assert [x["id"] for x in footer["links"]] == ["how_blinq_works", "methodology", "model_data", "faq", "responsible_use"]
+    ids = [x["id"] for x in footer["links"]]
+    assert ids[:5] == ["how_blinq_works", "methodology", "model_data", "faq", "responsible_use"]
+    assert {"terms", "privacy", "cookies", "support"}.issubset(ids)
     assert "state.ui?.footer?.links" in APP
     assert "function renderFooterConfig()" in APP
 

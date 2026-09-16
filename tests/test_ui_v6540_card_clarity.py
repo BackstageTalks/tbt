@@ -24,6 +24,6 @@ def test_ace_cards_require_real_api_line_and_use_prediction_copy():
 def test_cache_bust_is_current():
     import json
     cfg = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
-    expected = "v=" + str(cfg["ui_revision"]).replace(".", "")
+    expected = "v=" + str(cfg["asset_revision"])
     assert expected in INDEX
     assert "v=6539" not in INDEX

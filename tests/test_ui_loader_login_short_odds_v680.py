@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
@@ -36,8 +37,8 @@ def test_short_odds_public_labels_replace_prime_in_results_and_cards():
 
 
 def test_frontend_cache_bust_for_final_ui_pass():
-    assert '/blinq.css?v=6808' in INDEX
-    assert '/redesign-680.css?v=6808' in INDEX
-    assert '/polish-681.css?v=6808' in INDEX
-    assert '/app.js?v=6808' in INDEX
-    assert '/assets/blinq_loading_tennis_v2.webp?v=6808' in INDEX
+    cfg = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
+    cache = str(cfg['asset_revision'])
+    for asset in ('blinq.css','redesign-680.css','polish-681.css','polish-683.css','polish-684.css','polish-685.css','app.js'):
+        assert f'/{asset}?v={cache}' in INDEX
+    assert f'/assets/blinq_loading_tennis_v2.webp?v={cache}' in INDEX

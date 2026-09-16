@@ -27,6 +27,6 @@ def test_auth_failures_are_rendered_in_login_modal():
 
 def test_assets_are_cache_busted_to_current_ui_revision():
     cfg = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
-    cache_version = str(cfg['ui_revision']).replace('.', '')
+    cache_version = str(cfg['asset_revision'])
     for asset in ('styles.css', 'responsive.css', 'premium.css', 'auth.js', 'responsive.js', 'app.js'):
         assert f'/{asset}?v={cache_version}' in HTML

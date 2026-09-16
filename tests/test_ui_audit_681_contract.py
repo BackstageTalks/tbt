@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / 'web/index.html').read_text(encoding='utf-8')
@@ -7,8 +8,10 @@ CSS = (ROOT / 'web/polish-681.css').read_text(encoding='utf-8')
 
 
 def test_final_polish_layer_and_new_loader_asset_are_active():
-    assert '/polish-681.css?v=6808' in INDEX
-    assert '/assets/blinq_loading_tennis_v2.webp?v=6808' in INDEX
+    cfg = json.loads((ROOT / 'web/ui-config.json').read_text(encoding='utf-8'))
+    cache = cfg['asset_revision']
+    assert f'/polish-681.css?v={cache}' in INDEX
+    assert f'/assets/blinq_loading_tennis_v2.webp?v={cache}' in INDEX
     assert (ROOT / 'web/assets/blinq_loading_tennis_v2.webp').is_file()
     assert '@keyframes bq-loader-rally' in CSS
     assert 'animation:bq-loader-rally 1.85s' in CSS

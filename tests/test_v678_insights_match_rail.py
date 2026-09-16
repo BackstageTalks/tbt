@@ -14,13 +14,13 @@ STORAGE = (ROOT / "api/tbt/services/admin_storage.py").read_text(encoding="utf-8
 UI = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))
 
 
-def test_release_680_and_cache_are_consistent():
-    assert UI["ui_revision"] == "6.8.0"
-    assert UI["revision"] == "6.8.0"
-    assert 'RELEASE = "6.8.0"' in BACKEND
-    assert 'API_VERSION = "3.8.0"' in BACKEND
+def test_release_and_cache_are_consistent():
+    assert UI["ui_revision"] == UI["revision"] == "6.8.5"
+    assert UI["asset_revision"] == "6850"
+    assert 'RELEASE = "6.8.5"' in BACKEND
+    assert 'API_VERSION = "3.8.5"' in BACKEND
     for asset in ("blinq.css", "auth.js", "app.js"):
-        assert f"/{asset}?v=680" in INDEX
+        assert f"/{asset}?v={UI['asset_revision']}" in INDEX
 
 
 def test_private_feed_bell_drawer_and_read_state_are_real_code_paths():
