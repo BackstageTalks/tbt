@@ -1,0 +1,7 @@
+{
+  "name":"blinq-web-new",
+  "version":"0.1.0",
+  "private":true,
+  "description":"Lightweight responsive BlinQ web prototype",
+  "scripts":{"dev":"python3 -m http.server 4173"}
+}

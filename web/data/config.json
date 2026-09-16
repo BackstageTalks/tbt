@@ -1,0 +1,20 @@
+{
+  "defaultLevel":"Rookie",
+  "levels":{
+    "Rookie":{"label":"Rookie","free":true,"picksPerCategory":1,"resultsHours":24,"seeAll":false,"live":false,"premiumInfo":false},
+    "PRO":{"label":"PRO","picksPerCategory":3,"resultsHours":48,"seeAll":false,"live":false,"premiumInfo":false},
+    "ELITE":{"label":"ELITE","picksPerCategory":10,"resultsHours":null,"seeAll":true,"live":true,"premiumInfo":true},
+    "Legend":{"label":"Legend","picksPerCategory":10,"resultsHours":null,"seeAll":true,"live":true,"premiumInfo":true},
+    "GOAT":{"label":"GOAT","picksPerCategory":10,"resultsHours":null,"seeAll":true,"live":true,"premiumInfo":true}
+  },
+  "tabs":["TOP","VALUE","ESA","GAMES","SETS","SEE ALL"],
+  "comingSoon":["GAMES","SETS"],
+  "hiddenPools":["PRIME"],
+  "banner":{
+    "desktop":{"width":1920,"height":640},
+    "mobile":{"width":1080,"height":720},
+    "headline":"TENNIS INSIGHTS FOR A SMARTER TOMORROW.",
+    "subline":"ANALYZE • FOLLOW • WIN",
+    "animation":"slide-up"
+  }
+}

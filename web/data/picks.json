@@ -1,0 +1,20 @@
+[
+  {"id":1,"category":"TOP","rank":1,"time":"12:30","tour":"ATP Tokyo","country":"🇪🇸","opponentFlag":"🇮🇹","match":"Alcaraz – Musetti","pick":"ML 1","odds":1.68,"probability":78,"value":12},
+  {"id":2,"category":"TOP","rank":2,"time":"14:00","tour":"WTA Seoul","country":"🇵🇱","opponentFlag":"🇰🇿","match":"Swiatek – Rybakina","pick":"Over 21.5","odds":1.72,"probability":76,"value":11},
+  {"id":3,"category":"TOP","rank":3,"time":"15:30","tour":"ATP Beijing","country":"🇩🇪","opponentFlag":"🇺🇸","match":"Zverev – Fritz","pick":"ML 2","odds":1.85,"probability":71,"value":9},
+  {"id":4,"category":"TOP","rank":4,"time":"16:00","tour":"WTA Guadalajara","country":"🇺🇸","opponentFlag":"🇺🇸","match":"Gauff – Pegula","pick":"ML 1","odds":1.66,"probability":74,"value":10},
+  {"id":5,"category":"TOP","rank":5,"time":"17:30","tour":"ATP Tokyo","country":"🇳🇴","opponentFlag":"🇩🇰","match":"Ruud – Rune","pick":"Over 22.5","odds":1.78,"probability":72,"value":9},
+  {"id":6,"category":"TOP","rank":6,"time":"19:00","tour":"ATP Beijing","country":"🇷🇺","opponentFlag":"🇺🇸","match":"Medvedev – Tiafoe","pick":"ML 1","odds":1.70,"probability":73,"value":10},
+  {"id":7,"category":"TOP","rank":7,"time":"20:30","tour":"WTA Seoul","country":"🇧🇾","opponentFlag":"🇱🇻","match":"Sabalenka – Ostapenko","pick":"Over 20.5","odds":1.69,"probability":75,"value":11},
+  {"id":8,"category":"TOP","rank":8,"time":"21:00","tour":"ATP Beijing","country":"🇮🇹","opponentFlag":"🇷🇺","match":"Sinner – Khachanov","pick":"ML 1","odds":1.62,"probability":77,"value":12},
+  {"id":9,"category":"TOP","rank":9,"time":"22:30","tour":"WTA Guadalajara","country":"🇺🇸","opponentFlag":"🇺🇸","match":"Navarro – Collins","pick":"ML 2","odds":1.74,"probability":72,"value":9},
+  {"id":10,"category":"TOP","rank":10,"time":"23:00","tour":"ATP Tokyo","country":"🇺🇸","opponentFlag":"🇺🇸","match":"Paul – Shelton","pick":"Over 21.5","odds":1.67,"probability":74,"value":10},
+
+  {"id":11,"category":"VALUE","rank":1,"time":"13:10","tour":"ATP Chengdu","country":"🇫🇷","opponentFlag":"🇨🇿","match":"Fils – Lehecka","pick":"ML 1","odds":2.05,"probability":64,"value":17},
+  {"id":12,"category":"VALUE","rank":2,"time":"15:20","tour":"WTA Osaka","country":"🇨🇿","opponentFlag":"🇺🇸","match":"Noskova – Keys","pick":"+2.5 games","odds":1.92,"probability":69,"value":16},
+  {"id":13,"category":"VALUE","rank":3,"time":"18:10","tour":"ATP Hangzhou","country":"🇦🇺","opponentFlag":"🇨🇦","match":"De Minaur – Auger-Aliassime","pick":"ML 1","odds":1.88,"probability":70,"value":15},
+  {"id":14,"category":"VALUE","rank":4,"time":"20:00","tour":"WTA Seoul","country":"🇧🇷","opponentFlag":"🇬🇷","match":"Haddad Maia – Sakkari","pick":"Over 22.5","odds":2.00,"probability":66,"value":16},
+
+  {"id":15,"category":"ESA","rank":1,"time":"11:45","tour":"ATP Tokyo","country":"🇺🇸","opponentFlag":"🇫🇷","match":"Korda – Humbert","pick":"ESA 1","odds":1.81,"probability":73,"value":8},
+  {"id":16,"category":"ESA","rank":2,"time":"16:40","tour":"WTA Seoul","country":"🇨🇳","opponentFlag":"🇷🇺","match":"Zheng – Alexandrova","pick":"ESA 2","odds":1.77,"probability":72,"value":8}
+]
