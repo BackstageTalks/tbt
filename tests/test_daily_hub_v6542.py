@@ -24,13 +24,13 @@ def _ui(visible=1, enabled=True, blur=True):
     return {'dashboard':{'daily_hub':{'enabled':True,'tabs':tabs}}}
 
 
-def test_daily_combines_prime_top_filters_low_odds_and_value_duplicates():
+def test_daily_uses_top_only_filters_low_odds_and_value_duplicates():
     data, manifest=filter_feed_for_access(_feed(), {'status':'active','plan':'elite'})
     ids=[r['event_id'] for r in data['daily_picks']]
-    assert 'd1' not in ids  # 1.30 excluded by Daily >= 1.45
-    assert 'd6' not in ids  # Value has priority
-    assert ids[:3] == ['d2','d3','d4']
-    assert manifest['sections']['daily']['total'] == 4
+    assert 'd1' not in ids and 'd2' not in ids and 'd3' not in ids  # PRIME is internal only
+    assert 'd6' not in ids  # VALUE has priority over TOP
+    assert ids == ['d4','d5']
+    assert manifest['sections']['daily']['total'] == 2
 
 
 def test_runtime_admin_rule_can_narrow_to_zero_without_sending_rows():
@@ -38,7 +38,7 @@ def test_runtime_admin_rule_can_narrow_to_zero_without_sending_rows():
     assert data['daily_picks'] == []
     assert manifest['sections']['daily']['visible_picks'] == 0
     assert manifest['sections']['daily']['blur_remaining'] is True
-    assert manifest['sections']['daily']['total'] == 4
+    assert manifest['sections']['daily']['total'] == 2
 
 
 def test_runtime_admin_can_disable_tab_entirely():

@@ -35,6 +35,27 @@ def test_result_history_is_server_limited_by_plan():
     assert elite["performance"] == {"roi": 1.23}
 
 
+def test_prime_pool_is_internal_and_not_merged_into_public_top():
+    from tbt.services.entitlements import filter_feed_for_access
+
+    def row(event_id, odds, probability):
+        return {
+            "event_id": event_id, "pick": event_id, "odds": odds, "probability": probability,
+            "player1": {"name": "A", "probability": probability},
+            "player2": {"name": "B", "probability": 1 - probability},
+        }
+
+    payload = {
+        "prime_picks": [row("prime-only", 1.55, .90)],
+        "top_daily_picks": [row("top", 1.70, .75), row("value-dup", 1.90, .73)],
+        "value_picks": [row("value-dup", 1.90, .73)],
+        "ace_picks": [], "sg_picks": [], "doubles_picks": [], "upcoming": [], "results": [],
+    }
+    data, manifest = filter_feed_for_access(payload, {"status": "active", "plan": "elite"})
+    assert [item["event_id"] for item in data["daily_picks"]] == ["top"]
+    assert manifest["sections"]["daily"]["total"] == 1
+
+
 def test_public_prediction_board_matches_final_product_tabs():
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     render = app.split("function renderDailyHub(){", 1)[1].split("function marketPreviewCard", 1)[0]

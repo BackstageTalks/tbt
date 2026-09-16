@@ -148,16 +148,27 @@ def _row_odds(row: dict) -> float | None:
 
 
 def _daily_rows(payload: dict) -> list[dict]:
+    """Build the public TOP board.
+
+    VALUE has priority over TOP, so any row already qualifying for VALUE is
+    removed from the TOP board. PRIME is intentionally *not* merged here:
+    PRIME is an internal pool reserved for the Comeback LIVE Radar and must not
+    leak back into the public TOP category.
+    """
     value_ids={_row_id(row) for row in payload.get("value_picks", []) if isinstance(row, dict)}
     out=[]; seen=set()
-    for key in ("prime_picks", "top_daily_picks"):
-        for row in payload.get(key, []) if isinstance(payload.get(key), list) else []:
-            if not isinstance(row, dict): continue
-            ident=_row_id(row)
-            if ident in seen or ident in value_ids: continue
-            odds=_row_odds(row)
-            if odds is None or odds < 1.45: continue
-            seen.add(ident); out.append(row)
+    rows = payload.get("top_daily_picks", []) if isinstance(payload.get("top_daily_picks"), list) else []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        ident=_row_id(row)
+        if ident in seen or ident in value_ids:
+            continue
+        odds=_row_odds(row)
+        if odds is None or odds < 1.45:
+            continue
+        seen.add(ident)
+        out.append(row)
     out.sort(key=lambda row: (-_row_probability(row), str(row.get("scheduled_at") or row.get("date") or "")))
     return out
 

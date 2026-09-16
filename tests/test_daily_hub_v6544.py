@@ -34,7 +34,7 @@ def test_default_daily_hub_access_is_one_three_all():
 
 def test_server_policy_keeps_full_offer_elite_only():
     cfg = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
-    payload = {"prime_picks": _rows(16), "top_daily_picks": [], "value_picks": [], "ace_picks": [], "sg_picks": []}
+    payload = {"prime_picks": [], "top_daily_picks": _rows(16), "value_picks": [], "ace_picks": [], "sg_picks": []}
     rookie = entitlement_manifest({"status": "active", "plan": "rookie"}, payload, cfg)["sections"]["daily"]
     pro = entitlement_manifest({"status": "active", "plan": "pro"}, payload, cfg)["sections"]["daily"]
     elite = entitlement_manifest({"status": "active", "plan": "elite"}, payload, cfg)["sections"]["daily"]
