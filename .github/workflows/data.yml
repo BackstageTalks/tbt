@@ -81,6 +81,7 @@ jobs:
       SG_LOOKBACK_DAYS: ${{ inputs.sg_lookback_days || 730 }}
       PROMOTE: ${{ inputs.promote }}
       TBT_WEATHER_RESEARCH: ${{ vars.TBT_WEATHER_RESEARCH }}
+      PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

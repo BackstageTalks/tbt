@@ -881,7 +881,9 @@ def live_radar(req):
         if is_suspended(user):return response({"error":"account_suspended"},403)
         account=public_account(user,cfg=settings,profile=_profile_for(user))
         if not _live_radar_allowed(account):return response({"error":"elite_required"},403)
-        r=_run_live_radar(force=False,publish=True)
+        # User status reads are read-only: the minute timer publishes alerts.
+        # This keeps WATCH/CONFIRMED status available even if private insight storage is temporarily down.
+        r=_run_live_radar(force=False,publish=False)
         candidates=r.get("candidates") or []; signals=r.get("signals") or []
         public_candidate=lambda x:{k:x.get(k) for k in ("event_id","favorite","opponent","first_set","second_set","stage","reason","tournament") if k in x}
         return response({"ok":True,"scanned_at":r.get("scanned_at"),"live_events":r.get("live_events",0),"candidates":len(candidates),"signals":len(signals),"candidate_items":[public_candidate(x) for x in candidates[:3] if isinstance(x,dict)],"signal_items":[public_candidate(x) for x in signals[:3] if isinstance(x,dict)],"new_alerts":int(r.get("created") or 0),"cached":bool(r.get("cached")),"thresholds":r.get("thresholds") or {}})

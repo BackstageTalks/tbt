@@ -17,7 +17,7 @@
 }
 html{background:var(--lean-bg)}
 body{background:
-  linear-gradient(180deg,rgba(3,10,9,.86),rgba(4,11,10,.96)),
+  linear-gradient(180deg,rgba(3,10,9,.78),rgba(4,11,10,.93)),
   var(--blinq-page-bg, var(--blinq-page-bg-fallback, none)) center top/cover fixed,
   var(--lean-bg)!important;color:var(--lean-text)}
 body::before{opacity:.13!important;pointer-events:none}
@@ -409,3 +409,11 @@ body#blinqPremium .ace-detail-metric small{display:block;color:#6e9387;font-size
 body#blinqPremium .ace-detail-metric strong{display:block;margin-top:4px;color:#e6f4ef;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body#blinqPremium .ace-detail-note{margin:12px 0 0;color:#6f8d84;font-size:9px;line-height:1.5}
 @media(max-width:620px){body#blinqPremium .ace-detail-shell{padding:22px 14px 16px!important}body#blinqPremium .ace-detail-grid{grid-template-columns:1fr}body#blinqPremium .ace-detail-metric.wide{grid-column:auto}body#blinqPremium .ace-detail-pick{padding:13px 14px}body#blinqPremium .ace-detail-pick strong{font-size:17px}body#blinqPremium .ace-detail-main b{font-size:25px}}
+
+/* v7.1.2 — results pagination + tournament fallback polish */
+.results-pagination{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-top:14px;padding:12px 14px;border:1px solid var(--lean-line);border-radius:14px;background:rgba(7,20,18,.88);color:var(--lean-muted)}
+.results-pagination-meta{display:flex;align-items:baseline;gap:6px;min-width:100px}.results-pagination-meta strong{color:var(--lean-text);font-size:14px}.results-pagination label{display:flex;align-items:center;gap:8px;font-size:12px}.results-pagination select{min-width:72px;height:34px;border:1px solid var(--lean-line-strong);border-radius:9px;background:#081713;color:var(--lean-text);padding:0 10px}.results-pagination-nav{display:flex;align-items:center;gap:10px}.results-pagination-nav button{width:36px;height:34px;border:1px solid rgba(121,242,177,.28);border-radius:9px;background:rgba(121,242,177,.07);color:var(--lean-green);font-size:17px}.results-pagination-nav button:disabled{opacity:.28;cursor:not-allowed}.results-pagination-nav span{font-size:12px;min-width:96px;text-align:center}
+body#blinqPremium .hub-tournament-logo.logo-failed{background:linear-gradient(145deg,#0a2639,#071b29)!important}
+body#blinqPremium .hub-tournament-logo.logo-failed>img[data-tournament-logo]{display:none!important}
+body#blinqPremium .hub-tournament-logo.logo-failed>.hub-logo-fallback{display:grid!important}
+@media(max-width:720px){.results-pagination{flex-wrap:wrap}.results-pagination-meta{order:1}.results-pagination label{order:2}.results-pagination-nav{order:3;width:100%;justify-content:space-between;border-top:1px solid var(--lean-line);padding-top:10px}}
