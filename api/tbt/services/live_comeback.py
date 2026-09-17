@@ -109,7 +109,21 @@ def scan_comeback_radar(feed,live_events):
     return {'scanned_at':datetime.now(timezone.utc).isoformat(),'live_events':len(live_events),'prime_pool':len(prime),'candidates':[c.public() for c in candidates],'signals':[c.public() for c in signals],'thresholds':th}
 
 def publish_radar_signals(scan,*,actor_id='live-radar'):
+    """Publish two-stage LIVE notifications: WATCH first, CONFIRMED later."""
     published=[]
+    signal_ids={str(x.get('event_id') or '').strip() for x in scan.get('signals',[]) if isinstance(x,dict)}
+    for s in scan.get('candidates',[]):
+        if not isinstance(s,dict):continue
+        eid=str(s.get('event_id') or '').strip()
+        if not eid or eid in signal_ids:continue
+        fav=str(s.get('favorite') or 'Favorit');opp=str(s.get('opponent') or '');p=_num(s.get('probability')) or 0;odds=_num(s.get('odds'));fs=str(s.get('first_set') or '—');ss=str(s.get('second_set') or '—')
+        body=f'{fav} prehral 1. set ({fs}) a BlinQ ho zaradil do WATCH comeback režimu.'
+        if ss!='—':body+=f' Druhý set: {ss}.'
+        if opp:body+=f' Súper: {opp}.'
+        body+=f' Predzápasová pravdepodobnosť {p*100:.1f}%'+(f', pôvodný kurz {odds:.2f}.' if odds is not None else '.')
+        body+=' Toto ešte nie je potvrdený comeback signál.'
+        item,created=save_automated_insight({'title':f'Potential Comeback · {fav}','body':body,'type':'live_watch','priority':'normal','levels':LIVE_ALERT_LEVELS,'match_id':eid,'link_label':'Sledovať zápas','active':True,'pinned':False},actor_id=actor_id,insight_id=f'live-watch-{eid}'[:96])
+        published.append({'id':item.get('id'),'event_id':eid,'stage':'watch','created':created})
     for s in scan.get('signals',[]):
         eid=str(s.get('event_id') or '').strip()
         if not eid:continue
@@ -118,5 +132,5 @@ def publish_radar_signals(scan,*,actor_id='live-radar'):
         if opp:body+=f' Súper: {opp}.'
         body+=f' Predzápasová pravdepodobnosť {p*100:.1f}%'+(f', pôvodný kurz {odds:.2f}.' if odds is not None else '.')
         item,created=save_automated_insight({'title':f'Comeback LIVE · {fav}','body':body,'type':'alert','priority':'important','levels':LIVE_ALERT_LEVELS,'match_id':eid,'link_label':'Otvoriť zápas','active':True,'pinned':False},actor_id=actor_id,insight_id=f'live-comeback-{eid}'[:96])
-        published.append({'id':item.get('id'),'event_id':eid,'created':created})
-    return {'published':published,'created':sum(1 for x in published if x['created'])}
+        published.append({'id':item.get('id'),'event_id':eid,'stage':'confirmed','created':created})
+    return {'published':published,'created':sum(1 for x in published if x['created']),'watch_created':sum(1 for x in published if x['created'] and x['stage']=='watch'),'confirmed_created':sum(1 for x in published if x['created'] and x['stage']=='confirmed')}

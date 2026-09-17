@@ -21,3 +21,10 @@ def test_scan_and_prime_never_public(monkeypatch):
     scan=scan_comeback_radar({'prime_picks':[prime_row()]},[live_event()]);assert len(scan['signals'])==1
     payload={'prime_picks':[prime_row()],'top_daily_picks':[],'value_picks':[],'ace_picks':[],'sg_picks':[],'doubles_picks':[],'upcoming':[],'results':[]}
     public,manifest=filter_feed_for_access(payload,{'status':'active','plan':'elite'});assert public['prime_picks']==[] and manifest['sections']['prime']['internal_only'] is True
+
+
+def test_watch_stage_exists_before_confirmed_signal():
+    scan=scan_comeback_radar({'prime_picks':[prime_row()]},[live_event(second=(2,1))])
+    assert len(scan['candidates'])==1
+    assert scan['candidates'][0]['stage']=='watch'
+    assert scan['signals']==[]

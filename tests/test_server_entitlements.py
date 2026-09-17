@@ -29,7 +29,7 @@ def test_rookie_never_receives_hidden_rows():
     assert len(data["prime_picks"]) == 0
     assert len(data["top_daily_picks"]) == 1
     assert len(data["value_picks"]) == 1
-    assert len(data["ace_picks"]) == 0
+    assert len(data["ace_picks"]) == 1
     assert len(data["doubles_picks"]) == 0
     assert len(data["sg_picks"]) == 0
     assert manifest["sections"]["prime"]["internal_only"] is True

@@ -14,7 +14,7 @@ def test_rebuild_keeps_v65_dashboard_contract_and_complete_assets():
     assert tuple(map(int, cfg["ui_revision"].split("."))) >= (6, 5, 4)
     for name in (
         "blinq_logo.svg",
-        "blinq_background.png",
+        "blinq_background.webp",
         "blinq_favi.png",
         "missing_foto_m.png",
         "missing_foto_w.png",
@@ -38,6 +38,8 @@ def test_rebuild_keeps_probability_first_market_policy():
     assert "PRIME_TOP_FALLBACK_PROBABILITY = 0.65" in source
     assert "PRIME_MAX_ODDS_EXCLUSIVE = 1.50" in source
     assert "TOP_MIN_ODDS: float | None = 1.50" in source
+    assert "TOP_FALLBACK_MIN_ODDS = 1.40" in source
+    assert "TOP_MIN_COUNT = 3" in source
     assert "VALUE_MIN_ODDS = 1.80" in source
     assert "VALUE_MAX_ODDS_DIFFERENCE = 0.15" in source
     assert "probability_first_odds_buckets_v10_core68_fallback65" in source

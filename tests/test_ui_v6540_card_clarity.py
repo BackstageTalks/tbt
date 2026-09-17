@@ -2,7 +2,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-CSS = (ROOT / "web" / "premium-v2.css").read_text(encoding="utf-8")
+CSS = (ROOT / "web" / "blinq-lean-700.css").read_text(encoding="utf-8")
 INDEX = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 
 
@@ -10,7 +10,7 @@ def test_prime_top_and_value_cards_keep_four_metrics():
     assert "[publicText('Odds')" in APP
     assert "lcopy('Form','Forma','Forma')" in APP
     assert "['EV'" in APP
-    assert "repeat(4,minmax(0,1fr)) minmax(88px,auto)" in CSS
+    assert ".daily-hub-table" in CSS
 
 
 def test_ace_cards_require_real_api_line_and_use_prediction_copy():

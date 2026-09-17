@@ -224,3 +224,17 @@ body#blinqPremium .insight-live-strip small{font-size:8px;color:#78948b}
 body#blinqPremium .insight-live-dot{width:8px;height:8px;border-radius:50%;background:#35e98c;box-shadow:0 0 10px rgba(53,233,140,.62)}
 body#blinqPremium .insight-live-strip.is-error .insight-live-dot{background:#ffb45c;box-shadow:none}
 @media(max-width:720px){body#blinqPremium .insight-shortcut{padding:0 7px;font-size:8px;height:32px}}
+
+/* v7.0.2 LIVE WATCH / CONFIRMED status */
+body#blinqPremium .insight-shortcut b{display:inline-grid;place-items:center;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:#75847f;color:#06110d;font-size:8px;line-height:1}
+body#blinqPremium .insight-shortcut b[hidden]{display:none!important}
+body#blinqPremium .insight-shortcut.is-live-watching{border-color:rgba(255,181,76,.52);background:rgba(70,48,14,.46)}
+body#blinqPremium .insight-shortcut.is-live-watching .insight-shortcut-live{color:#ffb54c}
+body#blinqPremium .insight-shortcut.is-live-watching .insight-shortcut-live:before{background:#ffb54c;box-shadow:0 0 10px rgba(255,181,76,.75);animation:blinqLivePulse 1.35s ease-in-out infinite}
+body#blinqPremium .insight-shortcut.is-live-watching b{background:#ffb54c}
+body#blinqPremium .insight-shortcut.is-live-confirmed{border-color:rgba(53,233,140,.65);box-shadow:0 0 0 1px rgba(53,233,140,.08),0 0 14px rgba(53,233,140,.10)}
+body#blinqPremium .insight-shortcut.is-live-confirmed b{background:#35e98c}
+body#blinqPremium .insight-live-strip.is-watching{border-color:rgba(255,181,76,.30);background:rgba(65,43,12,.35)}
+body#blinqPremium .insight-live-strip.is-watching .insight-live-dot{background:#ffb54c;box-shadow:0 0 10px rgba(255,181,76,.62);animation:blinqLivePulse 1.35s ease-in-out infinite}
+body#blinqPremium .insight-live-strip.is-confirmed{border-color:rgba(53,233,140,.38);background:rgba(14,55,39,.66)}
+@keyframes blinqLivePulse{0%,100%{opacity:.55;transform:scale(.84)}50%{opacity:1;transform:scale(1.12)}}

@@ -26,11 +26,11 @@ _POLICY = {
     },
     "rookie": {
         "daily": (1, False), "prime": (1, False), "top_daily": (1, False), "value": (1, False),
-        "doubles": (0, False), "ace": (0, False), "sg": (0, False),
+        "doubles": (0, False), "ace": (1, False), "sg": (0, False),
     },
     "pro": {
         "daily": (3, False), "prime": (3, False), "top_daily": (3, False), "value": (3, False),
-        "doubles": (0, False), "ace": (0, False), "sg": (0, False),
+        "doubles": (0, False), "ace": (3, False), "sg": (0, False),
     },
     "elite": {key: ("ALL", True) for key in ["daily", *SECTION_TO_FEED_KEY]},
     "legend": {key: ("ALL", True) for key in ["daily", *SECTION_TO_FEED_KEY]},
@@ -165,7 +165,7 @@ def _daily_rows(payload: dict) -> list[dict]:
         if ident in seen or ident in value_ids:
             continue
         odds=_row_odds(row)
-        if odds is None or odds < 1.45:
+        if odds is None or odds < 1.40:
             continue
         seen.add(ident)
         out.append(row)

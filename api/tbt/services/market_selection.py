@@ -61,10 +61,11 @@ TOP_STANDARD_PROBABILITY = 0.76
 TOP_FALLBACK_PROBABILITIES = (0.74, 0.72, 0.70, 0.68)
 TOP_MIN_PROBABILITY = PRIME_TOP_CORE_PROBABILITY
 TOP_TARGET_COUNT = 10
-TOP_MIN_COUNT = 5
+TOP_MIN_COUNT = 3
 TOP_MIN_DATA_DEPTH = 0.80
 TOP_MIN_SURFACE_MATCHES = 5
 TOP_MIN_ODDS: float | None = 1.50
+TOP_FALLBACK_MIN_ODDS = 1.40
 TOP_MIN_EDGE: float | None = None
 TOP_MIN_EXPECTED_VALUE: float | None = None
 TOP_LIMIT: int | None = None
@@ -861,12 +862,19 @@ def select_market_sections(
         ):
             (prime_core if probability >= prime_core_floor else prime_fallback).append(card)
 
-        if odds >= float(top_min_odds or TOP_MIN_ODDS or 1.50) and _passes_candidate_gate(
+        top_core_odds = float(top_min_odds or TOP_MIN_ODDS or 1.50)
+        if odds >= TOP_FALLBACK_MIN_ODDS and _passes_candidate_gate(
             card, min_probability=fallback_floor,
             min_data_depth=top_min_data_depth,
             min_surface_matches=top_min_surface_matches,
         ):
-            (top_core if probability >= top_core_floor else top_fallback).append(card)
+            tagged = deepcopy(card)
+            if odds >= top_core_odds and probability >= top_core_floor:
+                tagged["selection_tier"] = "core"
+                top_core.append(tagged)
+            else:
+                tagged["selection_tier"] = "fallback"
+                top_fallback.append(tagged)
 
     rank = lambda card: (
         _number(card.get("probability")) or 0.0,
@@ -876,9 +884,9 @@ def select_market_sections(
     )
     value_qualified.sort(key=rank, reverse=True)
 
-    # Value claims overlap with Top before the Top minimum-fill decision, so
-    # fallback inventory is only used when fewer than five publishable Top rows
-    # remain after Value priority is respected.
+    # Value claims overlap with Top before the Top minimum-fill decision.
+    # Fallback inventory (>=1.40 / >=65%) is only used when fewer than three
+    # core Top rows (>=1.50 / >=68%) remain after Value priority is respected.
     value_ids = {_selection_identity(card) for card in value_qualified}
     top_core = [card for card in top_core if _selection_identity(card) not in value_ids]
     top_fallback = [card for card in top_fallback if _selection_identity(card) not in value_ids]
@@ -892,7 +900,7 @@ def select_market_sections(
 
     selected, duplicate_removed, limited_out = _exclusive_section_assignment(
         {"value": value_qualified, "prime": prime_qualified, "top_daily": top_qualified},
-        priority=("value", "prime", "top_daily"),
+        priority=("value", "top_daily", "prime"),
         limits={"value": value_limit, "prime": prime_limit, "top_daily": top_limit},
     )
     value = selected.get("value", [])
@@ -908,8 +916,8 @@ def select_market_sections(
         raise ValueError("Value probability floor invariant failed")
     if any((_number(card.get("odds")) or 0.0) >= PRIME_MAX_ODDS_EXCLUSIVE for card in prime):
         raise ValueError("Prime odds bucket invariant failed")
-    if any((_number(card.get("odds")) or 0.0) < float(top_min_odds or TOP_MIN_ODDS or 1.50) for card in top):
-        raise ValueError("Top odds bucket invariant failed")
+    if any((_number(card.get("odds")) or 0.0) < TOP_FALLBACK_MIN_ODDS for card in top):
+        raise ValueError("Top odds floor invariant failed")
 
     value_diffs = [_market_odds_difference(card) for card in value]
     return {
@@ -983,7 +991,9 @@ def select_market_sections(
                 "min_data_depth": float(top_min_data_depth),
                 "min_surface_matches_each": int(top_min_surface_matches),
                 "requires_odds": True,
-                "min_odds": float(top_min_odds or TOP_MIN_ODDS or 1.50),
+                "core_min_odds": float(top_min_odds or TOP_MIN_ODDS or 1.50),
+                "fallback_min_odds": TOP_FALLBACK_MIN_ODDS,
+                "min_odds": TOP_FALLBACK_MIN_ODDS,
                 "value_priority_exclusion": True,
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,

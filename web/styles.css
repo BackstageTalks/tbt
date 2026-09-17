@@ -41,7 +41,7 @@
 body{background:var(--dash-bg)}
 .dashboard-shell{grid-template-columns:220px minmax(0,1fr);background-color:#040812;background-image:
   linear-gradient(180deg,rgba(4,8,18,.92) 0%,rgba(5,10,19,.95) 70%,rgba(4,8,18,.97) 100%),
-  url('/assets/blinq_background.png'),
+  url('/assets/blinq_background.webp'),
   radial-gradient(circle at 75% 10%,rgba(42,91,181,.08),transparent 28%),
   radial-gradient(circle at 80% 72%,rgba(44,169,255,.05),transparent 24%);
   background-size:cover,cover,auto,auto;background-position:center top,center top,center,center;background-attachment:fixed,fixed,fixed,fixed}

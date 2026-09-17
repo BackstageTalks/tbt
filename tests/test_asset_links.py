@@ -8,7 +8,7 @@ def test_static_asset_contract_is_configured():
     cfg = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     assets = cfg["assets"]
     assert assets["favicon"] == "/assets/blinq_favi.png"
-    assert assets["background"] == "/assets/blinq_background.png"
+    assert assets["background"] == "/assets/blinq_background.webp"
     assert assets["player_fallback"] == {
         "atp": "/assets/missing_foto_m.png",
         "wta": "/assets/missing_foto_w.png",
@@ -25,7 +25,7 @@ def test_web_links_favicon_background_and_fallback_logic():
     css = (ROOT / "web" / "styles.css").read_text(encoding="utf-8")
     js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert '/assets/blinq_favi.png' in html
-    assert "url('/assets/blinq_background.png')" in css
+    assert "url('/assets/blinq_background.webp')" in css
     assert "playerFallbackUrl" in js
     assert "accountAvatarUrl" in js
     assert "tooltipAccountRemaining" in js

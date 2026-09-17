@@ -1165,25 +1165,27 @@
     const cfg=state.ui?.notifications||{};
     return {enabled:cfg.enabled!==false,one_way:cfg.one_way!==false,default_levels:Array.isArray(cfg.default_levels)?cfg.default_levels:['elite','legend','goat'],editable_levels:Array.isArray(cfg.editable_levels)?cfg.editable_levels:['rookie','pro','elite','legend','goat']};
   }
-  function insightTypeLabel(type){return ({info:'Info',insight:'Premium Info',alert:'LIVE',vip:'Premium Info'})[String(type||'').toLowerCase()]||'Insight';}
+  function insightTypeLabel(type){return ({info:'Info',insight:'Premium Info',alert:'LIVE',live_watch:'LIVE · WATCH',vip:'Premium Info'})[String(type||'').toLowerCase()]||'Insight';}
   function insightAudienceText(levels){
     const list=Array.isArray(levels)?levels:[];
     if(['elite','legend','goat'].every(v=>list.includes(v))&&list.length===3)return 'ELITE+';
     return list.map(v=>String(state.ui?.plans?.[v]?.label||v).replace(/^BlinQ\s+/i,'').toUpperCase()).join(' · ')||'—';
   }
   function renderInsightBell(){
-    const bell=$('insightBell'),badge=$('insightUnread'),shortcut=$('insightShortcut'),shortcutLabel=$('insightShortcutLabel');if(!bell||!badge)return;
+    const bell=$('insightBell'),badge=$('insightUnread'),shortcut=$('insightShortcut'),shortcutLabel=$('insightShortcutLabel'),shortcutCount=$('insightShortcutCount');if(!bell||!badge)return;
     const plan=accountPlan();
     const eligible=notificationAudienceConfig().enabled&&['rookie','pro','elite','legend','goat','admin'].includes(plan);
     const liveEligible=['elite','legend','goat','admin'].includes(plan);
     bell.hidden=!eligible;
-    if(shortcut){shortcut.hidden=!eligible;shortcut.classList.toggle('is-live-enabled',liveEligible);}
-    if(shortcutLabel)shortcutLabel.textContent=liveEligible?'& INFO':'INFO';
+    const radar=state.userLiveRadarStatus||{},watching=liveEligible&&Number(radar.candidates)>0,confirmed=liveEligible&&Number(radar.signals)>0;
+    if(shortcut){shortcut.hidden=!eligible;shortcut.classList.toggle('is-live-enabled',liveEligible);shortcut.classList.toggle('is-live-watching',watching&&!confirmed);shortcut.classList.toggle('is-live-confirmed',confirmed);}
+    if(shortcutCount){const n=confirmed?Number(radar.signals)||0:watching?Number(radar.candidates)||0:0;shortcutCount.textContent=String(n);shortcutCount.hidden=!n;}
+    if(shortcutLabel)shortcutLabel.textContent=liveEligible?(confirmed?'CONFIRMED & INFO':watching?'WATCH & INFO':'& INFO'):'INFO';
     const unread=Math.max(0,Number(state.insightsUnread)||0);badge.textContent=unread>99?'99+':String(unread);badge.hidden=!unread;
     bell.classList.toggle('has-unread',unread>0);
   }
   function insightTypeIcon(type){
-    return ({info:'i',insight:'✦',alert:'!',vip:'◆'})[String(type||'').toLowerCase()]||'✦';
+    return ({info:'i',insight:'✦',alert:'!',live_watch:'◉',vip:'◆'})[String(type||'').toLowerCase()]||'✦';
   }
   function renderInsightDrawer(){
     const drawer=$('insightDrawer'),list=$('insightDrawerList'),status=$('insightDrawerStatus'),toolbar=$('insightDrawerToolbar');if(!drawer||!list||!status)return;
@@ -1199,7 +1201,9 @@
     const plan=accountPlan();
     const liveEligible=['elite','legend','goat','admin'].includes(plan);
     const radar=state.userLiveRadarStatus||{};
-    const radarStrip=liveEligible?`<div class="insight-live-strip ${radar.error?'is-error':radar.ok?'is-ok':''}"><span class="insight-live-dot"></span><div><strong>Comeback LIVE Radar</strong><small>${escapeHtml(state.userLiveRadarLoading?lcopy('Checking live matches…','Kontrolujem live zápasy…','Kontroluji live zápasy…'):radar.error?lcopy('LIVE status is temporarily unavailable.','LIVE stav je dočasne nedostupný.','LIVE stav je dočasně nedostupný.'):radar.scanned_at?`${Number(radar.live_events)||0} live · ${Number(radar.candidates)||0} kandidátov · ${Number(radar.signals)||0} signálov`:lcopy('Automatic monitoring is active.','Automatické sledovanie je aktívne.','Automatické sledování je aktivní.'))}</small></div></div>`:'';
+    const candidateNames=Array.isArray(radar.candidate_items)?radar.candidate_items.map(x=>x?.favorite).filter(Boolean).slice(0,2):[];
+    const radarMode=Number(radar.signals)>0?'is-confirmed':Number(radar.candidates)>0?'is-watching':'';
+    const radarStrip=liveEligible?`<div class="insight-live-strip ${radar.error?'is-error':radar.ok?'is-ok':''} ${radarMode}"><span class="insight-live-dot"></span><div><strong>Comeback LIVE Radar</strong><small>${escapeHtml(state.userLiveRadarLoading?lcopy('Checking live matches…','Kontrolujem live zápasy…','Kontroluji live zápasy…'):radar.error?lcopy('LIVE status is temporarily unavailable.','LIVE stav je dočasne nedostupný.','LIVE stav je dočasně nedostupný.'):radar.scanned_at?`${Number(radar.live_events)||0} live · ${Number(radar.candidates)||0} WATCH · ${Number(radar.signals)||0} potvrdené${candidateNames.length?' · '+candidateNames.join(', '):''}`:lcopy('Automatic monitoring is active.','Automatické sledovanie je aktívne.','Automatické sledování je aktivní.'))}</small></div></div>`:'';
     if(state.insightsLoading){list.innerHTML=radarStrip+'<div class="insight-feed-empty insight-feed-loading"><span></span><strong>Načítavam…</strong></div>';return;}
     if(state.insightsStorageUnavailable){list.innerHTML=radarStrip+`<div class="insight-feed-empty insight-feed-offline"><i>!</i><strong>${escapeHtml(lcopy('Feed is offline','Feed je dočasne offline','Feed je dočasně offline'))}</strong><p>${escapeHtml(lcopy('Your dashboard remains fully available. Private messages will appear again when storage is reachable.','Dashboard funguje ďalej. Súkromné správy sa zobrazia po obnovení úložiska.','Dashboard funguje dál. Soukromé zprávy se zobrazí po obnovení úložiště.'))}</p></div>`;return;}
     if(!rows.length){const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');list.innerHTML=radarStrip+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.'))}</p></div>`;return;}
@@ -1213,15 +1217,16 @@
     finally{state.insightsLoading=false;renderInsightBell();renderInsightDrawer();}
   }
   async function refreshPrivateUpdates(force=false){
-    if(state.privateUpdatesBusy||document.hidden||$('appShell')?.hidden)return;const plan=accountPlan();if(!['rookie','pro','elite','legend','goat','admin'].includes(plan))return;const now=Date.now();if(!force&&now-Number(state.privateUpdatesLastPoll||0)<25000)return;state.privateUpdatesBusy=true;state.privateUpdatesLastPoll=now;try{await loadInsights(true);}finally{state.privateUpdatesBusy=false;}
+    if(state.privateUpdatesBusy||document.hidden||$('appShell')?.hidden)return;const plan=accountPlan();if(!['rookie','pro','elite','legend','goat','admin'].includes(plan))return;const now=Date.now();if(!force&&now-Number(state.privateUpdatesLastPoll||0)<25000)return;state.privateUpdatesBusy=true;state.privateUpdatesLastPoll=now;try{await loadInsights(true);if(['elite','legend','goat','admin'].includes(plan))await loadUserLiveRadarStatus(false);}finally{state.privateUpdatesBusy=false;}
   }
   async function loadUserLiveRadarStatus(force=false){
     const plan=accountPlan();if(!['elite','legend','goat','admin'].includes(plan)||state.userLiveRadarLoading)return;
-    if(!force&&state.userLiveRadarStatus?.scanned_at)return;
+    const scanned=Date.parse(state.userLiveRadarStatus?.scanned_at||'');
+    if(!force&&Number.isFinite(scanned)&&Date.now()-scanned<55000)return;
     state.userLiveRadarLoading=true;renderInsightDrawer();
     try{state.userLiveRadarStatus={...(await BlinqAuth.liveRadar()),ok:true};}
     catch(error){state.userLiveRadarStatus={error:error.message||'live_unavailable'};}
-    finally{state.userLiveRadarLoading=false;renderInsightDrawer();}
+    finally{state.userLiveRadarLoading=false;renderInsightBell();renderInsightDrawer();}
   }
   function setInsightDrawer(open){
     const drawer=$('insightDrawer'),backdrop=$('insightBackdrop'),bell=$('insightBell');if(!drawer||!backdrop||!bell)return;
@@ -1291,8 +1296,9 @@
   function leanSeeAllRows(){
     const rows=[],seen=new Set();
     const add=row=>{const id=dailyPickIdentity(row);if(!row||!id||seen.has(id))return;seen.add(id);rows.push(row);};
-    (marketRows('value')||[]).filter(offerSurfaceEligible).forEach(add);
-    (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible).forEach(add);
+    (marketRows('value')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'value'}));
+    (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'daily'}));
+    (marketRows('ace')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'ace'}));
     return rows.sort((a,b)=>(marketProbability(b)||0)-(marketProbability(a)||0));
   }
   function dailyHubRows(tab){
@@ -1302,10 +1308,10 @@
       return (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible);
     }
     if(tab==='value')return marketRows('value').filter(offerSurfaceEligible);
+    if(tab==='ace')return marketRows('ace').filter(offerSurfaceEligible);
     if(tab==='see_all')return ['elite','legend','goat','admin'].includes(accountPlan())?leanSeeAllRows():[];
-    // These categories stay visible in the UI from launch, but data is intentionally not
-    // published until the dedicated models are mapped and validated.
-    if(tab==='ace'||tab==='games'||tab==='sets')return [];
+    // GAMES and SETS stay visible but intentionally unpublished until validated.
+    if(tab==='games'||tab==='sets')return [];
     return [];
   }
   function dashboardFilteredRows(rows){
@@ -1335,10 +1341,11 @@
   function dailyHubTabLabel(tab){
     return {daily:'TOP',value:'VALUE',ace:'ESA',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
   }
-  function dailyHubIsComingSoon(tab){return ['ace','games','sets'].includes(tab);}
+  function dailyHubIsComingSoon(tab){return ['games','sets'].includes(tab);}
   function dailyHubColumns(tab){
     if(dailyHubIsComingSoon(tab))return [''];
     if(tab==='value')return ['#','ČAS','TURNAJ','ZÁPAS','TIP','KURZ','PRAVDEPODOBNOSŤ','HODNOTA',''];
+    if(tab==='ace')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA',''];
     return ['#','ČAS','TURNAJ','ZÁPAS','TIP','KURZ','PRAVDEPODOBNOSŤ',''];
   }
   function safeNum(value){ const n=Number(value); return Number.isFinite(n)?n:null; }
@@ -1628,6 +1635,14 @@
     const open=$('dailyHubInsightOpen'); if(open) open.onclick=()=>openMatch(match,state.dailyHubTab,row);
   }
   function dailyHubRow(row,tab,active=false,index=0){
+    const sourceTab=tab==='see_all'?String(row?._hub_source||''):tab;
+    if(sourceTab==='ace'){
+      const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=modelPickName(row),market=aceMarketName(row);
+      const time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
+      const rowClass=active?' class="hub-row-active"':'';
+      const pred=(market?market+' · ':'')+pick;
+      return `<tr${rowClass} data-hub-event="${key}"><td class="hub-rank">${index+1}</td><td class="hub-time">${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td class="hub-pick"><strong>${escapeHtml(pred)}</strong></td><td class="hub-odds">${Number.isFinite(projection)?projection.toFixed(2):'—'}</td><td><b class="hub-prob">${Number.isFinite(confidence)?pct(confidence):'—'}</b></td><td><button class="hub-detail" type="button" data-hub-detail aria-label="Detail">Detail →</button></td></tr>`;
+    }
     const probability=marketProbability(row),odds=Number(row?.odds??row?.betting?.odds),pick=modelPickName(row);
     const time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
     const rowClass=active?' class="hub-row-active"':'';
@@ -1858,7 +1873,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq.css?v=7011"><link rel="stylesheet" href="/redesign-680.css?v=7011"><link rel="stylesheet" href="/polish-681.css?v=7011"><link rel="stylesheet" href="/polish-683.css?v=7011"><link rel="stylesheet" href="/polish-684.css?v=7011"><link rel="stylesheet" href="/polish-685.css?v=7011"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq.css?v=7012"><link rel="stylesheet" href="/redesign-680.css?v=7012"><link rel="stylesheet" href="/polish-681.css?v=7012"><link rel="stylesheet" href="/polish-683.css?v=7012"><link rel="stylesheet" href="/polish-684.css?v=7012"><link rel="stylesheet" href="/polish-685.css?v=7012"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     const row=rowOverride||m?.raw||m;

@@ -62,7 +62,8 @@ def test_public_prediction_board_matches_final_product_tabs():
     assert "['daily','value','ace','games','sets','see_all']" in render
     assert "{daily:'TOP',value:'VALUE',ace:'ESA',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}" in app
     assert "if(tab==='daily'){" in app and "state.feed?.daily_picks" in app
-    assert "dailyHubIsComingSoon(tab){return ['ace','games','sets'].includes(tab);}" in app
+    assert "if(tab==='ace')return marketRows('ace').filter(offerSurfaceEligible);" in app
+    assert "dailyHubIsComingSoon(tab){return ['games','sets'].includes(tab);}" in app
 
 
 def test_admin_is_visibly_reduced_to_three_sections():

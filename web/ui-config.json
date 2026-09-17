@@ -2570,7 +2570,7 @@
   },
   "assets": {
     "favicon": "/assets/blinq_favi.png",
-    "background": "/assets/blinq_background.png",
+    "background": "/assets/blinq_background.webp",
     "player_fallback": {
       "atp": "/assets/missing_foto_m.png",
       "wta": "/assets/missing_foto_w.png"
@@ -3174,13 +3174,13 @@
               "see_all": false
             },
             "rookie": {
-              "visible_rows": 0,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
             },
             "pro": {
-              "visible_rows": 0,
+              "visible_rows": 3,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false
@@ -3585,5 +3585,5 @@
     "allow_user_replies": false,
     "read_tracking": true
   },
-  "asset_revision": "7011"
+  "asset_revision": 7012
 }
