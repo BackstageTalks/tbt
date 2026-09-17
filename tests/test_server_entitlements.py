@@ -26,13 +26,13 @@ def test_suspended_is_denied():
 
 def test_rookie_never_receives_hidden_rows():
     data, manifest = filter_feed_for_access(feed(), {"status": "active", "plan": "rookie"})
-    assert len(data["prime_picks"]) == 1
+    assert len(data["prime_picks"]) == 0
     assert len(data["top_daily_picks"]) == 1
     assert len(data["value_picks"]) == 1
     assert len(data["ace_picks"]) == 0
     assert len(data["doubles_picks"]) == 0
     assert len(data["sg_picks"]) == 0
-    assert manifest["sections"]["prime"]["locked_count"] == 7
+    assert manifest["sections"]["prime"]["internal_only"] is True
 
 
 def test_trial_inherits_rookie_server_side():
@@ -48,7 +48,7 @@ def test_expired_has_only_explicit_free_subset():
 
 def test_elite_gets_full_curated_feed():
     data, _ = filter_feed_for_access(feed(), {"status": "active", "plan": "elite"})
-    assert len(data["prime_picks"]) == 8
+    assert len(data["prime_picks"]) == 0
     assert len(data["sg_picks"]) == 8
 
 
@@ -69,7 +69,7 @@ def test_admin_runtime_can_set_zero_to_ten_rows_per_category():
         }
     }
     data, manifest = filter_feed_for_access(feed(12), {"status": "active", "plan": "rookie"}, cfg)
-    assert len(data["prime_picks"]) == 7
+    assert len(data["prime_picks"]) == 0
     assert len(data["top_daily_picks"]) == 10
     assert len(data["value_picks"]) == 4
     assert len(data["doubles_picks"]) == 6

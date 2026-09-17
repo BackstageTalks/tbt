@@ -291,6 +291,10 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
         see_all=(runtime_rule[2] if runtime_rule else hard_see_all) and hard_see_all
         enabled=(runtime_rule[3] if runtime_rule else True)
         sections[section]={"visible_picks":limit,"see_all":bool(see_all),"blur_remaining":bool(blur),"enabled":bool(enabled),"total":len(rows),"returned":returned,"locked_count":max(0,len(rows)-returned)}
+    # PRIME is internal-only for Comeback LIVE Radar and never leaves the API.
+    if "prime" in sections:
+        sections["prime"]={"visible_picks":0,"see_all":False,"blur_remaining":False,"enabled":False,"total":0,"returned":0,"locked_count":0,"internal_only":True}
+
     board_rows = _board_rows(payload, "upcoming")
     board_enabled = plan in BOARD_PLANS
     runtime_board = None if plan == "admin" else _admin_hub_rule(ui_config, "board", plan)
@@ -356,11 +360,9 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     # Legacy section arrays remain server-filtered by their original hard policy
     # for backward-compatible detail routes. The new dashboard consumes only
     # `daily_picks`, which has its own stricter consolidated authorization.
-    for section in ("prime", "top_daily"):
-        feed_key=SECTION_TO_FEED_KEY[section]
-        rows=payload.get(feed_key) if isinstance(payload.get(feed_key),list) else []
-        limit=manifest["sections"][section]["visible_picks"]
-        result[feed_key]=_limit_rows(rows,limit)
+    result[SECTION_TO_FEED_KEY["prime"]]=[]
+    rows=payload.get(SECTION_TO_FEED_KEY["top_daily"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["top_daily"]),list) else []
+    result[SECTION_TO_FEED_KEY["top_daily"]]=_limit_rows(rows,manifest["sections"]["top_daily"]["visible_picks"])
 
     for section,feed_key in SECTION_TO_FEED_KEY.items():
         if section in {"prime","top_daily"}: continue

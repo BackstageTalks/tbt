@@ -760,6 +760,25 @@ def save_insight(payload: object, *, actor_id: str = "", insight_id: str = "") -
     return _insight_from_entity(entity)
 
 
+def save_automated_insight(payload: object, *, actor_id: str = "automation", insight_id: str) -> tuple[dict, bool]:
+    """Create one deterministic system insight idempotently."""
+    insight_id=str(insight_id or '').strip()
+    if not _VALID_ID.fullmatch(insight_id): raise ValueError("Invalid automated insight id")
+    client=_table(INSIGHTS_TABLE)
+    try: existing_entity=client.get_entity(partition_key="insights",row_key=insight_id)
+    except Exception as exc:
+        status=getattr(exc,"status_code",None); name=exc.__class__.__name__.lower()
+        if not (status==404 or "notfound" in name or isinstance(exc,KeyError)): raise AdminStorageUnavailable("Unable to load automated insight") from exc
+    else: return _insight_from_entity(existing_entity),False
+    clean=normalize_insight(payload); now=datetime.now(timezone.utc).isoformat()
+    entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k!="levels"},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"created_at":now,"updated_at":now,"created_by":str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":0}
+    try: client.create_entity(entity)
+    except Exception as exc:
+        try:return _insight_from_entity(client.get_entity(partition_key="insights",row_key=insight_id)),False
+        except Exception:raise AdminStorageUnavailable("Unable to create automated insight") from exc
+    return _insight_from_entity(entity),True
+
+
 def delete_insight(insight_id: str) -> dict:
     if not _VALID_ID.fullmatch(str(insight_id or "")):
         raise ValueError("Invalid insight id")

@@ -3448,7 +3448,7 @@
       }
     }
   },
-  "ui_revision": "7.0.0",
+  "ui_revision": "7.0.1",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3493,7 +3493,7 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "7.0.0",
+  "revision": "7.0.1",
   "footer": {
     "copyright": "© 2026 BlinQ",
     "system_status": "Všetky systémy funkčné",

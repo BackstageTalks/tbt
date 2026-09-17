@@ -300,6 +300,10 @@
   async function insights() {
     return apiWithSession('/api/v1/insights');
   }
+  async function liveRadar() { return apiWithSession('/api/v1/live-radar'); }
+  async function adminLiveRadar(force = false, publish = false) {
+    return apiWithSession(`/api/v1/admin/live-radar${force?'?force=1':''}`, {method: publish ? 'POST' : 'GET'});
+  }
   async function markInsightRead(insightId) {
     return apiWithSession(`/api/v1/insights/${encodeURIComponent(insightId)}/read`, {method: 'POST'});
   }
@@ -377,7 +381,7 @@
 
   window.BlinqAuth = {
     init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
-    insights, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
+    insights, liveRadar, adminLiveRadar, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser, supportSubmit, adminSupport, adminUpdateSupport,
     adminPayments, adminAddPayment, adminAudit, runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear,

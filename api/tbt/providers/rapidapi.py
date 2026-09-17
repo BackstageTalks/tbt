@@ -76,6 +76,9 @@ class RapidTennisClient:
         self._category_cache: dict[str, list[dict[str, Any]]] = {}
         self._event_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
 
+    def close(self) -> None:
+        self.client.close()
+
     @property
     def headers(self) -> dict[str, str]:
         return {
@@ -432,6 +435,17 @@ class RapidTennisClient:
             if payload:
                 return payload
         return {}
+
+    def live_events(self) -> list[dict[str, Any]]:
+        """Current live tennis events; runtime-only, never training data."""
+        payload=self._get("/api/tennis/events/live",enrichment=True)
+        if isinstance(payload,dict) and isinstance(payload.get("events"),list): return [x for x in payload["events"] if isinstance(x,dict)]
+        if isinstance(payload,list): return [x for x in payload if isinstance(x,dict)]
+        rows=self._data(payload)
+        if rows:return rows
+        if isinstance(payload,dict) and not payload.get("error") and payload.get("success") is not False:return []
+        raise ProviderError("Unrecognised live events response")
+
 
     def event_statistics(self, event_id: str | int) -> Any:
         """Post-match event statistics; coverage is provider/event dependent."""

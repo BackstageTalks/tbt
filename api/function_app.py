@@ -1,5 +1,6 @@
 from pathlib import Path
 from collections import defaultdict, deque
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 import hashlib
 import logging
@@ -9,6 +10,7 @@ import time
 import azure.functions as func
 
 from tbt.config import settings
+from tbt.errors import ConfigurationError
 from tbt.services.auth import (
     AuthUnavailable,
     auth_provider,
@@ -62,11 +64,12 @@ from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.entitlements import filter_feed_for_access
+from tbt.services.live_comeback import scan_comeback_radar, publish_radar_signals, prime_radar_eligible
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "7.0.0"
-API_VERSION = "3.8.6"
+RELEASE = "7.0.1"
+API_VERSION = "3.9.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
 # instance-local: durable analytics remains in Table Storage, while this only absorbs accidental
@@ -94,6 +97,10 @@ _SUPPORT_RATE_LOCK = Lock()
 _MATCH_INTELLIGENCE_CACHE: dict[str, tuple[float, dict]] = {}
 _MATCH_INTELLIGENCE_CACHE_LOCK = Lock()
 _MATCH_INTELLIGENCE_TTL_SECONDS = 15 * 60
+
+_LIVE_RADAR_CACHE: tuple[float, dict] | None = None
+_LIVE_RADAR_CACHE_LOCK = Lock()
+_LIVE_RADAR_TTL_SECONDS = 45
 
 
 def _banner_event_allowed(payload):
@@ -798,6 +805,58 @@ def feed(req):
 
 
 
+def _live_radar_candidate_window(feed_payload: dict, *, now: datetime | None = None) -> bool:
+    rows=feed_payload.get("prime_picks") if isinstance(feed_payload.get("prime_picks"),list) else []
+    if not rows:return False
+    current=now or datetime.now(timezone.utc); parsed=False
+    for row in rows:
+        if not isinstance(row,dict) or not prime_radar_eligible(row):continue
+        raw=row.get("scheduled_at") or row.get("date") or row.get("start_time")
+        if not raw:continue
+        try:
+            dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
+        except (TypeError,ValueError):continue
+        parsed=True
+        if current-timedelta(hours=6)<=dt<=current+timedelta(minutes=20):return True
+    return not parsed
+
+
+def _live_radar_allowed(account: dict) -> bool:
+    if account.get("is_admin") or str(account.get("role") or "").lower()=="admin":return True
+    return str(account.get("status") or "").lower() in {"active","lifetime"} and str(account.get("plan") or "").lower() in {"elite","legend","goat"}
+
+
+def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
+    global _LIVE_RADAR_CACHE
+    now=time.monotonic()
+    with _LIVE_RADAR_CACHE_LOCK:
+        if not force and _LIVE_RADAR_CACHE and now-_LIVE_RADAR_CACHE[0]<_LIVE_RADAR_TTL_SECONDS:
+            result=dict(_LIVE_RADAR_CACHE[1]);result["cached"]=True;return result
+    feed_payload=read_feed(FEED); client=RapidTennisClient(settings)
+    try:live_events=client.live_events()
+    finally:
+        try:client.close()
+        except Exception:pass
+    scan=scan_comeback_radar(feed_payload,live_events); pub=publish_radar_signals(scan) if publish else {"published":[],"created":0}; result={**scan,**pub,"cached":False}
+    with _LIVE_RADAR_CACHE_LOCK:_LIVE_RADAR_CACHE=(time.monotonic(),dict(result))
+    return result
+
+
+@app.timer_trigger(schedule="0 * * * * *",arg_name="timer",run_on_startup=False,use_monitor=True)
+def live_comeback_timer(timer: func.TimerRequest)->None:
+    try:
+        feed_payload=read_feed(FEED)
+        if not _live_radar_candidate_window(feed_payload):return
+        result=_run_live_radar(force=True,publish=True)
+        if result.get("signals") or result.get("created"):logging.info("Comeback LIVE Radar: live=%s signals=%s new=%s",result.get("live_events",0),len(result.get("signals") or []),result.get("created",0))
+    except (FileNotFoundError,ConfigurationError):return
+    except AdminStorageUnavailable:logging.warning("Comeback LIVE Radar skipped: insight storage unavailable")
+    except Exception as exc:
+        logging.exception("Comeback LIVE Radar timer failed")
+        try:record_system_event("error","live_radar_timer","Comeback LIVE Radar timer failed",details={"error":exc.__class__.__name__})
+        except Exception:pass
+
+
 def _insight_plan_for_user(user):
     """Resolve the membership level used by the private BlinQ Insights feed."""
     profile = _profile_for(user, required=False)
@@ -811,6 +870,35 @@ def _insight_plan_for_user(user):
     if status not in {"active", "lifetime"}:
         return "expired"
     return str(account.get("plan") or "expired").lower()
+
+
+@app.route(route="v1/live-radar", methods=["GET"])
+def live_radar(req):
+    try:
+        user=_verified_user(req)
+        if not user:return response({"error":"unauthorized"},401)
+        if not bool(user.get("email_verified",False)):return response({"error":"email_not_verified"},403)
+        if is_suspended(user):return response({"error":"account_suspended"},403)
+        account=public_account(user,cfg=settings,profile=_profile_for(user))
+        if not _live_radar_allowed(account):return response({"error":"elite_required"},403)
+        r=_run_live_radar(force=False,publish=True)
+        return response({"ok":True,"scanned_at":r.get("scanned_at"),"live_events":r.get("live_events",0),"candidates":len(r.get("candidates") or []),"signals":len(r.get("signals") or []),"new_alerts":int(r.get("created") or 0),"cached":bool(r.get("cached")),"thresholds":r.get("thresholds") or {}})
+    except AuthUnavailable:return response({"error":"auth_unavailable"},503)
+    except AdminStorageUnavailable:return response({"error":"live_radar_storage_unavailable"},503)
+    except Exception as exc:
+        logging.exception("Comeback LIVE Radar scan failed");return response({"error":"live_radar_unavailable"},503)
+
+
+@app.route(route="v1/admin/live-radar", methods=["GET","POST"])
+def admin_live_radar(req):
+    admin,error=_admin_user(req)
+    if error:return error
+    try:
+        force=str(req.params.get("force") or "").lower() in {"1","true","yes"} or req.method=="POST"
+        return response(_run_live_radar(force=force,publish=req.method=="POST"))
+    except AdminStorageUnavailable:return response({"error":"live_radar_storage_unavailable"},503)
+    except Exception as exc:
+        logging.exception("Admin LIVE Radar scan failed");return response({"error":"live_radar_unavailable","detail":exc.__class__.__name__},503)
 
 
 @app.route(route="v1/insights", methods=["GET"])
