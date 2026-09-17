@@ -4,19 +4,19 @@ on:
   workflow_dispatch:
     inputs:
       start:
-        description: "Start UTC/date (inclusive)"
+        description: "Start UTC/date (inclusive). For the full current corpus use 2021-01-01."
         required: true
-        default: "2024-01-01"
+        default: "2021-01-01"
         type: string
       end:
-        description: "End UTC/date (exclusive)"
-        required: true
-        default: "2024-01-08"
+        description: "End UTC/date (exclusive). Blank = today UTC."
+        required: false
+        default: ""
         type: string
       limit:
-        description: "Maximum matches to inspect (0 = all in range)"
+        description: "Maximum matches to inspect (0 = all rows that need work)"
         required: true
-        default: "200"
+        default: "0"
         type: string
       mode:
         description: "Dry-run does not publish parquet changes"
@@ -39,6 +39,11 @@ on:
         required: true
         default: true
         type: boolean
+      max_requests:
+        description: "Open-Meteo/geocoder cap for this run (does NOT use Tennis RapidAPI quota)"
+        required: true
+        default: "12000"
+        type: string
 
 permissions:
   contents: read
@@ -87,17 +92,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          END_VALUE="${{ inputs.end }}"
+          if [[ -z "$END_VALUE" ]]; then END_VALUE="$(date -u +%F)"; fi
           ARGS=(
             --start "${{ inputs.start }}"
-            --end "${{ inputs.end }}"
+            --end "$END_VALUE"
             --limit "${{ inputs.limit }}"
+            --max-requests "${{ inputs.max_requests }}"
             --data-repository "$TBT_DATA_REPOSITORY"
           )
           if [[ "${{ inputs.mode }}" == "dry-run" ]]; then ARGS+=(--dry-run); fi
-          if [[ "${{ inputs.force }}" == "true" ]]; then ARGS+=(--force); fi
-          if [[ "${{ inputs.static_only }}" == "true" ]]; then
-            ARGS+=(--static-only --complete-static)
+          if [[ "${{ inputs.static_only }}" == "true" ]]; then ARGS+=(--static-only); fi
+
+          # Force means exactly that: overwrite/re-resolve every row in range.
+          # Do NOT combine --force with --complete-static; the Python CLI rejects
+          # that combination by design. This used to make force+static-only fail.
+          if [[ "${{ inputs.force }}" == "true" ]]; then
+            ARGS+=(--force)
           elif [[ "${{ inputs.retry_unresolved }}" == "true" ]]; then
             ARGS+=(--retry-unresolved)
+          elif [[ "${{ inputs.static_only }}" == "true" ]]; then
+            ARGS+=(--complete-static)
           fi
           python scripts/enrich_environment_snapshot.py "${ARGS[@]}"
+      - name: Upload environment run report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-environment-enrichment-${{ github.run_id }}
+          path: .cache/tbt/history/environment_enrichment_report.json
+          if-no-files-found: warn
+

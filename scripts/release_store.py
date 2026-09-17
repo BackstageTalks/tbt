@@ -2,12 +2,47 @@ import hashlib
 import json
 import re
 import subprocess
+import sys
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+_TRANSIENT_GH_ERROR = re.compile(
+    r"(?:HTTP\s+(?:429|500|502|503|504)\b|connection reset|timed? out|timeout|temporary failure|TLS handshake|unexpected EOF|EOF)",
+    re.IGNORECASE,
+)
+
+
+def _run_gh(args, *, max_attempts=5):
+    """Run gh with bounded retries for transient GitHub/API failures.
+
+    Release asset replacement is idempotent in our callers (uploads use
+    --clobber), so retrying a transient 5xx/429 avoids wasting a completed
+    provider refresh because GitHub briefly failed while persisting the bundle.
+    """
+    command = ["gh", *map(str, args)]
+    result = None
+    for attempt in range(max_attempts):
+        result = subprocess.run(command, capture_output=True, text=True)
+        if result.returncode == 0:
+            return result
+        stderr = result.stderr.strip()
+        transient = bool(_TRANSIENT_GH_ERROR.search(stderr))
+        if not transient or attempt + 1 >= max_attempts:
+            return result
+        delay = min(2 ** (attempt + 1), 16)
+        print(
+            f"GitHub CLI transient failure; retrying in {delay}s "
+            f"({attempt + 2}/{max_attempts}): {stderr[:220]}",
+            file=sys.stderr,
+        )
+        time.sleep(delay)
+    return result
+
+
 def gh(*args):
-    result = subprocess.run(["gh", *map(str, args)], capture_output=True, text=True)
+    result = _run_gh(args)
     if result.returncode:
         raise RuntimeError(f"GitHub CLI operation failed: {result.stderr.strip()[:500]}")
     return result.stdout
@@ -25,14 +60,11 @@ class ReleaseStore:
             raise ValueError("Training data destination must be PRIVATE")
         # Look up the exact tag directly. A long release history must not make
         # an existing fixed tag look absent merely because it fell off page 1.
-        lookup = subprocess.run(
+        lookup = _run_gh(
             [
-                "gh",
                 "api",
                 f"repos/{repository}/releases/tags/{tag}",
-            ],
-            capture_output=True,
-            text=True,
+            ]
         )
         if lookup.returncode:
             stderr = lookup.stderr.strip()

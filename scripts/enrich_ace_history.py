@@ -213,6 +213,7 @@ def main() -> None:
         "players_ready": sum(min(v.values()) >= args.target_samples for v in after.values()),
         "target_samples": args.target_samples,
     }
+    (cache / "ace_run_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2), flush=True)
 
 

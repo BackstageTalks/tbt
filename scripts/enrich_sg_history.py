@@ -199,6 +199,7 @@ def main() -> None:
         "players_ready": sum(value >= args.target_samples for value in current.values()),
         "target_samples": args.target_samples,
     }
+    (cache / "sg_run_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(json.dumps(summary, indent=2), flush=True)
 
 

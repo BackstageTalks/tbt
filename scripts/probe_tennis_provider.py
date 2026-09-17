@@ -23,6 +23,7 @@ from typing import Any
 from tbt.errors import ProviderError
 from tbt.providers.budget import RequestBudgetExceeded
 from tbt.providers.rapidapi import RapidTennisClient
+from tbt.providers.statistics import RATE_ALIASES, COUNT_ALIASES
 from tbt.services.market_selection import _outcome_text, _price, _walk_market_rows
 from tbt.utils import first_present
 
@@ -181,26 +182,76 @@ def _odds_summary(payload: Any) -> dict[str, Any]:
 
 
 def _stat_key_inventory(payload: Any) -> dict[str, Any]:
-    keys = Counter()
-    interesting = Counter()
-    wanted = ("ace", "double", "serve", "break", "game", "set", "return", "point")
+    """Inventory actual statistic item identifiers, not only JSON envelope keys.
+
+    The previous probe mostly reported generic dict keys such as ``groups`` and
+    ``statisticsItems``. That was insufficient to extend the conservative
+    statistics parser. This version captures provider item key/name values and
+    tells us which ones our current adapter already understands.
+    """
+    dict_keys = Counter()
+    item_names = Counter()
+    supported_rates = Counter()
+    supported_counts = Counter()
+    samples: list[dict[str, Any]] = []
+
+    def norm(value: Any) -> str:
+        import re
+        return re.sub(r"[^a-z0-9]", "", str(value or "").lower())
 
     def walk(value: Any):
         if isinstance(value, dict):
             for key, child in value.items():
-                keys[str(key)] += 1
-                normalized = str(key).casefold().replace("_", " ")
-                if any(token in normalized for token in wanted):
-                    interesting[str(key)] += 1
+                dict_keys[str(key)] += 1
                 walk(child)
         elif isinstance(value, list):
             for child in value:
                 walk(child)
 
     walk(payload)
+    periods = payload.get("statistics", []) if isinstance(payload, dict) else []
+    for period in periods if isinstance(periods, list) else []:
+        if not isinstance(period, dict):
+            continue
+        groups = period.get("groups", [])
+        for group in groups if isinstance(groups, list) else []:
+            if not isinstance(group, dict):
+                continue
+            items = group.get("statisticsItems", [])
+            for item in items if isinstance(items, list) else []:
+                if not isinstance(item, dict):
+                    continue
+                raw_name = str(item.get("key") or item.get("name") or "").strip()
+                if not raw_name:
+                    continue
+                item_names[raw_name] += 1
+                normalized = norm(raw_name)
+                if normalized in RATE_ALIASES:
+                    supported_rates[RATE_ALIASES[normalized]] += 1
+                if normalized in COUNT_ALIASES:
+                    supported_counts[COUNT_ALIASES[normalized]] += 1
+                if len(samples) < 40:
+                    sample = {
+                        "period": period.get("period"),
+                        "group": group.get("groupName") or group.get("name"),
+                        "key": item.get("key"),
+                        "name": item.get("name"),
+                    }
+                    for key in ("home", "away", "homeValue", "awayValue", "homeTotal", "awayTotal"):
+                        if key in item:
+                            sample[key] = item.get(key)
+                    samples.append(sample)
+
     return {
-        "interesting_keys": dict(interesting.most_common()),
-        "all_keys_sample": [name for name, _ in keys.most_common(120)],
+        "stat_item_names": dict(item_names.most_common()),
+        "supported_rate_alias_hits": dict(supported_rates),
+        "supported_count_alias_hits": dict(supported_counts),
+        "unsupported_item_names": [
+            name for name, _ in item_names.most_common()
+            if norm(name) not in RATE_ALIASES and norm(name) not in COUNT_ALIASES
+        ],
+        "sample_items": samples,
+        "all_dict_keys_sample": [name for name, _ in dict_keys.most_common(120)],
     }
 
 
