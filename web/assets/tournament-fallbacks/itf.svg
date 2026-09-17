@@ -1,7 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="ITF">
-<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0d2632"/><stop offset="1" stop-color="#06151e"/></linearGradient></defs>
-<rect x="2" y="2" width="92" height="92" rx="20" fill="url(#g)" stroke="#a890ff" stroke-opacity=".65" stroke-width="2"/>
-<circle cx="48" cy="34" r="13" fill="none" stroke="#a890ff" stroke-width="3"/>
-<path d="M39 25l18 18M35 31l19 19M42 22l18 18M35 39l14 14M47 46l11 18" fill="none" stroke="#a890ff" stroke-width="2" stroke-linecap="round" opacity=".9"/>
-<text x="48" y="79" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="800" fill="#f4fbfa" letter-spacing=".5">ITF</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="ITF / World Tennis">
+<title>ITF / World Tennis</title>
+<rect x="24" y="24" width="464" height="464" rx="92" fill="#082F35"/>
+<text x="256" y="214" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="126" font-weight="900" letter-spacing="-5" fill="#fff" style="">ITF</text><path d="M116 258 H395" stroke="#49E0CC" stroke-width="16" stroke-linecap="round"/><text x="256" y="343" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="40" font-weight="900" letter-spacing="2" fill="#49E0CC" style="">WORLD TENNIS</text><circle cx="256" cy="411" r="34" fill="#D9FF42" stroke="#0B3538" stroke-width="5"/><path d="M 226.1,395.4 Q 254.3,409.3 246.5,440.9" fill="none" stroke="#0B3538" stroke-width="5" stroke-linecap="round"/><path d="M 285.9,426.6 Q 257.7,412.7 265.5,381.1" fill="none" stroke="#0B3538" stroke-width="5" stroke-linecap="round"/>
 </svg>

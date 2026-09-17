@@ -1,7 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="GS">
-<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0d2632"/><stop offset="1" stop-color="#06151e"/></linearGradient></defs>
-<rect x="2" y="2" width="92" height="92" rx="20" fill="url(#g)" stroke="#f1d45c" stroke-opacity=".65" stroke-width="2"/>
-<circle cx="48" cy="34" r="13" fill="none" stroke="#f1d45c" stroke-width="3"/>
-<path d="M39 25l18 18M35 31l19 19M42 22l18 18M35 39l14 14M47 46l11 18" fill="none" stroke="#f1d45c" stroke-width="2" stroke-linecap="round" opacity=".9"/>
-<text x="48" y="79" text-anchor="middle" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="800" fill="#f4fbfa" letter-spacing=".5">GS</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="Grand Slam">
+<title>Grand Slam</title>
+<rect x="24" y="24" width="464" height="464" rx="92" fill="#F3F4F4"/>
+<path d="M256 79 A177 177 0 0 0 79 256 H256 Z" fill="#1F9CF0"/><path d="M256 79 A177 177 0 0 1 433 256 H256 Z" fill="#E96A2F"/><path d="M79 256 A177 177 0 0 0 256 433 V256 Z" fill="#0D6B3F"/><path d="M433 256 A177 177 0 0 1 256 433 V256 Z" fill="#173B73"/><circle cx="256" cy="256" r="82" fill="#101719" stroke="#fff" stroke-width="8"/><circle cx="256" cy="256" r="52" fill="#D9FF42" stroke="#101719" stroke-width="6"/><path d="M 210.2,232.1 Q 253.4,253.4 241.4,301.8" fill="none" stroke="#101719" stroke-width="6" stroke-linecap="round"/><path d="M 301.8,279.9 Q 258.6,258.6 270.6,210.2" fill="none" stroke="#101719" stroke-width="6" stroke-linecap="round"/><text x="256" y="478" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="29" font-weight="900" letter-spacing="4" fill="#101719" style="">GRAND SLAM</text>
 </svg>
