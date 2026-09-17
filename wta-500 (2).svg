@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="UTR Sports">
+<title>UTR Sports</title>
+<rect x="24" y="24" width="464" height="464" rx="92" fill="#11191D"/>
+<text x="256" y="220" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="118" font-weight="900" letter-spacing="-7" fill="#fff" style="">UTR</text><path d="M125 257 C177 294 336 294 389 257" fill="none" stroke="#FF6B2D" stroke-width="17" stroke-linecap="round"/><text x="256" y="348" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="50" font-weight="900" letter-spacing="6" fill="#FF6B2D" style="">SPORTS</text><text x="256" y="404" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" letter-spacing="1" fill="#C9D5DA" style="">UNIVERSAL TENNIS RATING</text>
+</svg>
