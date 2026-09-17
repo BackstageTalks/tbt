@@ -391,3 +391,21 @@ body#blinqPremium.blinq-admin .admin-simple-edit{font-size:16px!important;line-h
 body#blinqPremium .reference-topbar .profile-meta-primary{display:flex!important;align-items:center!important;gap:5px!important;min-width:0!important}
 body#blinqPremium .reference-topbar #profilePlan{display:inline-flex!important;align-items:center!important;max-width:68px!important;padding:1px 4px!important;border-radius:999px!important;background:rgba(121,242,177,.07)!important;color:#80d9b8!important;font-size:6.4px!important;font-weight:900!important;letter-spacing:.04em!important;text-transform:uppercase!important;overflow:hidden!important;text-overflow:ellipsis!important}
 body#blinqPremium .reference-topbar #profileTelegram{display:none!important}
+
+/* 7.0.8 ESA projection detail: compact, market-specific, no fake zero stats */
+body#blinqPremium .daily-hub-table tr[data-hub-market="ace"]{cursor:default!important}
+body#blinqPremium .daily-hub-table tr[data-hub-market="ace"]:hover{background:inherit!important}
+body#blinqPremium .hub-projection-detail{white-space:nowrap!important}
+body#blinqPremium .ace-projection-dialog{width:min(620px,calc(100vw - 28px))!important;max-height:min(82vh,680px)!important}
+body#blinqPremium .ace-detail-shell{padding:26px 28px 22px!important}
+body#blinqPremium .ace-detail-pick{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-top:16px;padding:16px 18px;border:1px solid rgba(47,206,156,.28);border-radius:14px;background:linear-gradient(180deg,rgba(12,48,40,.78),rgba(7,29,25,.9))}
+body#blinqPremium .ace-detail-pick small{display:block;color:#7aa897;font-size:9px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}
+body#blinqPremium .ace-detail-pick strong{display:block;margin-top:4px;font-size:20px;color:#f0f8f5}
+body#blinqPremium .ace-detail-main{text-align:right}.ace-detail-main b{display:block;color:#35f2a2;font-size:30px;line-height:1}.ace-detail-main small{display:block;margin-top:4px;color:#7aa897;font-size:9px;text-transform:uppercase;letter-spacing:.08em}
+body#blinqPremium .ace-detail-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin-top:12px}
+body#blinqPremium .ace-detail-metric{padding:11px 12px;border:1px solid rgba(49,113,91,.45);border-radius:11px;background:#071a16;min-width:0}
+body#blinqPremium .ace-detail-metric.wide{grid-column:1/-1}
+body#blinqPremium .ace-detail-metric small{display:block;color:#6e9387;font-size:8px;text-transform:uppercase;letter-spacing:.06em}
+body#blinqPremium .ace-detail-metric strong{display:block;margin-top:4px;color:#e6f4ef;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body#blinqPremium .ace-detail-note{margin:12px 0 0;color:#6f8d84;font-size:9px;line-height:1.5}
+@media(max-width:620px){body#blinqPremium .ace-detail-shell{padding:22px 14px 16px!important}body#blinqPremium .ace-detail-grid{grid-template-columns:1fr}body#blinqPremium .ace-detail-metric.wide{grid-column:auto}body#blinqPremium .ace-detail-pick{padding:13px 14px}body#blinqPremium .ace-detail-pick strong{font-size:17px}body#blinqPremium .ace-detail-main b{font-size:25px}}

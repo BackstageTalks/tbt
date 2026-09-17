@@ -72,7 +72,7 @@ jobs:
       - name: Run backend tests
         env:
           PYTHONPATH: api:scripts
-        run: python -m pytest --ignore=tests/legacy
+        run: python -m pytest tests --ignore=tests/legacy
 
       - name: Set up Node
         uses: actions/setup-node@v4

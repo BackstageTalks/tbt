@@ -1380,7 +1380,7 @@
   function dailyHubColumns(tab){
     if(dailyHubIsComingSoon(tab))return [''];
     if(tab==='value')return ['#','ČAS','TURNAJ','ZÁPAS','TIP','KURZ','PRAVDEPODOBNOSŤ','HODNOTA',''];
-    if(tab==='ace')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA',''];
+    if(tab==='ace')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];
     return ['#','ČAS','TURNAJ','ZÁPAS','TIP','KURZ','PRAVDEPODOBNOSŤ',''];
   }
   function safeNum(value){ const n=Number(value); return Number.isFinite(n)?n:null; }
@@ -1669,6 +1669,48 @@
     main.innerHTML='<div class="insight-main-head"><div><small>'+escapeHtml(String(row?.tour||match.tour||'').toUpperCase()+' · '+String(row?.round||match.round||'').toUpperCase())+'</small><h3>'+escapeHtml(match.p1)+' <span>vs</span> '+escapeHtml(match.p2)+'</h3><p>'+escapeHtml((row?.tournament||row?.competition||match.tournament)+' · '+String(match.surface||'').replaceAll('_',' ').toUpperCase()+' · '+fmtDate(match.date)+' · '+fmtTime(match.date))+'</p></div><div class="insight-main-score"><small>BlinQ</small><strong>'+escapeHtml(probability==null?'—':pct(probability))+'</strong><span class="confidence '+escapeHtml(match.confidence)+'">'+escapeHtml(confidenceLabel(match.confidence))+'</span></div></div>'+insightSummaryCards(row,state.dailyHubTab)+'<div class="insight-versus-grid">'+insightPlayerCard(row,1)+insightPlayerCard(row,2)+'</div><div class="insight-inline-footer"><div class="insight-compare-list">'+quick.map(([label,a,b])=>'<div class="insight-compare-row"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(String(a))+'</strong><b>'+escapeHtml(String(b))+'</b></div>').join('')+'</div><button class="btn btn-ghost insight-modal-cta" type="button" id="dailyHubInsightOpen">'+escapeHtml(lcopy('Open comparison + radar','Otvoriť porovnanie + radar','Otevřít porovnání + radar'))+'</button></div>';
     const open=$('dailyHubInsightOpen'); if(open) open.onclick=()=>openMatch(match,state.dailyHubTab,row);
   }
+  function aceProjectionDetailData(row){
+    const p1=row?.player1||{},p2=row?.player2||{};
+    const p1Name=String(p1?.name||row?.player1_name||'Player 1');
+    const p2Name=String(p2?.name||row?.player2_name||'Player 2');
+    const selectedId=String(row?.selection_id||row?.pick_id||'');
+    const selectedName=String(row?.pick||row?.selection||'').trim();
+    const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),gap=Number(row?.projection_gap),confidence=Number(row?.projection_confidence);
+    const samples=row?.projection_samples&&typeof row.projection_samples==='object'?row.projection_samples:{};
+    const p1Samples=Number(samples.player1),p2Samples=Number(samples.player2),p1Surface=Number(samples.player1_surface),p2Surface=Number(samples.player2_surface);
+    const market=aceMarketName(row),line=apiMarketLine(row),side=aceLineSide(row);
+    const selectedIsP1=selectedId&&String(p1?.id||'')===selectedId || (!selectedId&&selectedName&&selectedName.toLowerCase()===p1Name.toLowerCase());
+    const selectedIsP2=selectedId&&String(p2?.id||'')===selectedId || (!selectedId&&selectedName&&selectedName.toLowerCase()===p2Name.toLowerCase());
+    const opponentName=selectedIsP1?p2Name:selectedIsP2?p1Name:'';
+    const useful=Number.isFinite(projection)&&projection>0 && Number.isFinite(confidence)&&confidence>0;
+    return {useful,p1Name,p2Name,selectedName:selectedName||'—',opponentName,projection,opponentProjection,gap,confidence,p1Samples,p2Samples,p1Surface,p2Surface,market,line,side};
+  }
+  function aceProjectionDetailAvailable(row){return aceProjectionDetailData(row).useful;}
+  function aceProjectionDetailHtml(row){
+    const d=aceProjectionDetailData(row),match=normalize(row);
+    if(!d.useful)return '';
+    const metric=(label,value,wide=false)=>value===null||value===undefined||value===''?'' : `<div class="ace-detail-metric${wide?' wide':''}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(String(value))}</strong></div>`;
+    const metrics=[];
+    metrics.push(metric(d.market,lcopy('Projection','Projekcia','Projekce')+' '+d.projection.toFixed(2),true));
+    if(Number.isFinite(d.opponentProjection)&&d.opponentProjection>0)metrics.push(metric(lcopy('Opponent projection','Projekcia súpera','Projekce soupeře'),d.opponentProjection.toFixed(2)));
+    if(Number.isFinite(d.gap)&&d.gap>0)metrics.push(metric(lcopy('Projection gap','Rozdiel projekcie','Rozdíl projekce'),'+'+d.gap.toFixed(2)));
+    if(Number.isFinite(d.confidence)&&d.confidence>0)metrics.push(metric(lcopy('Model confidence','Istota modelu','Jistota modelu'),pct(d.confidence)));
+    if(Number.isFinite(d.line)&&d.line>0)metrics.push(metric(lcopy('Market line','Hranica trhu','Hranice trhu'),`${d.side?d.side+' ':''}${d.line.toFixed(1)}`));
+    if(Number.isFinite(d.p1Samples)&&d.p1Samples>0)metrics.push(metric(d.p1Name+' · '+lcopy('sample','vzorka','vzorek'),Math.trunc(d.p1Samples)));
+    if(Number.isFinite(d.p2Samples)&&d.p2Samples>0)metrics.push(metric(d.p2Name+' · '+lcopy('sample','vzorka','vzorek'),Math.trunc(d.p2Samples)));
+    const surfaceParts=[];
+    if(Number.isFinite(d.p1Surface)&&d.p1Surface>0)surfaceParts.push(`${d.p1Name} ${Math.trunc(d.p1Surface)}`);
+    if(Number.isFinite(d.p2Surface)&&d.p2Surface>0)surfaceParts.push(`${d.p2Name} ${Math.trunc(d.p2Surface)}`);
+    if(surfaceParts.length)metrics.push(metric(lcopy('Surface samples','Vzorka na povrchu','Vzorek na povrchu'),surfaceParts.join(' · '),true));
+    return `<div class="match-detail-shell ace-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">ESA · ${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div></header><div class="ace-detail-pick"><div><small>${escapeHtml(d.market)}</small><strong>${escapeHtml(d.selectedName)}</strong></div><div class="ace-detail-main"><b>${escapeHtml(d.projection.toFixed(2))}</b><small>${escapeHtml(lcopy('projection','projekcia','projekce'))}</small></div></div><div class="ace-detail-grid">${metrics.filter(Boolean).join('')}</div><p class="ace-detail-note">${escapeHtml(lcopy('Only verified Aces / Double Faults projection data are shown here. Missing serve or return statistics are intentionally hidden.','Zobrazujeme iba overené projekčné dáta pre esá a dvojchyby. Chýbajúce štatistiky podania alebo returnu zámerne nezobrazujeme.','Zobrazujeme pouze ověřená projekční data pro esa a dvojchyby. Chybějící statistiky podání nebo returnu záměrně nezobrazujeme.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>${escapeHtml(String(row?.projection_source||'historical_event_statistics').replaceAll('_',' '))}</span></div></div>`;
+  }
+  function openAceProjection(row){
+    if(!aceProjectionDetailAvailable(row))return;
+    const dialog=$('matchDialog'),content=$('dialogContent');if(!dialog||!content)return;
+    content.innerHTML=aceProjectionDetailHtml(row);
+    dialog.classList.add('ace-projection-dialog');
+    if(!dialog.open)dialog.showModal();
+  }
   function dailyHubRow(row,tab,active=false,index=0){
     const sourceTab=tab==='see_all'?String(row?._hub_source||''):tab;
     if(sourceTab==='ace'){
@@ -1676,7 +1718,9 @@
       const time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
       const rowClass=active?' class="hub-row-active"':'';
       const pred=(market?market+' · ':'')+pick;
-      return `<tr${rowClass} data-hub-event="${key}"><td class="hub-rank">${index+1}</td><td class="hub-time">${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td class="hub-pick"><strong>${escapeHtml(pred)}</strong></td><td class="hub-odds">${Number.isFinite(projection)?projection.toFixed(2):'—'}</td><td><b class="hub-prob">${Number.isFinite(confidence)?pct(confidence):'—'}</b></td><td><button class="hub-detail" type="button" data-hub-detail aria-label="Detail">Detail →</button></td></tr>`;
+      const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia ESA','Projekce ESA'))}">${escapeHtml(lcopy('Projection','Projekcia','Projekce'))} →</button>`:'';
+      const actionCell=tab==='see_all'?`<td class="hub-optional-action">${action}</td>`:'';
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="ace"><td class="hub-rank">${index+1}</td><td class="hub-time">${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td class="hub-pick"><strong>${escapeHtml(pred)}</strong></td><td class="hub-odds">${Number.isFinite(projection)?projection.toFixed(2):'—'}</td><td><b class="hub-prob">${Number.isFinite(confidence)?pct(confidence):'—'}</b></td>${actionCell}</tr>`;
     }
     const probability=marketProbability(row),odds=Number(row?.odds??row?.betting?.odds),pick=modelPickName(row);
     const time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
@@ -1853,7 +1897,12 @@
       [lcopy('Form','Forma','Forma'),s1.formDisplay,s2.formDisplay],
       [lcopy('Net play','Hra na sieti','Hra na síti'),s1.netDisplay,s2.netDisplay]
     ];
-    return `<div class="match-stat-table"><div class="match-stat-head"><span>${escapeHtml(lcopy('Metric','Metrika','Metrika'))}</span><strong>${escapeHtml(match.p1)}</strong><b>${escapeHtml(match.p2)}</b></div>${rows.map(([label,a,b])=>`<div class="match-stat-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(a))}</strong><b>${escapeHtml(String(b))}</b></div>`).join('')}</div>`;
+    const missingDisplay=value=>{const text=String(value??'').trim();if(!text||text==='—')return true;const numeric=Number(text.replace('%','').replace(',','.'));return Number.isFinite(numeric)&&numeric===0;};
+    const visibleRows=rows.filter(([label,a,b])=>{
+      const optional=[lcopy('1st serve','1. podanie','1. podání'),lcopy('Return','Return','Return'),lcopy('Aces','Esá','Esa'),lcopy('Net play','Hra na sieti','Hra na síti')].includes(label);
+      return !optional||!(missingDisplay(a)&&missingDisplay(b));
+    });
+    return `<div class="match-stat-table"><div class="match-stat-head"><span>${escapeHtml(lcopy('Metric','Metrika','Metrika'))}</span><strong>${escapeHtml(match.p1)}</strong><b>${escapeHtml(match.p2)}</b></div>${visibleRows.map(([label,a,b])=>`<div class="match-stat-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(a))}</strong><b>${escapeHtml(String(b))}</b></div>`).join('')}</div>`;
   }
   function renderMatchHistoryPanel(row){
     const match=normalize(row),s1=playerInsightStats(row,1),s2=playerInsightStats(row,2);
@@ -1909,7 +1958,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq.css?v=7012"><link rel="stylesheet" href="/redesign-680.css?v=7012"><link rel="stylesheet" href="/polish-681.css?v=7012"><link rel="stylesheet" href="/polish-683.css?v=7012"><link rel="stylesheet" href="/polish-684.css?v=7012"><link rel="stylesheet" href="/polish-685.css?v=7012"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq.css?v=7016"><link rel="stylesheet" href="/redesign-680.css?v=7016"><link rel="stylesheet" href="/polish-681.css?v=7016"><link rel="stylesheet" href="/polish-683.css?v=7016"><link rel="stylesheet" href="/polish-684.css?v=7016"><link rel="stylesheet" href="/polish-685.css?v=7016"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     const row=rowOverride||m?.raw||m;
@@ -1917,6 +1966,7 @@
     if(shouldHydrate)row.__liveIntelligenceLoading=true;
     $('dialogContent').innerHTML=matchDetailHtml(m,tab,rowOverride);
     const dialog=$('matchDialog');
+    dialog.classList.remove('ace-projection-dialog');
     dialog.querySelectorAll('[data-match-tab]').forEach(button=>button.addEventListener('click',()=>{
       const id=button.dataset.matchTab;
       dialog.querySelectorAll('[data-match-tab]').forEach(node=>{node.classList.toggle('active',node===button);node.setAttribute('aria-selected',node===button?'true':'false');});
@@ -1973,7 +2023,14 @@
           const pools=[state.feed?.upcoming,state.feed?.daily_picks,state.feed?.board_upcoming,state.feed?.board_results];
           current=pools.flatMap(items=>Array.isArray(items)?items:[]).find(r=>eventKey(r)===key)||null;
         }
-        if(current)openMatch(normalize(current),state.dailyHubTab,current);
+        if(current){
+          const sourceTab=state.dailyHubTab==='see_all'?String(current?._hub_source||''):state.dailyHubTab;
+          if(sourceTab==='ace'){
+            if(target.closest('[data-ace-projection]')&&aceProjectionDetailAvailable(current))openAceProjection(current);
+            return;
+          }
+          openMatch(normalize(current),state.dailyHubTab,current);
+        }
       }
     };
   }

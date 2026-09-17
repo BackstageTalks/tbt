@@ -1836,9 +1836,28 @@ body#blinqPremium#blinqPremium .boot-tennis-rally .boot-tennis-ball{
   body#blinqPremium#blinqPremium .boot-tennis-net{width:28%!important}
 }
 
-
-/* 7.0.7 compact BlinQ loader */
-body#blinqPremium .boot-tennis-card-compact{width:min(420px,88vw)!important;max-height:min(420px,72vh)!important;padding:18px!important;background:linear-gradient(180deg,rgba(7,28,44,.92),rgba(6,20,32,.94))!important;border:1px solid rgba(46,121,117,.58)!important;box-shadow:0 20px 60px rgba(0,0,0,.42),0 0 0 1px rgba(114,255,207,.04) inset!important;animation:blinqTennisLoad 1.8s ease-in-out infinite!important}
-body#blinqPremium .boot-tennis-card-compact img{display:block!important;width:100%!important;height:auto!important;max-height:calc(72vh - 36px)!important;filter:drop-shadow(0 18px 42px rgba(0,0,0,.34))!important}
-body#blinqPremium .boot-tennis-card-compact::before{display:none!important}
-@media (max-width:560px){body#blinqPremium .boot-tennis-card-compact{width:min(360px,92vw)!important;padding:14px!important;border-radius:18px!important}}
+/* 7.0.9 exact user-supplied BlinQ loader. Animation lives inside the SVG. */
+body#blinqPremium .boot-tennis-card-source{
+  width:min(390px,88vw)!important;
+  max-height:min(390px,76vh)!important;
+  padding:0!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:0!important;
+  box-shadow:none!important;
+  overflow:visible!important;
+  animation:none!important;
+}
+body#blinqPremium .boot-tennis-card-source::before{display:none!important}
+body#blinqPremium .boot-tennis-card-source>img{
+  display:block!important;
+  width:100%!important;
+  height:auto!important;
+  max-height:min(390px,76vh)!important;
+  object-fit:contain!important;
+  filter:none!important;
+}
+@media(max-width:560px){
+  body#blinqPremium .boot-tennis-card-source{width:min(350px,92vw)!important;max-height:72vh!important}
+  body#blinqPremium .boot-tennis-card-source>img{max-height:72vh!important}
+}

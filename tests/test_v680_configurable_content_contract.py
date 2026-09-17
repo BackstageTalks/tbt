@@ -19,11 +19,11 @@ def test_goat_is_regular_upgrade_tier():
 
 def test_loader_is_compact_svg_rally_without_progress_track():
     html=(ROOT/"web"/"index.html").read_text(encoding="utf-8")
-    loader=(ROOT/"web"/"assets"/"blinq_loading_compact.svg").read_text(encoding="utf-8")
+    loader=(ROOT/"web"/"assets"/"blinq_loading_animated_v6.svg").read_text(encoding="utf-8")
     assert "boot-tennis-track" not in html
-    assert "/assets/blinq_loading_compact.svg" in html
-    assert "<animateMotion" in loader
-    assert "Načítavam tenisovú inteligenciu" in loader
+    assert "/assets/blinq_loading_animated_v6.svg" in html
+    assert "<animateTransform" in loader
+    assert 'aria-label="BlinQ loading animation"' in loader
 
 def test_indoor_hard_uses_hard_stats_bucket():
     text=(ROOT/"api"/"tbt"/"services"/"feature_builder.py").read_text(encoding="utf-8")
