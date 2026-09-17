@@ -135,6 +135,75 @@ def download_days(provider, matches, progress, start, end, checkpoint, quarantin
         day -= timedelta(days=1)
 
 
+
+def reopen_history_gap_days(matches, progress, start, end, existing_years):
+    """Re-open progress dates when a requested year is missing or catastrophically partial."""
+    requested_years = set(range(start.year, end.year + 1))
+    missing_years = requested_years - set(existing_years)
+
+    represented_days = {}
+    values = matches.values() if isinstance(matches, dict) else matches
+    for match in values:
+        match_day = match.scheduled_at.astimezone(timezone.utc).date()
+        if start <= match_day <= end:
+            represented_days.setdefault(match_day.year, set()).add(match_day.isoformat())
+
+    completed_by_year = {}
+    valid_completed = []
+    invalid_completed = []
+    for raw_day in progress.get("completed_days", []):
+        try:
+            parsed_day = date.fromisoformat(str(raw_day))
+        except ValueError:
+            invalid_completed.append(raw_day)
+            continue
+        valid_completed.append((raw_day, parsed_day))
+        if start <= parsed_day <= end:
+            completed_by_year.setdefault(parsed_day.year, set()).add(parsed_day.isoformat())
+
+    suspicious_partial_years = set()
+    partial_coverage = {}
+    for year in sorted(requested_years & set(existing_years)):
+        completed = completed_by_year.get(year, set())
+        if len(completed) < 14:
+            continue
+        represented = represented_days.get(year, set())
+        represented_completed = completed & represented
+        ratio = len(represented_completed) / max(1, len(completed))
+        # A healthy tennis year has matches on most completed calendar days.
+        # Below 50% is intentionally conservative and catches catastrophic
+        # partial-year uploads without re-fetching ordinary no-match days.
+        if ratio < 0.50:
+            suspicious_partial_years.add(year)
+            partial_coverage[str(year)] = {
+                "completed_days": len(completed),
+                "represented_completed_days": len(represented_completed),
+                "represented_ratio": round(ratio, 4),
+            }
+
+    kept_days = list(invalid_completed)
+    reopened_days = []
+    for raw_day, parsed_day in valid_completed:
+        reopen = False
+        if start <= parsed_day <= end and parsed_day.year in missing_years:
+            reopen = True
+        elif start <= parsed_day <= end and parsed_day.year in suspicious_partial_years:
+            if parsed_day.isoformat() not in represented_days.get(parsed_day.year, set()):
+                reopen = True
+        if reopen:
+            reopened_days.append(raw_day)
+        else:
+            kept_days.append(raw_day)
+
+    if reopened_days:
+        progress["completed_days"] = sorted(kept_days)
+    return {
+        "missing_partition_years": sorted(missing_years),
+        "partial_partition_years": sorted(suspicious_partial_years),
+        "partial_partition_coverage": partial_coverage,
+        "reopened_days": reopened_days,
+    }
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start", default=None, help="Optional oldest date; overrides lookback")
@@ -202,6 +271,33 @@ def main():
     progress = read_json(progress_file, {"schema": 1, "completed_days": []})
     if progress.get("schema") != 1:
         raise ValueError("Unsupported download progress schema")
+
+    # Recovery guard: an interrupted/partial release upload can leave
+    # download_progress.json ahead of the physical yearly parquet.
+    if args.mode == "history":
+        existing_years = set()
+        for part in directory.glob("history-*.parquet"):
+            try:
+                existing_years.add(int(part.stem.split("-")[-1]))
+            except (TypeError, ValueError):
+                continue
+        recovery = reopen_history_gap_days(matches, progress, start, end, existing_years)
+        reopened_days = recovery.pop("reopened_days")
+        if reopened_days:
+            progress["recovery_reset"] = {
+                "at": datetime.now(timezone.utc).isoformat(),
+                **recovery,
+                "reopened_day_count": len(reopened_days),
+                "requested_start": start.isoformat(),
+                "requested_end": end.isoformat(),
+            }
+            write_json(progress_file, progress)
+            print(json.dumps({
+                "warning": "completed_days_reopened_for_history_gap_recovery",
+                **recovery,
+                "reopened_day_count": len(reopened_days),
+            }), flush=True)
+
     pending_years = set()
     pending_removals = set()
 

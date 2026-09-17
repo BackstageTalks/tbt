@@ -113,3 +113,47 @@ def test_merge_preserves_statistics_when_provider_changes_orientation(match_fact
 def test_invalid_ledger_fails_closed():
     with pytest.raises(ValueError):
         reserve_allocation({"schema": 99}, 1000)
+
+
+def test_reopen_history_gap_days_for_missing_partition(match_factory):
+    from download_tennis_history import reopen_history_gap_days
+    progress = {"completed_days": ["2026-01-01", "2026-01-02", "2025-12-31"]}
+    result = reopen_history_gap_days({}, progress, date(2026, 1, 1), date(2026, 1, 2), {2025})
+    assert result["missing_partition_years"] == [2026]
+    assert result["partial_partition_years"] == []
+    assert sorted(result["reopened_days"]) == ["2026-01-01", "2026-01-02"]
+    assert progress["completed_days"] == ["2025-12-31"]
+
+
+def test_reopen_history_gap_days_for_catastrophically_partial_partition(match_factory):
+    from download_tennis_history import reopen_history_gap_days
+    completed = [f"2026-01-{day:02d}" for day in range(1, 21)]
+    progress = {"completed_days": completed.copy()}
+    match = replace(
+        match_factory("m1", "A", "B", "A"),
+        scheduled_at=datetime(2026, 1, 20, 12, tzinfo=timezone.utc),
+    )
+    result = reopen_history_gap_days(
+        {match.match_id: match}, progress, date(2026, 1, 1), date(2026, 1, 20), {2026}
+    )
+    assert result["missing_partition_years"] == []
+    assert result["partial_partition_years"] == [2026]
+    assert len(result["reopened_days"]) == 19
+    assert progress["completed_days"] == ["2026-01-20"]
+
+
+def test_reopen_history_gap_days_does_not_touch_healthy_partition(match_factory):
+    from download_tennis_history import reopen_history_gap_days
+    completed = [f"2026-01-{day:02d}" for day in range(1, 21)]
+    matches = {}
+    for day in range(1, 16):
+        match = replace(
+            match_factory(f"m{day}", f"A{day}", f"B{day}", f"A{day}"),
+            scheduled_at=datetime(2026, 1, day, 12, tzinfo=timezone.utc),
+        )
+        matches[match.match_id] = match
+    progress = {"completed_days": completed.copy()}
+    result = reopen_history_gap_days(matches, progress, date(2026, 1, 1), date(2026, 1, 20), {2026})
+    assert result["partial_partition_years"] == []
+    assert result["reopened_days"] == []
+    assert progress["completed_days"] == completed
