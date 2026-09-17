@@ -18,6 +18,7 @@ from tbt.data.history_snapshot import (
     merge_matches,
     _merge_record,
     write_snapshot,
+    write_year_partition,
     load_snapshot,
     load_partitions,
     load_manifest,
@@ -1142,3 +1143,55 @@ def test_refresh_keeps_existing_row_when_ambiguous_new_collision_arrives(match_f
 
     assert len(merged) == 1
     assert merged[0].provider_payload.get("_tbt_provider_event_id") == "101"
+
+
+def test_missing_history_manifest_repair_reconstructs_valid_remote_inventory(monkeypatch, tmp_path, match_factory):
+    pytest.importorskip("pyarrow")
+    import repair_missing_history_manifest as manifest_repair
+
+    store, assets = fake_release(monkeypatch, tmp_path)
+    source = tmp_path / "source-history"
+    source.mkdir()
+    first = replace(
+        match_factory("r2024", "A", "B", "A"),
+        scheduled_at=datetime(2024, 6, 1, 12, tzinfo=timezone.utc),
+        provider_payload={"_tbt_provider_event_id": "r2024"},
+    )
+    second = replace(
+        match_factory("r2025", "C", "D", "C"),
+        scheduled_at=datetime(2025, 6, 1, 12, tzinfo=timezone.utc),
+        provider_payload={"_tbt_provider_event_id": "r2025"},
+    )
+    write_year_partition([first], source, 2024)
+    write_year_partition([second], source, 2025)
+    for year in (2024, 2025):
+        path = source / f"history-{year}.parquet"
+        assets[path.name] = path.read_bytes()
+    assets[store.BUNDLE_MANIFEST] = json.dumps({
+        "schema": 1,
+        "files": {
+            name: {"sha256": hashlib.sha256(payload).hexdigest(), "bytes": len(payload)}
+            for name, payload in assets.items()
+            if name.startswith("history-")
+        },
+    }).encode()
+
+    report = manifest_repair.repair_missing_manifest(store)
+
+    assert report["status"] == "repaired"
+    assert report["partition_count"] == 2
+    assert report["verified_normal_download"] is True
+    assert "history_manifest.json" in assets
+    recovered = json.loads(assets["history_manifest.json"])
+    assert set(recovered["years"]) == {"2024", "2025"}
+    assert recovered["years"]["2024"]["rows"] == 1
+    assert recovered["years"]["2025"]["rows"] == 1
+    bundle = json.loads(assets[store.BUNDLE_MANIFEST])
+    assert "history_manifest.json" in bundle["files"]
+
+
+def test_data_workflow_exposes_missing_manifest_repair_mode():
+    root = Path(__file__).resolve().parents[1]
+    data = (root / ".github/workflows/data.yml").read_text()
+    assert "history-manifest-repair" in data
+    assert "repair_missing_history_manifest.py" in data

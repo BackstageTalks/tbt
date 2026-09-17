@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [mega-data, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, train, backtest, refresh]
+        options: [mega-data, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -149,6 +149,8 @@ jobs:
               --max-requests "$MAX_REQUESTS"
           elif [[ "$MODE" == history-audit ]]; then
             python scripts/audit_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
+          elif [[ "$MODE" == history-manifest-repair ]]; then
+            python scripts/repair_missing_history_manifest.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == history-integrity-repair ]]; then
             python scripts/repair_history_bundle_integrity.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == history-repair ]]; then
@@ -225,6 +227,14 @@ jobs:
             .cache/tbt/provider-probe/provider_probe_report.json
             .cache/tbt/provider-probe/provider_probe_report.md
           if-no-files-found: error
+
+      - name: Upload history manifest recovery report
+        if: ${{ always() && env.MODE == 'history-manifest-repair' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-history-manifest-repair-${{ github.run_id }}
+          path: .cache/tbt/history-manifest-repair/history_manifest_repair_report.json
+          if-no-files-found: warn
 
       - name: Upload history repair diagnostics
         if: ${{ always() && (env.MODE == 'history-repair' || env.MODE == 'history' || env.MODE == 'statistics') }}
