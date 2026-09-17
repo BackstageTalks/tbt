@@ -2572,8 +2572,8 @@
     "favicon": "/assets/blinq_favi.png",
     "background": "/assets/blinq_background.webp",
     "player_fallback": {
-      "atp": "/assets/missing_foto_m.png",
-      "wta": "/assets/missing_foto_w.png"
+      "atp": "/assets/missing_foto_m.webp",
+      "wta": "/assets/missing_foto_w.webp"
     },
     "account_avatars": {
       "rookie": {

@@ -5,19 +5,15 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 APP = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
 CSS = (ROOT / "web" / "blinq.css").read_text(encoding="utf-8")
-POLISH = (ROOT / "web" / "polish-681.css").read_text(encoding="utf-8")
+LOADER = (ROOT / "web" / "assets" / "blinq_loading_compact.svg").read_text(encoding="utf-8")
 
 
-def test_loader_is_ball_rally_without_progress_track():
-    assert 'class="boot-tennis-rally"' in INDEX
-    assert 'class="boot-tennis-ball"' in INDEX
-    assert 'class="boot-tennis-track"' not in INDEX
-    assert 'class="boot-tennis-net"' in INDEX
-    assert 'class="boot-tennis-court"' in INDEX
-    assert "boot-tennis-cleanup" in INDEX
-    assert "@keyframes bq-loader-rally" in POLISH
-    assert "animation:bq-loader-rally" in POLISH
-    assert ".boot-tennis-net" in POLISH
+def test_loader_is_compact_svg_rally_without_progress_track():
+    assert '/assets/blinq_loading_compact.svg' in INDEX
+    assert 'boot-tennis-track' not in INDEX
+    assert '<animateMotion' in LOADER
+    assert 'TENNIS INTELLIGENCE' in LOADER
+    assert 'Načítavam tenisovú inteligenciu' in LOADER
 
 
 def test_auth_login_hides_signup_only_telegram_field():
@@ -41,4 +37,4 @@ def test_frontend_cache_bust_for_final_ui_pass():
     cache = str(cfg['asset_revision'])
     for asset in ('blinq.css','redesign-680.css','polish-681.css','polish-683.css','polish-684.css','polish-685.css','app.js'):
         assert f'/{asset}?v={cache}' in INDEX
-    assert f'/assets/blinq_loading_tennis_v2.webp?v={cache}' in INDEX
+    assert f'/assets/blinq_loading_compact.svg?v={cache}' in INDEX

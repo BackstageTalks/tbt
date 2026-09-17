@@ -10,8 +10,8 @@ def test_static_asset_contract_is_configured():
     assert assets["favicon"] == "/assets/blinq_favi.png"
     assert assets["background"] == "/assets/blinq_background.webp"
     assert assets["player_fallback"] == {
-        "atp": "/assets/missing_foto_m.png",
-        "wta": "/assets/missing_foto_w.png",
+        "atp": "/assets/missing_foto_m.webp",
+        "wta": "/assets/missing_foto_w.webp",
     }
     for plan, variants in assets["account_avatars"].items():
         for _, asset_path in variants.items():
