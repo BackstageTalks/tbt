@@ -4,6 +4,9 @@ import argparse
 import json
 import logging
 import os
+from collections import Counter, defaultdict
+from copy import deepcopy
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -13,10 +16,14 @@ from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions, write_year_partition
 from tbt.data.history_safety import sanitize_history_identities
 from tbt.services.environment import (
+    ENVIRONMENT_RESOLVER_VERSION,
+    ENVIRONMENT_SCHEMA_VERSION,
     OpenMeteoBudgetExceeded,
     OpenMeteoClient,
+    Venue,
     environment_payload,
     location_candidates,
+    venue_learning_keys,
 )
 
 logger = logging.getLogger("tbt.enrich_environment_snapshot")
@@ -41,6 +48,192 @@ def _write_report(path: Path, report: dict[str, Any]) -> None:
     temporary.replace(path)
 
 
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _venue_signature(venue: dict[str, Any]) -> tuple[float, float] | None:
+    try:
+        latitude = float(venue.get("latitude"))
+        longitude = float(venue.get("longitude"))
+    except (TypeError, ValueError):
+        return None
+    if not -90 <= latitude <= 90 or not -180 <= longitude <= 180:
+        return None
+    # City-level geocoding can differ by a few metres between snapshots.  Four
+    # decimals is precise enough for environment/weather reuse without creating
+    # artificial conflicts from insignificant coordinate drift.
+    return (round(latitude, 4), round(longitude, 4))
+
+
+def _venue_object(value: dict[str, Any]) -> Venue | None:
+    sig = _venue_signature(value)
+    if sig is None:
+        return None
+    latitude, longitude = sig
+    elevation = value.get("elevation_m")
+    try:
+        elevation_value = float(elevation) if elevation not in (None, "") else None
+    except (TypeError, ValueError):
+        elevation_value = None
+    return Venue(
+        query=str(value.get("query") or value.get("name") or "history-cache"),
+        name=str(value.get("name") or value.get("query") or "Resolved venue"),
+        latitude=latitude,
+        longitude=longitude,
+        elevation_m=elevation_value,
+        timezone=str(value.get("timezone")) if value.get("timezone") else None,
+        country=str(value.get("country")) if value.get("country") else None,
+    )
+
+
+class VenueKnowledge:
+    """In-memory positive venue cache learned from the private history release.
+
+    No new persistence layer is required: resolved ``_tbt_environment`` records
+    are the durable positive cache.  On every run we rebuild a conservative
+    index and only reuse a key when historical observations agree strongly.
+    """
+
+    def __init__(self) -> None:
+        self._counts: dict[str, Counter[tuple[float, float]]] = defaultdict(Counter)
+        self._representatives: dict[tuple[str, tuple[float, float]], dict[str, Any]] = {}
+        self.observations = 0
+
+    def add(self, match: Any, payload: dict[str, Any], venue: dict[str, Any]) -> None:
+        signature = _venue_signature(venue)
+        if signature is None:
+            return
+        keys = venue_learning_keys(
+            payload,
+            str(getattr(match, "tournament", "") or ""),
+            tour=str(getattr(match, "tour", "") or ""),
+            tournament_id=getattr(match, "tournament_id", None),
+        )
+        if not keys:
+            return
+        clean_venue = deepcopy(venue)
+        for key in keys:
+            self._counts[key][signature] += 1
+            self._representatives[(key, signature)] = clean_venue
+        self.observations += 1
+
+    def lookup(self, match: Any, payload: dict[str, Any]) -> tuple[dict[str, Any] | None, str | None]:
+        keys = venue_learning_keys(
+            payload,
+            str(getattr(match, "tournament", "") or ""),
+            tour=str(getattr(match, "tour", "") or ""),
+            tournament_id=getattr(match, "tournament_id", None),
+        )
+        for key in keys:
+            counts = self._counts.get(key)
+            if not counts:
+                continue
+            total = sum(counts.values())
+            top_signature, top_count = counts.most_common(1)[0]
+            # One unique historical location is accepted immediately.  Conflicted
+            # keys require overwhelming repeated evidence; otherwise we fail closed.
+            if len(counts) == 1 or (top_count >= 3 and top_count / max(1, total) >= 0.95):
+                venue = self._representatives.get((key, top_signature))
+                if venue:
+                    return deepcopy(venue), key
+        return None, None
+
+    @property
+    def reusable_keys(self) -> int:
+        count = 0
+        for values in self._counts.values():
+            total = sum(values.values())
+            top_count = values.most_common(1)[0][1]
+            if len(values) == 1 or (top_count >= 3 and top_count / max(1, total) >= 0.95):
+                count += 1
+        return count
+
+
+def _build_venue_knowledge(matches: list[Any]) -> VenueKnowledge:
+    knowledge = VenueKnowledge()
+    for match in matches:
+        payload = dict(getattr(match, "provider_payload", None) or {})
+        env = _as_dict(payload.get("_tbt_environment"))
+        venue = _as_dict(env.get("venue"))
+        if env.get("venue_resolved") is True and venue:
+            knowledge.add(match, payload, venue)
+    return knowledge
+
+
+def _learned_environment(
+    *,
+    client: OpenMeteoClient,
+    match: Any,
+    payload: dict[str, Any],
+    knowledge: VenueKnowledge,
+    include_weather: bool,
+) -> tuple[dict[str, Any] | None, str | None]:
+    venue_dict, cache_key = knowledge.lookup(match, payload)
+    if venue_dict is None or cache_key is None:
+        return None, None
+    venue = _venue_object(venue_dict)
+    if venue is None:
+        return None, None
+
+    env: dict[str, Any] = {
+        "schema_version": ENVIRONMENT_SCHEMA_VERSION,
+        "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
+        "venue_resolved": True,
+        "location_query": f"history-cache:{cache_key}",
+        "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
+        "source": "history-venue-cache",
+        "weather_provenance": "historical_archive_posthoc",
+        "training_eligible_weather": False,
+        "venue": asdict(venue),
+    }
+    if include_weather:
+        env["weather"] = asdict(client.weather_at(venue, match.scheduled_at))
+        env["match_hour_utc"] = match.scheduled_at.astimezone(timezone.utc).hour
+    return env, cache_key
+
+
+def _needs_work(
+    *,
+    match: Any,
+    payload: dict[str, Any],
+    knowledge: VenueKnowledge,
+    force: bool,
+    complete_static: bool,
+    retry_unresolved: bool,
+) -> tuple[bool, str]:
+    existing = _as_dict(payload.get("_tbt_environment"))
+    has_existing = bool(existing)
+
+    if force:
+        return True, "force"
+
+    if complete_static:
+        if existing.get("venue_resolved") is True:
+            return False, "resolved"
+        if has_existing:
+            try:
+                resolver_version = int(existing.get("resolver_version") or 0)
+            except (TypeError, ValueError):
+                resolver_version = 0
+            if resolver_version >= ENVIRONMENT_RESOLVER_VERSION:
+                # A current-version negative result is a durable negative cache.
+                # However, newly learned positive history is allowed to override it.
+                learned, _ = knowledge.lookup(match, payload)
+                if learned is None:
+                    return False, "unresolved_current_resolver"
+        return True, "complete_static"
+
+    if retry_unresolved:
+        if not has_existing or existing.get("venue_resolved") is True:
+            return False, "not_unresolved"
+        return True, "retry_unresolved"
+
+    if has_existing:
+        return False, "already_has_environment"
+    return True, "missing"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -50,7 +243,7 @@ def main() -> None:
     )
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True, help="Exclusive UTC end")
-    parser.add_argument("--limit", type=int, default=0, help="0 = all matches in range")
+    parser.add_argument("--limit", type=int, default=0, help="0 = all rows that actually need work")
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
         "--static-only", action="store_true",
@@ -58,15 +251,18 @@ def main() -> None:
     )
     parser.add_argument(
         "--complete-static", action="store_true",
-        help="With --static-only, process rows with missing OR unresolved environment and skip resolved rows.",
+        help=(
+            "With --static-only, fill missing rows and retry unresolved rows from older resolver versions. "
+            "Current-version negative results are skipped unless a positive venue can now be learned from history."
+        ),
     )
     parser.add_argument("--max-requests", type=int, default=4000, help="Open-Meteo request cap for a resumable run")
     parser.add_argument(
         "--retry-unresolved",
         action="store_true",
         help=(
-            "Process only rows with an existing unresolved environment record. "
-            "Default mode processes only rows with no environment record at all."
+            "Explicit second pass: retry rows with venue_resolved=false even when they were attempted "
+            "by the current resolver version."
         ),
     )
     parser.add_argument("--dry-run", action="store_true")
@@ -106,15 +302,18 @@ def main() -> None:
 
     years = range(start.year, end.year + 1)
     matches, identity_safety = sanitize_history_identities(load_partitions(history_dir, years=years))
-    candidates = [
+    in_scope = [
         match
         for match in matches
         if start <= match.scheduled_at.astimezone(timezone.utc) < end
         and match.is_completed
     ]
-    candidates.sort(key=lambda m: (m.scheduled_at, str(m.match_id)))
-    if args.limit > 0:
-        candidates = candidates[: args.limit]
+    in_scope.sort(key=lambda m: (m.scheduled_at, str(m.match_id)))
+
+    # The existing 150k+ resolved rows become our local venue master.  This is
+    # rebuilt from the durable history release and therefore survives workflows
+    # without introducing a second source of truth.
+    knowledge = _build_venue_knowledge(matches)
 
     report: dict[str, Any] = {
         "target": "private-github-release:tbt-data-v1",
@@ -122,10 +321,15 @@ def main() -> None:
         "supabase_used": False,
         "start": start.isoformat(),
         "end": end.isoformat(),
-        "matches_in_scope": len(candidates),
+        "matches_in_scope": len(in_scope),
+        "selected_for_run": 0,
+        "pending_before_limit": 0,
         "inspected": 0,
         "already_enriched": 0,
+        "skipped_current_resolver_unresolved": 0,
         "resolved": 0,
+        "resolved_from_history_cache": 0,
+        "resolved_from_geocoder": 0,
         "unresolved": 0,
         "updated": 0,
         "errors": 0,
@@ -138,6 +342,9 @@ def main() -> None:
         ),
         "static_only": bool(args.static_only),
         "max_requests": int(args.max_requests),
+        "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
+        "venue_cache_observations": knowledge.observations,
+        "venue_cache_reusable_keys": knowledge.reusable_keys,
         "weather_policy": "not_requested_static_only" if args.static_only else "historical_archive_posthoc_research_only",
         "training_eligible_weather": False,
         "budget_exhausted": False,
@@ -145,6 +352,29 @@ def main() -> None:
         "unresolved_details": [],
         "error_details": [],
     }
+
+    pending: list[Any] = []
+    for match in in_scope:
+        payload = dict(match.provider_payload or {})
+        needs_work, reason = _needs_work(
+            match=match,
+            payload=payload,
+            knowledge=knowledge,
+            force=bool(args.force),
+            complete_static=bool(args.complete_static),
+            retry_unresolved=bool(args.retry_unresolved),
+        )
+        if needs_work:
+            pending.append(match)
+        else:
+            report["already_enriched"] += 1
+            if reason == "unresolved_current_resolver":
+                report["skipped_current_resolver_unresolved"] += 1
+
+    report["pending_before_limit"] = len(pending)
+    if args.limit > 0:
+        pending = pending[: args.limit]
+    report["selected_for_run"] = len(pending)
 
     client = OpenMeteoClient(request_limit=args.max_requests)
     changed_years: set[int] = set()
@@ -171,6 +401,7 @@ def main() -> None:
                     "last_environment_enrichment": {
                         "start": start.isoformat(),
                         "end": end.isoformat(),
+                        "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
                         "training_eligible_weather": False,
                         "completed_at": datetime.now(timezone.utc).isoformat(),
                     }
@@ -184,30 +415,9 @@ def main() -> None:
         dirty_since_checkpoint = 0
 
     try:
-        for match in candidates:
+        for match in pending:
             report["inspected"] += 1
             payload = dict(match.provider_payload or {})
-            existing = payload.get("_tbt_environment")
-            has_existing = isinstance(existing, dict) and bool(existing)
-            if not args.force:
-                if args.complete_static:
-                    # One resumable static-data completion pass: fill missing rows and
-                    # retry unresolved rows, but never spend requests on already-resolved venues.
-                    if has_existing and existing.get("venue_resolved") is True:
-                        report["already_enriched"] += 1
-                        continue
-                elif args.retry_unresolved:
-                    # Second-pass mode: only retry rows that were actually attempted
-                    # and failed venue resolution. Missing rows wait for the normal pass.
-                    if not has_existing or existing.get("venue_resolved") is True:
-                        report["already_enriched"] += 1
-                        continue
-                elif has_existing:
-                    # Default resume mode never wastes another six-hour run retrying
-                    # rows that already have a resolved OR unresolved environment result.
-                    report["already_enriched"] += 1
-                    continue
-
             detail = {
                 "match_id": match.match_id,
                 "scheduled_at": match.scheduled_at.astimezone(timezone.utc).isoformat(),
@@ -217,13 +427,29 @@ def main() -> None:
             }
 
             try:
-                env = environment_payload(
-                    client,
-                    payload,
-                    match.tournament,
-                    match.scheduled_at,
+                env, cache_key = _learned_environment(
+                    client=client,
+                    match=match,
+                    payload=payload,
+                    knowledge=knowledge,
                     include_weather=(not args.static_only and match.indoor is not True),
                 )
+                if env is not None:
+                    report["resolved_from_history_cache"] += 1
+                    detail["venue_cache_key"] = cache_key
+                else:
+                    env = environment_payload(
+                        client,
+                        payload,
+                        match.tournament,
+                        match.scheduled_at,
+                        include_weather=(not args.static_only and match.indoor is not True),
+                    )
+                    # Keep the resolver version durable even if an older environment
+                    # helper is accidentally imported by a partial deployment.
+                    env["resolver_version"] = ENVIRONMENT_RESOLVER_VERSION
+                    if env.get("venue_resolved") is True:
+                        report["resolved_from_geocoder"] += 1
             except OpenMeteoBudgetExceeded:
                 report["budget_exhausted"] = True
                 checkpoint()
@@ -243,6 +469,8 @@ def main() -> None:
                 detail["resolved_venue"] = env.get("venue")
                 if len(report["resolved_details"]) < args.diagnostics_limit:
                     report["resolved_details"].append(detail)
+                # New successful geocodes immediately help later rows in the same run.
+                knowledge.add(match, payload, _as_dict(env.get("venue")))
             else:
                 report["unresolved"] += 1
                 if len(report["unresolved_details"]) < args.diagnostics_limit:
@@ -262,6 +490,7 @@ def main() -> None:
 
     report["open_meteo_requests"] = client.request_count
     report["changed_years"] = sorted(published_years | changed_years)
+    report["venue_cache_reusable_keys_after_run"] = knowledge.reusable_keys
     report_path = history_dir / "environment_enrichment_report.json"
     _write_report(report_path, report)
     if not args.dry_run:

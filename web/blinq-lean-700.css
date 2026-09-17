@@ -208,3 +208,19 @@ body::before{opacity:.13!important;pointer-events:none}
 /* 7.0.1 messages + Comeback LIVE */
 body#blinqPremium .admin-live-radar-card{display:flex;align-items:center;justify-content:space-between;gap:18px;margin:0 0 14px;padding:14px 16px;border:1px solid rgba(72,233,151,.22);border-radius:12px;background:linear-gradient(135deg,rgba(5,35,28,.92),rgba(5,20,24,.92))}
 body#blinqPremium .admin-live-radar-card>div{display:grid;gap:3px;min-width:0}body#blinqPremium .admin-live-radar-card small{color:#48e997;font-size:9px;font-weight:900;letter-spacing:.12em}body#blinqPremium .admin-live-radar-card strong{color:#edf8f4;font-size:13px}body#blinqPremium .admin-live-radar-card span{color:#87a39a;font-size:10px;line-height:1.45}body#blinqPremium .admin-live-radar-card.is-error{border-color:rgba(255,105,105,.32)}body#blinqPremium .admin-live-radar-card.is-ok{box-shadow:inset 3px 0 0 rgba(72,233,151,.65)}body#blinqPremium .admin-insight-audience-presets{margin-top:8px;display:flex!important;gap:6px!important}body#blinqPremium .admin-insight-audience-presets .btn{min-height:28px;padding:5px 10px;font-size:9px}@media(max-width:720px){body#blinqPremium .admin-live-radar-card{align-items:flex-start;flex-direction:column}body#blinqPremium .admin-live-radar-card .btn{width:100%}}
+
+
+/* v7.0.1 visibility pass: make Premium Info / LIVE discoverable without adding a heavy page. */
+body#blinqPremium .insight-shortcut{display:inline-flex;align-items:center;gap:5px;height:34px;padding:0 10px;border:1px solid rgba(49,226,151,.18);border-radius:9px;background:rgba(10,33,27,.68);color:#9eb6ae;font-size:9px;font-weight:900;letter-spacing:.06em;white-space:nowrap;cursor:pointer}
+body#blinqPremium .insight-shortcut[hidden]{display:none!important}
+body#blinqPremium .insight-shortcut-live{color:#7d938d}
+body#blinqPremium .insight-shortcut.is-live-enabled{border-color:rgba(53,233,140,.35);color:#d8efe6;background:rgba(18,58,44,.68)}
+body#blinqPremium .insight-shortcut.is-live-enabled .insight-shortcut-live{color:#35e98c}
+body#blinqPremium .insight-shortcut.is-live-enabled .insight-shortcut-live:before{content:"";display:inline-block;width:5px;height:5px;margin-right:5px;border-radius:50%;background:#35e98c;box-shadow:0 0 9px rgba(53,233,140,.7);vertical-align:1px}
+body#blinqPremium .insight-live-strip{display:flex;align-items:center;gap:10px;padding:10px 12px;margin-bottom:2px;border:1px solid rgba(53,233,140,.17);border-radius:10px;background:rgba(14,43,34,.58)}
+body#blinqPremium .insight-live-strip>div{display:grid;gap:2px}
+body#blinqPremium .insight-live-strip strong{font-size:10px;color:#dff8ed}
+body#blinqPremium .insight-live-strip small{font-size:8px;color:#78948b}
+body#blinqPremium .insight-live-dot{width:8px;height:8px;border-radius:50%;background:#35e98c;box-shadow:0 0 10px rgba(53,233,140,.62)}
+body#blinqPremium .insight-live-strip.is-error .insight-live-dot{background:#ffb45c;box-shadow:none}
+@media(max-width:720px){body#blinqPremium .insight-shortcut{padding:0 7px;font-size:8px;height:32px}}

@@ -14,6 +14,7 @@ GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 ENVIRONMENT_SCHEMA_VERSION = 2
+ENVIRONMENT_RESOLVER_VERSION = 3
 
 
 class OpenMeteoBudgetExceeded(RuntimeError):
@@ -49,6 +50,31 @@ def _normal(value: Any) -> str:
         for c in unicodedata.normalize("NFKD", str(value or "").casefold())
         if not unicodedata.combining(c)
     ).strip()
+
+
+_COUNTRY_HINT_ALIASES = {
+    "usa": "us",
+    "united states": "us",
+    "united states of america": "us",
+    "great britain": "gb",
+    "united kingdom": "gb",
+    "uk": "gb",
+    "england": "gb",
+    "scotland": "gb",
+    "wales": "gb",
+    "uae": "ae",
+    "united arab emirates": "ae",
+    "south korea": "kr",
+    "korea republic": "kr",
+    "czech republic": "cz",
+}
+
+
+def _country_hint(value: Any) -> str:
+    text = _normal(value)
+    if not text:
+        return ""
+    return _COUNTRY_HINT_ALIASES.get(text, text)
 
 
 class OpenMeteoClient:
@@ -111,14 +137,16 @@ class OpenMeteoClient:
                 country_hint = qualifiers[-1]
                 region_hint = qualifiers[-2]
 
+        normalized_country_hint = _country_hint(country_hint)
+
         params: dict[str, Any] = {
             "name": name,
             "count": 20,
             "language": "en",
             "format": "json",
         }
-        if len(country_hint) == 2 and country_hint.isalpha():
-            params["countryCode"] = country_hint.upper()
+        if len(normalized_country_hint) == 2 and normalized_country_hint.isalpha():
+            params["countryCode"] = normalized_country_hint.upper()
 
         rows = self._get(GEOCODE_URL, params).get("results") or []
         if not isinstance(rows, list):
@@ -130,12 +158,12 @@ class OpenMeteoClient:
                 continue
             if _normal(row.get("name")) != _normal(name):
                 continue
-            if country_hint:
+            if normalized_country_hint:
                 country_values = {
-                    _normal(row.get("country")),
-                    _normal(row.get("country_code")),
+                    _country_hint(row.get("country")),
+                    _country_hint(row.get("country_code")),
                 }
-                if _normal(country_hint) not in country_values:
+                if normalized_country_hint not in country_values:
                     continue
             if region_hint:
                 region_values = {
@@ -434,6 +462,12 @@ _TOURNAMENT_NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_LEADING_TOUR_CLASS_RE = re.compile(
+    r"^(?:(?:itf|atp|wta)\s+)?(?:m|w)\s*\d{2,3}\s+",
+    re.IGNORECASE,
+)
+_TRAILING_EVENT_NUMBER_RE = re.compile(r"\s+\d{1,3}$")
+
 
 def _alias_key(value: Any) -> str:
     text = _normal(_clean_location_token(value))
@@ -469,10 +503,26 @@ def _clean_location_token(value: Any) -> str:
     return " ".join(str(value or "").replace("_", " ").split()).strip(" ,-()")
 
 
+def _clean_tournament_location_part(value: Any) -> str:
+    """Conservatively remove tour/draw numbering that is not geography.
+
+    Examples: ``ITF M15 Monastir 30`` -> ``Monastir`` and
+    ``Oeiras 3`` -> ``Oeiras``.  We only use this as an additional candidate;
+    the original provider string remains available as a fallback.
+    """
+    text = _clean_location_token(value)
+    text = _LEADING_TOUR_CLASS_RE.sub("", text).strip()
+    text = _TRAILING_EVENT_NUMBER_RE.sub("", text).strip()
+    return text
+
+
 def _location_from_tournament_name(name: Any) -> list[str]:
     text = _clean_location_token(name)
-    if not text or "," not in text:
+    if not text:
         return []
+    if "," not in text:
+        cleaned = _clean_tournament_location_part(text)
+        return [cleaned] if cleaned and cleaned != text else []
     parts = [_clean_location_token(p) for p in text.split(",")]
     parts = [p for p in parts if p]
     if len(parts) < 2:
@@ -489,9 +539,14 @@ def _location_from_tournament_name(name: Any) -> list[str]:
     if not usable:
         return []
     out: list[str] = []
+    city = _clean_tournament_location_part(usable[0]) or usable[0]
     if len(usable) >= 2:
-        out.append(f"{usable[0]}, {usable[1]}")
-    out.append(usable[0])
+        out.append(f"{city}, {usable[1]}")
+    out.append(city)
+    if city != usable[0]:
+        if len(usable) >= 2:
+            out.append(f"{usable[0]}, {usable[1]}")
+        out.append(usable[0])
     return out
 
 
@@ -568,6 +623,60 @@ def location_candidates(
     return candidates
 
 
+def venue_learning_keys(
+    provider_payload: dict[str, Any],
+    tournament: str = "",
+    *,
+    tour: str = "",
+    tournament_id: Any = None,
+) -> list[str]:
+    """Stable high-confidence keys used to reuse already-resolved venues.
+
+    The enrichment job rebuilds this cache from the private history release on
+    every run, so no extra database or cache artifact is required.  A key is
+    only used when the historical observations for that key agree on one venue.
+    """
+    raw = _as_dict(provider_payload)
+    tournament_obj = _as_dict(raw.get("tournament"))
+    unique = _as_dict(tournament_obj.get("uniqueTournament"))
+    keys: list[str] = []
+
+    def add(prefix: str, value: Any) -> None:
+        text = _normal(value)
+        text = " ".join(text.replace("/", " ").replace("-", " ").replace(",", " ").split())
+        if text:
+            key = f"{prefix}:{text}"
+            if key not in keys:
+                keys.append(key)
+
+    tour_key = _normal(tour) or "unknown"
+    for value in (
+        tournament_id,
+        tournament_obj.get("id"),
+        unique.get("id"),
+        raw.get("tournamentId"),
+        raw.get("uniqueTournamentId"),
+    ):
+        if value not in (None, ""):
+            add(f"tournament-id:{tour_key}", value)
+
+    # The cleaned tournament label is useful for recurring ITF/Challenger labels
+    # while the tour prefix prevents accidental ATP/WTA cross-linking.
+    for value in (tournament, tournament_obj.get("name"), unique.get("name")):
+        cleaned = _alias_key(value)
+        if cleaned and cleaned not in _GENERIC_TOURNAMENT_TOKENS:
+            add(f"tournament-name:{tour_key}", cleaned)
+
+    # Reuse exact provider-derived location candidates when they already resolved
+    # elsewhere in history.  These are deliberately more specific than a bare city.
+    for candidate in location_candidates(raw, tournament):
+        normalized_candidate = _normal(candidate)
+        if normalized_candidate in _GENERIC_TOURNAMENT_TOKENS:
+            continue
+        add("location", candidate)
+    return keys
+
+
 def resolve_match_venue(
     client: OpenMeteoClient,
     provider_payload: dict[str, Any],
@@ -592,6 +701,7 @@ def environment_payload(
     venue, query = resolve_match_venue(client, provider_payload, tournament)
     base = {
         "schema_version": ENVIRONMENT_SCHEMA_VERSION,
+        "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
         "venue_resolved": venue is not None,
         "location_query": query,
         "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
