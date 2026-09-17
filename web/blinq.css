@@ -1836,10 +1836,10 @@ body#blinqPremium#blinqPremium .boot-tennis-rally .boot-tennis-ball{
   body#blinqPremium#blinqPremium .boot-tennis-net{width:28%!important}
 }
 
-/* 7.0.9 exact user-supplied BlinQ loader. Animation lives inside the SVG. */
-body#blinqPremium .boot-tennis-card-source{
-  width:min(390px,88vw)!important;
-  max-height:min(390px,76vh)!important;
+/* 7.1.1 user loader polish: keep the supplied artwork, remove the legacy outer frame. */
+body#blinqPremium#blinqPremium .boot-tennis-card-source{
+  width:min(450px,90vw)!important;
+  max-height:min(450px,78vh)!important;
   padding:0!important;
   background:transparent!important;
   border:0!important;
@@ -1848,16 +1848,16 @@ body#blinqPremium .boot-tennis-card-source{
   overflow:visible!important;
   animation:none!important;
 }
-body#blinqPremium .boot-tennis-card-source::before{display:none!important}
-body#blinqPremium .boot-tennis-card-source>img{
+body#blinqPremium#blinqPremium .boot-tennis-card-source::before{display:none!important}
+body#blinqPremium#blinqPremium .boot-tennis-card-source>img{
   display:block!important;
   width:100%!important;
   height:auto!important;
-  max-height:min(390px,76vh)!important;
+  max-height:min(450px,78vh)!important;
   object-fit:contain!important;
   filter:none!important;
 }
 @media(max-width:560px){
-  body#blinqPremium .boot-tennis-card-source{width:min(350px,92vw)!important;max-height:72vh!important}
-  body#blinqPremium .boot-tennis-card-source>img{max-height:72vh!important}
+  body#blinqPremium#blinqPremium .boot-tennis-card-source{width:min(390px,94vw)!important;max-height:74vh!important}
+  body#blinqPremium#blinqPremium .boot-tennis-card-source>img{max-height:74vh!important}
 }

@@ -13,7 +13,7 @@ def test_loader_is_compact_svg_rally_without_progress_track():
     assert 'boot-tennis-track' not in INDEX
     assert '<animateTransform' in LOADER
     assert 'aria-label="BlinQ loading animation"' in LOADER
-    assert 'data:image/png;base64,' in LOADER
+    assert 'data:image/webp;base64,' in LOADER
 
 
 def test_auth_login_hides_signup_only_telegram_field():
