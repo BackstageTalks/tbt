@@ -6,35 +6,35 @@
   <meta name="theme-color" content="#05111f" />
   <title>BlinQ · Tennis Intelligence</title>
   <link rel="icon" href="/assets/blinq_favi.png" type="image/png" />
-  <link rel="stylesheet" href="/styles.css?v=7013" media="not all" />
-  <link rel="stylesheet" href="/responsive.css?v=7013" media="not all" />
-  <link rel="stylesheet" href="/premium.css?v=7013" media="not all" />
-  <link rel="stylesheet" href="/blinq.css?v=7013" />
-  <link rel="stylesheet" href="/redesign-680.css?v=7013" />
-  <link rel="stylesheet" href="/polish-681.css?v=7013" />
-  <link rel="stylesheet" href="/polish-683.css?v=7013" />
-  <link rel="stylesheet" href="/polish-684.css?v=7013" />
-  <link rel="stylesheet" href="/polish-685.css?v=7013" />
-  <link rel="stylesheet" href="/auth-polish-686.css?v=7013" />
-  <link rel="stylesheet" href="/admin-polish-687.css?v=7013" />
-  <link rel="stylesheet" href="/blinq-lean-700.css?v=7013" />
-  <script defer src="/auth.js?v=7013"></script>
-  <script defer src="/responsive.js?v=7013"></script>
-  <script defer src="/app.js?v=7013"></script>
+  <link rel="stylesheet" href="/styles.css?v=7015" media="not all" />
+  <link rel="stylesheet" href="/responsive.css?v=7015" media="not all" />
+  <link rel="stylesheet" href="/premium.css?v=7015" media="not all" />
+  <link rel="stylesheet" href="/blinq.css?v=7015" />
+  <link rel="stylesheet" href="/redesign-680.css?v=7015" />
+  <link rel="stylesheet" href="/polish-681.css?v=7015" />
+  <link rel="stylesheet" href="/polish-683.css?v=7015" />
+  <link rel="stylesheet" href="/polish-684.css?v=7015" />
+  <link rel="stylesheet" href="/polish-685.css?v=7015" />
+  <link rel="stylesheet" href="/auth-polish-686.css?v=7015" />
+  <link rel="stylesheet" href="/admin-polish-687.css?v=7015" />
+  <link rel="stylesheet" href="/blinq-lean-700.css?v=7015" />
+  <script defer src="/auth.js?v=7015"></script>
+  <script defer src="/responsive.js?v=7015"></script>
+  <script defer src="/app.js?v=7015"></script>
 </head>
 <body id="blinqPremium" class="blinq-home">
   <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
   <noscript><p class="no-script">BlinQ potrebuje JavaScript.</p></noscript>
   <div id="statusBanner" class="status-banner" hidden role="status"></div>
+  <aside id="accessHint" class="access-hint" role="status" aria-live="polite" hidden>
+    <span class="access-hint-lock" aria-hidden="true">⌑</span>
+    <div class="access-hint-copy"><strong id="accessHintTitle">Dostupné od ELITE</strong><small id="accessHintText">Upgrade pre plný prístup.</small></div>
+    <button id="accessHintUpgrade" type="button">Upgrade</button>
+  </aside>
 
   <div id="bootSplash" class="boot-splash boot-splash-tennis" aria-live="polite">
-    <div class="boot-tennis-card">
-      <img src="/assets/blinq_loading_tennis_v2.webp?v=7013" alt="Načítavam BlinQ Intelligence" />
-      <span class="boot-tennis-cleanup" aria-hidden="true"></span>
-      <span class="boot-tennis-racket-cleanup" aria-hidden="true"></span>
-      <span class="boot-tennis-court" aria-hidden="true"></span>
-      <span class="boot-tennis-net" aria-hidden="true"><i></i><b></b><em></em></span>
-      <span class="boot-tennis-rally" aria-hidden="true"><b class="boot-tennis-ball"></b></span>
+    <div class="boot-tennis-card boot-tennis-card-compact">
+      <img src="/assets/blinq_loading_compact.svg?v=7015" alt="Načítavam BlinQ Intelligence" />
     </div>
   </div>
 
@@ -60,7 +60,7 @@
         </nav>
 
         <div class="header-actions">
-          <button id="topUpgradeButton" class="header-upgrade" type="button" data-upgrade-plan="pro" data-upgrade-section="BlinQ Membership"><span id="topUpgradeLabel">Upgrade</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 14 8-8M9 6h5v5"></path></svg></button>
+          <button id="topUpgradeButton" class="header-upgrade" type="button" data-upgrade-plan="pro" data-upgrade-section="BlinQ Membership" data-upgrade-explicit="1"><span id="topUpgradeLabel">Upgrade</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 14 8-8M9 6h5v5"></path></svg></button>
           <button id="insightShortcut" class="insight-shortcut insight-live-button" type="button" hidden aria-controls="insightDrawer" aria-expanded="false"><span class="insight-shortcut-live">LIVE</span><b id="insightShortcutCount" hidden>0</b><span id="insightShortcutLabel">RADAR</span></button>
           <button id="insightBell" class="insight-bell insight-info-button" type="button" aria-label="Premium Info" aria-controls="insightDrawer" aria-expanded="false"><span aria-hidden="true" class="insight-bell-icon"><svg viewBox="0 0 24 24" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="insight-info-label">INFO</span><b id="insightUnread" hidden>0</b></button>
           <div id="profileShell" class="profile-shell">

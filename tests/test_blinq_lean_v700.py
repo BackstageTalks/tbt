@@ -69,9 +69,9 @@ def test_public_prediction_board_matches_final_product_tabs():
 def test_admin_is_visibly_reduced_to_three_sections():
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     route = app.split("function renderAdminRoute(){", 1)[1].split("function rerenderAdmin", 1)[0]
-    assert "['accounts','Účty','Level · platnosť']" in route
-    assert "['banners','Bannery','Hero · background']" in route
-    assert "['insights','Správy & LIVE','Premium Info · LIVE']" in route
+    assert "['accounts','Účty','Prístup · platnosť']" in route
+    assert "['banners','Bannery','Hero · pozadie']" in route
+    assert "['insights','Info & LIVE','Správy · radar']" in route
     assert "campaigns" not in route
 
 

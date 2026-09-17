@@ -16,7 +16,7 @@ def _editor():
 
 def test_simple_account_editor_has_only_operational_controls():
     editor=_editor()
-    for marker in ['adminUserEmail','adminUserTelegram','Level a platnosť','reset-user-password','delete-user']:
+    for marker in ['adminUserEmail','adminUserTelegram','<strong>Level</strong>','Platnosť do','reset-user-password','delete-user']:
         assert marker in editor
     for removed in ['Manuálne spárovanie platby','História BlinQ účtu','TG Private','adminPaymentReference','adminUserSuspended','adminUserIsAdmin']:
         assert removed not in editor

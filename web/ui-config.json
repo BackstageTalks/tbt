@@ -1894,7 +1894,7 @@
         "legacy_copy_reference": "Dáta. Analýza.",
         "legacy_accent_reference": "Lepšie rozhodnutia.",
         "effect": "fade-up",
-        "site_background_url": "/assets/custom/site-background.webp"
+        "site_background_url": "/assets/blinq_background.webp"
       },
       "watermark": {
         "enabled": false,
@@ -3585,5 +3585,5 @@
     "allow_user_replies": false,
     "read_tracking": true
   },
-  "asset_revision": 7013
+  "asset_revision": 7015
 }

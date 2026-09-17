@@ -1279,7 +1279,7 @@ body#blinqPremium#blinqPremium.blinq-route .results-table td strong{font-size:14
 body#blinqPremium#blinqPremium.blinq-route .results-table td small{font-size:10.5px!important;}
 body#blinqPremium#blinqPremium .result-tag{font-size:10px!important;padding:5px 8px!important;}
 
-/* Page background image is directly replaceable in web/assets/custom/site-background.png. */
+/* Page background image is directly replaceable in web/assets/blinq_background.webp. */
 body#blinqPremium{background-image:var(--blinq-page-bg-overlay),var(--blinq-page-bg),var(--blinq-page-bg-fallback)!important;background-position:center,var(--blinq-page-bg-position,center top),center top!important;background-size:cover,var(--blinq-page-bg-size,cover),cover!important;background-attachment:fixed!important;background-repeat:no-repeat!important;}
 
 /* ========================================================================
@@ -1835,3 +1835,10 @@ body#blinqPremium#blinqPremium .boot-tennis-rally .boot-tennis-ball{
   body#blinqPremium#blinqPremium .boot-tennis-card{width:min(286px,79vw)!important}
   body#blinqPremium#blinqPremium .boot-tennis-net{width:28%!important}
 }
+
+
+/* 7.0.7 compact BlinQ loader */
+body#blinqPremium .boot-tennis-card-compact{width:min(420px,88vw)!important;max-height:min(420px,72vh)!important;padding:18px!important;background:linear-gradient(180deg,rgba(7,28,44,.92),rgba(6,20,32,.94))!important;border:1px solid rgba(46,121,117,.58)!important;box-shadow:0 20px 60px rgba(0,0,0,.42),0 0 0 1px rgba(114,255,207,.04) inset!important;animation:blinqTennisLoad 1.8s ease-in-out infinite!important}
+body#blinqPremium .boot-tennis-card-compact img{display:block!important;width:100%!important;height:auto!important;max-height:calc(72vh - 36px)!important;filter:drop-shadow(0 18px 42px rgba(0,0,0,.34))!important}
+body#blinqPremium .boot-tennis-card-compact::before{display:none!important}
+@media (max-width:560px){body#blinqPremium .boot-tennis-card-compact{width:min(360px,92vw)!important;padding:14px!important;border-radius:18px!important}}
