@@ -38,7 +38,7 @@ body::before{opacity:.13!important;pointer-events:none}
 .profile-copy{max-width:150px!important}
 
 /* Exactly one hero, deliberately shallow and light. */
-#bannerTop,#bannerMid,#bannerBottom,#dashboardKpis,#dashboardRightRail,#vipRail,.promo-zone,.info-banner-zone{display:none!important}
+#bannerTop,#bannerMid,#bannerBottom,#dashboardRightRail,.promo-zone,.info-banner-zone{display:none!important}
 .hero-shell{margin:20px 0 16px!important;min-height:0!important;height:232px!important;border:1px solid var(--lean-line)!important;border-radius:22px!important;overflow:hidden!important;background:#081311!important;box-shadow:var(--lean-shadow)!important}
 .dashboard-hero{height:232px!important;min-height:232px!important;border-radius:0!important;border:0!important;box-shadow:none!important}
 .dashboard-hero .dashboard-hero-image,.dashboard-hero img{object-fit:cover!important}
@@ -238,3 +238,66 @@ body#blinqPremium .insight-live-strip.is-watching{border-color:rgba(255,181,76,.
 body#blinqPremium .insight-live-strip.is-watching .insight-live-dot{background:#ffb54c;box-shadow:0 0 10px rgba(255,181,76,.62);animation:blinqLivePulse 1.35s ease-in-out infinite}
 body#blinqPremium .insight-live-strip.is-confirmed{border-color:rgba(53,233,140,.38);background:rgba(14,55,39,.66)}
 @keyframes blinqLivePulse{0%,100%{opacity:.55;transform:scale(.84)}50%{opacity:1;transform:scale(1.12)}}
+
+
+/* v7.0.5 homepage cleanup: full-width data board, explicit Upgrade/LIVE/INFO controls. */
+body#blinqPremium .reference-topbar .reference-search{display:none!important}
+body#blinqPremium .reference-topbar .header-actions{display:flex!important;align-items:center!important;gap:8px!important}
+body#blinqPremium .header-upgrade{height:36px;display:inline-flex;align-items:center;gap:7px;padding:0 13px;border:1px solid rgba(121,242,177,.34);border-radius:10px;background:linear-gradient(135deg,rgba(121,242,177,.16),rgba(57,214,142,.08));color:#dff9ec;font:800 10px/1 Inter,"Segoe UI",sans-serif;letter-spacing:.04em;cursor:pointer;white-space:nowrap}
+body#blinqPremium .header-upgrade:hover{border-color:rgba(121,242,177,.64);background:linear-gradient(135deg,rgba(121,242,177,.23),rgba(57,214,142,.12));transform:translateY(-1px)}
+body#blinqPremium .header-upgrade svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+body#blinqPremium .header-upgrade[hidden]{display:none!important}
+
+body#blinqPremium .reference-navigation .active:after{display:block!important;left:50%!important;right:auto!important;bottom:6px!important;width:24px!important;height:2px!important;border-radius:999px!important;transform:translateX(-50%)!important;background:var(--lean-green)!important}
+body#blinqPremium .reference-navigation a.active{box-shadow:none!important;background:transparent!important;color:var(--lean-green)!important}
+body#blinqPremium .reference-navigation a:hover{background:rgba(121,242,177,.055)!important}
+
+body#blinqPremium #dashboardKpis{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:10px!important;margin:0 0 10px!important}
+body#blinqPremium #dashboardRightRail{display:none!important}
+body#blinqPremium .dashboard-content-grid{display:block!important;grid-template-columns:1fr!important;padding:0!important;gap:0!important}
+body#blinqPremium .dashboard-primary-column{width:100%!important;max-width:none!important}
+body#blinqPremium .daily-panel{width:100%!important;max-width:none!important}
+body#blinqPremium .daily-toolbar{margin-left:auto!important}
+body#blinqPremium .daily-tournament-filter{display:none!important}
+body#blinqPremium .daily-hub-tab.active:after{display:none!important}
+body#blinqPremium .daily-hub-tab.active{background:rgba(121,242,177,.10)!important;border-color:rgba(121,242,177,.45)!important;box-shadow:none!important}
+
+/* Bottom strip stays useful, but no membership-plan CTA. */
+body#blinqPremium #vipRail{display:block!important;width:100%!important;margin:12px 0 0!important;min-height:0!important;height:auto!important;border:1px solid var(--lean-line)!important;border-radius:16px!important;background:rgba(5,16,14,.78)!important;overflow:hidden!important}
+body#blinqPremium #vipRail .vip-rail-content{display:block!important;width:100%!important;min-height:0!important;height:auto!important;padding:8px!important}
+body#blinqPremium #vipRail .vip-benefits{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:7px!important}
+body#blinqPremium #vipRail .vip-link-card{min-width:0!important;min-height:52px!important;padding:8px 10px!important;border:1px solid transparent!important;border-radius:11px!important;background:transparent!important;text-decoration:none!important}
+body#blinqPremium #vipRail .vip-link-card:hover{border-color:rgba(121,242,177,.18)!important;background:rgba(121,242,177,.04)!important}
+body#blinqPremium #vipRail .vip-link-icon{width:28px!important;height:28px!important;flex:0 0 28px!important}
+body#blinqPremium #vipRail .vip-link-card strong{font-size:10px!important}
+body#blinqPremium #vipRail .vip-link-card small{font-size:8px!important;color:#789089!important}
+body#blinqPremium #vipRail .vip-cta{display:none!important}
+
+/* Two distinct notification surfaces: LIVE radar and Premium Info. */
+body#blinqPremium .insight-shortcut.insight-live-button{height:36px!important;padding:0 10px!important;border-radius:10px!important;gap:6px!important}
+body#blinqPremium .insight-shortcut.insight-live-button .insight-shortcut-live{font-size:10px!important;font-weight:900!important}
+body#blinqPremium .insight-shortcut.insight-live-button #insightShortcutLabel{font-size:7px!important;letter-spacing:.08em!important;color:#80958e!important}
+body#blinqPremium .insight-info-button{width:auto!important;min-width:68px!important;height:36px!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:7px!important;padding:0 10px!important;border:1px solid rgba(121,242,177,.16)!important;border-radius:10px!important;background:rgba(255,255,255,.018)!important;color:#cbd9d5!important}
+body#blinqPremium .insight-info-button:hover,body#blinqPremium .insight-info-button.has-unread{border-color:rgba(121,242,177,.34)!important;background:rgba(121,242,177,.055)!important;color:var(--lean-green)!important}
+body#blinqPremium .insight-info-button .insight-bell-icon{width:16px;height:16px;display:grid;place-items:center}
+body#blinqPremium .insight-info-button .insight-bell-icon svg{width:16px;height:16px}
+body#blinqPremium .insight-info-label{font-size:9px;font-weight:850;letter-spacing:.08em}
+body#blinqPremium .insight-info-button>b{position:static!important;min-width:17px!important;height:17px!important;display:grid!important;place-items:center!important;padding:0 4px!important;border-radius:999px!important;background:var(--lean-green)!important;color:#04110d!important;font-size:8px!important;box-shadow:none!important}
+body#blinqPremium .insight-info-button>b[hidden]{display:none!important}
+body#blinqPremium .insight-drawer[data-channel="live"] .insight-drawer-head small{color:#ffb54c!important}
+body#blinqPremium .insight-drawer[data-channel="info"] .insight-drawer-head small{color:var(--lean-green)!important}
+
+@media(max-width:900px){
+  body#blinqPremium #dashboardKpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body#blinqPremium #vipRail .vip-benefits{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body#blinqPremium .header-upgrade{padding:0 9px!important}
+  body#blinqPremium .insight-info-button{min-width:38px!important;padding:0 8px!important}
+  body#blinqPremium .insight-info-label,body#blinqPremium .insight-shortcut.insight-live-button #insightShortcutLabel{display:none!important}
+}
+@media(max-width:560px){
+  body#blinqPremium #dashboardKpis{grid-template-columns:1fr 1fr!important;gap:7px!important}
+  body#blinqPremium #vipRail .vip-benefits{grid-template-columns:1fr!important}
+  body#blinqPremium .header-upgrade{display:none!important}
+  body#blinqPremium .reference-topbar .header-actions{gap:5px!important}
+  body#blinqPremium .insight-shortcut.insight-live-button{padding:0 7px!important}
+}
