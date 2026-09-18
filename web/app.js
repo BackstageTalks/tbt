@@ -30,12 +30,14 @@
   const safePhotoUrl = value => { const url=String(value||'').trim(); if(/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)&&!url.split('/').includes('..'))return url; if(/^\/api\/v1\/(?:tournament-logo|player-image)\/[0-9]{1,12}$/.test(url))return url; if(/^https:\/\//i.test(url)){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}} return ''; };
   const safeUiAsset = value => { const url=String(value||'').trim(); if(!/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)||url.split('/').includes('..'))return ''; return url; };
   const avatarAssetSrc = value => { const url=safeUiAsset(value); return url ? `${url}?v=v6544` : ''; };
-  function playerFallbackUrl(tour){
+  function playerFallbackUrl(tour,gender=''){
     const key=String(tour||'').trim().toLowerCase();
+    const g=String(gender||'').trim().toLowerCase();
     const map=state.ui?.assets?.player_fallback||{};
-    if(key.startsWith('wta'))return safeUiAsset(map.wta);
-    if(key.startsWith('atp'))return safeUiAsset(map.atp);
-    return '';
+    const women=safeUiAsset(map.wta)||'/assets/missing_foto_w.webp';
+    const men=safeUiAsset(map.atp)||'/assets/missing_foto_m.webp';
+    if(g.startsWith('f')||g.startsWith('w')||key.startsWith('wta'))return women;
+    return men;
   }
   function accountAvatarUrl(account){
     const admin=Boolean(account?.is_admin||String(account?.role||'').toLowerCase()==='admin');
@@ -1516,12 +1518,13 @@
     const explicit=safePhotoUrl(row?.tournament_logo_url||row?.competition_logo_url||row?.competition_logo||row?.tournament_logo||'');
     const logo=explicit||(/^\d{1,12}$/.test(tournamentId)?`/api/v1/tournament-logo/${tournamentId}`:'');
     const fallback=tournamentFallbackHtml(row);
-    if(logo) return '<span class="hub-tournament-logo has-image"><img data-tournament-logo src="'+escapeHtml(logo)+'" alt="" loading="lazy" onerror="this.hidden=true;this.parentElement.classList.add(\'logo-failed\')"><span class="hub-logo-fallback">'+fallback+'</span></span>';
+    if(logo) return '<span class="hub-tournament-logo has-image"><img data-tournament-logo src="'+escapeHtml(logo)+'" alt="" loading="lazy" onerror="this.parentElement.classList.add(\'logo-failed\');this.remove()"><span class="hub-logo-fallback">'+fallback+'</span></span>';
     return '<span class="hub-tournament-logo hub-tournament-badge">'+fallback+'</span>';
   }
-  function smallAvatar(photo,name,tour){
-    const safe=safePhotoUrl(photo),fallback=playerFallbackUrl(tour),src=safe||fallback;
-    return src?'<span class="hub-avatar has-photo"><img src="'+escapeHtml(src)+'" alt="" loading="lazy"></span>':'<span class="hub-avatar">'+escapeHtml(initials(name))+'</span>';
+  function smallAvatar(photo,name,tour,gender=''){
+    const safe=safePhotoUrl(photo),fallback=playerFallbackUrl(tour,gender),src=safe||fallback;
+    const fail=fallback&&fallback!==src?` onerror="this.onerror=null;this.src='${escapeHtml(fallback)}'"`:'';
+    return src?'<span class="hub-avatar has-photo"><img src="'+escapeHtml(src)+'" alt="" loading="lazy"'+fail+'></span>':'<span class="hub-avatar">'+escapeHtml(initials(name))+'</span>';
   }
   function hubPlayerMeta(player,tour){
     const name=player?.name||'—';
@@ -1530,7 +1533,7 @@
     const photo=player?.photo_url||player?.image_url||player?.photo||(String(player?.id||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${player.id}`:'');
     const rankText=rank!=null&&rank>0?'#'+Math.trunc(rank):'—';
     const tourText=String(tour||'').toUpperCase();
-    return '<span class="hub-player">'+smallAvatar(photo,name,tour)+'<span class="hub-player-copy"><b>'+escapeHtml(name)+'</b><small class="hub-player-meta">'+flagIconHtml(country,true)+'<span class="hub-rank">'+escapeHtml(rankText)+'</span><span class="hub-tour">'+escapeHtml(tourText)+'</span></small></span></span>';
+    return '<span class="hub-player">'+smallAvatar(photo,name,tour,player?.gender||player?.sex||'')+'<span class="hub-player-copy"><b>'+escapeHtml(name)+'</b><small class="hub-player-meta">'+flagIconHtml(country,true)+'<span class="hub-rank">'+escapeHtml(rankText)+'</span><span class="hub-tour">'+escapeHtml(tourText)+'</span></small></span></span>';
   }
   function dailyHubTournament(row){
     const tournament=String(row?.tournament||row?.competition||row?.tour||'—').trim();
@@ -1547,9 +1550,10 @@
     const c1=p1.country_code||p1.country_code2||p1.country_code3||row?.player1_country_code||row?.p1_country_code||'';
     const c2=p2.country_code||p2.country_code2||p2.country_code3||row?.player2_country_code||row?.p2_country_code||'';
     const r1=firstFinite(p1.rank,p1.ranking,p1.current_rank,row?.player1_rank,row?.p1_rank),r2=firstFinite(p2.rank,p2.ranking,p2.current_rank,row?.player2_rank,row?.p2_rank);
+    const photoFor=(player,side)=>player?.photo_url||player?.image_url||player?.photo||row?.[`${side}_photo_url`]||row?.[`${side}_image_url`]||(String(player?.id||row?.[`${side}_id`]||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${player?.id||row?.[`${side}_id`]}`:'');
     const selected=String(row?.pick||row?.selection||row?.prediction||'').trim().toLocaleLowerCase();
-    const line=(name,country,rank)=>`<span class="hub-match-player${selected&&selected===String(name).toLocaleLowerCase()?' is-pick':''}"><span class="hub-match-player-main">${flagIconHtml(country,true)}<b title="${escapeHtml(name)}">${escapeHtml(name)}</b></span>${Number.isFinite(Number(rank))&&Number(rank)>0?`<small>#${Math.trunc(Number(rank))}</small>`:''}</span>`;
-    return `<span class="hub-match hub-match-pro">${line(n1,c1,r1)}<i class="hub-match-divider" aria-hidden="true"></i>${line(n2,c2,r2)}</span>`;
+    const line=(player,side,name,country,rank)=>`<span class="hub-match-player${selected&&selected===String(name).toLocaleLowerCase()?' is-pick':''}"><span class="hub-match-player-main">${smallAvatar(photoFor(player,side),name,row?.tour,player?.gender||player?.sex||'')}${flagIconHtml(country,true)}<b title="${escapeHtml(name)}">${escapeHtml(name)}</b></span>${Number.isFinite(Number(rank))&&Number(rank)>0?`<small>#${Math.trunc(Number(rank))}</small>`:''}</span>`;
+    return `<span class="hub-match hub-match-pro">${line(p1,'player1',n1,c1,r1)}<i class="hub-match-divider" aria-hidden="true"></i>${line(p2,'player2',n2,c2,r2)}</span>`;
   }
   function recentFormData(source,key){
     const presentation=source?.presentation&&typeof source.presentation==='object'?source.presentation:{};
@@ -2284,7 +2288,10 @@
       const tag=projection?(String(publication?.market||'')==='double_faults'?'double_faults':'ace'):String(publication?.section||'');
       const tags=`<span class="result-tag ${escapeHtml(tag)}">${escapeHtml(projection?esaResultTypeLabel(publication):resultCategoryLabel(tag||'all'))}</span>`;
       const resultHtml=projection?(outcome.kind==='win'?'<b class="correct">✓ HIT</b>':outcome.kind==='loss'?'<b class="wrong">× MISS</b>':`<b class="void">○ VOID</b>${outcome.reason?`<small class="void-reason">${escapeHtml(outcome.reason)}</small>`:''}`):(outcome.kind==='win'?'<b class="correct">✓ VÝHRA</b>':outcome.kind==='loss'?'<b class="wrong">× PREHRA</b>':`<b class="void">○ VOID</b>${outcome.reason?`<small class="void-reason">${escapeHtml(outcome.reason)}</small>`:''}`);
-      const match=`<div class="results-match-player">${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1.name||'Player 1')}</strong></div><small class="results-match-sub"><span>vs</span>${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2.name||'Player 2')}</b><span class="results-tournament-inline">${tournamentVisual(r)}${escapeHtml(r.tournament||'')}</span></small>`;
+      const p1Name=p1.name||'Player 1',p2Name=p2.name||'Player 2';
+      const p1Photo=p1.photo_url||p1.image_url||p1.photo||(String(p1.id||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${p1.id}`:'');
+      const p2Photo=p2.photo_url||p2.image_url||p2.photo||(String(p2.id||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${p2.id}`:'');
+      const match=`<div class="results-match-player">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong></div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b></span><span class="results-tournament-inline">${tournamentVisual(r)}<span>${escapeHtml(r.tournament||'')}</span></span></small>`;
       if(projection){
         const projected=Number(publication?.projection),actual=Number(publication?.result?.actual_count),oppActual=Number(publication?.result?.opponent_actual_count),depth=Number(publication?.data_depth??publication?.result?.data_depth),actualText=Number.isFinite(actual)?`${actual.toFixed(actual%1?1:0)}${Number.isFinite(oppActual)?` · súper ${oppActual.toFixed(oppActual%1?1:0)}`:''}`:'—';
         return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${match}</td><td><strong>${escapeHtml(pickName)}</strong><small>${escapeHtml(esaResultTypeLabel(publication))}</small></td><td>${Number.isFinite(projected)?projected.toFixed(2):'—'}</td><td>${escapeHtml(actualText)}</td><td>${resultHtml}</td><td>${Number.isFinite(depth)?pct(depth):'—'}</td></tr>`;
