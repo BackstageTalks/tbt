@@ -3448,7 +3448,7 @@
       }
     }
   },
-  "ui_revision": "7.2.4",
+  "ui_revision": "7.2.5",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3481,10 +3481,10 @@
     "label": "MAIN BANNER",
     "enabled": true,
     "slot_count": 1,
-    "rotation_seconds": 12,
-    "auto_rotate": false,
-    "show_dots": false,
-    "pause_on_hover": false
+    "rotation_seconds": 6,
+    "auto_rotate": true,
+    "show_dots": true,
+    "pause_on_hover": true
   },
   "rss": {
     "enabled": false,
@@ -3493,7 +3493,7 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "7.2.4",
+  "revision": "7.2.5",
   "footer": {
     "copyright": "© 2026 BlinQ",
     "system_status": "Všetky systémy funkčné",
@@ -3585,5 +3585,5 @@
     "allow_user_replies": false,
     "read_tracking": true
   },
-  "asset_revision": 7241
+  "asset_revision": 7251
 }

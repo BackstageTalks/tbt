@@ -7,8 +7,8 @@ CSS = (ROOT / "web" / "final-polish-724.css").read_text(encoding="utf-8")
 
 
 def test_final_polish_is_loaded_after_lean_layer():
-    lean = INDEX.index('/blinq-lean-700.css?v=7241')
-    final = INDEX.index('/final-polish-724.css?v=7241')
+    lean = INDEX.index('/blinq-lean-700.css?v=7251')
+    final = INDEX.index('/final-polish-724.css?v=7251')
     assert final > lean
 
 

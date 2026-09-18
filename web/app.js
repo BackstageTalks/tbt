@@ -195,7 +195,7 @@
       const [tiers,banners,footer,theme,siteContent]=await Promise.all([getJSON('/config/membership-tiers.json'),getJSON('/config/banners.json'),getJSON('/config/footer-links.json'),getJSON('/config/site-theme.json'),getJSON('/config/site-content.json')]);
       state.presentationConfig={tiers,banners,footer,theme,siteContent}; state.siteContent=siteContent;
       Object.entries(tiers?.tiers||{}).forEach(([id,data])=>{if(!state.ui?.plans?.[id])return;const p=state.ui.plans[id];['label','card_title','description','short_description','cta_label','invite_only'].forEach(k=>{if(data[k]!==undefined)p[k]=data[k];});const u=safeExternalUrl(data.url||'');if(u)p.url=u;else if(data.url==='')p.url='';});
-      const hero=banners?.main_banner||{};if(state.ui){state.ui.hero_banner={...(state.ui.hero_banner||{}),rotation_seconds:hero.rotation_seconds??state.ui.hero_banner?.rotation_seconds,auto_rotate:hero.auto_rotate??state.ui.hero_banner?.auto_rotate,show_dots:hero.show_dots??state.ui.hero_banner?.show_dots,slot_count:Array.isArray(hero.slides)?Math.min(5,hero.slides.filter(x=>x?.enabled!==false).length):state.ui.hero_banner?.slot_count};}
+      const hero=banners?.main_banner||{};if(state.ui){const liveHero=state.ui.hero_banner||{};state.ui.hero_banner={...liveHero,rotation_seconds:liveHero.rotation_seconds??hero.rotation_seconds??6,auto_rotate:liveHero.auto_rotate??hero.auto_rotate??true,show_dots:liveHero.show_dots??hero.show_dots??true,pause_on_hover:liveHero.pause_on_hover??hero.pause_on_hover??true,slot_count:liveHero.slot_count??(Array.isArray(hero.slides)?Math.min(5,hero.slides.filter(x=>x?.enabled!==false).length):1)};}
       (hero.slides||[]).slice(0,5).forEach((row,i)=>{const item=state.ui?.elements?.[`HERO_BANNER_${i+1}`];if(item){item.content={...row,...(item.content||{})};}});
       const small=banners?.home_small_banners||{};(small.slides||[]).slice(0,4).forEach((row,i)=>{const item=state.ui?.elements?.[`SIDEBAR_PROMO_${i+1}`];if(item){item.content={...row,...(item.content||{})};}});
       const rail=state.ui?.elements?.VIP_RAIL;if(rail&&footer){const c=rail.content=rail.content||{};(footer.links||[]).slice(0,4).forEach((row,i)=>{const n=i+1;c[`benefit_${n}_title`]=row.enabled===false?'':row.title||'';c[`benefit_${n}_text`]=row.text||'';c[`benefit_${n}_title_size`]=row.title_size||15;c[`benefit_${n}_text_size`]=row.text_size||12;c[`benefit_${n}_icon`]=row.icon||'';c[`benefit_${n}_icon_url`]=row.icon_url||'';c[`benefit_${n}_link`]=row.link||'#predictions';});if(footer.cta){c.button_text=footer.cta.label||c.button_text;c.link=footer.cta.link||c.link;}};
@@ -678,7 +678,7 @@
     const cfg=heroConfig();
     const requested=Math.max(0,Math.min(5,Number(cfg.slot_count??1)||0));
     if(cfg.enabled===false||!requested)return [];
-    return elementList('hero_banner','hero').filter(item=>item?.content?.enabled!==false&&elementAccess(item.id)!=='hidden').slice(0,requested);
+    return elementList('hero_banner','hero').slice(0,requested).filter(item=>item?.content?.enabled!==false&&elementAccess(item.id)!=='hidden');
   }
   function heroImageHtml(content){
     const desktop=safeLink(content?.image_url,'');
@@ -881,8 +881,14 @@
     const footer=state.ui?.footer||{};
     const copyright=$('footerCopyright');if(copyright)copyright.textContent=String(footer.copyright||'© 2026 BlinQ');
     const wrap=document.querySelector('.system-status'),status=wrap?.querySelector('strong');
-    if(wrap){wrap.classList.toggle('is-warning',Boolean(state.feed?.stale));wrap.classList.remove('is-error');}
-    if(status)status.textContent=state.feed?.stale?lcopy('Data refresh in progress','Dáta sa aktualizujú','Data se aktualizují'):String(footer.system_status||'Všetky systémy funkčné');
+    const generated=state.feed?.generated_at,updated=generated?fmtTime(generated):'—';
+    const liveError=Boolean(state.userLiveRadarStatus?.error),stale=Boolean(state.feed?.stale);
+    if(wrap){wrap.classList.toggle('is-warning',stale&&!liveError);wrap.classList.toggle('is-error',liveError);wrap.classList.toggle('is-ok',!stale&&!liveError);}
+    if(status){
+      if(liveError)status.textContent=`${lcopy('Updated','Aktualizované','Aktualizováno')} ${updated} · ${lcopy('LIVE monitoring reconnecting','LIVE monitoring sa obnovuje','LIVE monitoring se obnovuje')}`;
+      else if(stale)status.textContent=`${lcopy('Updated','Aktualizované','Aktualizováno')} ${updated} · ${lcopy('data refresh in progress','dáta sa aktualizujú','data se aktualizují')}`;
+      else status.textContent=`${lcopy('Updated','Aktualizované','Aktualizováno')} ${updated} · ${lcopy('LIVE data active','LIVE dáta aktívne','LIVE data aktivní')}`;
+    }
   }
   const cookieConsentKey='blinq_cookie_consent_v1';
   function cookieConsentValue(){try{return localStorage.getItem(cookieConsentKey)||'';}catch{return '';}}
@@ -1239,10 +1245,17 @@
     const candidateNames=Array.isArray(radar.candidate_items)?radar.candidate_items.map(x=>x?.favorite).filter(Boolean).slice(0,2):[];
     const radarMode=Number(radar.signals)>0?'is-confirmed':Number(radar.candidates)>0?'is-watching':'';
     const radarStrip=channel==='live'&&liveEligible?`<div class="insight-live-strip ${radar.error?'is-error':radar.ok?'is-ok':''} ${radarMode}"><span class="insight-live-dot"></span><div><strong>Comeback LIVE Radar</strong><small>${escapeHtml(state.userLiveRadarLoading?lcopy('Checking live matches…','Kontrolujem live zápasy…','Kontroluji live zápasy…'):radar.error?lcopy('LIVE status is temporarily unavailable.','LIVE stav je dočasne nedostupný.','LIVE stav je dočasně nedostupný.'):radar.scanned_at?`${Number(radar.live_events)||0} live · ${Number(radar.candidates)||0} WATCH · ${Number(radar.signals)||0} potvrdené${candidateNames.length?' · '+candidateNames.join(', '):''}`:lcopy('Automatic monitoring is active.','Automatické sledovanie je aktívne.','Automatické sledování je aktivní.'))}</small></div></div>`:'';
-    if(state.insightsLoading){list.innerHTML=radarStrip+'<div class="insight-feed-empty insight-feed-loading"><span></span><strong>Načítavam…</strong></div>';return;}
-    if(state.insightsStorageUnavailable){list.innerHTML=radarStrip+`<div class="insight-feed-empty insight-feed-offline"><i>!</i><strong>${escapeHtml(lcopy('Feed is offline','Feed je dočasne offline','Feed je dočasně offline'))}</strong><p>${escapeHtml(lcopy('Your dashboard remains fully available. Private messages will appear again when storage is reachable.','Dashboard funguje ďalej. Súkromné správy sa zobrazia po obnovení úložiska.','Dashboard funguje dál. Soukromé zprávy se zobrazí po obnovení úložiště.'))}</p></div>`;return;}
-    if(!rows.length){const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');list.innerHTML=radarStrip+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.'))}</p></div>`;return;}
-    list.innerHTML=radarStrip+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon type-${escapeHtml(item.type||'insight')}">${escapeHtml(insightTypeIcon(item.type))}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p><footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
+    const radarCandidateCards=channel==='live'&&liveEligible&&Array.isArray(radar.candidate_items)?radar.candidate_items.slice(0,3).map(item=>{
+      const stage=String(item?.stage||'watch'),p=Number(item?.second_set_probability),odds=Number(item?.second_set_odds),edge=Number(item?.second_set_edge),ev=Number(item?.second_set_ev);
+      const status=stage==='second_set_won'||stage==='break_lead'?lcopy('COMEBACK CONFIRMED','COMEBACK POTVRDENÝ','COMEBACK POTVRZENÝ'):lcopy('COMEBACK WATCH','COMEBACK WATCH','COMEBACK WATCH');
+      const set2=[];if(Number.isFinite(p))set2.push(`${lcopy('P(win set 2)','P(výhra 2. setu)','P(výhra 2. setu)')} ${pct(p)}`);if(Number.isFinite(odds))set2.push(`${lcopy('live odds','live kurz','live kurz')} ${odds.toFixed(2)}`);if(Number.isFinite(edge))set2.push(`edge ${(edge*100).toFixed(1)} p.b.`);if(Number.isFinite(ev))set2.push(`EV ${(ev*100).toFixed(1)}%`);
+      return `<article class="live-radar-candidate"><header><div><small>${escapeHtml(status)}</small><strong>${escapeHtml(String(item?.favorite||'—'))} <span>vs</span> ${escapeHtml(String(item?.opponent||'—'))}</strong></div><b>${escapeHtml(String(item?.second_set||'—'))}</b></header><div class="live-radar-status-grid"><span><small>${escapeHtml(lcopy('Comeback status','Comeback stav','Comeback stav'))}</small><strong>${escapeHtml(String(item?.first_set||'—'))} → ${escapeHtml(String(item?.second_set||'—'))}</strong></span><span class="set2-model"><small>${escapeHtml(lcopy('SET 2 MODEL · separate supporting signal','MODEL 2. SETU · samostatný podporný signál','MODEL 2. SETU · samostatný podpůrný signál'))}</small><strong>${escapeHtml(set2.length?set2.join(' · '):lcopy('Projection only — no live market','Len projekcia — bez live marketu','Pouze projekce — bez live marketu'))}</strong></span></div></article>`;
+    }).join(''):'';
+    const radarPanel=radarStrip+radarCandidateCards;
+    if(state.insightsLoading){list.innerHTML=radarPanel+'<div class="insight-feed-empty insight-feed-loading"><span></span><strong>Načítavam…</strong></div>';return;}
+    if(state.insightsStorageUnavailable){list.innerHTML=radarPanel+`<div class="insight-feed-empty insight-feed-offline"><i>!</i><strong>${escapeHtml(lcopy('Feed is offline','Feed je dočasne offline','Feed je dočasně offline'))}</strong><p>${escapeHtml(lcopy('Your dashboard remains fully available. Private messages will appear again when storage is reachable.','Dashboard funguje ďalej. Súkromné správy sa zobrazia po obnovení úložiska.','Dashboard funguje dál. Soukromé zprávy se zobrazí po obnovení úložiště.'))}</p></div>`;return;}
+    if(!rows.length){const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');list.innerHTML=radarPanel+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.'))}</p></div>`;return;}
+    list.innerHTML=radarPanel+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon type-${escapeHtml(item.type||'insight')}">${escapeHtml(insightTypeIcon(item.type))}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p><footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
   }
   async function loadInsights(force=false){
     const plan=accountPlan();
@@ -1263,7 +1276,7 @@
     state.userLiveRadarLoading=true;renderInsightDrawer();
     try{state.userLiveRadarStatus={...(await BlinqAuth.liveRadar()),ok:true};}
     catch(error){state.userLiveRadarStatus={error:error.message||'live_unavailable'};}
-    finally{state.userLiveRadarLoading=false;renderInsightBell();renderInsightDrawer();}
+    finally{state.userLiveRadarLoading=false;renderInsightBell();renderInsightDrawer();renderFooterConfig();}
   }
   function setInsightDrawer(open,channel=null){
     const drawer=$('insightDrawer'),backdrop=$('insightBackdrop');if(!drawer||!backdrop)return;
@@ -1395,10 +1408,21 @@
     if(tab==='ace'||tab==='games'||tab==='sets')return ['rank','time','tournament','match','pick','number','confidence'];
     return ['rank','time','tournament','match','pick','number','confidence','action'];
   }
-  function hubConfidenceHtml(value){
-    const n=Number(value);if(!Number.isFinite(n))return '<span class="hub-confidence is-empty"><strong>—</strong></span>';
+  function hubDataDepthLabel(row){
+    const depth=Number(row?.data_depth??row?.dataDepth);
+    if(Number.isFinite(depth))return `DATA DEPTH · ${Math.round(Math.max(0,Math.min(1,depth))*100)}%`;
+    const samples=row?.projection_samples&&typeof row.projection_samples==='object'?row.projection_samples:{};
+    const a=Number(samples.player1),b=Number(samples.player2);
+    if(Number.isFinite(a)&&Number.isFinite(b)&&a>0&&b>0)return `DATA DEPTH · ${Math.trunc(a)}/${Math.trunc(b)}`;
+    const q=row?.quality||{},qa=Number(q?.player1?.matches),qb=Number(q?.player2?.matches);
+    if(Number.isFinite(qa)&&Number.isFinite(qb)&&qa>0&&qb>0)return `DATA DEPTH · ${Math.trunc(qa)}/${Math.trunc(qb)}`;
+    return '';
+  }
+  function hubConfidenceHtml(value,row=null){
+    const depth=hubDataDepthLabel(row);
+    const n=Number(value);if(!Number.isFinite(n))return `<span class="hub-confidence is-empty"><strong>—</strong>${depth?`<small class="hub-data-depth">${escapeHtml(depth)}</small>`:''}</span>`;
     const normalized=n<=1?n:n/100,p=Math.max(0,Math.min(100,normalized*100));
-    return `<span class="hub-confidence"><strong>${escapeHtml(pct(n))}</strong><i aria-hidden="true"><b style="width:${p.toFixed(1)}%"></b></i></span>`;
+    return `<span class="hub-confidence"><strong>${escapeHtml(pct(n))}</strong><i aria-hidden="true"><b style="width:${p.toFixed(1)}%"></b></i>${depth?`<small class="hub-data-depth" title="${escapeHtml(lcopy('Usable historical sample behind this prediction','Použiteľná historická vzorka za touto predikciou','Použitelný historický vzorek za touto predikcí'))}">${escapeHtml(depth)}</small>`:''}</span>`;
   }
   function hubPredictionHtml(sourceTab,text,subLabel=''){
     const label=subLabel||({daily:'TOP',value:'VALUE',ace:'ESA',games:'GAMES',sets:'SETS'}[sourceTab]||String(sourceTab||'').toUpperCase());
@@ -1738,7 +1762,32 @@
     if(!aceProjectionDetailAvailable(row))return;
     const dialog=$('matchDialog'),content=$('dialogContent');if(!dialog||!content)return;
     content.innerHTML=aceProjectionDetailHtml(row);
-    dialog.classList.add('ace-projection-dialog');
+    dialog.classList.remove('sg-projection-dialog');dialog.classList.add('ace-projection-dialog');
+    if(!dialog.open)dialog.showModal();
+  }
+  function sgProjectionDetailData(row,sourceTab=''){
+    const match=normalize(row),samples=row?.projection_samples&&typeof row.projection_samples==='object'?row.projection_samples:{};
+    const market=String(sourceTab||row?.market||'').toLowerCase()==='sets'?'sets':'games';
+    const projection=Number(row?.projection),baseline=Number(row?.reference_projection??row?.baseline_projection),gap=Number(row?.projection_gap),confidence=Number(row?.projection_confidence),depth=Number(row?.data_depth);
+    return {match,market,projection,baseline,gap,confidence,depth,bestOf:Number(row?.best_of),samples,selection:String(row?.pick||row?.selection||'—'),source:String(row?.projection_source||'historical_structured_scores')};
+  }
+  function sgProjectionDetailHtml(row,sourceTab=''){
+    const d=sgProjectionDetailData(row,sourceTab),isSets=d.market==='sets';
+    const projectionText=Number.isFinite(d.projection)?(isSets?pct(d.projection):d.projection.toFixed(1)):'—';
+    const baselineText=Number.isFinite(d.baseline)?(isSets?pct(d.baseline):d.baseline.toFixed(1)):'—';
+    const gapText=Number.isFinite(d.gap)?(isSets?`${(d.gap*100).toFixed(1)} p.b.`:`${d.gap.toFixed(1)} gemu`):'—';
+    const depthText=Number.isFinite(d.depth)?`${Math.round(Math.max(0,Math.min(1,d.depth))*100)}%`:'—';
+    const p1=Number(d.samples.player1),p2=Number(d.samples.player2),s1=Number(d.samples.player1_surface),s2=Number(d.samples.player2_surface);
+    const sample=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)?`${Math.trunc(a)} / ${Math.trunc(b)}`:'—';
+    const why=isSets
+      ?lcopy(`The model compares how often both players' historical matches extend beyond the reference set length and shrinks sparse evidence toward neutral.`,`Model porovnáva, ako často sa historické zápasy oboch hráčov predĺžia nad referenčnú dĺžku setov a pri malej vzorke výsledok konzervatívne približuje k neutrálu.`,`Model porovnává, jak často se historické zápasy obou hráčů prodlužují nad referenční délku setů a při malém vzorku výsledek konzervativně přibližuje k neutrálu.`)
+      :lcopy(`The projection is built from structured historical total-games scores for both players, adjusted by sample depth and surface evidence.`,`Projekcia vychádza zo štruktúrovaných historických počtov gemov oboch hráčov a zohľadňuje hĺbku vzorky aj dáta na povrchu.`,`Projekce vychází ze strukturovaných historických počtů gemů obou hráčů a zohledňuje hloubku vzorku i data na povrchu.`);
+    return `<div class="match-detail-shell sg-detail-shell" data-detail-market="${escapeHtml(d.market)}"><header class="match-detail-head"><div><div class="dialog-eyebrow">${isSets?'SETS':'GAMES'} · ${escapeHtml(d.match.tour)} · ${escapeHtml(d.match.tournament)}</div><h2>${escapeHtml(d.match.p1)} <span>vs</span> ${escapeHtml(d.match.p2)}</h2></div></header><div class="sg-detail-hero"><div><small>${escapeHtml(lcopy('Model projection','Modelová projekcia','Modelová projekce'))}</small><strong>${escapeHtml(d.selection)}</strong></div><div><b>${escapeHtml(projectionText)}</b><small>${escapeHtml(isSets?lcopy('direction probability','pravdepodobnosť smeru','pravděpodobnost směru'):lcopy('projected total games','projekcia gemov','projekce gemů'))}</small></div></div><div class="sg-detail-grid"><article><small>${escapeHtml(lcopy('Reference','Referencia','Reference'))}</small><strong>${escapeHtml(baselineText)}</strong></article><article><small>${escapeHtml(lcopy('Projection gap','Rozdiel projekcie','Rozdíl projekce'))}</small><strong>${escapeHtml(gapText)}</strong></article><article><small>${escapeHtml(lcopy('Model confidence','Istota modelu','Jistota modelu'))}</small><strong>${Number.isFinite(d.confidence)?escapeHtml(pct(d.confidence)):'—'}</strong></article><article class="data-depth"><small>DATA DEPTH</small><strong>${escapeHtml(depthText)}</strong></article><article><small>${escapeHtml(lcopy('History samples P1 / P2','Historická vzorka P1 / P2','Historický vzorek P1 / P2'))}</small><strong>${escapeHtml(sample(p1,p2))}</strong></article><article><small>${escapeHtml(lcopy('Surface samples P1 / P2','Vzorka na povrchu P1 / P2','Vzorek na povrchu P1 / P2'))}</small><strong>${escapeHtml(sample(s1,s2))}</strong></article></div><section class="detail-why-card"><small>${escapeHtml(lcopy('Why BlinQ','Prečo BlinQ','Proč BlinQ'))}</small><p>${escapeHtml(why)}</p></section><p class="ace-detail-note">${escapeHtml(lcopy('This is a model projection, not an odds-backed betting market. Odds, edge and EV are shown only when a real provider market exists.','Ide o modelovú projekciu, nie o predikciu podloženú kurzovým marketom. Kurz, edge a EV zobrazujeme iba vtedy, keď existuje reálny market od providera.','Jde o modelovou projekci, ne o predikci podloženou kurzovým marketem. Kurz, edge a EV zobrazujeme pouze tehdy, když existuje reálný market od providera.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(d.match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(d.match.date)} · ${fmtTime(d.match.date)}</span>${Number.isFinite(d.bestOf)?`<span>BO${Math.trunc(d.bestOf)}</span>`:''}<span>${escapeHtml(d.source.replaceAll('_',' '))}</span></div></div>`;
+  }
+  function openSgProjection(row,sourceTab=''){
+    const dialog=$('matchDialog'),content=$('dialogContent');if(!dialog||!content)return;
+    content.innerHTML=sgProjectionDetailHtml(row,sourceTab);
+    dialog.classList.remove('ace-projection-dialog');dialog.classList.add('sg-projection-dialog');
     if(!dialog.open)dialog.showModal();
   }
   function dailyHubRow(row,tab,active=false,index=0){
@@ -1752,16 +1801,16 @@
       const projectionText=Number.isFinite(projection)?(unit==='probability'?pct(projection):projection.toFixed(1)):'—';
       const projectionUnit=unit==='probability'?lcopy('model','model','model'):lcopy('games','gemov','gemů');
       const actionCell=tab==='see_all'?'<td class="hub-action-cell hub-optional-action"><span class="hub-projection-badge">MODEL</span></td>':'';
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence)}</td>${actionCell}</tr>`;
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
     }
     if(sourceTab==='ace'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=modelPickName(row),market=aceMarketName(row);
       const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia ESA','Projekce ESA'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}<span aria-hidden="true">→</span></button>`:'';
       const actionCell=tab==='see_all'?`<td class="hub-action-cell hub-optional-action">${action}</td>`:'';
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="ace">${leading}<td class="hub-pick">${hubPredictionHtml('ace',pick,market||'ESA')}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(projection)?projection.toFixed(2):'—',lcopy('projection','projekcia','projekce'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence)}</td>${actionCell}</tr>`;
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="ace">${leading}<td class="hub-pick">${hubPredictionHtml('ace',pick,market||'ESA')}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(projection)?projection.toFixed(2):'—',lcopy('projection','projekcia','projekce'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
     }
     const probability=marketProbability(row),odds=Number(row?.odds??row?.betting?.odds),pick=modelPickName(row);
-    const base=`${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick)}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(probability)}</td>`;
+    const base=`${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick)}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(probability,row)}</td>`;
     if(tab==='value'){
       const ev=Number(row?.expected_value??row?.betting?.expected_value);
       const edge=Number(row?.edge??row?.betting?.edge);
@@ -1922,25 +1971,38 @@
     $('prevPick').hidden=pageCount<=1;$('nextPick').hidden=pageCount<=1;$('prevPick').disabled=state.page<=0;$('nextPick').disabled=state.page>=pageCount-1;renderDots(pageCount);renderDashboardComposition();applyAccessStates(grid);translatePublicDom(grid);
   }
 
+  function winnerWhyBlinqHtml(row,tab='daily'){
+    const match=normalize(row),depth=hubDataDepthLabel(row),surface=surfaceSampleLabel(row),form=publicFormLabel(row,match.pickId),odds=Number(row?.odds??row?.betting?.odds),edge=Number(row?.edge??row?.betting?.edge),ev=Number(row?.expected_value??row?.betting?.expected_value);
+    const chips=[];
+    if(depth)chips.push(depth);
+    if(surface&&surface!=='—')chips.push(`${lcopy('Surface sample','Povrchová vzorka','Povrchový vzorek')} · ${surface}`);
+    if(form&&form!=='—')chips.push(`${lcopy('Recent form','Aktuálna forma','Aktuální forma')} · ${form}`);
+    if(Number.isFinite(odds)&&odds>1)chips.push(`${lcopy('Published odds','Publikovaný kurz','Publikovaný kurz')} · ${odds.toFixed(2)}`);
+    if(tab==='value'&&Number.isFinite(edge))chips.push(`EDGE · ${(edge*(Math.abs(edge)<=1?100:1)).toFixed(1)}%`);
+    if(tab==='value'&&Number.isFinite(ev))chips.push(`EV · ${(ev*(Math.abs(ev)<=1?100:1)).toFixed(1)}%`);
+    const note=tab==='value'
+      ?lcopy('VALUE combines the match-winner model with the published market price. The market metrics below are supporting context, not a separate prediction.','VALUE kombinuje model víťaza zápasu s publikovaným kurzom. Trhové metriky nižšie sú podporný kontext, nie samostatná predikcia.','VALUE kombinuje model vítěze zápasu s publikovaným kurzem. Tržní metriky níže jsou podpůrný kontext, ne samostatná predikce.')
+      :lcopy('The winner detail shows only factors relevant to the match-winner model: ranking, current form, surface evidence, return/serve context, H2H and usable historical depth.','Detail víťaza zobrazuje iba faktory relevantné pre model víťaza zápasu: rebríček, aktuálnu formu, dáta na povrchu, kontext podania/returnu, H2H a použiteľnú hĺbku histórie.','Detail vítěze zobrazuje pouze faktory relevantní pro model vítěze zápasu: žebříček, aktuální formu, data na povrchu, kontext podání/returnu, H2H a použitelnou hloubku historie.');
+    return `<section class="detail-why-card winner-why"><small>${escapeHtml(lcopy('Why BlinQ','Prečo BlinQ','Proč BlinQ'))}</small><p>${escapeHtml(note)}</p>${chips.length?`<div class="detail-context-chips">${chips.map(x=>`<span>${escapeHtml(x)}</span>`).join('')}</div>`:''}</section>`;
+  }
   function renderMatchStatsPanel(row){
     const match=normalize(row),s1=playerInsightStats(row,1),s2=playerInsightStats(row,2);
+    const h2h1=s1.h2hWins!=null&&s1.h2hLosses!=null?`${s1.h2hWins}–${s1.h2hLosses}`:'—';
+    const h2h2=s2.h2hWins!=null&&s2.h2hLosses!=null?`${s2.h2hWins}–${s2.h2hLosses}`:'—';
     const rows=[
       [lcopy('BlinQ probability','BlinQ pravdepodobnosť','BlinQ pravděpodobnost'),s1.probabilityDisplay,s2.probabilityDisplay],
       [lcopy('Ranking','Rebríček','Žebříček'),s1.rankDisplay,s2.rankDisplay],
+      [lcopy('Recent form','Aktuálna forma','Aktuální forma'),s1.overallFormDisplay,s2.overallFormDisplay],
+      [surfaceShortName(row?.surface||match.surface)+' '+lcopy('form','forma','forma'),s1.surfaceFormDisplay,s2.surfaceFormDisplay],
       [lcopy('Surface matches','Zápasy na povrchu','Zápasy na povrchu'),s1.surfaceDisplay,s2.surfaceDisplay],
       [lcopy('History sample','Historická vzorka','Historický vzorek'),s1.historyDisplay,s2.historyDisplay],
-      [lcopy('1st serve','1. podanie','1. podání'),s1.serveDisplay,s2.serveDisplay],
-      [lcopy('Return','Return','Return'),s1.returnDisplay,s2.returnDisplay],
-      [lcopy('Aces','Esá','Esa'),s1.aceDisplay,s2.aceDisplay],
-      [lcopy('Form','Forma','Forma'),s1.formDisplay,s2.formDisplay],
-      [lcopy('Net play','Hra na sieti','Hra na síti'),s1.netDisplay,s2.netDisplay]
+      ['H2H',h2h1,h2h2],
+      [lcopy('1st serve points','Body po 1. podaní','Body po 1. podání'),s1.serveDisplay,s2.serveDisplay],
+      [lcopy('Return points','Body na returne','Body na returnu'),s1.returnDisplay,s2.returnDisplay]
     ];
     const missingDisplay=value=>{const text=String(value??'').trim();if(!text||text==='—')return true;const numeric=Number(text.replace('%','').replace(',','.'));return Number.isFinite(numeric)&&numeric===0;};
-    const visibleRows=rows.filter(([label,a,b])=>{
-      const optional=[lcopy('1st serve','1. podanie','1. podání'),lcopy('Return','Return','Return'),lcopy('Aces','Esá','Esa'),lcopy('Net play','Hra na sieti','Hra na síti')].includes(label);
-      return !optional||!(missingDisplay(a)&&missingDisplay(b));
-    });
-    return `<div class="match-stat-table"><div class="match-stat-head"><span>${escapeHtml(lcopy('Metric','Metrika','Metrika'))}</span><strong>${escapeHtml(match.p1)}</strong><b>${escapeHtml(match.p2)}</b></div>${visibleRows.map(([label,a,b])=>`<div class="match-stat-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(a))}</strong><b>${escapeHtml(String(b))}</b></div>`).join('')}</div>`;
+    const visibleRows=rows.filter(([,a,b])=>!(missingDisplay(a)&&missingDisplay(b)));
+    return `<div class="match-stat-table winner-stat-table"><div class="match-stat-head"><span>${escapeHtml(lcopy('Winner factor','Faktor víťaza','Faktor vítěze'))}</span><strong>${escapeHtml(match.p1)}</strong><b>${escapeHtml(match.p2)}</b></div>${visibleRows.map(([label,a,b])=>`<div class="match-stat-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(a))}</strong><b>${escapeHtml(String(b))}</b></div>`).join('')}</div>`;
   }
   function renderMatchHistoryPanel(row){
     const match=normalize(row),s1=playerInsightStats(row,1),s2=playerInsightStats(row,2);
@@ -1986,11 +2048,11 @@
     const row=rowOverride||m?.raw||m;
     const match=rowOverride?normalize(rowOverride):m;
     const signalRows=Array.isArray(match.signals)&&match.signals.length?match.signals.map(s=>{const meta=signalMeta(s,match);const favoursId=String(s?.player_id??s?.favours_player_id??'');const favours=favoursId===String(match.p1Id)?match.p1:favoursId===String(match.p2Id)?match.p2:'—';return `<div class="dialog-signal"><span>${escapeHtml(meta.label)}</span><strong>${escapeHtml(favours)}</strong><small>${meta.favours?'supports pick':'counter-signal'}</small></div>`;}).join(''):'<p class="signal-empty">No secondary signals are available.</p>';
-    const overview=`<div class="match-detail-overview"><div class="dialog-duel-grid">${insightPlayerCard(row,1)}${insightPlayerCard(row,2)}</div><div class="match-overview-context">${renderMotivationPanel(row)}</div></div>`;
+    const overview=`<div class="match-detail-overview">${winnerWhyBlinqHtml(row,tab)}<div class="dialog-duel-grid">${insightPlayerCard(row,1)}${insightPlayerCard(row,2)}</div><div class="match-overview-context">${renderMotivationPanel(row)}</div></div>`;
     const statistics=`<div class="match-detail-statistics">${renderMatchStatsPanel(row)}</div>`;
-    const radar=`<div class="match-detail-radar"><div class="dialog-section dialog-radar-wrap">${renderRadarComparison(row)}</div><div class="dialog-section match-model-signals"><h3>${escapeHtml(lcopy('Model signals','Model signals','Model signals'))}</h3>${signalRows}</div></div>`;
+    const radar=`<div class="match-detail-radar"><div class="dialog-section dialog-radar-wrap">${renderRadarComparison(row)}</div><div class="dialog-section match-model-signals"><h3>${escapeHtml(lcopy('Winner model signals','Signály modelu víťaza','Signály modelu vítěze'))}</h3>${signalRows}</div></div>`;
     const history=`<div class="match-detail-history">${renderMatchHistoryPanel(row)}</div>`;
-    return `<div class="match-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div><button class="match-popout-button" type="button" data-match-popout><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M10 8h6v6"/></svg>${escapeHtml(lcopy('Open in new window','Otvoriť v novom okne','Otevřít v novém okně'))}</button></header><div class="dialog-pick match-detail-pick"><div><small>BlinQ Prediction</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${marketProbability(row)==null?'—':pct(marketProbability(row))}<small>${escapeHtml(lcopy('win probability','šanca na výhru','šance na výhru'))}</small></div></div><nav class="match-detail-tabs" role="tablist"><button type="button" class="active" data-match-tab="overview">${escapeHtml(lcopy('Overview','Prehľad','Přehled'))}</button><button type="button" data-match-tab="statistics">${escapeHtml(lcopy('Statistics','Štatistiky','Statistiky'))}</button><button type="button" data-match-tab="radar">${escapeHtml(lcopy('Radar','Radar','Radar'))}</button><button type="button" data-match-tab="history">${escapeHtml(lcopy('History','História','Historie'))}</button></nav><section class="match-detail-panel active" data-match-panel="overview">${overview}</section><section class="match-detail-panel" data-match-panel="statistics" hidden>${statistics}</section><section class="match-detail-panel" data-match-panel="radar" hidden>${radar}</section><section class="match-detail-panel" data-match-panel="history" hidden>${history}</section>${row?.__liveIntelligenceLoading?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-loading">${escapeHtml(lcopy('Loading live player analytics…','Načítavam analytické dáta hráčov…','Načítám analytická data hráčů…'))}</div>`:row?.__liveIntelligenceFailed?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-error">${escapeHtml(lcopy('Extra live analytics are temporarily unavailable.','Doplnkové analytické dáta sú dočasne nedostupné.','Doplňková analytická data jsou dočasně nedostupná.'))}</div>`:''}<div class="dialog-meta"><span>${escapeHtml(String(match.surface).replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>Model ${escapeHtml(match.model||'—')}</span><span class="dialog-system-ok"><i></i>${escapeHtml(lcopy('All systems operational','Všetky systémy funkčné','Všechny systémy funkční'))}</span></div></div>`;
+    return `<div class="match-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div><button class="match-popout-button" type="button" data-match-popout><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M10 8h6v6"/></svg>${escapeHtml(lcopy('Open in new window','Otvoriť v novom okne','Otevřít v novém okně'))}</button></header><div class="dialog-pick match-detail-pick"><div><small>BlinQ Prediction</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${marketProbability(row)==null?'—':pct(marketProbability(row))}<small>${escapeHtml(lcopy('win probability','šanca na výhru','šance na výhru'))}</small></div></div><nav class="match-detail-tabs" role="tablist"><button type="button" class="active" data-match-tab="overview">${escapeHtml(lcopy('Overview','Prehľad','Přehled'))}</button><button type="button" data-match-tab="statistics">${escapeHtml(lcopy('Form & surface','Forma & povrch','Forma & povrch'))}</button><button type="button" data-match-tab="radar">${escapeHtml(lcopy('Winner model','Model víťaza','Model vítěze'))}</button><button type="button" data-match-tab="history">${escapeHtml(lcopy('History / H2H','História / H2H','Historie / H2H'))}</button></nav><section class="match-detail-panel active" data-match-panel="overview">${overview}</section><section class="match-detail-panel" data-match-panel="statistics" hidden>${statistics}</section><section class="match-detail-panel" data-match-panel="radar" hidden>${radar}</section><section class="match-detail-panel" data-match-panel="history" hidden>${history}</section>${row?.__liveIntelligenceLoading?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-loading">${escapeHtml(lcopy('Loading live player analytics…','Načítavam analytické dáta hráčov…','Načítám analytická data hráčů…'))}</div>`:row?.__liveIntelligenceFailed?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-error">${escapeHtml(lcopy('Extra live analytics are temporarily unavailable.','Doplnkové analytické dáta sú dočasne nedostupné.','Doplňková analytická data jsou dočasně nedostupná.'))}</div>`:''}<div class="dialog-meta"><span>${escapeHtml(String(match.surface).replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>Model ${escapeHtml(match.model||'—')}</span><span class="dialog-system-ok"><i></i>${escapeHtml(lcopy('All systems operational','Všetky systémy funkčné','Všechny systémy funkční'))}</span></div></div>`;
   }
   function openMatchPopout(){
     const source=$('dialogContent');if(!source)return;
@@ -2004,7 +2066,7 @@
     if(shouldHydrate)row.__liveIntelligenceLoading=true;
     $('dialogContent').innerHTML=matchDetailHtml(m,tab,rowOverride);
     const dialog=$('matchDialog');
-    dialog.classList.remove('ace-projection-dialog');
+    dialog.classList.remove('ace-projection-dialog','sg-projection-dialog');
     dialog.querySelectorAll('[data-match-tab]').forEach(button=>button.addEventListener('click',()=>{
       const id=button.dataset.matchTab;
       dialog.querySelectorAll('[data-match-tab]').forEach(node=>{node.classList.toggle('active',node===button);node.setAttribute('aria-selected',node===button?'true':'false');});
@@ -2064,10 +2126,14 @@
         if(current){
           const sourceTab=state.dailyHubTab==='see_all'?String(current?._hub_source||''):state.dailyHubTab;
           if(sourceTab==='ace'){
-            if(target.closest('[data-ace-projection]')&&aceProjectionDetailAvailable(current))openAceProjection(current);
+            if(aceProjectionDetailAvailable(current))openAceProjection(current);
             return;
           }
-          openMatch(normalize(current),state.dailyHubTab,current);
+          if(sourceTab==='games'||sourceTab==='sets'){
+            openSgProjection(current,sourceTab);
+            return;
+          }
+          openMatch(normalize(current),sourceTab||state.dailyHubTab,current);
         }
       }
     };
@@ -2501,16 +2567,33 @@
     return `<div class="admin-site-map"><div class="admin-site-map-browser"><div class="admin-site-map-browserbar"><i></i><i></i><i></i><span>BLINQ · HLAVNÁ STRÁNKA</span></div><div class="admin-site-map-header"><div class="admin-site-map-logo">BlinQ</div><div class="admin-site-map-header-slots">${[1,2,3].map(i=>adminBannerMapSlot(`HEADER_BANNER_${i}`,`CTA ${i}`,'header')).join('')}</div><div class="admin-site-map-account">ÚČET</div></div><section class="admin-site-map-hero"><header><strong>Hlavný banner</strong><span>Klikni na konkrétny slide</span></header><div>${[1,2,3,4,5].map(i=>adminBannerMapSlot(`HERO_BANNER_${i}`,`Slide ${i}`,'hero')).join('')}</div></section><div class="admin-site-map-content"><div class="admin-site-map-table"><span></span><span></span><span></span><span></span></div>${row('content_top','Obsah · horný rad')}${row('content_mid','Obsah · stredný rad')}${row('content_bottom','Obsah · spodný rad')}<div class="admin-site-map-table compact"><span></span><span></span><span></span></div></div><section class="admin-site-map-vip"><header><strong>Spodný VIP / membership banner</strong><span>Fixná pozícia</span></header>${adminBannerMapSlot('VIP_RAIL','VIP RAIL','vip')}</section></div><p class="admin-site-map-help">Rozloženie stránky ostáva pevné. Meníš iba obsah vo vybranom slote, takže kreatíva s rovnakým pomerom strán nerozhodí layout.</p></div>`;
   }
   function renderAdminBanners(){
-    state.selectedElement='HERO_BANNER_1';
-    const item=elements()?.HERO_BANNER_1||{};const c=item.content=item.content||{};
+    const heroIds=[1,2,3,4,5].map(i=>`HERO_BANNER_${i}`);
+    if(!heroIds.includes(state.selectedElement))state.selectedElement='HERO_BANNER_1';
+    const selectedId=state.selectedElement;
+    const item=elements()?.[selectedId]||elements()?.HERO_BANNER_1||{};
+    const c=item.content=item.content||{};
+    const globalHero=state.ui.hero_banner=state.ui.hero_banner||{};
+    const activeCount=Math.max(1,Math.min(5,Number(globalHero.slot_count)||1));
+    const rotation=Math.max(3,Math.min(10,Number(globalHero.rotation_seconds)||6));
     const desktop=safePhotoUrl(c.image_url||'')||'/assets/hero-reference-exact-v680.webp';
     const mobile=safePhotoUrl(c.mobile_image_url||'')||desktop;
-    const bg=safePhotoUrl(c.site_background_url||'')||String(state.presentationConfig?.theme?.background?.image||'/assets/blinq_background.webp');
+    const hero1=elements()?.HERO_BANNER_1?.content||{};
+    const bg=safePhotoUrl(hero1.site_background_url||'')||String(state.presentationConfig?.theme?.background?.image||'/assets/blinq_background.webp');
     const effects=['fade-up','fade','slide-down'];
     const preview=(mode,img)=>`<div class="lean-admin-preview ${mode}" style="--preview-image:url('${escapeHtml(img)}')"><div><small>${escapeHtml(c.eyebrow||'BLINQ')}</small><strong>${escapeHtml(c.headline||'Tennis intelligence for a smarter tomorrow.')}</strong><p>${escapeHtml(c.text||'')}</p>${c.button_text?`<b>${escapeHtml(c.button_text)} →</b>`:''}</div></div>`;
-    return `<section class="admin-ux-section lean-admin-banners" data-simple-banner="HERO_BANNER_1">
-      <div class="admin-ux-heading"><div><small>BANNERY</small><h2>Hero + pozadie stránky</h2><p>Jeden hlavný banner. Text zostáva HTML vrstva nad obrázkom, takže ho upravíš bez výroby novej grafiky.</p></div></div>
-      <div class="lean-admin-specs"><article><strong>DESKTOP HERO</strong><span>1920 × 640 px</span><small>WebP / AVIF odporúčané</small></article><article><strong>MOBILE HERO</strong><span>1080 × 720 px</span><small>Samostatný crop pre telefón</small></article><article><strong>BACKGROUND</strong><span>1920 × 1080 px</span><small>Jemný podklad, ideálne &lt; 250 kB</small></article></div>
+    const tabs=heroIds.map((id,index)=>{const slot=elements()?.[id]||{},content=slot.content||{},active=index<activeCount,selected=id===selectedId,ready=Boolean(String(content.image_url||'').trim());return `<button type="button" class="admin-hero-tab${selected?' is-selected':''}${active?' is-live':''}${ready?' is-ready':''}" data-admin-element="${id}"><span>0${index+1}</span><strong>Banner ${index+1}</strong><small>${active?'AKTÍVNY':ready?'PRIPRAVENÝ':'NEAKTÍVNY'}</small></button>`;}).join('');
+    const countOptions=[1,2,3,4,5].map(n=>`<option value="${n}"${n===activeCount?' selected':''}>${n}</option>`).join('');
+    const delayOptions=[3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===rotation?' selected':''}>${n} s</option>`).join('');
+    return `<section class="admin-ux-section lean-admin-banners admin-hero-manager" data-simple-banner="${escapeHtml(selectedId)}">
+      <div class="admin-ux-heading"><div><small>BANNERY</small><h2>Hero carousel</h2><p>Pripravených je 5 pevných bannerových pozícií. Vyplň ďalší banner a potom zvýš počet aktívnych bannerov.</p></div></div>
+      <div class="admin-hero-carousel-controls">
+        <label><span>Počet aktívnych bannerov</span><select data-admin-hero-count>${countOptions}</select><small>Aktivujú sa bannery od 1 po zvolený počet.</small></label>
+        <label><span>Interval automatickej zmeny</span><select data-admin-hero-seconds>${delayOptions}</select><small>Rozsah 3–10 sekúnd.</small></label>
+        <div class="admin-hero-rotation-status"><i></i><div><strong>${activeCount>1?'Automatické prepínanie zapnuté':'Jeden statický banner'}</strong><small>${activeCount>1?`Zmena každých ${rotation} sekúnd · pozastaví sa pri hoveri`:'Pridaj Banner 2 a nastav počet aktívnych na 2.'}</small></div></div>
+      </div>
+      <div class="admin-hero-tabs" role="tablist" aria-label="Hero bannery">${tabs}</div>
+      <div class="admin-hero-selected-head"><div><small>UPRAVUJEŠ</small><strong>${escapeHtml(item.label||selectedId)}</strong></div><span>${Number(selectedId.split('_').pop())<=activeCount?'Zobrazuje sa v rotácii':'Mimo aktuálnej rotácie'}</span></div>
+      <div class="lean-admin-specs"><article><strong>DESKTOP HERO</strong><span>1920 × 640 px</span><small>WebP / AVIF odporúčané</small></article><article><strong>MOBILE HERO</strong><span>1080 × 720 px</span><small>Samostatný crop pre telefón</small></article><article><strong>ROTÁCIA</strong><span>${activeCount} / 5</span><small>${rotation} s medzi bannermi</small></article></div>
       <div class="lean-admin-preview-grid"><div><span>Desktop preview</span>${preview('desktop',desktop)}</div><div><span>Mobile preview</span>${preview('mobile',mobile)}</div></div>
       <div class="admin-form-section"><div class="admin-form-section-title"><strong>Text nad bannerom</strong><span>Nie je súčasťou obrázka.</span></div><div class="admin-form-grid">
         <label>Eyebrow<input data-simple-banner-field="eyebrow" value="${escapeHtml(c.eyebrow||'')}"></label>
@@ -2520,13 +2603,15 @@
         <label>Text tlačidla<input data-simple-banner-field="button_text" value="${escapeHtml(c.button_text||'')}"></label>
         <label>Odkaz<input data-simple-banner-field="link" value="${escapeHtml(c.link||'')}"></label>
       </div></div>
-      <div class="admin-form-section"><div class="admin-form-section-title"><strong>Grafické podklady</strong><span>Jasné rozmery, žiadne kampane ani ďalšie sloty.</span></div><div class="admin-form-grid">
+      <div class="admin-form-section"><div class="admin-form-section-title"><strong>Grafické podklady · Banner ${escapeHtml(selectedId.split('_').pop())}</strong><span>Nahraj vlastný desktop a mobilný podklad.</span></div><div class="admin-form-grid">
         <label class="span-2">Desktop hero · 1920×640<input data-simple-banner-field="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/hero.webp"></label>
         <label class="span-2">Mobile hero · 1080×720<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/hero-mobile.webp"></label>
-        <label class="span-2">Pozadie stránky · 1920×1080<input data-simple-banner-field="site_background_url" value="${escapeHtml(c.site_background_url||bg)}" placeholder="/assets/blinq_background.webp"></label>
         <label class="admin-toggle-line span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť editovateľný text nad podkladom</span></label>
       </div></div>
-      <div class="admin-banner-save-note"><span></span><strong>Po úprave klikni Publikovať.</strong><small>Náhľad vyššie sa obnovuje okamžite v adminovi.</small></div>
+      <div class="admin-form-section admin-page-background-editor" data-simple-banner="HERO_BANNER_1"><div class="admin-form-section-title"><strong>Pozadie celej stránky</strong><span>Spoločné pre všetkých 5 bannerov. Nad obrázkom sa automaticky pridáva jemný BlinQ ambient efekt.</span></div><div class="admin-form-grid">
+        <label class="span-2">Background · odporúčané 1920×1080<input data-simple-banner-field="site_background_url" value="${escapeHtml(hero1.site_background_url||bg)}" placeholder="/assets/blinq_background.webp"></label>
+      </div></div>
+      <div class="admin-banner-save-note"><span></span><strong>Po úprave klikni Publikovať.</strong><small>Prepínanie na webe sa aktivuje automaticky pri 2–5 banneroch.</small></div>
     </section>`;
   }
 
@@ -2875,6 +2960,7 @@
     const selector=[
       'input[data-simple-banner-field="image_url"]',
       'input[data-simple-banner-field="mobile_image_url"]',
+      'input[data-simple-banner-field="site_background_url"]',
       'input[data-simple-banner-field$="_icon_url"]',
       'input[data-campaign-image]',
       'input[data-campaign-field="image_url"]',
@@ -2989,8 +3075,8 @@
       if(t.id==='adminUserSort'){uf.sort=t.value;rerenderAdmin();adminApplyUserFilters();return;}
       if(t.id==='adminPlanSelect'){state.adminPlan=t.value;rerenderAdmin();return;}
       if(t.dataset.adminHeaderCount!==undefined){const count=Math.max(0,Math.min(3,Number(t.value)||0));state.ui.header_cta=state.ui.header_cta||{};state.ui.header_cta.enabled=count>0;state.ui.header_cta.slot_count=count;renderAllUiContent();rerenderAdmin();return;}
-      if(t.dataset.adminHeroCount!==undefined){const count=Math.max(0,Math.min(5,Number(t.value)||0));state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.enabled=count>0;state.ui.hero_banner.slot_count=count;state.heroIndex=0;renderAllUiContent();rerenderAdmin();return;}
-      if(t.dataset.adminHeroSeconds!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.rotation_seconds=Math.max(3,Math.min(300,Number(t.value)||10));renderHeroBanner();rerenderAdmin();return;}
+      if(t.dataset.adminHeroCount!==undefined){const count=Math.max(1,Math.min(5,Number(t.value)||1));state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.enabled=true;state.ui.hero_banner.slot_count=count;state.ui.hero_banner.auto_rotate=count>1;state.ui.hero_banner.show_dots=count>1;state.ui.hero_banner.pause_on_hover=true;[1,2,3,4,5].forEach(i=>{const slot=elements()?.[`HERO_BANNER_${i}`];if(slot){slot.content=slot.content||{};slot.content.enabled=i<=count;}});state.heroIndex=0;renderAllUiContent();rerenderAdmin();return;}
+      if(t.dataset.adminHeroSeconds!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.rotation_seconds=Math.max(3,Math.min(10,Number(t.value)||6));renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroRotate!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.auto_rotate=t.checked;renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
