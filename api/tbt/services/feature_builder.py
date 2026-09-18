@@ -13,7 +13,7 @@ from ..utils import clamp, stable_hash
 from .elo import elo_expected, update_elo
 
 
-FEATURE_STATE_SCHEMA_VERSION = 1
+FEATURE_STATE_SCHEMA_VERSION = 2
 
 
 FEATURE_NAMES = [
@@ -40,9 +40,29 @@ FEATURE_NAMES = [
     "altitude_serve_interaction",
     "environment_known",
     "h2h_advantage",
+    "surface_h2h_advantage",
+    "surface_h2h_known",
     "serve_quality_diff",
     "return_quality_diff",
+    "surface_serve_quality_diff",
+    "surface_return_quality_diff",
     "stats_known_both",
+    "surface_stats_known_both",
+    "sets_7d_advantage",
+    "games_7d_advantage",
+    "sets_14d_advantage",
+    "games_14d_advantage",
+    "score_workload_known_both",
+    "deciding_set_advantage",
+    "deciding_set_known_both",
+    "lost_set1_recovery_advantage",
+    "lost_set1_recovery_known_both",
+    "closing_advantage",
+    "closing_known_both",
+    "round_form_diff",
+    "round_form_known_both",
+    "tournament_history_advantage",
+    "tournament_history_known_both",
     "tournament_level",
     "best_of_five",
     "indoor",
@@ -65,6 +85,13 @@ class RecentPerformance:
     surface: str
     serve_quality: float | None = None
     return_quality: float | None = None
+    sets_played: float | None = None
+    games_played: float | None = None
+    deciding_set_played: float | None = None
+    first_set_won: float | None = None
+    second_set_won: float | None = None
+    round_bucket: str = "unknown"
+    tournament_key: str = ""
 
 
 @dataclass
@@ -137,6 +164,16 @@ class FeatureBuilder:
             lambda: [0, 0]
         )
 
+        # Surface-specific H2H is kept separately so the ordinary lifetime H2H
+        # contract stays stable. The state is strictly point-in-time: it is only
+        # updated after a completed historical match has been snapshotted.
+        self.surface_h2h: dict[
+            tuple[str, str, str],
+            list[int],
+        ] = defaultdict(
+            lambda: [0, 0]
+        )
+
     @staticmethod
     def _state_datetime(value: str | datetime | None) -> datetime | None:
         if value is None or value == "":
@@ -179,6 +216,13 @@ class FeatureBuilder:
                         "surface": str(item.surface),
                         "serve_quality": item.serve_quality,
                         "return_quality": item.return_quality,
+                        "sets_played": item.sets_played,
+                        "games_played": item.games_played,
+                        "deciding_set_played": item.deciding_set_played,
+                        "first_set_won": item.first_set_won,
+                        "second_set_won": item.second_set_won,
+                        "round_bucket": item.round_bucket,
+                        "tournament_key": item.tournament_key,
                     }
                     for item in state.recent
                 ],
@@ -194,10 +238,22 @@ class FeatureBuilder:
             for (left, right), wins in sorted(self.h2h.items())
         ]
 
+        surface_h2h = [
+            {
+                "left": left,
+                "right": right,
+                "surface": surface,
+                "wins_left": int(wins[0]),
+                "wins_right": int(wins[1]),
+            }
+            for (left, right, surface), wins in sorted(self.surface_h2h.items())
+        ]
+
         return {
             "schema_version": FEATURE_STATE_SCHEMA_VERSION,
             "players": players,
             "h2h": h2h,
+            "surface_h2h": surface_h2h,
         }
 
     @classmethod
@@ -206,10 +262,10 @@ class FeatureBuilder:
         if not isinstance(payload, dict):
             return builder
         version = int(payload.get("schema_version") or 0)
-        if version != FEATURE_STATE_SCHEMA_VERSION:
+        if version not in {1, FEATURE_STATE_SCHEMA_VERSION}:
             raise ValueError(
                 f"Unsupported FeatureBuilder state schema {version}; "
-                f"expected {FEATURE_STATE_SCHEMA_VERSION}"
+                f"expected 1 or {FEATURE_STATE_SCHEMA_VERSION}"
             )
 
         raw_players = payload.get("players")
@@ -249,6 +305,13 @@ class FeatureBuilder:
                                 surface=str(item.get("surface") or "unknown"),
                                 serve_quality=item.get("serve_quality"),
                                 return_quality=item.get("return_quality"),
+                                sets_played=item.get("sets_played"),
+                                games_played=item.get("games_played"),
+                                deciding_set_played=item.get("deciding_set_played"),
+                                first_set_won=item.get("first_set_won"),
+                                second_set_won=item.get("second_set_won"),
+                                round_bucket=str(item.get("round_bucket") or "unknown"),
+                                tournament_key=str(item.get("tournament_key") or ""),
                             )
                         )
                 builder.players[str(key)] = state
@@ -263,6 +326,21 @@ class FeatureBuilder:
                 if not left or not right:
                     continue
                 builder.h2h[(left, right)] = [
+                    int(item.get("wins_left", 0)),
+                    int(item.get("wins_right", 0)),
+                ]
+
+        raw_surface_h2h = payload.get("surface_h2h")
+        if isinstance(raw_surface_h2h, list):
+            for item in raw_surface_h2h:
+                if not isinstance(item, dict):
+                    continue
+                left = str(item.get("left") or "")
+                right = str(item.get("right") or "")
+                surface = stats_surface_key(str(item.get("surface") or "unknown"))
+                if not left or not right or surface == "unknown":
+                    continue
+                builder.surface_h2h[(left, right, surface)] = [
                     int(item.get("wins_left", 0)),
                     int(item.get("wins_right", 0)),
                 ]
@@ -421,6 +499,8 @@ class FeatureBuilder:
         state: PlayerState,
         now: datetime,
         field_name: str,
+        *,
+        surface: str | None = None,
     ) -> float | None:
         observed = [
             getattr(
@@ -428,6 +508,11 @@ class FeatureBuilder:
                 field_name,
             )
             for item in state.recent
+            if (
+                not surface
+                or stats_surface_key(surface) == "unknown"
+                or stats_surface_key(item.surface) == stats_surface_key(surface)
+            )
         ]
 
         observed = [
@@ -444,6 +529,7 @@ class FeatureBuilder:
             now,
             field_name,
             half_life_days=120.0,
+            surface=surface,
             prior=(
                 sum(observed)
                 / len(observed)
@@ -510,6 +596,140 @@ class FeatureBuilder:
             )
             * 2.0
         )
+
+    def _surface_h2h_values(
+        self,
+        match: MatchRecord,
+    ) -> tuple[float, float]:
+        surface = stats_surface_key(match.surface)
+        if surface == "unknown":
+            return 0.0, 0.0
+        key1 = self.player_key(match.tour, match.player1_id)
+        key2 = self.player_key(match.tour, match.player2_id)
+        left, right = sorted((key1, key2))
+        wins_left, wins_right = self.surface_h2h[(left, right, surface)]
+        if key1 == left:
+            wins_p1, wins_p2 = wins_left, wins_right
+        else:
+            wins_p1, wins_p2 = wins_right, wins_left
+        total = wins_p1 + wins_p2
+        if total <= 0:
+            return 0.0, 0.0
+        # Beta(2,2) prior mirrors lifetime H2H shrinkage.
+        share = (wins_p1 + 2.0) / (total + 4.0)
+        return (share - 0.5) * 2.0, min(1.0, total / 4.0)
+
+    @staticmethod
+    def _metric_sum_in_window(
+        state: PlayerState,
+        now: datetime,
+        days: float,
+        field_name: str,
+    ) -> float | None:
+        cutoff_seconds = max(days, 0.0) * 86400.0
+        values: list[float] = []
+        for item in state.recent:
+            age = (now - item.played_at).total_seconds()
+            if age < 0.0 or age > cutoff_seconds:
+                continue
+            value = getattr(item, field_name, None)
+            if value is None:
+                continue
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(number) and number >= 0.0:
+                values.append(number)
+        return sum(values) if values else None
+
+    @staticmethod
+    def _conditional_rate(
+        state: PlayerState,
+        now: datetime,
+        *,
+        condition,
+        outcome,
+        half_life_days: float = 180.0,
+        prior: float = 0.5,
+        prior_weight: float = 4.0,
+    ) -> tuple[float | None, int]:
+        numerator = prior * prior_weight
+        denominator = prior_weight
+        count = 0
+        for item in state.recent:
+            if not condition(item):
+                continue
+            value = outcome(item)
+            if value is None:
+                continue
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(number):
+                continue
+            age_days = max((now - item.played_at).total_seconds() / 86400.0, 0.0)
+            weight = 0.5 ** (age_days / half_life_days)
+            numerator += weight * clamp(number, 0.0, 1.0)
+            denominator += weight
+            count += 1
+        if count == 0:
+            return None, 0
+        return numerator / denominator, count
+
+    @staticmethod
+    def _round_bucket(value: str) -> str:
+        text = str(value or "").strip().lower().replace("-", " ").replace("_", " ")
+        if not text:
+            return "unknown"
+        if "qual" in text:
+            return "qualifying"
+        if "final" in text and "semi" not in text and "quarter" not in text:
+            return "final"
+        if "semi" in text or text in {"sf"}:
+            return "semifinal"
+        if "quarter" in text or text in {"qf"}:
+            return "quarterfinal"
+        compact = text.replace("round of", "r").replace(" ", "")
+        for token in ("r128", "r64", "r32", "r16"):
+            if token in compact:
+                return token
+        return "other"
+
+    @classmethod
+    def _context_form(
+        cls,
+        state: PlayerState,
+        now: datetime,
+        *,
+        round_bucket: str | None = None,
+        tournament_key: str | None = None,
+    ) -> tuple[float | None, int]:
+        rows: list[RecentPerformance] = []
+        for item in state.recent:
+            if round_bucket and round_bucket != "unknown" and item.round_bucket != round_bucket:
+                continue
+            if tournament_key and item.tournament_key != tournament_key:
+                continue
+            rows.append(item)
+        if not rows:
+            return None, 0
+        temp = deque(rows, maxlen=80)
+        return (
+            cls._decayed_average(
+                temp, now, "won", 240.0, prior=0.5, prior_weight=5.0
+            ),
+            len(rows),
+        )
+
+    @staticmethod
+    def _tournament_key(match: MatchRecord) -> str:
+        value = str(match.tournament_id or "").strip()
+        if value:
+            return f"id:{value}"
+        name = " ".join(str(match.tournament or "").strip().lower().split())
+        return f"name:{name}" if name else ""
 
     @staticmethod
     def _level_value(
@@ -1130,6 +1350,116 @@ class FeatureBuilder:
             and return2 is not None
         )
 
+        surface_key = stats_surface_key(match.surface)
+        surface_serve1 = self._stat_quality(
+            p1, match.scheduled_at, "serve_quality", surface=surface_key
+        )
+        surface_serve2 = self._stat_quality(
+            p2, match.scheduled_at, "serve_quality", surface=surface_key
+        )
+        surface_return1 = self._stat_quality(
+            p1, match.scheduled_at, "return_quality", surface=surface_key
+        )
+        surface_return2 = self._stat_quality(
+            p2, match.scheduled_at, "return_quality", surface=surface_key
+        )
+        surface_stats_known = float(
+            surface_key != "unknown"
+            and surface_serve1 is not None
+            and surface_serve2 is not None
+            and surface_return1 is not None
+            and surface_return2 is not None
+        )
+
+        surface_h2h_advantage, surface_h2h_known = self._surface_h2h_values(match)
+
+        p1_sets_7d = self._metric_sum_in_window(p1, match.scheduled_at, 7.0, "sets_played")
+        p2_sets_7d = self._metric_sum_in_window(p2, match.scheduled_at, 7.0, "sets_played")
+        p1_games_7d = self._metric_sum_in_window(p1, match.scheduled_at, 7.0, "games_played")
+        p2_games_7d = self._metric_sum_in_window(p2, match.scheduled_at, 7.0, "games_played")
+        p1_sets_14d = self._metric_sum_in_window(p1, match.scheduled_at, 14.0, "sets_played")
+        p2_sets_14d = self._metric_sum_in_window(p2, match.scheduled_at, 14.0, "sets_played")
+        p1_games_14d = self._metric_sum_in_window(p1, match.scheduled_at, 14.0, "games_played")
+        p2_games_14d = self._metric_sum_in_window(p2, match.scheduled_at, 14.0, "games_played")
+        workload_known = float(
+            None not in (
+                p1_sets_7d, p2_sets_7d, p1_games_7d, p2_games_7d,
+                p1_sets_14d, p2_sets_14d, p1_games_14d, p2_games_14d,
+            )
+        )
+        sets_7d_advantage = (
+            clamp((float(p2_sets_7d) - float(p1_sets_7d)) / 6.0, -2.0, 2.0)
+            if workload_known else 0.0
+        )
+        games_7d_advantage = (
+            clamp((float(p2_games_7d) - float(p1_games_7d)) / 50.0, -2.0, 2.0)
+            if workload_known else 0.0
+        )
+        sets_14d_advantage = (
+            clamp((float(p2_sets_14d) - float(p1_sets_14d)) / 10.0, -2.0, 2.0)
+            if workload_known else 0.0
+        )
+        games_14d_advantage = (
+            clamp((float(p2_games_14d) - float(p1_games_14d)) / 90.0, -2.0, 2.0)
+            if workload_known else 0.0
+        )
+
+        dec1, dec1_n = self._conditional_rate(
+            p1, match.scheduled_at,
+            condition=lambda item: item.deciding_set_played is not None and float(item.deciding_set_played) >= 0.5,
+            outcome=lambda item: item.won,
+        )
+        dec2, dec2_n = self._conditional_rate(
+            p2, match.scheduled_at,
+            condition=lambda item: item.deciding_set_played is not None and float(item.deciding_set_played) >= 0.5,
+            outcome=lambda item: item.won,
+        )
+        deciding_known = float(dec1 is not None and dec2 is not None)
+
+        rec1, rec1_n = self._conditional_rate(
+            p1, match.scheduled_at,
+            condition=lambda item: item.first_set_won is not None and float(item.first_set_won) < 0.5 and item.second_set_won is not None,
+            outcome=lambda item: item.second_set_won,
+        )
+        rec2, rec2_n = self._conditional_rate(
+            p2, match.scheduled_at,
+            condition=lambda item: item.first_set_won is not None and float(item.first_set_won) < 0.5 and item.second_set_won is not None,
+            outcome=lambda item: item.second_set_won,
+        )
+        recovery_known = float(rec1 is not None and rec2 is not None)
+
+        close1, close1_n = self._conditional_rate(
+            p1, match.scheduled_at,
+            condition=lambda item: item.first_set_won is not None and float(item.first_set_won) >= 0.5,
+            outcome=lambda item: item.won,
+        )
+        close2, close2_n = self._conditional_rate(
+            p2, match.scheduled_at,
+            condition=lambda item: item.first_set_won is not None and float(item.first_set_won) >= 0.5,
+            outcome=lambda item: item.won,
+        )
+        closing_known = float(close1 is not None and close2 is not None)
+
+        round_bucket = self._round_bucket(match.round_name)
+        round1, round1_n = self._context_form(p1, match.scheduled_at, round_bucket=round_bucket)
+        round2, round2_n = self._context_form(p2, match.scheduled_at, round_bucket=round_bucket)
+        round_known = float(
+            round_bucket != "unknown" and round1 is not None and round2 is not None
+            and round1_n >= 2 and round2_n >= 2
+        )
+
+        tournament_key = self._tournament_key(match)
+        tournament1, tournament1_n = self._context_form(
+            p1, match.scheduled_at, tournament_key=tournament_key or None
+        )
+        tournament2, tournament2_n = self._context_form(
+            p2, match.scheduled_at, tournament_key=tournament_key or None
+        )
+        tournament_known = float(
+            bool(tournament_key) and tournament1 is not None and tournament2 is not None
+            and tournament1_n >= 2 and tournament2_n >= 2
+        )
+
         weather = self._weather_values(
             match
         )
@@ -1310,6 +1640,8 @@ class FeatureBuilder:
                     match
                 )
             ),
+            "surface_h2h_advantage": surface_h2h_advantage,
+            "surface_h2h_known": surface_h2h_known,
             "serve_quality_diff": (
                 serve1 - serve2
                 if stats_known
@@ -1320,9 +1652,35 @@ class FeatureBuilder:
                 if stats_known
                 else 0.0
             ),
+            "surface_serve_quality_diff": (
+                float(surface_serve1) - float(surface_serve2)
+                if surface_stats_known else 0.0
+            ),
+            "surface_return_quality_diff": (
+                float(surface_return1) - float(surface_return2)
+                if surface_stats_known else 0.0
+            ),
             "stats_known_both": (
                 stats_known
             ),
+            "surface_stats_known_both": surface_stats_known,
+            "sets_7d_advantage": sets_7d_advantage,
+            "games_7d_advantage": games_7d_advantage,
+            "sets_14d_advantage": sets_14d_advantage,
+            "games_14d_advantage": games_14d_advantage,
+            "score_workload_known_both": workload_known,
+            "deciding_set_advantage": (float(dec1) - float(dec2)) if deciding_known else 0.0,
+            "deciding_set_known_both": deciding_known,
+            "lost_set1_recovery_advantage": (float(rec1) - float(rec2)) if recovery_known else 0.0,
+            "lost_set1_recovery_known_both": recovery_known,
+            "closing_advantage": (float(close1) - float(close2)) if closing_known else 0.0,
+            "closing_known_both": closing_known,
+            "round_form_diff": (float(round1) - float(round2)) if round_known else 0.0,
+            "round_form_known_both": round_known,
+            "tournament_history_advantage": (
+                float(tournament1) - float(tournament2) if tournament_known else 0.0
+            ),
+            "tournament_history_known_both": tournament_known,
             "tournament_level": (
                 self._level_value(
                     match.tournament_level
@@ -1551,6 +1909,17 @@ class FeatureBuilder:
             "p2",
         )
 
+        stats = match.stats if isinstance(match.stats, dict) else {}
+        total_sets = self._num(stats.get("total_sets"))
+        total_games = self._num(stats.get("total_games"))
+        deciding_set = self._num(stats.get("deciding_set"))
+        p1_first_set = self._num(stats.get("p1_first_set_won"))
+        p2_first_set = self._num(stats.get("p2_first_set_won"))
+        p1_second_set = self._num(stats.get("p1_second_set_won"))
+        p2_second_set = self._num(stats.get("p2_second_set_won"))
+        round_bucket = self._round_bucket(match.round_name)
+        tournament_key = self._tournament_key(match)
+
         p1.recent.append(
             RecentPerformance(
                 match.scheduled_at,
@@ -1559,6 +1928,13 @@ class FeatureBuilder:
                 stats_surface_key(match.surface),
                 p1_serve,
                 p1_return,
+                total_sets,
+                total_games,
+                deciding_set,
+                p1_first_set,
+                p1_second_set,
+                round_bucket,
+                tournament_key,
             )
         )
 
@@ -1570,6 +1946,13 @@ class FeatureBuilder:
                 stats_surface_key(match.surface),
                 p2_serve,
                 p2_return,
+                total_sets,
+                total_games,
+                deciding_set,
+                p2_first_set,
+                p2_second_set,
+                round_bucket,
+                tournament_key,
             )
         )
 
@@ -1663,6 +2046,14 @@ class FeatureBuilder:
 
         elif winner_key == right:
             wins[1] += 1
+
+        surface = stats_surface_key(match.surface)
+        if surface != "unknown":
+            surface_wins = self.surface_h2h[(left, right, surface)]
+            if winner_key == left:
+                surface_wins[0] += 1
+            elif winner_key == right:
+                surface_wins[1] += 1
 
     @staticmethod
     def orient_for_training(

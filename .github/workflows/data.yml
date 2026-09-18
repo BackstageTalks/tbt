@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [mega-data, sg-rebuild, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, train, backtest, refresh]
+        options: [mega-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -143,6 +143,11 @@ jobs:
               --max-requests "$MAX_REQUESTS" \
               --rebuild-existing \
               --force-provider-refresh
+          elif [[ "$MODE" == feature-audit ]]; then
+            python scripts/download_production_preflight_inputs.py
+            python scripts/audit_feature_v3_coverage.py \
+              --history-dir .cache/tbt/history \
+              --out .cache/tbt/feature-v3/coverage.json
           elif [[ "$MODE" == provider-probe ]]; then
             python scripts/probe_tennis_provider.py \
               --max-requests "$MAX_REQUESTS" \
@@ -234,6 +239,7 @@ jobs:
             .cache/tbt/mega-data/sg_run_summary.json
             .cache/tbt/sg-history/sg_projection_dry_run.json
             .cache/tbt/mega-data/ace_run_summary.json
+            .cache/tbt/mega-data/feature_v3_coverage.json
             .cache/tbt/provider-probe/provider_probe_report.json
             .cache/tbt/provider-probe/provider_probe_report.md
             .cache/tbt/launch/launch_gate.json
@@ -241,6 +247,14 @@ jobs:
             .cache/tbt/production/readiness_report.json
             .cache/tbt/production/readiness_report.md
           if-no-files-found: warn
+
+      - name: Upload Data Model v3 feature audit
+        if: ${{ always() && env.MODE == 'feature-audit' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-feature-v3-${{ github.run_id }}
+          path: .cache/tbt/feature-v3/coverage.json
+          if-no-files-found: error
 
       - name: Upload SG score enrichment report
         if: ${{ always() && (env.MODE == 'sg-scores' || env.MODE == 'sg-rebuild') }}

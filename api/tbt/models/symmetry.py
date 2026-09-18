@@ -7,8 +7,11 @@ from .feature_builder import FEATURE_NAMES
 
 INVARIANT_FEATURES = {
     "rank_known_both", "travel_known", "altitude_change_known", "weather_known",
-    "environment_known", "stats_known_both", "tournament_level", "best_of_five",
-    "indoor", "tour_atp", "data_depth",
+    "environment_known", "stats_known_both", "surface_stats_known_both",
+    "surface_h2h_known", "score_workload_known_both", "deciding_set_known_both",
+    "lost_set1_recovery_known_both", "closing_known_both",
+    "round_form_known_both", "tournament_history_known_both",
+    "tournament_level", "best_of_five", "indoor", "tour_atp", "data_depth",
 }
 
 

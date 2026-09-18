@@ -296,7 +296,20 @@ def main() -> None:
             ],
             optional=True,
         )
+    feature_v3_path = report_dir / "feature_v3_coverage.json"
+    if (ROOT / ".cache/tbt/history").is_dir():
+        _run(
+            "feature-v3-coverage",
+            [
+                sys.executable, "scripts/audit_feature_v3_coverage.py",
+                "--history-dir", ".cache/tbt/history",
+                "--out", str(feature_v3_path.relative_to(ROOT)),
+            ],
+            optional=True,
+        )
+
     inventory = _read_json(inventory_path)
+    feature_v3 = _read_json(feature_v3_path)
     inventory_before = _read_json(report_dir / "statistics_inventory_before.json")
     probe = _read_json(ROOT / ".cache/tbt/provider-probe/provider_probe_report.json")
     sg_summary = _read_json(report_dir / "sg_run_summary.json")
@@ -333,6 +346,7 @@ def main() -> None:
             "live_events": len(probe.get("live_events") or []),
             "live_odds_samples": probe.get("live_odds_samples") or [],
         },
+        "feature_v3_coverage": feature_v3,
         "post_run_statistics": {
             "rows": inventory.get("rows"),
             "any_stats_matches": inventory.get("any_stats_matches"),

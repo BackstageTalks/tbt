@@ -130,7 +130,14 @@ def predict(model, history, upcoming, now=None):
     if not future:
         return []
     features = [builder.snapshot(m) for m in future]
-    probabilities = model.predict_proba(pd.DataFrame(features, columns=FEATURE_NAMES))
+    # Serving is artifact-schema driven. This keeps an already-deployed legacy
+    # champion usable while the repository evolves to a richer feature schema;
+    # a newly trained model opts into new features through its persisted list.
+    feature_names = list(getattr(model, "feature_names", None) or FEATURE_NAMES)
+    missing = [name for name in feature_names if name not in features[0]]
+    if missing:
+        raise ValueError(f"Model artifact requests unavailable features: {missing}")
+    probabilities = model.predict_proba(pd.DataFrame(features, columns=feature_names))
     rows = []
     for match, f, probability in zip(future, features, probabilities):
         p = float(probability)
