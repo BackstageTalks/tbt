@@ -51,23 +51,27 @@ def _run(name: str, args: list[str], *, optional: bool = False) -> dict[str, Any
 
 
 def _budget(total: int) -> dict[str, int]:
-    """Launch-day allocation: finish SG/ESA while preserving data safety.
+    """Launch-day allocation with a protected final publication refresh.
 
-    Unused caps roll forward. History is now a small incremental safety sync;
-    integrity mutation is never automatic inside mega-data.
+    The expensive enrichment phases may consume at most ``total-refresh``.
+    The reserved refresh then publishes a feed from the newly enriched corpus
+    inside the same global operator cap.
     """
-    probe = min(120, max(80, int(total * 0.01)))
-    remaining = max(0, total - probe)
+    refresh = min(600, max(150, int(total * 0.05)))
+    enrich_total = max(0, total - refresh)
 
-    history = min(700, max(150, int(total * 0.05)))
+    probe = min(120, max(80, int(enrich_total * 0.01)))
+    remaining = max(0, enrich_total - probe)
+
+    history = min(700, max(150, int(enrich_total * 0.05)))
     history = min(history, remaining)
     remaining -= history
 
-    sg = min(4000, max(800, int(total * 0.35)))
+    sg = min(4000, max(800, int(enrich_total * 0.35)))
     sg = min(sg, remaining)
     remaining -= sg
 
-    ace = min(2800, max(500, int(total * 0.23)))
+    ace = min(2800, max(500, int(enrich_total * 0.23)))
     ace = min(ace, remaining)
     remaining -= ace
 
@@ -78,6 +82,7 @@ def _budget(total: int) -> dict[str, int]:
         "statistics_primary": statistics_primary,
         "sg": sg,
         "ace": ace,
+        "refresh": refresh,
     }
 
 
@@ -90,6 +95,8 @@ def _actual_requests(phase: str) -> int:
         return int(_read_json(ROOT / ".cache/tbt/ace-history/ace_run_summary.json").get("requests") or 0)
     if phase == "sg":
         return int(_read_json(ROOT / ".cache/tbt/sg-history/sg_run_summary.json").get("requests") or 0)
+    if phase == "refresh":
+        return int(_read_json(ROOT / ".cache/tbt/predictions/refresh_report.json").get("requests") or 0)
     return 0
 
 
@@ -246,7 +253,7 @@ def main() -> None:
         )
 
     # 6) Spend every request left on the highest-value generic statistics sweep.
-    stats_tail_cap = remaining()
+    stats_tail_cap = max(0, remaining() - int(planned.get("refresh") or 0))
     carry = 0
     if stats_tail_cap:
         phase = _run("statistics-tail", stats_cmd(stats_tail_cap))
@@ -254,6 +261,23 @@ def main() -> None:
         _snapshot_report(
             ROOT / ".cache/tbt/history/download_report.json",
             report_dir / "statistics_tail_report.json",
+        )
+
+    # 7) Publish today's feed from the newly enriched corpus while staying inside
+    # the same global launch budget. Any unused enrichment headroom rolls into it.
+    refresh_cap = min(int(planned.get("refresh") or 0) + carry, remaining())
+    carry = 0
+    if refresh_cap:
+        phase = _run("refresh", [
+            sys.executable, "scripts/pipeline.py", "refresh",
+            "--max-requests", str(refresh_cap),
+            "--market-odds-max-events", "120",
+            "--betting-day-start-hour", "6",
+        ])
+        finish_phase(phase, refresh_cap, "refresh")
+        _snapshot_report(
+            ROOT / ".cache/tbt/predictions/refresh_report.json",
+            report_dir / "refresh_report.json",
         )
 
     # 8) Zero-Tennis-API inventory + integrity audit from the latest canonical release.
@@ -348,6 +372,20 @@ def main() -> None:
         "Doubles remain probe-only until pair/team/member identity and odds coverage are confirmed. They are not mixed into the singles model.",
     ]
     (report_dir / "mega_data_report.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+
+    # Build a single conservative launch gate from the reports produced in this
+    # run. A missing production-preflight report is a warning here; CI/deploy
+    # remains a separate hard gate.
+    _run(
+        "production-preflight",
+        [sys.executable, "scripts/run_production_preflight.py"],
+        optional=True,
+    )
+    _run(
+        "launch-gate",
+        [sys.executable, "scripts/build_launch_gate.py", "--mega", str((report_dir / "mega_data_report.json").relative_to(ROOT))],
+        optional=True,
+    )
     print(json.dumps(payload, ensure_ascii=False, indent=2), flush=True)
 
 

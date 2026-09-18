@@ -158,3 +158,20 @@ jobs:
           python scripts/confirm_prediction_publication.py \
             --data-repository "$TBT_DATA_REPOSITORY" \
             --deployed-feed api/data/feed.json
+
+      - name: Smoke deployed health endpoint
+        if: ${{ vars.TBT_PRODUCTION_URL != '' }}
+        env:
+          TBT_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL }}
+        run: |
+          set -euo pipefail
+          base="${TBT_PRODUCTION_URL%/}"
+          python - <<'PYSMOKE'
+          import json, os, urllib.request
+          base=os.environ['TBT_PRODUCTION_URL'].rstrip('/')
+          with urllib.request.urlopen(base + '/api/health', timeout=20) as r:
+              payload=json.load(r)
+          assert payload.get('ok') is True, payload
+          assert payload.get('release') == '7.2.2', payload
+          print(json.dumps(payload, indent=2))
+          PYSMOKE

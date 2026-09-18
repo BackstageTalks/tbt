@@ -464,7 +464,7 @@ def main():
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
     write_json(target, feed)
-    print(json.dumps({
+    refresh_report = {
         "requests": provider.request_count,
         "upcoming": len(feed["upcoming"]),
         "daily": len(feed.get("top_daily_picks", [])),
@@ -477,7 +477,9 @@ def main():
         "odds": odds_report or {},
         "settled": len(feed["results"]),
         "model": model.version,
-    }))
+    }
+    write_json(prediction_dir / "refresh_report.json", refresh_report)
+    print(json.dumps(refresh_report))
 
 
 if __name__ == "__main__":

@@ -58,6 +58,8 @@ def test_mega_data_repairs_history_before_spending_on_enrichment():
 def test_mega_data_uses_large_history_safety_cap_but_rolls_unused_budget_forward():
     assert 'min(700' in MEGA
     assert 'int(total * 0.05)' in MEGA
-    assert 'int(total * 0.35)' in MEGA
-    assert 'int(total * 0.23)' in MEGA
+    assert 'int(enrich_total * 0.35)' in MEGA
+    assert 'int(enrich_total * 0.23)' in MEGA
     assert 'planned["statistics_primary"] + carry' in MEGA
+    assert '"refresh": refresh' in MEGA
+    assert 'pipeline.py", "refresh"' in MEGA

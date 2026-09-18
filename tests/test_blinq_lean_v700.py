@@ -63,7 +63,8 @@ def test_public_prediction_board_matches_final_product_tabs():
     assert "{daily:'TOP',value:'VALUE',ace:'ESA',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}" in app
     assert "if(tab==='daily'){" in app and "state.feed?.daily_picks" in app
     assert "if(tab==='ace')return marketRows('ace').filter(offerSurfaceEligible);" in app
-    assert "dailyHubIsComingSoon(tab){return ['games','sets'].includes(tab);}" in app
+    assert "dailyHubIsComingSoon(tab){return false;}" in app
+    assert "marketRows('sg').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()===tab)" in app
 
 
 def test_admin_is_visibly_reduced_to_three_sections():

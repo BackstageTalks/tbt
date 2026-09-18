@@ -218,11 +218,16 @@ jobs:
             .cache/tbt/mega-data/history_download_report.json
             .cache/tbt/mega-data/statistics_primary_report.json
             .cache/tbt/mega-data/statistics_tail_report.json
+            .cache/tbt/mega-data/refresh_report.json
             .cache/tbt/mega-data/history_audit_after.json
             .cache/tbt/mega-data/sg_run_summary.json
             .cache/tbt/mega-data/ace_run_summary.json
             .cache/tbt/provider-probe/provider_probe_report.json
             .cache/tbt/provider-probe/provider_probe_report.md
+            .cache/tbt/launch/launch_gate.json
+            .cache/tbt/launch/launch_gate.md
+            .cache/tbt/production/readiness_report.json
+            .cache/tbt/production/readiness_report.md
           if-no-files-found: warn
 
       - name: Upload SG score enrichment report

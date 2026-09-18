@@ -61,6 +61,7 @@ from tbt.services.admin_storage import (
 )
 from tbt.services.content_news import news_pool
 from tbt.services.support_storage import create_support_ticket, list_support_tickets, update_support_ticket
+from tbt.services.support_notifications import notify_support_ticket, support_email_configured
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
 from tbt.providers.rapidapi import RapidTennisClient
@@ -72,7 +73,7 @@ from tbt.services.live_comeback import (
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "7.0.1"
+RELEASE = "7.2.2"
 API_VERSION = "3.9.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -1023,6 +1024,7 @@ def admin_diagnostics(req):
             "accounts_ready": bool(users_ok),
             "content_storage_ready": bool(storage_ok),
             "release": RELEASE,
+            "support_email_configured": support_email_configured(),
             "auth_provider": auth_provider(settings),
             "admin_storage": storage.get("backend"),
             "storage": storage,
@@ -1261,7 +1263,10 @@ def support_submit(req):
             except AuthUnavailable:
                 user = None
         ticket = create_support_ticket(payload, user=user)
-        return response({"accepted": True, "ticket": ticket}, 201)
+        notification = notify_support_ticket(ticket)
+        if notification.get("configured") and not notification.get("sent"):
+            logging.warning("Support email notification failed for %s: %s", ticket.get("ticket_id"), notification.get("reason"))
+        return response({"accepted": True, "ticket": ticket, "email_notification": bool(notification.get("sent"))}, 201)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AdminStorageUnavailable:

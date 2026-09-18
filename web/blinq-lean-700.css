@@ -419,3 +419,6 @@ body#blinqPremium .hub-tournament-logo.logo-failed{background:linear-gradient(14
 body#blinqPremium .hub-tournament-logo.logo-failed>img[data-tournament-logo]{display:none!important}
 body#blinqPremium .hub-tournament-logo.logo-failed>.hub-logo-fallback{display:grid!important}
 @media(max-width:720px){.results-pagination{flex-wrap:wrap}.results-pagination-meta{order:1}.results-pagination label{order:2}.results-pagination-nav{order:3;width:100%;justify-content:space-between;border-top:1px solid var(--lean-line);padding-top:10px}}
+
+/* v7.2.2 projection market status */
+body#blinqPremium .hub-projection-badge{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border:1px solid rgba(121,242,177,.26);border-radius:999px;background:rgba(121,242,177,.07);color:#93e6b5;font-size:8px;font-weight:850;letter-spacing:.7px}

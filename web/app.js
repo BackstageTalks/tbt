@@ -1317,8 +1317,7 @@
       const total=Math.max(0,Number(daily.total)||0)+Math.max(0,Number(value.total)||0);
       return {visible_picks:allowed?'ALL':0,blur_remaining:!allowed,enabled:true,see_all:allowed,total,returned:allowed?total:0,locked_count:allowed?0:total};
     }
-    if(tab==='sets') return {visible_picks:0,blur_remaining:false,enabled:true,see_all:false,total:0,returned:0,coming_soon:true};
-    const key=tab==='calendar'?'daily':tab==='daily'?'daily':tab==='ace'?'ace':tab==='games'?'sg':tab;
+    const key=tab==='calendar'?'daily':tab==='daily'?'daily':tab==='ace'?'ace':(tab==='games'||tab==='sets')?'sg':tab;
     return state.feed?.entitlements?.sections?.[key]||{visible_picks:'ALL',blur_remaining:false,enabled:true,total:0,returned:0};
   }
   function dailyPickIdentity(row){
@@ -1340,6 +1339,7 @@
     (marketRows('value')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'value'}));
     (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'daily'}));
     (marketRows('ace')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'ace'}));
+    (marketRows('sg')||[]).filter(offerSurfaceEligible).forEach(row=>{const market=String(row?.market||'').toLowerCase();if(market==='games'||market==='sets')add({...row,_hub_source:market});});
     return rows.sort((a,b)=>(marketProbability(b)||0)-(marketProbability(a)||0));
   }
   function dailyHubRows(tab){
@@ -1350,9 +1350,8 @@
     }
     if(tab==='value')return marketRows('value').filter(offerSurfaceEligible);
     if(tab==='ace')return marketRows('ace').filter(offerSurfaceEligible);
+    if(tab==='games'||tab==='sets')return marketRows('sg').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()===tab);
     if(tab==='see_all')return ['elite','legend','goat','admin'].includes(accountPlan())?leanSeeAllRows():[];
-    // GAMES and SETS stay visible but intentionally unpublished until validated.
-    if(tab==='games'||tab==='sets')return [];
     return [];
   }
   function dashboardFilteredRows(rows){
@@ -1382,11 +1381,12 @@
   function dailyHubTabLabel(tab){
     return {daily:'TOP',value:'VALUE',ace:'ESA',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
   }
-  function dailyHubIsComingSoon(tab){return ['games','sets'].includes(tab);}
+  function dailyHubIsComingSoon(tab){return false;}
   function dailyHubColumns(tab){
     if(dailyHubIsComingSoon(tab))return [''];
     if(tab==='value')return ['#','ČAS','TURNAJ','ZÁPAS','TIP','KURZ','PRAVDEPODOBNOSŤ','HODNOTA',''];
     if(tab==='ace')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];
+    if(tab==='games'||tab==='sets')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];
     return ['#','ČAS','TURNAJ','ZÁPAS','TIP','KURZ','PRAVDEPODOBNOSŤ',''];
   }
   function safeNum(value){ const n=Number(value); return Number.isFinite(n)?n:null; }
@@ -1719,6 +1719,14 @@
   }
   function dailyHubRow(row,tab,active=false,index=0){
     const sourceTab=tab==='see_all'?String(row?._hub_source||''):tab;
+    if(sourceTab==='games'||sourceTab==='sets'){
+      const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=String(row?.pick||row?.selection||'—');
+      const unit=String(row?.projection_unit||''),time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
+      const rowClass=active?' class="hub-row-active"':'';
+      const projectionText=Number.isFinite(projection)?(unit==='probability'?pct(projection):`${projection.toFixed(1)} games`):'—';
+      const actionCell=tab==='see_all'?'<td class="hub-optional-action"><span class="hub-projection-badge">MODEL</span></td>':'';
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}"><td class="hub-rank">${index+1}</td><td class="hub-time">${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td class="hub-pick"><strong>${escapeHtml(pick)}</strong></td><td class="hub-odds">${escapeHtml(projectionText)}</td><td><b class="hub-prob">${Number.isFinite(confidence)?pct(confidence):'—'}</b></td>${actionCell}</tr>`;
+    }
     if(sourceTab==='ace'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=modelPickName(row),market=aceMarketName(row);
       const time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
