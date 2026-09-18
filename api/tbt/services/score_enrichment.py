@@ -5,10 +5,14 @@ import sqlite3
 from datetime import datetime, timezone
 
 from ..errors import ProviderError
+from ..match_format import (
+    exact_best_of_from_score_stats,
+    explicit_best_of_from_event,
+)
 from ..providers.score import parse_event_score
 
 
-SCORE_SCHEMA_VERSION = 2
+SCORE_SCHEMA_VERSION = 3
 EXCLUDED_STATUSES = {
     "retired", "walkover", "walk over", "cancelled", "canceled",
     "abandoned", "interrupted", "suspended", "postponed",
@@ -18,8 +22,9 @@ EXCLUDED_STATUSES = {
 class ScoreEnricher:
     """Backfill verified whole-match set/game facts from the canonical event ID."""
 
-    def __init__(self, provider, cache_path):
+    def __init__(self, provider, cache_path, *, force_refresh: bool = False):
         self.provider = provider
+        self.force_refresh = bool(force_refresh)
         self.cache = sqlite3.connect(str(cache_path))
         self.cache.execute(
             "CREATE TABLE IF NOT EXISTS responses (path TEXT PRIMARY KEY, fetched REAL, body TEXT)"
@@ -33,7 +38,7 @@ class ScoreEnricher:
         row = self.cache.execute(
             "SELECT fetched, body FROM responses WHERE path=?", (path,)
         ).fetchone()
-        if row is not None and now - row[0] < 30 * 86400:
+        if not self.force_refresh and row is not None and now - row[0] < 30 * 86400:
             return json.loads(row[1])
         payload = self.provider._get(path, enrichment=True)
         if not isinstance(payload, dict):
@@ -69,7 +74,7 @@ class ScoreEnricher:
         event_id = str(event_id)
 
         marker = raw.get("_tbt_score", {}) if isinstance(raw.get("_tbt_score"), dict) else {}
-        if marker.get("schema") == SCORE_SCHEMA_VERSION and marker.get("event_id") == event_id:
+        if not self.force_refresh and marker.get("schema") == SCORE_SCHEMA_VERSION and marker.get("event_id") == event_id:
             try:
                 checked = datetime.fromisoformat(str(marker.get("fetched_at") or ""))
             except ValueError:
@@ -77,7 +82,7 @@ class ScoreEnricher:
             if checked.tzinfo is None:
                 checked = checked.replace(tzinfo=timezone.utc)
             if marker.get("status") == "available" or (now - checked).total_seconds() < 30 * 86400:
-                return "cached"
+                return "cached_verified"
 
         detail = self._get(f"/api/tennis/event/{event_id}")
         event = detail.get("event") if isinstance(detail.get("event"), dict) else detail
@@ -91,19 +96,54 @@ class ScoreEnricher:
         if {home, away} != {str(match.player1_id), str(match.player2_id)} or not home or home == away:
             raise ProviderError("Event player identity mismatch; refusing score attachment")
 
+        provider_best_of = explicit_best_of_from_event(event)
         try:
+            # Parse the finished structured score independently first. This lets
+            # us cross-check an explicit provider bestOf instead of allowing a
+            # wrong format field to hide an otherwise valid final score.
             score = parse_event_score(
                 event,
                 home_is_player1=home == str(match.player1_id),
-                best_of=match.best_of,
+                best_of=None,
             )
             parser_status = "available" if score else "unavailable"
         except ProviderError:
             score = {}
             parser_status = "unsupported"
 
+        effective_best_of = provider_best_of
+        best_of_source = "provider_detail" if provider_best_of in {3, 5} else "unknown"
+        score_best_of = None
+        if score:
+            score_best_of, score_source = exact_best_of_from_score_stats(score)
+            if score_best_of not in {3, 5}:
+                # A structured score that cannot prove its own match format is
+                # not safe for S/G training. Preserve the audit marker, but do
+                # not attach ambiguous score facts to canonical history.
+                score = {}
+                parser_status = "unsupported_format"
+            elif provider_best_of in {3, 5} and provider_best_of != score_best_of:
+                score = {}
+                parser_status = "format_conflict"
+                effective_best_of = None
+                best_of_source = "provider_vs_finished_score_conflict"
+            else:
+                effective_best_of = provider_best_of or score_best_of
+                best_of_source = "provider_detail" if provider_best_of else score_source
+                # Re-parse with the proven format so deciding-set fields are
+                # deterministic and validated.
+                score = parse_event_score(
+                    event,
+                    home_is_player1=home == str(match.player1_id),
+                    best_of=effective_best_of,
+                )
+
         if score:
             match.stats = {**(match.stats or {}), **score}
+            # Provider detail or a completed structured score is stronger than
+            # any earlier pre-match inference, so canonical history is corrected
+            # rather than preserving a stale guess.
+            match.best_of = effective_best_of
         updated_raw = dict(raw)
         updated_raw["_tbt_event_identity"] = {
             "event_id": event_id,
@@ -117,6 +157,26 @@ class ScoreEnricher:
             "source": "tennisapi1_event_detail",
             "fetched_at": now.isoformat(),
             "status": parser_status,
+            "best_of": effective_best_of,
+            "best_of_source": best_of_source,
+            "identity_verified": True,
+            "format_verified": effective_best_of in {3, 5} and parser_status == "available",
         }
+        if parser_status == "available" and effective_best_of in {3, 5}:
+            updated_raw["_tbt_match_format"] = {
+                "schema": 2,
+                "status": "verified",
+                "best_of": effective_best_of,
+                "source": best_of_source,
+            }
+        elif parser_status == "format_conflict":
+            updated_raw["_tbt_match_format"] = {
+                "schema": 2,
+                "status": "conflict",
+                "best_of": None,
+                "source": "provider_vs_finished_score",
+                "provider_best_of": provider_best_of,
+                "score_best_of": score_best_of,
+            }
         match.provider_payload = updated_raw
         return "enriched" if score else parser_status

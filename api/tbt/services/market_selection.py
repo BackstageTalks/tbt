@@ -28,7 +28,7 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# Prime/Top use a 68% core floor; only when fewer than 5 qualified picks exist may the selector fill from 65–67.9%. Value keeps a 60% floor.
+# PRIME keeps its current short-price fallback. TOP uses a staged daily fallback: start at 68% / 1.50 and relax only until at least five TOP picks exist, never below 60% / 1.45. Value keeps a 60% floor.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
@@ -38,6 +38,11 @@ SECTION_PRIORITY = ("value", "prime", "top_daily")
 PUBLICATION_MIN_PROBABILITY = 0.60
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
+TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.60
+TOP_DYNAMIC_FALLBACK_TIERS = (
+    (0.67, 1.50), (0.66, 1.49), (0.65, 1.49), (0.64, 1.48),
+    (0.63, 1.48), (0.62, 1.47), (0.61, 1.46), (0.60, 1.45),
+)
 
 # PRIME: any decimal price below 1.50 (no lower odds bound).
 PRIME_MIN_PROBABILITY = PRIME_TOP_CORE_PROBABILITY
@@ -61,11 +66,11 @@ TOP_STANDARD_PROBABILITY = 0.76
 TOP_FALLBACK_PROBABILITIES = (0.74, 0.72, 0.70, 0.68)
 TOP_MIN_PROBABILITY = PRIME_TOP_CORE_PROBABILITY
 TOP_TARGET_COUNT = 10
-TOP_MIN_COUNT = 3
+TOP_MIN_COUNT = 5
 TOP_MIN_DATA_DEPTH = 0.80
 TOP_MIN_SURFACE_MATCHES = 5
 TOP_MIN_ODDS: float | None = 1.50
-TOP_FALLBACK_MIN_ODDS = 1.40
+TOP_FALLBACK_MIN_ODDS = 1.45
 TOP_MIN_EDGE: float | None = None
 TOP_MIN_EXPECTED_VALUE: float | None = None
 TOP_LIMIT: int | None = None
@@ -772,7 +777,7 @@ def _fill_to_minimum(
     minimum_count: int,
     rank_key,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Keep the 68% core set; add 65–67.9% rows only to reach minimum inventory."""
+    """PRIME compatibility helper: fill from its existing fallback pool."""
     selected = list(core)
     if len(selected) >= int(minimum_count):
         selected.sort(key=rank_key, reverse=True)
@@ -790,6 +795,44 @@ def _fill_to_minimum(
             break
     selected.sort(key=rank_key, reverse=True)
     return selected, added
+
+
+def _fill_top_dynamic(
+    core: list[dict[str, Any]],
+    fallback_pool: list[dict[str, Any]],
+    *,
+    minimum_count: int,
+    rank_key,
+) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
+    """Relax TOP probability/odds in small steps and stop at the first tier reaching the target."""
+    selected = list(core)
+    selected.sort(key=rank_key, reverse=True)
+    if len(selected) >= int(minimum_count):
+        return selected, 0, {"step": 0, "min_probability": PRIME_TOP_CORE_PROBABILITY, "min_odds": TOP_MIN_ODDS}
+
+    used = {_selection_identity(card) for card in selected}
+    added = 0
+    applied = {"step": 0, "min_probability": PRIME_TOP_CORE_PROBABILITY, "min_odds": TOP_MIN_ODDS}
+    pool = sorted(fallback_pool, key=rank_key, reverse=True)
+    for step, (prob_floor, odds_floor) in enumerate(TOP_DYNAMIC_FALLBACK_TIERS, start=1):
+        eligible = [card for card in pool if (_number(card.get("probability")) or 0.0) + 1e-12 >= prob_floor and (_number(card.get("odds")) or 0.0) + 1e-12 >= odds_floor]
+        for card in eligible:
+            identity = _selection_identity(card)
+            if not identity or identity in used:
+                continue
+            item = deepcopy(card)
+            item["selection_tier"] = "fallback"
+            item["fallback_step"] = step
+            item["fallback_min_probability"] = prob_floor
+            item["fallback_min_odds"] = odds_floor
+            selected.append(item)
+            used.add(identity)
+            added += 1
+        applied = {"step": step, "min_probability": prob_floor, "min_odds": odds_floor}
+        if len(selected) >= int(minimum_count):
+            break
+    selected.sort(key=rank_key, reverse=True)
+    return selected, added, applied
 
 
 def select_market_sections(
@@ -820,9 +863,10 @@ def select_market_sections(
 ) -> dict[str, Any]:
     """Split priced Match Winner predictions by BlinQ Probability and odds.
 
-    Prime/Top use a 68% core threshold. If a section has fewer than five core
-    picks, only then can 65–67.9% rows fill the shortfall. Value remains 60%+
-    with >=1.80 odds and the <=15% symmetric close-market rule. EV/edge never
+    TOP starts at 68% / 1.50. If fewer than five TOP picks remain after Value
+    priority, the selector relaxes probability/odds stepwise and stops as soon
+    as the target is met, with a hard floor of 60% / 1.45. PRIME keeps its
+    current short-price fallback. Value remains 60%+ with >=1.80 odds. EV/edge never
     qualify or disqualify Prime/Top/Value; they are diagnostics only.
     """
     cards = [card for row in predictions if (card := _market_card(row)) is not None]
@@ -830,6 +874,7 @@ def select_market_sections(
     prime_core_floor = max(PRIME_TOP_CORE_PROBABILITY, float(prime_min_probability))
     top_core_floor = max(PRIME_TOP_CORE_PROBABILITY, float(top_min_probability))
     fallback_floor = PRIME_TOP_FALLBACK_PROBABILITY
+    top_fallback_floor = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY
     value_floor = max(PUBLICATION_MIN_PROBABILITY, float(value_min_probability))
 
     value_qualified: list[dict[str, Any]] = []
@@ -864,7 +909,7 @@ def select_market_sections(
 
         top_core_odds = float(top_min_odds or TOP_MIN_ODDS or 1.50)
         if odds >= TOP_FALLBACK_MIN_ODDS and _passes_candidate_gate(
-            card, min_probability=fallback_floor,
+            card, min_probability=top_fallback_floor,
             min_data_depth=top_min_data_depth,
             min_surface_matches=top_min_surface_matches,
         ):
@@ -885,8 +930,9 @@ def select_market_sections(
     value_qualified.sort(key=rank, reverse=True)
 
     # Value claims overlap with Top before the Top minimum-fill decision.
-    # Fallback inventory (>=1.40 / >=65%) is only used when fewer than three
-    # core Top rows (>=1.50 / >=68%) remain after Value priority is respected.
+    # TOP fallback inventory is considered only after Value priority. The
+    # threshold is relaxed stepwise from 68% / 1.50 to at most 60% / 1.45,
+    # stopping immediately once the daily minimum target is reached.
     value_ids = {_selection_identity(card) for card in value_qualified}
     top_core = [card for card in top_core if _selection_identity(card) not in value_ids]
     top_fallback = [card for card in top_fallback if _selection_identity(card) not in value_ids]
@@ -894,7 +940,7 @@ def select_market_sections(
     prime_qualified, prime_fallback_added = _fill_to_minimum(
         prime_core, prime_fallback, minimum_count=PRIME_MIN_COUNT, rank_key=rank
     )
-    top_qualified, top_fallback_added = _fill_to_minimum(
+    top_qualified, top_fallback_added, top_fallback_applied = _fill_top_dynamic(
         top_core, top_fallback, minimum_count=TOP_MIN_COUNT, rank_key=rank
     )
 
@@ -910,8 +956,10 @@ def select_market_sections(
     selected_identities = [_selection_identity(card) for card in (prime + top + value)]
     if len(selected_identities) != len(set(selected_identities)):
         raise ValueError("Market section exclusivity invariant failed")
-    if any((_number(card.get("probability")) or 0.0) + 1e-12 < PRIME_TOP_FALLBACK_PROBABILITY for card in (prime + top)):
-        raise ValueError("Prime/Top fallback probability floor invariant failed")
+    if any((_number(card.get("probability")) or 0.0) + 1e-12 < PRIME_TOP_FALLBACK_PROBABILITY for card in prime):
+        raise ValueError("Prime fallback probability floor invariant failed")
+    if any((_number(card.get("probability")) or 0.0) + 1e-12 < TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY for card in top):
+        raise ValueError("Top fallback probability floor invariant failed")
     if any((_number(card.get("probability")) or 0.0) + 1e-12 < PUBLICATION_MIN_PROBABILITY for card in value):
         raise ValueError("Value probability floor invariant failed")
     if any((_number(card.get("odds")) or 0.0) >= PRIME_MAX_ODDS_EXCLUSIVE for card in prime):
@@ -927,14 +975,15 @@ def select_market_sections(
         "ace_picks": deepcopy(ace_picks or []),
         "sg_picks": deepcopy(sg_picks or []),
         "market_selection": {
-            "schema": 13,
-            "selection_policy": "probability_first_odds_buckets_v10_core68_fallback65",
+            "schema": 14,
+            "selection_policy": "probability_first_odds_buckets_v11_top_dynamic_68_150_to_60_145",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "prime_core_68_plus": len(prime_core),
                 "top_core_68_plus_after_value_priority": len(top_core),
                 "prime_fallback_65_679_added": prime_fallback_added,
-                "top_fallback_65_679_added": top_fallback_added,
+                "top_fallback_added": top_fallback_added,
+                "top_fallback_applied": top_fallback_applied,
                 "value_qualified_before_exclusivity": len(value_qualified),
                 "prime": len(prime), "top_daily": len(top), "value": len(value),
                 "duplicates_removed": sum(duplicate_removed.values()),
@@ -962,7 +1011,11 @@ def select_market_sections(
             "projection_only_outputs": ((["aces_projection", "double_faults_projection"] if ace_picks else []) + (["sets_projection", "games_projection"] if sg_picks else [])),
             "main_candidate_rule": {
                 "core_probability": PRIME_TOP_CORE_PROBABILITY,
-                "fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
+                "prime_fallback_probability": PRIME_TOP_FALLBACK_PROBABILITY,
+                "top_fallback_probability_floor": TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY,
+                "top_dynamic_fallback_tiers": [
+                    {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
+                ],
                 "fallback_only_if_section_below": 5,
                 "probability_basis": "blinq_probability=data_depth_shrunk_calibrated_model_probability",
                 "edge_filter": False,
@@ -986,8 +1039,13 @@ def select_market_sections(
                 "objective": "probability_first",
                 "probability_basis": "blinq_probability",
                 "core_min_probability": top_core_floor,
-                "fallback_min_probability": fallback_floor,
+                "fallback_min_probability": top_fallback_floor,
                 "fallback_only_if_core_count_below": TOP_MIN_COUNT,
+                "dynamic_fallback": True,
+                "dynamic_fallback_tiers": [
+                    {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
+                ],
+                "applied_fallback": top_fallback_applied,
                 "min_data_depth": float(top_min_data_depth),
                 "min_surface_matches_each": int(top_min_surface_matches),
                 "requires_odds": True,
@@ -1020,6 +1078,8 @@ def select_market_sections(
 
 def annotate_market_publication_candidates(
     predictions: list[dict[str, Any]],
+    *,
+    ace_picks: list[dict[str, Any]] | None = None,
     **selection_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Attach one pending betting-section publication per underlying pick.
@@ -1041,6 +1101,16 @@ def annotate_market_publication_candidates(
                 if identity in membership:
                     raise ValueError("Selection assigned to multiple public market sections")
                 membership[identity] = section_name
+
+    ace_by_event: dict[str, list[dict[str, Any]]] = {}
+    for card in ace_picks or []:
+        if not isinstance(card, dict):
+            continue
+        event = str(card.get("event_id") or "").strip()
+        market = str(card.get("market") or "").strip()
+        selection_id = str(card.get("selection_id") or "").strip()
+        if event and market in {"aces", "double_faults"} and selection_id:
+            ace_by_event.setdefault(event, []).append(card)
 
     annotated: list[dict[str, Any]] = []
     for source in predictions:
@@ -1076,6 +1146,42 @@ def annotate_market_publication_candidates(
                     "publication_status": "pending",
                     "result": None,
                 })
+        event_id = str(row.get("event_id") or "").strip()
+        for card in ace_by_event.get(event_id, []):
+            market = str(card.get("market") or "").strip()
+            selection_id = str(card.get("selection_id") or "").strip()
+            scope = str(card.get("projection_scope") or "player").strip() or "player"
+            selection_key = f"projection:{market}:{scope}:{event_id}:{selection_id}"
+            publications.append({
+                "schema": 2,
+                "publication_key": f"ace:{selection_key}",
+                "selection_key": selection_key,
+                "section": "ace",
+                "primary_section": "ace",
+                "market": market,
+                "selection": card.get("selection") or card.get("pick"),
+                "selection_id": selection_id,
+                "odds": None,
+                "model_probability": None,
+                "edge": None,
+                "expected_value": None,
+                "betting_day": None,
+                "price_status": "projection_only",
+                "projection": card.get("projection"),
+                "opponent_projection": card.get("opponent_projection"),
+                "projection_gap": card.get("projection_gap"),
+                "projection_scope": scope,
+                "projection_metric": card.get("projection_metric") or market,
+                "projection_kind": card.get("projection_kind"),
+                "projection_subject": card.get("projection_subject"),
+                "projection_label": card.get("projection_label"),
+                "projection_confidence": card.get("projection_confidence"),
+                "projection_samples": deepcopy(card.get("projection_samples")),
+                "data_depth": card.get("data_depth"),
+                "issued_at": None,
+                "publication_status": "pending",
+                "result": None,
+            })
         row["market_publication_candidates"] = publications
         annotated.append(row)
     return annotated

@@ -92,7 +92,7 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'probability_first_odds_buckets_v10_core68_fallback65'
+    assert meta['selection_policy'] == 'probability_first_odds_buckets_v11_top_dynamic_68_150_to_60_145'
     assert meta['value_rule']['assignment_priority'] == 1
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
@@ -108,12 +108,12 @@ def test_prime_top_core68_fallback65_and_value60_policy():
     ]
     sections = select_market_sections(rows, prime_min_probability=.50, top_min_probability=.50, value_min_probability=.50)
     assert [x['event_id'] for x in sections['value_picks']] == ['v600']
-    # There are fewer than three 68%+ Top picks, so a 65% row may fill the shortfall.
-    assert [x['event_id'] for x in sections['top_daily_picks']] == ['p650']
+    # TOP keeps relaxing until five picks are reached or the 60% / 1.45 hard floor is exhausted.
+    assert [x['event_id'] for x in sections['top_daily_picks']] == ['p650', 'p649-top']
     assert sections['prime_picks'] == []
     assert sections['value_picks'][0]['probability'] == .60
     assert sections['top_daily_picks'][0]['probability'] == .65
-    assert sections['market_selection']['selection_counts']['top_fallback_65_679_added'] == 1
+    assert sections['market_selection']['selection_counts']['top_fallback_added'] == 2
 
 
 def test_blinq_probability_shrinks_raw_confidence_by_data_depth():
@@ -126,7 +126,7 @@ def test_blinq_probability_shrinks_raw_confidence_by_data_depth():
 def test_low_data_depth_cannot_publish_high_probability_pick():
     rows = [
         row('fake90', .90, 1.40, 3.20, depth=.30, surface1=20, surface2=20),
-        row('deep70', .70, 1.40, 3.20, depth=.90, surface1=20, surface2=20),
+        row('deep70', .70, 1.45, 3.20, depth=.90, surface1=20, surface2=20),
     ]
     sections = select_market_sections(rows)
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['deep70']
@@ -151,14 +151,14 @@ def test_value_has_priority_over_top_when_both_qualify():
 
 
 
-def test_prime_top_do_not_use_65_679_fallback_when_three_core_picks_exist():
+def test_top_keeps_relaxing_when_only_three_core_picks_exist():
     rows = [row(f'core{i}', .70 + i*.01, 1.60 + i*.01, 2.60, depth=1.0) for i in range(3)]
     rows += [row('fallback', .67, 1.70, 2.50, depth=1.0)]
     sections = select_market_sections(rows)
     ids = [x['event_id'] for x in sections['top_daily_picks']]
-    assert 'fallback' not in ids
-    assert len(ids) == 3
-    assert sections['market_selection']['selection_counts']['top_fallback_65_679_added'] == 0
+    assert 'fallback' in ids
+    assert len(ids) == 4
+    assert sections['market_selection']['selection_counts']['top_fallback_added'] == 1
 
 
 def test_odds_150_belongs_to_top_not_prime():
@@ -219,13 +219,17 @@ def test_odds_enrichment_covers_all_60_percent_value_candidates_before_prices_ar
     assert next(x for x in enriched if x['event_id'] == 'eligible').get('betting')
 
 
-def test_top_fallback_can_drop_to_140_only_when_core_has_fewer_than_three():
-    rows=[row('core1',.74,1.60,2.40,depth=1.0),row('core2',.72,1.55,2.50,depth=1.0),row('fallback140',.66,1.40,3.00,depth=1.0),row('too_short',.90,1.39,3.20,depth=1.0)]
+def test_top_dynamic_fallback_stops_at_first_tier_reaching_five():
+    rows=[
+        row('core1',.74,1.60,2.40,depth=1.0),row('core2',.72,1.55,2.50,depth=1.0),
+        row('f67',.67,1.50,3.00,depth=1.0),row('f66a',.66,1.49,3.00,depth=1.0),
+        row('f66b',.66,1.52,3.00,depth=1.0),row('below-stop',.60,1.45,3.20,depth=1.0),
+    ]
     sections=select_market_sections(rows)
     ids=[x['event_id'] for x in sections['top_daily_picks']]
-    assert ids==['core1','core2','fallback140']
-    fallback=next(x for x in sections['top_daily_picks'] if x['event_id']=='fallback140')
-    assert fallback['selection_tier']=='fallback'
-    assert 'too_short' not in ids
-    assert sections['market_selection']['top_daily_rule']['fallback_min_odds']==1.40
-    assert sections['market_selection']['top_daily_rule']['fallback_only_if_core_count_below']==3
+    assert ids==['core1','core2','f67','f66a','f66b']
+    assert 'below-stop' not in ids
+    meta=sections['market_selection']['selection_counts']['top_fallback_applied']
+    assert meta=={'step':2,'min_probability':.66,'min_odds':1.49}
+    assert sections['market_selection']['top_daily_rule']['fallback_min_odds']==1.45
+    assert sections['market_selection']['top_daily_rule']['fallback_only_if_core_count_below']==5

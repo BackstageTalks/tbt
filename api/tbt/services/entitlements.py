@@ -165,7 +165,7 @@ def _daily_rows(payload: dict) -> list[dict]:
         if ident in seen or ident in value_ids:
             continue
         odds=_row_odds(row)
-        if odds is None or odds < 1.40:
+        if odds is None or odds < 1.45:
             continue
         seen.add(ident)
         out.append(row)

@@ -118,6 +118,60 @@ def test_canonical_id_survives_home_away_reordering():
     assert after.winner_id == "20"
 
 
+
+def test_provider_infers_missing_best_of_for_normal_atp_and_wta():
+    base = {
+        "id": "format-1",
+        "startTimestamp": 1748868630,
+        "homeTeam": {"id": 10, "name": "A"},
+        "awayTeam": {"id": 20, "name": "B"},
+        "status": {"type": "notstarted"},
+        "roundInfo": {"name": "Quarterfinal"},
+        "tournament": {"id": 77, "name": "Test Open", "groundType": "Hard"},
+    }
+    atp = RapidTennisClient.normalize_match(base, "atp", historical=False)
+    wta = RapidTennisClient.normalize_match({**base, "id": "format-2"}, "wta", historical=False)
+    assert atp.best_of == 3
+    assert wta.best_of == 3
+
+
+def test_provider_infers_atp_grand_slam_main_draw_bo5_but_qualifying_bo3():
+    base = {
+        "id": "slam-1",
+        "startTimestamp": 1748868630,
+        "homeTeam": {"id": 10, "name": "A"},
+        "awayTeam": {"id": 20, "name": "B"},
+        "status": {"type": "notstarted"},
+        "tournament": {
+            "id": 77, "name": "US Open", "groundType": "Hard",
+            "category": {"name": "ATP"},
+        },
+    }
+    main = RapidTennisClient.normalize_match(
+        {**base, "roundInfo": {"name": "Round of 16"}}, "atp", historical=False
+    )
+    qualifying = RapidTennisClient.normalize_match(
+        {**base, "id": "slam-q", "roundInfo": {"name": "Qualification round 2"}},
+        "atp", historical=False,
+    )
+    assert main.best_of == 5
+    assert qualifying.best_of == 3
+
+
+def test_provider_explicit_best_of_overrides_inference():
+    raw = {
+        "id": "explicit-format",
+        "startTimestamp": 1748868630,
+        "homeTeam": {"id": 10, "name": "A"},
+        "awayTeam": {"id": 20, "name": "B"},
+        "status": {"type": "notstarted"},
+        "bestOf": 3,
+        "roundInfo": {"name": "Round of 16"},
+        "tournament": {"id": 77, "name": "Wimbledon", "groundType": "Grass"},
+    }
+    match = RapidTennisClient.normalize_match(raw, "atp", historical=False)
+    assert match.best_of == 3
+
 def test_current_ranking_and_market_enrichment_endpoints(monkeypatch):
     client = object.__new__(RapidTennisClient)
     calls = []

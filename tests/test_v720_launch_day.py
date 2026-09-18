@@ -9,21 +9,19 @@ def test_live_watch_is_valid_private_insight_type():
     assert "live_watch" in admin_storage._INSIGHT_TYPES
 
 
-def test_private_info_rejects_lower_tiers():
+def test_info_can_target_lower_tiers_but_live_remains_elite_plus():
     from tbt.services.admin_storage import normalize_insight
+    row = normalize_insight({"title": "x", "body": "y", "type": "vip", "levels": ["rookie", "pro"]})
+    assert row["levels"] == ["rookie", "pro"]
     with pytest.raises(ValueError):
-        normalize_insight({"title": "x", "body": "y", "type": "vip", "levels": ["pro"]})
-    row = normalize_insight({
-        "title": "x", "body": "y", "type": "vip",
-        "levels": ["elite", "legend", "goat"],
-    })
-    assert row["levels"] == ["elite", "legend", "goat"]
+        normalize_insight({"title": "x", "body": "y", "type": "alert", "levels": ["rookie"]})
 
 
-def test_ui_private_channels_are_elite_plus():
+def test_ui_info_is_general_channel_while_live_remains_elite_plus():
     app = (ROOT / "web/app.js").read_text(encoding="utf-8")
-    assert "const infoEligible=['elite','legend','goat','admin'].includes(plan)" in app
-    assert "Premium Info · dostupné od ELITE" in app
+    assert "const infoEligible=eligible" in app
+    assert "const liveEligible=['elite','legend','goat','admin'].includes(plan)" in app
+    assert "insight-audience-all" in app and "insight-audience-rookie" in app
 
 
 def test_mega_data_does_not_auto_repair_history():

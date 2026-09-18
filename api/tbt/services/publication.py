@@ -164,6 +164,9 @@ _MARKET_SECTION_KEYS = {
     "top_daily": "top_daily_picks",
     "prime": "prime_picks",
     "value": "value_picks",
+    # Projection-only Aces / Double Faults are also frozen at deploy time so
+    # Results can later grade the exact projection that users actually saw.
+    "ace": "ace_picks",
 }
 
 
@@ -186,6 +189,13 @@ def _market_commitment_from_feed_row(row, section):
         betting.get("edge") if betting else row.get("edge"),
         betting.get("expected_value") if betting else row.get("expected_value"),
         betting.get("betting_day") if betting else row.get("betting_day"),
+        # Projection identity. These are None for Match Winner publications.
+        row.get("projection"),
+        row.get("opponent_projection"),
+        row.get("projection_scope"),
+        row.get("projection_metric"),
+        row.get("projection_confidence"),
+        row.get("projection_label"),
     )
 
 
@@ -202,6 +212,12 @@ def _market_commitment_from_publication(event_id, publication):
         publication.get("edge"),
         publication.get("expected_value"),
         publication.get("betting_day"),
+        publication.get("projection"),
+        publication.get("opponent_projection"),
+        publication.get("projection_scope"),
+        publication.get("projection_metric"),
+        publication.get("projection_confidence"),
+        publication.get("projection_label"),
     )
 
 
@@ -302,6 +318,15 @@ def restore_published_market_snapshots(feed, ledger):
                     for player in players:
                         player["probability"] = probability if player is selected[0] else 1 - probability
                     row["confidence"] = max(probability, 1 - probability)
+            if section == "ace":
+                for field in (
+                    "projection", "opponent_projection", "projection_scope",
+                    "projection_metric", "projection_confidence", "projection_label",
+                    "projection_kind", "projection_subject", "projection_samples",
+                    "data_depth", "price_status",
+                ):
+                    if field in snapshot:
+                        row[field] = deepcopy(snapshot.get(field))
     validate_market_publication_candidate(result, ledger)
     return result
 
@@ -311,11 +336,11 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
     now = now or datetime.now(timezone.utc)
     validate_market_publication_candidate(deployed_feed, ledger)
 
-    deployed = {}
+    deployed = set()
     for section, key in _MARKET_SECTION_KEYS.items():
         for row in deployed_feed.get(key, []) or []:
             commitment = _market_commitment_from_feed_row(row, section)
-            deployed[(section, commitment[0])] = commitment
+            deployed.add(commitment)
 
     confirmed = []
     newly_confirmed = 0
@@ -326,10 +351,8 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
             if publication.get("issued_at") or publication.get("publication_status") == "published":
                 continue
             section = str(publication.get("section") or "").strip()
-            commitment = deployed.get((section, str(row.get("event_id") or "").strip()))
-            if commitment is None:
-                continue
-            if _market_commitment_from_publication(row.get("event_id"), publication) != commitment:
+            commitment = _market_commitment_from_publication(row.get("event_id"), publication)
+            if section not in _MARKET_SECTION_KEYS or commitment not in deployed:
                 continue
             scheduled_at = datetime.fromisoformat(str(row.get("scheduled_at") or "").replace("Z", "+00:00"))
             if scheduled_at.tzinfo is None:

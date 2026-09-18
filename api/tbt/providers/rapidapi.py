@@ -14,6 +14,7 @@ from ..errors import ConfigurationError, ProviderError
 from .budget import RequestBudgetExceeded
 from .score import parse_event_score
 from ..schemas import MatchRecord
+from ..match_format import exact_best_of_from_score_stats, explicit_best_of_from_event, infer_best_of
 from ..utils import (
     deterministic_id,
     dig,
@@ -2035,14 +2036,21 @@ class RapidTennisClient:
             ]
         )
 
-        best_of = safe_int(
-            first_present(
-                raw,
-                "bestOf",
-                "best_of",
-                "setsToPlay",
-            )
+        provider_best_of = explicit_best_of_from_event(raw)
+        best_of, best_of_source = infer_best_of(
+            explicit=provider_best_of,
+            tour=tour,
+            tournament=tournament_name,
+            tournament_level=level_value,
+            round_name=round_name,
         )
+        normalized_payload = dict(raw)
+        normalized_payload["_tbt_match_format"] = {
+            "schema": 1,
+            "status": "verified" if provider_best_of in {3, 5} else ("inferred" if best_of in {3, 5} else "unknown"),
+            "best_of": best_of,
+            "source": "provider_payload" if provider_best_of in {3, 5} else best_of_source,
+        }
 
         indoor_raw = (
             first_present(
@@ -2071,17 +2079,41 @@ class RapidTennisClient:
             indoor = True
 
         normalized_stats = cls._stats(raw)
-        # Category/event payloads often already contain structured per-set scores.
-        # Persist them immediately when unambiguous so future S/G projections do
-        # not require a second event-detail call. Unsupported score shapes never
-        # make the fixture itself disappear.
-        try:
-            normalized_stats = {
-                **normalized_stats,
-                **parse_event_score(raw, home_is_player1=True, best_of=best_of),
-            }
-        except ProviderError:
-            pass
+        # Completed category/event payloads may already contain final structured
+        # per-set scores. Parse those independently from any pre-match format
+        # inference. A final score can prove BO3/BO5 exactly; an explicit provider
+        # bestOf must agree or the S/G score sample fails closed.
+        if status in {"finished", "completed", "ended", "ft"}:
+            try:
+                score_stats = parse_event_score(raw, home_is_player1=True, best_of=None)
+            except ProviderError:
+                score_stats = {}
+            if score_stats:
+                score_best_of, score_source = exact_best_of_from_score_stats(score_stats)
+                if score_best_of in {3, 5}:
+                    if provider_best_of in {3, 5} and provider_best_of != score_best_of:
+                        normalized_payload["_tbt_match_format"] = {
+                            "schema": 2,
+                            "status": "conflict",
+                            "best_of": None,
+                            "source": "provider_vs_finished_score",
+                            "provider_best_of": provider_best_of,
+                            "score_best_of": score_best_of,
+                        }
+                        best_of = None
+                    else:
+                        best_of = provider_best_of or score_best_of
+                        best_of_source = "provider_payload" if provider_best_of else score_source
+                        normalized_payload["_tbt_match_format"] = {
+                            "schema": 2,
+                            "status": "verified",
+                            "best_of": best_of,
+                            "source": best_of_source,
+                        }
+                        normalized_stats = {
+                            **normalized_stats,
+                            **parse_event_score(raw, home_is_player1=True, best_of=best_of),
+                        }
 
         return MatchRecord(
             match_id=match_id,
@@ -2115,5 +2147,5 @@ class RapidTennisClient:
             best_of=best_of,
             indoor=indoor,
             stats=normalized_stats,
-            provider_payload=raw,
+            provider_payload=normalized_payload,
         )

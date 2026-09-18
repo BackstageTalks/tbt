@@ -246,7 +246,7 @@ def _publish_predictions(
     # probability may already be public before provider odds arrive, so freeze
     # pending Daily / Prime / Value candidates independently and confirm them only
     # after the exact feed is deployed.
-    predictions = annotate_market_publication_candidates(predictions)
+    predictions = annotate_market_publication_candidates(predictions, ace_picks=ace_picks)
     records = reconcile_ledger(ledger, predictions, matches, now)
     feed = serving_feed(records, model, matches, report, upcoming, now)
     # Market presentation fields are derived from current odds-backed predictions

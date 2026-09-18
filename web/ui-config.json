@@ -2492,7 +2492,7 @@
       "standard_probability": 0.76,
       "target_count": 10,
       "presentation_preview_limit": 10,
-      "cascade": "68_plus_core; if fewer than 5 after Value priority, fill from 65–67.9 only",
+      "cascade": "68% / 1.50 core; if fewer than 5 after Value priority, relax stepwise and stop immediately at 5; hard floor 60% / 1.45",
       "confidence_tiers": [
         0.8,
         0.78,
@@ -2503,8 +2503,43 @@
         0.68
       ],
       "minimum_dashboard_count": 5,
-      "fallback_min_probability": 0.65,
-      "fallback_only_if_core_count_below": 5
+      "fallback_min_probability": 0.6,
+      "fallback_only_if_core_count_below": 5,
+      "fallback_min_odds": 1.45,
+      "dynamic_fallback_tiers": [
+        {
+          "min_probability": 0.67,
+          "min_odds": 1.5
+        },
+        {
+          "min_probability": 0.66,
+          "min_odds": 1.49
+        },
+        {
+          "min_probability": 0.65,
+          "min_odds": 1.49
+        },
+        {
+          "min_probability": 0.64,
+          "min_odds": 1.48
+        },
+        {
+          "min_probability": 0.63,
+          "min_odds": 1.48
+        },
+        {
+          "min_probability": 0.62,
+          "min_odds": 1.47
+        },
+        {
+          "min_probability": 0.61,
+          "min_odds": 1.46
+        },
+        {
+          "min_probability": 0.6,
+          "min_odds": 1.45
+        }
+      ]
     },
     "value": {
       "label": "Value Predictions",
@@ -3448,7 +3483,7 @@
       }
     }
   },
-  "ui_revision": "7.2.5",
+  "ui_revision": "7.2.8",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3493,7 +3528,7 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "7.2.5",
+  "revision": "7.2.8",
   "footer": {
     "copyright": "© 2026 BlinQ",
     "system_status": "Všetky systémy funkčné",

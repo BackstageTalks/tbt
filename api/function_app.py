@@ -79,7 +79,7 @@ from tbt.services.live_comeback import (
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "7.2.5"
+RELEASE = "7.2.8"
 API_VERSION = "3.10.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -1024,9 +1024,8 @@ def insights_feed(req):
         plan = _insight_plan_for_user(user)
         if plan == "expired":
             return response({"items": [], "unread": 0})
-        # Premium Info is an ELITE+ private channel. Admin keeps preview access.
-        if plan and plan not in {"elite", "legend", "goat"}:
-            return response({"items": [], "unread": 0, "elite_required": True})
+        # INFO can target any active membership level. LIVE items themselves
+        # remain server-restricted to ELITE+ by normalize_insight().
         payload = list_insights(plan=plan, user_id=str(user.get("id") or ""), include_inactive=False, limit=100)
         return response(payload)
     except AdminStorageUnavailable:

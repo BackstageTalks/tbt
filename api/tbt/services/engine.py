@@ -158,14 +158,18 @@ def predict(model, history, upcoming, now=None):
         profile2["h2h_wins"] = h2h_p2
         profile2["h2h_losses"] = h2h_p1
         provider_custom_id = ""
+        match_format = {}
         if isinstance(match.provider_payload, dict):
             provider_custom_id = str(match.provider_payload.get("customId") or match.provider_payload.get("custom_id") or "").strip()
+            marker = match.provider_payload.get("_tbt_match_format")
+            match_format = marker if isinstance(marker, dict) else {}
         rows.append({"id": match.match_id, "event_id": event_id(match), "custom_id": provider_custom_id, "tour": match.tour.upper(),
             "scheduled_at": match.scheduled_at.isoformat(), "tournament": match.tournament,
             "tournament_id": str(match.tournament_id or ""),
             "tournament_logo_id": tournament_logo_id,
             "surface": match.surface, "round": match.round_name,
             "best_of": match.best_of,
+            "best_of_source": str(match_format.get("source") or ""),
             "competition": match.tournament_level or "unknown", "quality": coverage(builder, match),
             "player1": {
                 "id": match.player1_id, "name": match.player1_name,
@@ -283,8 +287,103 @@ def _settle_match_winner_publications(row, match, now):
         publication["result"] = settled
 
 
+def _settle_projection_publications(row, match, now):
+    """Grade projection-only ESA publications without inventing betting ROI.
+
+    Current ESA cards predict which player will record more Aces or Double
+    Faults and expose the projected count. They have no bookmaker line/price,
+    therefore settlement records HIT/MISS/VOID plus actual counts only.
+    """
+    publications = row.get("market_publications")
+    if not isinstance(publications, list):
+        return
+    stats = match.stats if isinstance(match.stats, dict) else {}
+    sides = {str(match.player1_id): "p1", str(match.player2_id): "p2"}
+    for publication in publications:
+        if not isinstance(publication, dict):
+            continue
+        market = str(publication.get("market") or "")
+        if market not in {"aces", "double_faults"}:
+            continue
+        issued_at = publication.get("issued_at")
+        if not issued_at:
+            continue
+        try:
+            issued = datetime.fromisoformat(str(issued_at).replace("Z", "+00:00"))
+        except ValueError:
+            publication["excluded_reason"] = "invalid_issued_at"
+            continue
+        if issued.tzinfo is None or issued >= match.scheduled_at:
+            publication["excluded_reason"] = "invalid_issued_at" if issued.tzinfo is None else "issued_after_actual_start"
+            continue
+        selection_id = str(publication.get("selection_id") or "")
+        selected_side = sides.get(selection_id)
+        if not selected_side:
+            publication["excluded_reason"] = "invalid_projection_selection"
+            continue
+        opponent_side = "p2" if selected_side == "p1" else "p1"
+        stat_suffix = "aces" if market == "aces" else "double_faults"
+        try:
+            actual = float(stats.get(f"{selected_side}_{stat_suffix}"))
+            opponent_actual = float(stats.get(f"{opponent_side}_{stat_suffix}"))
+        except (TypeError, ValueError):
+            publication["excluded_reason"] = "projection_result_unavailable"
+            continue
+        if not np.isfinite(actual) or not np.isfinite(opponent_actual) or actual < 0 or opponent_actual < 0:
+            publication["excluded_reason"] = "projection_result_unavailable"
+            continue
+        publication.pop("excluded_reason", None)
+        if actual == opponent_actual:
+            status = "void"
+            correct = None
+        else:
+            correct = actual > opponent_actual
+            status = "hit" if correct else "miss"
+        existing = publication.get("result") if isinstance(publication.get("result"), dict) else None
+        settled = {
+            "status": status,
+            "correct": correct,
+            "actual_count": actual,
+            "opponent_actual_count": opponent_actual,
+            "projection": publication.get("projection"),
+            "opponent_projection": publication.get("opponent_projection"),
+            "projection_scope": publication.get("projection_scope") or "player",
+            "projection_metric": publication.get("projection_metric") or market,
+            "data_depth": publication.get("data_depth"),
+            "settled_at": (existing or {}).get("settled_at") or now.isoformat(),
+            "scheduled_at": match.scheduled_at.isoformat(),
+        }
+        if existing is not None and (
+            existing.get("status") != status
+            or existing.get("actual_count") != actual
+            or existing.get("opponent_actual_count") != opponent_actual
+        ):
+            settled["corrected_at"] = now.isoformat()
+        publication["result"] = settled
+
+
+def _projection_metrics(publications):
+    rows = [
+        p for p in publications
+        if isinstance(p, dict)
+        and p.get("price_status") == "projection_only"
+        and isinstance(p.get("result"), dict)
+        and not p.get("excluded_reason")
+        and p["result"].get("status") in {"hit", "miss", "void"}
+    ]
+    graded = [p for p in rows if p["result"].get("status") in {"hit", "miss"}]
+    hits = sum(1 for p in graded if p["result"].get("status") == "hit")
+    return {
+        "n": len(graded),
+        "hits": hits,
+        "misses": len(graded) - hits,
+        "voids": len(rows) - len(graded),
+        "hit_rate": hits / len(graded) if graded else None,
+    }
+
+
 def _betting_metrics(publications):
-    rows = [p for p in publications if isinstance(p, dict) and isinstance(p.get("result"), dict) and not p.get("excluded_reason")]
+    rows = [p for p in publications if isinstance(p, dict) and p.get("price_status") != "projection_only" and isinstance(p.get("result"), dict) and not p.get("excluded_reason")]
     if not rows:
         return {
             "n": 0, "wins": 0, "losses": 0, "hit_rate": None,
@@ -333,12 +432,18 @@ def betting_performance(results):
     markets = {}
     for market in sorted({str(p.get("market") or "") for p in publications if p.get("market")}):
         markets[market] = _betting_metrics([p for p in publications if p.get("market") == market])
+    projection_publications = [p for p in publications if p.get("price_status") == "projection_only"]
     return {
-        "schema": 1,
+        "schema": 2,
         "stake_model": "flat_1u",
         "overall": _betting_metrics(list(unique.values())),
         "sections": sections,
         "markets": markets,
+        "projections": {
+            "overall": _projection_metrics(projection_publications),
+            "aces": _projection_metrics([p for p in projection_publications if p.get("market") == "aces"]),
+            "double_faults": _projection_metrics([p for p in projection_publications if p.get("market") == "double_faults"]),
+        },
     }
 
 def reconcile_ledger(ledger, predictions, history, now=None):
@@ -363,6 +468,8 @@ def reconcile_ledger(ledger, predictions, history, now=None):
             # commitment. This never changes the published winner probability.
             if existing.get("best_of") in (None, "") and row.get("best_of") in {3, 5}:
                 existing["best_of"] = row.get("best_of")
+            if not existing.get("best_of_source") and row.get("best_of_source"):
+                existing["best_of_source"] = row.get("best_of_source")
             existing.setdefault("original_scheduled_at", existing["scheduled_at"])
             existing["scheduled_at"] = row["scheduled_at"]
     # Provider IDs are not sufficient evidence of identity. Keep all candidates
@@ -408,6 +515,7 @@ def reconcile_ledger(ledger, predictions, history, now=None):
         row.setdefault("original_scheduled_at", row["scheduled_at"])
         row["scheduled_at"] = match.scheduled_at.isoformat()
         _settle_match_winner_publications(row, match, now)
+        _settle_projection_publications(row, match, now)
         issued_at = row.get("issued_at")
         if not issued_at:
             # Pending predictions are never scored until a successful public

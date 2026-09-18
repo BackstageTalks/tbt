@@ -224,3 +224,36 @@ body#blinqPremium.blinq-home .dashboard-hero-copy{transition:opacity .25s ease,t
   body#blinqPremium .site-footer .system-status strong{white-space:normal!important}
   body#blinqPremium .hub-data-depth{font-size:5.5px!important}
 }
+
+/* BlinQ 7.2.7 — final header calm-down + LIVE Radar tabs */
+body#blinqPremium .site-header.reference-topbar{
+  background:linear-gradient(180deg,rgba(4,13,13,.96),rgba(4,12,12,.90))!important;
+  border-bottom:1px solid rgba(118,237,177,.10)!important;
+  box-shadow:0 12px 34px rgba(0,0,0,.16)!important;
+}
+body#blinqPremium .reference-topbar .header-top{min-height:62px!important;gap:24px!important}
+body#blinqPremium .reference-navigation{gap:18px!important;align-self:stretch!important;align-items:center!important}
+body#blinqPremium .reference-navigation a{min-height:62px!important;padding:0 2px!important;border-radius:0!important;background:transparent!important;color:#8fa39d!important;font-size:13px!important;letter-spacing:.01em!important;position:relative!important}
+body#blinqPremium .reference-navigation a:hover{background:transparent!important;color:#dceae5!important}
+body#blinqPremium .reference-navigation a.active{color:#eef8f4!important;background:transparent!important}
+body#blinqPremium .reference-navigation .active:after{bottom:0!important;width:32px!important;height:2px!important;box-shadow:0 0 12px rgba(121,242,177,.30)!important}
+body#blinqPremium .reference-topbar .header-actions{gap:6px!important;align-items:center!important}
+body#blinqPremium .header-upgrade,
+body#blinqPremium .insight-shortcut.insight-live-button,
+body#blinqPremium .insight-info-button,
+body#blinqPremium .reference-topbar .profile-shell{height:34px!important;min-height:34px!important;border-radius:9px!important}
+body#blinqPremium .insight-shortcut.insight-live-button,
+body#blinqPremium .insight-info-button{border-color:transparent!important;background:rgba(255,255,255,.025)!important;box-shadow:inset 0 0 0 1px rgba(121,242,177,.08)!important}
+body#blinqPremium .insight-shortcut.insight-live-button:hover,
+body#blinqPremium .insight-info-button:hover,
+body#blinqPremium .insight-info-button.has-unread{background:rgba(121,242,177,.065)!important;box-shadow:inset 0 0 0 1px rgba(121,242,177,.18)!important}
+body#blinqPremium .header-upgrade{border-color:rgba(121,242,177,.28)!important;background:linear-gradient(135deg,rgba(121,242,177,.16),rgba(121,242,177,.055))!important}
+body#blinqPremium .reference-topbar .profile-shell{border-color:transparent!important;background:rgba(255,255,255,.022)!important;box-shadow:inset 0 0 0 1px rgba(121,242,177,.075)!important}
+body#blinqPremium .reference-topbar .profile-toggle{height:28px!important;min-height:28px!important}
+body#blinqPremium .reference-topbar .profile-button{height:28px!important;min-height:28px!important}
+body#blinqPremium .live-radar-tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;margin:0 0 10px;border:1px solid rgba(121,242,177,.10);border-radius:10px;background:rgba(255,255,255,.018)}
+body#blinqPremium .live-radar-tabs button{min-height:32px;border:0;border-radius:7px;background:transparent;color:#71877f;font:850 9px/1 Inter,"Segoe UI",sans-serif;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+body#blinqPremium .live-radar-tabs button:hover{color:#dceae5;background:rgba(121,242,177,.035)}
+body#blinqPremium .live-radar-tabs button.is-active{color:#dff8ec;background:rgba(121,242,177,.09);box-shadow:inset 0 0 0 1px rgba(121,242,177,.14)}
+body#blinqPremium .live-radar-candidate.is-set2 .set2-model strong{color:#dff8ec}
+@media(max-width:760px){body#blinqPremium .reference-topbar .header-top{gap:7px!important}body#blinqPremium .reference-navigation{gap:10px!important}body#blinqPremium .reference-navigation a{min-height:58px!important;font-size:11px!important}}

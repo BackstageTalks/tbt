@@ -231,6 +231,11 @@ def _card(
     card.update({
         "market": market,
         "market_type": label,
+        "projection_scope": "player",
+        "projection_metric": market,
+        "projection_subject": selected.get("name") or "—",
+        "projection_kind": "player_aces" if market == "aces" else "player_double_faults",
+        "projection_label": "Hráč · Esá" if market == "aces" else "Hráč · Dvojchyby",
         "pick": selected.get("name") or "—",
         "selection": selected.get("name") or "—",
         "selection_id": str(selected.get("id") or ""),

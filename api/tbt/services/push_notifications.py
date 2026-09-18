@@ -210,7 +210,7 @@ def dispatch_insight_push(insight: dict) -> dict:
         "type": str(insight.get("type") or "info")[:40],
         "priority": str(insight.get("priority") or "normal")[:20],
     }, ensure_ascii=False, separators=(",", ":"))
-    ttl = 600 if str(insight.get("type") or "") in {"live_watch", "alert"} else 6 * 3600
+    ttl = 600 if str(insight.get("type") or "") in {"live_watch", "alert", "set2"} else 6 * 3600
     sent = failed = removed = 0
     for row in rows:
         if not _row_entitled(row, levels):

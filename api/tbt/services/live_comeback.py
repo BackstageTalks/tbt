@@ -45,6 +45,40 @@ def radar_thresholds():
     }
 
 
+
+
+def set2_push_thresholds():
+    def ev(name, default):
+        n = _num(os.getenv(name))
+        return float(n) if n is not None else default
+    return {
+        "min_samples": max(1, int(ev("BLINQ_LIVE_SET2_MIN_SAMPLES", 10))),
+        "min_edge": max(0.0, ev("BLINQ_LIVE_SET2_MIN_EDGE", 0.0)),
+        "min_ev": max(0.0, ev("BLINQ_LIVE_SET2_MIN_EV", 0.0)),
+        "accepted_quality": {"medium", "high"},
+    }
+
+
+def set2_push_eligible(row: dict[str, Any]) -> bool:
+    """True only for evidence-backed Set-2 value with a real live market."""
+    if not isinstance(row, dict):
+        return False
+    th = set2_push_thresholds()
+    quality = str(row.get("second_set_quality") or "").strip().lower()
+    samples = int(_num(row.get("second_set_samples")) or 0)
+    probability = _num(row.get("second_set_probability"))
+    odds = _num(row.get("second_set_odds"))
+    edge = _num(row.get("second_set_edge"))
+    ev = _num(row.get("second_set_ev"))
+    return bool(
+        quality in th["accepted_quality"]
+        and samples >= th["min_samples"]
+        and probability is not None
+        and odds is not None and odds > 1.0
+        and edge is not None and edge > th["min_edge"]
+        and ev is not None and ev > th["min_ev"]
+    )
+
 def _selection(row):
     b = row.get("betting") if isinstance(row.get("betting"), dict) else {}
     return str(b.get("selection_id") or row.get("winner_id") or "").strip(), str(b.get("selection") or row.get("pick") or "").strip()
@@ -339,8 +373,35 @@ def attach_second_set_odds(scan: dict[str, Any], odds_payloads: dict[str, Any], 
 
 
 def publish_radar_signals(scan, *, actor_id="live-radar"):
-    """Publish two-stage LIVE notifications: WATCH first, CONFIRMED later."""
+    """Publish comeback alerts plus a separate high-quality Set-2 signal."""
     published = []
+    # SET 2 is a distinct signal. It gets a durable LIVE item (and therefore a
+    # browser push) only when evidence depth is sufficient, a real provider
+    # price exists and both edge and EV are positive. Otherwise it stays panel-only.
+    for s in scan.get("candidates", []):
+        if not isinstance(s, dict) or not set2_push_eligible(s):
+            continue
+        eid = str(s.get("event_id") or "").strip()
+        if not eid:
+            continue
+        fav = str(s.get("favorite") or "Favorit")
+        opp = str(s.get("opponent") or "")
+        p2 = _num(s.get("second_set_probability")) or 0.0
+        odds2 = _num(s.get("second_set_odds"))
+        edge2 = _num(s.get("second_set_edge"))
+        ev2 = _num(s.get("second_set_ev"))
+        samples = int(_num(s.get("second_set_samples")) or 0)
+        quality = str(s.get("second_set_quality") or "").upper()
+        body = f"{fav} · samostatný model 2. setu: {p2*100:.1f}%"
+        if opp:
+            body += f" proti {opp}"
+        body += f". LIVE kurz {odds2:.2f}, edge {edge2*100:+.1f} p.b., EV {ev2*100:+.1f}%. Data depth: {quality} · {samples} vzoriek."
+        item, created = save_automated_insight({
+            "title": f"2. set LIVE · {fav}", "body": body, "type": "set2",
+            "priority": "important", "levels": LIVE_ALERT_LEVELS, "match_id": eid,
+            "link_label": "Otvoriť LIVE Radar", "active": True, "pinned": False,
+        }, actor_id=actor_id, insight_id=f"live-set2-{eid}"[:96])
+        published.append({"id": item.get("id"), "event_id": eid, "stage": "set2", "created": created})
     signal_ids = {str(x.get("event_id") or "").strip() for x in scan.get("signals", []) if isinstance(x, dict)}
     for s in scan.get("candidates", []):
         if not isinstance(s, dict):
@@ -402,4 +463,6 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
         "created": sum(1 for x in published if x["created"]),
         "watch_created": sum(1 for x in published if x["created"] and x["stage"] == "watch"),
         "confirmed_created": sum(1 for x in published if x["created"] and x["stage"] == "confirmed"),
+        "set2_created": sum(1 for x in published if x["created"] and x["stage"] == "set2"),
+        "set2_push_thresholds": {k: (sorted(v) if isinstance(v, set) else v) for k, v in set2_push_thresholds().items()},
     }

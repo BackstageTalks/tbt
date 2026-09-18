@@ -1,10 +1,11 @@
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 
-def test_private_info_is_elite_plus_only():
+def test_info_audience_presets_keep_live_elite_but_allow_general_info():
     app=(ROOT/'web/app.js').read_text();block=app.split('function renderAdminInsights(){',1)[1].split('function renderAdminSupport(){',1)[0]
     assert "['elite','legend','goat']" in block and 'insight-audience-elite' in block
-    assert 'insight-audience-all' not in block
+    assert 'insight-audience-all' in block and 'insight-audience-rookie' in block
+    assert 'LIVE upozornenia zostávajú iba ELITE+' in block
 
 def test_bell_and_light_poll():
     app=(ROOT/'web/app.js').read_text();assert "['elite','legend','goat','admin']" in app

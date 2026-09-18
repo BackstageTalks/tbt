@@ -12,6 +12,12 @@ from datetime import datetime, timezone
 import math
 from typing import Any
 
+from ..match_format import (
+    exact_best_of_from_score_stats,
+    provider_best_of_from_context,
+    infer_best_of,
+)
+
 
 EXCLUDED_STATUSES = {
     "retired", "walkover", "walk over", "cancelled", "canceled",
@@ -69,17 +75,15 @@ def _history_index(history, cutoff: datetime):
         lambda: {"games": [], "long": []}
     )
     score_matches = 0
+    exact_from_score = 0
+    provider_confirmed = 0
+    format_conflicts = 0
+    unsupported_scores = 0
 
     for match in history:
         if match.scheduled_at >= cutoff:
             continue
         if str(match.status or "").strip().lower() in EXCLUDED_STATUSES:
-            continue
-        try:
-            best_of = int(match.best_of) if match.best_of is not None else None
-        except (TypeError, ValueError):
-            best_of = None
-        if best_of not in {3, 5}:
             continue
         stats = match.stats if isinstance(match.stats, dict) else {}
         total_sets = _number(stats.get("total_sets"))
@@ -88,6 +92,25 @@ def _history_index(history, cutoff: datetime):
             continue
         if total_sets < 2 or total_games < 12:
             continue
+
+        # Historical format is never inferred from tour/tournament. A finished
+        # structured score proves BO3/BO5 exactly. If the raw provider payload
+        # also publishes bestOf, both facts must agree or the row is rejected.
+        score_best_of, _score_source = exact_best_of_from_score_stats(stats)
+        if score_best_of not in {3, 5}:
+            unsupported_scores += 1
+            continue
+        raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+        provider_best_of = provider_best_of_from_context(raw)
+        if provider_best_of in {3, 5} and provider_best_of != score_best_of:
+            format_conflicts += 1
+            continue
+        best_of = provider_best_of or score_best_of
+        if provider_best_of:
+            provider_confirmed += 1
+        else:
+            exact_from_score += 1
+
         long_value = _long_match(total_sets, best_of)
         key = (str(match.tour or "").lower(), best_of)
         baselines[key]["games"].append(total_games)
@@ -114,7 +137,13 @@ def _history_index(history, cutoff: datetime):
                 "long": sum(long) / len(long),
                 "n": float(len(games)),
             }
-    return by_player, baseline_values, score_matches
+    diagnostics = {
+        "exact_from_finished_score": exact_from_score,
+        "provider_confirmed": provider_confirmed,
+        "provider_score_conflicts_rejected": format_conflicts,
+        "unsupported_structured_scores_rejected": unsupported_scores,
+    }
+    return by_player, baseline_values, score_matches, diagnostics
 
 
 def _player_estimate(
@@ -315,11 +344,13 @@ def select_sg_picks(
         raise ValueError("select_sg_picks requires timezone-aware now")
     now = now.astimezone(timezone.utc)
     cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    histories, baselines, score_matches = _history_index(history, cutoff)
+    histories, baselines, score_matches, history_format = _history_index(history, cutoff)
 
     by_market: dict[str, list[dict[str, Any]]] = {"sets": [], "games": []}
     eligible = 0
     missing_best_of = 0
+    inferred_upcoming_best_of = 0
+    upcoming_inference_sources: dict[str, int] = defaultdict(int)
     missing_baseline = 0
     for row in predictions:
         p1_obj = row.get("player1") if isinstance(row.get("player1"), dict) else {}
@@ -327,14 +358,25 @@ def select_sg_picks(
         p1_id, p2_id = str(p1_obj.get("id") or ""), str(p2_obj.get("id") or "")
         if not p1_id or not p2_id:
             continue
-        try:
-            best_of = int(row.get("best_of"))
-        except (TypeError, ValueError):
-            missing_best_of += 1
-            continue
+        declared_source = str(row.get("best_of_source") or "").strip().lower()
+        provider_fact = declared_source in {"provider", "provider_payload", "provider_detail"}
+        best_of, best_of_source = infer_best_of(
+            explicit=row.get("best_of") if provider_fact else None,
+            tour=row.get("tour"),
+            tournament=row.get("tournament"),
+            tournament_level=row.get("competition") or row.get("tournament_level"),
+            round_name=row.get("round") or row.get("round_name"),
+        )
         if best_of not in {3, 5}:
             missing_best_of += 1
             continue
+        effective_row = row
+        if best_of_source != "provider":
+            inferred_upcoming_best_of += 1
+            upcoming_inference_sources[best_of_source] += 1
+            effective_row = deepcopy(row)
+            effective_row["best_of"] = best_of
+            effective_row["best_of_source"] = best_of_source
         tour = str(row.get("tour") or "").lower()
         surface = str(row.get("surface") or "unknown").lower()
         baseline = baselines.get((tour, best_of))
@@ -355,7 +397,7 @@ def select_sg_picks(
         )
         if p1_sets and p2_sets:
             card = _sets_card(
-                row, p1_sets, p2_sets, best_of=best_of,
+                effective_row, p1_sets, p2_sets, best_of=best_of,
                 baseline=float(baseline["long"]),
             )
             if card:
@@ -373,7 +415,7 @@ def select_sg_picks(
         )
         if p1_games and p2_games:
             card = _games_card(
-                row, p1_games, p2_games, best_of=best_of,
+                effective_row, p1_games, p2_games, best_of=best_of,
                 baseline=float(baseline["games"]),
             )
             if card:
@@ -415,7 +457,12 @@ def select_sg_picks(
         "odds_backed": False,
         "settlement_enabled": False,
         "history_matches_with_structured_score": score_matches,
+        "history_best_of_inferred": 0,
+        "history_best_of_inference_sources": {},
+        "history_format_facts": history_format,
         "eligible_upcoming_matches": eligible,
+        "upcoming_best_of_inferred": inferred_upcoming_best_of,
+        "upcoming_best_of_inference_sources": dict(upcoming_inference_sources),
         "missing_best_of": missing_best_of,
         "missing_baseline": missing_baseline,
         "sets_selected": sum(row.get("market") == "sets" for row in combined),

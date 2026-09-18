@@ -233,6 +233,10 @@ def main() -> None:
             ROOT / ".cache/tbt/sg-history/sg_run_summary.json",
             report_dir / "sg_run_summary.json",
         )
+        _snapshot_report(
+            ROOT / ".cache/tbt/sg-history/sg_projection_dry_run.json",
+            report_dir / "sg_projection_dry_run.json",
+        )
 
     # 5) ESA topping-up.  ACE/DF already have a useful corpus, so this remains
     # smaller than generic stats and SG.
@@ -296,6 +300,7 @@ def main() -> None:
     inventory_before = _read_json(report_dir / "statistics_inventory_before.json")
     probe = _read_json(ROOT / ".cache/tbt/provider-probe/provider_probe_report.json")
     sg_summary = _read_json(report_dir / "sg_run_summary.json")
+    sg_dry_run = _read_json(report_dir / "sg_projection_dry_run.json")
     ace_summary = _read_json(report_dir / "ace_run_summary.json")
 
     # Audit is read-only and does not consume Tennis API quota.  Keep it optional
@@ -322,6 +327,7 @@ def main() -> None:
         "statistics_inventory_before": inventory_before,
         "history_audit": history_audit,
         "sg_summary": sg_summary,
+        "sg_projection_dry_run": sg_dry_run,
         "ace_summary": ace_summary,
         "provider_live_probe": {
             "live_events": len(probe.get("live_events") or []),
