@@ -8,7 +8,7 @@ from ..errors import ProviderError
 from ..providers.score import parse_event_score
 
 
-SCORE_SCHEMA_VERSION = 1
+SCORE_SCHEMA_VERSION = 2
 EXCLUDED_STATUSES = {
     "retired", "walkover", "walk over", "cancelled", "canceled",
     "abandoned", "interrupted", "suspended", "postponed",

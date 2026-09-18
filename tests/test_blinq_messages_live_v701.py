@@ -11,4 +11,4 @@ def test_bell_and_light_poll():
     block=app.split('function setupLiveRefresh(){',1)[1].split('function finishBootSplash',1)[0];assert 'setInterval(privateRefresh,30*1000)' in block
 
 def test_server_timer():
-    api=(ROOT/'api/function_app.py').read_text();assert '@app.timer_trigger(schedule="0 * * * * *"' in api and '_live_radar_candidate_window' in api
+    api=(ROOT/'api/function_app.py').read_text();assert '@app.timer_trigger' not in api and '_LIVE_RADAR_TTL_SECONDS = 45' in api and '_run_live_radar(force=False,publish=True)' in api

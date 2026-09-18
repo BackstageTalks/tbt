@@ -24,6 +24,10 @@ def test_parse_structured_bo3_score_counts_sets_games_and_tiebreaks():
     assert stats["deciding_set"] == 1
     assert stats["straight_sets"] == 0
     assert stats["p1_first_set_won"] == 1
+    assert stats["p1_set1_games"] == 6
+    assert stats["p1_set2_games"] == 3
+    assert stats["p1_second_set_won"] == 0
+    assert stats["p2_second_set_won"] == 1
 
 
 def test_parse_score_respects_canonical_player_orientation():

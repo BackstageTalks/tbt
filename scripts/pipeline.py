@@ -28,6 +28,7 @@ from tbt.services.publication import (
 )
 from tbt.services.ace_selection import select_ace_picks
 from tbt.services.sg_selection import select_sg_picks
+from tbt.services.comeback_projection import annotate_live_second_set_projections
 from tbt.services.market_selection import (
     annotate_market_publication_candidates,
     attach_market_sections_to_feed,
@@ -255,6 +256,13 @@ def _publish_predictions(
         ace_picks=ace_picks, ace_report=ace_report,
         sg_picks=sg_picks, sg_report=sg_report,
     )
+    # PRIME remains internal, but its rows carry a separately trained-on-history
+    # conditional projection used only after the favourite loses set 1 LIVE.
+    feed, comeback_report = annotate_live_second_set_projections(feed, matches, now=now)
+    feed["market_selection"] = {
+        **(feed.get("market_selection") or {}),
+        "live_second_set_projection_report": comeback_report,
+    }
     feed = clean(feed)
     feed = restore_published_market_snapshots(feed, records)
     validate_publication_candidate(feed, records)

@@ -128,9 +128,20 @@ def parse_event_score(
         "games_won": float(away_games),
         "first_set_won": float(not first_home_win),
     }
+    if len(period_pairs) >= 2:
+        home_values.update({
+            "set1_games": float(period_pairs[0][0]),
+            "set2_games": float(period_pairs[1][0]),
+            "second_set_won": float(period_pairs[1][0] > period_pairs[1][1]),
+        })
+        away_values.update({
+            "set1_games": float(period_pairs[0][1]),
+            "set2_games": float(period_pairs[1][1]),
+            "second_set_won": float(period_pairs[1][1] > period_pairs[1][0]),
+        })
     p1, p2 = (home_values, away_values) if home_is_player1 else (away_values, home_values)
 
-    return {
+    result = {
         "p1_sets_won": p1["sets_won"],
         "p2_sets_won": p2["sets_won"],
         "p1_games_won": p1["games_won"],
@@ -143,3 +154,13 @@ def parse_event_score(
         "straight_sets": float(straight_sets),
         "deciding_set": float(deciding_set),
     }
+    if "second_set_won" in p1 and "second_set_won" in p2:
+        result.update({
+            "p1_set1_games": p1["set1_games"],
+            "p2_set1_games": p2["set1_games"],
+            "p1_set2_games": p1["set2_games"],
+            "p2_set2_games": p2["set2_games"],
+            "p1_second_set_won": p1["second_set_won"],
+            "p2_second_set_won": p2["second_set_won"],
+        })
+    return result

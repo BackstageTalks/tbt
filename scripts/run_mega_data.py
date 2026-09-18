@@ -222,6 +222,10 @@ def main() -> None:
             "--max-requests", str(sg_cap),
         ])
         finish_phase(phase, sg_cap, "sg")
+        _snapshot_report(
+            ROOT / ".cache/tbt/sg-history/sg_run_summary.json",
+            report_dir / "sg_run_summary.json",
+        )
 
     # 5) ESA topping-up.  ACE/DF already have a useful corpus, so this remains
     # smaller than generic stats and SG.
@@ -236,6 +240,10 @@ def main() -> None:
             "--max-requests", str(ace_cap),
         ])
         finish_phase(phase, ace_cap, "ace")
+        _snapshot_report(
+            ROOT / ".cache/tbt/ace-history/ace_run_summary.json",
+            report_dir / "ace_run_summary.json",
+        )
 
     # 6) Spend every request left on the highest-value generic statistics sweep.
     stats_tail_cap = remaining()
@@ -263,6 +271,8 @@ def main() -> None:
     inventory = _read_json(inventory_path)
     inventory_before = _read_json(report_dir / "statistics_inventory_before.json")
     probe = _read_json(ROOT / ".cache/tbt/provider-probe/provider_probe_report.json")
+    sg_summary = _read_json(report_dir / "sg_run_summary.json")
+    ace_summary = _read_json(report_dir / "ace_run_summary.json")
 
     # Audit is read-only and does not consume Tennis API quota.  Keep it optional
     # so an audit artifact issue cannot erase the expensive enrichment work.
@@ -287,6 +297,12 @@ def main() -> None:
         "phases": phases,
         "statistics_inventory_before": inventory_before,
         "history_audit": history_audit,
+        "sg_summary": sg_summary,
+        "ace_summary": ace_summary,
+        "provider_live_probe": {
+            "live_events": len(probe.get("live_events") or []),
+            "live_odds_samples": probe.get("live_odds_samples") or [],
+        },
         "post_run_statistics": {
             "rows": inventory.get("rows"),
             "any_stats_matches": inventory.get("any_stats_matches"),

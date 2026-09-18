@@ -44,13 +44,18 @@ def _feed_player_ids(feed: dict) -> set[str]:
 
 
 def _has_score(match) -> bool:
+    """Require score schema v2 facts used by Sets/Games and LIVE Set-2 models."""
     stats = match.stats if isinstance(match.stats, dict) else {}
     try:
         sets = float(stats.get("total_sets"))
         games = float(stats.get("total_games"))
+        p1_second = float(stats.get("p1_second_set_won"))
+        p2_second = float(stats.get("p2_second_set_won"))
+        float(stats.get("p1_set1_games")); float(stats.get("p2_set1_games"))
+        float(stats.get("p1_set2_games")); float(stats.get("p2_set2_games"))
     except (TypeError, ValueError):
         return False
-    return sets >= 2 and games >= 12
+    return sets >= 2 and games >= 12 and round(p1_second + p2_second) == 1
 
 
 def _coverage(matches, player_ids: set[str], cutoff: datetime) -> dict[str, int]:
@@ -142,7 +147,7 @@ def main() -> None:
         report_path.write_text(
             json.dumps(
                 {
-                    "schema": 1,
+                    "schema": 2,
                     "generated_at": datetime.now(timezone.utc).isoformat(),
                     "target_players": len(player_ids),
                     "target_samples": args.target_samples,

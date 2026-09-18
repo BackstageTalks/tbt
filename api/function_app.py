@@ -1,10 +1,11 @@
 from pathlib import Path
 from collections import defaultdict, deque
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from threading import Lock
 import hashlib
 import logging
 import json
+import os
 import time
 
 import azure.functions as func
@@ -64,7 +65,10 @@ from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.entitlements import filter_feed_for_access
-from tbt.services.live_comeback import scan_comeback_radar, publish_radar_signals, prime_radar_eligible
+from tbt.services.live_comeback import (
+    scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
+    attach_second_set_odds,
+)
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
@@ -101,6 +105,7 @@ _MATCH_INTELLIGENCE_TTL_SECONDS = 15 * 60
 _LIVE_RADAR_CACHE: tuple[float, dict] | None = None
 _LIVE_RADAR_CACHE_LOCK = Lock()
 _LIVE_RADAR_TTL_SECONDS = 45
+_LIVE_RADAR_LAST_PUBLISHED_SCAN: str | None = None
 
 
 def _banner_event_allowed(payload):
@@ -805,56 +810,64 @@ def feed(req):
 
 
 
-def _live_radar_candidate_window(feed_payload: dict, *, now: datetime | None = None) -> bool:
-    rows=feed_payload.get("prime_picks") if isinstance(feed_payload.get("prime_picks"),list) else []
-    if not rows:return False
-    current=now or datetime.now(timezone.utc); parsed=False
-    for row in rows:
-        if not isinstance(row,dict) or not prime_radar_eligible(row):continue
-        raw=row.get("scheduled_at") or row.get("date") or row.get("start_time")
-        if not raw:continue
-        try:
-            dt=datetime.fromisoformat(str(raw).replace("Z","+00:00")); dt=dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
-        except (TypeError,ValueError):continue
-        parsed=True
-        if current-timedelta(hours=6)<=dt<=current+timedelta(minutes=20):return True
-    return not parsed
-
-
 def _live_radar_allowed(account: dict) -> bool:
     if account.get("is_admin") or str(account.get("role") or "").lower()=="admin":return True
     return str(account.get("status") or "").lower() in {"active","lifetime"} and str(account.get("plan") or "").lower() in {"elite","legend","goat"}
 
 
 def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
-    global _LIVE_RADAR_CACHE
-    now=time.monotonic()
+    """Run/cached LIVE scan and publish at most once per fresh scan per instance.
+
+    Azure Static Web Apps managed Functions do not provide a dependable timer
+    trigger for this app shape, so ELITE/admin HTTP polling is the scheduler.
+    Provider calls are protected by the 45-second cache and alert writes remain
+    idempotent in persistent storage.
+    """
+    global _LIVE_RADAR_CACHE, _LIVE_RADAR_LAST_PUBLISHED_SCAN
+    now=time.monotonic(); fresh=False
     with _LIVE_RADAR_CACHE_LOCK:
         if not force and _LIVE_RADAR_CACHE and now-_LIVE_RADAR_CACHE[0]<_LIVE_RADAR_TTL_SECONDS:
-            result=dict(_LIVE_RADAR_CACHE[1]);result["cached"]=True;return result
-    feed_payload=read_feed(FEED); client=RapidTennisClient(settings)
-    try:live_events=client.live_events()
-    finally:
-        try:client.close()
-        except Exception:pass
-    scan=scan_comeback_radar(feed_payload,live_events); pub=publish_radar_signals(scan) if publish else {"published":[],"created":0}; result={**scan,**pub,"cached":False}
-    with _LIVE_RADAR_CACHE_LOCK:_LIVE_RADAR_CACHE=(time.monotonic(),dict(result))
-    return result
+            scan=dict(_LIVE_RADAR_CACHE[1]); scan["cached"]=True
+        else:
+            scan=None
+    if scan is None:
+        feed_payload=read_feed(FEED); client=RapidTennisClient(settings)
+        try:
+            live_events=client.live_events()
+            scan=scan_comeback_radar(feed_payload,live_events)
+            odds_payloads={}
+            max_odds_events=max(0,min(12,int(os.getenv("BLINQ_LIVE_SET2_ODDS_MAX_EVENTS","6"))))
+            for candidate in (scan.get("candidates") or [])[:max_odds_events]:
+                eid=str(candidate.get("event_id") or "").strip() if isinstance(candidate,dict) else ""
+                if not eid:continue
+                try:odds_payloads[eid]=client.event_odds(eid,provider_id=1)
+                except Exception as exc:
+                    logging.info("Set-2 odds unavailable for %s: %s",eid,exc.__class__.__name__)
+            scan=attach_second_set_odds(scan,odds_payloads,live_events)
+        finally:
+            try:client.close()
+            except Exception:pass
+        scan["cached"]=False; fresh=True
+        with _LIVE_RADAR_CACHE_LOCK:_LIVE_RADAR_CACHE=(time.monotonic(),dict(scan))
 
-
-@app.timer_trigger(schedule="0 * * * * *",arg_name="timer",run_on_startup=False,use_monitor=True)
-def live_comeback_timer(timer: func.TimerRequest)->None:
-    try:
-        feed_payload=read_feed(FEED)
-        if not _live_radar_candidate_window(feed_payload):return
-        result=_run_live_radar(force=True,publish=True)
-        if result.get("signals") or result.get("created"):logging.info("Comeback LIVE Radar: live=%s signals=%s new=%s",result.get("live_events",0),len(result.get("signals") or []),result.get("created",0))
-    except (FileNotFoundError,ConfigurationError):return
-    except AdminStorageUnavailable:logging.warning("Comeback LIVE Radar skipped: insight storage unavailable")
-    except Exception as exc:
-        logging.exception("Comeback LIVE Radar timer failed")
-        try:record_system_event("error","live_radar_timer","Comeback LIVE Radar timer failed",details={"error":exc.__class__.__name__})
-        except Exception:pass
+    pub={"published":[],"created":0,"watch_created":0,"confirmed_created":0}
+    storage_unavailable=False
+    scan_id=str(scan.get("scanned_at") or "")
+    should_publish=bool(publish and scan_id)
+    with _LIVE_RADAR_CACHE_LOCK:
+        if should_publish and not force and _LIVE_RADAR_LAST_PUBLISHED_SCAN==scan_id:
+            should_publish=False
+    if should_publish:
+        try:
+            pub=publish_radar_signals(scan)
+            with _LIVE_RADAR_CACHE_LOCK:_LIVE_RADAR_LAST_PUBLISHED_SCAN=scan_id
+        except AdminStorageUnavailable:
+            storage_unavailable=True
+            logging.warning("Comeback LIVE Radar alert storage unavailable")
+        except Exception as exc:
+            logging.exception("Comeback LIVE Radar alert publish failed")
+            return {**scan,**pub,"alert_storage_unavailable":False,"alert_publish_error":exc.__class__.__name__,"fresh_scan":fresh}
+    return {**scan,**pub,"alert_storage_unavailable":storage_unavailable,"fresh_scan":fresh}
 
 
 def _insight_plan_for_user(user):
@@ -881,11 +894,11 @@ def live_radar(req):
         if is_suspended(user):return response({"error":"account_suspended"},403)
         account=public_account(user,cfg=settings,profile=_profile_for(user))
         if not _live_radar_allowed(account):return response({"error":"elite_required"},403)
-        # User status reads are read-only: the minute timer publishes alerts.
-        # This keeps WATCH/CONFIRMED status available even if private insight storage is temporarily down.
-        r=_run_live_radar(force=False,publish=False)
+        # ELITE/Admin polling is the production scheduler. Provider calls are
+        # cached for 45 s and alert writes are idempotent / once per fresh scan.
+        r=_run_live_radar(force=False,publish=True)
         candidates=r.get("candidates") or []; signals=r.get("signals") or []
-        public_candidate=lambda x:{k:x.get(k) for k in ("event_id","favorite","opponent","first_set","second_set","stage","reason","tournament") if k in x}
+        public_candidate=lambda x:{k:x.get(k) for k in ("event_id","favorite","opponent","first_set","second_set","stage","reason","tournament","second_set_probability","second_set_model","second_set_quality","second_set_samples","second_set_odds","second_set_fair_probability","second_set_edge","second_set_ev","second_set_market") if k in x}
         return response({"ok":True,"scanned_at":r.get("scanned_at"),"live_events":r.get("live_events",0),"candidates":len(candidates),"signals":len(signals),"candidate_items":[public_candidate(x) for x in candidates[:3] if isinstance(x,dict)],"signal_items":[public_candidate(x) for x in signals[:3] if isinstance(x,dict)],"new_alerts":int(r.get("created") or 0),"cached":bool(r.get("cached")),"thresholds":r.get("thresholds") or {}})
     except AuthUnavailable:return response({"error":"auth_unavailable"},503)
     except AdminStorageUnavailable:return response({"error":"live_radar_storage_unavailable"},503)

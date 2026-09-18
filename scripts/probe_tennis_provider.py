@@ -137,7 +137,9 @@ def _market_bucket(name: str, outcome: str) -> str:
         return "aces"
     if "double fault" in text or "doublefault" in text:
         return "double_faults"
-    if "first set" in text or "1st set" in text:
+    if "second set" in text or "2nd set" in text or "set 2" in text:
+        return "second_set"
+    if "first set" in text or "1st set" in text or "set 1" in text:
         return "first_set"
     if "tie break" in text or "tiebreak" in text:
         return "tie_break"
@@ -288,6 +290,7 @@ def main() -> None:
     parser.add_argument("--max-events-per-day", type=int, default=500)
     parser.add_argument("--odds-samples", type=int, default=10)
     parser.add_argument("--stats-samples", type=int, default=4)
+    parser.add_argument("--live-odds-samples", type=int, default=4)
     parser.add_argument("--out", default=".cache/tbt/provider-probe/provider_probe_report.json")
     parser.add_argument("--markdown", default=".cache/tbt/provider-probe/provider_probe_report.md")
     args = parser.parse_args()
@@ -305,6 +308,8 @@ def main() -> None:
         "doubles_samples": [],
         "odds_samples": [],
         "statistics_samples": [],
+        "live_events": [],
+        "live_odds_samples": [],
         "notes": [
             "No canonical history or prediction release is modified.",
             "Doubles are inspected from raw calendar/category events before the singles filter.",
@@ -349,6 +354,46 @@ def main() -> None:
         for row in doubles[:8]:
             sample = {k: v for k, v in row.items() if k != "_raw"}
             report["doubles_samples"].append(sample)
+
+        # Probe the exact runtime LIVE contract and Set-2 market while the
+        # RapidAPI key is available in GitHub Actions. This is diagnostic only.
+        try:
+            live_rows = client.live_events()
+        except (ProviderError, RequestBudgetExceeded) as exc:
+            report["live_error"] = str(exc)
+            live_rows = []
+        for event in live_rows[:20]:
+            if not isinstance(event, dict):
+                continue
+            eid = _event_id(event)
+            report["live_events"].append({
+                "event_id": eid,
+                "status": _status(event),
+                "tournament": _event_name(event),
+                "home": _side(event, "homeTeam"),
+                "away": _side(event, "awayTeam"),
+            })
+        for event in live_rows:
+            if len(report["live_odds_samples"]) >= max(0, args.live_odds_samples):
+                break
+            eid = _event_id(event) if isinstance(event, dict) else ""
+            if not eid:
+                continue
+            try:
+                payload = client.event_odds(eid, provider_id=1)
+                odds = _odds_summary(payload)
+                second_set_rows = [row for row in odds.get("rows", []) if row.get("bucket") == "second_set"]
+                report["live_odds_samples"].append({
+                    "event_id": eid,
+                    "home": _side(event, "homeTeam").get("name"),
+                    "away": _side(event, "awayTeam").get("name"),
+                    "second_set_rows": second_set_rows,
+                    "market_names": odds.get("market_names") or {},
+                })
+            except (ProviderError, RequestBudgetExceeded) as exc:
+                report["live_odds_samples"].append({"event_id": eid, "error": str(exc)})
+                if isinstance(exc, RequestBudgetExceeded):
+                    break
 
         # Prioritise upcoming doubles, then upcoming singles. This tells us whether
         # provider-1 has usable Match Winner / props / totals on the exact formats we need.
@@ -477,6 +522,12 @@ def main() -> None:
             lines.append("- no priced rows found in sampled events")
         lines.append("")
     lines += [
+        "## LIVE / Set 2 probe",
+        "",
+        f"- live events returned: **{len(report.get('live_events') or [])}**",
+        f"- live events with odds samples: **{len(report.get('live_odds_samples') or [])}**",
+        f"- sampled Set-2 priced rows: **{sum(len(x.get('second_set_rows') or []) for x in (report.get('live_odds_samples') or []) if isinstance(x, dict))}**",
+        "",
         "## Interpretation",
         "",
         "- Aces / Sets / Games can become odds-backed only if those market buckets appear with real provider lines and prices.",

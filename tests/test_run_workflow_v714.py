@@ -15,7 +15,8 @@ def test_mega_data_prioritizes_statistics_then_sg_then_ace():
 
 
 def test_mega_data_keeps_history_small_and_one_global_cap():
-    assert 'min(300' in MEGA
+    assert 'min(700' in MEGA
+    assert 'int(total * 0.05)' in MEGA
     assert 'mega-data max-requests must be 500..12000' in MEGA
     assert 'requests_unused' in MEGA
 
@@ -25,6 +26,8 @@ def test_provider_probe_captures_actual_stat_item_names():
     assert 'unsupported_item_names' in PROBE
     assert 'supported_rate_alias_hits' in PROBE
     assert 'sample_items' in PROBE
+    assert 'live_odds_samples' in PROBE
+    assert 'second_set' in PROBE
 
 
 def test_environment_force_static_no_longer_adds_complete_static():
@@ -53,6 +56,8 @@ def test_mega_data_repairs_history_before_spending_on_enrichment():
 
 
 def test_mega_data_uses_large_history_safety_cap_but_rolls_unused_budget_forward():
-    assert 'min(2500' in MEGA
-    assert 'int(total * 0.20)' in MEGA
+    assert 'min(700' in MEGA
+    assert 'int(total * 0.05)' in MEGA
+    assert 'int(total * 0.35)' in MEGA
+    assert 'int(total * 0.23)' in MEGA
     assert 'planned["statistics_primary"] + carry' in MEGA

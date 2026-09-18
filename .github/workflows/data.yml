@@ -219,8 +219,26 @@ jobs:
             .cache/tbt/mega-data/statistics_primary_report.json
             .cache/tbt/mega-data/statistics_tail_report.json
             .cache/tbt/mega-data/history_audit_after.json
+            .cache/tbt/mega-data/sg_run_summary.json
+            .cache/tbt/mega-data/ace_run_summary.json
             .cache/tbt/provider-probe/provider_probe_report.json
             .cache/tbt/provider-probe/provider_probe_report.md
+          if-no-files-found: warn
+
+      - name: Upload SG score enrichment report
+        if: ${{ always() && env.MODE == 'sg-scores' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-sg-scores-${{ github.run_id }}
+          path: .cache/tbt/sg-history/sg_run_summary.json
+          if-no-files-found: warn
+
+      - name: Upload ACE/DF enrichment report
+        if: ${{ always() && env.MODE == 'ace-statistics' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-ace-statistics-${{ github.run_id }}
+          path: .cache/tbt/ace-history/ace_run_summary.json
           if-no-files-found: warn
 
       - name: Upload provider capability probe

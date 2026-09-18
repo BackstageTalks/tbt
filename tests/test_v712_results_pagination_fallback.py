@@ -25,4 +25,6 @@ def test_public_live_radar_status_does_not_depend_on_insight_storage():
     fn=(ROOT / 'api' / 'function_app.py').read_text(encoding='utf-8')
     marker='def live_radar(req):'
     block=fn[fn.index(marker):fn.index('@app.route(route="v1/admin/live-radar"', fn.index(marker))]
-    assert '_run_live_radar(force=False,publish=False)' in block
+    assert '_run_live_radar(force=False,publish=True)' in block
+    run_block=fn[fn.index('def _run_live_radar'):fn.index('def _insight_plan_for_user')]
+    assert 'except AdminStorageUnavailable:' in run_block and 'alert_storage_unavailable' in run_block
