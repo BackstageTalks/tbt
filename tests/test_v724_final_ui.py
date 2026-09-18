@@ -1,14 +1,16 @@
+import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
 INDEX = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 CSS = (ROOT / "web" / "final-polish-724.css").read_text(encoding="utf-8")
+cache = str(json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))["asset_revision"])
 
 
 def test_final_polish_is_loaded_after_lean_layer():
-    lean = INDEX.index('/blinq-lean-700.css?v=7251')
-    final = INDEX.index('/final-polish-724.css?v=7251')
+    lean = INDEX.index(f'/blinq-lean-700.css?v={cache}')
+    final = INDEX.index(f'/final-polish-724.css?v={cache}')
     assert final > lean
 
 
