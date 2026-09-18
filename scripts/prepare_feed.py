@@ -398,8 +398,17 @@ def main() -> None:
             ledger = json.loads((cache / "ledger.json").read_text(encoding="utf-8"))
             validate_publication_candidate(payload, ledger)
             if (payload.get("market_selection") or {}).get("publication_schema") == 1:
+                ace_before = len(payload.get("ace_picks") or []) if isinstance(payload.get("ace_picks"), list) else 0
                 payload = restore_published_market_snapshots(payload, ledger)
                 validate_market_publication_candidate(payload, ledger)
+                ace_after = len(payload.get("ace_picks") or []) if isinstance(payload.get("ace_picks"), list) else 0
+                if ace_after < ace_before:
+                    print(
+                        "Projection publication quarantine:",
+                        ace_before - ace_after,
+                        "legacy ESA card(s) omitted because no unique issued snapshot exists; "
+                        "odds-backed sections remain strict.",
+                    )
             payload = _attach_player_assets(payload, repository)
 
     # If no private prediction candidate exists, overwrite any checked-in stale

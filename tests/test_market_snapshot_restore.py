@@ -50,3 +50,57 @@ def test_preserve_exact_pending_snapshot():
     publication=ledger[0]['market_publications'][0]
     publication.update(feed['top_daily_picks'][0]['betting'], issued_at=None, publication_status='pending')
     assert restore_published_market_snapshots(feed, ledger) == feed
+
+
+def _ace_artifacts(projection=7.2):
+    row = {
+        'event_id':'17125475', 'market':'aces', 'selection_id':'A', 'selection':'Alpha',
+        'projection':projection, 'opponent_projection':4.0,
+        'projection_scope':'player', 'projection_metric':'aces',
+        'projection_confidence':.84, 'projection_label':'Hráč · Esá',
+        'price_status':'projection_only',
+    }
+    publication = {
+        'section':'ace','market':'aces','selection_id':'A','selection':'Alpha',
+        'odds':None,'model_probability':None,'edge':None,'expected_value':None,
+        'betting_day':None,'projection':6.8,'opponent_projection':4.1,
+        'projection_scope':'player','projection_metric':'aces',
+        'projection_confidence':.82,'projection_label':'Hráč · Esá',
+        'price_status':'projection_only','issued_at':'2026-09-18T10:00:00+00:00',
+        'publication_status':'published',
+    }
+    return {'ace_picks':[row]}, [{'event_id':'17125475','market_publications':[publication]}]
+
+
+def test_projection_restore_uses_unique_issued_snapshot():
+    feed, ledger = _ace_artifacts()
+    restored = restore_published_market_snapshots(feed, ledger)
+    assert len(restored['ace_picks']) == 1
+    assert restored['ace_picks'][0]['projection'] == 6.8
+    assert validate_market_publication_candidate(restored, ledger) == 1
+
+
+def test_projection_legacy_conflict_is_quarantined_not_deploy_blocking():
+    feed, ledger = _ace_artifacts()
+    conflicting = deepcopy(ledger[0]['market_publications'][0])
+    conflicting.update(projection=8.1, issued_at='2026-09-18T11:00:00+00:00')
+    ledger[0]['market_publications'].append(conflicting)
+    restored = restore_published_market_snapshots(feed, ledger)
+    assert restored['ace_picks'] == []
+    assert validate_market_publication_candidate(restored, ledger) == 0
+
+
+def test_projection_missing_ledger_is_quarantined_not_deploy_blocking():
+    feed, _ = _ace_artifacts()
+    restored = restore_published_market_snapshots(feed, [])
+    assert restored['ace_picks'] == []
+
+
+def test_projection_lifecycle_duplicates_with_identical_snapshot_are_safe():
+    feed, ledger = _ace_artifacts()
+    duplicate = deepcopy(ledger[0]['market_publications'][0])
+    duplicate['issued_at'] = '2026-09-18T11:00:00+00:00'
+    ledger[0]['market_publications'].append(duplicate)
+    restored = restore_published_market_snapshots(feed, ledger)
+    assert len(restored['ace_picks']) == 1
+    assert restored['ace_picks'][0]['projection'] == 6.8

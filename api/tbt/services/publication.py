@@ -283,23 +283,63 @@ def restore_published_market_snapshots(feed, ledger):
             raise ValueError(f"Duplicate publication ledger event: {event}")
         index[event] = row
     for section, key in _MARKET_SECTION_KEYS.items():
+        key_present = key in result
         rows = result.get(key, [])
         if rows is None:
             continue
         if not isinstance(rows, list):
             raise ValueError(f"Invalid market section: {key}")
+
+        # Odds-backed bets remain strictly fail-closed: a deployment must never
+        # guess which price/probability users were shown. Projection-only ESA
+        # cards are different: legacy ledgers can contain more than one issued
+        # snapshot for the same event/player/metric because early schemas had no
+        # betting-day identity. When such a legacy row cannot be resolved
+        # uniquely, omit only that projection from the serving feed rather than
+        # blocking the entire application deployment. Nothing is rewritten in
+        # the ledger, and no projection is invented. A fresh refresh will create
+        # the canonical v2 publication candidate.
+        restored_rows = []
         for row in rows:
             commitment = _market_commitment_from_feed_row(row, section)
             publications = [p for p in index.get(commitment[0], {}).get("market_publications", []) or [] if isinstance(p, dict)]
             if any(_market_commitment_from_publication(commitment[0], p) == commitment for p in publications):
+                restored_rows.append(row)
                 continue
+
             matches = []
             for publication in publications:
                 stored = _market_commitment_from_publication(commitment[0], publication)
-                if stored[:4] == commitment[:4] and stored[8] == commitment[8] and publication.get("issued_at") and publication.get("publication_status") == "published":
+                same_identity = stored[:4] == commitment[:4] and stored[8] == commitment[8]
+                # Projection scope + metric are part of the semantic identity.
+                # They disambiguate e.g. player aces from any future totals.
+                if section == "ace":
+                    same_identity = (
+                        same_identity
+                        and stored[11] == commitment[11]
+                        and stored[12] == commitment[12]
+                    )
+                if same_identity and publication.get("issued_at") and publication.get("publication_status") == "published":
                     matches.append(publication)
+
+            if section == "ace" and matches:
+                # Multiple ledger rows are safe only when they encode exactly the
+                # same immutable projection snapshot. Collapse lifecycle-only
+                # duplicates; never choose between conflicting projections.
+                unique = {}
+                for publication in matches:
+                    signature = _market_commitment_from_publication(commitment[0], publication)
+                    unique.setdefault(signature, publication)
+                matches = list(unique.values())
+
             if len(matches) != 1:
+                if section == "ace":
+                    # Fail closed at card granularity for legacy projection
+                    # corruption. The rest of the site remains deployable and a
+                    # subsequent refresh regenerates a clean publication row.
+                    continue
                 raise RuntimeError(f"Market feed/ledger mismatch for {section} event {commitment[0]}; no unique issued snapshot")
+
             snapshot = matches[0]
             betting = row.get("betting")
             if isinstance(betting, dict):
@@ -327,6 +367,10 @@ def restore_published_market_snapshots(feed, ledger):
                 ):
                     if field in snapshot:
                         row[field] = deepcopy(snapshot.get(field))
+            restored_rows.append(row)
+
+        if key_present:
+            result[key] = restored_rows
     validate_market_publication_candidate(result, ledger)
     return result
 
