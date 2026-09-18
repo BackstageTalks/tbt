@@ -895,7 +895,7 @@
   }
   function renderFooterConfig(){
     const footer=state.ui?.footer||{};
-    const copyright=$('footerCopyright');if(copyright)copyright.innerHTML=`${escapeHtml(String(footer.copyright||'© 2026 BlinQ'))} <small class="web-release-stamp" title="Frontend release">UI 7.3.6</small>`;
+    const copyright=$('footerCopyright');if(copyright)copyright.innerHTML=`${escapeHtml(String(footer.copyright||'© 2026 BlinQ'))} <small class="web-release-stamp" title="Frontend release">UI 7.3.7</small>`;
     const wrap=document.querySelector('.system-status'),status=wrap?.querySelector('strong');
     const model=$('footerModelState');
     const generated=state.feed?.generated_at||'',generatedMs=Date.parse(generated);
@@ -905,15 +905,23 @@
     const liveError=Boolean(state.userLiveRadarStatus?.error);
     const feedStale=Boolean(state.feed?.stale)||feedAgeMin>90,feedOld=feedAgeMin>30,liveFresh=liveAgeMin<=3&&!liveError;
     const ageText=minutes=>{if(!Number.isFinite(minutes))return '—';const n=Math.max(0,Math.round(minutes));return n<=1?uiCopy('footer.just_now',lcopy('just now','práve teraz','právě teď')):uiCopyTemplate('footer.minutes_ago',lcopy('{n} min ago','pred {n} min','před {n} min'),{n});};
-    if(wrap){wrap.classList.toggle('is-error',liveError&&!Number.isFinite(generatedMs));wrap.classList.toggle('is-warning',!liveFresh&&(feedOld||feedStale||liveError));wrap.classList.toggle('is-ok',liveFresh||(!feedOld&&!feedStale&&!liveError));}
-    if(status){
-      if(liveFresh)status.textContent=`${uiCopy('footer.live_ok',lcopy('LIVE radar active','LIVE radar aktívny','LIVE radar aktivní'))} · ${ageText(liveAgeMin)}`;
-      else if(feedStale)status.textContent=`${uiCopy('footer.feed_stale',lcopy('Waiting for data refresh','Čaká sa na aktualizáciu dát','Čeká se na aktualizaci dat'))} · ${ageText(feedAgeMin)}`;
-      else if(liveError&&Number.isFinite(generatedMs))status.textContent=`${uiCopy('footer.live_error',lcopy('LIVE radar is temporarily unavailable','LIVE radar je dočasne nedostupný','LIVE radar je dočasně nedostupný'))} · ${uiCopy('footer.updated',lcopy('Updated','Aktualizované','Aktualizováno'))} ${ageText(feedAgeMin)}`;
-      else if(feedOld)status.textContent=`${uiCopy('footer.feed_old',lcopy('Data is older','Dáta sú staršie','Data jsou starší'))} · ${ageText(feedAgeMin)}`;
-      else status.textContent=`${uiCopy('footer.feed_fresh',lcopy('Data is current','Dáta sú aktuálne','Data jsou aktuální'))} · ${ageText(feedAgeMin)}`;
+    const feedReady=!feedStale&&Number.isFinite(generatedMs);
+    if(wrap){
+      wrap.classList.toggle('is-error',!Number.isFinite(generatedMs));
+      wrap.classList.toggle('is-warning',Number.isFinite(generatedMs)&&(feedOld||feedStale||liveError));
+      wrap.classList.toggle('is-ok',feedReady&&!feedOld&&!liveError);
     }
-    if(model){const original=model.dataset.baseTitle||model.title||model.textContent||'';model.dataset.baseTitle=original;model.title=liveFresh?`${original} · LIVE ${ageText(liveAgeMin)}`.trim():original;}
+    if(status){
+      if(!Number.isFinite(generatedMs))status.textContent=uiCopy('footer.feed_missing',lcopy('Waiting for first sync','Čaká sa na prvú synchronizáciu','Čeká se na první synchronizaci'));
+      else if(feedStale)status.textContent=`${uiCopy('footer.feed_stale',lcopy('Waiting for data refresh','Čaká sa na aktualizáciu dát','Čeká se na aktualizaci dat'))} · ${ageText(feedAgeMin)}`;
+      else if(feedOld)status.textContent=`${uiCopy('footer.last_update',lcopy('Last update','Posledná aktualizácia','Poslední aktualizace'))} · ${ageText(feedAgeMin)}`;
+      else status.textContent=`${uiCopy('footer.feed_synced',lcopy('Data synced','Dáta synchronizované','Data synchronizována'))} · ${ageText(feedAgeMin)}`;
+    }
+    if(model){
+      const original=model.dataset.baseTitle||model.title||model.textContent||'';
+      model.dataset.baseTitle=original;
+      model.title=Number.isFinite(generatedMs)?`${original} · ${uiCopy('footer.last_update',lcopy('Last update','Posledná aktualizácia','Poslední aktualizace'))} ${ageText(feedAgeMin)}`.trim():original;
+    }
   }
   const cookieConsentKey='blinq_cookie_consent_v1';
   function cookieConsentValue(){try{return localStorage.getItem(cookieConsentKey)||'';}catch{return '';}}
@@ -1554,7 +1562,7 @@
     const explicit=safePhotoUrl(row?.tournament_logo_url||row?.competition_logo_url||row?.competition_logo||row?.tournament_logo||'');
     const logo=explicit||(/^\d{1,12}$/.test(tournamentId)?`/api/v1/tournament-logo/${tournamentId}`:'');
     const fallback=tournamentFallbackHtml(row);
-    if(logo) return '<span class="hub-tournament-logo has-image"><img data-tournament-logo src="'+escapeHtml(logo)+'" alt="" loading="lazy" onerror="this.parentElement.classList.add(\'logo-failed\');this.remove()"><span class="hub-logo-fallback">'+fallback+'</span></span>';
+    if(logo) return '<span class="hub-tournament-logo has-image"><img data-tournament-logo src="'+escapeHtml(logo)+'" alt="" loading="lazy" onerror="this.onerror=null;this.hidden=true;this.parentElement.classList.add(\'logo-failed\')"><span class="hub-logo-fallback">'+fallback+'</span></span>';
     return '<span class="hub-tournament-logo hub-tournament-badge">'+fallback+'</span>';
   }
   function smallAvatar(photo,name,tour,gender=''){
@@ -3547,7 +3555,9 @@
   function renderUpgradeTierCard(id,p,requiredIndex){
     const idx=membershipHierarchy.indexOf(id),below=requiredIndex>0&&idx<requiredIndex;
     const url=safeExternalUrl(p?.url||''),label=String(p?.label||id.toUpperCase()),title=p?.card_title||label;
-    const short=String(p?.short_description||p?.description||p?.note||'');
+    const short=String(p?.short_description||p?.description||p?.note||'').trim();
+    const fullDescription=String(p?.description||p?.note||short).trim();
+    const detail=fullDescription&&fullDescription!==short?fullDescription:'';
     const features=upgradePlanFeatureList(id);
     const required=idx===requiredIndex;
     const actionLabel=p?.cta_label||lcopy(`Upgrade to ${id.toUpperCase()}`,`Upgrade na ${id.toUpperCase()}`,`Upgrade na ${id.toUpperCase()}`);
@@ -3557,7 +3567,7 @@
     const note=below
       ?`<span class="upgrade-tier-note is-warning">${escapeHtml(lcopy('Does not unlock this section','Neodomkne túto sekciu','Neodemkne tuto sekci'))}</span>`
       :required?`<span class="upgrade-tier-note">${escapeHtml(lcopy('Required for this section','Požadovaná úroveň','Požadovaná úroveň'))}</span>`:'';
-    return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy"><small>${escapeHtml(id.toUpperCase())}</small><strong>${escapeHtml(title)}</strong><span>${escapeHtml(short)}</span></div></div><p class="upgrade-tier-description">${escapeHtml(p?.description||short)}</p><ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
+    return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy"><small>${escapeHtml(id.toUpperCase())}</small><strong>${escapeHtml(title)}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:'<div class="upgrade-tier-description is-empty" aria-hidden="true"></div>'}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
   }
   function showUpgradePrompt(planId='pro',sectionLabel='this content'){
     window.BlinqUI.closeMenu(false);
