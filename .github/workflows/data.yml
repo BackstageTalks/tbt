@@ -358,8 +358,23 @@ jobs:
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
 
-      - name: Deploy refreshed feed and application
+      - name: Guard against stale application deployment
         if: env.MODE == 'refresh'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          current="$(git rev-parse HEAD)"
+          latest="$(git rev-parse origin/main)"
+          if [[ "$current" != "$latest" ]]; then
+            echo "BLINQ_SKIP_STALE_DEPLOY=true" >> "$GITHUB_ENV"
+            echo "::warning::Skipping Static Web Apps deployment: this data run started on $current but main is now $latest. This prevents an older workflow from rolling back the frontend."
+          else
+            echo "BLINQ_SKIP_STALE_DEPLOY=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Deploy refreshed feed and application
+        if: env.MODE == 'refresh' && env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
@@ -369,7 +384,7 @@ jobs:
           output_location: ''
           skip_app_build: true
       - name: Confirm deployed prediction publication
-        if: env.MODE == 'refresh'
+        if: env.MODE == 'refresh' && env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         run: >-
           python scripts/confirm_prediction_publication.py
           --data-repository "$TBT_DATA_REPOSITORY"

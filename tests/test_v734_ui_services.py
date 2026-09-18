@@ -5,16 +5,16 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / 'web' / 'app.js').read_text(encoding='utf-8')
 AUTH = (ROOT / 'web' / 'auth.js').read_text(encoding='utf-8')
 INDEX = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8')
-CSS = (ROOT / 'web' / 'final-polish-733.css').read_text(encoding='utf-8')
+CSS = (ROOT / 'web' / 'final-polish-734.css').read_text(encoding='utf-8')
 UI = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
 SITE = json.loads((ROOT / 'web' / 'config' / 'site-content.json').read_text(encoding='utf-8'))
 
 
-def test_v733_asset_revision_and_polish_loaded_last():
-    assert UI['revision'] == '7.3.3'
-    assert UI['asset_revision'] == 7330
-    assert '/final-polish-733.css?v=7330' in INDEX
-    assert INDEX.index('/final-polish-731.css') < INDEX.index('/final-polish-733.css')
+def test_v734_asset_revision_and_polish_loaded_last():
+    assert UI['revision'] == '7.3.4'
+    assert UI['asset_revision'] == 7340
+    assert '/final-polish-734.css?v=7340' in INDEX
+    assert INDEX.index('/final-polish-731.css') < INDEX.index('/final-polish-734.css')
 
 
 def test_login_loader_and_footer_have_blinq_background_watermarks():
@@ -75,3 +75,24 @@ def test_storage_diagnostics_explain_private_service_dependency():
     assert 'premium_info' in source and 'live_alert_history' in source and 'support' in source
     assert 'INFO / LIVE / SUPPORT' in APP
     assert 'BLINQ_STORAGE_CONNECTION_STRING' in APP
+
+
+def test_frontend_release_probe_and_no_cache_entry_document():
+    release=json.loads((ROOT/'web'/'release.json').read_text(encoding='utf-8'))
+    static=json.loads((ROOT/'web'/'staticwebapp.config.json').read_text(encoding='utf-8'))
+    assert release['frontend_marker']=='blinq-web-734'
+    assert 'data-web-release="7.3.4"' in INDEX
+    for route in ('/','/index.html','/release.json'):
+        rule=next(row for row in static['routes'] if row.get('route')==route)
+        assert 'no-store' in rule['headers']['Cache-Control']
+
+
+def test_stale_data_workflow_cannot_roll_back_frontend():
+    data=(ROOT/'.github'/'workflows'/'data.yml').read_text(encoding='utf-8')
+    player=(ROOT/'.github'/'workflows'/'player-enrichment.yml').read_text(encoding='utf-8')
+    ci=(ROOT/'.github'/'workflows'/'ci.yml').read_text(encoding='utf-8')
+    assert 'BLINQ_SKIP_STALE_DEPLOY=true' in data
+    assert 'git rev-parse origin/main' in data
+    assert 'ref: main' in player
+    assert 'Verify deployed frontend release' in ci
+    assert 'blinq-web-734' in ci

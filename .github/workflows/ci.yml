@@ -93,6 +93,10 @@ jobs:
           test -s web/index.html
           test -s web/styles.css
           test -s web/staticwebapp.config.json
+          test -s web/final-polish-734.css
+          test -s web/release.json
+          grep -q 'data-web-release="7.3.4"' web/index.html
+          grep -q '/final-polish-734.css?v=7340' web/index.html
           test -s api/function_app.py
           test -s api/requirements.txt
           test -s scripts/prepare_feed.py
@@ -148,6 +152,27 @@ jobs:
           output_location: ''
           skip_app_build: true
 
+      - name: Verify deployed frontend release
+        if: ${{ vars.TBT_PRODUCTION_URL != '' }}
+        env:
+          TBT_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL }}
+        run: |
+          set -euo pipefail
+          base="${TBT_PRODUCTION_URL%/}"
+          stamp="${GITHUB_SHA}"
+          curl -fsSL -H 'Cache-Control: no-cache' "$base/?__blinq_release=$stamp" -o /tmp/blinq-index.html
+          grep -q 'data-web-release="7.3.4"' /tmp/blinq-index.html
+          grep -q '/final-polish-734.css?v=7340' /tmp/blinq-index.html
+          curl -fsSL -H 'Cache-Control: no-cache' "$base/final-polish-734.css?__blinq_release=$stamp" -o /tmp/blinq-final.css
+          grep -q 'BlinQ 7.3.4' /tmp/blinq-final.css
+          curl -fsSL -H 'Cache-Control: no-cache' "$base/release.json?__blinq_release=$stamp" -o /tmp/blinq-release.json
+          python - <<'PYWEB'
+          import json
+          data=json.load(open('/tmp/blinq-release.json', encoding='utf-8'))
+          assert data.get('frontend_marker') == 'blinq-web-734', data
+          print(json.dumps(data, indent=2))
+          PYWEB
+
       - name: Confirm deployed prediction publication
         env:
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
@@ -172,6 +197,6 @@ jobs:
           with urllib.request.urlopen(base + '/api/health', timeout=20) as r:
               payload=json.load(r)
           assert payload.get('ok') is True, payload
-          assert payload.get('release') == '7.3.0', payload
+          assert payload.get('release') == '7.3.4', payload
           print(json.dumps(payload, indent=2))
           PYSMOKE
