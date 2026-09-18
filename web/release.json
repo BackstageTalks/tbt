@@ -1,6 +1,7 @@
 {
-  "release": "7.3.7",
-  "ui_revision": "7.3.7",
+  "release": "7.3.6",
+  "ui_revision": "7.3.6",
   "frontend_marker": "blinq-web-736",
-  "asset_revision": 7360
+  "asset_revision": 7360,
+  "patch": "736-r2"
 }

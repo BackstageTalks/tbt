@@ -46,6 +46,43 @@ def _provider_player_country(payload, *, player1):
     return ""
 
 
+def _provider_tournament_context(payload):
+    """Return explicit provider tournament/venue identity for presentation.
+
+    No geocoding or name guessing happens here. Only fields present in the
+    provider payload are exposed so the UI can keep tournament and location
+    visually separate.
+    """
+    if not isinstance(payload, dict):
+        return {"country_code": "", "country_name": "", "city": "", "venue_name": ""}
+    tournament = payload.get("tournament") if isinstance(payload.get("tournament"), dict) else {}
+    unique = tournament.get("uniqueTournament") if isinstance(tournament.get("uniqueTournament"), dict) else {}
+    venue = payload.get("venue") if isinstance(payload.get("venue"), dict) else {}
+
+    def country_values(obj):
+        country = obj.get("country") if isinstance(obj, dict) and isinstance(obj.get("country"), dict) else {}
+        return (
+            country.get("alpha2") or country.get("alpha3") or country.get("code") or country.get("countryCode") or "",
+            country.get("name") or (obj.get("countryName") if isinstance(obj, dict) else "") or "",
+        )
+
+    country_code = ""
+    country_name = ""
+    for obj in (venue, tournament, unique, payload):
+        raw_code, raw_name = country_values(obj)
+        normalized = normalize_country_code(raw_code)
+        if normalized and not country_code:
+            country_code = normalized
+        if raw_name and not country_name:
+            country_name = str(raw_name).strip()
+    city = str(
+        venue.get("city") or tournament.get("city") or unique.get("city")
+        or payload.get("venueCity") or payload.get("city") or ""
+    ).strip()
+    venue_name = str(venue.get("name") or "").strip()
+    return {"country_code": country_code, "country_name": country_name, "city": city, "venue_name": venue_name}
+
+
 def _recent_form_summary(state, *, surface=None, limit=10):
     """Point-in-time recent form for presentation only.
 
@@ -157,6 +194,7 @@ def predict(model, history, upcoming, now=None):
         if isinstance(unique_tournament, dict):
             tournament_logo_id = str(unique_tournament.get("id") or "").strip()
         tournament_logo_id = tournament_logo_id or str(match.tournament_id or "")
+        tournament_context = _provider_tournament_context(match.provider_payload)
         h2h_p1, h2h_p2 = _h2h_record(builder, match)
         profile1 = _presentation_player_profile(builder, match, player1=True)
         profile2 = _presentation_player_profile(builder, match, player1=False)
@@ -174,6 +212,19 @@ def predict(model, history, upcoming, now=None):
             "scheduled_at": match.scheduled_at.isoformat(), "tournament": match.tournament,
             "tournament_id": str(match.tournament_id or ""),
             "tournament_logo_id": tournament_logo_id,
+            "tournament_country_code": tournament_context["country_code"],
+            "tournament_country": tournament_context["country_name"],
+            "tournament_city": tournament_context["city"],
+            "venue_name": tournament_context["venue_name"],
+            "venue_city": tournament_context["city"],
+            "venue_country_code": tournament_context["country_code"],
+            "venue_country": tournament_context["country_name"],
+            "location": {
+                "city": tournament_context["city"],
+                "country": tournament_context["country_name"],
+                "country_code": tournament_context["country_code"],
+                "venue": tournament_context["venue_name"],
+            },
             "surface": match.surface, "round": match.round_name,
             "best_of": match.best_of,
             "best_of_source": str(match_format.get("source") or ""),

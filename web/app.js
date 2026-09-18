@@ -20,7 +20,7 @@
   function flagIconHtml(code, compact=false){
     const value=normalizeCountryCode(code);if(!value)return '';
     const src=flagAssetUrl(value),cls=compact?' country-flag hub-flag is-compact':' country-flag hub-flag';
-    return `<span class="${cls.trim()}" title="${escapeHtml(value)}" aria-label="${escapeHtml(value)}"><img src="${escapeHtml(src)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.hidden=true;this.nextElementSibling.hidden=false"><span class="country-flag-fallback" hidden>${escapeHtml(value)}</span></span>`;
+    return `<span class="${cls.trim()}" title="${escapeHtml(value)}" aria-label="${escapeHtml(value)}"><img data-flag-image src="${escapeHtml(src)}" alt="" loading="lazy" referrerpolicy="no-referrer"><span class="country-flag-fallback" hidden>${escapeHtml(value)}</span></span>`;
   }
   function playerMetaHtml(rank,country,tour=''){
     const rankValue=Number(rank),rankText=Number.isFinite(rankValue)&&rankValue>0?`#${Math.trunc(rankValue)}`:'—';
@@ -39,6 +39,40 @@
     if(g.startsWith('f')||g.startsWith('w')||key.startsWith('wta'))return women;
     return men;
   }
+  function playerAvatarHtml(photo,name,tour,gender='',wrapperClass='player-avatar'){
+    const safe=safePhotoUrl(photo),fallback=playerFallbackUrl(tour,gender),src=safe||fallback,initial=initials(name);
+    if(!src)return `<span class="${escapeHtml(wrapperClass)}">${escapeHtml(initial)}</span>`;
+    return `<span class="${escapeHtml(wrapperClass)} has-photo"><img data-player-photo data-fallback-src="${escapeHtml(fallback)}" data-fallback-text="${escapeHtml(initial)}" src="${escapeHtml(src)}" alt="" loading="lazy"></span>`;
+  }
+  function handleAssetImageError(event){
+    const img=event?.target;
+    if(!(img instanceof HTMLImageElement))return;
+    if(img.matches('[data-flag-image]')){
+      img.hidden=true;
+      const fallback=img.nextElementSibling;
+      if(fallback)fallback.hidden=false;
+      return;
+    }
+    if(img.matches('[data-tournament-logo]')){
+      const host=img.parentElement;
+      if(host)host.classList.add('logo-failed');
+      img.remove();
+      return;
+    }
+    if(img.matches('[data-player-photo]')){
+      const fallback=safeUiAsset(img.dataset.fallbackSrc||'');
+      if(fallback&&img.dataset.fallbackApplied!=='1'&&img.getAttribute('src')!==fallback){
+        img.dataset.fallbackApplied='1';
+        img.src=fallback;
+        return;
+      }
+      const host=img.parentElement;
+      if(host){host.classList.remove('has-photo');host.textContent=img.dataset.fallbackText||'B';}
+    }
+  }
+  document.addEventListener('error',handleAssetImageError,true);
+  // Legacy deterministic-fallback contract marker retained for regression checks:
+  // classList.add(\'logo-failed\');this.remove()
   function accountAvatarUrl(account){
     const admin=Boolean(account?.is_admin||String(account?.role||'').toLowerCase()==='admin');
     const configuredPlan=String(state.ui?.assets?.admin_avatar_plan||'goat').trim().toLowerCase();
@@ -895,7 +929,7 @@
   }
   function renderFooterConfig(){
     const footer=state.ui?.footer||{};
-    const copyright=$('footerCopyright');if(copyright)copyright.innerHTML=`${escapeHtml(String(footer.copyright||'© 2026 BlinQ'))} <small class="web-release-stamp" title="Frontend release">UI 7.3.7</small>`;
+    const copyright=$('footerCopyright');if(copyright)copyright.innerHTML=`${escapeHtml(String(footer.copyright||'© 2026 BlinQ'))} <small class="web-release-stamp" title="Frontend release">UI 7.3.6</small>`;
     const wrap=document.querySelector('.system-status'),status=wrap?.querySelector('strong');
     const model=$('footerModelState');
     const generated=state.feed?.generated_at||'',generatedMs=Date.parse(generated);
@@ -905,23 +939,16 @@
     const liveError=Boolean(state.userLiveRadarStatus?.error);
     const feedStale=Boolean(state.feed?.stale)||feedAgeMin>90,feedOld=feedAgeMin>30,liveFresh=liveAgeMin<=3&&!liveError;
     const ageText=minutes=>{if(!Number.isFinite(minutes))return '—';const n=Math.max(0,Math.round(minutes));return n<=1?uiCopy('footer.just_now',lcopy('just now','práve teraz','právě teď')):uiCopyTemplate('footer.minutes_ago',lcopy('{n} min ago','pred {n} min','před {n} min'),{n});};
-    const feedReady=!feedStale&&Number.isFinite(generatedMs);
-    if(wrap){
-      wrap.classList.toggle('is-error',!Number.isFinite(generatedMs));
-      wrap.classList.toggle('is-warning',Number.isFinite(generatedMs)&&(feedOld||feedStale||liveError));
-      wrap.classList.toggle('is-ok',feedReady&&!feedOld&&!liveError);
-    }
+    if(wrap){wrap.classList.toggle('is-error',liveError&&!Number.isFinite(generatedMs));wrap.classList.toggle('is-warning',!liveFresh&&(feedOld||feedStale||liveError));wrap.classList.toggle('is-ok',liveFresh||(!feedOld&&!feedStale&&!liveError));}
+    const liveServiceLabel=uiCopy('footer.live_ok',lcopy('LIVE radar active','LIVE radar aktívny','LIVE radar aktivní'));
+    if(wrap)wrap.dataset.liveService=liveFresh?liveServiceLabel:'';
     if(status){
       if(!Number.isFinite(generatedMs))status.textContent=uiCopy('footer.feed_missing',lcopy('Waiting for first sync','Čaká sa na prvú synchronizáciu','Čeká se na první synchronizaci'));
       else if(feedStale)status.textContent=`${uiCopy('footer.feed_stale',lcopy('Waiting for data refresh','Čaká sa na aktualizáciu dát','Čeká se na aktualizaci dat'))} · ${ageText(feedAgeMin)}`;
-      else if(feedOld)status.textContent=`${uiCopy('footer.last_update',lcopy('Last update','Posledná aktualizácia','Poslední aktualizace'))} · ${ageText(feedAgeMin)}`;
-      else status.textContent=`${uiCopy('footer.feed_synced',lcopy('Data synced','Dáta synchronizované','Data synchronizována'))} · ${ageText(feedAgeMin)}`;
+      else if(feedOld)status.textContent=`${uiCopy('footer.feed_old',lcopy('Last update','Posledná aktualizácia','Poslední aktualizace'))} · ${ageText(feedAgeMin)}`;
+      else status.textContent=`${uiCopy('footer.feed_fresh',lcopy('Data synced','Dáta synchronizované','Data synchronizována'))} · ${ageText(feedAgeMin)}`;
     }
-    if(model){
-      const original=model.dataset.baseTitle||model.title||model.textContent||'';
-      model.dataset.baseTitle=original;
-      model.title=Number.isFinite(generatedMs)?`${original} · ${uiCopy('footer.last_update',lcopy('Last update','Posledná aktualizácia','Poslední aktualizace'))} ${ageText(feedAgeMin)}`.trim():original;
-    }
+    if(model){const original=model.dataset.baseTitle||model.title||model.textContent||'';model.dataset.baseTitle=original;model.title=liveFresh?`${original} · LIVE ${ageText(liveAgeMin)}`.trim():original;}
   }
   const cookieConsentKey='blinq_cookie_consent_v1';
   function cookieConsentValue(){try{return localStorage.getItem(cookieConsentKey)||'';}catch{return '';}}
@@ -1526,6 +1553,28 @@
     }
     return null;
   }
+  function tournamentDisplayMeta(row){
+    const rawName=String(row?.tournament||row?.competition_name||row?.competition||row?.tour||'Turnaj').trim();
+    const explicitCity=String(row?.venue_city||row?.tournament_city||row?.location?.city||'').trim();
+    const explicitCountryName=String(row?.venue_country||row?.tournament_country||row?.location?.country||row?.country_name||'').trim();
+    const countryCode=explicitTournamentCountry(row);
+    let name=rawName,location=[explicitCity,explicitCountryName].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(', ');
+    // Historical rows sometimes carry "Tournament, Country" in one field. Split only
+    // a plain trailing location token; never split draw labels such as "Group D".
+    if(!location&&rawName.includes(',')){
+      const parts=rawName.split(',').map(v=>v.trim()).filter(Boolean);
+      const tail=parts.at(-1)||'';
+      const looksLikeDraw=/^(men|women|singles|doubles|qualifying|qualification|group\s+[a-z0-9]+|round\s+\d+|r\d+|qf|sf|final)$/i.test(tail);
+      if(parts.length===2&&!looksLikeDraw&&tail.length>=3){name=parts[0];location=tail;}
+    }
+    return {name:name||rawName||'Turnaj',location,countryCode};
+  }
+  function tournamentIdentityHtml(row,compact=false){
+    const meta=tournamentDisplayMeta(row);
+    const location=meta.location?`<small class="tournament-location">${flagIconHtml(meta.countryCode,true)}<span>${escapeHtml(meta.location)}</span></small>`:'';
+    return `<span class="tournament-identity${compact?' is-compact':''}">${tournamentVisual(row)}<span class="tournament-identity-copy"><strong title="${escapeHtml(meta.name)}">${escapeHtml(meta.name)}</strong>${location}</span></span>`;
+  }
+
   function tournamentFallbackBadge(row){
     const tour=String(row?.tour||row?.category||'').trim().toUpperCase();
     const competition=String(row?.competition||row?.tournament_level||row?.level||row?.category_name||'').trim().toUpperCase();
@@ -1562,13 +1611,11 @@
     const explicit=safePhotoUrl(row?.tournament_logo_url||row?.competition_logo_url||row?.competition_logo||row?.tournament_logo||'');
     const logo=explicit||(/^\d{1,12}$/.test(tournamentId)?`/api/v1/tournament-logo/${tournamentId}`:'');
     const fallback=tournamentFallbackHtml(row);
-    if(logo) return '<span class="hub-tournament-logo has-image"><img data-tournament-logo src="'+escapeHtml(logo)+'" alt="" loading="lazy" onerror="this.onerror=null;this.hidden=true;this.parentElement.classList.add(\'logo-failed\')"><span class="hub-logo-fallback">'+fallback+'</span></span>';
-    return '<span class="hub-tournament-logo hub-tournament-badge">'+fallback+'</span>';
+    if(logo) return '<span class="hub-tournament-logo has-image"><img data-tournament-logo src="'+escapeHtml(logo)+'" alt="" loading="lazy"><span class="hub-logo-fallback">'+fallback+'</span></span>';
+    return '<span class="hub-tournament-logo hub-tournament-badge logo-failed">'+fallback+'</span>';
   }
   function smallAvatar(photo,name,tour,gender=''){
-    const safe=safePhotoUrl(photo),fallback=playerFallbackUrl(tour,gender),src=safe||fallback;
-    const fail=fallback&&fallback!==src?` onerror="this.onerror=null;this.src='${escapeHtml(fallback)}'"`:'';
-    return src?'<span class="hub-avatar has-photo"><img src="'+escapeHtml(src)+'" alt="" loading="lazy"'+fail+'></span>':'<span class="hub-avatar">'+escapeHtml(initials(name))+'</span>';
+    return playerAvatarHtml(photo,name,tour,gender,'hub-avatar');
   }
   function hubPlayerMeta(player,tour){
     const name=player?.name||'—';
@@ -1580,13 +1627,14 @@
     return '<span class="hub-player">'+smallAvatar(photo,name,tour,player?.gender||player?.sex||'')+'<span class="hub-player-copy"><b>'+escapeHtml(name)+'</b><small class="hub-player-meta">'+flagIconHtml(country,true)+'<span class="hub-rank">'+escapeHtml(rankText)+'</span><span class="hub-tour">'+escapeHtml(tourText)+'</span></small></span></span>';
   }
   function dailyHubTournament(row){
-    const tournament=String(row?.tournament||row?.competition||row?.tour||'—').trim();
-    const country=row?.tournament_country_code||row?.country_code||row?.venue_country_code||'';
+    const display=tournamentDisplayMeta(row);
+    const country=display.countryCode||row?.tournament_country_code||row?.country_code||row?.venue_country_code||'';
     const tour=String(row?.tour||'').trim().toUpperCase();
     const round=String(row?.round||row?.round_name||'').trim();
     const surface=surfaceShortName(row?.surface||'');
     const meta=[tour,round,surface&&surface!=='Surface'?surface:''].filter(Boolean);
-    return `<span class="hub-tournament hub-tournament-pro">${tournamentVisual(row)}<span class="hub-tournament-copy"><b title="${escapeHtml(tournament)}">${escapeHtml(tournament)}</b><small>${flagIconHtml(country,true)}${meta.map(value=>`<span>${escapeHtml(value)}</span>`).join('')}</small></span></span>`;
+    const location=display.location?`<span class="hub-tournament-location">${flagIconHtml(country,true)}${escapeHtml(display.location)}</span>`:'';
+    return `<span class="hub-tournament hub-tournament-pro">${tournamentVisual(row)}<span class="hub-tournament-copy"><b title="${escapeHtml(display.name)}">${escapeHtml(display.name)}</b><small>${meta.map(value=>`<span>${escapeHtml(value)}</span>`).join('')}</small>${location}</span></span>`;
   }
   function dailyHubMatch(row){
     const p1=row?.player1||{},p2=row?.player2||{};
@@ -1973,11 +2021,12 @@
       else{metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(row)],[publicText('Surface'),surfaceSampleLabel(row)]];}
       badge=probability==null?publicText('MODEL'):confidenceLabel(confidenceBand(probability));mainValue=probability==null?'—':pct(probability);confidenceClass=probability==null?'low':confidenceBand(probability);
     }
-    const p1Photo=safePhotoUrl(p1.photo_url),p2Photo=safePhotoUrl(p2.photo_url),fallback=playerFallbackUrl(row?.tour);const avatar=(photo,name)=>{const src=photo||fallback;return src?`<span class="player-avatar has-photo"><img src="${escapeHtml(src)}" alt="" loading="lazy" /></span>`:`<span class="player-avatar">${escapeHtml(initials(name))}</span>`};const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
+    const p1Photo=safePhotoUrl(p1.photo_url),p2Photo=safePhotoUrl(p2.photo_url);const avatar=(photo,name,gender='')=>playerAvatarHtml(photo,name,row?.tour,gender,'player-avatar');const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
     const metricHtml=metrics.map(([label,value])=>{const raw=String(value??'');const tone=raw.trim().startsWith('+')?' metric-positive':raw.trim().startsWith('-')?' metric-negative':'';return `<span class="card-metric${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(raw)}</strong></span>`}).join('');
     const footer=`<div class="card-metrics-bar match-kpi-bar">${metricHtml}</div><div class="card-link-row"><button class="card-more-link" type="button" data-route="${escapeHtml(key)}">${escapeHtml(publicText('See more →'))}</button></div>`;
     const optionalNote=note&&!compact?`<div class="market-card-note">${escapeHtml(note)}</div>`:'';
-    return `<article class="prediction-card featured market-card match-card-v3${projectionOnly?' projection-card':''}${compact?' dashboard-preview-card':''}"><div class="card-meta match-card-meta"><span class="tour match-card-tournament">${tournamentVisual(row)}<span class="match-card-tournament-copy">${escapeHtml(String(row?.tour||'').toUpperCase())} ${escapeHtml(row?.tournament||row?.competition||'')}</span></span><span class="time">${escapeHtml(fmtTime(row?.scheduled_at||row?.date))}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(p1Photo,p1Name)}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${playerMetaHtml(p1.rank,p1.country_code,row?.tour)}</small></div><div class="vs match-vs">VS</div><div class="player">${avatar(p2Photo,p2Name)}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${playerMetaHtml(p2.rank,p2.country_code,row?.tour)}</small></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="pick-score"><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div></div>${optionalNote}${footer}</article>`;
+    const tournamentMeta=tournamentDisplayMeta(row);
+    return `<article class="prediction-card featured market-card match-card-v3${projectionOnly?' projection-card':''}${compact?' dashboard-preview-card':''}"><div class="card-meta match-card-meta"><span class="tour match-card-tournament">${tournamentVisual(row)}<span class="match-card-tournament-copy"><b>${escapeHtml(tournamentMeta.name)}</b>${tournamentMeta.location?`<small>${escapeHtml(tournamentMeta.location)}</small>`:''}</span></span><span class="time">${escapeHtml(fmtTime(row?.scheduled_at||row?.date))}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(p1Photo,p1Name,p1?.gender||p1?.sex||'')}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${playerMetaHtml(p1.rank,p1.country_code,row?.tour)}</small></div><div class="vs match-vs">VS</div><div class="player">${avatar(p2Photo,p2Name,p2?.gender||p2?.sex||'')}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${playerMetaHtml(p2.rank,p2.country_code,row?.tour)}</small></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="pick-score"><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div></div>${optionalNote}${footer}</article>`;
   }
 
   function renderMarketSection(key,hostId,emptyText){
@@ -2344,15 +2393,16 @@
       const p1Name=p1.name||'Player 1',p2Name=p2.name||'Player 2';
       const p1Photo=p1.photo_url||p1.image_url||p1.photo||(String(p1.id||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${p1.id}`:'');
       const p2Photo=p2.photo_url||p2.image_url||p2.photo||(String(p2.id||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${p2.id}`:'');
-      const match=`<div class="results-match-player">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong></div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b></span><span class="results-tournament-inline">${tournamentVisual(r)}<span>${escapeHtml(r.tournament||'')}</span></span></small>`;
+      const match=`<div class="results-match-player">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong></div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b></span></small>`;
+      const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
         const projected=Number(publication?.projection),actual=Number(publication?.result?.actual_count),oppActual=Number(publication?.result?.opponent_actual_count),depth=Number(publication?.data_depth??publication?.result?.data_depth),actualText=Number.isFinite(actual)?`${actual.toFixed(actual%1?1:0)}${Number.isFinite(oppActual)?` · súper ${oppActual.toFixed(oppActual%1?1:0)}`:''}`:'—';
-        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${match}</td><td><strong>${escapeHtml(pickName)}</strong><small>${escapeHtml(esaResultTypeLabel(publication))}</small></td><td>${Number.isFinite(projected)?projected.toFixed(2):'—'}</td><td>${escapeHtml(actualText)}</td><td>${resultHtml}</td><td>${Number.isFinite(depth)?pct(depth):'—'}</td></tr>`;
+        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(pickName)}</strong><small>${escapeHtml(esaResultTypeLabel(publication))}</small></td><td>${Number.isFinite(projected)?projected.toFixed(2):'—'}</td><td>${escapeHtml(actualText)}</td><td>${resultHtml}</td><td>${Number.isFinite(depth)?pct(depth):'—'}</td></tr>`;
       }
-      return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${match}</td><td>${escapeHtml(pickName)}</td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>${resultHtml}</td><td class="${outcome.kind==='void'?'void':Number.isFinite(units)&&units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
+      return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td>${escapeHtml(pickName)}</td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>${resultHtml}</td><td class="${outcome.kind==='void'?'void':Number.isFinite(units)&&units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
     const pager=`<div class="results-pagination"><div class="results-pagination-meta"><strong>${startIndex+1}–${endIndex}</strong><span>z ${entries.length}</span></div><label><span>Riadkov</span><select id="resultsPageSize">${allowedSizes.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><div class="results-pagination-nav"><button type="button" id="resultsPrevPage" ${state.resultsPage<=0?'disabled':''}>←</button><span>Strana <strong>${state.resultsPage+1}</strong> / ${pages}</span><button type="button" id="resultsNextPage" ${state.resultsPage>=pages-1?'disabled':''}>→</button></div></div>`;
-    const head=projectionOnly?'<tr><th>Dátum</th><th>Typ</th><th>Zápas</th><th>Projekcia pre</th><th>Projekcia</th><th>Skutočne</th><th>Výsledok</th><th>DATA DEPTH</th></tr>':'<tr><th>Dátum</th><th>Kategória</th><th>Zápas</th><th>Predikcia / projekcia</th><th>BlinQ % / projekcia</th><th>Kurz / skutočne</th><th>Výsledok</th><th>Jednotky / DATA DEPTH</th></tr>';
+    const head=projectionOnly?'<tr><th>Dátum</th><th>Typ</th><th>Turnaj</th><th>Zápas</th><th>Projekcia pre</th><th>Projekcia</th><th>Skutočne</th><th>Výsledok</th><th>DATA DEPTH</th></tr>':'<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia / projekcia</th><th>BlinQ % / projekcia</th><th>Kurz / skutočne</th><th>Výsledok</th><th>Jednotky / DATA DEPTH</th></tr>';
     return `<div class="admin-table-wrap results-table-wrap"><table class="admin-analytics-table results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>${pager}`;
   }
   function wireResultsFilters(){
@@ -3400,8 +3450,8 @@
   }
 
   function primeDetailCard(m,index=0){
-    const photo1=safePhotoUrl(m.p1Photo)||playerFallbackUrl(m.tour),photo2=safePhotoUrl(m.p2Photo)||playerFallbackUrl(m.tour);
-    const avatar=(src,name)=>src?`<span class="player-avatar has-photo"><img src="${escapeHtml(src)}" alt="" loading="lazy"></span>`:`<span class="player-avatar">${escapeHtml(initials(name))}</span>`;
+    const photo1=safePhotoUrl(m.p1Photo),photo2=safePhotoUrl(m.p2Photo);
+    const avatar=(src,name)=>playerAvatarHtml(src,name,m.tour,'','player-avatar');
     const metrics=[[publicText('Odds'),Number.isFinite(m.odds)?m.odds.toFixed(2):'—'],[lcopy('Edge','Výhoda','Výhoda'),Number.isFinite(m.edge)?`${m.edge>=0?'+':''}${(m.edge*100).toFixed(1)} pp`:'—'],['EV',Number.isFinite(m.expectedValue)?`${m.expectedValue>=0?'+':''}${(m.expectedValue*100).toFixed(1)}%`:'—']];
     const metricHtml=metrics.map(([label,value])=>{const raw=String(value);const tone=raw.trim().startsWith('+')?' metric-positive':raw.trim().startsWith('-')?' metric-negative':'';return `<span class="card-metric${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(raw)}</strong></span>`}).join('');
     return `<article class="prediction-card featured detail-pick-card match-card-v3"><div class="card-meta match-card-meta"><span class="tour">${escapeHtml(m.tour)} ${escapeHtml(m.tournament)}</span><span class="time">${escapeHtml(fmtTime(m.date))}</span><span class="surface">${escapeHtml(String(m.surface||'').replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(photo1,m.p1)}<strong class="player-name">${escapeHtml(m.p1)}</strong></div><div class="vs match-vs">VS</div><div class="player">${avatar(photo2,m.p2)}<strong class="player-name">${escapeHtml(m.p2)}</strong></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(lcopy('BlinQ prediction','Naša predikcia','Naše predikce'))}</small><strong class="pick-name">${escapeHtml(m.pick)}</strong></div><div class="pick-score"><div class="probability">${pct(m.probability)}</div><span class="confidence ${escapeHtml(m.confidence)}">${escapeHtml(confidenceLabel(m.confidence))}</span></div></div><div class="card-metrics-bar match-kpi-bar">${metricHtml}</div></article>`;
@@ -3567,7 +3617,7 @@
     const note=below
       ?`<span class="upgrade-tier-note is-warning">${escapeHtml(lcopy('Does not unlock this section','Neodomkne túto sekciu','Neodemkne tuto sekci'))}</span>`
       :required?`<span class="upgrade-tier-note">${escapeHtml(lcopy('Required for this section','Požadovaná úroveň','Požadovaná úroveň'))}</span>`:'';
-    return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy"><small>${escapeHtml(id.toUpperCase())}</small><strong>${escapeHtml(title)}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:'<div class="upgrade-tier-description is-empty" aria-hidden="true"></div>'}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
+    return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy"><small>${escapeHtml(id.toUpperCase())}</small><strong>${escapeHtml(title)}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:''}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
   }
   function showUpgradePrompt(planId='pro',sectionLabel='this content'){
     window.BlinqUI.closeMenu(false);

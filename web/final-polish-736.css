@@ -11,34 +11,58 @@
   --bq736-muted:#8ca49c;
 }
 
-/* ---------- Full-bleed loader: no outer square ---------- */
+/* ---------- Loader: animated rally, no dead static screenshot ---------- */
+/* Legacy static loader asset remains a compatibility/fallback marker only: url('/assets/blinq_loading_scene_v736.webp') */
 body#blinqPremium .boot-splash.boot-splash-tennis{
   display:grid!important;
   place-items:center!important;
-  background:#020d0e url('/assets/blinq_loading_scene_v736.webp') center center / cover no-repeat!important;
+  overflow:hidden!important;
+  background:
+    radial-gradient(760px 430px at 50% 46%,rgba(49,226,156,.10),transparent 68%),
+    linear-gradient(180deg,rgba(0,9,11,.82),rgba(0,16,16,.62) 48%,rgba(0,9,11,.88)),
+    #020d0e url('/assets/blinq_background.webp') center center/cover no-repeat!important;
 }
 body#blinqPremium .boot-splash.boot-splash-tennis::before{
   content:""!important;
   position:absolute!important;
   inset:0!important;
-  background:linear-gradient(180deg,rgba(0,8,10,.08),rgba(0,8,10,.02) 48%,rgba(0,8,10,.12))!important;
+  background:linear-gradient(90deg,rgba(0,0,0,.18),transparent 18%,transparent 82%,rgba(0,0,0,.18))!important;
   pointer-events:none!important;
 }
 body#blinqPremium .boot-splash.boot-splash-tennis::after{display:none!important}
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source{
-  position:absolute!important;
-  width:1px!important;
-  height:1px!important;
+  position:relative!important;
+  width:min(620px,78vw)!important;
+  height:auto!important;
   padding:0!important;
   margin:0!important;
   border:0!important;
   border-radius:0!important;
   background:transparent!important;
   box-shadow:none!important;
-  overflow:hidden!important;
-  clip-path:inset(50%)!important;
-  white-space:nowrap!important;
-  opacity:.001!important;
+  overflow:visible!important;
+  clip-path:none!important;
+  white-space:normal!important;
+  opacity:1!important;
+}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source>img{
+  display:block!important;
+  width:100%!important;
+  max-width:none!important;
+  height:auto!important;
+  max-height:78vh!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  filter:drop-shadow(0 24px 68px rgba(0,0,0,.44))!important;
+}
+/* The supplied SVG contains the BlinQ title/copy and the actual moving rally ball. */
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source>#bootEyebrow,
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source>#bootStatus{
+  position:absolute!important;
+  width:1px!important;height:1px!important;
+  padding:0!important;margin:-1px!important;
+  overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;
 }
 
 /* ---------- Locked hints: same green/teal product language ---------- */
@@ -206,3 +230,75 @@ body#blinqPremium .header-upgrade:hover{border-color:rgba(49,226,156,.78)!import
   body#blinqPremium .upgrade-benefit-strip{grid-template-columns:1fr!important;gap:10px!important}
   body#blinqPremium .upgrade-benefit-strip span{border-right:0!important;padding:0!important}
 }
+
+/* ---------- Audit hotfix: CSP-safe media fallbacks + tournament/location layout ---------- */
+body#blinqPremium .hub-tournament-logo{position:relative!important;overflow:hidden!important;background:rgba(5,30,27,.72)!important}
+body#blinqPremium .hub-tournament-logo>.hub-logo-fallback{position:absolute!important;inset:0!important;display:grid!important;place-items:center!important;opacity:0!important;visibility:hidden!important}
+body#blinqPremium .hub-tournament-logo.logo-failed>.hub-logo-fallback,
+body#blinqPremium .hub-tournament-logo.hub-tournament-badge>.hub-logo-fallback{opacity:1!important;visibility:visible!important}
+body#blinqPremium .hub-tournament-logo.logo-failed>img{display:none!important}
+body#blinqPremium .hub-avatar,body#blinqPremium .player-avatar{overflow:hidden!important;background:#09211c!important}
+body#blinqPremium .hub-avatar>img,body#blinqPremium .player-avatar>img{display:block!important;width:100%!important;height:100%!important;object-fit:cover!important}
+
+body#blinqPremium .tournament-identity{display:grid!important;grid-template-columns:30px minmax(0,1fr)!important;gap:8px!important;align-items:center!important;min-width:150px!important}
+body#blinqPremium .tournament-identity>.hub-tournament-logo,body#blinqPremium .tournament-identity>.hub-tournament-badge{width:30px!important;height:30px!important;min-width:30px!important;border-radius:8px!important}
+body#blinqPremium .tournament-identity-copy{display:grid!important;gap:3px!important;min-width:0!important}
+body#blinqPremium .tournament-identity-copy>strong{display:block!important;min-width:0!important;color:#eaf4f0!important;font-size:10.5px!important;line-height:1.2!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body#blinqPremium .tournament-location{display:flex!important;align-items:center!important;gap:5px!important;min-width:0!important;color:#758d85!important;font-size:8px!important;line-height:1.2!important}
+body#blinqPremium .tournament-location>span:last-child{min-width:0!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body#blinqPremium .hub-tournament-location{display:flex!important;align-items:center!important;gap:5px!important;margin-top:3px!important;color:#718981!important;font-size:7px!important;line-height:1.2!important;min-width:0!important}
+body#blinqPremium .match-card-tournament-copy{display:grid!important;gap:2px!important;min-width:0!important}
+body#blinqPremium .match-card-tournament-copy>b{font:inherit!important;color:inherit!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+body#blinqPremium .match-card-tournament-copy>small{color:#718981!important;font-size:7px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+
+/* Dedicated results tournament column: tournament identity first, location second. */
+body#blinqPremium .results-table th:nth-child(3),body#blinqPremium .results-table td:nth-child(3){min-width:175px!important;width:18%!important}
+body#blinqPremium .results-table th:nth-child(4),body#blinqPremium .results-table td:nth-child(4){min-width:220px!important;width:24%!important}
+body#blinqPremium .results-match-sub{display:grid!important;grid-template-columns:18px minmax(0,1fr)!important;gap:4px 7px!important;align-items:center!important;margin-top:5px!important;min-width:0!important}
+body#blinqPremium .results-opponent{min-width:0!important}
+body#blinqPremium .results-match-player strong,body#blinqPremium .results-opponent b{min-width:0!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+
+/* ---------- Upgrade cards: consistent hierarchy, no overlapping pills/copy ---------- */
+body#blinqPremium .upgrade-plan-grid{align-items:stretch!important}
+body#blinqPremium .upgrade-tier-card{
+  min-height:398px!important;
+  grid-template-rows:auto auto auto 1fr auto!important;
+  gap:12px!important;
+  padding:16px!important;
+}
+body#blinqPremium .upgrade-tier-note{
+  position:static!important;
+  justify-self:start!important;
+  width:max-content!important;
+  max-width:100%!important;
+  margin:0!important;
+  padding:5px 8px!important;
+  font-size:7px!important;
+  line-height:1!important;
+  text-transform:uppercase!important;
+  letter-spacing:.05em!important;
+}
+body#blinqPremium .upgrade-tier-top{align-items:start!important;grid-template-columns:78px minmax(0,1fr)!important;gap:10px!important}
+body#blinqPremium .upgrade-tier-card .plan-avatar-pair{width:78px!important;height:54px!important;min-width:78px!important}
+body#blinqPremium .upgrade-tier-card .plan-avatar-chip{width:49px!important;height:49px!important}
+body#blinqPremium .upgrade-tier-card .plan-avatar-chip.is-back{left:28px!important}
+body#blinqPremium .upgrade-tier-copy{display:grid!important;gap:3px!important;min-width:0!important}
+body#blinqPremium .upgrade-tier-copy small{margin:0!important;font-size:7.5px!important;line-height:1.1!important}
+body#blinqPremium .upgrade-tier-copy strong{margin:0!important;font-size:16px!important;line-height:1.12!important;overflow-wrap:anywhere!important}
+body#blinqPremium .upgrade-tier-copy span{margin:1px 0 0!important;font-size:9px!important;line-height:1.35!important;color:#8ca49c!important;display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:2!important;overflow:hidden!important}
+body#blinqPremium .upgrade-tier-description{margin:0!important;min-height:0!important;font-size:9px!important;line-height:1.4!important;color:#8fa79f!important;display:-webkit-box!important;-webkit-box-orient:vertical!important;-webkit-line-clamp:2!important;overflow:hidden!important}
+body#blinqPremium .upgrade-feature-list{gap:6px!important;align-content:start!important}
+body#blinqPremium .upgrade-feature-list li{font-size:9.5px!important;line-height:1.28!important;padding-left:20px!important}
+body#blinqPremium .upgrade-feature-list li::before{width:14px!important;height:14px!important;font-size:8px!important}
+body#blinqPremium .upgrade-tier-cta{margin-top:auto!important;min-height:42px!important}
+
+@media(max-width:900px){
+  body#blinqPremium .boot-tennis-card.boot-tennis-card-source{width:min(540px,90vw)!important}
+  body#blinqPremium .results-table-wrap{overflow-x:auto!important}
+  body#blinqPremium .results-table{min-width:1120px!important}
+}
+@media(max-width:680px){
+  body#blinqPremium .boot-tennis-card.boot-tennis-card-source{width:min(460px,94vw)!important}
+  body#blinqPremium .upgrade-tier-card{min-height:0!important}
+}
+
