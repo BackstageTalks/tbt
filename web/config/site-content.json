@@ -1,6 +1,6 @@
 {
-  "schema": 1,
-  "updated_at": "2026-09-16",
+  "schema": 2,
+  "updated_at": "2026-09-18T20:00:00Z",
   "operator": {
     "display_name": "BlinQ",
     "legal_name": "DOPLNIŤ PREVÁDZKOVATEĽA",
@@ -845,6 +845,192 @@
       "essential": "Essential only",
       "accept": "Allow analytics",
       "settings": "Cookie settings"
+    }
+  },
+  "ui_copy": {
+    "loading": {
+      "eyebrow": {
+        "sk": "BLINQ INTELLIGENCE",
+        "cz": "BLINQ INTELLIGENCE",
+        "en": "BLINQ INTELLIGENCE"
+      },
+      "status": {
+        "sk": "Pripravujeme analytický priestor",
+        "cz": "Připravujeme analytický prostor",
+        "en": "Preparing your analytics workspace"
+      },
+      "substatus": {
+        "sk": "Synchronizujeme dáta a dnešné predikcie",
+        "cz": "Synchronizujeme data a dnešní predikce",
+        "en": "Synchronizing data and today’s predictions"
+      }
+    },
+    "auth": {
+      "login_title": {
+        "sk": "Prihlásenie do BlinQ",
+        "cz": "Přihlášení do BlinQ",
+        "en": "Sign in to BlinQ"
+      },
+      "login_subtitle": {
+        "sk": "Prihlás sa do svojho analytického priestoru",
+        "cz": "Přihlas se do svého analytického prostoru",
+        "en": "Sign in to your analytics workspace"
+      }
+    },
+    "footer": {
+      "updated": {
+        "sk": "Aktualizované",
+        "cz": "Aktualizováno",
+        "en": "Updated"
+      },
+      "minutes_ago": {
+        "sk": "pred {n} min",
+        "cz": "před {n} min",
+        "en": "{n} min ago"
+      },
+      "just_now": {
+        "sk": "práve teraz",
+        "cz": "právě teď",
+        "en": "just now"
+      },
+      "live_ok": {
+        "sk": "LIVE radar aktívny",
+        "cz": "LIVE radar aktivní",
+        "en": "LIVE radar active"
+      },
+      "live_error": {
+        "sk": "LIVE radar je dočasne nedostupný",
+        "cz": "LIVE radar je dočasně nedostupný",
+        "en": "LIVE radar is temporarily unavailable"
+      },
+      "feed_fresh": {
+        "sk": "Dáta sú aktuálne",
+        "cz": "Data jsou aktuální",
+        "en": "Data is current"
+      },
+      "feed_old": {
+        "sk": "Dáta sú staršie",
+        "cz": "Data jsou starší",
+        "en": "Data is older"
+      },
+      "feed_stale": {
+        "sk": "Čaká sa na aktualizáciu dát",
+        "cz": "Čeká se na aktualizaci dat",
+        "en": "Waiting for data refresh"
+      }
+    },
+    "private_feed": {
+      "history_unavailable": {
+        "sk": "História upozornení je dočasne nedostupná. LIVE radar ďalej funguje.",
+        "cz": "Historie upozornění je dočasně nedostupná. LIVE radar dále funguje.",
+        "en": "Alert history is temporarily unavailable. LIVE radar continues to work."
+      },
+      "info_unavailable": {
+        "sk": "Premium Info potrebuje trvalé úložisko. Po obnovení sa správy zobrazia automaticky.",
+        "cz": "Premium Info potřebuje trvalé úložiště. Po obnovení se zprávy zobrazí automaticky.",
+        "en": "Premium Info needs persistent storage. Messages return automatically after storage recovers."
+      },
+      "info_title_offline": {
+        "sk": "Premium Info je dočasne nedostupné",
+        "cz": "Premium Info je dočasně nedostupné",
+        "en": "Premium Info is temporarily unavailable"
+      }
+    },
+    "support": {
+      "sending": {
+        "sk": "Odosielam…",
+        "cz": "Odesílám…",
+        "en": "Sending…"
+      },
+      "sent": {
+        "sk": "Odoslané",
+        "cz": "Odesláno",
+        "en": "Sent"
+      },
+      "email_only": {
+        "sk": "Odoslané e-mailom. História supportu je dočasne nedostupná.",
+        "cz": "Odesláno e-mailem. Historie podpory je dočasně nedostupná.",
+        "en": "Sent by email. Support history is temporarily unavailable."
+      },
+      "storage_unavailable": {
+        "sk": "Podpora je dočasne nedostupná. Skúste to znova o chvíľu.",
+        "cz": "Podpora je dočasně nedostupná. Zkuste to znovu za chvíli.",
+        "en": "Support is temporarily unavailable. Please try again shortly."
+      },
+      "send_failed": {
+        "sk": "Požiadavku sa nepodarilo odoslať.",
+        "cz": "Požadavek se nepodařilo odeslat.",
+        "en": "Could not send the request."
+      }
+    },
+    "upgrade": {
+      "eyebrow": {
+        "sk": "BLINQ ČLENSTVO",
+        "cz": "BLINQ ČLENSTVÍ",
+        "en": "BLINQ MEMBERSHIP"
+      },
+      "title": {
+        "sk": "Odomknúť {plan} prístup",
+        "cz": "Odemknout {plan} přístup",
+        "en": "Unlock {plan} access"
+      },
+      "requires": {
+        "sk": "Vyžaduje {plan}",
+        "cz": "Vyžaduje {plan}",
+        "en": "Requires {plan}"
+      },
+      "availability": {
+        "sk": "Táto sekcia je dostupná od úrovne {plan} a vyššie.",
+        "cz": "Tato sekce je dostupná od úrovně {plan} a výše.",
+        "en": "This section is available from {plan} and above."
+      },
+      "body": {
+        "sk": "Získaj prístup k hlavným predikciám, dennej ponuke a detailom pickov.",
+        "cz": "Získej přístup k hlavním predikcím, denní nabídce a detailům tipů.",
+        "en": "Get access to core predictions, the daily offer and pick details."
+      },
+      "current_plan": {
+        "sk": "Tvoj plán",
+        "cz": "Tvůj plán",
+        "en": "Your plan"
+      },
+      "recommended_plan": {
+        "sk": "Odporúčaný plán",
+        "cz": "Doporučený plán",
+        "en": "Recommended plan"
+      },
+      "validity": {
+        "sk": "Platnosť",
+        "cz": "Platnost",
+        "en": "Validity"
+      },
+      "compare": {
+        "sk": "Porovnať plány",
+        "cz": "Porovnat plány",
+        "en": "Compare plans"
+      },
+      "cta": {
+        "sk": "Prejsť na {plan}",
+        "cz": "Přejít na {plan}",
+        "en": "Upgrade to {plan}"
+      }
+    },
+    "access": {
+      "requires": {
+        "sk": "Vyžaduje {plan}",
+        "cz": "Vyžaduje {plan}",
+        "en": "Requires {plan}"
+      },
+      "locked_row": {
+        "sk": "Ďalší pick je zamknutý",
+        "cz": "Další tip je zamčený",
+        "en": "Next pick is locked"
+      },
+      "locked_row_body": {
+        "sk": "Vyššia úroveň odomkne ďalšie riadky a detail predikcie.",
+        "cz": "Vyšší úroveň odemkne další řádky a detail predikce.",
+        "en": "A higher tier unlocks more rows and prediction detail."
+      }
     }
   }
 }

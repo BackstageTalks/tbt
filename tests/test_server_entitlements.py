@@ -27,9 +27,9 @@ def test_suspended_is_denied():
 def test_rookie_never_receives_hidden_rows():
     data, manifest = filter_feed_for_access(feed(), {"status": "active", "plan": "rookie"})
     assert len(data["prime_picks"]) == 0
-    assert len(data["top_daily_picks"]) == 1
-    assert len(data["value_picks"]) == 1
-    assert len(data["ace_picks"]) == 1
+    assert len(data["top_daily_picks"]) == 2
+    assert len(data["value_picks"]) == 0
+    assert len(data["ace_picks"]) == 0
     assert len(data["doubles_picks"]) == 0
     assert len(data["sg_picks"]) == 0
     assert manifest["sections"]["prime"]["internal_only"] is True

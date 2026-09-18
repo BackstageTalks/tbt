@@ -60,7 +60,7 @@ from tbt.services.admin_storage import (
     mark_insight_read,
 )
 from tbt.services.content_news import news_pool
-from tbt.services.support_storage import create_support_ticket, list_support_tickets, update_support_ticket
+from tbt.services.support_storage import build_support_ticket, create_support_ticket, list_support_tickets, update_support_ticket
 from tbt.services.support_notifications import notify_support_ticket, support_email_configured
 from tbt.services.media_storage import (
     MediaStorageUnavailable, download_media, media_storage_diagnostics, upload_media,
@@ -79,7 +79,7 @@ from tbt.services.live_comeback import (
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "7.3.4"
+RELEASE = "7.3.5"
 API_VERSION = "3.10.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -1370,11 +1370,19 @@ def support_submit(req):
                 user = verify_user(token, settings)
             except AuthUnavailable:
                 user = None
-        ticket = create_support_ticket(payload, user=user)
+        try:
+            ticket = create_support_ticket(payload, user=user)
+            delivery = "stored"
+        except AdminStorageUnavailable:
+            ticket, _ = build_support_ticket(payload, user=user)
+            notification = notify_support_ticket(ticket)
+            if notification.get("sent"):
+                return response({"accepted": True, "ticket": ticket, "email_notification": True, "delivery": "email_only", "storage_unavailable": True}, 202)
+            raise
         notification = notify_support_ticket(ticket)
         if notification.get("configured") and not notification.get("sent"):
             logging.warning("Support email notification failed for %s: %s", ticket.get("ticket_id"), notification.get("reason"))
-        return response({"accepted": True, "ticket": ticket, "email_notification": bool(notification.get("sent"))}, 201)
+        return response({"accepted": True, "ticket": ticket, "email_notification": bool(notification.get("sent")), "delivery": delivery}, 201)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AdminStorageUnavailable:

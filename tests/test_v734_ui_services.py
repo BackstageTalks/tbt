@@ -5,23 +5,23 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / 'web' / 'app.js').read_text(encoding='utf-8')
 AUTH = (ROOT / 'web' / 'auth.js').read_text(encoding='utf-8')
 INDEX = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8')
-CSS = (ROOT / 'web' / 'final-polish-734.css').read_text(encoding='utf-8')
+CSS = (ROOT / 'web' / 'final-polish-735.css').read_text(encoding='utf-8')
 UI = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
 SITE = json.loads((ROOT / 'web' / 'config' / 'site-content.json').read_text(encoding='utf-8'))
 
 
-def test_v734_asset_revision_and_polish_loaded_last():
-    assert UI['revision'] == '7.3.4'
-    assert UI['asset_revision'] == 7340
-    assert '/final-polish-734.css?v=7340' in INDEX
-    assert INDEX.index('/final-polish-731.css') < INDEX.index('/final-polish-734.css')
+def test_v735_asset_revision_and_polish_loaded_last():
+    assert UI['revision'] == '7.3.5'
+    assert UI['asset_revision'] == 7350
+    assert '/final-polish-735.css?v=7350' in INDEX
+    assert INDEX.index('/final-polish-731.css') < INDEX.index('/final-polish-735.css')
 
 
 def test_login_loader_and_footer_have_blinq_background_watermarks():
     assert "url('/assets/blinq_background.webp')" in CSS
     assert CSS.count("url('/assets/blinq_logo.svg')") >= 3
     assert 'bootEyebrow' in INDEX and 'bootStatus' in INDEX
-    assert 'auth-copy h2' in CSS and 'font-size:18px' in CSS
+    assert 'auth-copy h2' in CSS and 'font-size:17px' in CSS
 
 
 def test_footer_status_is_freshness_aware_not_hardcoded_live():
@@ -32,8 +32,8 @@ def test_footer_status_is_freshness_aware_not_hardcoded_live():
 
 
 def test_helper_copy_is_json_backed():
-    assert 'ui_copy' in UI
-    assert 'loading' in UI['ui_copy'] and 'auth' in UI['ui_copy'] and 'footer' in UI['ui_copy']
+    assert 'ui_copy' in SITE
+    assert 'loading' in SITE['ui_copy'] and 'auth' in SITE['ui_copy'] and 'footer' in SITE['ui_copy']
     assert 'form_copy' in SITE['support']
     assert 'supportFormCopy()' in APP
 
@@ -80,8 +80,8 @@ def test_storage_diagnostics_explain_private_service_dependency():
 def test_frontend_release_probe_and_no_cache_entry_document():
     release=json.loads((ROOT/'web'/'release.json').read_text(encoding='utf-8'))
     static=json.loads((ROOT/'web'/'staticwebapp.config.json').read_text(encoding='utf-8'))
-    assert release['frontend_marker']=='blinq-web-734'
-    assert 'data-web-release="7.3.4"' in INDEX
+    assert release['frontend_marker']=='blinq-web-735'
+    assert 'data-web-release="7.3.5"' in INDEX
     for route in ('/','/index.html','/release.json'):
         rule=next(row for row in static['routes'] if row.get('route')==route)
         assert 'no-store' in rule['headers']['Cache-Control']
@@ -95,4 +95,4 @@ def test_stale_data_workflow_cannot_roll_back_frontend():
     assert 'git rev-parse origin/main' in data
     assert 'ref: main' in player
     assert 'Verify deployed frontend release' in ci
-    assert 'blinq-web-734' in ci
+    assert 'blinq-web-735' in ci

@@ -25,7 +25,13 @@ def _clean_email(value: object) -> str:
     return email
 
 
-def create_support_ticket(payload: object, *, user: dict | None = None) -> dict:
+def build_support_ticket(payload: object, *, user: dict | None = None) -> tuple[dict, dict]:
+    """Validate a request and build both public and storage representations.
+
+    Keeping construction separate from persistence lets the public endpoint fall
+    back to configured support e-mail when persistent storage is temporarily
+    unavailable, while still failing closed when neither delivery path works.
+    """
     if not isinstance(payload, dict):
         raise ValueError("Invalid support request")
     category = str(payload.get("category") or "other").strip().lower()
@@ -45,7 +51,7 @@ def create_support_ticket(payload: object, *, user: dict | None = None) -> dict:
         "PartitionKey": "support",
         "RowKey": f"{int(now.timestamp()*1000):013d}-{uuid.uuid4().hex}",
         "ticket_id": ticket_id,
-        "user_id": str(user.get("id") or "")[:256],
+        "user_id": str(user.get("id") or user.get("uid") or "")[:256],
         "email": email,
         "account_plan": str(user.get("blinq_plan") or user.get("plan") or "")[:32],
         "category": category,
@@ -57,11 +63,17 @@ def create_support_ticket(payload: object, *, user: dict | None = None) -> dict:
         "updated_at": now.isoformat(),
         "updated_by": "",
     }
+    public = {k: v for k, v in entity.items() if k not in {"PartitionKey", "RowKey"}}
+    return public, entity
+
+
+def create_support_ticket(payload: object, *, user: dict | None = None) -> dict:
+    public, entity = build_support_ticket(payload, user=user)
     try:
         _table(SUPPORT_TABLE).create_entity(entity)
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to store support request") from exc
-    return {k: v for k, v in entity.items() if k not in {"PartitionKey", "RowKey"}}
+    return public
 
 
 def list_support_tickets(*, status: str = "all", limit: int = 250) -> list[dict]:

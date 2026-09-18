@@ -1,0 +1,87 @@
+/* BlinQ 7.3.5 — unified auth/loading/footer, access display controls, premium upgrade modal */
+:root{--bq735-green:#48eea5;--bq735-teal:#17b98b;--bq735-purple:#8b5cf6;--bq735-muted:#8ca098;--bq735-panel:rgba(4,22,20,.94)}
+
+/* Make the artwork actually visible; previous overlays were so opaque that the background looked blank. */
+body#blinqPremium .boot-splash.boot-splash-tennis{background-image:linear-gradient(90deg,rgba(1,11,12,.80),rgba(2,23,20,.58),rgba(1,10,12,.82)),url('/assets/blinq_background.webp')!important;background-size:cover!important;background-position:center!important}
+body#blinqPremium .boot-splash.boot-splash-tennis:before{background:radial-gradient(740px 500px at 50% 48%,rgba(55,238,168,.13),transparent 68%)!important}
+body#blinqPremium .boot-splash.boot-splash-tennis:after{background-image:url('/assets/blinq_logo.svg')!important;background-position:center!important;background-size:contain!important;background-repeat:no-repeat!important;right:38px!important;bottom:30px!important;width:170px!important;height:66px!important;opacity:.075!important;filter:grayscale(1) brightness(1.35)!important}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source{width:min(500px,84vw)!important;background:linear-gradient(155deg,rgba(4,31,28,.78),rgba(2,16,18,.70))!important;border:1px solid rgba(72,238,165,.22)!important;box-shadow:0 34px 110px rgba(0,0,0,.44),0 0 95px rgba(72,238,165,.06)!important}
+body#blinqPremium .boot-copy-eyebrow{color:#91aaa0!important;font-size:9px!important}
+body#blinqPremium .boot-copy-status{color:#a6bbb3!important;font-size:10px!important}
+
+/* Login belongs to the same visual system as the dashboard. */
+body#blinqPremium .auth-dialog[open]{background-image:linear-gradient(90deg,rgba(1,11,12,.80),rgba(2,23,20,.58),rgba(1,10,12,.82)),url('/assets/blinq_background.webp')!important;background-size:cover!important;background-position:center!important}
+body#blinqPremium .auth-dialog[open]::after{background-image:url('/assets/blinq_logo.svg')!important;background-position:center!important;background-size:contain!important;background-repeat:no-repeat!important;right:38px!important;bottom:30px!important;width:170px!important;height:66px!important;opacity:.075!important;filter:grayscale(1) brightness(1.35)!important}
+body#blinqPremium .auth-card{background:linear-gradient(155deg,rgba(5,31,35,.965),rgba(3,19,24,.98))!important;border:1px solid rgba(65,188,163,.34)!important;box-shadow:0 34px 105px rgba(0,0,0,.50),0 0 70px rgba(53,231,164,.045)!important}
+body#blinqPremium .auth-copy{margin:16px 0 18px!important;text-align:center!important}
+body#blinqPremium .auth-copy h2{margin:0 auto 6px!important;color:#e8f1ed!important;font-size:17px!important;line-height:1.25!important;font-weight:760!important;letter-spacing:-.015em!important}
+body#blinqPremium .auth-copy p,#authSubtitle{display:block!important;max-width:330px!important;margin:0 auto 16px!important;color:#82968f!important;font-size:11px!important;line-height:1.5!important;font-weight:520!important}
+body#blinqPremium .auth-card label{font-family:inherit!important}
+body#blinqPremium .auth-card .languages a,body#blinqPremium .site-footer .languages a{border:1px solid rgba(87,151,129,.28)!important;background:rgba(4,24,20,.72)!important;color:#839b92!important;border-radius:7px!important}
+body#blinqPremium .auth-card .languages a.active,body#blinqPremium .site-footer .languages a.active{border-color:rgba(72,238,165,.68)!important;background:rgba(39,145,103,.20)!important;color:#e9fff6!important;box-shadow:0 0 0 1px rgba(72,238,165,.05) inset,0 0 18px rgba(72,238,165,.05)!important}
+
+/* Footer: one quiet watermark, a truthful status, and language controls in the site palette. */
+body#blinqPremium .site-footer{background:linear-gradient(180deg,rgba(2,13,13,.96),rgba(1,10,11,.99))!important;border-top-color:rgba(86,159,135,.12)!important}
+body#blinqPremium .site-footer:before{background-image:url('/assets/blinq_logo.svg')!important;background-position:center!important;background-size:contain!important;background-repeat:no-repeat!important;left:14px!important;bottom:10px!important;width:132px!important;height:50px!important;opacity:.065!important;filter:grayscale(1) brightness(1.25)!important}
+body#blinqPremium .site-footer .footer-left>img{visibility:hidden!important;opacity:0!important}
+body#blinqPremium .system-status{max-width:520px!important;white-space:normal!important}
+body#blinqPremium .system-status strong{font-weight:720!important;letter-spacing:0!important}
+
+/* Persistent account requirement hint. Locked content never looks like a broken/disabled control. */
+body#blinqPremium [data-ui-element].ui-state-locked::after,body#blinqPremium [data-ui-element].ui-state-blurred::after{content:attr(data-ui-state-label)!important;inset:10px 10px auto auto!important;padding:5px 8px!important;border-radius:999px!important;border:1px solid rgba(139,92,246,.42)!important;background:rgba(30,16,57,.88)!important;color:#c9b8ff!important;font-size:8px!important;font-weight:900!important;letter-spacing:.045em!important;box-shadow:0 5px 20px rgba(0,0,0,.22)!important;backdrop-filter:blur(8px)!important}
+body#blinqPremium [data-ui-element].ui-state-blurred>*{filter:blur(5px)!important;opacity:.58!important}
+body#blinqPremium [data-ui-element].ui-state-hidden{display:none!important}
+
+/* Daily locked rows: redacted premium teaser, no underlying pick data. */
+body#blinqPremium .hub-row-locked td{padding:12px 14px!important;background:linear-gradient(90deg,rgba(24,14,46,.42),rgba(6,27,23,.34))!important;border-top:1px solid rgba(139,92,246,.18)!important;cursor:pointer!important}
+body#blinqPremium .hub-row-locked td>div{display:inline-grid!important;gap:2px!important;margin-left:8px!important;vertical-align:middle!important}
+body#blinqPremium .hub-row-locked em{width:max-content;padding:3px 7px;border:1px solid rgba(139,92,246,.35);border-radius:999px;background:rgba(66,35,120,.22);color:#bba6ff;font-size:7px;font-style:normal;font-weight:900;letter-spacing:.05em;text-transform:uppercase}
+body#blinqPremium .hub-row-locked b{color:#dde8e3!important;font-size:9px!important}
+body#blinqPremium .hub-row-locked small{color:#789087!important;font-size:8px!important}
+
+/* Upgrade modal — native BlinQ look, not a generic membership popup. */
+body#blinqPremium .upgrade-dialog{width:min(820px,calc(100vw - 32px))!important;padding:0!important;border:1px solid rgba(39,190,185,.62)!important;border-radius:20px!important;background:radial-gradient(540px 280px at 85% 5%,rgba(20,95,120,.16),transparent 68%),linear-gradient(145deg,#061923 0%,#05151c 50%,#06141b 100%)!important;box-shadow:0 42px 130px rgba(0,0,0,.70),0 0 70px rgba(26,186,174,.08)!important;overflow:hidden!important}
+body#blinqPremium .upgrade-dialog::before{content:"";position:absolute;right:-90px;bottom:-110px;width:390px;height:250px;border-radius:50%;background:radial-gradient(circle at 30% 30%,rgba(114,58,235,.26),rgba(49,29,120,.08) 45%,transparent 70%);pointer-events:none}
+body#blinqPremium #upgradeDialogContent{position:relative;z-index:1;padding:34px 40px 36px!important}
+body#blinqPremium .upgrade-dialog>.dialog-close{right:20px!important;top:20px!important;width:42px!important;height:42px!important;border-radius:11px!important;border-color:rgba(65,179,191,.38)!important;background:rgba(5,29,40,.82)!important}
+body#blinqPremium .upgrade-dialog-eyebrow{color:#b8c8c3!important;font-size:10px!important;letter-spacing:.18em!important;font-weight:780!important}
+body#blinqPremium .upgrade-dialog-brandrow{display:flex;align-items:center;gap:15px;margin:14px 0 14px}
+body#blinqPremium .upgrade-dialog-brandrow .plan-card-avatar{width:48px!important;height:48px!important;min-width:48px!important}
+body#blinqPremium .upgrade-requires-pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid rgba(139,92,246,.42);border-radius:999px;background:rgba(80,39,143,.18);color:#c5b3ff;font-size:9px;font-weight:850;letter-spacing:.025em}
+body#blinqPremium .upgrade-dialog-title{margin:0 0 12px!important;padding-right:52px;color:#f4f8f6;font-size:34px!important;line-height:1.08!important;letter-spacing:-.035em!important;font-weight:900!important}
+body#blinqPremium .upgrade-dialog-copy{display:grid;gap:4px;margin:0;color:#9eb1aa;font-size:13px;line-height:1.55}
+body#blinqPremium .upgrade-dialog-copy strong{color:#e5efeb;font-weight:720}
+body#blinqPremium .upgrade-dialog-account-facts{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important;margin:24px 0 22px!important}
+body#blinqPremium .upgrade-dialog-account-facts>span{display:grid!important;grid-template-columns:38px 1fr!important;grid-template-rows:auto auto!important;column-gap:10px!important;min-height:74px!important;padding:12px!important;border:1px solid rgba(69,126,121,.24)!important;border-radius:12px!important;background:rgba(3,22,25,.63)!important;text-align:left!important}
+body#blinqPremium .upgrade-dialog-account-facts>span.is-recommended{border-color:rgba(139,92,246,.58)!important;background:linear-gradient(145deg,rgba(62,38,132,.26),rgba(8,26,34,.72))!important;box-shadow:0 0 0 1px rgba(139,92,246,.05) inset!important}
+body#blinqPremium .upgrade-dialog-account-facts i{grid-row:1/3;display:grid;place-items:center;width:38px;height:38px;border-radius:50%;background:rgba(29,89,93,.18);color:#8edbd0;font-size:16px;font-style:normal}
+body#blinqPremium .upgrade-dialog-account-facts .is-recommended i{background:rgba(109,63,215,.20);color:#c4a9ff}
+body#blinqPremium .upgrade-dialog-account-facts small{align-self:end;color:#82968f!important;font-size:8px!important;letter-spacing:.03em!important;text-transform:none!important;font-weight:650!important}
+body#blinqPremium .upgrade-dialog-account-facts strong{align-self:start;color:#f0f6f3!important;font-size:13px!important;font-weight:850!important}
+body#blinqPremium .upgrade-dialog-account-facts .is-recommended strong{color:#a983ff!important}
+body#blinqPremium .upgrade-dialog-actions{display:flex;align-items:center;gap:18px;flex-wrap:wrap}
+body#blinqPremium .upgrade-dialog-cta{width:auto!important;min-width:250px!important;min-height:52px!important;padding:0 28px!important;border-radius:12px!important;background:linear-gradient(90deg,#7448ef,#8248f3)!important;box-shadow:0 12px 32px rgba(100,61,225,.24)!important;font-size:13px!important}
+body#blinqPremium .upgrade-dialog-compare{border:0;background:transparent;color:#9bc5c2;text-decoration:underline;text-underline-offset:4px;font-size:11px;font-weight:700;cursor:pointer}
+
+/* Admin display controller — row overrides are explicit and compact. */
+body#blinqPremium .admin-row-overrides{grid-column:1/-1;margin:4px 0 2px;padding:8px 10px;border:1px solid rgba(86,145,128,.14);border-radius:10px;background:rgba(2,16,17,.42)}
+body#blinqPremium .admin-row-overrides summary{cursor:pointer;color:#8da39c;font-size:8px;font-weight:820;letter-spacing:.04em}
+body#blinqPremium .admin-row-overrides>div{display:grid;grid-template-columns:repeat(10,minmax(56px,1fr));gap:5px;margin-top:8px}
+body#blinqPremium .admin-row-overrides label{display:grid!important;grid-template-columns:14px 1fr;align-items:center;gap:4px!important;margin:0!important;color:#6f8880!important;font-size:7px!important}
+body#blinqPremium .admin-row-overrides select{height:28px!important;min-width:0!important;padding:0 17px 0 5px!important;font-size:7px!important}
+body#blinqPremium .admin-row-overrides small{display:block;margin-top:7px;color:#627972;font-size:7px;line-height:1.45}
+body#blinqPremium .admin-audience-row select,body#blinqPremium .simple-banner-audience-row select{height:32px;min-width:105px;border:1px solid rgba(92,148,132,.22);border-radius:7px;background:#061a19;color:#d6e6e0;padding:0 25px 0 8px;font-size:8px;font-weight:780}
+
+/* Support failures are readable and aligned with the product tone. */
+body#blinqPremium #supportFormStatus{color:#91a69e!important;font-size:9px!important;line-height:1.45!important;max-width:420px}
+
+@media(max-width:760px){
+ body#blinqPremium .boot-splash.boot-splash-tennis:after,body#blinqPremium .auth-dialog[open]::after{background-image:url('/assets/blinq_logo.svg')!important;background-position:center!important;background-size:contain!important;background-repeat:no-repeat!important;right:18px!important;bottom:17px!important;width:110px!important;height:42px!important}
+ body#blinqPremium #upgradeDialogContent{padding:26px 20px 24px!important}
+ body#blinqPremium .upgrade-dialog-title{font-size:26px!important}
+ body#blinqPremium .upgrade-dialog-account-facts{grid-template-columns:1fr!important}
+ body#blinqPremium .upgrade-dialog-actions{align-items:stretch;flex-direction:column;gap:10px}
+ body#blinqPremium .upgrade-dialog-cta{width:100%!important;min-width:0!important}
+ body#blinqPremium .admin-row-overrides>div{grid-template-columns:repeat(5,minmax(58px,1fr))}
+}
+body#blinqPremium .insight-storage-note{display:flex;align-items:center;gap:9px;border-color:rgba(214,180,90,.16)!important;background:rgba(75,59,20,.10)!important;color:#9faa9e!important}

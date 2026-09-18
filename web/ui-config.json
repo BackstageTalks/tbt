@@ -2710,7 +2710,7 @@
         "preview_limit": 5,
         "plans": {
           "trial": {
-            "visible_picks": 1,
+            "visible_picks": 2,
             "blur_remaining": true,
             "see_all": false,
             "order": 2
@@ -2722,7 +2722,7 @@
             "order": 2
           },
           "rookie": {
-            "visible_picks": 1,
+            "visible_picks": 2,
             "blur_remaining": true,
             "see_all": false,
             "order": 2
@@ -3101,46 +3101,67 @@
           "enabled": true,
           "plans": {
             "trial": {
-              "visible_rows": 1,
+              "visible_rows": 2,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "stable_random",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "expired": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "rookie": {
-              "visible_rows": 1,
+              "visible_rows": 2,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "stable_random",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "pro": {
               "visible_rows": 3,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "elite": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "legend": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "goat": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             }
           }
         },
@@ -3149,46 +3170,67 @@
           "enabled": true,
           "plans": {
             "trial": {
-              "visible_rows": 1,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "stable_random",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "expired": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "rookie": {
-              "visible_rows": 1,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "stable_random",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "pro": {
               "visible_rows": 3,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "elite": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "legend": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "goat": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             }
           }
         },
@@ -3200,43 +3242,64 @@
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "expired": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "rookie": {
-              "visible_rows": 1,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "stable_random",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "pro": {
               "visible_rows": 3,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "elite": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "legend": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "goat": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             }
           }
         },
@@ -3248,43 +3311,64 @@
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "expired": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "rookie": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "pro": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "elite": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "legend": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "goat": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             }
           }
         },
@@ -3296,43 +3380,64 @@
               "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "expired": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "rookie": {
               "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "pro": {
               "visible_rows": 3,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "elite": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "legend": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "goat": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             }
           }
         },
@@ -3344,43 +3449,64 @@
               "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "expired": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "rookie": {
               "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "pro": {
               "visible_rows": 3,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "elite": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "legend": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "goat": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             }
           }
         },
@@ -3392,43 +3518,64 @@
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "expired": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "rookie": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "pro": {
               "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "elite": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "legend": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "goat": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             }
           }
         },
@@ -3440,50 +3587,140 @@
               "visible_rows": 0,
               "blur_remaining": false,
               "tab_enabled": false,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "hidden",
+              "row_overrides": {}
             },
             "expired": {
               "visible_rows": 0,
               "blur_remaining": false,
               "tab_enabled": false,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "hidden",
+              "row_overrides": {}
             },
             "rookie": {
               "visible_rows": 0,
               "blur_remaining": false,
               "tab_enabled": false,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "hidden",
+              "row_overrides": {}
             },
             "pro": {
               "visible_rows": 0,
               "blur_remaining": false,
               "tab_enabled": false,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "hidden",
+              "row_overrides": {}
             },
             "elite": {
               "visible_rows": 0,
               "blur_remaining": false,
               "tab_enabled": false,
-              "see_all": false
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "hidden",
+              "row_overrides": {}
             },
             "legend": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             },
             "goat": {
               "visible_rows": "ALL",
               "blur_remaining": false,
               "tab_enabled": true,
-              "see_all": true
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            }
+          }
+        },
+        "sets": {
+          "label": "SETS",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "rookie": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "pro": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
             }
           }
         }
       }
     }
   },
-  "ui_revision": "7.3.4",
+  "ui_revision": "7.3.5",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3528,7 +3765,7 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "7.3.4",
+  "revision": "7.3.5",
   "footer": {
     "copyright": "© 2026 BlinQ",
     "system_status": "Všetky systémy funkčné",
@@ -3620,7 +3857,7 @@
     "allow_user_replies": false,
     "read_tracking": true
   },
-  "asset_revision": 7340,
+  "asset_revision": 7350,
   "ui_copy": {
     "loading": {
       "eyebrow": {

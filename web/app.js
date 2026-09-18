@@ -154,10 +154,14 @@
   }
   const lcopy=(en,sk,cz=sk)=>locale==='sk'?sk:locale==='cz'?cz:en;
   function uiCopy(path,fallback=''){
-    const keys=String(path||'').split('.').filter(Boolean);let node=state.ui?.ui_copy;
-    for(const key of keys){if(!node||typeof node!=='object')return String(fallback??'');node=node[key];}
+    const keys=String(path||'').split('.').filter(Boolean);
+    const read=source=>{let node=source;for(const key of keys){if(!node||typeof node!=='object')return undefined;node=node[key];}return node;};
+    let node=read(state.siteContent?.ui_copy);if(node===undefined)node=read(state.ui?.ui_copy);
     if(node&&typeof node==='object'&&!Array.isArray(node)){const localized=node[locale]??node.sk??node.en;return localized==null?String(fallback??''):String(localized);}
     return node==null?String(fallback??''):String(node);
+  }
+  function uiCopyTemplate(path,fallback='',values={}){
+    let text=uiCopy(path,fallback);for(const [key,value] of Object.entries(values||{}))text=text.replaceAll(`{${key}}`,String(value));return text;
   }
   function applyEditableUiCopy(){
     const eyebrow=$('bootEyebrow'),bootStatus=$('bootStatus');
@@ -834,7 +838,6 @@
       const id=node.dataset.uiElement; const mode=elementAccess(id);
       node.classList.remove('ui-state-active','ui-state-locked','ui-state-blurred','ui-state-hidden','access-locked');
       node.classList.add(`ui-state-${mode}`); node.dataset.uiState=mode;
-      node.dataset.uiStateLabel=mode==='active'?'':`${mode.toUpperCase()} · ${accessLabel()}`;
       node.setAttribute('aria-disabled',mode==='active'?'false':'true');
       if(mode!=='active'){
         node.classList.add('access-locked');
@@ -844,9 +847,9 @@
           node.dataset.upgradeSection=node.textContent?.trim().slice(0,70)||dashboardSectionConfig(sectionKey).label||'BlinQ';
           node.dataset.accessAutoLock='1';
         }
-      }else if(node.dataset.accessAutoLock==='1'){
-        delete node.dataset.upgradePlan;delete node.dataset.upgradeSection;delete node.dataset.accessAutoLock;
-      }
+        const required=String(upgradePlanLabel(node.dataset.upgradePlan||'pro')||node.dataset.upgradePlan||'PRO').replace(/^BlinQ\s+/i,'').toUpperCase();
+        node.dataset.uiStateLabel=uiCopyTemplate('access.requires',lcopy(`Requires ${required}`,`Vyžaduje ${required}`,`Vyžaduje ${required}`),{plan:required});
+      }else{node.dataset.uiStateLabel='';if(node.dataset.accessAutoLock==='1'){delete node.dataset.upgradePlan;delete node.dataset.upgradeSection;delete node.dataset.accessAutoLock;}}
     });
   }
   function refreshTopPlanCta(){
@@ -892,40 +895,25 @@
   }
   function renderFooterConfig(){
     const footer=state.ui?.footer||{};
-    const copyright=$('footerCopyright');if(copyright)copyright.textContent=String(footer.copyright||'© 2026 BlinQ');
+    const copyright=$('footerCopyright');if(copyright)copyright.innerHTML=`${escapeHtml(String(footer.copyright||'© 2026 BlinQ'))} <small class="web-release-stamp" title="Frontend release">UI 7.3.5</small>`;
     const wrap=document.querySelector('.system-status'),status=wrap?.querySelector('strong');
     const model=$('footerModelState');
-    const generated=state.feed?.generated_at||'';
-    const generatedMs=Date.parse(generated);
+    const generated=state.feed?.generated_at||'',generatedMs=Date.parse(generated);
     const feedAgeMin=Number.isFinite(generatedMs)?Math.max(0,(Date.now()-generatedMs)/60000):Infinity;
-    const liveScan=state.userLiveRadarStatus?.scanned_at||'';
-    const liveMs=Date.parse(liveScan);
+    const liveScan=state.userLiveRadarStatus?.scanned_at||'',liveMs=Date.parse(liveScan);
     const liveAgeMin=Number.isFinite(liveMs)?Math.max(0,(Date.now()-liveMs)/60000):Infinity;
     const liveError=Boolean(state.userLiveRadarStatus?.error);
-    const feedStale=Boolean(state.feed?.stale)||feedAgeMin>90;
-    const feedOld=feedAgeMin>30;
-    const liveFresh=liveAgeMin<=3&&!liveError;
-    const updated=generated?fmtTime(generated):'—';
-    const liveUpdated=liveScan?fmtTime(liveScan):'';
-    if(wrap){
-      wrap.classList.toggle('is-error',liveError&&!Number.isFinite(generatedMs));
-      wrap.classList.toggle('is-warning',!liveFresh&&(feedOld||feedStale||liveError));
-      wrap.classList.toggle('is-ok',liveFresh||(!feedOld&&!feedStale&&!liveError));
-    }
+    const feedStale=Boolean(state.feed?.stale)||feedAgeMin>90,feedOld=feedAgeMin>30,liveFresh=liveAgeMin<=3&&!liveError;
+    const ageText=minutes=>{if(!Number.isFinite(minutes))return '—';const n=Math.max(0,Math.round(minutes));return n<=1?uiCopy('footer.just_now',lcopy('just now','práve teraz','právě teď')):uiCopyTemplate('footer.minutes_ago',lcopy('{n} min ago','pred {n} min','před {n} min'),{n});};
+    if(wrap){wrap.classList.toggle('is-error',liveError&&!Number.isFinite(generatedMs));wrap.classList.toggle('is-warning',!liveFresh&&(feedOld||feedStale||liveError));wrap.classList.toggle('is-ok',liveFresh||(!feedOld&&!feedStale&&!liveError));}
     if(status){
-      if(liveFresh){
-        status.textContent=`${uiCopy('footer.live_ok',lcopy('LIVE radar active','LIVE radar aktívny','LIVE radar aktivní'))}${liveUpdated?' · '+liveUpdated:''}`;
-      }else if(liveError){
-        status.textContent=`${uiCopy('footer.offline',lcopy('Services reconnecting','Služby sa obnovujú','Služby se obnovují'))} · ${uiCopy('footer.updated',lcopy('Updated','Aktualizované','Aktualizováno'))} ${updated}`;
-      }else if(feedStale){
-        status.textContent=`${uiCopy('footer.updated',lcopy('Updated','Aktualizované','Aktualizováno'))} ${updated} · ${uiCopy('footer.feed_stale',lcopy('Waiting for data refresh','Čaká sa na aktualizáciu dát','Čeká se na aktualizaci dat'))}`;
-      }else if(feedOld){
-        status.textContent=`${uiCopy('footer.updated',lcopy('Updated','Aktualizované','Aktualizováno'))} ${updated} · ${uiCopy('footer.feed_old',lcopy('Data is older','Dáta sú staršie','Data jsou starší'))}`;
-      }else{
-        status.textContent=`${uiCopy('footer.updated',lcopy('Updated','Aktualizované','Aktualizováno'))} ${updated} · ${uiCopy('footer.feed_fresh',lcopy('Data is current','Dáta sú aktuálne','Data jsou aktuální'))}`;
-      }
+      if(liveFresh)status.textContent=`${uiCopy('footer.live_ok',lcopy('LIVE radar active','LIVE radar aktívny','LIVE radar aktivní'))} · ${ageText(liveAgeMin)}`;
+      else if(feedStale)status.textContent=`${uiCopy('footer.feed_stale',lcopy('Waiting for data refresh','Čaká sa na aktualizáciu dát','Čeká se na aktualizaci dat'))} · ${ageText(feedAgeMin)}`;
+      else if(liveError&&Number.isFinite(generatedMs))status.textContent=`${uiCopy('footer.live_error',lcopy('LIVE radar is temporarily unavailable','LIVE radar je dočasne nedostupný','LIVE radar je dočasně nedostupný'))} · ${uiCopy('footer.updated',lcopy('Updated','Aktualizované','Aktualizováno'))} ${ageText(feedAgeMin)}`;
+      else if(feedOld)status.textContent=`${uiCopy('footer.feed_old',lcopy('Data is older','Dáta sú staršie','Data jsou starší'))} · ${ageText(feedAgeMin)}`;
+      else status.textContent=`${uiCopy('footer.feed_fresh',lcopy('Data is current','Dáta sú aktuálne','Data jsou aktuální'))} · ${ageText(feedAgeMin)}`;
     }
-    if(model&&liveScan){model.title=`${model.title||model.textContent||''} · LIVE ${liveUpdated}`.trim();}
+    if(model){const original=model.dataset.baseTitle||model.title||model.textContent||'';model.dataset.baseTitle=original;model.title=liveFresh?`${original} · LIVE ${ageText(liveAgeMin)}`.trim():original;}
   }
   const cookieConsentKey='blinq_cookie_consent_v1';
   function cookieConsentValue(){try{return localStorage.getItem(cookieConsentKey)||'';}catch{return '';}}
@@ -965,8 +953,13 @@
     $('authPassword').autocomplete=mode==='login'?'current-password':'new-password';
     const authFallback={login:'Sign in to your analytics workspace',signup:'Get access',reset:'Restore your access',recovery:'Set a new password'}[mode];
     const authCopyKey={login:'auth.login_title',signup:'auth.signup_title',reset:'auth.reset_title',recovery:'auth.recovery_title'}[mode];
-    $('authTitle').textContent=uiCopy(authCopyKey,publicText(authFallback));
-    $('authSubtitle').textContent=''; $('authSubtitle').hidden=true;
+    if(mode==='login'){
+      $('authTitle').textContent=uiCopy('auth.login_title',lcopy('Sign in to BlinQ','Prihlásenie do BlinQ','Přihlášení do BlinQ'));
+      $('authSubtitle').textContent=uiCopy('auth.login_subtitle',publicText(authFallback));$('authSubtitle').hidden=false;
+    }else{
+      $('authTitle').textContent=uiCopy(authCopyKey,publicText(authFallback));
+      $('authSubtitle').textContent='';$('authSubtitle').hidden=true;
+    }
     $('authSubmit').textContent=publicText({login:'Sign in',signup:'Create account',reset:'Send recovery link',recovery:'Save password'}[mode]);
     $('switchSignup').textContent=publicText(mode==='login'?'Create account':'Back to sign in'); $('switchReset').hidden=mode!=='login';
     $('authSubmit').disabled=!state.authEnabled;
@@ -1178,7 +1171,7 @@
   }
   function findRowByEventId(id){
     const target=String(id||'');
-    for(const tab of ['daily','prime','top','value','ace','games','doubles']){
+    for(const tab of ['daily','prime','top','value','ace','games','sets','doubles']){
       const row=(dailyHubRows(tab)||[]).find(item=>eventKey(item)===target);
       if(row)return {row,tab};
     }
@@ -1302,7 +1295,7 @@
       const liveCopy=uiCopy('private_feed.history_unavailable',lcopy('Alert history is temporarily unavailable. LIVE radar continues to work.','História upozornení je dočasne nedostupná. LIVE radar ďalej funguje.','Historie upozornění je dočasně nedostupná. LIVE radar dále funguje.'));
       const infoCopy=uiCopy('private_feed.info_unavailable',lcopy('Premium Info needs persistent storage. Messages will return automatically when storage is restored.','Premium Info potrebuje trvalé úložisko. Po obnovení sa správy zobrazia automaticky.','Premium Info potřebuje trvalé úložiště. Po obnovení se zprávy zobrazí automaticky.'));
       if(channel==='live'){list.innerHTML=radarPanel+`<div class="insight-storage-note"><i>i</i><span>${escapeHtml(liveCopy)}</span></div>`;}
-      else{list.innerHTML=`<div class="insight-feed-empty insight-feed-offline"><i>!</i><strong>${escapeHtml(lcopy('Premium Info temporarily unavailable','Premium Info je dočasne nedostupné','Premium Info je dočasně nedostupné'))}</strong><p>${escapeHtml(infoCopy)}</p></div>`;}
+      else{list.innerHTML=`<div class="insight-feed-empty insight-feed-offline"><i>!</i><strong>${escapeHtml(uiCopy('private_feed.info_title_offline',lcopy('Premium Info temporarily unavailable','Premium Info je dočasne nedostupné','Premium Info je dočasně nedostupné')))}</strong><p>${escapeHtml(infoCopy)}</p></div>`;}
       return;
     }
     if(!rows.length){const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');list.innerHTML=radarPanel+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.'))}</p></div>`;return;}
@@ -1389,7 +1382,7 @@
       const total=Math.max(0,Number(daily.total)||0)+Math.max(0,Number(value.total)||0);
       return {visible_picks:allowed?'ALL':0,blur_remaining:!allowed,enabled:true,see_all:allowed,total,returned:allowed?total:0,locked_count:allowed?0:total};
     }
-    const key=tab==='calendar'?'daily':tab==='daily'?'daily':tab==='ace'?'ace':(tab==='games'||tab==='sets')?'sg':tab;
+    const key=tab==='calendar'?'daily':tab==='daily'?'daily':tab==='ace'?'ace':tab==='games'?'games':tab==='sets'?'sets':tab;
     return state.feed?.entitlements?.sections?.[key]||{visible_picks:'ALL',blur_remaining:false,enabled:true,total:0,returned:0};
   }
   function dailyPickIdentity(row){
@@ -1416,7 +1409,7 @@
   }
   function dailyHubRows(tab){
     if(tab==='daily'){
-      // `daily_picks` is already server-authorized: ROOKIE=1, PRO=3, ELITE+=ALL.
+      // `daily_picks` is already server-authorized: ROOKIE=2 stable/day, PRO=3, ELITE+=ALL.
       // Do not re-merge the legacy prime/top arrays here or a low tier could receive extra rows.
       return (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible);
     }
@@ -1881,10 +1874,10 @@
     return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><span aria-hidden="true">→</span></button></td></tr>`;
   }
 
-  function dailyHubLockedRow(tab,index){
-    const colspan=Math.max(1,dailyHubColumns(tab).length);
-    if(tab==='see_all')return `<tr class="hub-row-locked hub-row-seeall"><td colspan="${colspan}"><span>◆</span><b>SEE ALL je dostupné od ELITE</b><small>Kompletný kvalifikovaný výber bez limitu TOP 10.</small></td></tr>`;
-    return `<tr class="hub-row-locked"><td colspan="${colspan}"><span>🔒</span><b>Ďalší pick</b><small>Vyššia úroveň odomkne viac riadkov v tejto kategórii.</small></td></tr>`;
+  function dailyHubLockedRow(tab,index,requiredPlan='pro'){
+    const colspan=Math.max(1,dailyHubColumns(tab).length),required=String(upgradePlanLabel(requiredPlan)||requiredPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
+    if(tab==='see_all')return `<tr class="hub-row-locked hub-row-seeall access-locked" data-upgrade-plan="elite" data-upgrade-section="SEE ALL"><td colspan="${colspan}"><span>◆</span><div><em>${escapeHtml(uiCopyTemplate('access.requires','Vyžaduje ELITE',{plan:'ELITE'}))}</em><b>SEE ALL</b><small>Kompletný kvalifikovaný výber bez limitu TOP 10.</small></div></td></tr>`;
+    return `<tr class="hub-row-locked access-locked" data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}"><td colspan="${colspan}"><span>🔒</span><div><em>${escapeHtml(uiCopyTemplate('access.requires',`Vyžaduje ${required}`,{plan:required}))}</em><b>${escapeHtml(uiCopy('access.locked_row',lcopy('Next pick is locked','Ďalší pick je zamknutý','Další tip je zamčený')))}</b><small>${escapeHtml(uiCopy('access.locked_row_body',lcopy('A higher tier unlocks more rows and prediction detail.','Vyššia úroveň odomkne ďalšie riadky a detail predikcie.','Vyšší úroveň odemkne další řádky a detail predikce.')))}</small></div></td></tr>`;
   }
   function renderDailyHub(){
     const host=$('dailyHub'); if(!host)return; wireDailyHub();
@@ -1892,7 +1885,9 @@
     const tabs=['daily','value','ace','games','sets','see_all'];
     if(!tabs.includes(state.dailyHubTab))state.dailyHubTab='daily';
     const plan=accountPlan();
-    $('dailyHubTabs').innerHTML=tabs.map(tab=>{
+    const visibleTabs=tabs.filter(tab=>tab==='see_all'||dailyHubEntitlement(tab).enabled!==false);
+    if(!visibleTabs.includes(state.dailyHubTab))state.dailyHubTab=visibleTabs[0]||'daily';
+    $('dailyHubTabs').innerHTML=visibleTabs.map(tab=>{
       const ent=dailyHubEntitlement(tab),locked=tab==='see_all'&&!ent.see_all,coming=dailyHubIsComingSoon(tab);
       let count='';
       if(coming)count='<em>COMING SOON</em>';
@@ -1919,12 +1914,19 @@
     limit=Math.min(limit,Math.max(rows.length,Number(ent.returned)||0));
     const columnKeys=dailyHubColumnKeys(tab);
     head.innerHTML=`<tr>${dailyHubColumns(tab).map((c,i)=>`<th class="hub-head-${escapeHtml(columnKeys[i]||'generic')}">${escapeHtml(c)}</th>`).join('')}</tr>`;
-    const out=[];
-    if(tab==='see_all'&&!ent.see_all)out.push(dailyHubLockedRow(tab,0));
+    const out=[],requiredPlan=firstUnlockPlan(tab==='daily'?'top_daily':tab==='games'||tab==='sets'?'sg':tab,Number(ent.visible_picks)||0,true)||'pro';
+    if(tab==='see_all'&&!ent.see_all)out.push(dailyHubLockedRow(tab,0,'elite'));
     else{
-      for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
-      if(!rows.length&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,0));
-      else if(rows.length<allCount&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,rows.length));
+      const slotStates=Array.isArray(ent.slot_states)?ent.slot_states:[];let dataIndex=0;
+      if(slotStates.length){
+        slotStates.slice(0,preview).forEach((slotState,slotIndex)=>{
+          if(slotState==='hidden')return;
+          if(slotState==='blurred')out.push(dailyHubLockedRow(tab,slotIndex,requiredPlan));
+          else if(dataIndex<rows.length)out.push(dailyHubRow(rows[dataIndex++],tab,false,slotIndex));
+        });
+      }else for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
+      if(!out.length&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,0,requiredPlan));
+      else if((Number(ent.total)||0)>Math.max(slotStates.length,rows.length)&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,Math.max(slotStates.length,rows.length),requiredPlan));
     }
     body.innerHTML=out.join('');
     if(empty){empty.hidden=Boolean(out.length);empty.textContent=lcopy('No predictions are available in this category yet.','V tejto kategórii zatiaľ nie sú dostupné predikcie.','V této kategorii zatím nejsou dostupné predikce.');}
@@ -2489,7 +2491,7 @@
   function bannerAudienceEditor(item){
     if(!['header_slot','hero_banner','large_banner','sidebar_promo'].includes(item.kind))return '';
     item.click_access=item.click_access||{};
-    return `<div class="admin-section"><div class="admin-section-title"><strong>Audience / link access</strong><span>Choose who can see this banner and who may open its link.</span></div><div class="admin-audience-grid">${accessContexts.map(plan=>{const visible=elementAccess(item.id,plan)!=='hidden',click=item.click_access?.[plan]!==false;return `<div class="admin-audience-row"><b>${escapeHtml(state.ui?.plans?.[plan]?.label||plan.toUpperCase())}</b><label><input type="checkbox" data-banner-visible-plan="${escapeHtml(plan)}" ${visible?'checked':''}> Viditeľné</label><label><input type="checkbox" data-banner-click-plan="${escapeHtml(plan)}" ${click?'checked':''}> Odkaz aktívny</label></div>`;}).join('')}</div><small class="field-hint">Example: keep a PRO Telegram banner visible to ROOKIE, but disable its link. ROOKIE sees the offer with a lock instead of entering the premium group.</small></div>`;
+    return `<div class="admin-section"><div class="admin-section-title"><strong>Zobrazenie / prístup</strong><span>Každý banner môže byť pre každú úroveň zobrazený, rozmazaný alebo skrytý. Kliknutie sa riadi samostatne.</span></div><div class="admin-audience-grid">${accessContexts.map(plan=>{const mode=elementAccess(item.id,plan),click=item.click_access?.[plan]!==false;return `<div class="admin-audience-row"><b>${escapeHtml(state.ui?.plans?.[plan]?.label||plan.toUpperCase())}</b><label>Stav<select data-banner-state-plan="${escapeHtml(plan)}"><option value="active"${mode==='active'?' selected':''}>ZOBRAZIŤ</option><option value="blurred"${mode==='blurred'||mode==='locked'?' selected':''}>ROZMAZAŤ</option><option value="hidden"${mode==='hidden'?' selected':''}>SKRYŤ</option></select></label><label><input type="checkbox" data-banner-click-plan="${escapeHtml(plan)}" ${click?'checked':''}> Odkaz aktívny</label></div>`;}).join('')}</div></div>`;
   }
   function renderAdminInspector(){
     const item=elements()?.[state.selectedElement] || elements()?.HEADER_BANNER_1;
@@ -2556,16 +2558,20 @@
     const ordered=orderedDashboardKeys(state.adminPlan);
     const levelLabel=accessLabel(state.adminPlan);
     const hub=dailyHubConfig();
-    const rows=['daily','top','value','ace','games','doubles'].map(tab=>{
-      const tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{},globalOn=tc.enabled!==false,levelOn=rule.tab_enabled!==false;
-      const visible=String(rule.visible_rows??0).toUpperCase();
-      return `<div class="admin-daily-matrix-row${globalOn?'':' is-global-off'}${levelOn?'':' is-level-off'}" data-admin-hub-tab-card="${tab}">
+    const rows=['daily','value','ace','games','sets','doubles'].map(tab=>{
+      const tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{},globalOn=tc.enabled!==false;
+      const visible=String(rule.visible_rows??0).toUpperCase(),display=String(rule.display_state||((rule.tab_enabled!==false)?'active':'hidden'));
+      const selection=String(rule.selection_mode||'first'),overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};
+      const rowOverrides=[1,2,3,4,5,6,7,8,9,10].map(position=>{const mode=String(overrides[position]||'active');return `<label><span>${position}</span><select data-admin-hub-row-state="${position}" data-admin-hub-tab="${tab}"><option value="active"${mode==='active'?' selected':''}>SHOW</option><option value="blurred"${mode==='blurred'?' selected':''}>BLUR</option><option value="hidden"${mode==='hidden'?' selected':''}>HIDE</option></select></label>`;}).join('');
+      return `<div class="admin-daily-matrix-row${globalOn?'':' is-global-off'}${display==='hidden'?' is-level-off':''}" data-admin-hub-tab-card="${tab}">
         <div class="admin-daily-category"><strong>${escapeHtml(dailyHubTabLabel(tab))}</strong><small>${globalOn?'Na webe':'Globálne vypnuté'}</small></div>
         <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-global-field="enabled" data-admin-hub-tab="${tab}" ${globalOn?'checked':''}><span>Na webe</span></label>
-        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="tab_enabled" data-admin-hub-tab="${tab}" ${levelOn?'checked':''}><span>Pre ${escapeHtml(levelLabel)}</span></label>
-        <label class="admin-daily-row-count"><span>Riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||!levelOn?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label>
-        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||!levelOn?'disabled':''}><span>Zamknúť zvyšok</span></label>
-        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||!levelOn?'disabled':''}><span>Celá ponuka</span></label>
+        <label class="admin-daily-row-count"><span>Panel pre ${escapeHtml(levelLabel)}</span><select data-admin-hub-field="display_state" data-admin-hub-tab="${tab}" ${!globalOn?'disabled':''}><option value="active"${display==='active'?' selected':''}>ZOBRAZIŤ</option><option value="blurred"${display==='blurred'?' selected':''}>ROZMAZAŤ</option><option value="hidden"${display==='hidden'?' selected':''}>SKRYŤ</option></select></label>
+        <label class="admin-daily-row-count"><span>Odomknuté riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label>
+        <label class="admin-daily-row-count"><span>Výber</span><select data-admin-hub-field="selection_mode" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}><option value="first"${selection==='first'?' selected':''}>PRVÉ</option><option value="stable_random"${selection==='stable_random'?' selected':''}>NÁHODNÉ / DEŇ</option></select></label>
+        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||display==='hidden'?'disabled':''}><span>Zamknúť zvyšok</span></label>
+        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||display!=='active'?'disabled':''}><span>Celá ponuka</span></label>
+        <details class="admin-row-overrides"><summary>Riadky 1–10 · SHOW / BLUR / HIDE</summary><div>${rowOverrides}</div><small>BLUR a HIDE neposielajú citlivý obsah do prehliadača. Pri NÁHODNÉ / DEŇ zostáva výber stabilný celý deň pre konkrétny účet.</small></details>
       </div>`;
     }).join('');
     return `<section class="admin-ux-section admin-daily-settings-v687">
@@ -2578,12 +2584,12 @@
         <div><small>UPRAVUJEŠ PRÍSTUP PRE</small><strong>${escapeHtml(levelLabel)}</strong><span>Najprv vyber level, potom nastav jeho pravidlá. Globálne vypnutie kategórie ju skryje všetkým.</span></div>
         ${adminLevelChips(state.adminPlan,'admin-plan-chip',true)}
       </div>
-      <div class="admin-daily-preset-bar"><div><strong>Rýchle nastavenie pre ${escapeHtml(levelLabel)}</strong><span>Voliteľné. Prepíše iba pravidlá dennej ponuky pre tento level, nie globálne zapnutie kategórií.</span></div><div><button type="button" data-admin-daily-preset="full">Plný prístup</button><button type="button" data-admin-daily-preset="preview3">3 riadky</button><button type="button" data-admin-daily-preset="teaser1">1 riadok</button><button type="button" data-admin-daily-preset="hidden">Skryť všetko</button></div></div>
+      <div class="admin-daily-preset-bar"><div><strong>Rýchle nastavenie pre ${escapeHtml(levelLabel)}</strong><span>Voliteľné. Prepíše iba pravidlá dennej ponuky pre tento level, nie globálne zapnutie kategórií.</span></div><div><button type="button" data-admin-daily-preset="full">Plný prístup</button><button type="button" data-admin-daily-preset="preview3">3 riadky</button><button type="button" data-admin-daily-preset="rookie2">2 náhodné + blur</button><button type="button" data-admin-daily-preset="blurred">Rozmazať panely</button><button type="button" data-admin-daily-preset="hidden">Skryť všetko</button></div></div>
       <div class="admin-daily-matrix-card">
         <header><div><small>DENNÁ PONUKA</small><h3>Čo uvidí ${escapeHtml(levelLabel)}</h3><p>Domovská stránka drží maximálne 10 pozícií. „VŠETKY“ odomkne všetky aktuálne riadky. „Celá ponuka“ dovolí otvoriť rozšírený zoznam.</p></div><button class="btn btn-ghost" type="button" data-admin-action="preview">Náhľad ako ${escapeHtml(levelLabel)}</button></header>
-        <div class="admin-daily-matrix-head"><span>Kategória</span><span>Globálne</span><span>Level</span><span>Viditeľné</span><span>Ďalšie riadky</span><span>Rozšírenie</span></div>
+        <div class="admin-daily-matrix-head"><span>Kategória</span><span>Globálne</span><span>Panel</span><span>Riadky</span><span>Výber</span><span>Zvyšok</span></div>
         <div class="admin-daily-matrix">${rows}</div>
-        <div class="admin-admin-legend"><span><i class="is-global"></i><b>Na webe</b> = kategória existuje pre používateľov</span><span><i class="is-level"></i><b>Pre level</b> = zvolená úroveň ju vidí</span><span><i class="is-lock"></i><b>Zamknúť zvyšok</b> = ďalšie riadky zostanú ako premium teaser</span></div>
+        <div class="admin-admin-legend"><span><i class="is-global"></i><b>SHOW</b> = plný obsah</span><span><i class="is-level"></i><b>BLUR</b> = viditeľný premium teaser bez citlivých dát v HTML</span><span><i class="is-lock"></i><b>HIDE</b> = prvok sa pre level nezobrazí</span></div>
       </div>
       <details class="admin-compact-tools"><summary>Kopírovať nastavenie z iného levelu</summary><div class="admin-copy-strip"><label>Zdrojová úroveň<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Skopírovať všetky pravidlá → ${escapeHtml(levelLabel)}</button><small>Skopíruje prístupy, počty predikcií, poradie, rozmazanie a oprávnenia bannerov.</small></div></details>
       <details class="admin-layout-advanced"><summary><span><strong>Rozšírené sekcie dashboardu</strong><small>TOP / Short Odds / Value / Esá / Sety a hry / Štvorhra – poradie, navigácia a limity</small></span><b>Rozbaliť</b></summary><div class="admin-layout-advanced-body"><div class="admin-section-list">${ordered.map(renderAdminSectionCard).join('')}</div></div></details>
@@ -2594,9 +2600,8 @@
   function simpleBannerAudienceRows(id,item){
     item.click_access=item.click_access||{};
     return accessContexts.map(plan=>{
-      const visible=elementAccess(id,plan)!=='hidden',click=item.click_access?.[plan]!==false;
-      const label=state.ui?.plans?.[plan]?.label||plan.toUpperCase();
-      return `<div class="simple-banner-audience-row"><b>${escapeHtml(label)}</b><label><input type="checkbox" data-simple-banner-visible="${escapeHtml(plan)}" ${visible?'checked':''}> Viditeľné</label><label><input type="checkbox" data-simple-banner-click="${escapeHtml(plan)}" ${click?'checked':''}> Odkaz aktívny</label></div>`;
+      const mode=elementAccess(id,plan),click=item.click_access?.[plan]!==false,label=state.ui?.plans?.[plan]?.label||plan.toUpperCase();
+      return `<div class="simple-banner-audience-row"><b>${escapeHtml(label)}</b><label>Stav<select data-simple-banner-state="${escapeHtml(plan)}"><option value="active"${mode==='active'?' selected':''}>ZOBRAZIŤ</option><option value="blurred"${mode==='blurred'||mode==='locked'?' selected':''}>ROZMAZAŤ</option><option value="hidden"${mode==='hidden'?' selected':''}>SKRYŤ</option></select></label><label><input type="checkbox" data-simple-banner-click="${escapeHtml(plan)}" ${click?'checked':''}> Odkaz aktívny</label></div>`;
     }).join('');
   }
   function simpleBannerPreview(id,item,kind){
@@ -2967,10 +2972,10 @@
   }
 
   function renderAdminRoute(){
-    const tabs=[['accounts','Účty','Prístup · platnosť'],['banners','Bannery','Hero · pozadie'],['insights','Info & LIVE','Správy · radar'],['support','Support','Požiadavky'],['system','Systém','Diagnostika']];
+    const tabs=[['accounts','Účty','Prístup · platnosť'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['insights','Info & LIVE','Správy · radar'],['support','Support','Požiadavky'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,banners:renderAdminBanners,insights:renderAdminInsights,support:renderAdminSupport,system:renderAdminSystem};const panel=renderers[state.adminTab]();
-    const info={accounts:['Účty','Levely, platnosť a prístup.'],banners:['Bannery','Hero, mobil a pozadie.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],support:['Support','Požiadavky používateľov a stav riešenia.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
+    const renderers={accounts:renderAdminAccounts,layout:renderAdminLayout,banners:renderAdminBanners,insights:renderAdminInsights,support:renderAdminSupport,system:renderAdminSystem};const panel=renderers[state.adminTab]();
+    const info={accounts:['Účty','Levely, platnosť a prístup.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','SHOW / BLUR / HIDE, klik, hero, mobil a pozadie.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],support:['Support','Požiadavky používateľov a stav riešenia.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
     else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy sa publikujú okamžite</div>';
@@ -3100,7 +3105,7 @@
     host.onclick=async event=>{
       const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='insights')loadAdminInsights();if(state.adminTab==='analytics')loadBannerAnalytics();if(state.adminTab==='support')loadAdminSupport();if(state.adminTab==='audit')loadAdminAudit();if(state.adminTab==='system')loadAdminDiagnostics(true);return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
-      const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','top','value','ace','games','doubles'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};if(preset==='full'){rule.tab_enabled=true;rule.visible_rows='ALL';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.tab_enabled=true;rule.visible_rows=3;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='teaser1'){rule.tab_enabled=true;rule.visible_rows=1;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.tab_enabled=false;rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Denná ponuka · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
+      const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','value','ace','games','sets','doubles'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.tab_enabled=true;rule.row_overrides={};if(preset==='full'){rule.display_state='active';rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.display_state='active';rule.visible_rows=3;rule.selection_mode='first';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='rookie2'){rule.display_state='active';rule.visible_rows=tab==='daily'?2:Math.min(1,Number(rule.visible_rows)||1);rule.selection_mode='stable_random';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='blurred'){rule.display_state='blurred';rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.display_state='hidden';rule.visible_rows=0;rule.blur_remaining=false;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Zobrazenie · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
       const bannerPreviewChip=event.target.closest('[data-admin-banner-preview-plan]');if(bannerPreviewChip){state.adminBannerPreviewPlan=bannerPreviewChip.dataset.adminBannerPreviewPlan;rerenderAdmin();return;}
       const planSelect=event.target.closest('[data-admin-plan-select]');if(planSelect){state.adminPlanId=planSelect.dataset.adminPlanSelect;rerenderAdmin();return;}
       const sectionPreset=event.target.closest('[data-section-preset]');if(sectionPreset){const key=sectionPreset.dataset.sectionKey,plan=state.adminPlan,cfg=key?state.ui?.dashboard?.sections?.[key]:null,id=cfg?.sidebar_element,item=id?elements()?.[id]:null;if(cfg&&item&&plan){cfg.plans=cfg.plans||{};cfg.plans[plan]=cfg.plans[plan]||{};item.access=item.access||{};const ent=cfg.plans[plan],preset=sectionPreset.dataset.sectionPreset;if(preset==='full'){item.access[plan]='active';ent.visible_picks='ALL';ent.blur_remaining=false;ent.see_all=true;}else if(preset==='teaser'){item.access[plan]='active';ent.visible_picks=1;ent.blur_remaining=true;ent.see_all=true;}else if(preset==='blurred'){item.access[plan]='locked';ent.visible_picks=0;ent.blur_remaining=true;ent.see_all=false;}else if(preset==='hidden'){item.access[plan]='hidden';ent.visible_picks=0;ent.blur_remaining=true;ent.see_all=false;}if(plan==='rookie'){item.access.trial=item.access[plan];cfg.plans.trial=clone(ent);}state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();showStatus(`${cfg.label||key} · ${accessLabel(plan)} preset applied.`);}return;}
@@ -3187,6 +3192,7 @@
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
       if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();}return;}
+      if(simpleBanner&&t.dataset.simpleBannerState){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id],plan=t.dataset.simpleBannerState;if(item){item.access=item.access||{};item.access[plan]=t.value;if(plan==='rookie')item.access.trial=t.value;renderAllUiContent();rerenderAdmin();}return;}
       if(simpleBanner&&t.dataset.simpleBannerVisible){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id],plan=t.dataset.simpleBannerVisible;if(item){item.access=item.access||{};if(plan==='ALL'){accessContexts.forEach(level=>{item.access[level]=t.checked?'active':'hidden';});}else{item.access[plan]=t.checked?'active':'hidden';if(plan==='rookie')item.access.trial=item.access[plan];}renderAllUiContent();rerenderAdmin();}return;}
       if(simpleBanner&&t.dataset.simpleBannerClick){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id],plan=t.dataset.simpleBannerClick;if(item){item.click_access=item.click_access||{};if(plan==='ALL'){accessContexts.forEach(level=>{item.click_access[level]=t.checked;});}else{item.click_access[plan]=t.checked;if(plan==='rookie')item.click_access.trial=t.checked;}renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.adminRowCount){const zone=t.dataset.adminRowCount,count=Math.max(0,Math.min(4,Number(t.value)||0));state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows[zone]=state.ui.content_rows[zone]||{};state.ui.content_rows[zone].enabled=count>0;state.ui.content_rows[zone].slot_count=count;state.ui.content_rows[zone].preset=String(count||1);renderAllUiContent();rerenderAdmin();return;}
@@ -3194,13 +3200,15 @@
       if(t.dataset.adminRowPreset){const zone=t.dataset.adminRowPreset;state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows[zone]=state.ui.content_rows[zone]||{};state.ui.content_rows[zone].preset=t.value;renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.dashboardGlobalField){state.ui.dashboard=state.ui.dashboard||{};let value=t.type==='checkbox'?t.checked:Number(t.value);state.ui.dashboard[t.dataset.dashboardGlobalField]=value;state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHubGlobalField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc[t.dataset.adminHubGlobalField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();showStatus(`${dailyHubTabLabel(tab)} · ${tc.enabled===false?'vypnuté':'zapnuté'} globálne.`);return;}
-      if(t.dataset.adminHubField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{visible_rows:0,blur_remaining:true,tab_enabled:true,see_all:false};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.adminHubField==='visible_rows'&&String(value).toUpperCase()!=='ALL')value=Number(value);rule[t.dataset.adminHubField]=value;if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
+      if(t.dataset.adminHubField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{visible_rows:0,blur_remaining:true,tab_enabled:true,see_all:false,selection_mode:'first',display_state:'active',row_overrides:{}};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.adminHubField==='visible_rows'&&String(value).toUpperCase()!=='ALL')value=Number(value);rule[t.dataset.adminHubField]=value;rule.tab_enabled=rule.display_state!=='hidden';if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
+      if(t.dataset.adminHubRowState){const tab=t.dataset.adminHubTab,position=String(t.dataset.adminHubRowState),hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.row_overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};if(t.value==='active')delete rule.row_overrides[position];else rule.row_overrides[position]=t.value;if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
       const dashboardRow=t.closest('[data-dashboard-section]');
       if(dashboardRow&&t.dataset.dashboardField){const key=dashboardRow.dataset.dashboardSection;state.ui.dashboard=state.ui.dashboard||{};state.ui.dashboard.sections=state.ui.dashboard.sections||{};const cfg=state.ui.dashboard.sections[key]=state.ui.dashboard.sections[key]||clone(dashboardSectionFallback[key]||{});let value=t.type==='checkbox'?t.checked:(t.dataset.dashboardField==='preview_limit'&&String(t.value).toUpperCase()!=='ALL'?Number(t.value):t.value);if(t.dataset.dashboardField==='dashboard_enabled'){const pickKeys=dashboardPickSectionKeys;cfg.dashboard_enabled=value;if(pickKeys.includes(key)&&value){const enabled=pickKeys.filter(k=>(state.ui.dashboard.sections[k]||dashboardSectionFallback[k]||{}).dashboard_enabled!==false);const max=Number(state.ui.dashboard.visible_slots||6);if(enabled.length>max){const victim=[...enabled].reverse().find(k=>k!==key);if(victim)state.ui.dashboard.sections[victim].dashboard_enabled=false;}}state.dashboardVisibility=null;}else cfg[t.dataset.dashboardField]=value;renderAllUiContent();rerenderAdmin();return;}
       if(dashboardRow&&t.dataset.dashboardPlanField){const key=dashboardRow.dataset.dashboardSection;state.ui.dashboard=state.ui.dashboard||{};state.ui.dashboard.sections=state.ui.dashboard.sections||{};const cfg=state.ui.dashboard.sections[key]=state.ui.dashboard.sections[key]||clone(dashboardSectionFallback[key]||{});cfg.plans=cfg.plans||{};cfg.plans[state.adminPlan]=cfg.plans[state.adminPlan]||{};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.dashboardPlanField==='visible_picks'&&String(value).toUpperCase()!=='ALL')value=Number(value);cfg.plans[state.adminPlan][t.dataset.dashboardPlanField]=value;if(state.adminPlan==='rookie')cfg.plans.trial=clone(cfg.plans.rookie);renderAllUiContent();rerenderAdmin();return;}
       const matrixRow=t.closest('[data-dashboard-plan-row]');
       if(matrixRow&&t.dataset.dashboardRouteAccess!==undefined){const sectionRow=t.closest('[data-dashboard-section]'),key=sectionRow?.dataset.dashboardSection,plan=matrixRow.dataset.dashboardPlanRow,id=key?dashboardSectionConfig(key).sidebar_element:'';const item=id?elements()?.[id]:null;if(item&&plan){item.access=item.access||{};item.access[plan]=t.value;if(plan==='rookie')item.access.trial=t.value;state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();}return;}
       if(matrixRow&&t.dataset.dashboardMatrixField){const sectionRow=t.closest('[data-dashboard-section]'),key=sectionRow?.dataset.dashboardSection,plan=matrixRow.dataset.dashboardPlanRow;if(key&&plan){state.ui.dashboard=state.ui.dashboard||{};state.ui.dashboard.sections=state.ui.dashboard.sections||{};const cfg=state.ui.dashboard.sections[key]=state.ui.dashboard.sections[key]||clone(dashboardSectionFallback[key]||{});cfg.plans=cfg.plans||{};cfg.plans[plan]=cfg.plans[plan]||{};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.dashboardMatrixField==='visible_picks'&&String(value).toUpperCase()!=='ALL')value=Number(value);if(t.dataset.dashboardMatrixField==='order')value=Math.max(1,Math.min(20,Number(value)||Number(cfg.dashboard_order||99)));cfg.plans[plan][t.dataset.dashboardMatrixField]=value;if(plan==='rookie')cfg.plans.trial=clone(cfg.plans.rookie);renderAllUiContent();rerenderAdmin();return;}}
+      if(t.dataset.bannerStatePlan){const item=elements()?.[state.selectedElement],plan=t.dataset.bannerStatePlan;if(item){item.access=item.access||{};item.access[plan]=t.value;if(plan==='rookie')item.access.trial=t.value;renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.bannerVisiblePlan){const item=elements()?.[state.selectedElement],plan=t.dataset.bannerVisiblePlan;if(item){item.access=item.access||{};item.access[plan]=t.checked?'active':'hidden';if(plan==='rookie')item.access.trial=item.access[plan];renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.bannerClickPlan){const item=elements()?.[state.selectedElement],plan=t.dataset.bannerClickPlan;if(item){item.click_access=item.click_access||{};item.click_access[plan]=t.checked;if(plan==='rookie')item.click_access.trial=t.checked;renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.adminAccess){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.access[t.dataset.adminAccess]=t.value;if(t.dataset.adminAccess==='rookie')item.access.trial=t.value;rerenderAdmin();}return;}
@@ -3430,7 +3438,7 @@
   }
   function wireSupportForm(){
     const form=$('supportForm');if(!form||form.dataset.wired==='1')return;form.dataset.wired='1';
-    form.addEventListener('submit',async event=>{event.preventDefault();if(state.supportSubmitting)return;const status=$('supportFormStatus');state.supportSubmitting=true;status.textContent=supportFormCopy().sending||lcopy('Sending…','Odosielam…','Odesílám…');try{const result=await BlinqAuth.supportSubmit({category:$('supportCategory').value,email:$('supportEmail').value.trim(),subject:$('supportSubject').value.trim(),message:$('supportMessage').value.trim()});const ticket=result?.ticket?.ticket_id||'';status.textContent=ticket?lcopy(`Sent · ${ticket}`,`Odoslané · ${ticket}`,`Odesláno · ${ticket}`):lcopy('Sent','Odoslané','Odesláno');$('supportMessage').value='';$('supportSubject').value='';}catch(error){const code=String(error.code||'').toLowerCase();status.textContent=code==='support_storage_unavailable'?lcopy('Support storage is temporarily unavailable.','Support úložisko je dočasne nedostupné.','Support úložiště je dočasně nedostupné.'):(error.message||lcopy('Could not send the request.','Požiadavku sa nepodarilo odoslať.','Požadavek se nepodařilo odeslat.'));}finally{state.supportSubmitting=false;}});
+    form.addEventListener('submit',async event=>{event.preventDefault();if(state.supportSubmitting)return;const status=$('supportFormStatus');state.supportSubmitting=true;status.textContent=uiCopy('support.sending',supportFormCopy().sending||lcopy('Sending…','Odosielam…','Odesílám…'));try{const result=await BlinqAuth.supportSubmit({category:$('supportCategory').value,email:$('supportEmail').value.trim(),subject:$('supportSubject').value.trim(),message:$('supportMessage').value.trim()});const ticket=result?.ticket?.ticket_id||'';status.textContent=result?.delivery==='email_only'?`${uiCopy('support.email_only',lcopy('Sent by email. Support history is temporarily unavailable.','Odoslané e-mailom. História supportu je dočasne nedostupná.','Odesláno e-mailem. Historie podpory je dočasně nedostupná.'))}${ticket?' · '+ticket:''}`:`${uiCopy('support.sent',lcopy('Sent','Odoslané','Odesláno'))}${ticket?' · '+ticket:''}`;$('supportMessage').value='';$('supportSubject').value='';}catch(error){const code=String(error.code||'').toLowerCase();status.textContent=code==='support_storage_unavailable'?uiCopy('support.storage_unavailable',lcopy('Support is temporarily unavailable. Please try again shortly.','Podpora je dočasne nedostupná. Skúste to znova o chvíľu.','Podpora je dočasně nedostupná. Zkuste to znovu za chvíli.')):(error.message||uiCopy('support.send_failed',lcopy('Could not send the request.','Požiadavku sa nepodarilo odoslať.','Požadavek se nepodařilo odeslat.')));}finally{state.supportSubmitting=false;}});
   }
   function renderRoute(route){
     const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body='';
@@ -3510,13 +3518,14 @@
   function showUpgradePrompt(planId='pro',sectionLabel='this content'){
     window.BlinqUI.closeMenu(false);
     const dialog=$('upgradeDialog'),host=$('upgradeDialogContent');if(!dialog||!host)return;
-    const plan=state.ui?.plans?.[planId]||state.ui?.plans?.pro||{},url=safeExternalUrl(plan.url),facts=upgradePlanFacts(planId,plan);
-    const factHtml=facts.map(([label,value])=>`<span><small>${escapeHtml(label)}</small><strong>${escapeHtml(publicText(value))}</strong></span>`).join('');
+    const plan=state.ui?.plans?.[planId]||state.ui?.plans?.pro||{},url=safeExternalUrl(plan.url);
     const levelName=String(plan.label||upgradePlanLabel(planId)||planId).replace(/^BlinQ\s+/i,'').toUpperCase();
-    const availability=lcopy(`Available from ${levelName} level.`,`Táto položka je dostupná od úrovne ${levelName} vyššie.`,`Tato položka je dostupná od úrovně ${levelName} výše.`);
-    const title=lcopy(`Unlock ${sectionLabel}`,`${sectionLabel} · uzamknuté`,`${sectionLabel} · uzamčeno`);
-    host.innerHTML=`<div class="upgrade-dialog-eyebrow">BLINQ MEMBERSHIP</div><div class="upgrade-dialog-plan">${planAvatarHtml(planId,plan)}<div><h2 id="upgradeDialogTitle">${escapeHtml(title)}</h2><p><strong>${escapeHtml(availability)}</strong><br>${escapeHtml(publicText(plan.description||plan.note||''))}</p></div></div><div class="upgrade-dialog-benefits upgrade-dialog-account-facts">${factHtml}</div>${url?`<a class="btn btn-primary upgrade-dialog-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(lcopy(`Upgrade to ${levelName}`,`Prejsť na ${levelName}`,`Přejít na ${levelName}`))} →</a>`:`<button class="btn btn-primary upgrade-dialog-cta" type="button" data-route="account">${escapeHtml(lcopy('View membership options','Zobraziť možnosti členstva','Zobrazit možnosti členství'))} →</button>`}`;
-    if(locale!=='en')translatePublicDom(dialog); if(!dialog.open)dialog.showModal();
+    const current=String(state.ui?.plans?.[accountPlan()]?.label||accessLabel()).replace(/^BlinQ\s+/i,'');
+    const facts=upgradePlanFacts(planId,plan),validity=facts?.[2]?.[1]||'—';
+    const title=uiCopyTemplate('upgrade.title',lcopy(`Unlock ${levelName} access`,`Odomknúť ${levelName} prístup`,`Odemknout ${levelName} přístup`),{plan:levelName});
+    const requires=uiCopyTemplate('upgrade.requires',lcopy(`Requires ${levelName}`,`Vyžaduje ${levelName}`,`Vyžaduje ${levelName}`),{plan:levelName});
+    host.innerHTML=`<div class="upgrade-dialog-eyebrow">${escapeHtml(uiCopy('upgrade.eyebrow',lcopy('BLINQ MEMBERSHIP','BLINQ ČLENSTVO','BLINQ ČLENSTVÍ')))}</div><div class="upgrade-dialog-brandrow">${planAvatarHtml(planId,plan)}<span class="upgrade-requires-pill">🔒 ${escapeHtml(requires)}</span></div><h2 id="upgradeDialogTitle" class="upgrade-dialog-title">${escapeHtml(title)}</h2><p class="upgrade-dialog-copy"><strong>${escapeHtml(uiCopyTemplate('upgrade.availability',lcopy(`This section is available from ${levelName} and above.`,`Táto sekcia je dostupná od úrovne ${levelName} a vyššie.`,`Tato sekce je dostupná od úrovně ${levelName} a výše.`),{plan:levelName}))}</strong><span>${escapeHtml(uiCopy('upgrade.body',lcopy('Get access to core predictions, the daily offer and pick details.','Získaj prístup k hlavným predikciám, dennej ponuke a detailom pickov.','Získej přístup k hlavním predikcím, denní nabídce a detailům tipů.')))}</span></p><div class="upgrade-dialog-account-facts"><span><i>○</i><small>${escapeHtml(uiCopy('upgrade.current_plan','Tvoj plán'))}</small><strong>${escapeHtml(current||'Rookie')}</strong></span><span class="is-recommended"><i>♛</i><small>${escapeHtml(uiCopy('upgrade.recommended_plan','Odporúčaný plán'))}</small><strong>${escapeHtml(levelName)}</strong></span><span><i>▣</i><small>${escapeHtml(uiCopy('upgrade.validity','Platnosť'))}</small><strong>${escapeHtml(publicText(validity))}</strong></span></div><div class="upgrade-dialog-actions">${url?`<a class="btn btn-primary upgrade-dialog-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(uiCopyTemplate('upgrade.cta',`Prejsť na ${levelName}`,{plan:levelName}))} →</a>`:`<button class="btn btn-primary upgrade-dialog-cta" type="button" data-route="account">${escapeHtml(uiCopyTemplate('upgrade.cta',`Prejsť na ${levelName}`,{plan:levelName}))} →</button>`}<button type="button" class="upgrade-dialog-compare" data-route="account">${escapeHtml(uiCopy('upgrade.compare','Porovnať plány'))}</button></div>`;
+    if(locale!=='en')translatePublicDom(dialog);if(!dialog.open)dialog.showModal();
   }
   async function signOutCurrentSession(){feedGeneration++;await BlinqAuth.signOut();state.feed={upcoming:[],results:[],performance:{},history:{},model:null};state.insights=[];state.insightsUnread=0;state.railMatch=null;setInsightDrawer(false);auth('login');}
   function closeProfileMenu(){const menu=$('profileMenu'),toggle=$('profileMenuToggle');if(menu)menu.hidden=true;if(toggle)toggle.setAttribute('aria-expanded','false');}

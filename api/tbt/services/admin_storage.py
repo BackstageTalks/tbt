@@ -332,14 +332,14 @@ def validate_ui_config(payload: object) -> dict:
     daily_hub = dashboard.get("daily_hub") or {}
     if not isinstance(daily_hub, dict) or not isinstance(daily_hub.get("enabled"), bool):
         raise ValueError("Invalid Daily Picks hub configuration")
-    if daily_hub.get("default_tab") not in {"daily", "prime", "top", "value", "ace", "games", "doubles", "board"}:
+    if daily_hub.get("default_tab") not in {"daily", "prime", "top", "value", "ace", "games", "sets", "doubles", "board"}:
         raise ValueError("Invalid Daily Picks default tab")
     for field in ("preview_rows", "expand_rows"):
         value = daily_hub.get(field)
         if not isinstance(value, int) or not 1 <= value <= 20:
             raise ValueError(f"Invalid Daily Picks setting: {field}")
     hub_tabs = daily_hub.get("tabs") or {}
-    required_hub_tabs = {"daily", "value", "ace", "games"}
+    required_hub_tabs = {"daily", "value", "ace", "games", "sets"}
     allowed_hub_tabs = required_hub_tabs | {"prime", "top", "doubles", "board"}
     if not isinstance(hub_tabs, dict) or not required_hub_tabs.issubset(hub_tabs) or not set(hub_tabs).issubset(allowed_hub_tabs):
         raise ValueError("Daily Picks hub must contain the core tabs and only supported consolidated tabs")
@@ -356,6 +356,20 @@ def validate_ui_config(payload: object) -> dict:
                 raise ValueError(f"Invalid Daily Picks row count {tab_id}/{plan_id}")
             if not isinstance(rule.get("blur_remaining"), bool) or not isinstance(rule.get("tab_enabled"), bool) or not isinstance(rule.get("see_all", False), bool):
                 raise ValueError(f"Invalid Daily Picks entitlement flags {tab_id}/{plan_id}")
+            if str(rule.get("selection_mode") or "first") not in {"first", "stable_random"}:
+                raise ValueError(f"Invalid Daily Picks selection mode {tab_id}/{plan_id}")
+            if str(rule.get("display_state") or "active") not in {"active", "blurred", "hidden"}:
+                raise ValueError(f"Invalid Daily Picks display state {tab_id}/{plan_id}")
+            overrides = rule.get("row_overrides") or {}
+            if not isinstance(overrides, dict):
+                raise ValueError(f"Invalid Daily Picks row overrides {tab_id}/{plan_id}")
+            for position, state in overrides.items():
+                try:
+                    index = int(position)
+                except (TypeError, ValueError):
+                    raise ValueError(f"Invalid Daily Picks row override position {tab_id}/{plan_id}")
+                if not 1 <= index <= 10 or str(state) not in {"active", "blurred", "hidden"}:
+                    raise ValueError(f"Invalid Daily Picks row override {tab_id}/{plan_id}/{position}")
 
     valid_dashboard_sections = {"prime", "top_daily", "value", "doubles", "ace", "sg", "results", "btts"}
     if not isinstance(sections, dict) or not valid_dashboard_sections.issubset(sections):

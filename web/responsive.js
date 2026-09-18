@@ -96,12 +96,12 @@
     }
     node.dataset.state = status;
     node.textContent = {
-      loading: uiText('LIVE · Refreshing…','LIVE · Obnovujem…','LIVE · Obnovuji…'),
-      ready: time ? `LIVE · ${time}` : uiText('LIVE · Connected','LIVE · Pripojené','LIVE · Připojeno'),
+      loading: uiText('DATA · Refreshing…','DÁTA · Obnovujem…','DATA · Obnovuji…'),
+      ready: time ? `${uiText('DATA','DÁTA','DATA')} · ${time}` : uiText('DATA · Connected','DÁTA · Pripojené','DATA · Připojeno'),
       stale: time ? `STALE · ${time}` : uiText('STALE · Waiting for update','STARÉ · Čakám na aktualizáciu','STARÉ · Čekám na aktualizaci'),
       error: uiText('REFRESH FAILED','OBNOVENIE ZLYHALO','OBNOVENÍ SELHALO'),
       offline: uiText('OFFLINE · Cached data','OFFLINE · Dáta z cache','OFFLINE · Data z cache')
-    }[status] || uiText('LIVE · Connecting…','LIVE · Pripájam…','LIVE · Připojuji…');
+    }[status] || uiText('DATA · Connecting…','DÁTA · Pripájam…','DATA · Připojuji…');
     $('syncRefresh').disabled = status === 'loading';
   }
   function refreshFinished() { $('syncRefresh').disabled = false; }

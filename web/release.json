@@ -1,5 +1,6 @@
 {
-  "release": "7.3.4",
-  "ui_revision": "7.3.4",
-  "frontend_marker": "blinq-web-734"
+  "release": "7.3.5",
+  "ui_revision": "7.3.5",
+  "frontend_marker": "blinq-web-735",
+  "asset_revision": 7350
 }
