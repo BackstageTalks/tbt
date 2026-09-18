@@ -1,0 +1,208 @@
+/* BlinQ 7.3.6 — approved visual pass: full-bleed loader, all-tier upgrade chooser, legacy-purple cleanup */
+:root{
+  --bq736-green:#31e29c;
+  --bq736-green-soft:#6af0bc;
+  --bq736-teal:#15b993;
+  --bq736-cyan:#28c9d8;
+  --bq736-gold:#c99d31;
+  --bq736-panel:#04191a;
+  --bq736-panel-2:#061f22;
+  --bq736-line:rgba(56,193,169,.26);
+  --bq736-muted:#8ca49c;
+}
+
+/* ---------- Full-bleed loader: no outer square ---------- */
+body#blinqPremium .boot-splash.boot-splash-tennis{
+  display:grid!important;
+  place-items:center!important;
+  background:#020d0e url('/assets/blinq_loading_scene_v736.webp') center center / cover no-repeat!important;
+}
+body#blinqPremium .boot-splash.boot-splash-tennis::before{
+  content:""!important;
+  position:absolute!important;
+  inset:0!important;
+  background:linear-gradient(180deg,rgba(0,8,10,.08),rgba(0,8,10,.02) 48%,rgba(0,8,10,.12))!important;
+  pointer-events:none!important;
+}
+body#blinqPremium .boot-splash.boot-splash-tennis::after{display:none!important}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source{
+  position:absolute!important;
+  width:1px!important;
+  height:1px!important;
+  padding:0!important;
+  margin:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  overflow:hidden!important;
+  clip-path:inset(50%)!important;
+  white-space:nowrap!important;
+  opacity:.001!important;
+}
+
+/* ---------- Locked hints: same green/teal product language ---------- */
+body#blinqPremium [data-ui-element].ui-state-locked::after,
+body#blinqPremium [data-ui-element].ui-state-blurred::after{
+  border-color:rgba(49,226,156,.42)!important;
+  background:rgba(3,35,29,.90)!important;
+  color:#aaf6d5!important;
+  box-shadow:0 5px 22px rgba(0,0,0,.24),0 0 18px rgba(49,226,156,.05)!important;
+}
+body#blinqPremium .hub-row-locked td{
+  background:linear-gradient(90deg,rgba(5,37,31,.66),rgba(4,24,27,.58))!important;
+  border-top-color:rgba(49,226,156,.15)!important;
+}
+body#blinqPremium .hub-row-locked em{
+  border-color:rgba(49,226,156,.34)!important;
+  background:rgba(17,91,65,.20)!important;
+  color:#a5f1d0!important;
+}
+
+/* ---------- Upgrade chooser: all higher tiers, no legacy purple ---------- */
+body#blinqPremium .upgrade-dialog{
+  width:min(1330px,calc(100vw - 40px))!important;
+  max-height:min(900px,calc(100vh - 28px))!important;
+  padding:0!important;
+  border:1px solid rgba(40,201,216,.66)!important;
+  border-radius:22px!important;
+  color:#eff8f4!important;
+  background:
+    radial-gradient(780px 420px at 73% -10%,rgba(26,112,89,.15),transparent 68%),
+    radial-gradient(520px 380px at 8% 100%,rgba(25,150,113,.10),transparent 72%),
+    linear-gradient(145deg,#031619 0%,#051b1e 54%,#031316 100%)!important;
+  box-shadow:0 45px 150px rgba(0,0,0,.74),0 0 88px rgba(42,210,170,.08)!important;
+  overflow:auto!important;
+}
+body#blinqPremium .upgrade-dialog::before{
+  content:""!important;
+  position:absolute!important;
+  inset:0!important;
+  background:
+    linear-gradient(125deg,transparent 0 56%,rgba(49,226,156,.024) 56% 58%,transparent 58% 100%),
+    radial-gradient(340px 180px at 91% 18%,rgba(49,226,156,.06),transparent 72%)!important;
+  pointer-events:none!important;
+}
+body#blinqPremium #upgradeDialogContent{position:relative!important;z-index:1!important;padding:40px 42px 34px!important}
+body#blinqPremium .upgrade-dialog>.dialog-close{
+  position:absolute!important;right:22px!important;top:22px!important;z-index:5!important;
+  width:46px!important;height:46px!important;border-radius:13px!important;
+  border:1px solid rgba(48,174,178,.42)!important;background:rgba(3,29,34,.88)!important;
+  color:#cde8e1!important;box-shadow:none!important;
+}
+body#blinqPremium .upgrade-dialog>.dialog-close:hover{border-color:rgba(49,226,156,.72)!important;color:#fff!important;background:rgba(7,50,42,.92)!important}
+body#blinqPremium .upgrade-dialog-head{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(340px,.75fr);gap:28px;align-items:start;padding-right:58px}
+body#blinqPremium .upgrade-dialog-eyebrow{display:block;color:#8da49c!important;font-size:9px!important;letter-spacing:.2em!important;font-weight:850!important;text-transform:uppercase!important}
+body#blinqPremium .upgrade-requires-pill{
+  display:inline-flex!important;align-items:center!important;gap:7px!important;margin:14px 0 12px!important;padding:7px 12px!important;
+  width:max-content!important;border:1px solid rgba(49,226,156,.55)!important;border-radius:999px!important;
+  background:rgba(12,79,57,.22)!important;color:#9bf4ce!important;font-size:9px!important;font-weight:850!important;letter-spacing:.025em!important;
+}
+body#blinqPremium .upgrade-dialog-title{margin:0 0 12px!important;padding:0!important;color:#f5faf8!important;font-size:42px!important;line-height:1.03!important;letter-spacing:-.045em!important;font-weight:900!important}
+body#blinqPremium .upgrade-dialog-title .accent{color:var(--bq736-green)!important}
+body#blinqPremium .upgrade-dialog-copy{display:grid!important;gap:5px!important;margin:0!important;color:#8fa79f!important;font-size:13px!important;line-height:1.55!important;max-width:720px!important}
+body#blinqPremium .upgrade-dialog-copy strong{color:#eaf3ef!important;font-weight:760!important}
+body#blinqPremium .upgrade-account-summary{
+  min-height:126px;padding:20px 20px!important;border:1px solid rgba(58,139,128,.30)!important;border-radius:16px!important;
+  background:linear-gradient(150deg,rgba(6,35,36,.88),rgba(2,24,27,.88))!important;
+  display:grid!important;grid-template-columns:auto 1fr auto!important;gap:16px!important;align-items:center!important;
+}
+body#blinqPremium .upgrade-account-avatar{width:62px;height:62px;display:grid;place-items:center;overflow:hidden;border-radius:50%;border:1px solid rgba(201,157,49,.55);background:#0c211d;color:#f2c356;font-size:28px;font-weight:900}
+body#blinqPremium .upgrade-account-avatar img{width:100%;height:100%;object-fit:cover}
+body#blinqPremium .upgrade-account-copy{display:grid;gap:3px;min-width:0}
+body#blinqPremium .upgrade-account-copy small{color:#789189;font-size:8px;font-weight:850;letter-spacing:.13em;text-transform:uppercase}
+body#blinqPremium .upgrade-account-copy strong{color:#f4faf7;font-size:20px;line-height:1.05}
+body#blinqPremium .upgrade-account-copy span{color:#a2b5ae;font-size:11px}
+body#blinqPremium .upgrade-account-copy b{color:var(--bq736-green);font-size:11px}
+body#blinqPremium .upgrade-account-promise{display:grid;grid-template-columns:44px minmax(0,1fr);gap:10px;align-items:center;max-width:240px;padding-left:16px;border-left:1px solid rgba(67,141,130,.28)}
+body#blinqPremium .upgrade-account-promise i{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(49,226,156,.38);background:rgba(13,72,54,.20);color:#6df0bd;font-size:21px;font-style:normal}
+body#blinqPremium .upgrade-account-promise strong{font-size:12px;line-height:1.25;color:#eaf4f0}
+body#blinqPremium .upgrade-account-promise span{display:block;margin-top:3px;color:#7f978f;font-size:9px;line-height:1.35}
+body#blinqPremium .upgrade-tier-heading{display:flex;justify-content:space-between;gap:18px;align-items:end;margin:30px 0 12px}
+body#blinqPremium .upgrade-tier-heading h3{margin:0;color:#f4faf7;font-size:23px;letter-spacing:-.03em}
+body#blinqPremium .upgrade-tier-heading p{margin:0;color:#789189;font-size:9px;text-align:right}
+body#blinqPremium .upgrade-plan-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+body#blinqPremium .upgrade-tier-card{
+  position:relative;min-height:390px;padding:18px 16px 16px;border:1px solid rgba(43,150,137,.34);border-radius:15px;
+  background:linear-gradient(155deg,rgba(5,31,31,.94),rgba(2,20,23,.96));display:grid;grid-template-rows:auto auto 1fr auto;gap:12px;overflow:hidden;
+}
+body#blinqPremium .upgrade-tier-card::before{content:"";position:absolute;inset:0 0 auto 0;height:2px;background:linear-gradient(90deg,var(--bq736-green),transparent 72%);opacity:.7}
+body#blinqPremium .upgrade-tier-card.is-required{border-color:rgba(49,226,156,.72);box-shadow:0 0 0 1px rgba(49,226,156,.08) inset,0 12px 38px rgba(0,0,0,.18)}
+body#blinqPremium .upgrade-tier-card.plan-legend,body#blinqPremium .upgrade-tier-card.plan-goat{border-color:rgba(201,157,49,.52);background:linear-gradient(155deg,rgba(31,29,13,.64),rgba(2,20,22,.96))}
+body#blinqPremium .upgrade-tier-card.plan-legend::before,body#blinqPremium .upgrade-tier-card.plan-goat::before{background:linear-gradient(90deg,#d6aa36,transparent 72%)}
+body#blinqPremium .upgrade-tier-card.is-below-required{opacity:.68}
+body#blinqPremium .upgrade-tier-top{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:center}
+body#blinqPremium .upgrade-tier-card .plan-avatar-pair{width:86px!important;height:58px!important}
+body#blinqPremium .upgrade-tier-card .plan-avatar-chip{width:54px!important;height:54px!important}
+body#blinqPremium .upgrade-tier-card .plan-avatar-chip.is-back{left:31px!important}
+body#blinqPremium .upgrade-tier-copy small{display:block;color:#63e9b5;font-size:8px;font-weight:900;letter-spacing:.1em;text-transform:uppercase}
+body#blinqPremium .upgrade-tier-card.plan-legend .upgrade-tier-copy small,body#blinqPremium .upgrade-tier-card.plan-goat .upgrade-tier-copy small{color:#d9b55b}
+body#blinqPremium .upgrade-tier-copy strong{display:block;margin-top:2px;color:#f5faf8;font-size:17px;line-height:1.08}
+body#blinqPremium .upgrade-tier-copy span{display:block;margin-top:4px;color:#8ca49c;font-size:10px;line-height:1.35}
+body#blinqPremium .upgrade-tier-description{margin:0;color:#a3b6af;font-size:11px;line-height:1.48;min-height:48px}
+body#blinqPremium .upgrade-feature-list{display:grid;align-content:start;gap:7px;margin:0;padding:0;list-style:none}
+body#blinqPremium .upgrade-feature-list li{position:relative;padding-left:22px;color:#a8bbb4;font-size:10px;line-height:1.3}
+body#blinqPremium .upgrade-feature-list li::before{content:"✓";position:absolute;left:0;top:-1px;width:15px;height:15px;border:1px solid rgba(49,226,156,.70);border-radius:50%;display:grid;place-items:center;color:#5ff0b8;font-size:9px;font-weight:900}
+body#blinqPremium .upgrade-tier-note{position:absolute;right:12px;top:10px;padding:4px 7px;border-radius:999px;border:1px solid rgba(49,226,156,.34);background:rgba(9,67,49,.24);color:#91f1cb;font-size:7px;font-weight:850}
+body#blinqPremium .upgrade-tier-note.is-warning{border-color:rgba(139,159,152,.25);background:rgba(26,43,42,.48);color:#92a39e}
+body#blinqPremium .upgrade-tier-cta{
+  display:flex!important;align-items:center!important;justify-content:center!important;width:100%!important;min-height:44px!important;padding:0 12px!important;border:1px solid rgba(49,226,156,.70)!important;border-radius:10px!important;
+  background:linear-gradient(90deg,#2ddf99,#40e8a7)!important;color:#03150f!important;text-decoration:none!important;font-size:11px!important;font-weight:900!important;box-shadow:none!important;cursor:pointer!important;
+}
+body#blinqPremium .upgrade-tier-cta:hover{filter:brightness(1.05)!important;transform:translateY(-1px)}
+body#blinqPremium .upgrade-tier-cta.is-disabled{border-color:rgba(99,125,117,.30)!important;background:rgba(13,37,34,.62)!important;color:#7e928b!important;cursor:default!important;transform:none!important;filter:none!important}
+body#blinqPremium .upgrade-benefit-strip{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin-top:18px;padding-top:15px;border-top:1px solid rgba(66,129,120,.24)}
+body#blinqPremium .upgrade-benefit-strip span{display:grid;grid-template-columns:34px 1fr;gap:9px;align-items:center;padding:0 18px;border-right:1px solid rgba(66,129,120,.20)}
+body#blinqPremium .upgrade-benefit-strip span:last-child{border-right:0}
+body#blinqPremium .upgrade-benefit-strip i{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;border:1px solid rgba(49,226,156,.45);color:#65efbc;font-style:normal}
+body#blinqPremium .upgrade-benefit-strip strong{display:block;color:#e8f3ee;font-size:10px}
+body#blinqPremium .upgrade-benefit-strip small{display:block;margin-top:2px;color:#778f87;font-size:8px}
+
+/* ---------- Account/profile cleanup: remove legacy purple controls ---------- */
+body#blinqPremium .account-dialog{border-color:rgba(44,167,154,.46)!important;background:linear-gradient(145deg,#04191c,#061d22 54%,#031417)!important}
+body#blinqPremium .account-modal-head small,
+body#blinqPremium .account-modal-section-title small,
+body#blinqPremium .account-profile-editor-head small,
+body#blinqPremium .account-card-kicker{color:#70e8ba!important}
+body#blinqPremium .account-modal-main-card-v3,
+body#blinqPremium .account-modal-plan,
+body#blinqPremium .membership-card{border-color:rgba(51,136,126,.30)!important;background:linear-gradient(150deg,rgba(6,34,35,.90),rgba(3,23,27,.94))!important}
+body#blinqPremium .account-modal-plan small,
+body#blinqPremium .membership-card-copy small{color:#69e7b7!important}
+body#blinqPremium .account-modal-plan.plan-goat,
+body#blinqPremium .membership-card.plan-goat,
+body#blinqPremium .membership-card.plan-legend{border-color:rgba(201,157,49,.48)!important;background:linear-gradient(150deg,rgba(31,29,13,.56),rgba(3,23,27,.94))!important}
+body#blinqPremium .account-modal-plan .account-plan-upgrade,
+body#blinqPremium .membership-cta,
+body#blinqPremium .account-profile-save{border-color:rgba(49,226,156,.72)!important;background:linear-gradient(90deg,#2ddf99,#43e8a8)!important;color:#03150f!important;font-weight:900!important}
+body#blinqPremium .account-plan-current,
+body#blinqPremium .membership-current{border-color:rgba(49,226,156,.28)!important;background:rgba(10,69,51,.18)!important;color:#83edc5!important}
+body#blinqPremium .avatar-sex-toggle button.is-active{border-color:rgba(49,226,156,.72)!important;background:rgba(20,110,78,.22)!important;color:#65efbb!important}
+body#blinqPremium .account-inline-field input,
+body#blinqPremium .account-profile-form input{border-color:rgba(54,128,122,.34)!important;background:#031a1c!important;color:#eaf5f0!important}
+
+/* ---------- Make header Upgrade explicitly read as membership chooser ---------- */
+body#blinqPremium .header-upgrade{background:linear-gradient(145deg,rgba(21,91,66,.74),rgba(9,61,48,.76))!important;border-color:rgba(49,226,156,.46)!important;color:#eafff6!important;box-shadow:none!important}
+body#blinqPremium .header-upgrade:hover{border-color:rgba(49,226,156,.78)!important;background:linear-gradient(145deg,rgba(28,118,84,.84),rgba(11,73,56,.84))!important}
+
+@media(max-width:1100px){
+  body#blinqPremium .upgrade-dialog{width:min(980px,calc(100vw - 24px))!important}
+  body#blinqPremium .upgrade-dialog-head{grid-template-columns:1fr!important}
+  body#blinqPremium .upgrade-account-summary{max-width:none!important}
+  body#blinqPremium .upgrade-plan-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:680px){
+  body#blinqPremium .boot-splash.boot-splash-tennis{background-position:center center!important}
+  body#blinqPremium .upgrade-dialog{width:calc(100vw - 10px)!important;max-height:calc(100vh - 10px)!important;border-radius:16px!important}
+  body#blinqPremium #upgradeDialogContent{padding:24px 14px 20px!important}
+  body#blinqPremium .upgrade-dialog-head{padding-right:0!important}
+  body#blinqPremium .upgrade-dialog-title{font-size:30px!important}
+  body#blinqPremium .upgrade-account-summary{grid-template-columns:auto 1fr!important}
+  body#blinqPremium .upgrade-account-promise{grid-column:1/-1!important;padding:12px 0 0!important;border-left:0!important;border-top:1px solid rgba(67,141,130,.24)!important;max-width:none!important}
+  body#blinqPremium .upgrade-tier-heading{display:grid!important;gap:5px!important}
+  body#blinqPremium .upgrade-tier-heading p{text-align:left!important}
+  body#blinqPremium .upgrade-plan-grid{grid-template-columns:1fr!important}
+  body#blinqPremium .upgrade-tier-card{min-height:0!important}
+  body#blinqPremium .upgrade-benefit-strip{grid-template-columns:1fr!important;gap:10px!important}
+  body#blinqPremium .upgrade-benefit-strip span{border-right:0!important;padding:0!important}
+}

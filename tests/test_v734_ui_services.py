@@ -5,21 +5,24 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / 'web' / 'app.js').read_text(encoding='utf-8')
 AUTH = (ROOT / 'web' / 'auth.js').read_text(encoding='utf-8')
 INDEX = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8')
-CSS = (ROOT / 'web' / 'final-polish-735.css').read_text(encoding='utf-8')
+CSS735 = (ROOT / 'web' / 'final-polish-735.css').read_text(encoding='utf-8')
+CSS736 = (ROOT / 'web' / 'final-polish-736.css').read_text(encoding='utf-8')
+CSS = CSS735 + '\n' + CSS736
 UI = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
 SITE = json.loads((ROOT / 'web' / 'config' / 'site-content.json').read_text(encoding='utf-8'))
 
 
 def test_v735_asset_revision_and_polish_loaded_last():
-    assert UI['revision'] == '7.3.5'
-    assert UI['asset_revision'] == 7350
-    assert '/final-polish-735.css?v=7350' in INDEX
-    assert INDEX.index('/final-polish-731.css') < INDEX.index('/final-polish-735.css')
+    assert UI['revision'] == '7.3.6'
+    assert UI['asset_revision'] == 7360
+    assert '/final-polish-736.css?v=7360' in INDEX
+    assert INDEX.index('/final-polish-731.css') < INDEX.index('/final-polish-736.css')
 
 
 def test_login_loader_and_footer_have_blinq_background_watermarks():
-    assert "url('/assets/blinq_background.webp')" in CSS
-    assert CSS.count("url('/assets/blinq_logo.svg')") >= 3
+    assert "url('/assets/blinq_loading_scene_v736.webp')" in CSS736
+    assert "url('/assets/blinq_background.webp')" in CSS735
+    assert CSS735.count("url('/assets/blinq_logo.svg')") >= 2
     assert 'bootEyebrow' in INDEX and 'bootStatus' in INDEX
     assert 'auth-copy h2' in CSS and 'font-size:17px' in CSS
 
@@ -80,8 +83,8 @@ def test_storage_diagnostics_explain_private_service_dependency():
 def test_frontend_release_probe_and_no_cache_entry_document():
     release=json.loads((ROOT/'web'/'release.json').read_text(encoding='utf-8'))
     static=json.loads((ROOT/'web'/'staticwebapp.config.json').read_text(encoding='utf-8'))
-    assert release['frontend_marker']=='blinq-web-735'
-    assert 'data-web-release="7.3.5"' in INDEX
+    assert release['frontend_marker']=='blinq-web-736'
+    assert 'data-web-release="7.3.6"' in INDEX
     for route in ('/','/index.html','/release.json'):
         rule=next(row for row in static['routes'] if row.get('route')==route)
         assert 'no-store' in rule['headers']['Cache-Control']
@@ -95,4 +98,4 @@ def test_stale_data_workflow_cannot_roll_back_frontend():
     assert 'git rev-parse origin/main' in data
     assert 'ref: main' in player
     assert 'Verify deployed frontend release' in ci
-    assert 'blinq-web-735' in ci
+    assert 'blinq-web-736' in ci

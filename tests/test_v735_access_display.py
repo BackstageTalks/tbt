@@ -8,7 +8,9 @@ from tbt.services import support_storage
 ROOT=Path(__file__).resolve().parents[1]
 UI=json.loads((ROOT/'web'/'ui-config.json').read_text(encoding='utf-8'))
 APP=(ROOT/'web'/'app.js').read_text(encoding='utf-8')
-CSS=(ROOT/'web'/'final-polish-735.css').read_text(encoding='utf-8')
+CSS735=(ROOT/'web'/'final-polish-735.css').read_text(encoding='utf-8')
+CSS736=(ROOT/'web'/'final-polish-736.css').read_text(encoding='utf-8')
+CSS=CSS735+'\n'+CSS736
 FUNCTION=(ROOT/'api'/'function_app.py').read_text(encoding='utf-8')
 SITE=json.loads((ROOT/'web'/'config'/'site-content.json').read_text(encoding='utf-8'))
 
@@ -68,9 +70,9 @@ def test_admin_has_real_display_route_and_show_blur_hide_controls():
 
 
 def test_upgrade_auth_footer_and_copy_are_v735_native():
-    assert 'upgrade-requires-pill' in APP and 'upgrade-dialog-actions' in APP
+    assert 'upgrade-requires-pill' in APP and 'upgrade-plan-grid' in APP
     assert 'upgrade-dialog-title' in CSS
-    assert 'UI 7.3.5' in APP
+    assert 'UI 7.3.6' in APP
     assert 'auth-copy p,#authSubtitle' in CSS
     assert 'site-footer:before' in CSS
     assert 'ui_copy' in SITE and 'upgrade' in SITE['ui_copy'] and 'support' in SITE['ui_copy']

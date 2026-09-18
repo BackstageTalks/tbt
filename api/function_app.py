@@ -79,7 +79,7 @@ from tbt.services.live_comeback import (
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "7.3.5"
+RELEASE = "7.3.6"
 API_VERSION = "3.10.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
