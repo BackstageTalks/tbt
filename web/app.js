@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, boardMode:'live', dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:'',board:''}, railMatch:null, railMatchTab:'overview', railDetailTab:'overview', insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, privateUpdatesLastPoll:0, privateUpdatesBusy:false, railPromoIndex:0, railPromoTimer:null, railPromoPaused:false, presentationConfig:null, siteContent:null, adminSupport:null, adminSupportLoading:false, adminSupportError:'', adminSupportStatus:'all', adminPayments:{}, adminAudit:null, adminAuditLoading:false, adminUserAudit:{}, supportSubmitting:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, boardMode:'live', dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:'',board:''}, railMatch:null, railMatchTab:'overview', railDetailTab:'overview', insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, privateUpdatesLastPoll:0, privateUpdatesBusy:false, railPromoIndex:0, railPromoTimer:null, railPromoPaused:false, presentationConfig:null, siteContent:null, adminSupport:null, adminSupportLoading:false, adminSupportError:'', adminSupportStatus:'all', adminPayments:{}, adminAudit:null, adminAuditLoading:false, adminUserAudit:{}, supportSubmitting:false, pushConfig:null, pushBusy:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -2841,8 +2841,41 @@
   function adminDefaultPlanDays(){
     const planId=String($('adminUserPlan')?.value||'');const plan=state.ui?.plans?.[planId]||{};return plan.lifetime||planId==='goat'?0:Math.max(1,Number(plan.duration_days)||30);
   }
+  function decorateAdminMediaUploads(host){
+    if(!host)return;
+    const selector=[
+      'input[data-simple-banner-field="image_url"]',
+      'input[data-simple-banner-field="mobile_image_url"]',
+      'input[data-simple-banner-field$="_icon_url"]',
+      'input[data-campaign-image]',
+      'input[data-campaign-field="image_url"]',
+      'input[data-campaign-field="mobile_image_url"]'
+    ].join(',');
+    host.querySelectorAll(selector).forEach(input=>{
+      if(input.dataset.mediaUploadReady==='1')return;
+      input.dataset.mediaUploadReady='1';
+      const wrap=document.createElement('span');wrap.className='admin-media-upload';
+      input.parentNode.insertBefore(wrap,input);wrap.appendChild(input);
+      const button=document.createElement('button');button.type='button';button.className='admin-media-upload-button';button.textContent='Nahrať obrázok';
+      const picker=document.createElement('input');picker.type='file';picker.accept='image/png,image/jpeg,image/webp,image/gif,image/avif';picker.hidden=true;
+      wrap.appendChild(button);wrap.appendChild(picker);
+      button.onclick=()=>picker.click();
+      picker.onchange=async()=>{
+        const file=picker.files?.[0];if(!file)return;
+        button.disabled=true;button.textContent='Nahrávam…';
+        try{
+          const result=await BlinqAuth.adminUploadMedia(file);
+          input.value=String(result?.url||'');
+          input.dispatchEvent(new Event('change',{bubbles:true}));
+          showStatus(`Obrázok bol nahraný · ${Math.max(1,Math.round(Number(result?.size||0)/1024))} kB`);
+        }catch(error){showStatus(error.message||'Obrázok sa nepodarilo nahrať.');}
+        finally{button.disabled=false;button.textContent='Nahrať obrázok';picker.value='';}
+      };
+    });
+  }
   function wireAdmin(){
     const host=$('routePanel'); if(!host)return;
+    decorateAdminMediaUploads(host);
     host.onclick=async event=>{
       const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='insights')loadAdminInsights();if(state.adminTab==='analytics')loadBannerAnalytics();if(state.adminTab==='support')loadAdminSupport();if(state.adminTab==='audit')loadAdminAudit();if(state.adminTab==='system')loadAdminDiagnostics(true);return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
@@ -2866,7 +2899,7 @@
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
         const d=state.adminDiagnostics||{};
-        const safe={release:d.release||'',accounts_ready:Boolean(d.accounts_ready),content_storage_ready:Boolean(d.content_storage_ready),auth_provider:d.auth_provider||'',admin_storage:d.admin_storage||'unavailable',firebase_server_configured:Boolean(d.firebase_server_configured),firebase_admin_users:Boolean(d.firebase_admin_users),storage:{backend:d.storage?.backend||'unavailable',azure_configured:Boolean(d.storage?.azure_configured),azure_available:Boolean(d.storage?.azure_available),firestore_available:Boolean(d.storage?.firestore_available)},problems:Array.isArray(d.problems)?d.problems:[]};
+        const safe={release:d.release||'',accounts_ready:Boolean(d.accounts_ready),content_storage_ready:Boolean(d.content_storage_ready),auth_provider:d.auth_provider||'',admin_storage:d.admin_storage||'unavailable',firebase_server_configured:Boolean(d.firebase_server_configured),firebase_admin_users:Boolean(d.firebase_admin_users),storage:{backend:d.storage?.backend||'unavailable',azure_configured:Boolean(d.storage?.azure_configured),azure_available:Boolean(d.storage?.azure_available),firestore_available:Boolean(d.storage?.firestore_available)},media_storage:{configured:Boolean(d.media_storage?.configured),available:Boolean(d.media_storage?.available),container:d.media_storage?.container||''},webpush:{enabled:Boolean(d.webpush?.enabled),keys_configured:Boolean(d.webpush?.keys_configured),storage_available:Boolean(d.webpush?.storage_available),subscriptions:d.webpush?.subscriptions??null},problems:Array.isArray(d.problems)?d.problems:[]};
         const value=JSON.stringify(safe,null,2);
         try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(value);else{const ta=document.createElement('textarea');ta.value=value;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus('Bezpečná diagnostika bola skopírovaná. Môžeš ju poslať bez kľúčov a tokenov.');}catch{showStatus('Diagnostiku sa nepodarilo skopírovať.');}
         return;
@@ -3025,13 +3058,57 @@
   }
   function renderAccountPage(){
     const a=state.feed?.account||{},status=String(a.status||'expired').toLowerCase(),plan=accountPlan(),planLabel=a.plan_label||state.ui?.plans?.[plan]?.label||plan;
+    const pushEligible=Boolean(a.is_admin||String(a.role||'').toLowerCase()==='admin'||(['elite','legend','goat'].includes(plan)&&['active','lifetime'].includes(status)));
     const expiry=status==='lifetime'?publicText('Lifetime access'):a.expires_at?`${remainingLabel(a.expires_at)} ${locale==='cz'?'zbývá':'zostáva'}`:(status==='active'?publicText('Active'):publicText('No active access'));
     const verified=a.email_verified===true;
     return `<section class="account-overview account-overview-v676">
       <article class="account-profile-card account-profile-card-v676"><div class="account-profile-head"><span class="avatar account-page-avatar" id="accountPageAvatar">${escapeHtml(accountAvatarFallback(a))}</span><div><span class="account-card-kicker">BLINQ ÚČET</span><h2>${escapeHtml(a.email||'BlinQ účet')}</h2><p>${escapeHtml(a.telegram_nick||'Telegram nickname zatiaľ nie je nastavený')}</p></div><span class="account-verified ${verified?'is-verified':'needs-verification'}">${escapeHtml(publicText(verified?'✓ Email verified':'! Email not verified'))}</span></div>
       <form id="accountProfileForm" class="account-profile-form account-profile-form-v676"><label><span class="telegram-label">${adminTelegramIcon()} Telegram</span><input id="accountTelegramNick" maxlength="33" value="${escapeHtml(a.telegram_nick||'')}" placeholder="@username"></label><div class="account-page-avatar-choice"><span>Avatar</span><div class="avatar-sex-toggle" role="group" aria-label="Avatar"><button type="button" data-avatar-page-variant="m" class="${a.avatar_variant==='w'?'':'is-active'}" aria-label="Mužský avatar" aria-pressed="${a.avatar_variant==='w'?'false':'true'}">♂</button><button type="button" data-avatar-page-variant="w" class="${a.avatar_variant==='w'?'is-active':''}" aria-label="Ženský avatar" aria-pressed="${a.avatar_variant==='w'?'true':'false'}">♀</button></div><input id="accountAvatarVariant" type="hidden" value="${a.avatar_variant==='w'?'w':'m'}"></div><button class="btn btn-primary" type="submit">Uložiť profil</button><p class="form-message" id="accountProfileMessage"></p></form></article>
       <article class="account-access-card"><div class="account-access-top"><span class="account-card-kicker">AKTUÁLNY PRÍSTUP</span>${planAvatarHtml(plan,state.ui?.plans?.[plan]||{})}</div><h2>${escapeHtml(planLabel)}</h2><p class="account-access-status">${escapeHtml(status==='trial'?'Rookie Trial':status==='lifetime'?'Doživotný':status==='active'?'Aktívny':'Expirovaný')}</p><div class="account-facts"><span><small>Prístup</small><strong>${escapeHtml(expiry)}</strong></span><span><small>Člen od</small><strong>${escapeHtml(a.created_at?fmtDate(a.created_at):'—')}</strong></span><span><small>Zabezpečenie</small><strong>${verified?'E-mail overený':'Vyžaduje overenie'}</strong></span></div><div class="account-access-actions"><button class="btn btn-ghost" id="accountPasswordReset" type="button">Obnoviť heslo</button><button class="btn btn-ghost account-signout" id="accountSignOut" type="button">Odhlásiť sa</button></div></article>
+      <article class="account-push-card${pushEligible?'':' is-locked'}"><div><span class="account-card-kicker">LIVE & INFO PUSH</span><h2>Okamžité upozornenia</h2><p>${pushEligible?'Dostaneš systémovú notifikáciu aj keď BlinQ práve nemáš otvorený.':'Browser push je súčasť ELITE, Legend a GOAT.'}</p></div><div class="account-push-actions"><button class="btn ${pushEligible?'btn-primary':'btn-ghost'}" id="accountPushToggle" type="button" ${pushEligible?'':'disabled'}>Skontrolovať push</button><span id="accountPushStatus">${pushEligible?'Kontrolujem stav…':'Dostupné od ELITE'}</span></div></article>
     </section><section class="account-membership-page"><div class="account-membership-heading"><div><small>BLINQ ČLENSTVO</small><h2>Plány</h2></div></div>${renderPlanCardsForAccount()}</section>`;
+  }
+  function base64UrlToUint8Array(value){
+    const padding='='.repeat((4-String(value||'').length%4)%4),base64=(String(value||'')+padding).replace(/-/g,'+').replace(/_/g,'/');
+    const raw=atob(base64);return Uint8Array.from([...raw].map(ch=>ch.charCodeAt(0)));
+  }
+  async function localPushSubscription(){
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window))return null;
+    const registration=await navigator.serviceWorker.getRegistration('/');
+    return registration?registration.pushManager.getSubscription():null;
+  }
+  async function refreshPushControl(){
+    const button=$('accountPushToggle'),status=$('accountPushStatus');if(!button||!status||button.disabled)return;
+    if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){button.disabled=true;button.textContent='Nepodporované';status.textContent='Tento prehliadač nepodporuje Web Push.';return;}
+    try{
+      const cfg=await BlinqAuth.pushConfig();state.pushConfig=cfg;
+      if(!cfg?.eligible){button.disabled=true;button.textContent='ELITE+';status.textContent='Dostupné od ELITE.';return;}
+      if(!cfg?.enabled){button.disabled=true;button.textContent='Čaká na nastavenie';status.textContent='Push server ešte nemá VAPID kľúče.';return;}
+      const sub=await localPushSubscription();
+      if(sub&&Notification.permission==='granted'){button.dataset.pushEnabled='1';button.textContent='Vypnúť upozornenia';button.classList.remove('btn-primary');button.classList.add('btn-ghost');status.textContent='Push upozornenia sú na tomto zariadení zapnuté.';}
+      else{button.dataset.pushEnabled='0';button.textContent='Zapnúť upozornenia';button.classList.add('btn-primary');button.classList.remove('btn-ghost');status.textContent=Notification.permission==='denied'?'Notifikácie sú zablokované v nastavení prehliadača.':'Zapni LIVE a INFO notifikácie pre toto zariadenie.';}
+    }catch(error){status.textContent=error.message||'Stav push notifikácií sa nepodarilo načítať.';}
+  }
+  async function toggleBrowserPush(){
+    const button=$('accountPushToggle'),status=$('accountPushStatus');if(!button||state.pushBusy)return;state.pushBusy=true;button.disabled=true;
+    try{
+      const cfg=state.pushConfig||await BlinqAuth.pushConfig();
+      if(!cfg?.enabled)throw new Error('Browser push ešte nie je nakonfigurovaný na serveri.');
+      const registration=await navigator.serviceWorker.register('/blinq-sw.js',{scope:'/',updateViaCache:'none'});
+      await navigator.serviceWorker.ready;
+      let subscription=await registration.pushManager.getSubscription();
+      if(button.dataset.pushEnabled==='1'&&subscription){
+        await BlinqAuth.pushUnsubscribe(subscription.endpoint);await subscription.unsubscribe();subscription=null;
+        status.textContent='Push upozornenia sú vypnuté.';
+      }else{
+        const permission=await Notification.requestPermission();
+        if(permission!=='granted')throw new Error('Povolenie pre notifikácie nebolo udelené.');
+        if(!subscription)subscription=await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:base64UrlToUint8Array(cfg.public_key)});
+        await BlinqAuth.pushSubscribe(subscription.toJSON());
+        status.textContent='Push upozornenia sú zapnuté.';
+      }
+    }catch(error){status.textContent=error.message||'Push notifikácie sa nepodarilo zmeniť.';}
+    finally{state.pushBusy=false;button.disabled=false;await refreshPushControl();}
   }
   function wireAccountPage(){
     const a=state.feed?.account||{};setAccountAvatar($('accountPageAvatar'),a);
@@ -3040,6 +3117,7 @@
     document.querySelectorAll('[data-plan-link-missing]').forEach(button=>button.onclick=()=>{const message=$('accountProfileMessage');if(message)message.textContent=`Doplň odkaz pre ${button.dataset.planLinkMissing?.toUpperCase()||'plán'} v web/config/membership-tiers.json.`;});
     const reset=$('accountPasswordReset');if(reset)reset.onclick=async()=>{const message=$('accountProfileMessage');message.textContent=publicText('Sending recovery email…');try{await BlinqAuth.reset(a.email);message.textContent=publicText('Password reset email sent.');}catch(error){message.textContent=error.message;}};
     const logout=$('accountSignOut');if(logout)logout.onclick=signOutCurrentSession;
+    const pushToggle=$('accountPushToggle');if(pushToggle&&!pushToggle.disabled){pushToggle.onclick=toggleBrowserPush;refreshPushControl();}
     document.querySelectorAll('[data-goat-request]').forEach(button=>button.onclick=()=>{const nick=String(state.feed?.account?.telegram_nick||'').trim();const input=$('accountTelegramNick');const message=$('accountProfileMessage');if(!nick){if(message)message.textContent='Add your Telegram nick first, save the profile, then request GOAT access.';input?.focus();return;}if(message)message.textContent=`GOAT is invite-only. Your Telegram ${nick.startsWith('@')?nick:`@${nick}`} is saved; configure the GOAT invite contact URL in Admin → Membership to make this button open the request chat.`;});
   }
   function primeTableRows(){ return rankedPredictions(); }

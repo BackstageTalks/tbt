@@ -51,7 +51,7 @@ def test_firebase_runtime_dependency_and_api_routes_are_present():
     cfg = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     release = str(cfg["ui_revision"])
     assert "firebase-admin>=6.5,<8" in requirements
-    assert 'API_VERSION = "3.9.0"' in function_app
+    assert 'API_VERSION = "3.10.0"' in function_app
     # Release consistency is the contract; do not pin this rebuild test to an
     # obsolete UI release, otherwise every legitimate release bump breaks CI.
     assert f'RELEASE = "{release}"' in function_app

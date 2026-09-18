@@ -172,6 +172,6 @@ jobs:
           with urllib.request.urlopen(base + '/api/health', timeout=20) as r:
               payload=json.load(r)
           assert payload.get('ok') is True, payload
-          assert payload.get('release') == '7.2.2', payload
+          assert payload.get('release') == '7.2.3', payload
           print(json.dumps(payload, indent=2))
           PYSMOKE

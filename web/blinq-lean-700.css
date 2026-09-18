@@ -422,3 +422,15 @@ body#blinqPremium .hub-tournament-logo.logo-failed>.hub-logo-fallback{display:gr
 
 /* v7.2.2 projection market status */
 body#blinqPremium .hub-projection-badge{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border:1px solid rgba(121,242,177,.26);border-radius:999px;background:rgba(121,242,177,.07);color:#93e6b5;font-size:8px;font-weight:850;letter-spacing:.7px}
+
+/* v7.2.3 · binary banner upload + ELITE+ browser push */
+.admin-media-upload{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;width:100%}
+.admin-media-upload>input[type="text"],.admin-media-upload>input:not([type]){min-width:0;width:100%}
+.admin-media-upload-button{min-height:38px;padding:0 12px;border:1px solid rgba(116,232,204,.28);border-radius:10px;background:rgba(10,38,45,.78);color:#9cf5df;font-weight:800;white-space:nowrap;cursor:pointer}
+.admin-media-upload-button:hover{border-color:rgba(116,232,204,.58);background:rgba(14,55,61,.92)}
+.admin-media-upload-button:disabled{opacity:.55;cursor:progress}
+.account-push-card{grid-column:1/-1;display:flex;justify-content:space-between;gap:24px;align-items:center;padding:24px;border:1px solid rgba(116,232,204,.18);border-radius:20px;background:linear-gradient(135deg,rgba(7,28,35,.94),rgba(8,18,30,.96));box-shadow:0 16px 38px rgba(0,0,0,.18)}
+.account-push-card h2{margin:5px 0 8px;font-size:21px;color:#f2fffb}.account-push-card p{margin:0;max-width:650px;color:#91a9ad;line-height:1.55}
+.account-push-card.is-locked{opacity:.72;border-color:rgba(255,255,255,.09)}
+.account-push-actions{display:flex;min-width:240px;flex-direction:column;align-items:flex-end;gap:8px}.account-push-actions span{font-size:12px;color:#7f989d;text-align:right;max-width:300px}.account-push-actions .btn{min-width:190px}
+@media(max-width:760px){.admin-media-upload{grid-template-columns:1fr}.admin-media-upload-button{width:100%}.account-push-card{align-items:flex-start;flex-direction:column;padding:20px}.account-push-actions{width:100%;min-width:0;align-items:stretch}.account-push-actions .btn{width:100%;min-width:0}.account-push-actions span{text-align:left;max-width:none}}

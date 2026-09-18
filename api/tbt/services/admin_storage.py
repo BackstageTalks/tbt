@@ -765,7 +765,16 @@ def save_insight(payload: object, *, actor_id: str = "", insight_id: str = "") -
         client.upsert_entity(entity, mode="replace")
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to save insight") from exc
-    return _insight_from_entity(entity)
+    item = _insight_from_entity(entity)
+    # Push is deliberately best-effort and only fires for a newly published
+    # message. Durable INFO/LIVE storage remains the source of truth.
+    if not insight_id:
+        try:
+            from .push_notifications import dispatch_insight_push
+            dispatch_insight_push(item)
+        except Exception:
+            pass
+    return item
 
 
 def save_automated_insight(payload: object, *, actor_id: str = "automation", insight_id: str) -> tuple[dict, bool]:
@@ -784,7 +793,13 @@ def save_automated_insight(payload: object, *, actor_id: str = "automation", ins
     except Exception as exc:
         try:return _insight_from_entity(client.get_entity(partition_key="insights",row_key=insight_id)),False
         except Exception:raise AdminStorageUnavailable("Unable to create automated insight") from exc
-    return _insight_from_entity(entity),True
+    item=_insight_from_entity(entity)
+    try:
+        from .push_notifications import dispatch_insight_push
+        dispatch_insight_push(item)
+    except Exception:
+        pass
+    return item,True
 
 
 def delete_insight(insight_id: str) -> dict:

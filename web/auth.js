@@ -378,12 +378,41 @@
   async function adminBannerAnalytics(days = 30) {
     return apiWithSession(`/api/v1/admin/banner-analytics?days=${encodeURIComponent(days)}`);
   }
+  async function pushConfig() {
+    return apiWithSession('/api/v1/push/config');
+  }
+  async function pushSubscribe(subscription) {
+    return apiWithSession('/api/v1/push/subscription', {method: 'POST', body: JSON.stringify({subscription})});
+  }
+  async function pushUnsubscribe(endpoint) {
+    return apiWithSession('/api/v1/push/subscription', {method: 'DELETE', body: JSON.stringify({endpoint: String(endpoint || '')})});
+  }
+  async function adminUploadMedia(file) {
+    const s = await restore();
+    if (!s) throw new Error('Sign in again.');
+    if (!(file instanceof Blob)) throw new Error('Choose an image first.');
+    const headers = {
+      Accept: 'application/json',
+      'X-Blinq-Access-Token': s.access_token,
+      'Content-Type': file.type || 'application/octet-stream',
+      'X-Blinq-Filename': encodeURIComponent(file.name || 'banner-image').slice(0, 480),
+    };
+    const timeoutSignal = typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(45000) : undefined;
+    const response = await fetch('/api/v1/admin/media', {method: 'POST', headers, body: file, cache: 'no-store', signal: timeoutSignal});
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const error = new Error(errorMessage(data, response.status));
+      error.status = response.status;
+      throw error;
+    }
+    return data;
+  }
 
   window.BlinqAuth = {
     init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
     insights, liveRadar, adminLiveRadar, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser, supportSubmit, adminSupport, adminUpdateSupport,
     adminPayments, adminAddPayment, adminAudit, runtimeUiConfig, contentNews,
-    bannerEvent, adminSaveUiConfig, adminBannerAnalytics, clear,
+    bannerEvent, adminSaveUiConfig, adminBannerAnalytics, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
   };
 })();

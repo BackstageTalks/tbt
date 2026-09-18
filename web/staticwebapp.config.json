@@ -12,6 +12,7 @@
       "/api/*",
       "/*.css",
       "/*.js",
+      "/*.webmanifest",
       "/assets/*"
     ]
   },

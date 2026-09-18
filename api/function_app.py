@@ -62,6 +62,12 @@ from tbt.services.admin_storage import (
 from tbt.services.content_news import news_pool
 from tbt.services.support_storage import create_support_ticket, list_support_tickets, update_support_ticket
 from tbt.services.support_notifications import notify_support_ticket, support_email_configured
+from tbt.services.media_storage import (
+    MediaStorageUnavailable, download_media, media_storage_diagnostics, upload_media,
+)
+from tbt.services.push_notifications import (
+    delete_subscription, push_storage_diagnostics, save_subscription, sync_push_access, webpush_config,
+)
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
 from tbt.providers.rapidapi import RapidTennisClient
@@ -73,8 +79,8 @@ from tbt.services.live_comeback import (
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "7.2.2"
-API_VERSION = "3.9.0"
+RELEASE = "7.2.3"
+API_VERSION = "3.10.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
 # instance-local: durable analytics remains in Table Storage, while this only absorbs accidental
@@ -244,6 +250,27 @@ def _admin_account_row(user, profile=None):
 @app.route(route="health", methods=["GET"])
 def health(req):
     return response({"ok": True, "version": API_VERSION, "release": RELEASE, "auth": auth_provider(settings)})
+
+
+@app.route(route="v1/media/{media_id}", methods=["GET"])
+def public_media(req):
+    try:
+        media_id = str((req.route_params or {}).get("media_id") or "")
+        data, content_type, etag = download_media(media_id)
+        headers = {
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "X-Content-Type-Options": "nosniff",
+            "X-BlinQ-Release": RELEASE,
+        }
+        if etag:
+            headers["ETag"] = f'"{etag}"'
+        return func.HttpResponse(body=data, status_code=200, mimetype=content_type, headers=headers)
+    except ValueError:
+        return response({"error": "invalid_media_id"}, 400)
+    except FileNotFoundError:
+        return response({"error": "media_not_found"}, 404)
+    except MediaStorageUnavailable:
+        return response({"error": "media_storage_unavailable"}, 503)
 
 
 @app.route(route="v1/auth/config", methods=["GET"])
@@ -919,6 +946,71 @@ def admin_live_radar(req):
         logging.exception("Admin LIVE Radar scan failed");return response({"error":"live_radar_unavailable","detail":exc.__class__.__name__},503)
 
 
+@app.route(route="v1/push/config", methods=["GET"])
+def push_config(req):
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if not bool(user.get("email_verified", False)):
+            return response({"error": "email_not_verified"}, 403)
+        if is_suspended(user):
+            return response({"error": "account_suspended"}, 403)
+        account = public_account(user, cfg=settings, profile=_profile_for(user))
+        eligible = _live_radar_allowed(account)
+        cfg = webpush_config()
+        return response({**cfg, "eligible": bool(eligible)})
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/push/subscription", methods=["POST", "DELETE"])
+def push_subscription(req):
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if not bool(user.get("email_verified", False)):
+            return response({"error": "email_not_verified"}, 403)
+        if is_suspended(user):
+            return response({"error": "account_suspended"}, 403)
+        account = public_account(user, cfg=settings, profile=_profile_for(user))
+        if not _live_radar_allowed(account):
+            return response({"error": "elite_required"}, 403)
+        try:
+            payload = req.get_json() or {}
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        if req.method == "DELETE":
+            endpoint = str((payload or {}).get("endpoint") or "")
+            return response(delete_subscription(user_id=str(user.get("id") or ""), endpoint=endpoint))
+        cfg = webpush_config()
+        if not cfg.get("enabled"):
+            return response({"error": "webpush_not_configured"}, 503)
+        plan = str(account.get("plan") or "").lower()
+        push_status = str(account.get("status") or "").lower()
+        push_expires_at = account.get("expires_at")
+        if account.get("is_admin") or str(account.get("role") or "").lower() == "admin":
+            plan = plan if plan in {"elite", "legend", "goat"} else "goat"
+            # Admin push is operational access and must not depend on a paid-plan expiry.
+            push_status = push_status if push_status in {"active", "lifetime"} else "lifetime"
+            if push_status == "lifetime":
+                push_expires_at = None
+        return response(save_subscription(
+            user_id=str(user.get("id") or ""),
+            subscription=(payload or {}).get("subscription") or payload,
+            plan=plan,
+            status=push_status,
+            expires_at=push_expires_at,
+        ), 201)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "push_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
 @app.route(route="v1/insights", methods=["GET"])
 def insights_feed(req):
     try:
@@ -978,6 +1070,8 @@ def admin_diagnostics(req):
             return denied
         storage = admin_storage_diagnostics()
         storage_ok = storage.get("backend") != "unavailable"
+        media = media_storage_diagnostics()
+        push = push_storage_diagnostics()
         feed_health = {"ready": False, "stale": True, "generated_at": None, "upcoming": 0, "results": 0, "model_version": None}
         try:
             raw_feed = read_feed(FEED)
@@ -1019,12 +1113,20 @@ def admin_diagnostics(req):
             problems.append("firebase_admin_users_unavailable")
         if not storage_ok:
             problems.append("admin_storage_unavailable")
+        if not media.get("configured") or not media.get("available"):
+            problems.append("media_storage_unavailable")
+        if not push.get("enabled"):
+            problems.append("webpush_not_configured")
+        elif not push.get("storage_available"):
+            problems.append("webpush_storage_unavailable")
         return response({
             "ok": bool(users_ok),
             "accounts_ready": bool(users_ok),
             "content_storage_ready": bool(storage_ok),
             "release": RELEASE,
             "support_email_configured": support_email_configured(),
+            "media_storage": media,
+            "webpush": push,
             "auth_provider": auth_provider(settings),
             "admin_storage": storage.get("backend"),
             "storage": storage,
@@ -1100,7 +1202,14 @@ def admin_user_access(req):
             payload,
             actor_id=str(actor.get("id") or ""),
         )
-        return response(_admin_account_row(updated))
+        updated_row = _admin_account_row(updated)
+        sync_push_access(
+            user_id=user_id,
+            plan=str(updated_row.get("plan") or ""),
+            status=str(updated_row.get("status") or ""),
+            expires_at=updated_row.get("expires_at"),
+        )
+        return response(updated_row)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AuthUnavailable:
@@ -1422,6 +1531,29 @@ def admin_ui_config(req):
         return response({"error": "admin_auth_unavailable"}, 503)
     except AdminStorageUnavailable:
         return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/media", methods=["POST"])
+def admin_media_upload(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        content_type = str(req.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower()
+        filename = str(req.headers.get("X-Blinq-Filename") or "")[:240]
+        data = req.get_body() or b""
+        return response(upload_media(
+            data,
+            content_type=content_type,
+            original_name=filename,
+            actor_id=str(actor.get("id") or ""),
+        ), 201)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except MediaStorageUnavailable:
+        return response({"error": "media_storage_unavailable"}, 503)
 
 
 @app.route(route="v1/admin/banner-analytics", methods=["GET"])
