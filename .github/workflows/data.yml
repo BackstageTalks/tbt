@@ -213,7 +213,12 @@ jobs:
           path: |
             .cache/tbt/mega-data/mega_data_report.json
             .cache/tbt/mega-data/mega_data_report.md
+            .cache/tbt/mega-data/statistics_inventory_before.json
             .cache/tbt/mega-data/statistics_inventory_after.json
+            .cache/tbt/mega-data/history_download_report.json
+            .cache/tbt/mega-data/statistics_primary_report.json
+            .cache/tbt/mega-data/statistics_tail_report.json
+            .cache/tbt/mega-data/history_audit_after.json
             .cache/tbt/provider-probe/provider_probe_report.json
             .cache/tbt/provider-probe/provider_probe_report.md
           if-no-files-found: warn
@@ -237,12 +242,22 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload history repair diagnostics
-        if: ${{ always() && (env.MODE == 'history-repair' || env.MODE == 'history' || env.MODE == 'statistics') }}
+        if: ${{ always() && env.MODE == 'history-repair' }}
         uses: actions/upload-artifact@v4
         with:
           name: blinq-history-repair-${{ github.run_id }}
           path: .cache/tbt/history-repair-all/history_repair_report.json
           if-no-files-found: ignore
+
+      - name: Upload history/statistics run report
+        if: ${{ always() && (env.MODE == 'history' || env.MODE == 'statistics') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-${{ env.MODE }}-${{ github.run_id }}
+          path: |
+            .cache/tbt/history/download_report.json
+            .cache/tbt/history/download_progress.json
+          if-no-files-found: warn
 
       - name: Upload production preflight artifacts
         if: env.MODE == 'production-preflight'

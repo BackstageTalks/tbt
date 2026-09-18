@@ -10,11 +10,13 @@ import re
 
 import httpx
 
+from tbt.services.countries import normalize_country_code
+
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 ENVIRONMENT_SCHEMA_VERSION = 2
-ENVIRONMENT_RESOLVER_VERSION = 3
+ENVIRONMENT_RESOLVER_VERSION = 4
 
 
 class OpenMeteoBudgetExceeded(RuntimeError):
@@ -392,6 +394,14 @@ _LOCATION_ALIASES = {
     "cluj napoca": "Cluj-Napoca, RO",
     "belgrade": "Belgrade, RS",
     "kursumlijska banja": "Kuršumlijska Banja, RS",
+    "kutaisi": "Kutaisi, GE",
+    "maringa": "Maringá, BR",
+    "hurghada": "Hurghada, EG",
+    "monastir": "Monastir, TN",
+    "antalya": "Antalya, TR",
+    "sharm el sheikh": "Sharm El Sheikh, EG",
+    "heraklion": "Heraklion, GR",
+    "oeiras": "Oeiras, PT",
     "zagreb": "Zagreb, HR",
     "umag": "Umag, HR",
     "ljubljana": "Ljubljana, SI",
@@ -457,16 +467,31 @@ _LOCATION_ALIASES = {
 # "Kursumlijska Banja, Singles Qualifying, M-ITF-SRB-01A" without fuzzy matching.
 _TOURNAMENT_NOISE_RE = re.compile(
     r"\b(?:singles?|doubles?|qualifying|qualification|men(?:'s|s)?|women(?:'s|s)?|"
-    r"atp|wta|challenger|challengers|grand\s+slam|round\s+of\s+\d+|"
+    r"atp|wta|itf|challenger|challengers|grand\s+slam|round\s+of\s+\d+|"
     r"m-?itf-[a-z]{3}-?\w*|w-?itf-[a-z]{3}-?\w*|m\d{2,3}|w\d{2,3})\b",
     re.IGNORECASE,
 )
 
 _LEADING_TOUR_CLASS_RE = re.compile(
-    r"^(?:(?:itf|atp|wta)\s+)?(?:m|w)\s*\d{2,3}\s+",
+    r"^(?:(?:itf|atp|wta)\s+)?(?:m|w)\s*\d{2,3}\b[\s:,-]*",
     re.IGNORECASE,
 )
-_TRAILING_EVENT_NUMBER_RE = re.compile(r"\s+\d{1,3}$")
+_TRAILING_EVENT_NUMBER_RE = re.compile(r"(?:\s+|\s*[-#]\s*)\d{1,3}$")
+_TRAILING_DRAW_RE = re.compile(
+    r"(?:[,\s-]+(?:men(?:'s|s)?|women(?:'s|s)?|singles?|doubles?|qualifying|qualification|finals?))+$",
+    re.IGNORECASE,
+)
+_ITF_COUNTRY_CODE_RE = re.compile(r"\b[MW]-?ITF-([A-Z]{3})(?:[-_A-Z0-9]*|$)", re.IGNORECASE)
+
+
+def _country_from_tournament_label(value: Any) -> str:
+    """Extract an explicit provider/ITF country token when present.
+
+    Example: ``M-ITF-SRB-01A`` -> ``RS``.  We only normalize explicit codes;
+    no country is guessed from a tournament or player name.
+    """
+    match = _ITF_COUNTRY_CODE_RE.search(str(value or ""))
+    return normalize_country_code(match.group(1)) if match else ""
 
 
 def _alias_key(value: Any) -> str:
@@ -504,57 +529,84 @@ def _clean_location_token(value: Any) -> str:
 
 
 def _clean_tournament_location_part(value: Any) -> str:
-    """Conservatively remove tour/draw numbering that is not geography.
+    """Conservatively strip provider draw/tour decorations from a location.
 
-    Examples: ``ITF M15 Monastir 30`` -> ``Monastir`` and
-    ``Oeiras 3`` -> ``Oeiras``.  We only use this as an additional candidate;
-    the original provider string remains available as a fallback.
+    Examples:
+    ``ITF M15 Monastir 30`` -> ``Monastir``
+    ``ITF M25 Kutaisi Men`` -> ``Kutaisi``
+    ``Maringa Women`` -> ``Maringa``
+
+    The raw provider label remains a later fallback, so this helper never
+    destroys the only candidate.
     """
     text = _clean_location_token(value)
+    text = _ITF_COUNTRY_CODE_RE.sub(" ", text)
     text = _LEADING_TOUR_CLASS_RE.sub("", text).strip()
-    text = _TRAILING_EVENT_NUMBER_RE.sub("", text).strip()
-    return text
+    previous = None
+    while text and text != previous:
+        previous = text
+        text = _TRAILING_DRAW_RE.sub("", text).strip(" ,-")
+        text = _TRAILING_EVENT_NUMBER_RE.sub("", text).strip(" ,-")
+    return " ".join(text.split())
 
 
 def _location_from_tournament_name(name: Any) -> list[str]:
     text = _clean_location_token(name)
     if not text:
         return []
+    explicit_country = _country_from_tournament_label(text)
+
     if "," not in text:
         cleaned = _clean_tournament_location_part(text)
-        return [cleaned] if cleaned and cleaned != text else []
+        if not cleaned or cleaned == text:
+            return []
+        out = []
+        if explicit_country:
+            out.append(f"{cleaned}, {explicit_country}")
+        out.append(cleaned)
+        return out
+
     parts = [_clean_location_token(p) for p in text.split(",")]
     parts = [p for p in parts if p]
     if len(parts) < 2:
         return []
 
     usable: list[str] = []
+    country_hint = explicit_country
     for idx, part in enumerate(parts):
-        low = part.lower()
+        low = _normal(part)
+        if not country_hint:
+            country_hint = normalize_country_code(part)
+        if _ITF_COUNTRY_CODE_RE.search(part):
+            continue
         if idx == 0 and ("open" in low or low in _GENERIC_TOURNAMENT_TOKENS):
             continue
         if low in _GENERIC_TOURNAMENT_TOKENS or "qualif" in low:
             continue
-        usable.append(part)
+        cleaned_part = _clean_tournament_location_part(part)
+        if cleaned_part:
+            usable.append(cleaned_part)
     if not usable:
         return []
+
     out: list[str] = []
-    city = _clean_tournament_location_part(usable[0]) or usable[0]
-    if len(usable) >= 2:
+    city = usable[0]
+    if country_hint:
+        out.append(f"{city}, {country_hint}")
+    elif len(usable) >= 2:
         out.append(f"{city}, {usable[1]}")
     out.append(city)
-    if city != usable[0]:
-        if len(usable) >= 2:
-            out.append(f"{usable[0]}, {usable[1]}")
-        out.append(usable[0])
-    return out
+    return list(dict.fromkeys(out))
 
 
 def _query_variants(query: str) -> list[str]:
     variants = [query]
-    alias = _LOCATION_ALIASES.get(query.lower())
+    alias = _tournament_alias(query) or _LOCATION_ALIASES.get(_normal(query))
     if alias and alias.lower() != query.lower():
         variants.insert(0, alias)
+    cleaned = _clean_tournament_location_part(query)
+    if cleaned and cleaned.casefold() != query.casefold() and cleaned.casefold() not in {v.casefold() for v in variants}:
+        variants.append(cleaned)
     return variants
 
 

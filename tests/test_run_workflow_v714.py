@@ -43,3 +43,16 @@ def test_environment_force_static_no_longer_adds_complete_static():
 def test_environment_report_is_uploaded():
     assert 'Upload environment run report' in ENV
     assert '.cache/tbt/history/environment_enrichment_report.json' in ENV
+
+
+def test_mega_data_repairs_history_before_spending_on_enrichment():
+    assert MEGA.index('"history"') < MEGA.index('"statistics-primary"')
+    assert 'history_download_report.json' in MEGA
+    assert 'statistics_inventory_before.json' in MEGA
+    assert 'history_audit_after.json' in MEGA
+
+
+def test_mega_data_uses_large_history_safety_cap_but_rolls_unused_budget_forward():
+    assert 'min(2500' in MEGA
+    assert 'int(total * 0.20)' in MEGA
+    assert 'planned["statistics_primary"] + carry' in MEGA

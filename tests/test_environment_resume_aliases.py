@@ -53,3 +53,22 @@ def test_itf_draw_suffixes_do_not_hide_known_city_alias():
     assert candidates[0] == 'Kuršumlijska Banja, RS'
     candidates = location_candidates({}, 'Bogota, Women, W-ITF-COL-03A')
     assert candidates[0] == 'Bogotá, CO'
+
+
+def test_itf_compact_labels_strip_draw_gender_and_recover_city():
+    cases = {
+        'ITF M25 Kutaisi Men': 'Kutaisi, GE',
+        'ITF M15 Maringa Men': 'Maringá, BR',
+        'ITF W15 Hurghada Women': 'Hurghada, EG',
+        'ITF M15 Kursumlijska Banja 4 Men': 'Kuršumlijska Banja, RS',
+    }
+    for label, expected in cases.items():
+        candidates = location_candidates({}, label)
+        assert candidates[0] == expected, (label, candidates[:4])
+
+
+def test_itf_provider_country_code_becomes_explicit_country_hint():
+    candidates = location_candidates({}, 'Kursumlijska Banja, Singles Qualifying, M-ITF-SRB-01A')
+    assert 'Kuršumlijska Banja, RS' == candidates[0]
+    candidates = location_candidates({}, 'Tbilisi, Singles, M-ITF-GEO-02A')
+    assert 'Tbilisi, GE' in candidates[:3]

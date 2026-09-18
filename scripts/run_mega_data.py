@@ -1,22 +1,20 @@
-"""Run the high-value tennis data backfills under one global RapidAPI budget.
+"""Run high-value tennis backfills under one global RapidAPI budget.
 
-Operational goal: one GitHub Action run, one Tennis RapidAPI cap and sequential
-writers. The phase order is intentionally driven by the current production
-preflight: event statistics are the largest gap, Sets/Games are next, Aces/DF
-already have a useful corpus, and plain history is only a small catch-up step.
+The run is deliberately defensive and data-driven:
+1. provider capability probe (tiny/read-only; doubles + market/stat discovery)
+2. canonical history gap recovery with a generous *cap* but near-zero spend when complete
+3. zero-API baseline statistics inventory
+4. generic event-statistics sweep (largest enrichment gap)
+5. targeted Sets/Games score enrichment
+6. targeted Aces/Double-Fault enrichment
+7. statistics tail consumes every request left by earlier phases
+8. zero-API post-run inventory + history audit
 
-Current phases:
-1. provider capability probe (tiny, read-only; doubles/markets/stat-key discovery)
-2. generic event-statistics sweep (largest budget share)
-3. targeted Sets/Games score enrichment for current-board players
-4. targeted Aces/Double-Fault enrichment for current-board players
-5. canonical history catch-up (small reserved cap; normally near-zero)
-6. second statistics sweep with every request still left
-7. zero-API post-run statistics inventory
-
-Unused request headroom rolls forward automatically. Doubles remain probe-only
-until pair/member identity and odds coverage are confirmed by real provider
-payloads; doubles are never mixed into the singles history/model.
+All writer phases are serialized by the GitHub workflow.  Unused request headroom
+rolls forward, so a healthy history costs almost nothing and its reserved budget
+falls through to event statistics.  Doubles remain probe-only until provider
+payloads confirm stable pair/member identity and odds/statistics coverage; doubles
+are never mixed into the singles history/model.
 """
 from __future__ import annotations
 
@@ -53,34 +51,34 @@ def _run(name: str, args: list[str], *, optional: bool = False) -> dict[str, Any
 
 
 def _budget(total: int) -> dict[str, int]:
-    """Reserve high-value caps; unused requests roll forward and end in stats-tail."""
-    probe = min(120, max(60, int(total * 0.01)))
+    """Set high-value phase caps; actual unused calls always roll forward.
+
+    History gets a meaningful safety cap because a partial yearly partition can
+    otherwise poison every later enrichment.  On a healthy release the downloader
+    spends ~0 calls, so that cap immediately flows into statistics-primary.
+    """
+    probe = min(120, max(80, int(total * 0.01)))
     remaining = max(0, total - probe)
 
-    # Keep plain history small. The canonical corpus is already large/current;
-    # this only catches a recent gap before unused budget returns to statistics.
-    history = min(300, max(50, int(total * 0.03)))
+    history = min(2500, max(300, int(total * 0.20)))
     history = min(history, remaining)
     remaining -= history
 
-    # Aces/DF already have materially better coverage than SG, so cap this phase.
-    ace = min(1500, max(250, int(total * 0.10)))
-    ace = min(ace, remaining)
-    remaining -= ace
-
-    # Structured score history is still shallow and directly unlocks SETS/GAMES.
-    sg = min(3200, max(500, int(total * 0.25)))
+    sg = min(3000, max(600, int(total * 0.22)))
     sg = min(sg, remaining)
     remaining -= sg
 
-    # Everything else is the primary event-statistics sweep.
+    ace = min(1200, max(250, int(total * 0.08)))
+    ace = min(ace, remaining)
+    remaining -= ace
+
     statistics_primary = max(0, remaining)
     return {
         "provider_probe": probe,
+        "history": history,
         "statistics_primary": statistics_primary,
         "sg": sg,
         "ace": ace,
-        "history": history,
     }
 
 
@@ -95,6 +93,14 @@ def _actual_requests(phase: str) -> int:
         return int(_read_json(ROOT / ".cache/tbt/sg-history/sg_run_summary.json").get("requests") or 0)
     return 0
 
+
+
+def _snapshot_report(source: Path, target: Path) -> dict[str, Any]:
+    payload = _read_json(source)
+    if payload:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
+    return payload
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
@@ -152,49 +158,16 @@ def main() -> None:
             [
                 sys.executable, "scripts/probe_tennis_provider.py",
                 "--max-requests", str(probe_cap),
-                "--days-back", "3", "--days-ahead", "2",
-                "--odds-samples", "12", "--stats-samples", "8",
+                "--days-back", "4", "--days-ahead", "3",
+                "--odds-samples", "16", "--stats-samples", "10",
             ],
             optional=True,
         )
         finish_phase(phase, probe_cap, "provider_probe")
 
-    # 2) Largest current gap: event statistics / serve-return quality.
-    _run("statistics-repair", [sys.executable, "scripts/repair_history_data.py", "--data-repository", args.data_repository])
-    stats_cap = min(planned["statistics_primary"] + carry, remaining())
-    carry = 0
-    if stats_cap:
-        phase = _run("statistics-primary", stats_cmd(stats_cap))
-        finish_phase(phase, stats_cap, "statistics")
-
-    # 3) Structured set/game samples for current-board players.
-    sg_cap = min(planned["sg"] + carry, remaining())
-    carry = 0
-    if sg_cap:
-        phase = _run("sg-scores", [
-            sys.executable, "scripts/enrich_sg_history.py",
-            "--data-repository", args.data_repository,
-            "--lookback-days", str(args.sg_lookback_days),
-            "--target-samples", str(args.sg_target_samples),
-            "--max-requests", str(sg_cap),
-        ])
-        finish_phase(phase, sg_cap, "sg")
-
-    # 4) ESA topping-up. This is intentionally smaller than SG/statistics now.
-    ace_cap = min(planned["ace"] + carry, remaining())
-    carry = 0
-    if ace_cap:
-        phase = _run("ace-statistics", [
-            sys.executable, "scripts/enrich_ace_history.py",
-            "--data-repository", args.data_repository,
-            "--lookback-days", str(args.ace_lookback_days),
-            "--target-samples", str(args.ace_target_samples),
-            "--max-requests", str(ace_cap),
-        ])
-        finish_phase(phase, ace_cap, "ace")
-
-    # 5) Tiny history catch-up near the end. If already complete it spends almost
-    # nothing and its unused headroom immediately returns to statistics-tail.
+    # 2) Physical history completeness comes first.  The partial-year recovery
+    # guard reopens only progress dates missing from the parquet, so a healthy
+    # release spends almost no provider calls.
     _run("history-repair", [sys.executable, "scripts/repair_history_data.py", "--data-repository", args.data_repository])
     history_cap = min(planned["history"] + carry, remaining())
     carry = 0
@@ -210,17 +183,74 @@ def main() -> None:
             cmd += ["--end", args.end]
         phase = _run("history", cmd)
         finish_phase(phase, history_cap, "history")
+        _snapshot_report(
+            ROOT / ".cache/tbt/history/download_report.json",
+            report_dir / "history_download_report.json",
+        )
 
-    # 6) Consume every remaining request on the highest-value generic stats sweep.
-    # A second pass naturally skips rows marked available/cached by the first pass
-    # and continues farther back through the requested window.
+    # Baseline inventory is free and makes the mega artifact show real gains.
+    inventory_before_path = report_dir / "statistics_inventory_before.json"
+    if (ROOT / ".cache/tbt/history").is_dir():
+        _run(
+            "baseline-statistics-inventory",
+            [
+                sys.executable, "scripts/audit_statistics_inventory.py",
+                "--history-dir", ".cache/tbt/history",
+                "--out", str(inventory_before_path.relative_to(ROOT)),
+            ],
+            optional=True,
+        )
+
+    # 3) Largest current gap: event statistics / serve-return quality.
+    stats_cap = min(planned["statistics_primary"] + carry, remaining())
+    carry = 0
+    if stats_cap:
+        phase = _run("statistics-primary", stats_cmd(stats_cap))
+        finish_phase(phase, stats_cap, "statistics")
+        _snapshot_report(
+            ROOT / ".cache/tbt/history/download_report.json",
+            report_dir / "statistics_primary_report.json",
+        )
+
+    # 4) Structured set/game samples for current-board players.
+    sg_cap = min(planned["sg"] + carry, remaining())
+    carry = 0
+    if sg_cap:
+        phase = _run("sg-scores", [
+            sys.executable, "scripts/enrich_sg_history.py",
+            "--data-repository", args.data_repository,
+            "--lookback-days", str(args.sg_lookback_days),
+            "--target-samples", str(args.sg_target_samples),
+            "--max-requests", str(sg_cap),
+        ])
+        finish_phase(phase, sg_cap, "sg")
+
+    # 5) ESA topping-up.  ACE/DF already have a useful corpus, so this remains
+    # smaller than generic stats and SG.
+    ace_cap = min(planned["ace"] + carry, remaining())
+    carry = 0
+    if ace_cap:
+        phase = _run("ace-statistics", [
+            sys.executable, "scripts/enrich_ace_history.py",
+            "--data-repository", args.data_repository,
+            "--lookback-days", str(args.ace_lookback_days),
+            "--target-samples", str(args.ace_target_samples),
+            "--max-requests", str(ace_cap),
+        ])
+        finish_phase(phase, ace_cap, "ace")
+
+    # 6) Spend every request left on the highest-value generic statistics sweep.
     stats_tail_cap = remaining()
     carry = 0
     if stats_tail_cap:
         phase = _run("statistics-tail", stats_cmd(stats_tail_cap))
         finish_phase(phase, stats_tail_cap, "statistics")
+        _snapshot_report(
+            ROOT / ".cache/tbt/history/download_report.json",
+            report_dir / "statistics_tail_report.json",
+        )
 
-    # 7) Zero-Tennis-API inventory from the latest local canonical release.
+    # 8) Zero-Tennis-API inventory + integrity audit from the latest canonical release.
     inventory_path = report_dir / "statistics_inventory_after.json"
     if (ROOT / ".cache/tbt/history").is_dir():
         _run(
@@ -233,7 +263,21 @@ def main() -> None:
             optional=True,
         )
     inventory = _read_json(inventory_path)
+    inventory_before = _read_json(report_dir / "statistics_inventory_before.json")
     probe = _read_json(ROOT / ".cache/tbt/provider-probe/provider_probe_report.json")
+
+    # Audit is read-only and does not consume Tennis API quota.  Keep it optional
+    # so an audit artifact issue cannot erase the expensive enrichment work.
+    audit_phase = _run(
+        "post-run-history-audit",
+        [sys.executable, "scripts/audit_history_data.py", "--data-repository", args.data_repository],
+        optional=True,
+    )
+    phases.append(audit_phase)
+    history_audit = _snapshot_report(
+        ROOT / ".cache/tbt/history-audit/history_audit_report.json",
+        report_dir / "history_audit_after.json",
+    )
 
     payload = {
         "schema": 2,
@@ -243,6 +287,8 @@ def main() -> None:
         "requests_unused": max(0, args.max_requests - used_total),
         "planned_caps": planned,
         "phases": phases,
+        "statistics_inventory_before": inventory_before,
+        "history_audit": history_audit,
         "post_run_statistics": {
             "rows": inventory.get("rows"),
             "any_stats_matches": inventory.get("any_stats_matches"),
