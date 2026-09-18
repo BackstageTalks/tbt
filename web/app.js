@@ -153,6 +153,17 @@
     return raw;
   }
   const lcopy=(en,sk,cz=sk)=>locale==='sk'?sk:locale==='cz'?cz:en;
+  function uiCopy(path,fallback=''){
+    const keys=String(path||'').split('.').filter(Boolean);let node=state.ui?.ui_copy;
+    for(const key of keys){if(!node||typeof node!=='object')return String(fallback??'');node=node[key];}
+    if(node&&typeof node==='object'&&!Array.isArray(node)){const localized=node[locale]??node.sk??node.en;return localized==null?String(fallback??''):String(localized);}
+    return node==null?String(fallback??''):String(node);
+  }
+  function applyEditableUiCopy(){
+    const eyebrow=$('bootEyebrow'),bootStatus=$('bootStatus');
+    if(eyebrow)eyebrow.textContent=uiCopy('loading.eyebrow','BLINQ INTELLIGENCE');
+    if(bootStatus)bootStatus.textContent=uiCopy('loading.status',lcopy('Loading model · data · today’s predictions','Načítavam model · dáta · dnešné predikcie','Načítám model · data · dnešní predikce'));
+  }
   function translatePublicDom(root=document){
     if(locale==='en'||!root)return;
     const shouldSkip=node=>{const el=node?.parentElement;return Boolean(el?.closest?.('.admin-route,.admin-canvas,.admin-inspector,.admin-toolbar,.admin-tabbar,.admin-accounts-grid,.admin-plan-grid,.reference-wordmark'))};
@@ -883,14 +894,38 @@
     const footer=state.ui?.footer||{};
     const copyright=$('footerCopyright');if(copyright)copyright.textContent=String(footer.copyright||'© 2026 BlinQ');
     const wrap=document.querySelector('.system-status'),status=wrap?.querySelector('strong');
-    const generated=state.feed?.generated_at,updated=generated?fmtTime(generated):'—';
-    const liveError=Boolean(state.userLiveRadarStatus?.error),stale=Boolean(state.feed?.stale);
-    if(wrap){wrap.classList.toggle('is-warning',stale&&!liveError);wrap.classList.toggle('is-error',liveError);wrap.classList.toggle('is-ok',!stale&&!liveError);}
-    if(status){
-      if(liveError)status.textContent=`${lcopy('Updated','Aktualizované','Aktualizováno')} ${updated} · ${lcopy('LIVE monitoring reconnecting','LIVE monitoring sa obnovuje','LIVE monitoring se obnovuje')}`;
-      else if(stale)status.textContent=`${lcopy('Updated','Aktualizované','Aktualizováno')} ${updated} · ${lcopy('data refresh in progress','dáta sa aktualizujú','data se aktualizují')}`;
-      else status.textContent=`${lcopy('Updated','Aktualizované','Aktualizováno')} ${updated} · ${lcopy('LIVE data active','LIVE dáta aktívne','LIVE data aktivní')}`;
+    const model=$('footerModelState');
+    const generated=state.feed?.generated_at||'';
+    const generatedMs=Date.parse(generated);
+    const feedAgeMin=Number.isFinite(generatedMs)?Math.max(0,(Date.now()-generatedMs)/60000):Infinity;
+    const liveScan=state.userLiveRadarStatus?.scanned_at||'';
+    const liveMs=Date.parse(liveScan);
+    const liveAgeMin=Number.isFinite(liveMs)?Math.max(0,(Date.now()-liveMs)/60000):Infinity;
+    const liveError=Boolean(state.userLiveRadarStatus?.error);
+    const feedStale=Boolean(state.feed?.stale)||feedAgeMin>90;
+    const feedOld=feedAgeMin>30;
+    const liveFresh=liveAgeMin<=3&&!liveError;
+    const updated=generated?fmtTime(generated):'—';
+    const liveUpdated=liveScan?fmtTime(liveScan):'';
+    if(wrap){
+      wrap.classList.toggle('is-error',liveError&&!Number.isFinite(generatedMs));
+      wrap.classList.toggle('is-warning',!liveFresh&&(feedOld||feedStale||liveError));
+      wrap.classList.toggle('is-ok',liveFresh||(!feedOld&&!feedStale&&!liveError));
     }
+    if(status){
+      if(liveFresh){
+        status.textContent=`${uiCopy('footer.live_ok',lcopy('LIVE radar active','LIVE radar aktívny','LIVE radar aktivní'))}${liveUpdated?' · '+liveUpdated:''}`;
+      }else if(liveError){
+        status.textContent=`${uiCopy('footer.offline',lcopy('Services reconnecting','Služby sa obnovujú','Služby se obnovují'))} · ${uiCopy('footer.updated',lcopy('Updated','Aktualizované','Aktualizováno'))} ${updated}`;
+      }else if(feedStale){
+        status.textContent=`${uiCopy('footer.updated',lcopy('Updated','Aktualizované','Aktualizováno'))} ${updated} · ${uiCopy('footer.feed_stale',lcopy('Waiting for data refresh','Čaká sa na aktualizáciu dát','Čeká se na aktualizaci dat'))}`;
+      }else if(feedOld){
+        status.textContent=`${uiCopy('footer.updated',lcopy('Updated','Aktualizované','Aktualizováno'))} ${updated} · ${uiCopy('footer.feed_old',lcopy('Data is older','Dáta sú staršie','Data jsou starší'))}`;
+      }else{
+        status.textContent=`${uiCopy('footer.updated',lcopy('Updated','Aktualizované','Aktualizováno'))} ${updated} · ${uiCopy('footer.feed_fresh',lcopy('Data is current','Dáta sú aktuálne','Data jsou aktuální'))}`;
+      }
+    }
+    if(model&&liveScan){model.title=`${model.title||model.textContent||''} · LIVE ${liveUpdated}`.trim();}
   }
   const cookieConsentKey='blinq_cookie_consent_v1';
   function cookieConsentValue(){try{return localStorage.getItem(cookieConsentKey)||'';}catch{return '';}}
@@ -913,7 +948,7 @@
     if(route==='support')wireSupportForm();
     if(!dialog.open)dialog.showModal();
   }
-  function renderAllUiContent(){ if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeaderSlots(); renderHeroBanner(); renderBanners(); renderVipRail(); renderFooterConfig(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); translatePublicDom(document.body); }
+  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeaderSlots(); renderHeroBanner(); renderBanners(); renderVipRail(); renderFooterConfig(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); translatePublicDom(document.body); }
 
   function auth(mode='login'){
     feedGeneration++;
@@ -928,7 +963,9 @@
     // could call Firebase, which looked like a broken login button.
     $('authPassword').minLength=(mode==='signup'||mode==='recovery')?8:0;
     $('authPassword').autocomplete=mode==='login'?'current-password':'new-password';
-    $('authTitle').textContent=publicText({login:'Sign in to your analytics workspace',signup:'Get access',reset:'Restore your access',recovery:'Set a new password'}[mode]);
+    const authFallback={login:'Sign in to your analytics workspace',signup:'Get access',reset:'Restore your access',recovery:'Set a new password'}[mode];
+    const authCopyKey={login:'auth.login_title',signup:'auth.signup_title',reset:'auth.reset_title',recovery:'auth.recovery_title'}[mode];
+    $('authTitle').textContent=uiCopy(authCopyKey,publicText(authFallback));
     $('authSubtitle').textContent=''; $('authSubtitle').hidden=true;
     $('authSubmit').textContent=publicText({login:'Sign in',signup:'Create account',reset:'Send recovery link',recovery:'Save password'}[mode]);
     $('switchSignup').textContent=publicText(mode==='login'?'Create account':'Back to sign in'); $('switchReset').hidden=mode!=='login';
@@ -1261,7 +1298,13 @@
     const radarTabs=channel==='live'&&liveEligible?`<div class="live-radar-tabs"><button type="button" data-live-radar-tab="comeback" class="${state.liveRadarTab!=='set2'?'is-active':''}">Comeback</button><button type="button" data-live-radar-tab="set2" class="${state.liveRadarTab==='set2'?'is-active':''}">2. set</button></div>`:'';
     const radarPanel=radarTabs+(state.liveRadarTab==='set2'?radarCandidateCards:radarStrip+radarCandidateCards);
     if(state.insightsLoading){list.innerHTML=radarPanel+'<div class="insight-feed-empty insight-feed-loading"><span></span><strong>Načítavam…</strong></div>';return;}
-    if(state.insightsStorageUnavailable){list.innerHTML=radarPanel+`<div class="insight-feed-empty insight-feed-offline"><i>!</i><strong>${escapeHtml(lcopy('Feed is offline','Feed je dočasne offline','Feed je dočasně offline'))}</strong><p>${escapeHtml(lcopy('Your dashboard remains fully available. Private messages will appear again when storage is reachable.','Dashboard funguje ďalej. Súkromné správy sa zobrazia po obnovení úložiska.','Dashboard funguje dál. Soukromé zprávy se zobrazí po obnovení úložiště.'))}</p></div>`;return;}
+    if(state.insightsStorageUnavailable){
+      const liveCopy=uiCopy('private_feed.history_unavailable',lcopy('Alert history is temporarily unavailable. LIVE radar continues to work.','História upozornení je dočasne nedostupná. LIVE radar ďalej funguje.','Historie upozornění je dočasně nedostupná. LIVE radar dále funguje.'));
+      const infoCopy=uiCopy('private_feed.info_unavailable',lcopy('Premium Info needs persistent storage. Messages will return automatically when storage is restored.','Premium Info potrebuje trvalé úložisko. Po obnovení sa správy zobrazia automaticky.','Premium Info potřebuje trvalé úložiště. Po obnovení se zprávy zobrazí automaticky.'));
+      if(channel==='live'){list.innerHTML=radarPanel+`<div class="insight-storage-note"><i>i</i><span>${escapeHtml(liveCopy)}</span></div>`;}
+      else{list.innerHTML=`<div class="insight-feed-empty insight-feed-offline"><i>!</i><strong>${escapeHtml(lcopy('Premium Info temporarily unavailable','Premium Info je dočasne nedostupné','Premium Info je dočasně nedostupné'))}</strong><p>${escapeHtml(infoCopy)}</p></div>`;}
+      return;
+    }
     if(!rows.length){const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');list.innerHTML=radarPanel+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.'))}</p></div>`;return;}
     list.innerHTML=radarPanel+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon type-${escapeHtml(item.type||'insight')}">${escapeHtml(insightTypeIcon(item.type))}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p><footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
   }
@@ -2858,7 +2901,7 @@
   function renderAdminInsights(){
     const item=adminInsightDraft(),levels=Array.isArray(item.levels)?item.levels:[];const list=Array.isArray(state.adminInsights)?state.adminInsights:[];
     const allowed=new Set(notificationAudienceConfig().editable_levels||['elite','legend','goat']);
-    const allLevels=['elite','legend','goat'].filter(level=>allowed.has(level));
+    const allLevels=['rookie','pro','elite','legend','goat'].filter(level=>allowed.has(level));
     const levelChecks=allLevels.map(level=>`<label class="admin-insight-level"><input type="checkbox" name="insight_level" value="${level}" ${levels.includes(level)||(!item.id&&['elite','legend','goat'].includes(level))?'checked':''}><span>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,''))}</span></label>`).join('');
     const rows=list.map(row=>`<article class="admin-insight-row ${row.active===false?'is-inactive':''} priority-${escapeHtml(row.priority||'normal')}"><div><span>${escapeHtml(insightTypeLabel(row.type))}${row.pinned?' · PIN':''}</span><strong>${escapeHtml(row.title)}</strong><p>${escapeHtml(row.body)}</p><small>${escapeHtml(insightAudienceText(row.levels))} · ${escapeHtml(row.created_at?fmtDate(row.created_at)+' '+fmtTime(row.created_at):'')} · ${Number(row.read_count)||0} prečítaní</small></div><div class="admin-insight-row-actions"><button type="button" class="btn btn-ghost" data-admin-action="insight-edit" data-insight-id="${escapeHtml(row.id)}">Upraviť</button><button type="button" class="btn btn-ghost danger" data-admin-action="insight-delete" data-insight-id="${escapeHtml(row.id)}">Zmazať</button></div></article>`).join('');
     const radar=state.adminLiveRadarStatus||{};const radarTone=radar.error?' is-error':radar.ok?' is-ok':'';
@@ -2888,15 +2931,19 @@
   function systemState(ok,warning=false){return ok?'ok':warning?'warning':'error';}
   function renderAdminSystem(){
     const d=state.adminDiagnostics||{},feed=d.feed||{},provider=d.provider||{},ops=d.ops||{},counts=ops.counts||{};
+    const storage=d.storage||{},storageServices=storage.services||{};
+    const privateServicesReady=Boolean(storageServices.premium_info&&storageServices.live_alert_history&&storageServices.support);
+    const storageDetail=d.content_storage_ready?`${d.admin_storage||'storage'}${storage.azure_connection_source?' · '+storage.azure_connection_source:''}`:(storage.recommended_setting?`SET ${storage.recommended_setting}`:'unavailable');
     const cards=[
       ['API / AUTH',Boolean(d.accounts_ready),d.auth_provider||'—'],
-      ['ADMIN STORAGE',Boolean(d.content_storage_ready),d.admin_storage||'unavailable'],
+      ['ADMIN STORAGE',Boolean(d.content_storage_ready),storageDetail],
+      ['INFO / LIVE / SUPPORT',privateServicesReady,privateServicesReady?'ONLINE':'NEED STORAGE'],
       ['PUBLISHED FEED',Boolean(feed.ready)&&!feed.stale,feed.ready?(feed.stale?'STALE':'FRESH'):'NO FEED'],
       ['DATA PROVIDER',Boolean(provider.configured),provider.configured?'CONFIGURED':'MISSING KEY'],
       ['ERRORS · 24H',Number(counts.error||0)===0,String(counts.error||0)],
     ];
     const events=(ops.items||[]).map(item=>`<tr><td><span class="ops-level is-${escapeHtml(item.level||'info')}">${escapeHtml(String(item.level||'info').toUpperCase())}</span></td><td>${escapeHtml(item.component||'app')}</td><td>${escapeHtml(item.message||'')}</td><td>${escapeHtml(fmtDate(item.occurred_at))} · ${escapeHtml(fmtTime(item.occurred_at))}</td></tr>`).join('');
-    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>SYSTEM HEALTH</small><h2>Prevádzkový stav</h2><p>Rýchla kontrola API, účtov, úložiska, feedu a dátového providera. Pri chybe sa tu zobrazí aj posledný prevádzkový záznam.</p></div><div class="admin-system-actions"><button class="btn btn-ghost" type="button" data-admin-action="copy-diagnostics">Kopírovať diagnostiku</button><button class="btn btn-primary" type="button" data-admin-action="diagnostics">Spustiť kontrolu</button></div></div><div class="admin-system-cards">${cards.map(([name,ok,detail])=>`<article class="admin-system-card is-${systemState(ok,false)}"><span></span><small>${name}</small><strong>${ok?'OK':'CHECK'}</strong><em>${escapeHtml(detail)}</em></article>`).join('')}</div><div class="admin-system-details"><div><small>Posledný feed</small><strong>${escapeHtml(feed.generated_at?`${fmtDate(feed.generated_at)} · ${fmtTime(feed.generated_at)}`:'—')}</strong></div><div><small>Model</small><strong>${escapeHtml(feed.model_version||state.feed?.model?.version||'—')}</strong></div><div><small>Upcoming / Results</small><strong>${Number(feed.upcoming||0)} / ${Number(feed.results||0)}</strong></div><div><small>Kontrola</small><strong>${d.checked_at?new Date(Number(d.checked_at)*1000).toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}):'—'}</strong></div></div><div class="admin-form-section"><div class="admin-form-section-title"><strong>Posledné udalosti</strong><span>Serverové chyby, ktoré zachytil BlinQ prevádzkový journal.</span></div><div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Level</th><th>Komponent</th><th>Správa</th><th>Čas</th></tr></thead><tbody>${events||'<tr><td colspan="4">Za posledných 24 hodín nie sú zaznamenané žiadne prevádzkové udalosti.</td></tr>'}</tbody></table></div></div></section>`;
+    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>SYSTEM HEALTH</small><h2>Prevádzkový stav</h2><p>Rýchla kontrola API, účtov, úložiska, feedu a dátového providera. Pri chybe sa tu zobrazí aj posledný prevádzkový záznam.</p></div><div class="admin-system-actions"><button class="btn btn-ghost" type="button" data-admin-action="copy-diagnostics">Kopírovať diagnostiku</button><button class="btn btn-primary" type="button" data-admin-action="diagnostics">Spustiť kontrolu</button></div></div><div class="admin-system-cards">${cards.map(([name,ok,detail])=>`<article class="admin-system-card is-${systemState(ok,false)}"><span></span><small>${name}</small><strong>${ok?'OK':'CHECK'}</strong><em>${escapeHtml(detail)}</em></article>`).join('')}</div><div class="admin-system-details"><div><small>Posledný feed</small><strong>${escapeHtml(feed.generated_at?`${fmtDate(feed.generated_at)} · ${fmtTime(feed.generated_at)}`:'—')}</strong></div><div><small>Model</small><strong>${escapeHtml(feed.model_version||state.feed?.model?.version||'—')}</strong></div><div><small>Upcoming / Results</small><strong>${Number(feed.upcoming||0)} / ${Number(feed.results||0)}</strong></div><div><small>Úložisko</small><strong>${escapeHtml(storageDetail)}</strong></div><div><small>Kontrola</small><strong>${d.checked_at?new Date(Number(d.checked_at)*1000).toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}):'—'}</strong></div></div>${!d.content_storage_ready?`<div class="admin-runtime-note is-error"><strong>INFO, uložená história LIVE a Support potrebujú trvalé úložisko</strong><span>Nastav jeden spoločný App Setting <code>${escapeHtml(storage.recommended_setting||'BLINQ_STORAGE_CONNECTION_STRING')}</code>. Ak už používaš storage pre bannery, v7.3.3 ho automaticky znovu použije.</span></div>`:''}<div class="admin-form-section"><div class="admin-form-section-title"><strong>Posledné udalosti</strong><span>Serverové chyby, ktoré zachytil BlinQ prevádzkový journal.</span></div><div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Level</th><th>Komponent</th><th>Správa</th><th>Čas</th></tr></thead><tbody>${events||'<tr><td colspan="4">Za posledných 24 hodín nie sú zaznamenané žiadne prevádzkové udalosti.</td></tr>'}</tbody></table></div></div></section>`;
   }
   function renderAdminPages(){
     const pages=state.siteContent?.pages?.sk||{};
@@ -2920,13 +2967,15 @@
   }
 
   function renderAdminRoute(){
-    const tabs=[['accounts','Účty','Prístup · platnosť'],['banners','Bannery','Hero · pozadie'],['insights','Info & LIVE','Správy · radar']];
+    const tabs=[['accounts','Účty','Prístup · platnosť'],['banners','Bannery','Hero · pozadie'],['insights','Info & LIVE','Správy · radar'],['support','Support','Požiadavky'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,banners:renderAdminBanners,insights:renderAdminInsights};const panel=renderers[state.adminTab]();
-    const info={accounts:['Účty','Levely, platnosť a prístup.'],banners:['Bannery','Hero, mobil a pozadie.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.']}[state.adminTab];
+    const renderers={accounts:renderAdminAccounts,banners:renderAdminBanners,insights:renderAdminInsights,support:renderAdminSupport,system:renderAdminSystem};const panel=renderers[state.adminTab]();
+    const info={accounts:['Účty','Levely, platnosť a prístup.'],banners:['Bannery','Hero, mobil a pozadie.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],support:['Support','Požiadavky používateľov a stav riešenia.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
     else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy sa publikujú okamžite</div>';
+    else if(state.adminTab==='support')contextual='<div class="admin-account-direct-note"><span></span>Support sa ukladá okamžite</div>';
+    else if(state.adminTab==='system')contextual='<button class="btn btn-primary" type="button" data-admin-action="diagnostics">Spustiť kontrolu</button>';
     else contextual='<div class="admin-publish-hint"><span>Koncept</span><i></i><b>Live po publikovaní</b></div><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Uložiť koncept</button><button class="btn btn-primary" type="button" data-admin-action="publish-config">Publikovať</button>';
     const nav=tabs.map(([id,label,hint])=>`<button type="button" class="${state.adminTab===id?'active':''}" data-admin-tab="${id}"><span class="admin-nav-mark"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(hint)}</small></span></button>`).join('');
     return `<div class="admin-console admin-console-v685 admin-console-v687 lean-admin-console"><aside class="admin-side-nav"><div class="admin-side-brand"><span>BLINQ CONTROL</span><strong>Admin</strong><small>Účty · obsah · LIVE</small></div><nav class="admin-tabs admin-tabs-v685" aria-label="Admin navigácia"><div class="admin-nav-group"><span>SPRÁVA</span>${nav}</div></nav><div class="admin-side-foot"><a href="#predictions" data-route="predictions"><svg viewBox="0 0 20 20"><path d="M4 10h12M9 5l-5 5 5 5"></path></svg><span>Späť na web</span></a></div></aside><section class="admin-workarea"><header class="admin-workarea-head admin-control-toolbar"><div><small>ADMIN / ${escapeHtml(state.adminTab.toUpperCase())}</small><h2>${escapeHtml(info[0])}</h2><p>${escapeHtml(info[1])}</p></div><div class="admin-global-actions">${contextual}</div></header><div class="admin-panel admin-panel-v685">${panel}</div></section></div>`;
@@ -3071,7 +3120,7 @@
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
         const d=state.adminDiagnostics||{};
-        const safe={release:d.release||'',accounts_ready:Boolean(d.accounts_ready),content_storage_ready:Boolean(d.content_storage_ready),auth_provider:d.auth_provider||'',admin_storage:d.admin_storage||'unavailable',firebase_server_configured:Boolean(d.firebase_server_configured),firebase_admin_users:Boolean(d.firebase_admin_users),storage:{backend:d.storage?.backend||'unavailable',azure_configured:Boolean(d.storage?.azure_configured),azure_available:Boolean(d.storage?.azure_available),firestore_available:Boolean(d.storage?.firestore_available)},media_storage:{configured:Boolean(d.media_storage?.configured),available:Boolean(d.media_storage?.available),container:d.media_storage?.container||''},webpush:{enabled:Boolean(d.webpush?.enabled),keys_configured:Boolean(d.webpush?.keys_configured),storage_available:Boolean(d.webpush?.storage_available),subscriptions:d.webpush?.subscriptions??null},problems:Array.isArray(d.problems)?d.problems:[]};
+        const safe={release:d.release||'',accounts_ready:Boolean(d.accounts_ready),content_storage_ready:Boolean(d.content_storage_ready),auth_provider:d.auth_provider||'',admin_storage:d.admin_storage||'unavailable',firebase_server_configured:Boolean(d.firebase_server_configured),firebase_admin_users:Boolean(d.firebase_admin_users),storage:{backend:d.storage?.backend||'unavailable',azure_configured:Boolean(d.storage?.azure_configured),azure_available:Boolean(d.storage?.azure_available),azure_connection_source:d.storage?.azure_connection_source||'',firestore_available:Boolean(d.storage?.firestore_available)},media_storage:{configured:Boolean(d.media_storage?.configured),available:Boolean(d.media_storage?.available),container:d.media_storage?.container||''},webpush:{enabled:Boolean(d.webpush?.enabled),keys_configured:Boolean(d.webpush?.keys_configured),storage_available:Boolean(d.webpush?.storage_available),subscriptions:d.webpush?.subscriptions??null},problems:Array.isArray(d.problems)?d.problems:[]};
         const value=JSON.stringify(safe,null,2);
         try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(value);else{const ta=document.createElement('textarea');ta.value=value;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus('Bezpečná diagnostika bola skopírovaná. Môžeš ju poslať bez kľúčov a tokenov.');}catch{showStatus('Diagnostiku sa nepodarilo skopírovať.');}
         return;
@@ -3370,18 +3419,22 @@
   function supportCategoryOptions(selected=''){
     return (state.siteContent?.support?.categories||[]).map(row=>{const label=row?.[contentLocale()]||row?.sk||row?.en||row?.id;return `<option value="${escapeHtml(row.id||'other')}"${String(selected)===String(row.id)?' selected':''}>${escapeHtml(label||'')}</option>`;}).join('');
   }
+  function supportFormCopy(){
+    const rows=state.siteContent?.support?.form_copy||{};return rows?.[contentLocale()]||rows?.sk||{};
+  }
   function renderSupportForm(){
     const account=state.feed?.account||{};
     const email=String(account.email||'');
-    return `<div class="support-panel"><div class="support-panel-copy"><span>BLINQ SUPPORT</span><h3>${escapeHtml(lcopy('Send us a message','Napíšte nám','Napište nám'))}</h3><p>${escapeHtml(lcopy('We handle support manually and keep the request linked to your account when you are signed in.','Podporu riešime manuálne a pri prihlásenom účte sa požiadavka automaticky spojí s vaším profilom.','Podporu řešíme manuálně a u přihlášeného účtu se požadavek automaticky spojí s vaším profilem.'))}</p></div><form id="supportForm" class="support-form"><div class="support-form-grid"><label>${escapeHtml(lcopy('Category','Kategória','Kategorie'))}<select id="supportCategory" required>${supportCategoryOptions('technical')}</select></label><label>${escapeHtml(lcopy('Email','E-mail','E-mail'))}<input id="supportEmail" type="email" required value="${escapeHtml(email)}" ${email?'readonly':''} placeholder="name@example.com"></label><label class="span-2">${escapeHtml(lcopy('Subject','Predmet','Předmět'))}<input id="supportSubject" maxlength="160" placeholder="${escapeHtml(lcopy('Short description','Krátky popis','Krátký popis'))}"></label><label class="span-2">${escapeHtml(lcopy('Message','Správa','Zpráva'))}<textarea id="supportMessage" minlength="8" maxlength="5000" rows="7" required placeholder="${escapeHtml(lcopy('Describe what happened and what you expected.','Popíšte, čo sa stalo a čo ste očakávali.','Popište, co se stalo a co jste očekávali.'))}"></textarea></label></div><div class="support-form-actions"><button class="btn btn-primary" type="submit">${escapeHtml(lcopy('Send request','Odoslať požiadavku','Odeslat požadavek'))}</button><span id="supportFormStatus" role="status"></span></div><small>${escapeHtml(lcopy('Never send passwords or full payment-card details.','Nikdy neposielajte heslá ani celé údaje platobnej karty.','Nikdy neposílejte hesla ani celé údaje platební karty.'))}</small></form></div>`;
+    const copy=supportFormCopy();
+    return `<div class="support-panel"><div class="support-panel-copy"><span>${escapeHtml(copy.eyebrow||'BLINQ SUPPORT')}</span><h3>${escapeHtml(copy.title||lcopy('Send us a message','Napíšte nám','Napište nám'))}</h3><p>${escapeHtml(copy.intro||lcopy('We handle support manually and keep the request linked to your account when you are signed in.','Podporu riešime manuálne a pri prihlásenom účte sa požiadavka automaticky spojí s vaším profilom.','Podporu řešíme manuálně a u přihlášeného účtu se požadavek automaticky spojí s vaším profilem.'))}</p></div><form id="supportForm" class="support-form"><div class="support-form-grid"><label>${escapeHtml(copy.category||lcopy('Category','Kategória','Kategorie'))}<select id="supportCategory" required>${supportCategoryOptions('technical')}</select></label><label>${escapeHtml(copy.email||'E-mail')}<input id="supportEmail" type="email" required value="${escapeHtml(email)}" ${email?'readonly':''} placeholder="name@example.com"></label><label class="span-2">${escapeHtml(copy.subject||lcopy('Subject','Predmet','Předmět'))}<input id="supportSubject" maxlength="160" placeholder="${escapeHtml(copy.subject_placeholder||lcopy('Short description','Krátky popis','Krátký popis'))}"></label><label class="span-2">${escapeHtml(copy.message||lcopy('Message','Správa','Zpráva'))}<textarea id="supportMessage" minlength="8" maxlength="5000" rows="7" required placeholder="${escapeHtml(copy.message_placeholder||lcopy('Describe what happened and what you expected.','Popíšte, čo sa stalo a čo ste očakávali.','Popište, co se stalo a co jste očekávali.'))}"></textarea></label></div><div class="support-form-actions"><button class="btn btn-primary" type="submit">${escapeHtml(copy.send||lcopy('Send request','Odoslať požiadavku','Odeslat požadavek'))}</button><span id="supportFormStatus" role="status"></span></div><small>${escapeHtml(copy.privacy||lcopy('Never send passwords or full payment-card details.','Nikdy neposielajte heslá ani celé údaje platobnej karty.','Nikdy neposílejte hesla ani celé údaje platební karty.'))}</small></form></div>`;
   }
   function wireSupportForm(){
     const form=$('supportForm');if(!form||form.dataset.wired==='1')return;form.dataset.wired='1';
-    form.addEventListener('submit',async event=>{event.preventDefault();if(state.supportSubmitting)return;const status=$('supportFormStatus');state.supportSubmitting=true;status.textContent=lcopy('Sending…','Odosielam…','Odesílám…');try{const result=await BlinqAuth.supportSubmit({category:$('supportCategory').value,email:$('supportEmail').value.trim(),subject:$('supportSubject').value.trim(),message:$('supportMessage').value.trim()});const ticket=result?.ticket?.ticket_id||'';status.textContent=ticket?lcopy(`Sent · ${ticket}`,`Odoslané · ${ticket}`,`Odesláno · ${ticket}`):lcopy('Sent','Odoslané','Odesláno');$('supportMessage').value='';$('supportSubject').value='';}catch(error){status.textContent=error.message||lcopy('Could not send the request.','Požiadavku sa nepodarilo odoslať.','Požadavek se nepodařilo odeslat.');}finally{state.supportSubmitting=false;}});
+    form.addEventListener('submit',async event=>{event.preventDefault();if(state.supportSubmitting)return;const status=$('supportFormStatus');state.supportSubmitting=true;status.textContent=supportFormCopy().sending||lcopy('Sending…','Odosielam…','Odesílám…');try{const result=await BlinqAuth.supportSubmit({category:$('supportCategory').value,email:$('supportEmail').value.trim(),subject:$('supportSubject').value.trim(),message:$('supportMessage').value.trim()});const ticket=result?.ticket?.ticket_id||'';status.textContent=ticket?lcopy(`Sent · ${ticket}`,`Odoslané · ${ticket}`,`Odesláno · ${ticket}`):lcopy('Sent','Odoslané','Odesláno');$('supportMessage').value='';$('supportSubject').value='';}catch(error){const code=String(error.code||'').toLowerCase();status.textContent=code==='support_storage_unavailable'?lcopy('Support storage is temporarily unavailable.','Support úložisko je dočasne nedostupné.','Support úložiště je dočasně nedostupné.'):(error.message||lcopy('Could not send the request.','Požiadavku sa nepodarilo odoslať.','Požadavek se nepodařilo odeslat.'));}finally{state.supportSubmitting=false;}});
   }
   function renderRoute(route){
     const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body='';
-    if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='analytics')loadBannerAnalytics();if(state.adminTab==='support')loadAdminSupport();if(state.adminTab==='audit')loadAdminAudit();return;}
+    if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='analytics')loadBannerAnalytics();if(state.adminTab==='support')loadAdminSupport();if(state.adminTab==='system')loadAdminDiagnostics();if(state.adminTab==='audit')loadAdminAudit();return;}
     if(route==='prime'){
       const r=state.ui?.market_rules?.prime||{};
       const desc=lcopy(`Accuracy first · model ${Math.round(Number(r.min_win_probability||.85)*100)}%+ · depth ${Math.round(Number(r.min_data_depth||.80)*100)}%+ · surface ${Number(r.min_surface_matches||5)}+/player · preferred odds ${Number(r.preferred_min_odds||1.20).toFixed(2)}–${Number(r.preferred_max_odds||1.50).toFixed(2)}, no hard odds band · reject materially negative EV.`,`Presnosť na prvom mieste · model ${Math.round(Number(r.min_win_probability||.85)*100)}%+ · hĺbka dát ${Math.round(Number(r.min_data_depth||.80)*100)}%+ · povrch ${Number(r.min_surface_matches||5)}+ zápasov/hráč · preferovaný kurz ${Number(r.preferred_min_odds||1.20).toFixed(2)}–${Number(r.preferred_max_odds||1.50).toFixed(2)} bez pevného pásma · výrazne negatívne EV sa odmieta.`,`Přesnost na prvním místě · model ${Math.round(Number(r.min_win_probability||.85)*100)}%+ · hloubka dat ${Math.round(Number(r.min_data_depth||.80)*100)}%+ · povrch ${Number(r.min_surface_matches||5)}+ zápasů/hráč · preferovaný kurz ${Number(r.preferred_min_odds||1.20).toFixed(2)}–${Number(r.preferred_max_odds||1.50).toFixed(2)} bez pevného pásma · výrazně negativní EV se odmítá.`);

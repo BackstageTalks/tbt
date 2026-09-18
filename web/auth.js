@@ -80,6 +80,10 @@
       EMAIL_NOT_VERIFIED: 'Verify your email before opening the BlinQ workspace.',
       TOKEN_EXPIRED: 'Your session expired. Sign in again.',
       INVALID_ID_TOKEN: 'Your session is no longer valid. Sign in again.',
+      SUPPORT_STORAGE_UNAVAILABLE: 'Support storage is temporarily unavailable.',
+      ADMIN_STORAGE_UNAVAILABLE: 'Persistent service storage is temporarily unavailable.',
+      LIVE_RADAR_STORAGE_UNAVAILABLE: 'LIVE alert storage is temporarily unavailable.',
+      UI_CONFIG_STORAGE_UNAVAILABLE: 'Content storage is temporarily unavailable.',
     };
     return friendly[code] || raw.replaceAll('_', ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
   }

@@ -79,7 +79,7 @@ from tbt.services.live_comeback import (
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
-RELEASE = "7.3.2"
+RELEASE = "7.3.3"
 API_VERSION = "3.10.0"
 
 # Lightweight abuse guard for the anonymous banner telemetry endpoint. This is intentionally
@@ -927,7 +927,7 @@ def live_radar(req):
         r=_run_live_radar(force=False,publish=True)
         candidates=r.get("candidates") or []; signals=r.get("signals") or []
         public_candidate=lambda x:{k:x.get(k) for k in ("event_id","favorite","opponent","first_set","second_set","stage","reason","tournament","second_set_probability","second_set_model","second_set_quality","second_set_samples","second_set_odds","second_set_fair_probability","second_set_edge","second_set_ev","second_set_market") if k in x}
-        return response({"ok":True,"scanned_at":r.get("scanned_at"),"live_events":r.get("live_events",0),"candidates":len(candidates),"signals":len(signals),"candidate_items":[public_candidate(x) for x in candidates[:3] if isinstance(x,dict)],"signal_items":[public_candidate(x) for x in signals[:3] if isinstance(x,dict)],"new_alerts":int(r.get("created") or 0),"cached":bool(r.get("cached")),"thresholds":r.get("thresholds") or {}})
+        return response({"ok":True,"scanned_at":r.get("scanned_at"),"live_events":r.get("live_events",0),"candidates":len(candidates),"signals":len(signals),"candidate_items":[public_candidate(x) for x in candidates[:3] if isinstance(x,dict)],"signal_items":[public_candidate(x) for x in signals[:3] if isinstance(x,dict)],"new_alerts":int(r.get("created") or 0),"cached":bool(r.get("cached")),"alert_storage_unavailable":bool(r.get("alert_storage_unavailable")),"thresholds":r.get("thresholds") or {}})
     except AuthUnavailable:return response({"error":"auth_unavailable"},503)
     except AdminStorageUnavailable:return response({"error":"live_radar_storage_unavailable"},503)
     except Exception as exc:

@@ -3483,7 +3483,7 @@
       }
     }
   },
-  "ui_revision": "7.3.2",
+  "ui_revision": "7.3.3",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -3528,7 +3528,7 @@
     "max_items": 0,
     "sources": []
   },
-  "revision": "7.3.2",
+  "revision": "7.3.3",
   "footer": {
     "copyright": "© 2026 BlinQ",
     "system_status": "Všetky systémy funkčné",
@@ -3620,5 +3620,90 @@
     "allow_user_replies": false,
     "read_tracking": true
   },
-  "asset_revision": 7320
+  "asset_revision": 7330,
+  "ui_copy": {
+    "loading": {
+      "eyebrow": {
+        "sk": "BLINQ INTELLIGENCE",
+        "cz": "BLINQ INTELLIGENCE",
+        "en": "BLINQ INTELLIGENCE"
+      },
+      "status": {
+        "sk": "Načítavam model · dáta · dnešné predikcie",
+        "cz": "Načítám model · data · dnešní predikce",
+        "en": "Loading model · data · today’s predictions"
+      }
+    },
+    "auth": {
+      "login_title": {
+        "sk": "Prihlás sa do svojho analytického priestoru",
+        "cz": "Přihlas se do svého analytického prostoru",
+        "en": "Sign in to your analytics workspace"
+      },
+      "signup_title": {
+        "sk": "Vytvor si BlinQ účet",
+        "cz": "Vytvoř si BlinQ účet",
+        "en": "Create your BlinQ account"
+      },
+      "reset_title": {
+        "sk": "Obnov svoj prístup",
+        "cz": "Obnov svůj přístup",
+        "en": "Restore your access"
+      },
+      "recovery_title": {
+        "sk": "Nastav nové heslo",
+        "cz": "Nastav nové heslo",
+        "en": "Set a new password"
+      }
+    },
+    "footer": {
+      "updated": {
+        "sk": "Aktualizované",
+        "cz": "Aktualizováno",
+        "en": "Updated"
+      },
+      "live_ok": {
+        "sk": "LIVE radar aktívny",
+        "cz": "LIVE radar aktivní",
+        "en": "LIVE radar active"
+      },
+      "live_waiting": {
+        "sk": "LIVE radar čaká na kontrolu",
+        "cz": "LIVE radar čeká na kontrolu",
+        "en": "LIVE radar waiting for check"
+      },
+      "feed_fresh": {
+        "sk": "Dáta sú aktuálne",
+        "cz": "Data jsou aktuální",
+        "en": "Data is current"
+      },
+      "feed_stale": {
+        "sk": "Čaká sa na aktualizáciu dát",
+        "cz": "Čeká se na aktualizaci dat",
+        "en": "Waiting for data refresh"
+      },
+      "feed_old": {
+        "sk": "Dáta sú staršie",
+        "cz": "Data jsou starší",
+        "en": "Data is older"
+      },
+      "offline": {
+        "sk": "Služby sa obnovujú",
+        "cz": "Služby se obnovují",
+        "en": "Services reconnecting"
+      }
+    },
+    "private_feed": {
+      "history_unavailable": {
+        "sk": "História upozornení je dočasne nedostupná. LIVE radar ďalej funguje.",
+        "cz": "Historie upozornění je dočasně nedostupná. LIVE radar dále funguje.",
+        "en": "Alert history is temporarily unavailable. LIVE radar continues to work."
+      },
+      "info_unavailable": {
+        "sk": "Premium Info potrebuje trvalé úložisko. Po obnovení sa správy zobrazia automaticky.",
+        "cz": "Premium Info potřebuje trvalé úložiště. Po obnovení se zprávy zobrazí automaticky.",
+        "en": "Premium Info needs persistent storage. Messages will return automatically when storage is restored."
+      }
+    }
+  }
 }

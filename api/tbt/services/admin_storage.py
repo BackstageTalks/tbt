@@ -43,12 +43,30 @@ def _valid_destination(value: object, *, allow_internal: bool = True) -> bool:
     return parsed.scheme == "https" and bool(parsed.netloc) and not parsed.username and not parsed.password
 
 
+def _connection_string_source() -> tuple[str, str]:
+    """Return the first configured durable-storage connection and its safe source name.
+
+    A single general-purpose Azure Storage account can back admin config, INFO,
+    LIVE alert history, support tickets and media.  Keeping the explicit admin
+    setting first preserves separation when desired, while the unified/media
+    aliases avoid an unnecessary outage when the same account is already
+    configured for banner uploads.  Secrets are never returned by diagnostics.
+    """
+    candidates = (
+        ("BLINQ_ADMIN_STORAGE_CONNECTION_STRING", os.getenv("BLINQ_ADMIN_STORAGE_CONNECTION_STRING")),
+        ("BLINQ_STORAGE_CONNECTION_STRING", os.getenv("BLINQ_STORAGE_CONNECTION_STRING")),
+        ("BLINQ_MEDIA_STORAGE_CONNECTION_STRING", os.getenv("BLINQ_MEDIA_STORAGE_CONNECTION_STRING")),
+        ("AzureWebJobsStorage", os.getenv("AzureWebJobsStorage")),
+    )
+    for source, value in candidates:
+        text = str(value or "").strip()
+        if text:
+            return text, source
+    return "", ""
+
+
 def _connection_string() -> str:
-    return str(
-        os.getenv("BLINQ_ADMIN_STORAGE_CONNECTION_STRING")
-        or os.getenv("AzureWebJobsStorage")
-        or ""
-    ).strip()
+    return _connection_string_source()[0]
 
 
 class _FirestoreTableAdapter:
@@ -157,16 +175,26 @@ def _azure_table_health() -> bool:
 
 def admin_storage_diagnostics() -> dict:
     """Return safe admin-storage health without exposing connection details."""
-    azure_configured = bool(_connection_string())
+    connection, connection_source = _connection_string_source()
+    azure_configured = bool(connection)
     azure_available = _azure_table_health() if azure_configured else False
-    firestore_available = _firestore_health()
+    firestore_available = False if azure_available else _firestore_health()
     backend = "azure_table" if azure_available else "firestore" if firestore_available else "unavailable"
     return {
         "backend": backend,
         "azure_configured": azure_configured,
         "azure_available": azure_available,
+        "azure_connection_source": connection_source,
         "firestore_available": firestore_available,
         "requires_persistent_store": backend == "unavailable",
+        # Safe operational hint only; never expose the connection string itself.
+        "recommended_setting": "BLINQ_STORAGE_CONNECTION_STRING" if backend == "unavailable" else "",
+        "services": {
+            "premium_info": backend != "unavailable",
+            "live_alert_history": backend != "unavailable",
+            "support": backend != "unavailable",
+            "admin_config": backend != "unavailable",
+        },
     }
 
 

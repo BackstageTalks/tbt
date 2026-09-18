@@ -778,7 +778,51 @@
         "cz": "Jiné",
         "en": "Other"
       }
-    ]
+    ],
+    "form_copy": {
+      "sk": {
+        "eyebrow": "BLINQ SUPPORT",
+        "title": "Napíšte nám",
+        "intro": "Podporu riešime manuálne a pri prihlásenom účte sa požiadavka automaticky spojí s vaším profilom.",
+        "category": "Kategória",
+        "email": "E-mail",
+        "subject": "Predmet",
+        "subject_placeholder": "Krátky popis",
+        "message": "Správa",
+        "message_placeholder": "Popíšte, čo sa stalo a čo ste očakávali.",
+        "send": "Odoslať požiadavku",
+        "sending": "Odosielam…",
+        "privacy": "Nikdy neposielajte heslá ani celé údaje platobnej karty."
+      },
+      "cz": {
+        "eyebrow": "BLINQ SUPPORT",
+        "title": "Napište nám",
+        "intro": "Podporu řešíme manuálně a u přihlášeného účtu se požadavek automaticky spojí s vaším profilem.",
+        "category": "Kategorie",
+        "email": "E-mail",
+        "subject": "Předmět",
+        "subject_placeholder": "Krátký popis",
+        "message": "Zpráva",
+        "message_placeholder": "Popište, co se stalo a co jste očekávali.",
+        "send": "Odeslat požadavek",
+        "sending": "Odesílám…",
+        "privacy": "Nikdy neposílejte hesla ani celé údaje platební karty."
+      },
+      "en": {
+        "eyebrow": "BLINQ SUPPORT",
+        "title": "Send us a message",
+        "intro": "We handle support manually and keep the request linked to your account when you are signed in.",
+        "category": "Category",
+        "email": "Email",
+        "subject": "Subject",
+        "subject_placeholder": "Short description",
+        "message": "Message",
+        "message_placeholder": "Describe what happened and what you expected.",
+        "send": "Send request",
+        "sending": "Sending…",
+        "privacy": "Never send passwords or full payment-card details."
+      }
+    }
   },
   "cookie_banner": {
     "sk": {

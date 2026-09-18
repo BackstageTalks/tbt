@@ -1,0 +1,71 @@
+/* BlinQ 7.3.3 — visual consistency, explicit freshness, login/loader/footer watermarks */
+:root{--bq733-green:#49f1a7;--bq733-muted:#789087;--bq733-line:rgba(105,179,153,.14);--bq733-panel:rgba(4,20,18,.84)}
+
+/* One type system across login, loader, dashboard and footer. */
+body#blinqPremium,body#blinqPremium button,body#blinqPremium input,body#blinqPremium select,body#blinqPremium textarea{font-family:Inter,"Segoe UI",Arial,sans-serif!important}
+
+/* HEADER — quieter premium navigation rail, active route by line rather than a second box. */
+body#blinqPremium .site-header.reference-topbar{min-height:72px!important;background:linear-gradient(180deg,rgba(2,15,13,.99),rgba(3,18,16,.965))!important;border-bottom:1px solid rgba(92,177,147,.16)!important;box-shadow:0 12px 42px rgba(0,0,0,.20)!important}
+body#blinqPremium .reference-topbar .header-top{width:min(100%,1480px)!important;max-width:1480px!important;min-height:72px!important;padding:0 28px!important;grid-template-columns:112px auto minmax(48px,1fr) auto!important;gap:22px!important}
+body#blinqPremium .reference-topbar .brand{height:72px!important;width:108px!important;min-width:108px!important;position:relative!important}
+body#blinqPremium .reference-topbar .brand:after{content:"";position:absolute;right:-12px;top:22px;width:1px;height:28px;background:linear-gradient(transparent,rgba(119,188,164,.18),transparent)}
+body#blinqPremium .reference-topbar .brand-source-logo{width:104px!important;max-height:39px!important}
+body#blinqPremium .reference-topbar .reference-navigation{min-height:72px!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;gap:22px!important}
+body#blinqPremium .reference-topbar .reference-navigation a{position:relative!important;min-height:72px!important;padding:0 2px!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;color:#789088!important;font-size:11px!important;font-weight:760!important}
+body#blinqPremium .reference-topbar .reference-navigation a.active{background:transparent!important;box-shadow:none!important;color:#eefaf5!important}
+body#blinqPremium .reference-topbar .reference-navigation a.active::before{content:""!important;position:absolute!important;left:50%!important;bottom:0!important;transform:translateX(-50%)!important;width:31px!important;height:2px!important;margin:0!important;border-radius:99px!important;background:linear-gradient(90deg,#37d996,#63f4b8)!important;box-shadow:0 0 10px rgba(73,241,167,.26)!important}
+body#blinqPremium .reference-topbar .header-actions{height:72px!important;gap:7px!important;padding:5px!important;border:1px solid rgba(107,171,150,.075)!important;border-radius:14px!important;background:rgba(255,255,255,.012)!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.012)!important}
+body#blinqPremium .header-upgrade{height:36px!important;border-radius:9px!important;background:linear-gradient(180deg,rgba(31,92,67,.70),rgba(12,53,39,.76))!important}
+body#blinqPremium .insight-shortcut.insight-live-button,body#blinqPremium .insight-info-button{height:36px!important;padding:0 10px!important;border-radius:9px!important;color:#a9beb6!important}
+body#blinqPremium .insight-shortcut.insight-live-button.is-live-enabled{color:#52edaa!important}
+body#blinqPremium .reference-topbar .profile-shell{height:38px!important;min-height:38px!important;min-width:178px!important;border-radius:10px!important;background:rgba(4,25,21,.55)!important;border-color:rgba(103,171,147,.11)!important}
+
+/* LOADING — use the same site artwork, not a blank field. */
+body#blinqPremium .boot-splash.boot-splash-tennis{position:fixed!important;inset:0!important;background-image:linear-gradient(90deg,rgba(1,12,13,.94),rgba(2,20,18,.82),rgba(1,11,13,.94)),url('/assets/blinq_background.webp')!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important}
+body#blinqPremium .boot-splash.boot-splash-tennis:before{background:radial-gradient(650px 430px at 50% 48%,rgba(49,226,158,.105),transparent 68%)!important;opacity:1!important}
+body#blinqPremium .boot-splash.boot-splash-tennis:after{content:"";position:absolute;right:42px;bottom:34px;width:150px;height:58px;background:url('/assets/blinq_logo.svg') center/contain no-repeat;opacity:.055;filter:grayscale(1);pointer-events:none}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source{width:min(455px,80vw)!important;padding:13px!important;border-color:rgba(77,204,159,.17)!important;background:linear-gradient(180deg,rgba(3,24,22,.78),rgba(2,14,15,.72))!important;box-shadow:0 32px 100px rgba(0,0,0,.43),0 0 76px rgba(47,229,158,.06)!important}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source:before,body#blinqPremium .boot-tennis-card.boot-tennis-card-source:after{display:none!important}
+body#blinqPremium .boot-copy-eyebrow,body#blinqPremium .boot-copy-status{display:block;text-align:center}
+body#blinqPremium .boot-copy-eyebrow{padding:2px 0 10px;color:#7d9b90;font-size:8px;font-weight:850;letter-spacing:.18em}
+body#blinqPremium .boot-copy-status{padding:11px 0 3px;color:#819a91;font-size:9px;font-weight:650;letter-spacing:.015em}
+
+/* LOGIN — same background family + subtle watermark. Title deliberately quieter. */
+body#blinqPremium .auth-dialog[open]{isolation:isolate!important;background-image:linear-gradient(90deg,rgba(1,12,13,.94),rgba(1,18,17,.84),rgba(1,10,12,.95)),url('/assets/blinq_background.webp')!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important}
+body#blinqPremium .auth-dialog[open]::after{content:"";position:fixed;right:42px;bottom:34px;width:150px;height:58px;background:url('/assets/blinq_logo.svg') center/contain no-repeat;opacity:.055;filter:grayscale(1);pointer-events:none;z-index:0}
+body#blinqPremium .auth-card{z-index:1!important;background:linear-gradient(160deg,rgba(5,29,36,.955),rgba(3,18,24,.98))!important;border-color:rgba(55,151,145,.36)!important;box-shadow:0 32px 100px rgba(0,0,0,.50),0 0 55px rgba(47,229,158,.04)!important}
+body#blinqPremium .auth-copy h2{max-width:320px!important;margin:7px auto 18px!important;color:#a9bbb5!important;font-size:18px!important;line-height:1.22!important;letter-spacing:-.018em!important;font-weight:680!important;text-align:center!important}
+body#blinqPremium .auth-logo{display:block!important;margin:0 auto 18px!important}
+body#blinqPremium .auth-card .languages{justify-content:center!important}
+
+/* Language selectors share the BlinQ green palette everywhere. */
+body#blinqPremium .languages a{border-color:rgba(93,146,129,.25)!important;background:rgba(3,21,18,.52)!important;color:#829a91!important;box-shadow:none!important}
+body#blinqPremium .languages a:hover{border-color:rgba(73,241,167,.38)!important;color:#cce5dc!important;background:rgba(73,241,167,.045)!important}
+body#blinqPremium .languages a.active{border-color:rgba(73,241,167,.62)!important;color:#eafff6!important;background:rgba(35,129,94,.20)!important;box-shadow:0 0 0 1px rgba(73,241,167,.05) inset!important}
+
+/* Footer wordmark becomes a watermark instead of another visual CTA. */
+body#blinqPremium .site-footer{position:relative!important;overflow:hidden!important;min-height:86px!important;padding:22px 16px!important}
+body#blinqPremium .site-footer:before{content:"";position:absolute;left:10px;bottom:12px;width:118px;height:46px;background:url('/assets/blinq_logo.svg') center/contain no-repeat;opacity:.055;filter:grayscale(1);pointer-events:none}
+body#blinqPremium .site-footer .footer-left>img{visibility:hidden!important;width:105px!important;min-width:105px!important}
+body#blinqPremium .site-footer .footer-left,body#blinqPremium .site-footer .footer-right{position:relative!important;z-index:1!important}
+body#blinqPremium .site-footer .system-status.is-ok>i{background:#4aefa8!important;box-shadow:0 0 0 4px rgba(74,239,168,.07),0 0 12px rgba(74,239,168,.28)!important}
+body#blinqPremium .site-footer .system-status.is-warning>i{background:#e5b85c!important}
+body#blinqPremium .site-footer .system-status.is-error>i{background:#e47f78!important}
+
+/* Storage outage is not the same thing as LIVE being offline. */
+body#blinqPremium .insight-storage-note{display:flex;align-items:center;gap:9px;margin:10px 12px 0;padding:10px 12px;border:1px solid rgba(214,180,90,.16);border-radius:10px;background:rgba(75,59,20,.10);color:#9faa9e;font-size:9.5px;line-height:1.45}
+body#blinqPremium .insight-storage-note>i{display:grid;place-items:center;width:19px;height:19px;border:1px solid rgba(214,180,90,.28);border-radius:50%;color:#e2bd67;font-style:normal;font-weight:850;flex:0 0 auto}
+
+/* Keep image errors invisible: provider image or deterministic local fallback, never browser broken icon. */
+body#blinqPremium .hub-tournament-logo>img,body#blinqPremium .hub-avatar>img{font-size:0;color:transparent}
+body#blinqPremium .hub-tournament-logo.logo-failed{background:rgba(6,31,25,.70)!important}
+body#blinqPremium .hub-tournament-logo.logo-failed .hub-logo-fallback{position:absolute!important;inset:0!important;display:grid!important;place-items:center!important}
+
+@media(max-width:760px){
+ body#blinqPremium .reference-topbar .header-top{min-height:60px!important;grid-template-columns:76px minmax(0,1fr) auto!important;padding:0 10px!important;gap:8px!important}
+ body#blinqPremium .reference-topbar .brand{height:60px!important}.reference-topbar .reference-navigation{min-height:60px!important;gap:11px!important}.reference-topbar .reference-navigation a{min-height:60px!important}
+ body#blinqPremium .reference-topbar .header-actions{height:44px!important;padding:3px!important}
+ body#blinqPremium .boot-splash.boot-splash-tennis:after,body#blinqPremium .auth-dialog[open]::after{right:18px;bottom:18px;width:105px;height:40px}
+ body#blinqPremium .boot-tennis-card.boot-tennis-card-source{width:min(400px,91vw)!important}
+ body#blinqPremium .site-footer:before{left:6px;bottom:10px;width:96px;height:38px}
+}

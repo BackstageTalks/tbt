@@ -6,7 +6,9 @@ CSS = (ROOT / "web" / "final-polish-725.css").read_text(encoding="utf-8")
 
 
 def test_footer_exposes_freshness_and_live_state():
-    assert "LIVE dáta aktívne" in APP
+    assert "liveAgeMin<=3" in APP
+    assert "feedAgeMin>90" in APP
+    assert "footer.live_ok" in APP
     assert "hubDataDepthLabel" in APP
     assert ".site-footer .system-status" in CSS
 

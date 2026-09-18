@@ -31,6 +31,7 @@ _MAX_UPLOAD_BYTES = 12 * 1024 * 1024
 def _connection_string() -> str:
     return str(
         os.getenv("BLINQ_MEDIA_STORAGE_CONNECTION_STRING")
+        or os.getenv("BLINQ_STORAGE_CONNECTION_STRING")
         or os.getenv("BLINQ_ADMIN_STORAGE_CONNECTION_STRING")
         or os.getenv("AzureWebJobsStorage")
         or ""
