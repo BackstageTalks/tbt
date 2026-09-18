@@ -120,6 +120,10 @@ def download_days(provider, matches, progress, start, end, checkpoint, quarantin
             rows = []
             for tour in ("atp", "wta"):
                 rows.extend(provider.matches_for_day(tour, day, historical=True))
+                provider_events = getattr(provider, "historical_event_quarantine", None)
+                if quarantine is not None and isinstance(provider_events, list) and provider_events:
+                    quarantine.extend(provider_events)
+                    provider_events.clear()
             completed_rows = [match for match in rows if match.is_completed]
             affected_years = set()
             if completed_rows:

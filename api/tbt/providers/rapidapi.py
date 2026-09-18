@@ -75,6 +75,10 @@ class RapidTennisClient:
         self.rate_limit_remaining = None
         self._category_cache: dict[str, list[dict[str, Any]]] = {}
         self._event_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
+        # Provider payloads occasionally contain an impossible self-match
+        # (home.id == away.id). Keep an explicit diagnostic quarantine so one
+        # corrupt event cannot abort an otherwise valid historical day.
+        self.historical_event_quarantine: list[dict[str, Any]] = []
 
     def close(self) -> None:
         self.client.close()
@@ -946,6 +950,27 @@ class RapidTennisClient:
                         historical=historical,
                     )
                 except ValueError as exc:
+                    if historical and "both sides have the same player ID" in str(exc):
+                        home = event.get("homeTeam") if isinstance(event.get("homeTeam"), dict) else {}
+                        away = event.get("awayTeam") if isinstance(event.get("awayTeam"), dict) else {}
+                        quarantine_row = {
+                            "reason": "provider_self_match_identity",
+                            "tour": tour,
+                            "day": day.isoformat(),
+                            "provider_event_id": str(event.get("_tbt_provider_event_id") or ""),
+                            "category_id": str(category_id),
+                            "category_name": category_name,
+                            "home_id": str(home.get("id") or ""),
+                            "away_id": str(away.get("id") or ""),
+                            "home_name": str(home.get("name") or ""),
+                            "away_name": str(away.get("name") or ""),
+                        }
+                        self.historical_event_quarantine.append(quarantine_row)
+                        logger.warning(
+                            "Quarantining impossible %s historical event %s: %s",
+                            tour.upper(), quarantine_row["provider_event_id"] or "?", exc,
+                        )
+                        continue
                     if historical:
                         raise ProviderError(
                             "Incomplete historical day: invalid required "

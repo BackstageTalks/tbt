@@ -623,7 +623,8 @@ def banner_analytics_summary(*, days: int = 30) -> dict:
 
 # --- BlinQ Insights / private member feed ---------------------------------
 _INSIGHT_LEVELS = ("rookie", "pro", "elite", "legend", "goat")
-_INSIGHT_TYPES = {"info", "insight", "alert", "vip"}
+_INSIGHT_TYPES = {"info", "insight", "alert", "live_watch", "vip"}
+_ELITE_PLUS_LEVELS = ("elite", "legend", "goat")
 _INSIGHT_PRIORITIES = {"normal", "important", "critical"}
 
 
@@ -668,6 +669,13 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
             levels.append(level)
     if not levels:
         raise ValueError("Select at least one insight level")
+    # Premium Info and LIVE are private ELITE+ channels. Enforce this on the
+    # server so a stale/admin client can never accidentally publish them to
+    # Rookie or PRO accounts.
+    if insight_type in {"info", "insight", "vip", "alert", "live_watch"}:
+        invalid_levels = [level for level in levels if level not in _ELITE_PLUS_LEVELS]
+        if invalid_levels:
+            raise ValueError("Premium Info and LIVE are available from ELITE level")
     link = str(payload.get("link", base.get("link", "")) or "").strip()
     if link and not _valid_destination(link, allow_internal=True):
         raise ValueError("Insight link must use HTTPS or a same-origin path")

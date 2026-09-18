@@ -2,11 +2,11 @@
 
 The run is deliberately defensive and data-driven:
 1. provider capability probe (tiny/read-only; doubles + market/stat discovery)
-2. canonical history gap recovery with a generous *cap* but near-zero spend when complete
+2. read-only canonical history audit + small incremental history safety sync
 3. zero-API baseline statistics inventory
-4. generic event-statistics sweep (largest enrichment gap)
-5. targeted Sets/Games score enrichment
-6. targeted Aces/Double-Fault enrichment
+4. generic event-statistics sweep
+5. targeted Sets/Games score enrichment (launch priority)
+6. targeted Aces/Double-Fault enrichment (launch priority)
 7. statistics tail consumes every request left by earlier phases
 8. zero-API post-run inventory + history audit
 
@@ -51,24 +51,23 @@ def _run(name: str, args: list[str], *, optional: bool = False) -> dict[str, Any
 
 
 def _budget(total: int) -> dict[str, int]:
-    """Set high-value phase caps; actual unused calls always roll forward.
+    """Launch-day allocation: finish SG/ESA while preserving data safety.
 
-    History gets a meaningful safety cap because a partial yearly partition can
-    otherwise poison every later enrichment.  On a healthy release the downloader
-    spends ~0 calls, so that cap immediately flows into statistics-primary.
+    Unused caps roll forward. History is now a small incremental safety sync;
+    integrity mutation is never automatic inside mega-data.
     """
     probe = min(120, max(80, int(total * 0.01)))
     remaining = max(0, total - probe)
 
-    history = min(2500, max(300, int(total * 0.20)))
+    history = min(700, max(150, int(total * 0.05)))
     history = min(history, remaining)
     remaining -= history
 
-    sg = min(3000, max(600, int(total * 0.22)))
+    sg = min(4000, max(800, int(total * 0.35)))
     sg = min(sg, remaining)
     remaining -= sg
 
-    ace = min(1200, max(250, int(total * 0.08)))
+    ace = min(2800, max(500, int(total * 0.23)))
     ace = min(ace, remaining)
     remaining -= ace
 
@@ -165,10 +164,9 @@ def main() -> None:
         )
         finish_phase(phase, probe_cap, "provider_probe")
 
-    # 2) Physical history completeness comes first.  The partial-year recovery
-    # guard reopens only progress dates missing from the parquet, so a healthy
-    # release spends almost no provider calls.
-    _run("history-repair", [sys.executable, "scripts/repair_history_data.py", "--data-repository", args.data_repository])
+    # 2) Verify history read-only first. Do not mutate a clean canonical bundle
+    # automatically. The incremental sync then catches only genuinely new/gap days.
+    _run("history-audit-before", [sys.executable, "scripts/audit_history_data.py", "--data-repository", args.data_repository])
     history_cap = min(planned["history"] + carry, remaining())
     carry = 0
     if history_cap:
