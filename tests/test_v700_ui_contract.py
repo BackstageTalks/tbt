@@ -15,7 +15,7 @@ def ui():
 
 def test_v700_revision_is_active():
     cfg = ui()
-    assert cfg["revision"] == cfg["ui_revision"] == "7.2.3"
+    assert cfg["revision"] == cfg["ui_revision"] == "7.2.4"
 
 
 def test_v700_public_prediction_categories_are_current():

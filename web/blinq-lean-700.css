@@ -423,7 +423,7 @@ body#blinqPremium .hub-tournament-logo.logo-failed>.hub-logo-fallback{display:gr
 /* v7.2.2 projection market status */
 body#blinqPremium .hub-projection-badge{display:inline-flex;align-items:center;min-height:20px;padding:0 7px;border:1px solid rgba(121,242,177,.26);border-radius:999px;background:rgba(121,242,177,.07);color:#93e6b5;font-size:8px;font-weight:850;letter-spacing:.7px}
 
-/* v7.2.3 · binary banner upload + ELITE+ browser push */
+/* v7.2.4 · final dashboard polish over v7.2.3 media + push */
 .admin-media-upload{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;width:100%}
 .admin-media-upload>input[type="text"],.admin-media-upload>input:not([type]){min-width:0;width:100%}
 .admin-media-upload-button{min-height:38px;padding:0 12px;border:1px solid rgba(116,232,204,.28);border-radius:10px;background:rgba(10,38,45,.78);color:#9cf5df;font-weight:800;white-space:nowrap;cursor:pointer}

@@ -863,15 +863,16 @@
     if(!item||c.enabled===false||elementAccess('VIP_RAIL')==='hidden'){host.hidden=true;host.innerHTML='';return;}
     host.hidden=false;
     const benefits=[1,2,3,4].map((n,i)=>{
-      const title=c[`benefit_${n}_title`]||'',text=c[`benefit_${n}_text`]||'';
+      const title=String(c[`benefit_${n}_title`]||'').trim(),text=String(c[`benefit_${n}_text`]||'').trim();
       if(!title&&!text)return '';
       const iconUrl=safeUiAsset(c[`benefit_${n}_icon_url`]||'')||safeExternalUrl(c[`benefit_${n}_icon_url`]||'');
       const icon=iconUrl?`<img src="${escapeHtml(iconUrl)}" alt="" loading="lazy">`:`<span class="vip-feature-svg" aria-hidden="true">${vipFeatureIcon(i)}</span>`;
-      const titleSize=Math.max(10,Math.min(28,Number(c[`benefit_${n}_title_size`])||14));
-      const textSize=Math.max(8,Math.min(22,Number(c[`benefit_${n}_text_size`])||11));
-      const href=safeLink(c[`benefit_${n}_link`]||'#predictions','#predictions');
-      const external=isExternalLink(href);
-      return `<a class="vip-link-card" href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} style="--vip-title-size:${titleSize}px;--vip-text-size:${textSize}px"><span class="vip-link-icon">${icon}</span><span class="vip-link-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(text)}</small></span></a>`;
+      const rawLink=String(c[`benefit_${n}_link`]||'').trim();
+      const href=rawLink?safeLink(rawLink,''):'';
+      const external=href&&isExternalLink(href);
+      const arrow=external?'↗':'→';
+      const inner=`<span class="vip-link-icon">${icon}</span><span class="vip-link-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(text)}</small></span><span class="vip-link-arrow" aria-hidden="true">${arrow}</span>`;
+      return href?`<a class="vip-link-card" href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''}>${inner}</a>`:`<div class="vip-link-card is-static">${inner}</div>`;
     }).filter(Boolean).join('');
     if(!benefits){host.hidden=true;host.innerHTML='';return;}
     host.innerHTML=`<div class="vip-rail-content vip-links-only"><div class="vip-benefits">${benefits}</div></div>`;
@@ -1384,10 +1385,27 @@
   function dailyHubIsComingSoon(tab){return false;}
   function dailyHubColumns(tab){
     if(dailyHubIsComingSoon(tab))return [''];
-    if(tab==='value')return ['#','ČAS','TURNAJ','ZÁPAS','TIP','KURZ','PRAVDEPODOBNOSŤ','HODNOTA',''];
+    if(tab==='value')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %','EDGE',''];
     if(tab==='ace')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];
     if(tab==='games'||tab==='sets')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];
-    return ['#','ČAS','TURNAJ','ZÁPAS','TIP','KURZ','PRAVDEPODOBNOSŤ',''];
+    return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %',''];
+  }
+  function dailyHubColumnKeys(tab){
+    if(tab==='value')return ['rank','time','tournament','match','pick','number','confidence','edge','action'];
+    if(tab==='ace'||tab==='games'||tab==='sets')return ['rank','time','tournament','match','pick','number','confidence'];
+    return ['rank','time','tournament','match','pick','number','confidence','action'];
+  }
+  function hubConfidenceHtml(value){
+    const n=Number(value);if(!Number.isFinite(n))return '<span class="hub-confidence is-empty"><strong>—</strong></span>';
+    const normalized=n<=1?n:n/100,p=Math.max(0,Math.min(100,normalized*100));
+    return `<span class="hub-confidence"><strong>${escapeHtml(pct(n))}</strong><i aria-hidden="true"><b style="width:${p.toFixed(1)}%"></b></i></span>`;
+  }
+  function hubPredictionHtml(sourceTab,text,subLabel=''){
+    const label=subLabel||({daily:'TOP',value:'VALUE',ace:'ESA',games:'GAMES',sets:'SETS'}[sourceTab]||String(sourceTab||'').toUpperCase());
+    return `<span class="hub-pick-stack"><small>${escapeHtml(label)}</small><strong title="${escapeHtml(text)}">${escapeHtml(text)}</strong></span>`;
+  }
+  function hubNumberHtml(value,label=''){
+    return `<span class="hub-number-stack"><strong>${escapeHtml(value)}</strong>${label?`<small>${escapeHtml(label)}</small>`:''}</span>`;
   }
   function safeNum(value){ const n=Number(value); return Number.isFinite(n)?n:null; }
   function clampValue(value,min=0,max=100){ const n=Number(value); if(!Number.isFinite(n)) return min; return Math.max(min,Math.min(max,n)); }
@@ -1480,15 +1498,21 @@
   function dailyHubTournament(row){
     const tournament=String(row?.tournament||row?.competition||row?.tour||'—').trim();
     const country=row?.tournament_country_code||row?.country_code||row?.venue_country_code||'';
-    const tour=String(row?.tour||'').toUpperCase();
-    return `<span class="hub-tournament hub-tournament-lean">${flagIconHtml(country,true)}<span><b>${escapeHtml(tournament)}</b>${tour?`<small>${escapeHtml(tour)}</small>`:''}</span></span>`;
+    const tour=String(row?.tour||'').trim().toUpperCase();
+    const round=String(row?.round||row?.round_name||'').trim();
+    const surface=surfaceShortName(row?.surface||'');
+    const meta=[tour,round,surface&&surface!=='Surface'?surface:''].filter(Boolean);
+    return `<span class="hub-tournament hub-tournament-pro">${tournamentVisual(row)}<span class="hub-tournament-copy"><b title="${escapeHtml(tournament)}">${escapeHtml(tournament)}</b><small>${flagIconHtml(country,true)}${meta.map(value=>`<span>${escapeHtml(value)}</span>`).join('')}</small></span></span>`;
   }
   function dailyHubMatch(row){
     const p1=row?.player1||{},p2=row?.player2||{};
-    const n1=p1.name||row?.player1_name||'—',n2=p2.name||row?.player2_name||'—';
+    const n1=String(p1.name||row?.player1_name||'—'),n2=String(p2.name||row?.player2_name||'—');
     const c1=p1.country_code||p1.country_code2||p1.country_code3||row?.player1_country_code||row?.p1_country_code||'';
     const c2=p2.country_code||p2.country_code2||p2.country_code3||row?.player2_country_code||row?.p2_country_code||'';
-    return `<span class="hub-match hub-match-lean"><span>${flagIconHtml(c1,true)}<b>${escapeHtml(n1)}</b></span><i>–</i><span>${flagIconHtml(c2,true)}<b>${escapeHtml(n2)}</b></span></span>`;
+    const r1=firstFinite(p1.rank,p1.ranking,p1.current_rank,row?.player1_rank,row?.p1_rank),r2=firstFinite(p2.rank,p2.ranking,p2.current_rank,row?.player2_rank,row?.p2_rank);
+    const selected=String(row?.pick||row?.selection||row?.prediction||'').trim().toLocaleLowerCase();
+    const line=(name,country,rank)=>`<span class="hub-match-player${selected&&selected===String(name).toLocaleLowerCase()?' is-pick':''}"><span class="hub-match-player-main">${flagIconHtml(country,true)}<b title="${escapeHtml(name)}">${escapeHtml(name)}</b></span>${Number.isFinite(Number(rank))&&Number(rank)>0?`<small>#${Math.trunc(Number(rank))}</small>`:''}</span>`;
+    return `<span class="hub-match hub-match-pro">${line(n1,c1,r1)}<i class="hub-match-divider" aria-hidden="true"></i>${line(n2,c2,r2)}</span>`;
   }
   function recentFormData(source,key){
     const presentation=source?.presentation&&typeof source.presentation==='object'?source.presentation:{};
@@ -1719,36 +1743,35 @@
   }
   function dailyHubRow(row,tab,active=false,index=0){
     const sourceTab=tab==='see_all'?String(row?._hub_source||''):tab;
+    const time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
+    const rowClass=active?' class="hub-row-active"':'';
+    const leading=`<td class="hub-rank">${index+1}</td><td class="hub-time">${escapeHtml(time)}</td><td class="hub-tournament-cell">${tournament}</td><td class="hub-match-cell">${dailyHubMatch(row)}</td>`;
     if(sourceTab==='games'||sourceTab==='sets'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=String(row?.pick||row?.selection||'—');
-      const unit=String(row?.projection_unit||''),time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
-      const rowClass=active?' class="hub-row-active"':'';
-      const projectionText=Number.isFinite(projection)?(unit==='probability'?pct(projection):`${projection.toFixed(1)} games`):'—';
-      const actionCell=tab==='see_all'?'<td class="hub-optional-action"><span class="hub-projection-badge">MODEL</span></td>':'';
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}"><td class="hub-rank">${index+1}</td><td class="hub-time">${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td class="hub-pick"><strong>${escapeHtml(pick)}</strong></td><td class="hub-odds">${escapeHtml(projectionText)}</td><td><b class="hub-prob">${Number.isFinite(confidence)?pct(confidence):'—'}</b></td>${actionCell}</tr>`;
+      const unit=String(row?.projection_unit||'');
+      const projectionText=Number.isFinite(projection)?(unit==='probability'?pct(projection):projection.toFixed(1)):'—';
+      const projectionUnit=unit==='probability'?lcopy('model','model','model'):lcopy('games','gemov','gemů');
+      const actionCell=tab==='see_all'?'<td class="hub-action-cell hub-optional-action"><span class="hub-projection-badge">MODEL</span></td>':'';
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence)}</td>${actionCell}</tr>`;
     }
     if(sourceTab==='ace'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=modelPickName(row),market=aceMarketName(row);
-      const time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
-      const rowClass=active?' class="hub-row-active"':'';
-      const pred=(market?market+' · ':'')+pick;
-      const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia ESA','Projekce ESA'))}">${escapeHtml(lcopy('Projection','Projekcia','Projekce'))} →</button>`:'';
-      const actionCell=tab==='see_all'?`<td class="hub-optional-action">${action}</td>`:'';
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="ace"><td class="hub-rank">${index+1}</td><td class="hub-time">${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td class="hub-pick"><strong>${escapeHtml(pred)}</strong></td><td class="hub-odds">${Number.isFinite(projection)?projection.toFixed(2):'—'}</td><td><b class="hub-prob">${Number.isFinite(confidence)?pct(confidence):'—'}</b></td>${actionCell}</tr>`;
+      const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia ESA','Projekce ESA'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}<span aria-hidden="true">→</span></button>`:'';
+      const actionCell=tab==='see_all'?`<td class="hub-action-cell hub-optional-action">${action}</td>`:'';
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="ace">${leading}<td class="hub-pick">${hubPredictionHtml('ace',pick,market||'ESA')}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(projection)?projection.toFixed(2):'—',lcopy('projection','projekcia','projekce'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence)}</td>${actionCell}</tr>`;
     }
     const probability=marketProbability(row),odds=Number(row?.odds??row?.betting?.odds),pick=modelPickName(row);
-    const time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
-    const rowClass=active?' class="hub-row-active"':'';
-    const base=`<td class="hub-rank">${index+1}</td><td class="hub-time">${escapeHtml(time)}</td><td>${tournament}</td><td>${dailyHubMatch(row)}</td><td class="hub-pick"><strong>${escapeHtml(pick)}</strong></td><td class="hub-odds">${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td><b class="hub-prob">${probability==null?'—':pct(probability)}</b></td>`;
+    const base=`${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick)}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(probability)}</td>`;
     if(tab==='value'){
       const ev=Number(row?.expected_value??row?.betting?.expected_value);
       const edge=Number(row?.edge??row?.betting?.edge);
       const value=Number.isFinite(ev)?ev:Number.isFinite(edge)?edge:null;
       const valueText=value==null?'—':`${value>0?'+':''}${(value*(Math.abs(value)<=1?100:1)).toFixed(1)}%`;
-      return `<tr${rowClass} data-hub-event="${key}">${base}<td class="metric-positive">${escapeHtml(valueText)}</td><td><button class="hub-detail" type="button" data-hub-detail aria-label="Detail">Detail →</button></td></tr>`;
+      return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-edge-cell metric-positive">${hubNumberHtml(valueText,'edge')}</td><td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><span aria-hidden="true">→</span></button></td></tr>`;
     }
-    return `<tr${rowClass} data-hub-event="${key}">${base}<td><button class="hub-detail" type="button" data-hub-detail aria-label="Detail">Detail →</button></td></tr>`;
+    return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><span aria-hidden="true">→</span></button></td></tr>`;
   }
+
   function dailyHubLockedRow(tab,index){
     const colspan=Math.max(1,dailyHubColumns(tab).length);
     if(tab==='see_all')return `<tr class="hub-row-locked hub-row-seeall"><td colspan="${colspan}"><span>◆</span><b>SEE ALL je dostupné od ELITE</b><small>Kompletný kvalifikovaný výber bez limitu TOP 10.</small></td></tr>`;
@@ -1785,7 +1808,8 @@
     const canExpand=ent.see_all===true&&allCount>preview;
     let limit=(state.dailyHubExpanded&&canExpand)?allCount:preview;
     limit=Math.min(limit,Math.max(rows.length,Number(ent.returned)||0));
-    head.innerHTML=`<tr>${dailyHubColumns(tab).map(c=>`<th>${escapeHtml(c)}</th>`).join('')}</tr>`;
+    const columnKeys=dailyHubColumnKeys(tab);
+    head.innerHTML=`<tr>${dailyHubColumns(tab).map((c,i)=>`<th class="hub-head-${escapeHtml(columnKeys[i]||'generic')}">${escapeHtml(c)}</th>`).join('')}</tr>`;
     const out=[];
     if(tab==='see_all'&&!ent.see_all)out.push(dailyHubLockedRow(tab,0));
     else{
@@ -2458,7 +2482,12 @@
   function renderBannerEditor(id){
     const item=elements()?.[id];if(!item)return '<div class="admin-empty-panel">Choose a banner.</div>';
     const c=item.content=item.content||{},isHero=item.kind==='hero_banner',isContent=item.kind==='large_banner',isVip=id==='VIP_RAIL',kind=isHero?'hero':isContent?'content':'header',themes=['blue','green','gold','purple','violet'];
-    return `<article class="admin-banner-editor" data-simple-banner="${escapeHtml(id)}"><div class="admin-banner-editor-head"><div><small>${isVip?'SPODNÝ VIP BANNER':isHero?'HLAVNÝ ROTUJÚCI BANNER':isContent?'OBSAHOVÝ BANNER':'HORNÝ CTA BANNER'}</small><h2>${escapeHtml(c.headline||item.label||id)}</h2><p>${escapeHtml(id)}</p></div><label class="admin-master-switch"><input type="checkbox" data-simple-banner-field="enabled" ${c.enabled!==false?'checked':''}><span>Zapnuté</span></label></div><div class="admin-banner-preview-toolbar"><span>Náhľad ako</span>${adminLevelChips(state.adminBannerPreviewPlan,'admin-banner-preview-plan',true)}</div>${bannerPreviewForPlan(id,item,kind,state.adminBannerPreviewPlan)}<div class="admin-form-section"><div class="admin-form-section-title"><strong>Obsah</strong><span>Všetko, čo návštevník vidí.</span></div><div class="admin-form-grid"><label>Horný popis<input data-simple-banner-field="eyebrow" value="${escapeHtml(c.eyebrow||'')}" placeholder="COMMUNITY"></label><label>Téma<select data-simple-banner-field="theme">${themes.map(v=>`<option value="${v}"${v===(c.theme||'blue')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label><label class="span-2">Nadpis<input data-simple-banner-field="headline" value="${escapeHtml(c.headline||'')}" placeholder="Join our Telegram community"></label>${isHero?`<label class="span-2">Zvýraznený riadok<input data-simple-banner-field="accent_text" value="${escapeHtml(c.accent_text||'')}" placeholder="Telegram komunita"></label>`:''}<label class="span-2">Podnadpis<input data-simple-banner-field="text" value="${escapeHtml(c.text||'')}" placeholder="Novinky · Predikcie · Diskusia"></label><label>Text tlačidla<input data-simple-banner-field="button_text" value="${escapeHtml(c.button_text||'')}" placeholder="PRIDAŤ SA"></label>${!isHero?`<label>Ikona / emoji<input data-simple-banner-field="icon" value="${escapeHtml(c.icon||'')}" placeholder="✈"></label>`:''}</div></div>${isVip?`<div class="admin-form-section"><div class="admin-form-section-title"><strong>4 klikateľné odkazy</strong><span>Každý blok má vlastný text, veľkosti, ikonu a URL (napr. Telegram skupina).</span></div><div class="admin-form-grid">${[1,2,3,4].map(n=>`<label>Nadpis ${n}<input data-simple-banner-field="benefit_${n}_title" value="${escapeHtml(c[`benefit_${n}_title`]||'')}"></label><label>Veľkosť nadpisu (px)<input type="number" min="10" max="28" data-simple-banner-field="benefit_${n}_title_size" value="${escapeHtml(String(c[`benefit_${n}_title_size`]||14))}"></label><label>Text ${n}<input data-simple-banner-field="benefit_${n}_text" value="${escapeHtml(c[`benefit_${n}_text`]||'')}"></label><label>Veľkosť textu (px)<input type="number" min="8" max="22" data-simple-banner-field="benefit_${n}_text_size" value="${escapeHtml(String(c[`benefit_${n}_text_size`]||11))}"></label><label>Ikona / znak ${n}<input data-simple-banner-field="benefit_${n}_icon" value="${escapeHtml(c[`benefit_${n}_icon`]||'')}" placeholder="✈"></label><label>Vlastná ikona URL/path ${n}<input data-simple-banner-field="benefit_${n}_icon_url" value="${escapeHtml(c[`benefit_${n}_icon_url`]||'')}" placeholder="/assets/moje-logo.svg"></label><label class="span-2">Odkaz ${n}<input data-simple-banner-field="benefit_${n}_link" value="${escapeHtml(c[`benefit_${n}_link`]||'')}" placeholder="https://t.me/..."></label>`).join('')}</div></div>`:''}<div class="admin-form-section"><div class="admin-form-section-title"><strong>Odkaz</strong><span>Telegram, web alebo interná stránka BlinQ.</span></div><label class="admin-wide-field">Cieľová URL / odkaz<input data-simple-banner-field="link" value="${escapeHtml(c.link||'')}" placeholder="https://t.me/... or #results"></label></div><div class="admin-form-section"><div class="admin-form-section-title"><strong>Podklad bannera</strong><span>Nahraj alebo zadaj cestu k obrázku a text BlinQ sa vykreslí nad ním.</span></div><div class="field-hint-box">Odporúčaný formát pre tento slot: ${escapeHtml(creativeSpecText(item))}</div><div class="admin-form-grid"><label class="span-2">Obrázok pre desktop<input data-simple-banner-field="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/banner.webp or https://..."></label><label class="span-2">Obrázok pre mobil (voliteľný)<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/banner-mobile.webp or https://..."></label><label>Prispôsobenie<select data-simple-banner-field="image_fit"><option value="cover"${(c.image_fit||'cover')==='cover'?' selected':''}>Cover</option><option value="contain"${c.image_fit==='contain'?' selected':''}>Contain</option></select></label><label>Pozícia<select data-simple-banner-field="image_position">${['center','left','right','top','bottom'].map(v=>`<option value="${v}"${v===(c.image_position||'center')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label><label class="admin-toggle-line span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť vlastný text a CTA nad podkladom</span></label></div></div><div class="admin-form-section audience-section"><div class="admin-form-section-title"><strong>Kto ho môže vidieť a otvoriť?</strong><span>Viditeľnosť a možnosť kliknutia sa nastavujú samostatne.</span></div><div class="admin-banner-presets"><button type="button" class="btn btn-ghost" data-banner-preset="all">Všetci</button><button type="button" class="btn btn-ghost" data-banner-preset="teaser-elite">Viditeľné pre všetkých · odkaz ELITE+</button><button type="button" class="btn btn-ghost" data-banner-preset="pro-only">Iba PRO+</button><button type="button" class="btn btn-ghost" data-banner-preset="goat-only">Iba GOAT</button></div>${renderBannerAccessMatrix(id,item)}</div><details class="admin-advanced"><summary>Pokročilé možnosti</summary><div class="admin-form-grid"><label>Aktívne od<input type="datetime-local" data-simple-banner-field="active_from" value="${escapeHtml(String(c.active_from||'').replace('Z','').slice(0,16))}"></label><label>Aktívne do<input type="datetime-local" data-simple-banner-field="active_until" value="${escapeHtml(String(c.active_until||'').replace('Z','').slice(0,16))}"></label></div>${watermarkEditor(item)}</details></article>`;
+    if(isVip){
+      const linkEditors=[1,2,3,4].map(n=>`<article class="admin-footer-link-item"><div class="admin-footer-link-index">0${n}</div><label>Názov<input data-simple-banner-field="benefit_${n}_title" value="${escapeHtml(c[`benefit_${n}_title`]||'')}" placeholder="Napr. VIP komunita"></label><label>Popis<input data-simple-banner-field="benefit_${n}_text" value="${escapeHtml(c[`benefit_${n}_text`]||'')}" placeholder="Krátky popis odkazu"></label><label class="span-2">Odkaz<input data-simple-banner-field="benefit_${n}_link" value="${escapeHtml(c[`benefit_${n}_link`]||'')}" placeholder="https://t.me/... alebo #results"></label></article>`).join('');
+      const preview=[1,2,3,4].map((n,i)=>{const title=c[`benefit_${n}_title`]||`Odkaz ${n}`,text=c[`benefit_${n}_text`]||'Krátky popis',link=String(c[`benefit_${n}_link`]||'').trim();return `<div class="admin-footer-preview-card"><span class="admin-footer-preview-icon">${vipFeatureIcon(i)}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(text)}</small></span><b>${link?'↗':'—'}</b></div>`;}).join('');
+      return `<article class="admin-banner-editor admin-footer-editor" data-simple-banner="${escapeHtml(id)}"><div class="admin-banner-editor-head"><div><small>SPODNÉ ODKAZY</small><h2>Footer odkazy</h2><p>Názov · popis · URL. Bez zbytočných bannerových nastavení.</p></div><label class="admin-master-switch"><input type="checkbox" data-simple-banner-field="enabled" ${c.enabled!==false?'checked':''}><span>Zapnuté</span></label></div><div class="admin-footer-preview">${preview}</div><div class="admin-form-section admin-footer-links-editor"><div class="admin-form-section-title"><strong>4 odkazy</strong><span>Telegram, VIP skupina, výsledky, štatistiky alebo ľubovoľná externá URL.</span></div><div class="admin-footer-link-grid">${linkEditors}</div></div></article>`;
+    }
+    return `<article class="admin-banner-editor" data-simple-banner="${escapeHtml(id)}"><div class="admin-banner-editor-head"><div><small>${isVip?'SPODNÝ VIP BANNER':isHero?'HLAVNÝ ROTUJÚCI BANNER':isContent?'OBSAHOVÝ BANNER':'HORNÝ CTA BANNER'}</small><h2>${escapeHtml(c.headline||item.label||id)}</h2><p>${escapeHtml(id)}</p></div><label class="admin-master-switch"><input type="checkbox" data-simple-banner-field="enabled" ${c.enabled!==false?'checked':''}><span>Zapnuté</span></label></div><div class="admin-banner-preview-toolbar"><span>Náhľad ako</span>${adminLevelChips(state.adminBannerPreviewPlan,'admin-banner-preview-plan',true)}</div>${bannerPreviewForPlan(id,item,kind,state.adminBannerPreviewPlan)}<div class="admin-form-section"><div class="admin-form-section-title"><strong>Obsah</strong><span>Všetko, čo návštevník vidí.</span></div><div class="admin-form-grid"><label>Horný popis<input data-simple-banner-field="eyebrow" value="${escapeHtml(c.eyebrow||'')}" placeholder="COMMUNITY"></label><label>Téma<select data-simple-banner-field="theme">${themes.map(v=>`<option value="${v}"${v===(c.theme||'blue')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label><label class="span-2">Nadpis<input data-simple-banner-field="headline" value="${escapeHtml(c.headline||'')}" placeholder="Join our Telegram community"></label>${isHero?`<label class="span-2">Zvýraznený riadok<input data-simple-banner-field="accent_text" value="${escapeHtml(c.accent_text||'')}" placeholder="Telegram komunita"></label>`:''}<label class="span-2">Podnadpis<input data-simple-banner-field="text" value="${escapeHtml(c.text||'')}" placeholder="Novinky · Predikcie · Diskusia"></label><label>Text tlačidla<input data-simple-banner-field="button_text" value="${escapeHtml(c.button_text||'')}" placeholder="PRIDAŤ SA"></label>${!isHero?`<label>Ikona / emoji<input data-simple-banner-field="icon" value="${escapeHtml(c.icon||'')}" placeholder="✈"></label>`:''}</div></div>${isVip?`<div class="admin-form-section admin-footer-links-editor"><div class="admin-form-section-title"><strong>Spodné odkazy</strong><span>Stačí názov, krátky popis a cieľový odkaz. Vhodné pre Telegram, VIP skupinu, štatistiky alebo internú stránku.</span></div><div class="admin-footer-link-grid">${[1,2,3,4].map(n=>`<article class="admin-footer-link-item"><div class="admin-footer-link-index">0${n}</div><label>Názov<input data-simple-banner-field="benefit_${n}_title" value="${escapeHtml(c[`benefit_${n}_title`]||'')}" placeholder="Napr. VIP komunita"></label><label>Popis<input data-simple-banner-field="benefit_${n}_text" value="${escapeHtml(c[`benefit_${n}_text`]||'')}" placeholder="Krátky popis odkazu"></label><label class="span-2">Odkaz<input data-simple-banner-field="benefit_${n}_link" value="${escapeHtml(c[`benefit_${n}_link`]||'')}" placeholder="https://t.me/... alebo #results"></label></article>`).join('')}</div></div>`:''}<div class="admin-form-section"><div class="admin-form-section-title"><strong>Odkaz</strong><span>Telegram, web alebo interná stránka BlinQ.</span></div><label class="admin-wide-field">Cieľová URL / odkaz<input data-simple-banner-field="link" value="${escapeHtml(c.link||'')}" placeholder="https://t.me/... or #results"></label></div><div class="admin-form-section"><div class="admin-form-section-title"><strong>Podklad bannera</strong><span>Nahraj alebo zadaj cestu k obrázku a text BlinQ sa vykreslí nad ním.</span></div><div class="field-hint-box">Odporúčaný formát pre tento slot: ${escapeHtml(creativeSpecText(item))}</div><div class="admin-form-grid"><label class="span-2">Obrázok pre desktop<input data-simple-banner-field="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/banner.webp or https://..."></label><label class="span-2">Obrázok pre mobil (voliteľný)<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/banner-mobile.webp or https://..."></label><label>Prispôsobenie<select data-simple-banner-field="image_fit"><option value="cover"${(c.image_fit||'cover')==='cover'?' selected':''}>Cover</option><option value="contain"${c.image_fit==='contain'?' selected':''}>Contain</option></select></label><label>Pozícia<select data-simple-banner-field="image_position">${['center','left','right','top','bottom'].map(v=>`<option value="${v}"${v===(c.image_position||'center')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label><label class="admin-toggle-line span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť vlastný text a CTA nad podkladom</span></label></div></div><div class="admin-form-section audience-section"><div class="admin-form-section-title"><strong>Kto ho môže vidieť a otvoriť?</strong><span>Viditeľnosť a možnosť kliknutia sa nastavujú samostatne.</span></div><div class="admin-banner-presets"><button type="button" class="btn btn-ghost" data-banner-preset="all">Všetci</button><button type="button" class="btn btn-ghost" data-banner-preset="teaser-elite">Viditeľné pre všetkých · odkaz ELITE+</button><button type="button" class="btn btn-ghost" data-banner-preset="pro-only">Iba PRO+</button><button type="button" class="btn btn-ghost" data-banner-preset="goat-only">Iba GOAT</button></div>${renderBannerAccessMatrix(id,item)}</div><details class="admin-advanced"><summary>Pokročilé možnosti</summary><div class="admin-form-grid"><label>Aktívne od<input type="datetime-local" data-simple-banner-field="active_from" value="${escapeHtml(String(c.active_from||'').replace('Z','').slice(0,16))}"></label><label>Aktívne do<input type="datetime-local" data-simple-banner-field="active_until" value="${escapeHtml(String(c.active_until||'').replace('Z','').slice(0,16))}"></label></div>${watermarkEditor(item)}</details></article>`;
   }
   function adminBannerMapSlot(id,label,size='normal'){
     const item=elements()?.[id];if(!item)return '';
