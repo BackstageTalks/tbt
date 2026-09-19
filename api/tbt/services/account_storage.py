@@ -53,6 +53,8 @@ def _public_entity(entity: dict | None) -> dict:
         "legal_consent_version": str(row.get("legal_consent_version") or "")[:40],
         "legal_consent_locale": str(row.get("legal_consent_locale") or "")[:8],
         "legal_consent_at": row.get("legal_consent_at"),
+        "inactivity_warning_sent_at": row.get("inactivity_warning_sent_at"),
+        "inactivity_expired_at": row.get("inactivity_expired_at"),
     }
 
 
@@ -228,6 +230,24 @@ def save_admin_metadata(user_id: object, payload: object, *, actor_id: object = 
         client.upsert_entity(entity, mode="merge")
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to save account admin metadata") from exc
+    return load_account_metadata(uid)
+
+
+def save_inactivity_state(user_id: object, *, warning_sent_at: object = None, expired_at: object = None) -> dict:
+    """Persist worker-only inactivity markers used to de-duplicate e-mail notices."""
+    uid = str(user_id or "").strip()
+    key = _key(uid)
+    entity = {"PartitionKey": "account", "RowKey": key, "user_id": uid}
+    if warning_sent_at is not None:
+        entity["inactivity_warning_sent_at"] = str(warning_sent_at or "")[:64]
+    if expired_at is not None:
+        entity["inactivity_expired_at"] = str(expired_at or "")[:64]
+    if len(entity) == 3:
+        return load_account_metadata(uid)
+    try:
+        _table(ACCOUNT_TABLE).upsert_entity(entity, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save account inactivity state") from exc
     return load_account_metadata(uid)
 
 

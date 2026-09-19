@@ -2,14 +2,14 @@
   "schema": 2,
   "plans": {
     "trial": {
-      "label": "ROOKIE TRIAL",
-      "enabled": true,
+      "label": "ROOKIE LEGACY",
+      "enabled": false,
       "price": "0.00",
       "currency": "EUR",
-      "billing": "72 hours",
+      "billing": "",
       "payment_link": "",
-      "note": "Automatic 3-day Rookie access after registration.",
-      "trial_hours": 72,
+      "note": "Legacy compatibility alias only. New accounts start directly on unlimited ROOKIE.",
+      "trial_hours": 0,
       "inherits": "rookie",
       "duration_days": null
     },
@@ -25,9 +25,8 @@
     "rookie": {
       "label": "BlinQ ROOKIE",
       "enabled": true,
-      "note": "Limited daily predictions; first 3 days free after registration.",
-      "duration_days": 30,
-      "trial_hours": 72,
+      "note": "FREE level bez časového obmedzenia.",
+      "duration_days": null,
       "lifetime": false,
       "hide_ads_allowed": false,
       "description": "Entry access to the BlinQ workspace.",
@@ -36,7 +35,9 @@
       "avatar": "rookie",
       "order": 1,
       "card_title": "Start with BlinQ",
-      "show_price": false
+      "show_price": false,
+      "eyebrow": "",
+      "unlimited": true
     },
     "pro": {
       "label": "BlinQ PRO",
@@ -51,7 +52,9 @@
       "avatar": "pro",
       "order": 2,
       "card_title": "Core predictions",
-      "show_price": false
+      "show_price": false,
+      "eyebrow": "",
+      "unlimited": false
     },
     "elite": {
       "label": "BlinQ ELITE",
@@ -66,7 +69,9 @@
       "avatar": "elite",
       "order": 3,
       "card_title": "Advanced analytics",
-      "show_price": false
+      "show_price": false,
+      "eyebrow": "",
+      "unlimited": false
     },
     "legend": {
       "label": "BlinQ LEGEND",
@@ -81,7 +86,9 @@
       "avatar": "legend",
       "order": 4,
       "card_title": "Maximum public access",
-      "show_price": false
+      "show_price": false,
+      "eyebrow": "",
+      "unlimited": false
     },
     "goat": {
       "label": "BlinQ GOAT",
@@ -98,7 +105,9 @@
       "card_title": "Private all-access",
       "show_price": false,
       "invite_only": true,
-      "invite_url": ""
+      "invite_url": "",
+      "eyebrow": "",
+      "unlimited": false
     }
   },
   "navigation": {
@@ -2344,5 +2353,13 @@
       }
     }
   },
-  "ui_patch": "736-r23"
+  "ui_patch": "736-r24",
+  "account_inactivity": {
+    "enabled": true,
+    "inactive_days": 90,
+    "warning_days": 7,
+    "notify_admin": true,
+    "notify_user": false,
+    "auto_expire_rookie": false
+  }
 }

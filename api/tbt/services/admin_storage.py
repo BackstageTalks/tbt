@@ -327,6 +327,52 @@ def load_live_worker_status() -> dict | None:
         return None
     return payload if isinstance(payload, dict) else None
 
+def save_account_worker_status(payload: object) -> dict:
+    """Persist the last account-inactivity worker summary for Admin diagnostics."""
+    data = dict(payload or {}) if isinstance(payload, dict) else {}
+    now = datetime.now(timezone.utc).isoformat()
+    safe = {
+        "scanned_at": str(data.get("scanned_at") or now)[:64],
+        "scanned": max(0, int(data.get("scanned") or 0)),
+        "inactive": max(0, int(data.get("inactive") or 0)),
+        "warnings": max(0, int(data.get("warnings") or 0)),
+        "expired": max(0, int(data.get("expired") or 0)),
+        "user_emails": max(0, int(data.get("user_emails") or 0)),
+        "admin_email": bool(data.get("admin_email", False)),
+        "smtp_configured": bool(data.get("smtp_configured", False)),
+        "enabled": bool(data.get("enabled", False)),
+        "last_error": str(data.get("last_error") or "")[:160],
+        "updated_at": now,
+    }
+    entity = {
+        "PartitionKey": "runtime",
+        "RowKey": "account-inactivity-worker-status",
+        "payload": json.dumps(safe, ensure_ascii=False, separators=(",", ":")),
+        "updated_at": now,
+    }
+    try:
+        _table(UI_TABLE).upsert_entity(entity, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save account worker status") from exc
+    return safe
+
+
+def load_account_worker_status() -> dict | None:
+    try:
+        entity = _table(UI_TABLE).get_entity(partition_key="runtime", row_key="account-inactivity-worker-status")
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        name = exc.__class__.__name__.lower()
+        if status == 404 or "notfound" in name or isinstance(exc, KeyError):
+            return None
+        raise AdminStorageUnavailable("Unable to load account worker status") from exc
+    try:
+        payload = json.loads(str(entity.get("payload") or "{}"))
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def validate_ui_config(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Invalid UI configuration")
@@ -343,7 +389,9 @@ def validate_ui_config(payload: object) -> dict:
     plan_order = ["rookie", "pro", "elite", "legend", "goat"]
     if [plan for plan, _ in sorted(((plan, plans[plan].get("order")) for plan in plan_order), key=lambda item: int(item[1] or 99))] != plan_order:
         raise ValueError("Membership order must be Rookie, PRO, Elite, Legend, GOAT")
-    for plan in ("rookie", "pro", "elite", "legend"):
+    if plans["rookie"].get("unlimited") is not True or plans["rookie"].get("duration_days") is not None:
+        raise ValueError("ROOKIE must remain the unlimited free base level")
+    for plan in ("pro", "elite", "legend"):
         days = plans[plan].get("duration_days")
         if not isinstance(days, int) or days <= 0:
             raise ValueError(f"{plan} requires a positive default duration")
@@ -351,6 +399,22 @@ def validate_ui_config(payload: object) -> dict:
         raise ValueError("Legend enabled flag must be boolean")
     if plans["goat"].get("lifetime") is not True or plans["goat"].get("duration_days") is not None:
         raise ValueError("GOAT must remain the lifetime top level")
+    for plan in plan_order:
+        eyebrow = plans[plan].get("eyebrow", "")
+        if not isinstance(eyebrow, str) or len(eyebrow) > 40:
+            raise ValueError(f"{plan} membership eyebrow must be at most 40 characters")
+    inactivity = payload.get("account_inactivity") or {}
+    if not isinstance(inactivity, dict):
+        raise ValueError("Account inactivity policy must be an object")
+    for key in ("enabled", "notify_admin", "notify_user", "auto_expire_rookie"):
+        if key in inactivity and not isinstance(inactivity.get(key), bool):
+            raise ValueError(f"Account inactivity {key} must be boolean")
+    inactive_days = inactivity.get("inactive_days", 90)
+    warning_days = inactivity.get("warning_days", 7)
+    if not isinstance(inactive_days, int) or not 14 <= inactive_days <= 3650:
+        raise ValueError("Account inactivity threshold must be 14..3650 days")
+    if not isinstance(warning_days, int) or not 1 <= warning_days < inactive_days:
+        raise ValueError("Account inactivity warning must be between 1 day and the inactivity threshold")
     if any(plans[plan].get("hide_ads_allowed") is True for plan in plan_order):
         raise ValueError("Plan-based ad-free access is disabled")
     for plan in plan_order:

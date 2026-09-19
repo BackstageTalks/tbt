@@ -1,4 +1,4 @@
-/* BlinQ runtime stylesheet — consolidated 7.3.6-r23. Legacy-only visual selectors are removed; retained cascade rules support the active UI. */
+/* BlinQ runtime stylesheet — consolidated 7.3.6-r24. Legacy-only visual selectors are removed; retained cascade rules support the active UI. */
 
 /* SOURCE: blinq.css */
 :root{--bg:#030d18;--bg2:#071522;--panel:#071a29;--panel2:#0a2031;--line:#183c52;--line2:#245a73;--text:#f7fbff;--muted:#8ea7b8;--cyan:#2ae3ff;--lime:#42f39a;--violet:#8b5cf6;--violet2:#6d37e9;--gold:#ffc930;--danger:#ff5f7c;--shadow:0 22px 70px rgba(0,0,0,.32);--radius:18px;--radius-sm:12px;--font:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
@@ -5996,3 +5996,11 @@ body#blinqPremium .admin-user-empty-v687{min-height:210px!important}
 /* BlinQ runtime patch 7.3.6-r23: legacy visual cleanup */
 body#blinqPremium .lean-admin-banners .admin-banner-save-note{margin-top:2px!important}
 body#blinqPremium .lean-admin-banners .admin-form-section:last-of-type{margin-bottom:0!important}
+
+
+/* BlinQ runtime patch 7.3.6-r24: unlimited ROOKIE + editable membership eyebrow + inactivity monitor */
+body#blinqPremium .admin-inactivity-policy{margin-top:12px!important}
+body#blinqPremium .admin-membership-fields>.admin-inactivity-danger{display:grid!important;gap:6px!important;padding:10px!important;border:1px solid rgba(83,145,128,.16)!important;border-radius:9px!important;background:rgba(3,18,22,.42)!important;color:#77958b!important;font-size:8px!important}
+body#blinqPremium .admin-inactivity-danger>.admin-inline-check{display:flex!important;align-items:center!important;gap:8px!important;color:#dcece6!important;font-size:9px!important;cursor:pointer!important}
+body#blinqPremium .admin-inactivity-danger>.admin-inline-check input{width:15px!important;height:15px!important;min-width:15px!important;accent-color:#2df2ad!important}
+body#blinqPremium .admin-inactivity-danger>small{font-size:7px!important;line-height:1.4!important;color:#66877c!important}

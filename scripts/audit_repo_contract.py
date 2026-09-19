@@ -128,6 +128,7 @@ required_routes = (
     'route="v1/admin/users"', 'route="v1/admin/users/{user_id}/payments"',
     'route="v1/admin/audit"', 'route="v1/admin/ui-config"', 'route="v1/admin/media"',
     'route="v1/push/config"', 'route="v1/push/subscription"',
+    'route="v1/internal/account-inactivity-worker"',
 )
 for token in required_routes:
     if token not in api:
@@ -231,6 +232,20 @@ ok('critical media/fallback assets + index static references present')
 for tier in ('rookie', 'pro', 'elite', 'legend', 'goat'):
     if not isinstance(((tiers.get('tiers') or {}).get(tier) or {}).get('features'), list):
         fail(f'membership tier features missing: {tier}')
+plans = ui.get('plans') or {}
+if (plans.get('trial') or {}).get('enabled') is not False or int((plans.get('trial') or {}).get('trial_hours') or 0) != 0:
+    fail('legacy ROOKIE trial must stay disabled')
+rookie_plan = plans.get('rookie') or {}
+if rookie_plan.get('enabled') is not True or rookie_plan.get('unlimited') is not True or rookie_plan.get('duration_days') is not None:
+    fail('ROOKIE must stay enabled and unlimited without duration')
+for tier in ('rookie', 'pro', 'elite', 'legend', 'goat'):
+    if not isinstance((plans.get(tier) or {}).get('eyebrow', ''), str):
+        fail(f'membership eyebrow must remain editable text: {tier}')
+inactivity = ui.get('account_inactivity') or {}
+if inactivity.get('auto_expire_rookie') is not False:
+    fail('ROOKIE inactivity auto-expiry must default OFF')
+if 'data-admin-level-field="eyebrow"' not in app or 'data-admin-inactivity-field="enabled"' not in app:
+    fail('r24 membership/inactivity Admin controls missing')
 hub = ((ui.get('dashboard') or {}).get('daily_hub') or {})
 tabs = hub.get('tabs') or {}
 for tab in ('daily', 'value', 'ace', 'doubles', 'games', 'sets'):
@@ -244,7 +259,7 @@ if str(rookie.get('selection_mode')) != 'stable_random' or int(rookie.get('visib
 ok('membership + daily hub core schema present')
 
 # 7. Storage diagnostics/current support policy.
-for label in ('PLAYER IMAGES', 'TOURNAMENT LOGOS', 'INFO STORAGE', 'LIVE DATA'):
+for label in ('PLAYER IMAGES', 'TOURNAMENT LOGOS', 'INFO STORAGE', 'LIVE DATA', 'ACCOUNT CHECK', 'EMAIL / SMTP'):
     if label not in app:
         fail(f'Admin System diagnostic missing: {label}')
 if 'SUPPORT STORAGE' in app:
@@ -257,6 +272,7 @@ ok('Admin System diagnostics contract present')
 data_yml = read(ROOT / '.github' / 'workflows' / 'data.yml')
 player_yml = read(ROOT / '.github' / 'workflows' / 'player-enrichment.yml')
 ci_yml = read(ROOT / '.github' / 'workflows' / 'ci.yml')
+account_yml = read(ROOT / '.github' / 'workflows' / 'account-inactivity.yml')
 if 'BLINQ_SKIP_STALE_DEPLOY=true' not in data_yml or 'git rev-parse origin/main' not in data_yml:
     fail('data workflow stale-deploy guard missing')
 if 'ref: main' not in player_yml:
@@ -267,7 +283,9 @@ if 'Guard fresh main commit' not in ci_yml or 'origin/main' not in ci_yml or 'ST
     fail('CI stale re-run guard missing')
 if 'run-name: "BlinQ CI · ${{ github.sha }}"' not in ci_yml:
     fail('CI run name does not expose commit SHA')
-ok('workflow stale-deploy + stale-rerun safeguards present')
+if 'TBT_ACCOUNT_INACTIVITY_ENABLED' not in account_yml or 'BLINQ_ACCOUNT_WORKER_TOKEN' not in account_yml or '/api/v1/internal/account-inactivity-worker' not in account_yml:
+    fail('daily account inactivity workflow contract missing')
+ok('workflow stale-deploy + stale-rerun + account-inactivity safeguards present')
 
 # 9. Production tree cleanliness.
 # In CI the checkout itself necessarily contains .git/.git metadata.  The audit must

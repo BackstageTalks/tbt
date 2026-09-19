@@ -316,11 +316,14 @@ def is_admin(user, cfg=None):
 
 
 def account_access(user, *, cfg=None, now=None):
-    """Resolve role/plan state from admin-controlled metadata and signup time.
+    """Resolve role/plan state from server-controlled membership metadata.
 
-    Trial is derived, not stored: an account without active paid access gets 72 hours
-    from the identity provider's immutable creation timestamp. Paid access remains
-    server-controlled so a normal user cannot grant themselves a plan.
+    ROOKIE is the permanent free base tier. It has no fixed expiry and is used for
+    every ordinary account that has no explicit paid membership assignment. Paid
+    tiers remain server-controlled; PRO/ELITE/LEGEND require a future expiration
+    timestamp and GOAT remains lifetime. An explicit expired/suspended ROOKIE claim
+    is still respected so the optional inactivity worker can archive dormant free
+    accounts without changing the default free-tier contract.
     """
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -329,8 +332,6 @@ def account_access(user, *, cfg=None, now=None):
 
     app = user.get("app_metadata") or {}
     admin = is_admin(user, cfg)
-    created_at = _parse_utc(user.get("created_at"))
-    trial_expires = created_at + timedelta(hours=72) if created_at else None
     assigned_plan = str(app.get("blinq_plan") or "").strip().lower()
     assigned_status = str(app.get("blinq_status") or "").strip().lower()
     expires_at = _parse_utc(app.get("blinq_expires_at"))
@@ -340,11 +341,11 @@ def account_access(user, *, cfg=None, now=None):
     if assigned_status == "suspended":
         return {
             "role": "user",
-            "plan": assigned_plan if assigned_plan in PAID_PLANS else "expired",
-            "plan_label": PLAN_LABELS.get(assigned_plan, PLAN_LABELS["expired"]),
+            "plan": assigned_plan if assigned_plan in PAID_PLANS else "rookie",
+            "plan_label": PLAN_LABELS.get(assigned_plan, PLAN_LABELS["rookie"]),
             "status": "suspended",
-            "expires_at": expires_at.isoformat() if expires_at else None,
-            "trial_expires_at": trial_expires.isoformat() if trial_expires else None,
+            "expires_at": None if assigned_plan == "rookie" else (expires_at.isoformat() if expires_at else None),
+            "trial_expires_at": None,
             "is_admin": False,
         }
 
@@ -355,40 +356,78 @@ def account_access(user, *, cfg=None, now=None):
             "plan_label": PLAN_LABELS["admin"],
             "status": "active",
             "expires_at": None,
-            "trial_expires_at": trial_expires.isoformat() if trial_expires else None,
+            "trial_expires_at": None,
             "is_admin": True,
         }
 
-    active_paid = assigned_plan in PAID_PLANS and assigned_status in {"active", "lifetime"}
-    if active_paid and (assigned_status == "lifetime" or (expires_at is not None and expires_at > now)):
+    # Explicitly archived free accounts remain expired until an admin reactivates
+    # them. This is separate from the ordinary ROOKIE plan duration, which is
+    # unlimited.
+    if assigned_plan == "rookie" and assigned_status == "expired":
+        return {
+            "role": "user",
+            "plan": "rookie",
+            "plan_label": PLAN_LABELS["rookie"],
+            "status": "expired",
+            "expires_at": None,
+            "trial_expires_at": None,
+            "is_admin": False,
+        }
+
+    # ROOKIE never needs an expiration timestamp. Legacy 30-day ROOKIE claims
+    # become unlimited automatically without a data migration.
+    if assigned_plan == "rookie":
+        return {
+            "role": "user",
+            "plan": "rookie",
+            "plan_label": PLAN_LABELS["rookie"],
+            "status": "active",
+            "expires_at": None,
+            "trial_expires_at": None,
+            "is_admin": False,
+        }
+
+    if assigned_plan == "goat" and assigned_status == "lifetime":
+        return {
+            "role": "user",
+            "plan": "goat",
+            "plan_label": PLAN_LABELS["goat"],
+            "status": "lifetime",
+            "expires_at": None,
+            "trial_expires_at": None,
+            "is_admin": False,
+        }
+
+    if assigned_plan in {"pro", "elite", "legend"} and assigned_status == "active" and expires_at is not None and expires_at > now:
         return {
             "role": "user",
             "plan": assigned_plan,
             "plan_label": PLAN_LABELS[assigned_plan],
-            "status": "lifetime" if assigned_status == "lifetime" else "active",
-            "expires_at": expires_at.isoformat() if expires_at else None,
-            "trial_expires_at": trial_expires.isoformat() if trial_expires else None,
+            "status": "active",
+            "expires_at": expires_at.isoformat(),
+            "trial_expires_at": None,
             "is_admin": False,
         }
 
-    if trial_expires and trial_expires > now and not assigned_plan:
+    if assigned_plan in PAID_PLANS:
         return {
             "role": "user",
-            "plan": "rookie",
-            "plan_label": "Rookie Trial",
-            "status": "trial",
-            "expires_at": trial_expires.isoformat(),
-            "trial_expires_at": trial_expires.isoformat(),
+            "plan": assigned_plan,
+            "plan_label": PLAN_LABELS[assigned_plan],
+            "status": "expired",
+            "expires_at": None if assigned_plan in {"rookie", "goat"} else (expires_at.isoformat() if expires_at else None),
+            "trial_expires_at": None,
             "is_admin": False,
         }
 
+    # No membership claim means the permanent free base tier, not a trial.
     return {
         "role": "user",
-        "plan": assigned_plan if assigned_plan in PAID_PLANS else "expired",
-        "plan_label": PLAN_LABELS.get(assigned_plan, PLAN_LABELS["expired"]),
-        "status": "expired",
-        "expires_at": expires_at.isoformat() if expires_at else None,
-        "trial_expires_at": trial_expires.isoformat() if trial_expires else None,
+        "plan": "rookie",
+        "plan_label": PLAN_LABELS["rookie"],
+        "status": "active",
+        "expires_at": None,
+        "trial_expires_at": None,
         "is_admin": False,
     }
 

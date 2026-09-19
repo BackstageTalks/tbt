@@ -61,6 +61,8 @@ from tbt.services.admin_storage import (
     mark_insight_read,
     save_live_worker_status,
     load_live_worker_status,
+    save_account_worker_status,
+    load_account_worker_status,
     live_min_level,
     membership_levels_from,
 )
@@ -75,6 +77,7 @@ from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.entitlements import filter_feed_for_access
+from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnostics, inactivity_policy
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
     attach_second_set_odds,
@@ -839,6 +842,12 @@ def _live_worker_token_ok(req) -> bool:
     return bool(expected and supplied and hmac.compare_digest(expected,supplied))
 
 
+def _account_worker_token_ok(req) -> bool:
+    expected=str(getattr(settings, "blinq_account_worker_token", "") or "").strip()
+    supplied=str((getattr(req,"headers",{}) or {}).get("X-Blinq-Worker-Token") or "").strip()
+    return bool(expected and supplied and hmac.compare_digest(expected,supplied))
+
+
 def _live_worker_snapshot(max_age_seconds: int = 180) -> dict | None:
     try:
         snapshot=load_live_worker_status()
@@ -981,6 +990,37 @@ def internal_live_radar_worker(req):
         except Exception:
             pass
         return response({"error":"live_worker_failed","detail":exc.__class__.__name__},503)
+
+
+@app.route(route="v1/internal/account-inactivity-worker", methods=["POST"])
+def internal_account_inactivity_worker(req):
+    """Secret-protected daily account inactivity review hook."""
+    if not str(getattr(settings, "blinq_account_worker_token", "") or "").strip():
+        return response({"error":"account_worker_not_configured"},503)
+    if not _account_worker_token_ok(req):
+        return response({"error":"forbidden"},403)
+    try:
+        try:
+            runtime=load_runtime_ui_config() or {}
+        except AdminStorageUnavailable:
+            # Without runtime storage we can still report using safe defaults, but
+            # never auto-expire because the published admin policy is unavailable.
+            runtime={"account_inactivity":{"enabled":True,"notify_admin":True,"notify_user":False,"auto_expire_rookie":False}}
+        result=run_inactivity_review(settings,runtime)
+        persisted=True
+        try:
+            save_account_worker_status(result)
+        except AdminStorageUnavailable:
+            persisted=False
+            logging.warning("Account inactivity worker heartbeat storage unavailable")
+        return response({**result,"heartbeat_persisted":persisted})
+    except Exception as exc:
+        logging.exception("Account inactivity worker failed")
+        try:
+            save_account_worker_status({"scanned_at":datetime.now(timezone.utc).isoformat(),"enabled":True,"last_error":exc.__class__.__name__})
+        except Exception:
+            pass
+        return response({"error":"account_worker_failed","detail":exc.__class__.__name__},503)
 
 
 @app.route(route="v1/admin/live-radar", methods=["GET","POST"])
@@ -1180,6 +1220,28 @@ def admin_diagnostics(req):
         storage_ok = storage.get("backend") != "unavailable"
         media = media_storage_diagnostics()
         push = push_storage_diagnostics()
+        try:
+            runtime_ui = load_runtime_ui_config() or {}
+        except AdminStorageUnavailable:
+            runtime_ui = {}
+        inactivity = inactivity_policy(runtime_ui)
+        smtp = smtp_diagnostics(settings)
+        account_worker_configured = bool(str(getattr(settings, "blinq_account_worker_token", "") or "").strip())
+        try:
+            account_worker_status = load_account_worker_status() or {}
+        except AdminStorageUnavailable:
+            account_worker_status = {}
+        account_worker_age_seconds = None
+        account_worker_healthy = False
+        raw_account_worker_time = str(account_worker_status.get("updated_at") or account_worker_status.get("scanned_at") or "").strip()
+        if raw_account_worker_time:
+            try:
+                account_worker_moment = datetime.fromisoformat(raw_account_worker_time.replace("Z", "+00:00"))
+                if account_worker_moment.tzinfo is None: account_worker_moment = account_worker_moment.replace(tzinfo=timezone.utc)
+                account_worker_age_seconds = max(0, int((datetime.now(timezone.utc)-account_worker_moment.astimezone(timezone.utc)).total_seconds()))
+                account_worker_healthy = bool(account_worker_configured and account_worker_age_seconds <= 36*3600 and not account_worker_status.get("last_error"))
+            except ValueError:
+                pass
         worker_configured = bool(str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip())
         try:
             worker_status = load_live_worker_status() or {}
@@ -1250,6 +1312,15 @@ def admin_diagnostics(req):
             problems.append("live_worker_token_missing")
         elif not worker_healthy:
             problems.append("live_worker_stale")
+        if inactivity.get("enabled"):
+            if not account_worker_configured:
+                problems.append("account_worker_token_missing")
+            elif not account_worker_healthy:
+                problems.append("account_worker_stale")
+            if (inactivity.get("notify_admin") or inactivity.get("notify_user") or inactivity.get("auto_expire_rookie")) and not smtp.get("configured"):
+                problems.append("smtp_not_configured")
+            if inactivity.get("notify_admin") and not smtp.get("admin_recipient_configured"):
+                problems.append("admin_email_missing")
         if not push.get("enabled"):
             problems.append("webpush_not_configured")
         elif not push.get("storage_available"):
@@ -1271,6 +1342,21 @@ def admin_diagnostics(req):
                 "signals": int(worker_status.get("signals") or 0),
                 "new_alerts": int(worker_status.get("new_alerts") or 0),
                 "last_error": str(worker_status.get("last_error") or "")[:160],
+            },
+            "account_inactivity": {
+                "policy": inactivity,
+                "worker": {
+                    "configured": account_worker_configured,
+                    "healthy": account_worker_healthy,
+                    "age_seconds": account_worker_age_seconds,
+                    "scanned_at": account_worker_status.get("scanned_at"),
+                    "scanned": int(account_worker_status.get("scanned") or 0),
+                    "inactive": int(account_worker_status.get("inactive") or 0),
+                    "warnings": int(account_worker_status.get("warnings") or 0),
+                    "expired": int(account_worker_status.get("expired") or 0),
+                    "last_error": str(account_worker_status.get("last_error") or "")[:160],
+                },
+                "smtp": smtp,
             },
             "auth_provider": auth_provider(settings),
             "admin_storage": storage.get("backend"),

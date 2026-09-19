@@ -1,6 +1,6 @@
 # BlinQ web/admin v2 — implemented changes
 
-- ROOKIE 5.99 €/month with automatic 72-hour Rookie trial.
+- ROOKIE is FREE and has no fixed expiration; the legacy trial is disabled.
 - PRO 14.99 €/month, ELITE 99 €/year, GOAT 199 € lifetime.
 - LEGEND retained as hidden/disabled reserve; ADMIN is a separate role.
 - Fixed UI access engine: ACTIVE / LOCKED / BLURRED / HIDDEN per stable element ID.

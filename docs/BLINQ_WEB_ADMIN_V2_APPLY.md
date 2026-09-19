@@ -5,7 +5,7 @@ This package implements the fixed-layout membership/content/admin architecture a
 ## What is included
 
 - ROOKIE / PRO / ELITE / GOAT + hidden LEGEND and separate ADMIN role.
-- Automatic 72-hour Rookie trial.
+- ROOKIE is the permanent FREE base level without a fixed expiration.
 - Fixed element IDs with ACTIVE / LOCKED / BLURRED / HIDDEN access rules.
 - Three independent top header content slots.
 - Eight large partner/content positions in two fixed four-unit rows.

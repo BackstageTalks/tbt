@@ -32,23 +32,50 @@ def cfg(**overrides):
     return SimpleNamespace(**data)
 
 
-def test_new_account_gets_72_hour_rookie_trial_without_stored_plan():
+def test_new_account_gets_unlimited_free_rookie_without_stored_plan():
     access = account_access(user(), cfg=cfg(), now=NOW)
     assert access["plan"] == "rookie"
-    assert access["plan_label"] == "Rookie Trial"
-    assert access["status"] == "trial"
-    assert access["expires_at"] == (NOW + timedelta(hours=48)).isoformat()
+    assert access["plan_label"] == "Rookie"
+    assert access["status"] == "active"
+    assert access["expires_at"] is None
+    assert access["trial_expires_at"] is None
 
 
-def test_old_unpaid_account_is_expired():
+def test_old_unpaid_account_stays_active_rookie_without_expiry():
     access = account_access(
-        user(created_at=(NOW - timedelta(days=10)).isoformat()),
+        user(created_at=(NOW - timedelta(days=400)).isoformat()),
         cfg=cfg(),
         now=NOW,
     )
-    assert access["plan"] == "expired"
-    assert access["status"] == "expired"
+    assert access["plan"] == "rookie"
+    assert access["status"] == "active"
+    assert access["expires_at"] is None
 
+
+def test_legacy_rookie_expiry_is_ignored_when_status_is_active():
+    access = account_access(
+        user(app_metadata={
+            "blinq_plan": "rookie",
+            "blinq_status": "active",
+            "blinq_expires_at": (NOW - timedelta(days=1)).isoformat(),
+        }),
+        cfg=cfg(),
+        now=NOW,
+    )
+    assert access["plan"] == "rookie"
+    assert access["status"] == "active"
+    assert access["expires_at"] is None
+
+
+def test_explicitly_archived_rookie_can_remain_expired():
+    access = account_access(
+        user(app_metadata={"blinq_plan": "rookie", "blinq_status": "expired"}),
+        cfg=cfg(),
+        now=NOW,
+    )
+    assert access["plan"] == "rookie"
+    assert access["status"] == "expired"
+    assert access["expires_at"] is None
 
 def test_paid_plan_comes_only_from_app_metadata():
     access = account_access(
@@ -115,6 +142,13 @@ def test_lifetime_is_only_valid_for_goat():
 def test_active_plan_requires_expiration_date():
     with pytest.raises(ValueError, match="expiration"):
         normalize_access_update({"role": "user", "plan": "pro", "status": "active"})
+
+
+def test_active_rookie_does_not_require_expiration_date():
+    normalized = normalize_access_update({"role": "user", "plan": "rookie", "status": "active"})
+    assert normalized["status"] == "active"
+    assert normalized["plan"] == "rookie"
+    assert normalized["expires_at"] is None
 
 
 def test_admin_update_keeps_claims_authorization_only():

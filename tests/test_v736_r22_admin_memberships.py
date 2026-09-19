@@ -10,13 +10,16 @@ RELEASE=json.loads((ROOT/'web'/'release.json').read_text(encoding='utf-8'))
 def test_membership_admin_exists_and_edits_runtime_plans():
     assert "['levels','Členstvá','Levely · odkazy']" in APP
     assert 'function renderAdminLevels()' in APP
-    for field in ('enabled','label','card_title','short_description','description','cta_label','url','invite_url','duration_days','features'):
+    for field in ('enabled','label','card_title','eyebrow','short_description','description','cta_label','url','invite_url','duration_days','features'):
         assert f'data-admin-level-field="{field}"' in APP
     assert 'runtimeConfigSnapshot?.plans' in APP
     assert 'state.ui?.plans?.[id]?.features' in APP
     assert 'data-admin-level-field="lifetime"' not in APP
     assert 'data-admin-level-field="order"' not in APP
     assert 'admin-membership-static-mark' in APP
+    assert 'data-admin-inactivity-field="enabled"' in APP
+    assert 'data-admin-inactivity-field="inactive_days"' in APP
+    assert 'data-admin-inactivity-field="auto_expire_rookie"' in APP
 
 def test_legacy_expanded_layout_editor_is_not_rendered():
     assert 'Rozšírené sekcie dashboardu' not in APP

@@ -17,7 +17,7 @@
 9. Publish the runtime config from Admin. Repository `web/ui-config.json` remains the safe fallback/default.
 
 Current public plan defaults:
-- ROOKIE: €5.99/month; automatic first 72 hours free.
+- ROOKIE: FREE base level without a fixed expiration.
 - PRO: €14.99/month.
 - ELITE: €99/year.
 - GOAT: €199 lifetime.

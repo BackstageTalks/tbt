@@ -4,7 +4,7 @@ This document describes the web/admin implementation added on 2026-09-06.
 
 ## Plans
 
-- ROOKIE — €5.99/month, automatic 72-hour Rookie trial after registration.
+- ROOKIE — FREE base level without a fixed expiration.
 - PRO — €14.99/month.
 - ELITE — €99/year.
 - GOAT — €199 lifetime.

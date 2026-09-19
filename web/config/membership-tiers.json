@@ -4,8 +4,8 @@
     "rookie": {
       "label": "BlinQ ROOKIE",
       "card_title": "BlinQ ROOKIE",
-      "short_description": "Základný prístup do BlinQ a ochutnávka denného prehľadu.",
-      "description": "Ochutnávková úroveň pre základný prístup k BlinQ.",
+      "short_description": "FREE základný prístup do BlinQ bez časového obmedzenia.",
+      "description": "Bezplatná úroveň BlinQ bez pevnej expirácie. Rozsah obsahu sa riadi nastavením prístupu pre ROOKIE.",
       "cta_label": "Vybrať ROOKIE",
       "url": "",
       "invite_only": false,
@@ -13,7 +13,8 @@
         "2 stabilné denné TOP náhľady",
         "Základný dashboard",
         "Ukážka BlinQ ponuky"
-      ]
+      ],
+      "eyebrow": ""
     },
     "pro": {
       "label": "BlinQ PRO",
@@ -28,7 +29,8 @@
         "3 PRIME value picky",
         "Plný dashboard",
         "Vlastné upozornenia"
-      ]
+      ],
+      "eyebrow": ""
     },
     "elite": {
       "label": "BlinQ ELITE",
@@ -43,7 +45,8 @@
         "VIP skupina",
         "See All",
         "Overview + pokročilé analýzy"
-      ]
+      ],
+      "eyebrow": ""
     },
     "legend": {
       "label": "BlinQ LEGEND",
@@ -58,7 +61,8 @@
         "Výsledky",
         "Pokročilé štatistiky výkonu",
         "Dlhodobý analytický prehľad"
-      ]
+      ],
+      "eyebrow": ""
     },
     "goat": {
       "label": "BlinQ GOAT",
@@ -73,7 +77,8 @@
         "Maximum BlinQ",
         "Partner / reklamné privilégiá",
         "Výhoda na reklamný banner"
-      ]
+      ],
+      "eyebrow": ""
     }
   }
 }

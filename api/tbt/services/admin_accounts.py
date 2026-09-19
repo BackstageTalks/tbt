@@ -151,8 +151,11 @@ def normalize_access_update(payload):
         expires_at = None
     if status == "active" and not plan and role != "admin":
         raise ValueError("Active status requires a plan")
-    if status == "active" and plan and expires_at is None:
-        raise ValueError("Active non-lifetime plan requires an expiration date")
+    if status == "active" and plan == "rookie":
+        # ROOKIE is the permanent free base tier and never needs an expiry.
+        expires_at = None
+    elif status == "active" and plan and expires_at is None:
+        raise ValueError("Active paid plan requires an expiration date")
     if role == "admin" and status not in {"active", "suspended"}:
         raise ValueError("Admin status must be active or suspended")
 

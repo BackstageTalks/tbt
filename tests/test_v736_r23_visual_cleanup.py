@@ -13,9 +13,11 @@ BANNERS = json.loads((WEB / "config" / "banners.json").read_text(encoding="utf-8
 BACKEND = (ROOT / "api" / "tbt" / "services" / "admin_storage.py").read_text(encoding="utf-8")
 
 
-def test_r23_release_identity_and_cleanup_marker():
-    assert RELEASE["patch"] == "736-r23"
-    assert UI["ui_patch"] == "736-r23"
+def test_r23_cleanup_survives_newer_release_patches():
+    release_no = int(RELEASE["patch"].split("r", 1)[1])
+    ui_no = int(UI["ui_patch"].split("r", 1)[1])
+    assert release_no >= 23
+    assert ui_no >= 23
     assert "BlinQ runtime patch 7.3.6-r23: legacy visual cleanup" in CSS
 
 

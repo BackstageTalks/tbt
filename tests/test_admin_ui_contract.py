@@ -39,9 +39,11 @@ def test_admin_layout_has_current_inventory_and_access_states():
 
 def test_plan_catalogue_has_requested_default_terms_and_active_legend():
     plans = _cfg()["plans"]
-    assert plans["trial"]["trial_hours"] == 72
+    assert plans["trial"]["enabled"] is False
+    assert plans["trial"]["trial_hours"] == 0
     assert plans["trial"]["inherits"] == "rookie"
-    assert plans["rookie"]["duration_days"] == 30
+    assert plans["rookie"]["duration_days"] is None
+    assert plans["rookie"]["unlimited"] is True
     assert plans["pro"]["duration_days"] == 30
     assert plans["elite"]["duration_days"] == 180
     assert plans["goat"]["lifetime"] is True
@@ -101,7 +103,7 @@ def test_admin_routes_and_runtime_config_are_server_side():
     assert 'route="v1/banner-events"' in app
     assert 'route="v1/content/news"' in app
     assert "app_metadata" in auth
-    assert "timedelta(hours=72)" in auth
+    assert "No membership claim means the permanent free base tier, not a trial." in auth
 
 
 def test_rss_sources_live_in_backend_json_and_are_empty_until_owner_configures_them():
