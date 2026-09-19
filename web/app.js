@@ -263,12 +263,12 @@
   async function loadUiConfig() {
     let runtimeConfigSnapshot=null;
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=27');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=28');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=27');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=28');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -336,7 +336,7 @@
     const loadedPatch=String(state.ui?.ui_patch||'');
     const loadedPatchNumber=Number((loadedPatch.match(/r(\d+)$/)||[])[1]||0);
     if(loadedPatchNumber<27){const primeTab=state.ui?.dashboard?.daily_hub?.tabs?.prime;if(primeTab)primeTab.enabled=true;}
-    state.ui.ui_patch='736-r27';
+    state.ui.ui_patch='736-r28';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -634,21 +634,22 @@
     if(cfg.enabled===false||!requested)return [];
     return elementList('hero_banner','hero').slice(0,requested).filter(item=>item?.content?.enabled!==false);
   }
-  function heroImageHtml(content){
+  function heroImageHtml(content,index=0){
     const desktop=safeLink(content?.image_url,'');
     const mobile=safeLink(content?.mobile_image_url,'');
     if(!desktop||desktop.startsWith('#'))return '';
     const fit=['cover','contain'].includes(String(content?.image_fit||'cover'))?String(content.image_fit||'cover'):'cover';
     const position=['center','left','right','top','bottom'].includes(String(content?.image_position||'center'))?String(content.image_position||'center'):'center';
-    const img=`<img class="hero-slide-image fit-${escapeHtml(fit)} pos-${escapeHtml(position)}" src="${escapeHtml(desktop)}" alt="" loading="eager">`;
-    return mobile&&!mobile.startsWith('#')?`<picture class="hero-slide-picture"><source media="(max-width: 700px)" srcset="${escapeHtml(mobile)}">${img}</picture>`:img;
+    const first=Number(index)===0;
+    const img=`<img class="hero-slide-image fit-${escapeHtml(fit)} pos-${escapeHtml(position)}" src="${escapeHtml(desktop)}" alt="" loading="${first?'eager':'lazy'}" decoding="async"${first?' fetchpriority="high"':''}>`;
+    return mobile&&!mobile.startsWith('#')?`<picture class="hero-slide-picture"><source media="(max-width: 900px)" srcset="${escapeHtml(mobile)}">${img}</picture>`:img;
   }
   function heroSlideHtml(item,index){
     const rawContent=resolvedBannerContent(item,index),c={...rawContent,eyebrow:publicText(rawContent.eyebrow||''),headline:publicText(rawContent.headline||''),accent_text:publicText(rawContent.accent_text||''),text:publicText(rawContent.text||''),button_text:publicText(rawContent.button_text||'')},route=c.route||'',href=safeLink(c.link,route?`#${route}`:'#predictions'),external=isExternalLink(href);
     const theme=String(c.theme||'violet').replace(/[^a-z0-9_-]/gi,'');
     const showCopy=c.show_copy!==false;
     const sponsored=c.sponsored?'<span class="sponsored-label hero-sponsored">SPONSORED</span>':'';
-    const image=heroImageHtml(c);
+    const image=heroImageHtml(c,index);
     const art=image?'':`<div class="dashboard-hero-ball" aria-hidden="true"><i></i><b></b></div><div class="dashboard-hero-mark" aria-hidden="true"><strong>BlinQ</strong><span>STATISTICAL ENGINE</span><small>by BackstageTalks</small></div>`;
     const accent=String(c.accent_text||'').trim();
     const title=escapeHtml(c.headline||'Data. Analysis.');
@@ -1821,6 +1822,12 @@
       else if((Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
     }
     body.innerHTML=out.join('');
+    // r28: semantic cell labels let the same server-rendered table become a
+    // compact card layout on phones without duplicating business logic.
+    const mobileLabels=dailyHubColumns(tab);
+    body.querySelectorAll('tr:not(.hub-row-locked)').forEach(row=>{
+      [...row.children].forEach((cell,i)=>{cell.dataset.label=mobileLabels[i]||'';});
+    });
     if(empty){empty.hidden=Boolean(out.length);empty.textContent=lcopy('No predictions are available in this category yet.','V tejto kategórii zatiaľ nie sú dostupné predikcie.','V této kategorii zatím nejsou dostupné predikce.');}
     const first=rows[0]||sourceRows[0];const raw=first?.scheduled_at||first?.date||first?.start_time||first?.start_at||'';const d=raw?new Date(raw):new Date();const dateText=Number.isNaN(d.getTime())?lcopy('Today','Dnes','Dnes'):new Intl.DateTimeFormat(locale==='en'?'en-GB':locale==='cz'?'cs-CZ':'sk-SK',{weekday:'short',day:'numeric',month:'numeric'}).format(d);
     if($('dailyHubMetaDate'))$('dailyHubMetaDate').textContent=dateText;if($('dailyHubToolbarDate'))$('dailyHubToolbarDate').textContent=dateText;
@@ -2012,7 +2019,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=27"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=28"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     const row=rowOverride||m?.raw||m;

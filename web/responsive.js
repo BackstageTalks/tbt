@@ -1,4 +1,4 @@
-/* BlinQ responsive helpers — 7.3.6-r25. Active responsive/table/sync behaviour only. */
+/* BlinQ responsive helpers — 7.3.6-r28. Active responsive/table/sync behaviour only. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -87,7 +87,27 @@
 
   function refreshFinished() { const refresh=$('syncRefresh'); if(refresh) refresh.disabled = false; }
 
+  let viewportRaf=0;
+  function syncViewportState(){
+    cancelAnimationFrame(viewportRaf);
+    viewportRaf=requestAnimationFrame(()=>{
+      const vv=window.visualViewport;
+      const width=Math.round(vv?.width||window.innerWidth||document.documentElement.clientWidth||0);
+      const height=Math.round(vv?.height||window.innerHeight||document.documentElement.clientHeight||0);
+      const mobile=width<=900;
+      document.documentElement.style.setProperty('--bq-viewport-height',`${height}px`);
+      document.body.classList.toggle('blinq-mobile-layout',mobile);
+      const keyboardOpen=Boolean(mobile&&vv&&window.innerHeight&&vv.height<window.innerHeight*.78);
+      document.body.classList.toggle('blinq-mobile-keyboard-open',keyboardOpen);
+    });
+  }
+
   function init() {
+    syncViewportState();
+    window.addEventListener('resize',syncViewportState,{passive:true});
+    window.addEventListener('orientationchange',syncViewportState,{passive:true});
+    window.visualViewport?.addEventListener('resize',syncViewportState,{passive:true});
+    window.visualViewport?.addEventListener('scroll',syncViewportState,{passive:true});
     const skip=document.querySelector('.skip-link');
     if(skip)skip.onclick=event=>{event.preventDefault();$('mainContent')?.focus();};
 

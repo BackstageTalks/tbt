@@ -2353,7 +2353,7 @@
       }
     }
   },
-  "ui_patch": "736-r27",
+  "ui_patch": "736-r28",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,

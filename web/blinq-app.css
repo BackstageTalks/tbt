@@ -1,4 +1,4 @@
-/* BlinQ runtime stylesheet — consolidated 7.3.6-r25. Legacy-only visual selectors are removed; retained cascade rules support the active UI. */
+/* BlinQ runtime stylesheet — consolidated 7.3.6-r28. Legacy-only visual selectors are removed; retained cascade rules support the active UI. */
 
 /* SOURCE: blinq.css */
 :root{--bg:#030d18;--bg2:#071522;--panel:#071a29;--panel2:#0a2031;--line:#183c52;--line2:#245a73;--text:#f7fbff;--muted:#8ea7b8;--cyan:#2ae3ff;--lime:#42f39a;--violet:#8b5cf6;--violet2:#6d37e9;--gold:#ffc930;--danger:#ff5f7c;--shadow:0 22px 70px rgba(0,0,0,.32);--radius:18px;--radius-sm:12px;--font:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
@@ -2589,9 +2589,9 @@ body#blinqPremium .rail-motivation{margin:0 11px 10px!important;padding:10px!imp
   body#blinqPremium .dashboard-content-grid{grid-template-columns:minmax(0,1fr) 338px!important;gap:16px!important}
 }
 @media (min-width:1081px){
-  /* Card separation in the supplied reference is intentional; the legacy DOM
-     wrapper swallowed the grid gap{display:grid!important;gap:10px!important;min-width:0!important}
-
+  /* Card separation in the supplied reference is intentional. The original
+     r6 block was truncated during an old cleanup; keep this desktop-only
+     placeholder closed so every runtime rule below remains global. */
 }
 
 /* 6.8.0 FINAL rail: 4 native banners by default; match detail replaces rail. */
@@ -5987,7 +5987,6 @@ body#blinqPremium .admin-simple-user-editor-wrap{min-width:0!important;max-width
 body#blinqPremium .admin-user-empty-v687{min-height:210px!important}
 @media(max-width:1280px){body#blinqPremium .admin-accounts-split-v22{grid-template-columns:1fr!important}body#blinqPremium .admin-simple-user-editor-wrap{position:static!important}body#blinqPremium .admin-membership-switches{grid-template-columns:1fr!important}}
 @media(max-width:760px){body#blinqPremium .admin-membership-fields{grid-template-columns:1fr!important}body#blinqPremium .admin-membership-fields .span-2{grid-column:auto!important}body#blinqPremium .admin-membership-link-row{grid-template-columns:1fr!important}}
-}
 
 /* BlinQ runtime patch 7.3.6-r23: legacy visual cleanup */
 body#blinqPremium .lean-admin-banners .admin-banner-save-note{margin-top:2px!important}
@@ -6005,3 +6004,244 @@ body#blinqPremium .admin-inactivity-danger>small{font-size:7px!important;line-he
 /* BlinQ runtime patch 7.3.6-r26: self-healing ROOKIE publish invariant */
 
 /* BlinQ runtime patch 7.3.6-r27: Short Odds public controls + unified SEE ALL + Telegram icon */
+
+/* ========================================================================
+   BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract
+   Final cascade layer. Desktop geometry (>900px) is intentionally unchanged.
+   This replaces the accumulated small-screen overrides with one semantic,
+   class-based responsive contract for public routes, results and Telegram.
+   ======================================================================== */
+@media (max-width:1080px){
+  body#blinqPremium:not(.blinq-admin) .table-scroller{overscroll-behavior-inline:contain;-webkit-overflow-scrolling:touch}
+  body#blinqPremium:not(.blinq-admin) .dashboard-content-grid{min-width:0!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-primary-column{min-width:0!important}
+}
+
+@media (max-width:900px){
+  html{overflow-x:hidden;scroll-padding-bottom:calc(82px + env(safe-area-inset-bottom,0px))}
+  body#blinqPremium{overflow-x:hidden!important;background-attachment:scroll!important;-webkit-text-size-adjust:100%}
+  body#blinqPremium:not(.blinq-admin) .app-shell{width:100%!important;max-width:100%!important;margin:0!important;padding:0 0 calc(78px + env(safe-area-inset-bottom,0px))!important;overflow:clip!important}
+  body#blinqPremium:not(.blinq-admin) .site-main{width:100%!important;min-width:0!important;overflow:visible!important}
+  body#blinqPremium:not(.blinq-admin) .app-shell:not([hidden])::after{display:none!important}
+
+  /* Header: mobile has one job — brand + actions. Main route navigation lives
+     in the bottom bar, so it cannot collide with LIVE/INFO/account controls. */
+  body#blinqPremium:not(.blinq-admin) .site-header.reference-topbar{height:58px!important;padding:0!important;box-sizing:border-box!important;min-height:58px!important;position:sticky!important;top:0!important;z-index:120!important;background:rgba(2,16,14,.975)!important;backdrop-filter:blur(10px)!important;-webkit-backdrop-filter:blur(10px)!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{width:100%!important;height:58px!important;min-height:58px!important;display:grid!important;grid-template-columns:76px minmax(0,1fr)!important;align-items:center!important;gap:7px!important;padding:0 8px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand{grid-column:1!important;width:72px!important;min-width:72px!important;height:58px!important;min-height:58px!important;padding:0!important;margin:0!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand:after{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand-source-logo{display:block!important;width:70px!important;max-width:70px!important;height:auto!important;max-height:34px!important;object-fit:contain!important;filter:none!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .reference-wordmark{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .reference-navigation{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-actions{grid-column:2!important;justify-self:end!important;width:auto!important;max-width:100%!important;height:42px!important;min-height:42px!important;display:flex!important;align-items:center!important;justify-content:flex-end!important;gap:4px!important;padding:0!important;margin:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;min-width:0!important}
+  body#blinqPremium:not(.blinq-admin) .header-upgrade{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:4px!important;height:34px!important;min-height:34px!important;min-width:58px!important;max-width:76px!important;padding:0 8px!important;border-radius:8px!important;font-size:8px!important;line-height:1!important;letter-spacing:.02em!important;white-space:nowrap!important}
+  body#blinqPremium:not(.blinq-admin) .header-upgrade svg{width:10px!important;height:10px!important;flex:0 0 10px!important}
+  body#blinqPremium:not(.blinq-admin) .insight-shortcut.insight-live-button,
+  body#blinqPremium:not(.blinq-admin) .insight-info-button{display:inline-flex!important;align-items:center!important;justify-content:center!important;height:34px!important;min-height:34px!important;width:34px!important;min-width:34px!important;max-width:34px!important;padding:0!important;margin:0!important;border-radius:8px!important;overflow:visible!important}
+  body#blinqPremium:not(.blinq-admin) #insightShortcutLabel,
+  body#blinqPremium:not(.blinq-admin) .insight-info-label{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .insight-shortcut-live{font-size:7.5px!important;letter-spacing:.04em!important}
+  body#blinqPremium:not(.blinq-admin) .insight-info-button .insight-bell-icon,
+  body#blinqPremium:not(.blinq-admin) .insight-info-button .insight-bell-icon svg{width:17px!important;height:17px!important;display:block!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{display:grid!important;grid-template-columns:1fr!important;width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;min-height:36px!important;padding:2px!important;margin:0!important;border-radius:9px!important;overflow:visible!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-button{display:grid!important;place-items:center!important;width:32px!important;height:32px!important;min-height:32px!important;padding:0!important;margin:0!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .avatar{width:30px!important;height:30px!important;min-width:30px!important;flex-basis:30px!important;margin:0!important;font-size:8px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-copy,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-toggle{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .profile-menu{position:fixed!important;top:64px!important;right:8px!important;left:auto!important;width:min(250px,calc(100vw - 16px))!important;max-height:calc(var(--bq-viewport-height,100dvh) - 76px)!important;overflow:auto!important;z-index:180!important}
+
+  /* Hero: preserve the artwork and text hierarchy without letting either
+     dominate a 360–430px display. */
+  body#blinqPremium:not(.blinq-admin) #dashboardHero,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-slide{height:202px!important;min-height:202px!important;max-height:202px!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-slide-image,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-media img{object-position:center center!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero:after,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-slide:after{background:linear-gradient(90deg,rgba(2,15,13,.94) 0%,rgba(2,15,13,.77) 45%,rgba(2,15,13,.22) 78%,rgba(2,15,13,.35) 100%)!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-copy{left:16px!important;right:auto!important;top:50%!important;width:min(78%,360px)!important;max-width:360px!important;padding:0!important;transform:translateY(-50%)!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy small,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-copy small{margin-bottom:7px!important;font-size:7.5px!important;letter-spacing:.18em!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy h2,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-copy h2{font-size:clamp(23px,6.2vw,29px)!important;line-height:1.04!important;letter-spacing:-.035em!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy p,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-copy p{max-width:320px!important;margin-top:8px!important;font-size:9px!important;line-height:1.4!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-dots{bottom:6px!important}
+
+  /* Main content / KPI cards */
+  body#blinqPremium:not(.blinq-admin) .dashboard-content-grid{display:block!important;width:100%!important;min-width:0!important;padding:8px 7px 0!important;margin:0!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpis{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:7px!important;margin:0 0 8px!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpi{height:64px!important;min-height:64px!important;gap:8px!important;padding:8px 9px!important;border-radius:9px!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span{width:30px!important;height:30px!important;flex:0 0 30px!important;border-radius:7px!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span svg{width:17px!important;height:17px!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpi small{font-size:6.2px!important;letter-spacing:.11em!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpi strong{font-size:16px!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpi p{font-size:6.2px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+
+  /* Category rail: one horizontal touch target rail. Never squeeze 8 market
+     names into a fixed grid. */
+  body#blinqPremium:not(.blinq-admin) .daily-panel{overflow:visible!important;border-radius:10px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-tabs-row{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;gap:5px!important;width:100%!important;height:auto!important;min-height:46px!important;padding:0 6px!important;border-radius:10px 10px 0 0!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .daily-tabs{display:flex!important;align-items:stretch!important;width:100%!important;height:44px!important;min-width:0!important;gap:14px!important;overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none!important;scroll-snap-type:x proximity!important;-webkit-overflow-scrolling:touch!important}
+  body#blinqPremium:not(.blinq-admin) .daily-tabs::-webkit-scrollbar{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-tab{flex:0 0 auto!important;width:auto!important;min-width:max-content!important;height:44px!important;min-height:44px!important;padding:0 3px!important;border:0!important;border-radius:0!important;background:transparent!important;font-size:9px!important;line-height:1!important;scroll-snap-align:start!important;white-space:nowrap!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-tab:first-child{font-size:9px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-tab b{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-tab.active:after{left:0!important;right:0!important;bottom:0!important}
+  body#blinqPremium:not(.blinq-admin) .daily-toolbar{display:flex!important;align-items:center!important;justify-content:flex-end!important;width:auto!important;height:44px!important;min-width:34px!important;margin:0!important;padding:0!important}
+  body#blinqPremium:not(.blinq-admin) .daily-toolbar-date,
+  body#blinqPremium:not(.blinq-admin) .daily-tournament-filter{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .daily-expand{display:grid!important;place-items:center!important;width:32px!important;height:32px!important;min-width:32px!important;padding:0!important;margin:0!important}
+
+  /* Prediction board: semantic mobile cards. Desktop remains a table. */
+  body#blinqPremium:not(.blinq-admin) .table-scroller{overflow:visible!important;width:100%!important;padding:0!important;border:0!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table tbody{display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;table-layout:auto!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table thead{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table tbody{display:grid!important;gap:7px!important;padding:7px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table tbody tr:not(.hub-row-locked){display:grid!important;grid-template-columns:28px 46px minmax(0,1fr) auto!important;grid-template-areas:"rank time tournament action" "match match match match" "pick pick number confidence" "edge edge edge edge"!important;align-items:center!important;gap:6px 8px!important;width:100%!important;min-width:0!important;padding:9px!important;border:1px solid rgba(75,143,119,.23)!important;border-radius:10px!important;background:linear-gradient(145deg,#071a16,#051511)!important;box-shadow:0 8px 24px rgba(0,0,0,.08)!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table td{display:block!important;width:auto!important;min-width:0!important;max-width:none!important;height:auto!important;min-height:0!important;padding:0!important;border:0!important;overflow:visible!important;text-overflow:clip!important;font-size:9px!important;line-height:1.25!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-rank{grid-area:rank!important;align-self:start!important;padding-top:3px!important;color:#91aaa1!important;font-size:9px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-time{grid-area:time!important;align-self:start!important;padding-top:3px!important;color:#dbe9e4!important;font-size:9px!important;white-space:nowrap!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-tournament-cell{grid-area:tournament!important;min-width:0!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-match-cell{grid-area:match!important;width:auto!important;padding-top:7px!important;border-top:1px solid rgba(82,139,121,.14)!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-pick{grid-area:pick!important;width:auto!important;min-width:0!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-odds{grid-area:number!important;width:auto!important;text-align:center!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-confidence-cell{grid-area:confidence!important;width:auto!important;text-align:right!important;min-width:62px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-edge-cell{grid-area:edge!important;width:auto!important;padding-top:5px!important;border-top:1px solid rgba(82,139,121,.10)!important;text-align:right!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-action-cell{grid-area:action!important;justify-self:end!important;align-self:start!important;width:auto!important;min-width:0!important;max-width:none!important;padding:0!important;overflow:visible!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-action-cell .hub-detail{width:auto!important;min-width:48px!important;max-width:58px!important;height:28px!important;padding:0 7px!important;font-size:7px!important;border-radius:7px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-action-cell .hub-projection-badge{display:inline-flex!important;align-items:center!important;min-height:24px!important;padding:0 6px!important;border:1px solid rgba(85,161,134,.18)!important;border-radius:7px!important;color:#7fa498!important;font-size:6px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-pick:before,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-odds:before,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-confidence-cell:before,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-edge-cell:before{content:attr(data-label)!important;display:block!important;margin:0 0 2px!important;color:#638077!important;font-size:5.5px!important;font-weight:850!important;letter-spacing:.09em!important;line-height:1!important;text-transform:uppercase!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-tournament{display:flex!important;align-items:center!important;gap:6px!important;min-width:0!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-tournament-logo,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-tour-logo,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-tournament-badge{width:28px!important;height:28px!important;min-width:28px!important;flex:0 0 28px!important;border-radius:7px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-tournament-copy{min-width:0!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-tournament-copy b{display:block!important;max-width:100%!important;font-size:9px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-tournament-copy small,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-tournament-location{display:block!important;max-width:100%!important;font-size:6px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-match{display:grid!important;grid-template-columns:minmax(0,1fr) 12px minmax(0,1fr)!important;align-items:center!important;gap:5px!important;min-width:0!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player{display:flex!important;align-items:center!important;gap:5px!important;min-width:0!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-avatar,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player img,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player-avatar{width:28px!important;height:28px!important;min-width:28px!important;flex:0 0 28px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player-copy,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player-meta{min-width:0!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player-copy>b{display:block!important;max-width:100%!important;font-size:8.7px!important;line-height:1.12!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player-meta{font-size:5.6px!important;white-space:nowrap!important;text-overflow:ellipsis!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-pick-stack{display:grid!important;gap:1px!important;min-width:0!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-pick-stack small{font-size:5.6px!important;color:#69857c!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-pick-stack strong{display:block!important;max-width:100%!important;font-size:9px!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-number-stack{display:grid!important;gap:1px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-number-stack strong{font-size:10px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-number-stack small{font-size:5.5px!important;color:#668079!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-confidence{display:grid!important;justify-items:end!important;gap:1px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-confidence strong{font-size:10px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-confidence>i{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-data-depth{display:block!important;max-width:76px!important;font-size:5.2px!important;line-height:1.15!important;color:#688179!important;white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table tbody tr.hub-row-locked{display:block!important;width:100%!important;min-width:0!important;padding:0!important;border:1px dashed rgba(87,140,122,.20)!important;border-radius:10px!important;background:rgba(6,24,20,.54)!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table tbody tr.hub-row-locked td{display:flex!important;align-items:center!important;justify-content:center!important;gap:8px!important;width:100%!important;min-height:68px!important;padding:10px!important;text-align:left!important}
+
+  /* Telegram: prevent the decorative SVG from inheriting any oversized global
+     SVG geometry and keep cards compact. */
+  body#blinqPremium:not(.blinq-admin) .telegram-groups-panel{margin:10px 0 0!important;padding:12px!important;border-radius:11px!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .tg-panel-head{align-items:center!important;gap:10px!important;margin-bottom:10px!important}
+  body#blinqPremium:not(.blinq-admin) .tg-panel-head h2{font-size:15px!important}
+  body#blinqPremium:not(.blinq-admin) .tg-panel-head p{font-size:8px!important}
+  body#blinqPremium:not(.blinq-admin) .tg-panel-mark{width:32px!important;height:32px!important;min-width:32px!important;border-radius:9px!important;font-size:8px!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-grid{display:grid!important;grid-template-columns:1fr!important;gap:7px!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-card{display:grid!important;grid-template-columns:34px minmax(0,1fr) auto!important;align-items:center!important;gap:8px!important;min-height:66px!important;padding:9px!important;border-radius:10px!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-icon{display:grid!important;place-items:center!important;width:34px!important;height:34px!important;min-width:34px!important;border-radius:9px!important;color:#45e8b0!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-icon svg{display:block!important;width:18px!important;height:18px!important;min-width:18px!important;max-width:18px!important;max-height:18px!important;fill:currentColor!important;stroke:none!important;transform:none!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-icon svg path{fill:currentColor!important;stroke:none!important;transform:none!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-copy strong{font-size:10px!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-copy p{font-size:7px!important;line-height:1.35!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-cta{grid-column:auto!important;min-height:30px!important;padding:0 8px!important;font-size:7px!important;justify-content:center!important;max-width:122px!important;overflow:hidden!important;text-overflow:ellipsis!important}
+
+  /* Bottom navigation: safe-area aware, vector icons are explicitly stroke-only
+     so browser/default SVG fill can never create giant black silhouettes. */
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs{position:fixed!important;display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;left:8px!important;right:8px!important;bottom:calc(8px + env(safe-area-inset-bottom,0px))!important;z-index:150!important;height:62px!important;min-height:62px!important;padding:4px!important;border:1px solid rgba(87,151,130,.32)!important;border-radius:15px!important;background:rgba(3,18,20,.94)!important;box-shadow:0 14px 40px rgba(0,0,0,.34)!important;backdrop-filter:blur(12px)!important;-webkit-backdrop-filter:blur(12px)!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs a{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:3px!important;min-width:0!important;height:52px!important;padding:4px!important;border-radius:10px!important;color:#879b95!important;text-decoration:none!important;font-size:8px!important;font-weight:720!important;line-height:1!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs a.active{color:#45eaa3!important;background:rgba(59,232,157,.065)!important}
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs a>svg{display:block!important;width:19px!important;height:19px!important;min-width:19px!important;max-width:19px!important;min-height:19px!important;max-height:19px!important;fill:none!important;stroke:currentColor!important;stroke-width:1.55!important;stroke-linecap:round!important;stroke-linejoin:round!important;transform:none!important;overflow:visible!important}
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs a>svg path{fill:none!important;stroke:currentColor!important;stroke-width:1.55!important;vector-effect:non-scaling-stroke!important;transform:none!important}
+  body#blinqPremium.blinq-mobile-keyboard-open .mobile-tabs{display:none!important}
+
+  /* Results route: cards on phones; no 1120px table trapped in a 390px viewport. */
+  body#blinqPremium.blinq-route:not(.blinq-admin) .route-panel{width:100%!important;max-width:100%!important;min-width:0!important;padding:10px 7px!important;border-radius:0!important;overflow:visible!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table-wrap{overflow:visible!important;border:0!important;border-radius:0!important;background:transparent!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table,
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table tbody{display:block!important;width:100%!important;min-width:0!important;max-width:100%!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table thead{display:none!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table tbody{display:grid!important;gap:8px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table tr{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px 10px!important;width:100%!important;min-width:0!important;padding:10px!important;border:1px solid rgba(77,139,121,.22)!important;border-radius:10px!important;background:linear-gradient(145deg,#071a16,#051410)!important;overflow:hidden!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td{display:block!important;width:auto!important;min-width:0!important;max-width:none!important;padding:0!important;border:0!important;font-size:9px!important;overflow:visible!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td:before{content:attr(data-label)!important;display:block!important;margin-bottom:3px!important;color:#668178!important;font-size:5.5px!important;font-weight:850!important;letter-spacing:.09em!important;text-transform:uppercase!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td:nth-child(3),
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td:nth-child(4),
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td:nth-child(5){grid-column:1/-1!important;width:auto!important;min-width:0!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table .tournament-identity{min-width:0!important;grid-template-columns:28px minmax(0,1fr)!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-sub{grid-template-columns:15px minmax(0,1fr)!important;min-width:0!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-pagination{gap:7px!important;flex-wrap:wrap!important;padding:9px!important}
+
+  /* Dialogs/drawers: dynamic viewport units + no horizontal escape. */
+  body#blinqPremium .auth-dialog,
+  body#blinqPremium .account-dialog,
+  body#blinqPremium .match-dialog,
+  body#blinqPremium .upgrade-dialog{max-width:calc(100vw - 10px)!important;max-height:calc(var(--bq-viewport-height,100dvh) - 10px)!important;margin:auto!important;overflow:auto!important}
+  body#blinqPremium .auth-card{width:min(430px,calc(100vw - 28px))!important;max-width:calc(100vw - 28px)!important;margin-inline:auto!important;padding:20px 16px!important;border-radius:16px!important;box-sizing:border-box!important}
+  body#blinqPremium .insight-drawer{width:min(100vw,430px)!important;max-width:100vw!important;height:var(--bq-viewport-height,100dvh)!important;max-height:var(--bq-viewport-height,100dvh)!important;border-radius:0!important}
+  body#blinqPremium .upgrade-plan-grid{grid-template-columns:1fr!important}
+
+  /* Heavy fixed compositing is expensive and glitchy on mobile Chrome/iOS. */
+  body#blinqPremium.blinq-home{background-attachment:scroll!important}
+  body#blinqPremium .boot-splash.boot-splash-tennis{background-attachment:scroll!important}
+  body#blinqPremium.blinq-home .site-main:before,
+  body#blinqPremium.blinq-home .site-main:after{position:absolute!important}
+}
+
+@media (max-width:480px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{grid-template-columns:70px minmax(0,1fr)!important;padding-inline:6px!important;gap:5px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand{width:66px!important;min-width:66px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand-source-logo{width:64px!important;max-width:64px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-actions{gap:3px!important}
+  body#blinqPremium:not(.blinq-admin) .header-upgrade{min-width:54px!important;max-width:62px!important;padding:0 6px!important;font-size:7.4px!important}
+  body#blinqPremium:not(.blinq-admin) .header-upgrade svg{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .insight-shortcut.insight-live-button,
+  body#blinqPremium:not(.blinq-admin) .insight-info-button{width:32px!important;min-width:32px!important;height:32px!important;min-height:32px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{width:34px!important;min-width:34px!important;max-width:34px!important;height:34px!important;min-height:34px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-button{width:30px!important;height:30px!important;min-height:30px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .avatar{width:28px!important;height:28px!important;min-width:28px!important;flex-basis:28px!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-slide{height:190px!important;min-height:190px!important;max-height:190px!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-copy{left:14px!important;width:82%!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy h2,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-copy h2{font-size:clamp(22px,7vw,27px)!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpi{height:61px!important;min-height:61px!important;padding:7px!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span{width:28px!important;height:28px!important;flex-basis:28px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table tbody tr:not(.hub-row-locked){grid-template-columns:24px 42px minmax(0,1fr) auto!important;gap:6px!important;padding:8px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-avatar,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player img,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player-avatar{width:26px!important;height:26px!important;min-width:26px!important;flex-basis:26px!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-card{grid-template-columns:32px minmax(0,1fr)!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-cta{grid-column:1/-1!important;width:100%!important;max-width:none!important}
+}
+
+@media (max-width:360px){
+  body#blinqPremium:not(.blinq-admin) .header-upgrade{display:none!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy p,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-copy p{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpi small{font-size:5.8px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table tbody tr:not(.hub-row-locked){grid-template-columns:22px 40px minmax(0,1fr) auto!important}
+}
+
+@media (hover:none) and (pointer:coarse){
+  body#blinqPremium button,body#blinqPremium a{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+}

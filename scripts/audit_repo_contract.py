@@ -331,6 +331,27 @@ if root_legacy:
     fail(f'historical release docs still clutter repository root: {root_legacy}')
 ok('production tree cleanliness checks complete')
 
+# 10. Release-specific runtime contracts that must be checked before PASS.
+_admin_storage = (ROOT / "api" / "tbt" / "services" / "admin_storage.py").read_text(encoding="utf-8")
+if "_normalize_membership_invariants(payload)" not in _admin_storage:
+    fail("r26 membership publish self-heal is missing")
+
+_app = app
+_ui = ui
+if _ui.get("ui_patch") != "736-r28" or not (((_ui.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}).get("prime", {}).get("enabled"):
+    fail("r28 Short Odds public configuration is missing")
+if "Kopírovať nastavenie z iného levelu" in _app or "data-admin-action=\"copy-plan\"" in _app or "adminCopyFrom" in _app:
+    fail("retired copy-from-level admin tool is still present")
+if "admin-see-all-rule-note" in _app or "const rows=['daily','prime','value','ace','doubles','games','sets','see_all'].map" not in _app:
+    fail("unified SEE ALL controls are missing")
+if "BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract" not in css:
+    fail("r28 final responsive stability layer is missing")
+if "blinq-mobile-keyboard-open" not in responsive or "--bq-viewport-height" not in responsive:
+    fail("r28 dynamic mobile viewport/keyboard handling is missing")
+if "const mobileLabels=dailyHubColumns(tab);" not in _app:
+    fail("r28 semantic mobile table labels are missing")
+ok('r26-r28 publish, Short Odds, SEE ALL and mobile responsive contracts present')
+
 if errors:
     print('BlinQ repository contract audit: FAIL', file=sys.stderr)
     for item in errors:
@@ -340,18 +361,3 @@ if errors:
 print('BlinQ repository contract audit: PASS')
 for item in checks:
     print(f'  ✓ {item}')
-
-# r26 membership publish self-heal contract
-_admin_storage = (ROOT / "api" / "tbt" / "services" / "admin_storage.py").read_text(encoding="utf-8")
-if "_normalize_membership_invariants(payload)" not in _admin_storage:
-    fail("r26 membership publish self-heal is missing")
-
-# r27 Short Odds / unified SEE ALL / admin cleanup contract
-_app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-_ui = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
-if _ui.get("ui_patch") != "736-r27" or not (((_ui.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}).get("prime", {}).get("enabled"):
-    fail("r27 Short Odds public configuration is missing")
-if "Kopírovať nastavenie z iného levelu" in _app or "data-admin-action=\"copy-plan\"" in _app or "adminCopyFrom" in _app:
-    fail("r27 retired copy-from-level admin tool is still present")
-if "admin-see-all-rule-note" in _app or "const rows=['daily','prime','value','ace','doubles','games','sets','see_all'].map" not in _app:
-    fail("r27 unified SEE ALL controls are missing")
