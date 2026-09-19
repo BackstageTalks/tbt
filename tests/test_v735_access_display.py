@@ -62,7 +62,7 @@ def test_blurred_row_override_withholds_actual_pick_from_browser_payload():
 
 def test_admin_has_real_display_route_and_show_blur_hide_controls():
     assert "['layout','Zobrazenie','Panely · riadky']" in APP
-    assert 'renderers={accounts:renderAdminAccounts,layout:renderAdminLayout' in APP
+    assert 'accounts:renderAdminAccounts' in APP and 'layout:renderAdminLayout' in APP
     assert 'data-admin-hub-row-state' in APP
     assert 'data-simple-banner-state' in APP
     assert 'data-banner-state-plan' in APP

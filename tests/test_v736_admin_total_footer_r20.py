@@ -1,6 +1,10 @@
 from pathlib import Path
+import json
 
 ROOT = Path(__file__).resolve().parents[1]
+RELEASE = json.loads((ROOT/'web'/'release.json').read_text(encoding='utf-8'))
+PATCH = str(RELEASE['patch'])
+PATCH_NUM = PATCH.rsplit('r',1)[-1]
 
 def test_admin_backend_never_inherits_rookie_runtime_rules():
     text=(ROOT/'api/tbt/services/entitlements.py').read_text(encoding='utf-8')
@@ -21,10 +25,10 @@ def test_footer_watermark_explicitly_overrides_legacy_hidden_rule():
     html=(ROOT/'web/index.html').read_text(encoding='utf-8')
     css=(ROOT/'web/blinq-app.css').read_text(encoding='utf-8')
     assert 'class="footer-watermark-logo"' in html
-    assert 'runtime patch 7.3.6-r21' in css
+    assert f"runtime patch 7.3.6-r{PATCH_NUM}" in css
     assert 'visibility:visible!important' in css
 
 def test_current_patch_identity():
     html=(ROOT/'web/index.html').read_text(encoding='utf-8')
-    assert 'content="736-r21"' in html
-    assert 'p=21' in html
+    assert f'content="{PATCH}"' in html
+    assert f'p={PATCH_NUM}' in html

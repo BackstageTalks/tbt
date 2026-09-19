@@ -1,6 +1,9 @@
 from pathlib import Path
 import json
 ROOT=Path(__file__).resolve().parents[1]
+RELEASE = json.loads((ROOT/'web'/'release.json').read_text(encoding='utf-8'))
+PATCH = str(RELEASE['patch'])
+PATCH_NUM = PATCH.rsplit('r',1)[-1]
 APP=(ROOT/'web'/'app.js').read_text(encoding='utf-8')
 CSS=(ROOT/'web'/'blinq-app.css').read_text(encoding='utf-8')
 INDEX=(ROOT/'web'/'index.html').read_text(encoding='utf-8')
@@ -33,4 +36,4 @@ def test_live_worker_setup_is_explained_in_system():
 
 def test_header_membership_cta_is_subtle():
     assert "label.textContent=lcopy('Membership','Členstvo','Členství')" in APP
-    assert 'runtime patch 7.3.6-r21' in CSS
+    assert f"runtime patch 7.3.6-r{PATCH_NUM}" in CSS
