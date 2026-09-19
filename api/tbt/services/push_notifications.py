@@ -1,4 +1,4 @@
-"""Browser Web Push subscriptions and ELITE+ INFO/LIVE delivery."""
+"""Browser Web Push subscriptions with per-message membership audiences."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -12,7 +12,7 @@ from urllib.parse import urlparse
 from .admin_storage import AdminStorageUnavailable, _table
 
 PUSH_TABLE = "BlinQPushSubscriptions"
-_ELITE_PLUS = {"elite", "legend", "goat"}
+_MEMBERSHIP_LEVELS = {"rookie", "pro", "elite", "legend", "goat"}
 
 
 def webpush_config() -> dict:
@@ -66,10 +66,10 @@ def save_subscription(*, user_id: str, subscription: object, plan: str, status: 
         raise ValueError("Invalid push user")
     plan = str(plan or "").strip().lower()
     status = str(status or "").strip().lower()
-    if plan not in _ELITE_PLUS:
-        raise ValueError("Browser push is available from ELITE level")
+    if plan not in _MEMBERSHIP_LEVELS:
+        raise ValueError("Browser push requires an active BlinQ membership")
     if status not in {"active", "lifetime"}:
-        raise ValueError("Active ELITE+ access is required for browser push")
+        raise ValueError("Active BlinQ membership is required for browser push")
     now = datetime.now(timezone.utc).isoformat()
     row = {
         "PartitionKey": "push",
@@ -122,8 +122,12 @@ def sync_push_access(*, user_id: str, plan: str, status: str, expires_at: object
             if str(row.get("user_id") or "") != user_id:
                 continue
             row = dict(row)
-            row["plan"] = str(plan or "").strip().lower()
-            row["status"] = str(status or "").strip().lower()
+            next_plan = str(plan or "").strip().lower()
+            next_status = str(status or "").strip().lower()
+            if next_status == "trial":
+                next_plan, next_status = "rookie", "active"
+            row["plan"] = next_plan
+            row["status"] = next_status
             row["expires_at"] = str(expires_at or "")[:64]
             row["updated_at"] = datetime.now(timezone.utc).isoformat()
             client.upsert_entity(row, mode="replace")
@@ -134,7 +138,7 @@ def sync_push_access(*, user_id: str, plan: str, status: str, expires_at: object
 def _row_entitled(row: dict, levels: set[str]) -> bool:
     plan = str(row.get("plan") or "").lower()
     status = str(row.get("status") or "").lower()
-    if plan not in levels or plan not in _ELITE_PLUS or status not in {"active", "lifetime"}:
+    if plan not in levels or plan not in _MEMBERSHIP_LEVELS or status not in {"active", "lifetime"}:
         return False
     expires_at = str(row.get("expires_at") or "").strip()
     if status == "lifetime" or not expires_at:
@@ -186,7 +190,7 @@ def dispatch_insight_push(insight: dict) -> dict:
     config = webpush_config()
     if not config["enabled"] or not isinstance(insight, dict) or not _insight_active_now(insight):
         return {"enabled": bool(config["enabled"]), "sent": 0, "failed": 0, "removed": 0}
-    levels = {str(v).lower() for v in (insight.get("levels") or []) if str(v).lower() in _ELITE_PLUS}
+    levels = {str(v).lower() for v in (insight.get("levels") or []) if str(v).lower() in _MEMBERSHIP_LEVELS}
     if not levels:
         return {"enabled": True, "sent": 0, "failed": 0, "removed": 0}
     try:

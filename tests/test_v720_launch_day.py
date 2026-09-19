@@ -9,19 +9,26 @@ def test_live_watch_is_valid_private_insight_type():
     assert "live_watch" in admin_storage._INSIGHT_TYPES
 
 
-def test_info_can_target_lower_tiers_but_live_remains_elite_plus():
-    from tbt.services.admin_storage import normalize_insight
-    row = normalize_insight({"title": "x", "body": "y", "type": "vip", "levels": ["rookie", "pro"]})
+def test_info_can_target_lower_tiers_and_live_respects_runtime_minimum(monkeypatch):
+    from tbt.services import admin_storage
+    row = admin_storage.normalize_insight({"title": "x", "body": "y", "type": "vip", "levels": ["rookie", "pro"]})
     assert row["levels"] == ["rookie", "pro"]
+    monkeypatch.setattr(admin_storage, "live_min_level", lambda config=None: "legend")
+    monkeypatch.setattr(admin_storage, "live_alert_levels", lambda config=None: ["legend", "goat"])
     with pytest.raises(ValueError):
-        normalize_insight({"title": "x", "body": "y", "type": "alert", "levels": ["rookie"]})
+        admin_storage.normalize_insight({"title": "x", "body": "y", "type": "alert", "levels": ["elite"]})
+    live = admin_storage.normalize_insight({"title": "x", "body": "y", "type": "alert", "levels": ["legend", "goat"]})
+    assert live["levels"] == ["legend", "goat"]
 
 
-def test_ui_info_is_general_channel_while_live_remains_elite_plus():
+def test_ui_info_is_general_channel_while_live_uses_dynamic_minimum():
     app = (ROOT / "web/app.js").read_text(encoding="utf-8")
     assert "const infoEligible=eligible" in app
-    assert "const liveEligible=['elite','legend','goat','admin'].includes(plan)" in app
-    assert "insight-audience-all" in app and "insight-audience-rookie" in app
+    assert "membershipAtLeast(plan,liveMin)" in app
+    assert "adminLiveMinLevel" in app
+    assert "insight-audience-preset" in app
+    for label in ("VŠETCI", "PRO+", "ELITE+", "LEGEND+", "GOAT", "LIVE PRAVIDLO"):
+        assert label in app
 
 
 def test_mega_data_does_not_auto_repair_history():

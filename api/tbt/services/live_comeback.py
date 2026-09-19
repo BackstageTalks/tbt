@@ -14,12 +14,11 @@ import os
 import re
 from typing import Any
 
-from .admin_storage import save_automated_insight
+from .admin_storage import save_automated_insight, live_alert_levels
 from .market_selection import _walk_market_rows, _outcome_text, _price, _match_side
 
 DEFAULT_MIN_PROBABILITY = .78
 DEFAULT_MAX_ODDS = 1.35
-LIVE_ALERT_LEVELS = ["elite", "legend", "goat"]
 
 
 def _num(v):
@@ -398,7 +397,7 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
         body += f". LIVE kurz {odds2:.2f}, edge {edge2*100:+.1f} p.b., EV {ev2*100:+.1f}%. Data depth: {quality} · {samples} vzoriek."
         item, created = save_automated_insight({
             "title": f"2. set LIVE · {fav}", "body": body, "type": "set2",
-            "priority": "important", "levels": LIVE_ALERT_LEVELS, "match_id": eid,
+            "priority": "important", "levels": live_alert_levels(), "match_id": eid,
             "link_label": "Otvoriť LIVE Radar", "active": True, "pinned": False,
         }, actor_id=actor_id, insight_id=f"live-set2-{eid}"[:96])
         published.append({"id": item.get("id"), "event_id": eid, "stage": "set2", "created": created})
@@ -434,7 +433,7 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
         body += " Toto ešte nie je potvrdený comeback signál."
         item, created = save_automated_insight({
             "title": f"Potential Comeback · {fav}", "body": body, "type": "live_watch",
-            "priority": "normal", "levels": LIVE_ALERT_LEVELS, "match_id": eid,
+            "priority": "normal", "levels": live_alert_levels(), "match_id": eid,
             "link_label": "Sledovať zápas", "active": True, "pinned": False,
         }, actor_id=actor_id, insight_id=f"live-watch-{eid}"[:96])
         published.append({"id": item.get("id"), "event_id": eid, "stage": "watch", "created": created})
@@ -454,7 +453,7 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
         body += f" Predzápasová pravdepodobnosť {p*100:.1f}%" + (f", pôvodný kurz {odds:.2f}." if odds is not None else ".")
         item, created = save_automated_insight({
             "title": f"Comeback LIVE · {fav}", "body": body, "type": "alert",
-            "priority": "important", "levels": LIVE_ALERT_LEVELS, "match_id": eid,
+            "priority": "important", "levels": live_alert_levels(), "match_id": eid,
             "link_label": "Otvoriť zápas", "active": True, "pinned": False,
         }, actor_id=actor_id, insight_id=f"live-comeback-{eid}"[:96])
         published.append({"id": item.get("id"), "event_id": eid, "stage": "confirmed", "created": created})

@@ -43,13 +43,14 @@ def test_worker_heartbeat_is_persistent_and_visible_in_admin_system():
 
 
 def test_admin_can_receive_same_live_push_as_goat_operational_access():
-    # Admin subscriptions are intentionally normalized to a valid ELITE+ level,
-    # while insight listing with plan="" lets admin see every active audience.
+    # Admin subscriptions are normalized to GOAT operational access, while
+    # normal members may subscribe at any active tier and message levels decide delivery.
     push_block = API.split('def push_subscription(req):', 1)[1].split('@app.route(route="v1/insights"', 1)[0]
     assert 'plan = plan if plan in {"elite", "legend", "goat"} else "goat"' in push_block
     assert 'push_status = push_status if push_status in {"active", "lifetime"} else "lifetime"' in push_block
     assert 'plan and plan not in item["levels"]' in ADMIN_STORAGE
-    assert '_ELITE_PLUS' in PUSH
+    assert '_MEMBERSHIP_LEVELS' in PUSH
+    assert 'plan not in levels' in PUSH
 
 
 def test_worker_skips_provider_when_no_prime_candidate_can_qualify():

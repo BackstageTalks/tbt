@@ -402,7 +402,7 @@ def validate_ui_config(payload: object) -> dict:
     daily_hub = dashboard.get("daily_hub") or {}
     if not isinstance(daily_hub, dict) or not isinstance(daily_hub.get("enabled"), bool):
         raise ValueError("Invalid Daily Picks hub configuration")
-    if daily_hub.get("default_tab") not in {"daily", "prime", "top", "value", "ace", "games", "sets", "doubles", "board"}:
+    if daily_hub.get("default_tab") not in {"daily", "prime", "top", "value", "ace", "games", "sets", "doubles", "board", "see_all"}:
         raise ValueError("Invalid Daily Picks default tab")
     for field in ("preview_rows", "expand_rows"):
         value = daily_hub.get(field)
@@ -410,7 +410,7 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError(f"Invalid Daily Picks setting: {field}")
     hub_tabs = daily_hub.get("tabs") or {}
     required_hub_tabs = {"daily", "value", "ace", "games", "sets"}
-    allowed_hub_tabs = required_hub_tabs | {"prime", "top", "doubles", "board"}
+    allowed_hub_tabs = required_hub_tabs | {"prime", "top", "doubles", "board", "see_all"}
     if not isinstance(hub_tabs, dict) or not required_hub_tabs.issubset(hub_tabs) or not set(hub_tabs).issubset(allowed_hub_tabs):
         raise ValueError("Daily Picks hub must contain the core tabs and only supported consolidated tabs")
     for tab_id, tab in hub_tabs.items():
@@ -440,6 +440,15 @@ def validate_ui_config(payload: object) -> dict:
                     raise ValueError(f"Invalid Daily Picks row override position {tab_id}/{plan_id}")
                 if not 1 <= index <= 10 or str(state) not in {"active", "blurred", "hidden"}:
                     raise ValueError(f"Invalid Daily Picks row override {tab_id}/{plan_id}/{position}")
+
+    notifications = payload.get("notifications") or {}
+    if notifications:
+        live_min = str(notifications.get("live_min_level") or notifications.get("default_min_level") or "elite").lower()
+        if live_min not in _INSIGHT_LEVELS:
+            raise ValueError("Invalid LIVE minimum membership level")
+        info_defaults = notifications.get("info_default_levels", list(_INSIGHT_LEVELS))
+        if not isinstance(info_defaults, list) or not info_defaults or any(str(level).lower() not in _INSIGHT_LEVELS for level in info_defaults):
+            raise ValueError("Invalid INFO default audience")
 
     valid_dashboard_sections = {"prime", "top_daily", "value", "doubles", "ace", "sg", "results"}
     if not isinstance(sections, dict) or not valid_dashboard_sections.issubset(sections):
@@ -738,7 +747,26 @@ def banner_analytics_summary(*, days: int = 30) -> dict:
 # --- BlinQ Insights / private member feed ---------------------------------
 _INSIGHT_LEVELS = ("rookie", "pro", "elite", "legend", "goat")
 _INSIGHT_TYPES = {"info", "insight", "alert", "live_watch", "set2", "vip"}
-_ELITE_PLUS_LEVELS = ("elite", "legend", "goat")
+
+def membership_levels_from(min_level: str = "rookie") -> list[str]:
+    level = str(min_level or "rookie").strip().lower()
+    if level not in _INSIGHT_LEVELS:
+        level = "rookie"
+    return list(_INSIGHT_LEVELS[_INSIGHT_LEVELS.index(level):])
+
+def live_min_level(config: dict | None = None) -> str:
+    runtime = config if isinstance(config, dict) else None
+    if runtime is None:
+        try:
+            runtime = load_runtime_ui_config() or {}
+        except AdminStorageUnavailable:
+            runtime = {}
+    notifications = (runtime.get("notifications") or {}) if isinstance(runtime, dict) else {}
+    level = str(notifications.get("live_min_level") or notifications.get("default_min_level") or "elite").strip().lower()
+    return level if level in _INSIGHT_LEVELS else "elite"
+
+def live_alert_levels(config: dict | None = None) -> list[str]:
+    return membership_levels_from(live_min_level(config))
 _INSIGHT_PRIORITIES = {"normal", "important", "critical"}
 
 
@@ -771,7 +799,8 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
         raise ValueError("Invalid insight type")
     if priority not in _INSIGHT_PRIORITIES:
         raise ValueError("Invalid insight priority")
-    raw_levels = payload.get("levels", base.get("levels", ["elite", "legend", "goat"]))
+    default_levels = live_alert_levels() if insight_type in {"alert", "live_watch", "set2"} else list(_INSIGHT_LEVELS)
+    raw_levels = payload.get("levels", base.get("levels", default_levels))
     if not isinstance(raw_levels, list):
         raise ValueError("Insight levels must be a list")
     levels = []
@@ -783,12 +812,15 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
             levels.append(level)
     if not levels:
         raise ValueError("Select at least one insight level")
-    # Manual INFO can be used as a general information channel for any account
-    # level. Automated/manual LIVE signals remain strictly ELITE+.
+    # INFO can target any active membership level. LIVE is governed by the
+    # published Admin → Info & LIVE minimum; a manual LIVE item may narrow the
+    # audience, but it may never widen access below that global minimum.
     if insight_type in {"alert", "live_watch", "set2"}:
-        invalid_levels = [level for level in levels if level not in _ELITE_PLUS_LEVELS]
+        allowed_live = set(live_alert_levels())
+        invalid_levels = [level for level in levels if level not in allowed_live]
         if invalid_levels:
-            raise ValueError("LIVE alerts are available from ELITE level")
+            required = live_min_level().upper()
+            raise ValueError(f"LIVE alerts are available from {required} level")
     link = str(payload.get("link", base.get("link", "")) or "").strip()
     if link and not _valid_destination(link, allow_internal=True):
         raise ValueError("Insight link must use HTTPS or a same-origin path")
@@ -948,6 +980,8 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
         item = _insight_from_entity(entity)
         if not include_inactive:
             if not item["active"] or (plan and plan not in item["levels"]):
+                continue
+            if plan and str(item.get("type") or "").lower() in {"alert", "live_watch", "set2"} and plan not in set(live_alert_levels()):
                 continue
             try:
                 starts = datetime.fromisoformat(item["active_from"]) if item["active_from"] else None

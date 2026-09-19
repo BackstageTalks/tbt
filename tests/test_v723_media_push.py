@@ -60,7 +60,7 @@ def test_webpush_config_requires_complete_vapid(monkeypatch):
     assert cfg["public_key"] == "public"
 
 
-def test_push_subscription_is_elite_plus_and_persisted(monkeypatch):
+def test_push_subscription_accepts_any_active_membership_and_persists(monkeypatch):
     from tbt.services import push_notifications as push
 
     rows = {}
@@ -74,13 +74,13 @@ def test_push_subscription_is_elite_plus_and_persisted(monkeypatch):
         "endpoint": "https://push.example.test/subscription/abc",
         "keys": {"p256dh": "p" * 64, "auth": "a" * 22},
     }
-    with pytest.raises(ValueError, match="ELITE"):
-        push.save_subscription(user_id="u1", subscription=subscription, plan="pro", status="active")
-    result = push.save_subscription(user_id="u1", subscription=subscription, plan="elite", status="active")
+    result = push.save_subscription(user_id="u1", subscription=subscription, plan="pro", status="active")
     assert result["subscribed"] is True
     row = next(iter(rows.values()))
-    assert row["plan"] == "elite"
+    assert row["plan"] == "pro"
     assert json.loads(row["keys_json"])["auth"] == "a" * 22
+    with pytest.raises(ValueError, match="active BlinQ membership"):
+        push.save_subscription(user_id="u2", subscription=subscription, plan="expired", status="active")
 
 
 def test_expired_push_subscription_is_not_entitled():

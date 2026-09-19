@@ -21,10 +21,10 @@ def test_footer_watermark_explicitly_overrides_legacy_hidden_rule():
     html=(ROOT/'web/index.html').read_text(encoding='utf-8')
     css=(ROOT/'web/blinq-app.css').read_text(encoding='utf-8')
     assert 'class="footer-watermark-logo"' in html
-    assert 'runtime patch 7.3.6-r20' in css
+    assert 'runtime patch 7.3.6-r21' in css
     assert 'visibility:visible!important' in css
 
-def test_r20_identity():
+def test_current_patch_identity():
     html=(ROOT/'web/index.html').read_text(encoding='utf-8')
-    assert 'content="736-r20"' in html
-    assert 'p=20' in html
+    assert 'content="736-r21"' in html
+    assert 'p=21' in html

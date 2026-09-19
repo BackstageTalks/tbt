@@ -3196,6 +3196,75 @@
               "row_overrides": {}
             }
           }
+        },
+        "see_all": {
+          "label": "SEE ALL",
+          "enabled": true,
+          "plans": {
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "blurred",
+              "row_overrides": {}
+            },
+            "trial": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "blurred",
+              "row_overrides": {}
+            },
+            "rookie": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "blurred",
+              "row_overrides": {}
+            },
+            "pro": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "blurred",
+              "row_overrides": {}
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            }
+          }
         }
       }
     }
@@ -3266,7 +3335,15 @@
     ],
     "show_bell": true,
     "allow_user_replies": false,
-    "read_tracking": true
+    "read_tracking": true,
+    "live_min_level": "elite",
+    "info_default_levels": [
+      "rookie",
+      "pro",
+      "elite",
+      "legend",
+      "goat"
+    ]
   },
   "asset_revision": 7360,
   "ui_copy": {
@@ -3354,5 +3431,5 @@
       }
     }
   },
-  "ui_patch": "736-r20"
+  "ui_patch": "736-r21"
 }

@@ -262,12 +262,12 @@
 
   async function loadUiConfig() {
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=20');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=21');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=20');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=21');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -1092,21 +1092,35 @@
   }
   function notificationAudienceConfig(){
     const cfg=state.ui?.notifications||{};
-    return {enabled:cfg.enabled!==false,one_way:cfg.one_way!==false,default_levels:Array.isArray(cfg.default_levels)?cfg.default_levels:['elite','legend','goat'],editable_levels:Array.isArray(cfg.editable_levels)?cfg.editable_levels:['rookie','pro','elite','legend','goat']};
+    const rawLive=String(cfg.live_min_level||cfg.default_min_level||'elite').toLowerCase();
+    const liveMin=membershipHierarchy.includes(rawLive)?rawLive:'elite';
+    const editable=Array.isArray(cfg.editable_levels)?cfg.editable_levels.filter(level=>membershipHierarchy.includes(String(level))):[...membershipHierarchy];
+    const infoDefault=Array.isArray(cfg.info_default_levels)?cfg.info_default_levels.filter(level=>membershipHierarchy.includes(String(level))):[...membershipHierarchy];
+    return {enabled:cfg.enabled!==false,one_way:cfg.one_way!==false,live_min_level:liveMin,default_min_level:liveMin,default_levels:Array.isArray(cfg.default_levels)?cfg.default_levels:membershipLevelsFrom(liveMin),info_default_levels:infoDefault.length?infoDefault:[...membershipHierarchy],editable_levels:editable.length?editable:[...membershipHierarchy]};
+  }
+  function membershipLevelsFrom(minPlan='rookie'){
+    const normalized=membershipHierarchy.includes(String(minPlan||'').toLowerCase())?String(minPlan).toLowerCase():'rookie';
+    const index=Math.max(0,membershipHierarchy.indexOf(normalized));return membershipHierarchy.slice(index);
+  }
+  function membershipAtLeast(plan,minPlan='rookie'){
+    if(String(plan||'').toLowerCase()==='admin')return true;
+    const current=membershipHierarchy.indexOf(String(plan||'').toLowerCase()),required=membershipHierarchy.indexOf(String(minPlan||'').toLowerCase());
+    return current>=0&&required>=0&&current>=required;
   }
   function insightTypeLabel(type){return ({info:'Info',insight:'Premium Info',alert:'LIVE · COMEBACK',live_watch:'LIVE · WATCH',set2:'LIVE · 2. SET',vip:'Premium Info'})[String(type||'').toLowerCase()]||'Insight';}
   function insightAudienceText(levels){
-    const list=Array.isArray(levels)?levels:[];
-    if(['elite','legend','goat'].every(v=>list.includes(v))&&list.length===3)return 'ELITE+';
+    const list=[...new Set((Array.isArray(levels)?levels:[]).map(v=>String(v).toLowerCase()).filter(v=>membershipHierarchy.includes(v)))].sort((a,b)=>membershipHierarchy.indexOf(a)-membershipHierarchy.indexOf(b));
+    for(const level of membershipHierarchy){const suffix=membershipLevelsFrom(level);if(list.length===suffix.length&&suffix.every((v,i)=>list[i]===v)){const label=String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,'').toUpperCase();return level==='goat'?label:`${label}+`;}}
     return list.map(v=>String(state.ui?.plans?.[v]?.label||v).replace(/^BlinQ\s+/i,'').toUpperCase()).join(' · ')||'—';
   }
   function isLiveInsight(item){return ['alert','live_watch','set2'].includes(String(item?.type||'').toLowerCase());}
   function renderInsightBell(){
     const bell=$('insightBell'),badge=$('insightUnread'),shortcut=$('insightShortcut'),shortcutLabel=$('insightShortcutLabel'),shortcutCount=$('insightShortcutCount');if(!bell||!badge)return;
-    const plan=accountPlan();
-    const eligible=notificationAudienceConfig().enabled&&['rookie','pro','elite','legend','goat','admin'].includes(plan);
+    const plan=accountPlan(),notificationCfg=notificationAudienceConfig(),liveMin=notificationCfg.live_min_level;
+    const eligible=notificationCfg.enabled&&['rookie','pro','elite','legend','goat','admin'].includes(plan);
     const infoEligible=eligible;
-    const liveEligible=['elite','legend','goat','admin'].includes(plan);
+    const liveEligible=eligible&&membershipAtLeast(plan,liveMin);
+    const liveAccessLabel=String(upgradePlanLabel(liveMin)||liveMin).replace(/^BlinQ\s+/i,'').toUpperCase();
     bell.hidden=!eligible;
     bell.classList.remove('is-access-locked');
     delete bell.dataset.upgradePlan;delete bell.dataset.upgradeSection;bell.setAttribute('aria-label','BlinQ Info');
@@ -1117,12 +1131,12 @@
       shortcut.classList.toggle('is-live-watching',watching&&!confirmed);
       shortcut.classList.toggle('is-live-confirmed',confirmed);
       shortcut.classList.toggle('is-access-locked',eligible&&!liveEligible);
-      if(eligible&&!liveEligible){shortcut.dataset.upgradePlan='elite';shortcut.dataset.upgradeSection='Comeback LIVE';shortcut.setAttribute('aria-label','Comeback LIVE · dostupné od ELITE');}
+      if(eligible&&!liveEligible){shortcut.dataset.upgradePlan=liveMin;shortcut.dataset.upgradeSection='Comeback LIVE';shortcut.setAttribute('aria-label',`Comeback LIVE · dostupné od ${liveAccessLabel}`);}
       else{delete shortcut.dataset.upgradePlan;delete shortcut.dataset.upgradeSection;shortcut.setAttribute('aria-label','Comeback LIVE Radar');}
       shortcut.setAttribute('aria-expanded',state.insightDrawerOpen&&state.insightChannel==='live'?'true':'false');
     }
     if(shortcutCount){const n=confirmed?Number(radar.signals)||0:watching?Number(radar.candidates)||0:0;shortcutCount.textContent=String(n);shortcutCount.hidden=!n||!liveEligible;}
-    if(shortcutLabel)shortcutLabel.textContent=liveEligible?(confirmed?'CONFIRMED':watching?'WATCH':'RADAR'):'ELITE';
+    if(shortcutLabel)shortcutLabel.textContent=liveEligible?(confirmed?'CONFIRMED':watching?'WATCH':'RADAR'):liveAccessLabel;
     const infoUnread=state.insights.filter(item=>!item.read&&!isLiveInsight(item)).length;
     badge.textContent=infoUnread>99?'99+':String(infoUnread);badge.hidden=!infoUnread;
     bell.classList.toggle('has-unread',infoUnread>0);bell.setAttribute('aria-expanded',state.insightDrawerOpen&&state.insightChannel==='info'?'true':'false');
@@ -1150,7 +1164,7 @@
       toolbar.innerHTML=`<div class="insight-filter-tabs">${tabs.map(([id,label])=>`<button type="button" data-insight-filter="${id}" class="${filter===id?'is-active':''}">${escapeHtml(label)}${id==='unread'&&channelUnread?` <b>${channelUnread}</b>`:''}</button>`).join('')}</div>${channelUnread?`<button class="insight-read-all" type="button" data-insight-read-all>${escapeHtml(lcopy('Mark all read','Prečítať všetko','Přečíst vše'))}</button>`:''}`;
     }
     const plan=accountPlan();
-    const liveEligible=['elite','legend','goat','admin'].includes(plan);
+    const liveEligible=membershipAtLeast(plan,notificationAudienceConfig().live_min_level);
     const radar=state.userLiveRadarStatus||{};
     const candidateNames=Array.isArray(radar.candidate_items)?radar.candidate_items.map(x=>x?.favorite).filter(Boolean).slice(0,2):[];
     const radarMode=Number(radar.signals)>0?'is-confirmed':Number(radar.candidates)>0?'is-watching':'';
@@ -1189,10 +1203,10 @@
     finally{state.insightsLoading=false;renderInsightBell();renderInsightDrawer();}
   }
   async function refreshPrivateUpdates(force=false){
-    if(state.privateUpdatesBusy||document.hidden||$('appShell')?.hidden)return;const plan=accountPlan();if(!['rookie','pro','elite','legend','goat','admin'].includes(plan))return;const now=Date.now();if(!force&&now-Number(state.privateUpdatesLastPoll||0)<25000)return;state.privateUpdatesBusy=true;state.privateUpdatesLastPoll=now;try{await loadInsights(true);if(['elite','legend','goat','admin'].includes(plan))await loadUserLiveRadarStatus(false);}finally{state.privateUpdatesBusy=false;}
+    if(state.privateUpdatesBusy||document.hidden||$('appShell')?.hidden)return;const plan=accountPlan();if(!['rookie','pro','elite','legend','goat','admin'].includes(plan))return;const now=Date.now();if(!force&&now-Number(state.privateUpdatesLastPoll||0)<25000)return;state.privateUpdatesBusy=true;state.privateUpdatesLastPoll=now;try{await loadInsights(true);if(membershipAtLeast(plan,notificationAudienceConfig().live_min_level))await loadUserLiveRadarStatus(false);}finally{state.privateUpdatesBusy=false;}
   }
   async function loadUserLiveRadarStatus(force=false){
-    const plan=accountPlan();if(!['elite','legend','goat','admin'].includes(plan)||state.userLiveRadarLoading)return;
+    const plan=accountPlan();if(!membershipAtLeast(plan,notificationAudienceConfig().live_min_level)||state.userLiveRadarLoading)return;
     const scanned=Date.parse(state.userLiveRadarStatus?.scanned_at||'');
     if(!force&&Number.isFinite(scanned)&&Date.now()-scanned<55000)return;
     state.userLiveRadarLoading=true;renderInsightDrawer();
@@ -1268,6 +1282,26 @@
     const returned=slot_states.filter(v=>v==='active').length;
     return {visible_picks:visible,blur_remaining:blur,enabled,see_all:Boolean(rule.see_all),total,returned,locked_count:Math.max(0,total-returned),selection_mode:String(rule.selection_mode||'first'),display_state:display,slot_states,row_overrides:overrides};
   }
+  function dailyHubRuleForPlan(tab,plan=accountPlan()){
+    const cfg=dailyHubConfig()?.tabs?.[tab]||{},normalized=plan==='trial'?'rookie':plan;
+    return cfg?.plans?.[plan]||cfg?.plans?.[normalized]||cfg?.plans?.rookie||{};
+  }
+  function firstDailyHubUnlockPlan(tab,index=0,forSeeAll=false){
+    const cfg=dailyHubConfig()?.tabs?.[tab]||{};
+    const plans=membershipHierarchy.filter(id=>state.ui?.plans?.[id]?.enabled!==false);
+    for(const plan of plans){
+      const rule=cfg?.plans?.[plan]||{};const display=String(rule.display_state||((rule.tab_enabled===false)?'hidden':'active')).toLowerCase();
+      if(cfg.enabled===false||rule.tab_enabled===false||display==='hidden'||display==='blurred')continue;
+      // SEE ALL itself is governed by its own panel access. For normal tabs,
+      // an expand/"celá ponuka" request additionally requires see_all=true.
+      if(forSeeAll){if(tab==='see_all'||rule.see_all===true)return plan;continue;}
+      const override=String(rule?.row_overrides?.[String(index+1)]||'').toLowerCase();
+      if(override==='active')return plan;
+      if(override==='blurred'||override==='hidden')continue;
+      const raw=rule.visible_rows??'ALL';if(String(raw).toUpperCase()==='ALL'||Number(raw)>index)return plan;
+    }
+    return 'goat';
+  }
   function dailyHubEntitlement(tab){
     // ADMIN is unrestricted outside explicit Admin preview mode. Ignore any
     // stale membership slot states that may have been cached before login.
@@ -1285,12 +1319,13 @@
       return {...server,visible_picks:'ALL',blur_remaining:false,enabled:server.enabled!==false,see_all:true,total,returned:rows.length,locked_count:0,slot_states:[]};
     }
     if(tab==='see_all'){
-      const plan=accountPlan();
-      const allowed=['elite','legend','goat','admin'].includes(plan);
-      const daily=state.feed?.entitlements?.sections?.daily||{};
-      const value=state.feed?.entitlements?.sections?.value||{};
-      const total=Math.max(0,Number(daily.total)||0)+Math.max(0,Number(value.total)||0);
-      return {visible_picks:allowed?'ALL':0,blur_remaining:!allowed,enabled:true,see_all:allowed,total,returned:allowed?total:0,locked_count:allowed?0:total};
+      if(state.previewPlan&&isAdminAccount())return previewDailyHubEntitlement(tab);
+      const plan=accountPlan(),rule=dailyHubRuleForPlan('see_all',plan),cfg=dailyHubConfig()?.tabs?.see_all||{};
+      const display=String(rule.display_state||((rule.tab_enabled===false)?'hidden':'active')).toLowerCase();
+      const enabled=cfg.enabled!==false&&rule.tab_enabled!==false&&display!=='hidden';
+      const allowed=enabled&&display==='active';
+      const rows=leanSeeAllRows();
+      return {visible_picks:allowed?'ALL':0,blur_remaining:display==='blurred',enabled,see_all:allowed,total:rows.length,returned:allowed?rows.length:0,locked_count:allowed?0:rows.length,display_state:display};
     }
     if(state.previewPlan&&isAdminAccount())return previewDailyHubEntitlement(tab);
     const key=tab==='calendar'?'daily':tab==='daily'?'daily':tab==='ace'?'ace':tab==='games'?'games':tab==='sets'?'sets':tab;
@@ -1329,7 +1364,7 @@
     if(tab==='ace')return marketRows('ace').filter(offerSurfaceEligible);
     if(tab==='doubles')return marketRows('doubles').filter(offerSurfaceEligible);
     if(tab==='games'||tab==='sets')return marketRows('sg').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()===tab);
-    if(tab==='see_all')return ['elite','legend','goat','admin'].includes(accountPlan())?leanSeeAllRows():[];
+    if(tab==='see_all')return leanSeeAllRows();
     return [];
   }
   function dashboardFilteredRows(rows){
@@ -1806,7 +1841,7 @@
 
   function dailyHubLockedRow(tab,index,requiredPlan='pro'){
     const colspan=Math.max(1,dailyHubColumns(tab).length),required=String(upgradePlanLabel(requiredPlan)||requiredPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
-    if(tab==='see_all')return `<tr class="hub-row-locked hub-row-seeall access-locked" data-upgrade-plan="elite" data-upgrade-section="SEE ALL"><td colspan="${colspan}"><span>◆</span><div><em>${escapeHtml(uiCopyTemplate('access.requires','Vyžaduje ELITE',{plan:'ELITE'}))}</em><b>SEE ALL</b><small>Kompletný kvalifikovaný výber bez limitu TOP 10.</small></div></td></tr>`;
+    if(tab==='see_all')return `<tr class="hub-row-locked hub-row-seeall access-locked" data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="SEE ALL"><td colspan="${colspan}"><span>◆</span><div><em>${escapeHtml(uiCopyTemplate('access.requires',`Vyžaduje ${required}`,{plan:required}))}</em><b>SEE ALL</b><small>Rozšírený kvalifikovaný výber podľa nastavenej úrovne prístupu.</small></div></td></tr>`;
     return `<tr class="hub-row-locked access-locked" data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}"><td colspan="${colspan}"><span>🔒</span><div><em>${escapeHtml(uiCopyTemplate('access.requires',`Vyžaduje ${required}`,{plan:required}))}</em><b>${escapeHtml(uiCopy('access.locked_row',lcopy('Next pick is locked','Ďalší pick je zamknutý','Další tip je zamčený')))}</b><small>${escapeHtml(uiCopy('access.locked_row_body',lcopy('A higher tier unlocks more rows and prediction detail.','Vyššia úroveň odomkne ďalšie riadky a detail predikcie.','Vyšší úroveň odemkne další řádky a detail predikce.')))}</small></div></td></tr>`;
   }
   function renderDailyHub(){
@@ -1821,9 +1856,9 @@
       const ent=dailyHubEntitlement(tab),locked=tab==='see_all'&&!ent.see_all,coming=dailyHubIsComingSoon(tab);
       let count='';
       if(coming)count='<em>COMING SOON</em>';
-      else if(tab==='see_all')count=locked?'<em>ELITE+</em>':`<b>${Number(ent.total)||dailyHubRows(tab).length}</b>`;
+      else if(tab==='see_all'){const requiredPlan=firstDailyHubUnlockPlan('see_all',0,true);const requiredLabel=String(upgradePlanLabel(requiredPlan)||requiredPlan).replace(/^BlinQ\s+/i,'').toUpperCase();count=locked?`<em>${escapeHtml(requiredLabel)}+</em>`:`<b>${Number(ent.total)||dailyHubRows(tab).length}</b>`;}
       else {const total=Number(ent.total);const rows=dailyHubRows(tab);const n=Number.isFinite(total)?total:rows.length;count=n?`<b>${n}</b>`:'';}
-      const lockAttrs=locked?` data-upgrade-plan="${escapeHtml(firstUnlockPlan('top_daily',0,true)||'elite')}" data-upgrade-section="SEE ALL"`:'';
+      const lockAttrs=locked?` data-upgrade-plan="${escapeHtml(firstDailyHubUnlockPlan('see_all',0,true))}" data-upgrade-section="SEE ALL"`:'';
       return `<button type="button" role="tab" aria-selected="${tab===state.dailyHubTab?'true':'false'}" class="daily-hub-tab${tab===state.dailyHubTab?' active':''}${locked?' is-locked access-locked':''}${coming?' is-coming':''}" data-daily-hub-tab="${tab}"${lockAttrs}><span>${escapeHtml(dailyHubTabLabel(tab))}</span>${count}</button>`;
     }).join('');
     const tab=state.dailyHubTab; host.dataset.tab=tab; host.dataset.plan=plan;
@@ -1844,19 +1879,20 @@
     limit=Math.min(limit,Math.max(rows.length,Number(ent.returned)||0));
     const columnKeys=dailyHubColumnKeys(tab);
     head.innerHTML=`<tr>${dailyHubColumns(tab).map((c,i)=>`<th class="hub-head-${escapeHtml(columnKeys[i]||'generic')}">${escapeHtml(c)}</th>`).join('')}</tr>`;
-    const out=[],requiredPlan=firstUnlockPlan(tab==='daily'?'top_daily':tab==='games'||tab==='sets'?'sg':tab,Number(ent.visible_picks)||0,true)||'pro';
-    if(tab==='see_all'&&!ent.see_all)out.push(dailyHubLockedRow(tab,0,'elite'));
+    const out=[],seeAllRequiredPlan=firstDailyHubUnlockPlan('see_all',0,true);
+    if(tab==='see_all'&&!ent.see_all)out.push(dailyHubLockedRow(tab,0,seeAllRequiredPlan));
     else{
       const slotStates=Array.isArray(ent.slot_states)?ent.slot_states:[];let dataIndex=0;
       if(slotStates.length){
         slotStates.slice(0,preview).forEach((slotState,slotIndex)=>{
           if(slotState==='hidden')return;
-          if(slotState==='blurred')out.push(dailyHubLockedRow(tab,slotIndex,requiredPlan));
+          if(slotState==='blurred')out.push(dailyHubLockedRow(tab,slotIndex,firstDailyHubUnlockPlan(tab,slotIndex,false)));
           else if(dataIndex<rows.length)out.push(dailyHubRow(rows[dataIndex++],tab,false,slotIndex));
         });
       }else for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
-      if(!out.length&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,0,requiredPlan));
-      else if((Number(ent.total)||0)>Math.max(slotStates.length,rows.length)&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,Math.max(slotStates.length,rows.length),requiredPlan));
+      const nextIndex=Math.max(slotStates.length,rows.length);
+      if(!out.length&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
+      else if((Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
     }
     body.innerHTML=out.join('');
     if(empty){empty.hidden=Boolean(out.length);empty.textContent=lcopy('No predictions are available in this category yet.','V tejto kategórii zatiaľ nie sú dostupné predikcie.','V této kategorii zatím nejsou dostupné predikce.');}
@@ -2050,7 +2086,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=20"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=21"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     const row=rowOverride||m?.raw||m;
@@ -2105,7 +2141,7 @@
       if(tab){ if(tab.dataset.upgradePlan){showAccessHint(tab,tab.dataset.upgradePlan,tab.dataset.upgradeSection||'SEE ALL',true);return;} state.dailyHubTab=tab.dataset.dailyHubTab; state.dailyHubExpanded=false; renderDailyHub(); return; }
       const boardMode=target.closest('button[data-board-mode]');
       if(boardMode){state.boardMode=boardMode.dataset.boardMode==='results'?'results':'live';state.dailyHubExpanded=false;renderDailyHub();return;}
-      if(target.closest('#dailyHubExpand')){ const ent=dailyHubEntitlement(state.dailyHubTab); if(ent.see_all!==true){ const expand=target.closest('#dailyHubExpand');const plan=state.dailyHubTab==='board'?'legend':'elite';const label=state.dailyHubTab==='board'?'BlinQ Board':lcopy('Full daily offer','Celá denná ponuka','Celá denní nabídka');showAccessHint(expand,plan,label,true); return; } state.dailyHubExpanded=!state.dailyHubExpanded; renderDailyHub(); return; }
+      if(target.closest('#dailyHubExpand')){ const ent=dailyHubEntitlement(state.dailyHubTab); if(ent.see_all!==true){ const expand=target.closest('#dailyHubExpand');const plan=state.dailyHubTab==='board'?'legend':firstDailyHubUnlockPlan(state.dailyHubTab,0,true);const label=state.dailyHubTab==='board'?'BlinQ Board':lcopy('Full daily offer','Celá denná ponuka','Celá denní nabídka');showAccessHint(expand,plan,label,true); return; } state.dailyHubExpanded=!state.dailyHubExpanded; renderDailyHub(); return; }
       const row=target.closest('tr[data-hub-event]');
       if(row){
         const key=String(row.dataset.hubEvent||'');
@@ -2402,20 +2438,17 @@
     const ordered=orderedDashboardKeys(state.adminPlan);
     const levelLabel=accessLabel(state.adminPlan);
     const hub=dailyHubConfig();
-    const rows=['daily','value','ace','games','sets','doubles'].map(tab=>{
+    const rows=['daily','value','ace','doubles','games','sets','see_all'].map(tab=>{
       const tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{},globalOn=tc.enabled!==false;
       const visible=String(rule.visible_rows??0).toUpperCase(),display=String(rule.display_state||((rule.tab_enabled!==false)?'active':'hidden'));
       const selection=String(rule.selection_mode||'first'),overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};
       const rowOverrides=[1,2,3,4,5,6,7,8,9,10].map(position=>{const mode=String(overrides[position]||'active');return `<label><span>${position}</span><select data-admin-hub-row-state="${position}" data-admin-hub-tab="${tab}"><option value="active"${mode==='active'?' selected':''}>SHOW</option><option value="blurred"${mode==='blurred'?' selected':''}>BLUR</option><option value="hidden"${mode==='hidden'?' selected':''}>HIDE</option></select></label>`;}).join('');
-      return `<div class="admin-daily-matrix-row${globalOn?'':' is-global-off'}${display==='hidden'?' is-level-off':''}" data-admin-hub-tab-card="${tab}">
+      const seeAllTab=tab==='see_all';
+      return `<div class="admin-daily-matrix-row${globalOn?'':' is-global-off'}${display==='hidden'?' is-level-off':''}${seeAllTab?' is-see-all':''}" data-admin-hub-tab-card="${tab}">
         <div class="admin-daily-category"><strong>${escapeHtml(dailyHubTabLabel(tab))}</strong><small>${globalOn?'Na webe':'Globálne vypnuté'}</small></div>
         <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-global-field="enabled" data-admin-hub-tab="${tab}" ${globalOn?'checked':''}><span>Na webe</span></label>
-        <label class="admin-daily-row-count"><span>Panel pre ${escapeHtml(levelLabel)}</span><select data-admin-hub-field="display_state" data-admin-hub-tab="${tab}" ${!globalOn?'disabled':''}><option value="active"${display==='active'?' selected':''}>ZOBRAZIŤ</option><option value="blurred"${display==='blurred'?' selected':''}>ROZMAZAŤ</option><option value="hidden"${display==='hidden'?' selected':''}>SKRYŤ</option></select></label>
-        <label class="admin-daily-row-count"><span>Odomknuté riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label>
-        <label class="admin-daily-row-count"><span>Výber</span><select data-admin-hub-field="selection_mode" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}><option value="first"${selection==='first'?' selected':''}>PRVÉ</option><option value="stable_random"${selection==='stable_random'?' selected':''}>NÁHODNÉ / DEŇ</option></select></label>
-        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||display==='hidden'?'disabled':''}><span>Zamknúť zvyšok</span></label>
-        <label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||display!=='active'?'disabled':''}><span>Celá ponuka</span></label>
-        <details class="admin-row-overrides"><summary>Riadky 1–10 · SHOW / BLUR / HIDE</summary><div>${rowOverrides}</div><small>BLUR a HIDE neposielajú citlivý obsah do prehliadača. Pri NÁHODNÉ / DEŇ zostáva výber stabilný celý deň pre konkrétny účet.</small></details>
+        <label class="admin-daily-row-count"><span>Prístup pre ${escapeHtml(levelLabel)}</span><select data-admin-hub-field="display_state" data-admin-hub-tab="${tab}" ${!globalOn?'disabled':''}><option value="active"${display==='active'?' selected':''}>ZOBRAZIŤ</option><option value="blurred"${display==='blurred'?' selected':''}>ZAMKNÚŤ</option><option value="hidden"${display==='hidden'?' selected':''}>SKRYŤ</option></select></label>
+        ${seeAllTab?'<div class="admin-see-all-rule-note"><b>SEE ALL</b><span>Samostatný prístup k rozšírenému zoznamu. Obsah vždy rešpektuje serverové oprávnenia levelu.</span></div>':`<label class="admin-daily-row-count"><span>Odomknuté riadky</span><select data-admin-hub-field="visible_rows" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}>${[0,1,2,3,4,5,6,7,8,9,10,'ALL'].map(v=>`<option value="${v}"${visible===String(v).toUpperCase()?' selected':''}>${String(v).toUpperCase()==='ALL'?'VŠETKY':v}</option>`).join('')}</select></label><label class="admin-daily-row-count"><span>Výber</span><select data-admin-hub-field="selection_mode" data-admin-hub-tab="${tab}" ${!globalOn||display!=='active'?'disabled':''}><option value="first"${selection==='first'?' selected':''}>PRVÉ</option><option value="stable_random"${selection==='stable_random'?' selected':''}>NÁHODNÉ / DEŇ</option></select></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="blur_remaining" data-admin-hub-tab="${tab}" ${rule.blur_remaining!==false?'checked':''} ${!globalOn||display==='hidden'?'disabled':''}><span>Zamknúť zvyšok</span></label><label class="admin-switch-compact"><input type="checkbox" data-admin-hub-field="see_all" data-admin-hub-tab="${tab}" ${rule.see_all===true?'checked':''} ${!globalOn||display!=='active'?'disabled':''}><span>Celá ponuka</span></label><details class="admin-row-overrides admin-row-advanced"><summary><span>Pokročilé nastavenia</span><small>Ručné pravidlá pre jednotlivé pozície</small></summary><div class="admin-row-advanced-body"><strong>Riadky 1–10 · SHOW / BLUR / HIDE</strong><div>${rowOverrides}</div><small>BLUR a HIDE neposielajú citlivý obsah do prehliadača. Pri NÁHODNÉ / DEŇ zostáva výber stabilný celý deň pre konkrétny účet.</small></div></details>`}
       </div>`;
     }).join('');
     return `<section class="admin-ux-section admin-daily-settings-v687">
@@ -2607,21 +2640,39 @@
   }
   function adminInsightDraft(){
     const editing=(state.adminInsights||[]).find(row=>String(row.id)===String(state.adminInsightEditingId));
-    return editing||{title:'',body:'',type:'insight',priority:'normal',levels:['elite','legend','goat'],link:'',link_label:'',match_id:'',active:true,pinned:false,active_from:'',active_until:''};
+    if(editing)return editing;
+    const cfg=notificationAudienceConfig();
+    return {title:'',body:'',type:'vip',priority:'normal',levels:[...cfg.info_default_levels],link:'',link_label:'',match_id:'',active:true,pinned:false,active_from:'',active_until:''};
   }
   function adminDatetimeValue(value){const text=String(value||'');return text?text.replace('Z','').slice(0,16):'';}
+  function adminAudiencePresetLevels(preset){
+    if(preset==='all'||preset==='rookie+')return [...membershipHierarchy];
+    if(preset==='live-default')return membershipLevelsFrom(notificationAudienceConfig().live_min_level);
+    if(preset==='goat')return ['goat'];
+    const min=String(preset||'').replace('+','').toLowerCase();return membershipHierarchy.includes(min)?membershipLevelsFrom(min):[];
+  }
+  function syncAdminInsightAudienceForType(form,reset=false){
+    if(!form)return;const live=String(form.querySelector('#adminInsightType')?.value||'vip')==='alert';const liveLevels=new Set(membershipLevelsFrom(notificationAudienceConfig().live_min_level));
+    const nodes=[...form.querySelectorAll('input[name="insight_level"]')];
+    nodes.forEach(node=>{node.disabled=live&&!liveLevels.has(node.value);if(node.disabled)node.checked=false;});
+    if(reset){const wanted=new Set(live?liveLevels:notificationAudienceConfig().info_default_levels);nodes.forEach(node=>{node.checked=wanted.has(node.value)&&!node.disabled;});}
+    const hint=form.querySelector('[data-insight-audience-hint]');if(hint){const label=String(upgradePlanLabel(notificationAudienceConfig().live_min_level)||notificationAudienceConfig().live_min_level).replace(/^BlinQ\s+/i,'').toUpperCase();hint.textContent=live?`LIVE rešpektuje globálne minimum ${label}. Pre konkrétnu správu môžeš publikum iba zúžiť.`:'INFO môže ísť všetkým alebo ľubovoľnej kombinácii levelov.';}
+  }
   function renderAdminInsights(){
     const item=adminInsightDraft(),levels=Array.isArray(item.levels)?item.levels:[];const list=Array.isArray(state.adminInsights)?state.adminInsights:[];
-    const allowed=new Set(notificationAudienceConfig().editable_levels||['elite','legend','goat']);
-    const allLevels=['rookie','pro','elite','legend','goat'].filter(level=>allowed.has(level));
-    const levelChecks=allLevels.map(level=>`<label class="admin-insight-level"><input type="checkbox" name="insight_level" value="${level}" ${levels.includes(level)||(!item.id&&['elite','legend','goat'].includes(level))?'checked':''}><span>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,''))}</span></label>`).join('');
+    const notificationCfg=notificationAudienceConfig(),liveMin=notificationCfg.live_min_level,liveLevels=membershipLevelsFrom(liveMin),liveLabel=String(upgradePlanLabel(liveMin)||liveMin).replace(/^BlinQ\s+/i,'').toUpperCase();
+    const itemIsLive=String(item.type||'vip')==='alert';
+    const allowed=new Set(notificationCfg.editable_levels||membershipHierarchy);
+    const allLevels=membershipHierarchy.filter(level=>allowed.has(level));
+    const selectedLevels=new Set(levels.length?levels:(itemIsLive?liveLevels:notificationCfg.info_default_levels));
+    const levelChecks=allLevels.map(level=>{const disabled=itemIsLive&&!liveLevels.includes(level);return `<label class="admin-insight-level${disabled?' is-disabled':''}"><input type="checkbox" name="insight_level" value="${level}" ${selectedLevels.has(level)&&!disabled?'checked':''} ${disabled?'disabled':''}><span>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,''))}</span></label>`;}).join('');
     const rows=list.map(row=>`<article class="admin-insight-row ${row.active===false?'is-inactive':''} priority-${escapeHtml(row.priority||'normal')}"><div><span>${escapeHtml(insightTypeLabel(row.type))}${row.pinned?' · PIN':''}</span><strong>${escapeHtml(row.title)}</strong><p>${escapeHtml(row.body)}</p><small>${escapeHtml(insightAudienceText(row.levels))} · ${escapeHtml(row.created_at?fmtDate(row.created_at)+' '+fmtTime(row.created_at):'')} · ${Number(row.read_count)||0} prečítaní</small></div><div class="admin-insight-row-actions"><button type="button" class="btn btn-ghost" data-admin-action="insight-edit" data-insight-id="${escapeHtml(row.id)}">Upraviť</button><button type="button" class="btn btn-ghost danger" data-admin-action="insight-delete" data-insight-id="${escapeHtml(row.id)}">Zmazať</button></div></article>`).join('');
     const radar=state.adminLiveRadarStatus||{};const radarTone=radar.error?' is-error':radar.ok?' is-ok':'';
     const radarText=state.adminLiveRadarLoading?'Kontrolujem live zápasy…':radar.error?String(radar.error):radar.scanned_at?`Posledný scan ${fmtTime(radar.scanned_at)} · live ${Number(radar.live_events)||0} · kandidáti ${Number(radar.candidates)||0} · signály ${Number(radar.signals)||0} · nové ${Number(radar.new_alerts??radar.created)||0}`:'Automatický radar beží na serveri. Tu ho vieš kedykoľvek otestovať ručne.';
-    return `<section class="admin-ux-section admin-insights-section"><div class="admin-ux-heading"><div><small>SPRÁVY & LIVE</small><h2>Info & Comeback LIVE</h2><p>INFO kanál pre zvolené levely a LIVE Radar pre ELITE+.</p></div><button type="button" class="btn btn-ghost" data-admin-action="insight-new">Nová správa</button></div>${state.adminInsightsError?`<div class="admin-runtime-note is-error"><strong>Feed nie je dostupný</strong><span>${escapeHtml(state.adminInsightsError)}</span></div>`:''}<div class="admin-live-radar-card${radarTone}"><div><small>COMEBACK LIVE RADAR</small><strong>PRIME pool → prehratý 1. set → potvrdený návrat</strong><span>${escapeHtml(radarText)}</span></div><button type="button" class="btn btn-ghost" data-admin-action="live-radar-scan" ${state.adminLiveRadarLoading?'disabled':''}>${state.adminLiveRadarLoading?'Skenujem…':'Scan LIVE teraz'}</button></div><div class="admin-insights-grid"><form id="adminInsightForm" class="admin-insight-composer"><div class="admin-insight-composer-head"><div><small>${item.id?'UPRAVIŤ':'NOVÁ SPRÁVA'}</small><h3>${item.id?escapeHtml(item.title):'Napíš Premium Info alebo ručné LIVE upozornenie'}</h3></div><span>${escapeHtml(insightAudienceText(levels.length?levels:['elite','legend','goat']))}</span></div><label>Nadpis<input id="adminInsightTitle" maxlength="140" required value="${escapeHtml(item.title||'')}"></label><label>Správa<textarea id="adminInsightBody" maxlength="4000" required rows="7">${escapeHtml(item.body||'')}</textarea></label><div class="admin-form-grid"><label>Typ<select id="adminInsightType"><option value="vip"${String(item.type||'vip')==='vip'?' selected':''}>Premium Info</option><option value="alert"${item.type==='alert'?' selected':''}>LIVE</option></select></label><label>Priorita<select id="adminInsightPriority"><option value="normal"${item.priority==='normal'?' selected':''}>Normal</option><option value="important"${item.priority==='important'?' selected':''}>Important</option><option value="critical"${item.priority==='critical'?' selected':''}>Critical</option></select></label></div><fieldset class="admin-insight-audience"><legend>Viditeľné pre</legend><div>${levelChecks}</div><div class="admin-insight-audience-presets"><button type="button" class="btn btn-ghost" data-admin-action="insight-audience-rookie">ROOKIE</button><button type="button" class="btn btn-ghost" data-admin-action="insight-audience-elite">ELITE+</button><button type="button" class="btn btn-ghost" data-admin-action="insight-audience-all">VŠETCI</button></div><small>INFO môžeš poslať ľubovoľným levelom. Ručné a automatické LIVE upozornenia zostávajú iba ELITE+.</small></fieldset><div class="admin-form-grid"><label>Event ID / zápas (voliteľné)<input id="adminInsightMatchId" value="${escapeHtml(item.match_id||'')}"></label><label>Text odkazu<input id="adminInsightLinkLabel" maxlength="80" value="${escapeHtml(item.link_label||'')}"></label><label class="span-2">Odkaz (voliteľné)<input id="adminInsightLink" value="${escapeHtml(item.link||'')}"></label><label>Aktívne od<input id="adminInsightFrom" type="datetime-local" value="${escapeHtml(adminDatetimeValue(item.active_from))}"></label><label>Aktívne do<input id="adminInsightUntil" type="datetime-local" value="${escapeHtml(adminDatetimeValue(item.active_until))}"></label></div><div class="admin-insight-flags"><label><input id="adminInsightActive" type="checkbox" ${item.active!==false?'checked':''}> Aktívna</label><label><input id="adminInsightPinned" type="checkbox" ${item.pinned?'checked':''}> Pripnúť hore</label></div><div class="admin-insight-actions"><button class="btn btn-primary" type="submit">${item.id?'Uložiť':'Publikovať'}</button>${item.id?'<button class="btn btn-ghost" type="button" data-admin-action="insight-new">Zrušiť</button>':''}<span id="adminInsightMessage"></span></div></form><div class="admin-insight-list"><div class="admin-subsection-heading"><div><strong>Publikované</strong><span>${state.adminInsightsLoading?'Načítavam…':`${list.length} správ`}</span></div></div>${state.adminInsightsLoading?'<div class="admin-note"><strong>Načítavam…</strong></div>':rows||'<div class="admin-note"><strong>Zatiaľ žiadne správy</strong><span>Premium Info sa zobrazí v INFO a LIVE upozornenia v samostatnom LIVE tlačidle podľa vybraných levelov.</span></div>'}</div></div></section>`;
+    const liveOptions=membershipHierarchy.map(level=>`<option value="${level}"${level===liveMin?' selected':''}>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,'').toUpperCase())}+</option>`).join('');
+    const audiencePresets=[['all','VŠETCI'],['pro+','PRO+'],['elite+','ELITE+'],['legend+','LEGEND+'],['goat','GOAT']].map(([value,label])=>`<button type="button" class="btn btn-ghost" data-admin-action="insight-audience-preset" data-audience-preset="${value}">${label}</button>`).join('');
+    return `<section class="admin-ux-section admin-insights-section"><div class="admin-ux-heading"><div><small>SPRÁVY & LIVE</small><h2>Info & Comeback LIVE</h2><p>LIVE má globálne minimum prístupu. INFO má publikum pri každej správe samostatne.</p></div><button type="button" class="btn btn-ghost" data-admin-action="insight-new">Nová správa</button></div>${state.adminInsightsError?`<div class="admin-runtime-note is-error"><strong>Feed nie je dostupný</strong><span>${escapeHtml(state.adminInsightsError)}</span></div>`:''}<div class="admin-live-access-rule"><div><small>PRÍSTUP K LIVE</small><strong>Comeback LIVE od ${escapeHtml(liveLabel)}</strong><span>Automatický radar, ručné LIVE správy aj zámok v headeri používajú toto pravidlo. ADMIN má vždy plný prístup.</span></div><label><span>Minimálny level</span><select id="adminLiveMinLevel">${liveOptions}</select></label><button class="btn btn-primary" type="button" data-admin-action="save-live-access">Uložiť LIVE pravidlo</button></div><div class="admin-live-radar-card${radarTone}"><div><small>COMEBACK LIVE RADAR</small><strong>PRIME pool → prehratý 1. set → potvrdený návrat</strong><span>${escapeHtml(radarText)}</span></div><button type="button" class="btn btn-ghost" data-admin-action="live-radar-scan" ${state.adminLiveRadarLoading?'disabled':''}>${state.adminLiveRadarLoading?'Skenujem…':'Scan LIVE teraz'}</button></div><div class="admin-insights-grid"><form id="adminInsightForm" class="admin-insight-composer"><div class="admin-insight-composer-head"><div><small>${item.id?'UPRAVIŤ':'NOVÁ SPRÁVA'}</small><h3>${item.id?escapeHtml(item.title):'Napíš INFO alebo ručné LIVE upozornenie'}</h3></div><span>${escapeHtml(insightAudienceText([...selectedLevels]))}</span></div><label>Nadpis<input id="adminInsightTitle" maxlength="140" required value="${escapeHtml(item.title||'')}"></label><label>Správa<textarea id="adminInsightBody" maxlength="4000" required rows="7">${escapeHtml(item.body||'')}</textarea></label><div class="admin-form-grid"><label>Typ<select id="adminInsightType"><option value="vip"${String(item.type||'vip')==='vip'?' selected':''}>INFO</option><option value="alert"${item.type==='alert'?' selected':''}>LIVE</option></select></label><label>Priorita<select id="adminInsightPriority"><option value="normal"${item.priority==='normal'?' selected':''}>Normal</option><option value="important"${item.priority==='important'?' selected':''}>Important</option><option value="critical"${item.priority==='critical'?' selected':''}>Critical</option></select></label></div><fieldset class="admin-insight-audience"><legend>Publikum</legend><div>${levelChecks}</div><div class="admin-insight-audience-presets">${audiencePresets}<button type="button" class="btn btn-ghost" data-admin-action="insight-audience-preset" data-audience-preset="live-default">LIVE PRAVIDLO</button></div><small data-insight-audience-hint>${itemIsLive?`LIVE rešpektuje globálne minimum ${escapeHtml(liveLabel)}. Pre konkrétnu správu môžeš publikum iba zúžiť.`:'INFO môže ísť všetkým alebo ľubovoľnej kombinácii levelov.'}</small></fieldset><div class="admin-form-grid"><label>Event ID / zápas (voliteľné)<input id="adminInsightMatchId" value="${escapeHtml(item.match_id||'')}"></label><label>Text odkazu<input id="adminInsightLinkLabel" maxlength="80" value="${escapeHtml(item.link_label||'')}"></label><label class="span-2">Odkaz (voliteľné)<input id="adminInsightLink" value="${escapeHtml(item.link||'')}"></label><label>Aktívne od<input id="adminInsightFrom" type="datetime-local" value="${escapeHtml(adminDatetimeValue(item.active_from))}"></label><label>Aktívne do<input id="adminInsightUntil" type="datetime-local" value="${escapeHtml(adminDatetimeValue(item.active_until))}"></label></div><div class="admin-insight-flags"><label><input id="adminInsightActive" type="checkbox" ${item.active!==false?'checked':''}> Aktívna</label><label><input id="adminInsightPinned" type="checkbox" ${item.pinned?'checked':''}> Pripnúť hore</label></div><div class="admin-insight-actions"><button class="btn btn-primary" type="submit">${item.id?'Uložiť':'Publikovať'}</button>${item.id?'<button class="btn btn-ghost" type="button" data-admin-action="insight-new">Zrušiť</button>':''}<span id="adminInsightMessage"></span></div></form><div class="admin-insight-list"><div class="admin-subsection-heading"><div><strong>Publikované</strong><span>${state.adminInsightsLoading?'Načítavam…':`${list.length} správ`}</span></div></div>${state.adminInsightsLoading?'<div class="admin-note"><strong>Načítavam…</strong></div>':rows||'<div class="admin-note"><strong>Zatiaľ žiadne správy</strong><span>INFO sa zobrazí iba vybranému publiku; LIVE navyše rešpektuje globálny minimálny level.</span></div>'}</div></div></section>`;
   }
-
-
   function auditDiffLabel(item){
     const before=item?.before||{},after=item?.after||{};const changes=[];
     ['plan','status','expires_at','role','tg_private_member'].forEach(key=>{if(String(before[key]??'')!==String(after[key]??''))changes.push(`${key}: ${before[key]??'—'} → ${after[key]??'—'}`);});
@@ -2771,7 +2822,7 @@
       const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='insights')loadAdminInsights();if(state.adminTab==='system')loadAdminDiagnostics(true);return;}
       const tgAction=event.target.closest('[data-admin-action="tg-add"],[data-admin-action="tg-remove"]');if(tgAction){const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]};cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];if(tgAction.dataset.adminAction==='tg-add'){cfg.groups.push({id:`group_${Date.now()}`,enabled:true,badge:'KOMUNITA',title:'Telegram skupina',description:'',cta:'Otvoriť Telegram',url:'',min_plan:'rookie'});}else{const index=Number(tgAction.dataset.tgIndex);if(Number.isInteger(index)&&index>=0)cfg.groups.splice(index,1);}renderTelegramGroupsPanel();rerenderAdmin();return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
-      const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','value','ace','games','sets','doubles'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.tab_enabled=true;rule.row_overrides={};if(preset==='full'){rule.display_state='active';rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.display_state='active';rule.visible_rows=3;rule.selection_mode='first';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='rookie2'){rule.display_state='active';rule.visible_rows=tab==='daily'?2:Math.min(1,Number(rule.visible_rows)||1);rule.selection_mode='stable_random';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='blurred'){rule.display_state='blurred';rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.display_state='hidden';rule.visible_rows=0;rule.blur_remaining=false;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Zobrazenie · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
+      const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','value','ace','doubles','games','sets','see_all'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.tab_enabled=true;rule.row_overrides={};if(tab==='see_all'){rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=preset!=='full';rule.see_all=preset==='full';rule.display_state=preset==='full'?'active':preset==='hidden'?'hidden':'blurred';if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);return;}if(preset==='full'){rule.display_state='active';rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.display_state='active';rule.visible_rows=3;rule.selection_mode='first';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='rookie2'){rule.display_state='active';rule.visible_rows=tab==='daily'?2:Math.min(1,Number(rule.visible_rows)||1);rule.selection_mode='stable_random';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='blurred'){rule.display_state='blurred';rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.display_state='hidden';rule.visible_rows=0;rule.blur_remaining=false;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Zobrazenie · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
       const bannerPreviewChip=event.target.closest('[data-admin-banner-preview-plan]');if(bannerPreviewChip){state.adminBannerPreviewPlan=bannerPreviewChip.dataset.adminBannerPreviewPlan;rerenderAdmin();return;}
       const sectionPreset=event.target.closest('[data-section-preset]');if(sectionPreset){const key=sectionPreset.dataset.sectionKey,plan=state.adminPlan,cfg=key?state.ui?.dashboard?.sections?.[key]:null,id=cfg?.sidebar_element,item=id?elements()?.[id]:null;if(cfg&&item&&plan){cfg.plans=cfg.plans||{};cfg.plans[plan]=cfg.plans[plan]||{};item.access=item.access||{};const ent=cfg.plans[plan],preset=sectionPreset.dataset.sectionPreset;if(preset==='full'){item.access[plan]='active';ent.visible_picks='ALL';ent.blur_remaining=false;ent.see_all=true;}else if(preset==='teaser'){item.access[plan]='active';ent.visible_picks=1;ent.blur_remaining=true;ent.see_all=true;}else if(preset==='blurred'){item.access[plan]='locked';ent.visible_picks=0;ent.blur_remaining=true;ent.see_all=false;}else if(preset==='hidden'){item.access[plan]='hidden';ent.visible_picks=0;ent.blur_remaining=true;ent.see_all=false;}if(plan==='rookie'){item.access.trial=item.access[plan];cfg.plans.trial=clone(ent);}state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();showStatus(`${cfg.label||key} · ${accessLabel(plan)} preset applied.`);}return;}
       const bannerPreset=event.target.closest('[data-banner-preset]');if(bannerPreset){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.click_access=item.click_access||{};const preset=bannerPreset.dataset.bannerPreset;accessContexts.forEach(plan=>{let visible=true,click=true;if(preset==='teaser-elite')click=['elite','legend','goat'].includes(plan);if(preset==='pro-only'){visible=['pro','elite','legend','goat'].includes(plan);click=visible;}if(preset==='goat-only'){visible=plan==='goat';click=visible;}item.access[plan]=visible?'active':'hidden';item.click_access[plan]=click;});item.access.trial=item.access.rookie;item.click_access.trial=item.click_access.rookie;renderAllUiContent();rerenderAdmin();}return;}
@@ -2783,7 +2834,8 @@
       if(action==='insight-new'){state.adminInsightEditingId='';rerenderAdmin();return;}
       if(action==='insight-edit'){state.adminInsightEditingId=String(actionNode.dataset.insightId||'');rerenderAdmin();return;}
       if(action==='insight-delete'){const id=String(actionNode.dataset.insightId||'');if(!id)return;if(!window.confirm('Naozaj chceš túto správu odstrániť?'))return;try{await BlinqAuth.adminDeleteInsight(id);state.adminInsightEditingId='';state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus('Správa bola odstránená.');}catch(error){showStatus(error.message);}return;}
-      if(action==='insight-audience-rookie'||action==='insight-audience-elite'||action==='insight-audience-all'){const form=$('adminInsightForm');if(!form)return;const wanted=action==='insight-audience-rookie'?new Set(['rookie']):action==='insight-audience-all'?new Set(['rookie','pro','elite','legend','goat']):new Set(['elite','legend','goat']);form.querySelectorAll('input[name="insight_level"]').forEach(node=>{node.checked=wanted.has(node.value);});return;}
+      if(action==='insight-audience-preset'){const form=$('adminInsightForm');if(!form)return;const preset=String(actionNode.dataset.audiencePreset||'all'),wanted=new Set(adminAudiencePresetLevels(preset)),live=String($('adminInsightType')?.value||'vip')==='alert',liveAllowed=new Set(membershipLevelsFrom(notificationAudienceConfig().live_min_level));form.querySelectorAll('input[name="insight_level"]').forEach(node=>{node.checked=wanted.has(node.value)&&(!live||liveAllowed.has(node.value));});return;}
+      if(action==='save-live-access'){const value=String($('adminLiveMinLevel')?.value||'elite').toLowerCase();state.ui.notifications=state.ui.notifications||{};state.ui.notifications.live_min_level=membershipHierarchy.includes(value)?value:'elite';state.ui.notifications.default_min_level=state.ui.notifications.live_min_level;state.ui.notifications.default_levels=membershipLevelsFrom(state.ui.notifications.live_min_level);const saved=await publishUiConfig();if(saved!==false)showStatus(`LIVE prístup bol nastavený od ${String(upgradePlanLabel(state.ui.notifications.live_min_level)||state.ui.notifications.live_min_level).replace(/^BlinQ\s+/i,'').toUpperCase()}.`);return;}
       if(action==='live-radar-scan'){if(state.adminLiveRadarLoading)return;state.adminLiveRadarLoading=true;state.adminLiveRadarStatus=null;rerenderAdmin();try{const result=await BlinqAuth.adminLiveRadar(true,true);state.adminLiveRadarStatus={...result,ok:true,new_alerts:Number(result?.created)||0};state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus(`LIVE Radar: ${Number(result?.signals?.length??result?.signals)||0} signálov · ${Number(result?.created)||0} nových upozornení.`);}catch(error){state.adminLiveRadarStatus={error:error.message||'LIVE Radar sa nepodarilo spustiť.'};showStatus(state.adminLiveRadarStatus.error);}finally{state.adminLiveRadarLoading=false;rerenderAdmin();}return;}
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
@@ -2860,7 +2912,7 @@
       state.adminUsers=(state.adminUsers||[]).map(row=>row.id===updated.id?updated:row);state.adminSelectedUser=updated;message.textContent='Účet bol uložený.';setTimeout(()=>{rerenderAdmin();adminApplyUserFilters();},300);
     }catch(error){message.textContent=error.message||'Účet sa nepodarilo uložiť.';}};
 
-    const insightForm=$('adminInsightForm');if(insightForm)insightForm.onsubmit=async event=>{event.preventDefault();const message=$('adminInsightMessage');if(message)message.textContent='Publikujem…';try{const levels=[...insightForm.querySelectorAll('input[name="insight_level"]:checked')].map(node=>node.value);if(!levels.length)throw new Error('Vyber aspoň jeden level.');const payload={title:$('adminInsightTitle').value.trim(),body:$('adminInsightBody').value.trim(),type:$('adminInsightType').value,priority:$('adminInsightPriority').value,levels,link:$('adminInsightLink').value.trim(),link_label:$('adminInsightLinkLabel').value.trim(),match_id:$('adminInsightMatchId').value.trim(),active:Boolean($('adminInsightActive').checked),pinned:Boolean($('adminInsightPinned').checked),active_from:$('adminInsightFrom').value?new Date($('adminInsightFrom').value).toISOString():'',active_until:$('adminInsightUntil').value?new Date($('adminInsightUntil').value).toISOString():''};if(state.adminInsightEditingId)await BlinqAuth.adminUpdateInsight(state.adminInsightEditingId,payload);else await BlinqAuth.adminCreateInsight(payload);state.adminInsightEditingId='';state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus('BlinQ Insight bol publikovaný.');}catch(error){if(message)message.textContent=error.message;}};
+    const insightForm=$('adminInsightForm');if(insightForm){const typeSelect=$('adminInsightType');if(typeSelect)typeSelect.onchange=()=>syncAdminInsightAudienceForType(insightForm,true);syncAdminInsightAudienceForType(insightForm,false);}if(insightForm)insightForm.onsubmit=async event=>{event.preventDefault();const message=$('adminInsightMessage');if(message)message.textContent='Publikujem…';try{const levels=[...insightForm.querySelectorAll('input[name="insight_level"]:checked')].map(node=>node.value);if(!levels.length)throw new Error('Vyber aspoň jeden level.');const payload={title:$('adminInsightTitle').value.trim(),body:$('adminInsightBody').value.trim(),type:$('adminInsightType').value,priority:$('adminInsightPriority').value,levels,link:$('adminInsightLink').value.trim(),link_label:$('adminInsightLinkLabel').value.trim(),match_id:$('adminInsightMatchId').value.trim(),active:Boolean($('adminInsightActive').checked),pinned:Boolean($('adminInsightPinned').checked),active_from:$('adminInsightFrom').value?new Date($('adminInsightFrom').value).toISOString():'',active_until:$('adminInsightUntil').value?new Date($('adminInsightUntil').value).toISOString():''};if(state.adminInsightEditingId)await BlinqAuth.adminUpdateInsight(state.adminInsightEditingId,payload);else await BlinqAuth.adminCreateInsight(payload);state.adminInsightEditingId='';state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus('BlinQ Insight bol publikovaný.');}catch(error){if(message)message.textContent=error.message;}};
   }
   function planAvatarHtml(id,p={}){
     const style=String(p.avatar||id||'').toLowerCase(),src=marketingAvatarUrl(style);
@@ -2912,14 +2964,14 @@
   }
   function renderAccountPage(){
     const a=state.feed?.account||{},status=String(a.status||'expired').toLowerCase(),plan=accountPlan(),planLabel=a.plan_label||state.ui?.plans?.[plan]?.label||plan;
-    const pushEligible=Boolean(a.is_admin||String(a.role||'').toLowerCase()==='admin'||(['elite','legend','goat'].includes(plan)&&['active','lifetime'].includes(status)));
+    const pushEligible=Boolean(a.is_admin||String(a.role||'').toLowerCase()==='admin'||(membershipHierarchy.includes(plan)&&['trial','active','lifetime'].includes(status)));
     const expiry=status==='lifetime'?publicText('Lifetime access'):a.expires_at?`${remainingLabel(a.expires_at)} ${locale==='cz'?'zbývá':'zostáva'}`:(status==='active'?publicText('Active'):publicText('No active access'));
     const verified=a.email_verified===true;
     return `<section class="account-overview account-overview-v676">
       <article class="account-profile-card account-profile-card-v676"><div class="account-profile-head"><span class="avatar account-page-avatar" id="accountPageAvatar">${escapeHtml(accountAvatarFallback(a))}</span><div><span class="account-card-kicker">BLINQ ÚČET</span><h2>${escapeHtml(a.email||'BlinQ účet')}</h2><p>${escapeHtml(a.telegram_nick||'Telegram nickname zatiaľ nie je nastavený')}</p></div><span class="account-verified ${verified?'is-verified':'needs-verification'}">${escapeHtml(publicText(verified?'✓ Email verified':'! Email not verified'))}</span></div>
       <form id="accountProfileForm" class="account-profile-form account-profile-form-v676"><label><span class="telegram-label">${adminTelegramIcon()} Telegram</span><input id="accountTelegramNick" maxlength="33" value="${escapeHtml(a.telegram_nick||'')}" placeholder="@username"></label><div class="account-page-avatar-choice"><span>Avatar</span><div class="avatar-sex-toggle" role="group" aria-label="Avatar"><button type="button" data-avatar-page-variant="m" class="${a.avatar_variant==='w'?'':'is-active'}" aria-label="Mužský avatar" aria-pressed="${a.avatar_variant==='w'?'false':'true'}">♂</button><button type="button" data-avatar-page-variant="w" class="${a.avatar_variant==='w'?'is-active':''}" aria-label="Ženský avatar" aria-pressed="${a.avatar_variant==='w'?'true':'false'}">♀</button></div><input id="accountAvatarVariant" type="hidden" value="${a.avatar_variant==='w'?'w':'m'}"></div><button class="btn btn-primary" type="submit">Uložiť profil</button><p class="form-message" id="accountProfileMessage"></p></form></article>
       <article class="account-access-card"><div class="account-access-top"><span class="account-card-kicker">AKTUÁLNY PRÍSTUP</span>${planAvatarHtml(plan,state.ui?.plans?.[plan]||{})}</div><h2>${escapeHtml(planLabel)}</h2><p class="account-access-status">${escapeHtml(status==='trial'?'Rookie Trial':status==='lifetime'?'Doživotný':status==='active'?'Aktívny':'Expirovaný')}</p><div class="account-facts"><span><small>Prístup</small><strong>${escapeHtml(expiry)}</strong></span><span><small>Člen od</small><strong>${escapeHtml(a.created_at?fmtDate(a.created_at):'—')}</strong></span><span><small>Zabezpečenie</small><strong>${verified?'E-mail overený':'Vyžaduje overenie'}</strong></span></div><div class="account-access-actions"><button class="btn btn-ghost" id="accountPasswordReset" type="button">Obnoviť heslo</button><button class="btn btn-ghost account-signout" id="accountSignOut" type="button">Odhlásiť sa</button></div></article>
-      <article class="account-push-card${pushEligible?'':' is-locked'}"><div><span class="account-card-kicker">LIVE & INFO PUSH</span><h2>Okamžité upozornenia</h2><p>${pushEligible?'Dostaneš systémovú notifikáciu aj keď BlinQ práve nemáš otvorený.':'Browser push je súčasť ELITE, Legend a GOAT.'}</p></div><div class="account-push-actions"><button class="btn ${pushEligible?'btn-primary':'btn-ghost'}" id="accountPushToggle" type="button" ${pushEligible?'':'disabled'}>Skontrolovať push</button><span id="accountPushStatus">${pushEligible?'Kontrolujem stav…':'Dostupné od ELITE'}</span></div></article>
+      <article class="account-push-card${pushEligible?'':' is-locked'}"><div><span class="account-card-kicker">LIVE & INFO PUSH</span><h2>Okamžité upozornenia</h2><p>${pushEligible?'Dostaneš systémovú notifikáciu aj keď BlinQ práve nemáš otvorený.':'INFO push je dostupný pre aktívne členstvo; LIVE sa riadi nastaveným minimálnym levelom.'}</p></div><div class="account-push-actions"><button class="btn ${pushEligible?'btn-primary':'btn-ghost'}" id="accountPushToggle" type="button" ${pushEligible?'':'disabled'}>Skontrolovať push</button><span id="accountPushStatus">${pushEligible?'Kontrolujem stav…':'Dostupné pre aktívne členstvo'}</span></div></article>
     </section><section class="account-membership-page"><div class="account-membership-heading"><div><small>BLINQ ČLENSTVO</small><h2>Plány</h2></div></div>${renderPlanCardsForAccount()}</section>`;
   }
   function base64UrlToUint8Array(value){
@@ -2936,7 +2988,7 @@
     if(!('serviceWorker' in navigator)||!('PushManager' in window)||!('Notification' in window)){button.disabled=true;button.textContent='Nepodporované';status.textContent='Tento prehliadač nepodporuje Web Push.';return;}
     try{
       const cfg=await BlinqAuth.pushConfig();state.pushConfig=cfg;
-      if(!cfg?.eligible){button.disabled=true;button.textContent='ELITE+';status.textContent='Dostupné od ELITE.';return;}
+      if(!cfg?.eligible){button.disabled=true;button.textContent='NEDOSTUPNÉ';status.textContent='Vyžaduje aktívne členstvo.';return;}
       if(!cfg?.enabled){button.disabled=true;button.textContent='Čaká na nastavenie';status.textContent='Push server ešte nemá VAPID kľúče.';return;}
       const sub=await localPushSubscription();
       if(sub&&Notification.permission==='granted'){button.dataset.pushEnabled='1';button.textContent='Vypnúť upozornenia';button.classList.remove('btn-primary');button.classList.add('btn-ghost');status.textContent='Push upozornenia sú na tomto zariadení zapnuté.';}

@@ -33,4 +33,4 @@ def test_live_worker_setup_is_explained_in_system():
 
 def test_header_membership_cta_is_subtle():
     assert "label.textContent=lcopy('Membership','Členstvo','Členství')" in APP
-    assert 'runtime patch 7.3.6-r20' in CSS
+    assert 'runtime patch 7.3.6-r21' in CSS

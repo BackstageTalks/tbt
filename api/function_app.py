@@ -61,6 +61,8 @@ from tbt.services.admin_storage import (
     mark_insight_read,
     save_live_worker_status,
     load_live_worker_status,
+    live_min_level,
+    membership_levels_from,
 )
 from tbt.services.content_news import news_pool
 from tbt.services.media_storage import (
@@ -798,9 +800,18 @@ def feed(req):
 
 
 
+def _membership_allowed(account: dict, min_level: str = "rookie") -> bool:
+    if account.get("is_admin") or str(account.get("role") or "").lower() == "admin":
+        return True
+    status = str(account.get("status") or "").lower()
+    plan = "rookie" if status == "trial" else str(account.get("plan") or "").lower()
+    return status in {"trial", "active", "lifetime"} and plan in set(membership_levels_from(min_level))
+
 def _live_radar_allowed(account: dict) -> bool:
-    if account.get("is_admin") or str(account.get("role") or "").lower()=="admin":return True
-    return str(account.get("status") or "").lower() in {"active","lifetime"} and str(account.get("plan") or "").lower() in {"elite","legend","goat"}
+    return _membership_allowed(account, live_min_level())
+
+def _push_allowed(account: dict) -> bool:
+    return _membership_allowed(account, "rookie")
 
 
 def _public_live_radar_payload(result: dict) -> dict:
@@ -931,10 +942,10 @@ def live_radar(req):
         if not bool(user.get("email_verified",False)):return response({"error":"email_not_verified"},403)
         if is_suspended(user):return response({"error":"account_suspended"},403)
         account=public_account(user,cfg=settings,profile=_profile_for(user))
-        if not _live_radar_allowed(account):return response({"error":"elite_required"},403)
+        if not _live_radar_allowed(account):return response({"error":"live_access_required","required_level":live_min_level()},403)
         # Prefer the autonomous worker snapshot. If its heartbeat is stale or
         # durable storage is temporarily unavailable, fall back to one cached
-        # on-demand scan so ELITE+/admin users still get a usable service.
+        # on-demand scan so eligible members/admin still get a usable service.
         snapshot=_live_worker_snapshot()
         if snapshot is not None:
             return response({**_public_live_radar_payload(snapshot),"autonomous":True})
@@ -995,7 +1006,7 @@ def push_config(req):
         if is_suspended(user):
             return response({"error": "account_suspended"}, 403)
         account = public_account(user, cfg=settings, profile=_profile_for(user))
-        eligible = _live_radar_allowed(account)
+        eligible = _push_allowed(account)
         cfg = webpush_config()
         return response({**cfg, "eligible": bool(eligible)})
     except AuthUnavailable:
@@ -1013,8 +1024,8 @@ def push_subscription(req):
         if is_suspended(user):
             return response({"error": "account_suspended"}, 403)
         account = public_account(user, cfg=settings, profile=_profile_for(user))
-        if not _live_radar_allowed(account):
-            return response({"error": "elite_required"}, 403)
+        if not _push_allowed(account):
+            return response({"error": "membership_required"}, 403)
         try:
             payload = req.get_json() or {}
         except ValueError:
@@ -1028,6 +1039,9 @@ def push_subscription(req):
         plan = str(account.get("plan") or "").lower()
         push_status = str(account.get("status") or "").lower()
         push_expires_at = account.get("expires_at")
+        if push_status == "trial":
+            plan = "rookie"
+            push_status = "active"
         if account.get("is_admin") or str(account.get("role") or "").lower() == "admin":
             plan = plan if plan in {"elite", "legend", "goat"} else "goat"
             # Admin push is operational access and must not depend on a paid-plan expiry.
@@ -1063,7 +1077,7 @@ def insights_feed(req):
         if plan == "expired":
             return response({"items": [], "unread": 0})
         # INFO can target any active membership level. LIVE items themselves
-        # remain server-restricted to ELITE+ by normalize_insight().
+        # remain server-restricted to the published LIVE minimum by normalize_insight().
         payload = list_insights(plan=plan, user_id=str(user.get("id") or ""), include_inactive=False, limit=100)
         return response(payload)
     except AdminStorageUnavailable:

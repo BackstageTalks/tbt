@@ -11,16 +11,19 @@ def test_top_dynamic_fallback_contract_present():
     assert '(0.60, 1.45)' in src
 
 
-def test_info_general_audience_but_live_elite_only():
-    from tbt.services.admin_storage import normalize_insight
-    info=normalize_insight({'title':'Info','body':'Body','type':'vip','levels':['rookie','pro','elite','legend','goat']})
+def test_info_general_audience_and_live_minimum_is_dynamic(monkeypatch):
+    from tbt.services import admin_storage
+    monkeypatch.setattr(admin_storage, 'load_runtime_ui_config', lambda: {'notifications': {'live_min_level': 'legend'}})
+    info=admin_storage.normalize_insight({'title':'Info','body':'Body','type':'vip','levels':['rookie','pro','elite','legend','goat']})
     assert info['levels'][0]=='rookie'
+    live=admin_storage.normalize_insight({'title':'Live','body':'Body','type':'set2','levels':['legend','goat']})
+    assert live['levels']==['legend','goat']
     try:
-        normalize_insight({'title':'Live','body':'Body','type':'set2','levels':['rookie']})
-    except ValueError:
-        pass
+        admin_storage.normalize_insight({'title':'Live','body':'Body','type':'set2','levels':['elite']})
+    except ValueError as exc:
+        assert 'LEGEND' in str(exc)
     else:
-        raise AssertionError('Set2 LIVE must remain ELITE+')
+        raise AssertionError('Set2 LIVE must respect the published LIVE minimum')
 
 
 def test_set2_push_requires_real_market_positive_value_and_depth():
