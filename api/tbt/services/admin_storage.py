@@ -378,6 +378,9 @@ def validate_ui_config(payload: object) -> dict:
         raise ValueError("Invalid UI configuration")
     if int(payload.get("schema") or 0) != 2:
         raise ValueError("Unsupported UI configuration schema")
+    # r25 intentionally accepts stale r22/r23 browser/Azure drafts and strips
+    # retired membership gating from Hero banners before persistence. Keep the
+    # historical in-place validation contract used by the admin storage tests.
     elements = payload.get("elements")
     plans = payload.get("plans")
     if not isinstance(elements, dict) or not isinstance(plans, dict):
@@ -391,14 +394,21 @@ def validate_ui_config(payload: object) -> dict:
         raise ValueError("Membership order must be Rookie, PRO, Elite, Legend, GOAT")
     if plans["rookie"].get("unlimited") is not True or plans["rookie"].get("duration_days") is not None:
         raise ValueError("ROOKIE must remain the unlimited free base level")
-    for plan in ("pro", "elite", "legend"):
+    # r25 migration: GOAT is no longer lifetime/unlimited. Older published
+    # configs are normalized to a finite default so they can be saved once and
+    # then edited normally from Admin.
+    goat = plans["goat"]
+    goat["lifetime"] = False
+    goat["unlimited"] = False
+    goat_days = goat.get("duration_days")
+    if not isinstance(goat_days, int) or goat_days <= 0:
+        goat["duration_days"] = 365
+    for plan in ("pro", "elite", "legend", "goat"):
         days = plans[plan].get("duration_days")
         if not isinstance(days, int) or days <= 0:
             raise ValueError(f"{plan} requires a positive default duration")
     if not isinstance(plans["legend"].get("enabled"), bool):
         raise ValueError("Legend enabled flag must be boolean")
-    if plans["goat"].get("lifetime") is not True or plans["goat"].get("duration_days") is not None:
-        raise ValueError("GOAT must remain the lifetime top level")
     for plan in plan_order:
         eyebrow = plans[plan].get("eyebrow", "")
         if not isinstance(eyebrow, str) or len(eyebrow) > 40:
@@ -589,6 +599,9 @@ def validate_ui_config(payload: object) -> dict:
     for element_id, element in elements.items():
         if not isinstance(element, dict):
             raise ValueError(f"Invalid UI element {element_id}")
+        if element.get("kind") == "hero_banner":
+            element.pop("access", None)
+            element.pop("click_access", None)
         if element.get("kind") != "hero_banner":
             access = element.get("access")
             if not isinstance(access, dict) or not contexts.issubset(access):
@@ -597,8 +610,6 @@ def validate_ui_config(payload: object) -> dict:
                 raise ValueError(f"UI element {element_id} has an invalid access state")
             if str(access.get("trial")).lower() != str(access.get("rookie")).lower():
                 raise ValueError(f"UI element {element_id} trial access must inherit Rookie")
-        elif element.get("access") or element.get("click_access"):
-            raise ValueError(f"Hero banner {element_id} must not carry membership access rules")
         content = element.get("content") or {}
         if isinstance(content, dict) and not _valid_destination(content.get("link"), allow_internal=True):
             raise ValueError(f"UI element {element_id} has an invalid destination URL")

@@ -93,11 +93,11 @@
     "goat": {
       "label": "BlinQ GOAT",
       "enabled": true,
-      "note": "Lifetime top-tier access; workspace permissions remain configurable in Admin.",
-      "duration_days": null,
-      "lifetime": true,
+      "note": "Top-tier access with duration managed in Admin.",
+      "duration_days": 365,
+      "lifetime": false,
       "hide_ads_allowed": false,
-      "description": "Lifetime access · All BlinQ features. Private top-tier access for selected members.",
+      "description": "All BlinQ features with duration managed in Admin. Private top-tier access for selected members.",
       "cta_label": "Request invite",
       "url": "",
       "avatar": "goat",
@@ -2353,7 +2353,7 @@
       }
     }
   },
-  "ui_patch": "736-r24",
+  "ui_patch": "736-r25",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,

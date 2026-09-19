@@ -67,8 +67,8 @@
     "goat": {
       "label": "BlinQ GOAT",
       "card_title": "BlinQ GOAT",
-      "short_description": "Doživotný prístup, všetky funkcie BlinQ a partner/reklamné výhody.",
-      "description": "Najvyššia úroveň BlinQ s doživotným prístupom a partner/reklamnými výhodami.",
+      "short_description": "Najvyššia úroveň BlinQ s kompletným prístupom a nastaviteľnou platnosťou.",
+      "description": "Najvyššia úroveň BlinQ s kompletným prístupom; platnosť nastavuješ v Admin → Členstvá.",
       "cta_label": "Upgrade na GOAT",
       "url": "",
       "invite_only": false,

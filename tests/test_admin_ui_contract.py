@@ -46,8 +46,9 @@ def test_plan_catalogue_has_requested_default_terms_and_active_legend():
     assert plans["rookie"]["unlimited"] is True
     assert plans["pro"]["duration_days"] == 30
     assert plans["elite"]["duration_days"] == 180
-    assert plans["goat"]["lifetime"] is True
-    assert plans["goat"]["duration_days"] is None
+    assert plans["goat"]["lifetime"] is False
+    assert plans["goat"]["unlimited"] is False
+    assert plans["goat"]["duration_days"] == 365
     assert plans["legend"]["enabled"] is True
     assert plans["legend"]["duration_days"] == 365
     assert "admin" not in plans

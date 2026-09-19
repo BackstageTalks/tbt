@@ -106,7 +106,7 @@ def test_plan_based_hide_ads_is_disabled_for_all_membership_levels():
         ("pro", 30, "active"),
         ("elite", 180, "active"),
         ("legend", 365, "active"),
-        ("goat", None, "lifetime"),
+        ("goat", 365, "active"),
     ):
         app_metadata = {"blinq_plan": plan, "blinq_status": status}
         if days is not None:
@@ -134,9 +134,9 @@ def test_admin_role_is_separate_from_subscription_plan():
     assert account["is_admin"] is True
 
 
-def test_lifetime_is_only_valid_for_goat():
-    with pytest.raises(ValueError, match="GOAT"):
-        normalize_access_update({"role": "user", "plan": "pro", "status": "lifetime"})
+def test_lifetime_is_no_longer_assignable_from_admin():
+    with pytest.raises(ValueError, match="no longer assignable"):
+        normalize_access_update({"role": "user", "plan": "goat", "status": "lifetime"})
 
 
 def test_active_plan_requires_expiration_date():

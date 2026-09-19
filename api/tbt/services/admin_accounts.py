@@ -145,10 +145,8 @@ def normalize_access_update(payload):
         raise ValueError("Invalid plan")
     if status not in ALLOWED_STATUSES:
         raise ValueError("Invalid status")
-    if status == "lifetime" and plan != "goat":
-        raise ValueError("Lifetime status is reserved for GOAT")
     if status == "lifetime":
-        expires_at = None
+        raise ValueError("Lifetime membership is no longer assignable; use active with an expiration date")
     if status == "active" and not plan and role != "admin":
         raise ValueError("Active status requires a plan")
     if status == "active" and plan == "rookie":

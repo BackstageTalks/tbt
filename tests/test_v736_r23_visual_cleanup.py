@@ -1,5 +1,8 @@
 from pathlib import Path
+import copy
 import json
+
+from tbt.services.admin_storage import validate_ui_config
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
@@ -65,6 +68,11 @@ def test_retired_drawer_api_and_obsolete_css_selectors_stay_removed():
         assert token not in CSS
 
 
-def test_backend_accepts_only_current_hero_banner_analytics_slots():
+def test_backend_normalizes_retired_hero_membership_rules():
     assert 're.compile(r"^HERO_BANNER_[1-5]$")' in BACKEND
-    assert "Hero banner {element_id} must not carry membership access rules" in BACKEND
+    stale = copy.deepcopy(UI)
+    stale["elements"]["HERO_BANNER_1"]["access"] = {"rookie": "active"}
+    stale["elements"]["HERO_BANNER_1"]["click_access"] = {"rookie": True}
+    cleaned = validate_ui_config(stale)
+    assert "access" not in cleaned["elements"]["HERO_BANNER_1"]
+    assert "click_access" not in cleaned["elements"]["HERO_BANNER_1"]

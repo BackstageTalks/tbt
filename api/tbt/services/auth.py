@@ -321,7 +321,7 @@ def account_access(user, *, cfg=None, now=None):
     ROOKIE is the permanent free base tier. It has no fixed expiry and is used for
     every ordinary account that has no explicit paid membership assignment. Paid
     tiers remain server-controlled; PRO/ELITE/LEGEND require a future expiration
-    timestamp and GOAT remains lifetime. An explicit expired/suspended ROOKIE claim
+    timestamp and GOAT uses the same finite-expiry contract. Legacy GOAT lifetime claims are grandfathered. An explicit expired/suspended ROOKIE claim
     is still respected so the optional inactivity worker can archive dormant free
     accounts without changing the default free-tier contract.
     """
@@ -398,7 +398,7 @@ def account_access(user, *, cfg=None, now=None):
             "is_admin": False,
         }
 
-    if assigned_plan in {"pro", "elite", "legend"} and assigned_status == "active" and expires_at is not None and expires_at > now:
+    if assigned_plan in {"pro", "elite", "legend", "goat"} and assigned_status == "active" and expires_at is not None and expires_at > now:
         return {
             "role": "user",
             "plan": assigned_plan,
@@ -415,7 +415,7 @@ def account_access(user, *, cfg=None, now=None):
             "plan": assigned_plan,
             "plan_label": PLAN_LABELS[assigned_plan],
             "status": "expired",
-            "expires_at": None if assigned_plan in {"rookie", "goat"} else (expires_at.isoformat() if expires_at else None),
+            "expires_at": None if assigned_plan == "rookie" else (expires_at.isoformat() if expires_at else None),
             "trial_expires_at": None,
             "is_admin": False,
         }
