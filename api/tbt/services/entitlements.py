@@ -26,7 +26,7 @@ _POLICY = {
         "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "rookie": {
-        "daily": (2, False), "prime": (0, False), "top_daily": (2, False), "value": (0, False),
+        "daily": (2, False), "prime": (1, False), "top_daily": (2, False), "value": (0, False),
         "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "pro": {
@@ -152,9 +152,9 @@ def _daily_rows(payload: dict) -> list[dict]:
     """Build the public TOP board.
 
     VALUE has priority over TOP, so any row already qualifying for VALUE is
-    removed from the TOP board. PRIME is intentionally *not* merged here:
-    PRIME is an internal pool reserved for the Comeback LIVE Radar and must not
-    leak back into the public TOP category.
+    removed from the TOP board. PRIME is intentionally *not* merged into TOP. It is published separately as
+    the Short Odds category while the same raw pool remains available to the
+    internal Comeback LIVE Radar.
     """
     value_ids={_row_id(row) for row in payload.get("value_picks", []) if isinstance(row, dict)}
     out=[]; seen=set()
@@ -354,7 +354,7 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
     payload = payload or {}
     sections = {}
     source_map={"daily":_daily_rows(payload), **{section:(payload.get(feed_key) if isinstance(payload.get(feed_key),list) else []) for section,feed_key in SECTION_TO_FEED_KEY.items()}}
-    tab_map={"daily":"daily","prime":"top","top_daily":"daily","value":"value","doubles":"doubles","ace":"ace","sg":"games"}
+    tab_map={"daily":"daily","prime":"prime","top_daily":"daily","value":"value","doubles":"doubles","ace":"ace","sg":"games"}
     for section, rows in source_map.items():
         default_limit, hard_see_all = policy.get(section, (0,False))
         runtime_rule=_admin_hub_rule(ui_config, tab_map[section], plan) if section in tab_map else None
@@ -425,10 +425,6 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
             "display_state":display_state,"slot_states":slot_states,"row_overrides":deepcopy(row_overrides),
         }
 
-    # PRIME is internal-only for Comeback LIVE Radar and never leaves the API.
-    if "prime" in sections:
-        sections["prime"]={"visible_picks":0,"see_all":False,"blur_remaining":False,"enabled":False,"total":0,"returned":0,"locked_count":0,"internal_only":True}
-
     board_rows = _board_rows(payload, "upcoming")
     board_enabled = plan in BOARD_PLANS
     runtime_board = None if plan == "admin" else _admin_hub_rule(ui_config, "board", plan)
@@ -492,9 +488,11 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     daily_allowed,_=_select_authorized_rows(daily_all,daily_ent["visible_picks"],access=access,section="daily",selection_mode=daily_ent.get("selection_mode","first"),row_overrides=daily_ent.get("row_overrides"),blur_remaining=bool(daily_ent.get("blur_remaining"))) if daily_ent.get("display_state")=="active" and daily_ent.get("enabled") else ([],[])
     result["daily_picks"]=daily_allowed
     # Legacy section arrays remain server-filtered by their original hard policy
-    # for backward-compatible detail routes. The new dashboard consumes only
-    # `daily_picks`, which has its own stricter consolidated authorization.
-    result[SECTION_TO_FEED_KEY["prime"]]=[]
+    # for backward-compatible detail routes. Short Odds (PRIME) is now a public,
+    # independently authorized category and is never merged into TOP.
+    prime_rows=payload.get(SECTION_TO_FEED_KEY["prime"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["prime"]),list) else []
+    prime_ent=manifest["sections"]["prime"]
+    result[SECTION_TO_FEED_KEY["prime"]]=_select_authorized_rows(prime_rows,prime_ent["visible_picks"],access=access,section="prime",selection_mode=prime_ent.get("selection_mode","first"),row_overrides=prime_ent.get("row_overrides"),blur_remaining=bool(prime_ent.get("blur_remaining")))[0] if prime_ent.get("display_state")=="active" and prime_ent.get("enabled") else []
     rows=payload.get(SECTION_TO_FEED_KEY["top_daily"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["top_daily"]),list) else []
     top_ent=manifest["sections"]["top_daily"]
     result[SECTION_TO_FEED_KEY["top_daily"]]=_select_authorized_rows(rows,top_ent["visible_picks"],access=access,section="top_daily",selection_mode=top_ent.get("selection_mode","first"),row_overrides=top_ent.get("row_overrides"),blur_remaining=bool(top_ent.get("blur_remaining")))[0] if top_ent.get("display_state")=="active" and top_ent.get("enabled") else []
@@ -538,7 +536,7 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     result[SECTION_TO_FEED_KEY["sg"]]=authorized_sg
 
     if manifest["plan"] not in {"elite","legend","goat","admin"}:
-        permitted_ids={str(row.get("event_id") or "") for feed_key in ["daily_picks","top_daily_picks","value_picks","doubles_picks","ace_picks","sg_picks"] for row in result.get(feed_key,[]) if isinstance(row,dict)}
+        permitted_ids={str(row.get("event_id") or "") for feed_key in ["daily_picks","prime_picks","top_daily_picks","value_picks","doubles_picks","ace_picks","sg_picks"] for row in result.get(feed_key,[]) if isinstance(row,dict)}
         safe=[]
         for row in payload.get("upcoming",[]):
             if not isinstance(row,dict) or str(row.get("event_id") or "") not in permitted_ids: continue

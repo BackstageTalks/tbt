@@ -10,7 +10,8 @@ def test_see_all_is_configured_like_a_regular_access_rule():
     assert see['enabled'] is True
     assert see['plans']['rookie']['display_state']=='blurred'
     assert see['plans']['elite']['display_state']=='active'
-    assert "firstDailyHubUnlockPlan('see_all'" in APP
+    assert "if(tab==='see_all')return previewDailyHubEntitlement(tab);" in APP
+    assert "tab==='see_all'&&!ent.see_all" not in APP
     assert "data-admin-hub-tab-card=\"${tab}\"" in APP
     assert "if(tab==='see_all')return leanSeeAllRows();" in APP
     assert 'Vyžaduje ELITE' not in APP.split('function dailyHubLockedRow',1)[1].split('function renderDailyHub',1)[0]

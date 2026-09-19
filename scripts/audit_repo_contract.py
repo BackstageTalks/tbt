@@ -345,3 +345,13 @@ for item in checks:
 _admin_storage = (ROOT / "api" / "tbt" / "services" / "admin_storage.py").read_text(encoding="utf-8")
 if "_normalize_membership_invariants(payload)" not in _admin_storage:
     fail("r26 membership publish self-heal is missing")
+
+# r27 Short Odds / unified SEE ALL / admin cleanup contract
+_app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+_ui = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+if _ui.get("ui_patch") != "736-r27" or not (((_ui.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}).get("prime", {}).get("enabled"):
+    fail("r27 Short Odds public configuration is missing")
+if "Kopírovať nastavenie z iného levelu" in _app or "data-admin-action=\"copy-plan\"" in _app or "adminCopyFrom" in _app:
+    fail("r27 retired copy-from-level admin tool is still present")
+if "admin-see-all-rule-note" in _app or "const rows=['daily','prime','value','ace','doubles','games','sets','see_all'].map" not in _app:
+    fail("r27 unified SEE ALL controls are missing")

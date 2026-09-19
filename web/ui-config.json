@@ -1782,7 +1782,7 @@
         },
         "prime": {
           "label": "Short Odds",
-          "enabled": false,
+          "enabled": true,
           "plans": {
             "trial": {
               "visible_rows": 1,
@@ -2353,7 +2353,7 @@
       }
     }
   },
-  "ui_patch": "736-r26",
+  "ui_patch": "736-r27",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,

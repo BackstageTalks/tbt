@@ -24,8 +24,8 @@ def test_v700_public_prediction_categories_are_current():
     assert tabs["value"]["label"] == "VALUE" and tabs["value"]["enabled"] is True
     assert tabs["ace"]["label"] == "ESA" and tabs["ace"]["enabled"] is True
     assert tabs["games"]["label"] == "GAMES" and tabs["games"]["enabled"] is True
-    # PRIME/Short Odds is internal, not a public prediction tab.
-    assert tabs["prime"]["enabled"] is False
+    # Short Odds is the public PRIME category and is Admin-configurable.
+    assert tabs["prime"]["label"] == "Short Odds" and tabs["prime"]["enabled"] is True
     assert tabs["top"]["enabled"] is False
     assert tabs["doubles"]["enabled"] is True
     assert tabs["board"]["enabled"] is False
