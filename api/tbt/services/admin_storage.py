@@ -264,6 +264,45 @@ def _decode_runtime_ui_payload(payload: object) -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+def _normalize_membership_invariants(payload: object) -> object:
+    """Heal legacy membership values before UI-config validation/serving.
+
+    ROOKIE is a product invariant: always enabled, free and without a fixed
+    expiry. Older Azure rows/browser drafts may still carry the former 30-day
+    values, so rejecting those payloads would make Admin unable to publish the
+    very migration that fixes them. GOAT is now finite and defaults to 365 days
+    when a legacy lifetime row is encountered.
+    """
+    if not isinstance(payload, dict):
+        return payload
+    plans = payload.get("plans")
+    if not isinstance(plans, dict):
+        return payload
+
+    trial = plans.get("trial")
+    if isinstance(trial, dict):
+        trial["enabled"] = False
+        trial["trial_hours"] = 0
+        trial["duration_days"] = None
+        trial["inherits"] = "rookie"
+
+    rookie = plans.get("rookie")
+    if isinstance(rookie, dict):
+        rookie["enabled"] = True
+        rookie["duration_days"] = None
+        rookie["unlimited"] = True
+        rookie["lifetime"] = False
+
+    goat = plans.get("goat")
+    if isinstance(goat, dict):
+        goat["lifetime"] = False
+        goat["unlimited"] = False
+        days = goat.get("duration_days")
+        if not isinstance(days, int) or isinstance(days, bool) or days <= 0:
+            goat["duration_days"] = 365
+    return payload
+
+
 def load_runtime_ui_config() -> dict | None:
     client = _table(UI_TABLE)
     try:
@@ -275,7 +314,8 @@ def load_runtime_ui_config() -> dict | None:
         if status == 404 or "resourcenotfound" in name or "resourcenotfounderror" in name:
             return None
         raise AdminStorageUnavailable("Unable to load runtime UI configuration") from exc
-    return _decode_runtime_ui_payload(entity.get("payload"))
+    decoded = _decode_runtime_ui_payload(entity.get("payload"))
+    return _normalize_membership_invariants(decoded) if decoded is not None else None
 
 
 
@@ -376,6 +416,10 @@ def load_account_worker_status() -> dict | None:
 def validate_ui_config(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Invalid UI configuration")
+    # r26: normalize product invariants BEFORE validation. This makes publishing
+    # self-healing even when an old Azure row, stale browser tab or local Admin
+    # draft still contains the former 30-day ROOKIE / lifetime GOAT values.
+    _normalize_membership_invariants(payload)
     if int(payload.get("schema") or 0) != 2:
         raise ValueError("Unsupported UI configuration schema")
     # r25 intentionally accepts stale r22/r23 browser/Azure drafts and strips
@@ -392,17 +436,11 @@ def validate_ui_config(payload: object) -> dict:
     plan_order = ["rookie", "pro", "elite", "legend", "goat"]
     if [plan for plan, _ in sorted(((plan, plans[plan].get("order")) for plan in plan_order), key=lambda item: int(item[1] or 99))] != plan_order:
         raise ValueError("Membership order must be Rookie, PRO, Elite, Legend, GOAT")
-    if plans["rookie"].get("unlimited") is not True or plans["rookie"].get("duration_days") is not None:
-        raise ValueError("ROOKIE must remain the unlimited free base level")
-    # r25 migration: GOAT is no longer lifetime/unlimited. Older published
-    # configs are normalized to a finite default so they can be saved once and
-    # then edited normally from Admin.
+    # Product invariants have already been normalized above. Keep the explicit
+    # checks as a defensive contract, but legacy values no longer block publish.
+    if plans["rookie"].get("unlimited") is not True or plans["rookie"].get("duration_days") is not None or plans["rookie"].get("enabled") is not True:
+        raise ValueError("ROOKIE normalization failed")
     goat = plans["goat"]
-    goat["lifetime"] = False
-    goat["unlimited"] = False
-    goat_days = goat.get("duration_days")
-    if not isinstance(goat_days, int) or goat_days <= 0:
-        goat["duration_days"] = 365
     for plan in ("pro", "elite", "legend", "goat"):
         days = plans[plan].get("duration_days")
         if not isinstance(days, int) or days <= 0:

@@ -340,3 +340,8 @@ if errors:
 print('BlinQ repository contract audit: PASS')
 for item in checks:
     print(f'  ✓ {item}')
+
+# r26 membership publish self-heal contract
+_admin_storage = (ROOT / "api" / "tbt" / "services" / "admin_storage.py").read_text(encoding="utf-8")
+if "_normalize_membership_invariants(payload)" not in _admin_storage:
+    fail("r26 membership publish self-heal is missing")

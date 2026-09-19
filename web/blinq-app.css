@@ -6006,3 +6006,4 @@ body#blinqPremium .admin-inactivity-danger>.admin-inline-check input{width:15px!
 body#blinqPremium .admin-inactivity-danger>small{font-size:7px!important;line-height:1.4!important;color:#66877c!important}
 
 /* BlinQ runtime patch 7.3.6-r25: stale Hero publish migration + finite GOAT duration */
+/* BlinQ runtime patch 7.3.6-r26: self-healing ROOKIE publish invariant */
