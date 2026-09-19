@@ -252,6 +252,11 @@ def tracked_repo_files() -> list[Path]:
         return out
 
 for path in tracked_repo_files():
+    # CI sanitizes compiled/cache artifacts before this audit. A file can still
+    # be listed in Git's index when it came from an older browser-uploaded ZIP,
+    # but if it no longer exists in the production working tree it cannot ship.
+    if not path.exists():
+        continue
     rel = path.relative_to(ROOT)
     if any(part in {'.pytest_cache', '__pycache__'} for part in rel.parts):
         fail(f'cache/build artifact committed: {rel}')

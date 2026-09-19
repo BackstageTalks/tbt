@@ -21,6 +21,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Sanitize generated artifacts
+        run: python scripts/clean_generated_artifacts.py
+
       - name: Guard fresh main commit
         if: ${{ github.event_name != 'pull_request' }}
         shell: bash
@@ -149,6 +152,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Sanitize generated artifacts
+        run: python scripts/clean_generated_artifacts.py
 
       - name: Set up Python
         uses: actions/setup-python@v5

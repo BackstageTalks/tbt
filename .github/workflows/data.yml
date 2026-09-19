@@ -397,6 +397,9 @@ jobs:
             echo "BLINQ_SKIP_STALE_DEPLOY=false" >> "$GITHUB_ENV"
           fi
 
+      - name: Sanitize generated artifacts before deploy
+        run: python scripts/clean_generated_artifacts.py
+
       - name: Deploy refreshed feed and application
         if: env.MODE == 'refresh' && env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         uses: Azure/static-web-apps-deploy@v1
