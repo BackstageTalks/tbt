@@ -3,6 +3,7 @@ from collections import defaultdict, deque
 from datetime import datetime, timezone
 from threading import Lock
 import hashlib
+import hmac
 import logging
 import json
 import os
@@ -58,6 +59,8 @@ from tbt.services.admin_storage import (
     save_insight,
     delete_insight,
     mark_insight_read,
+    save_live_worker_status,
+    load_live_worker_status,
 )
 from tbt.services.content_news import news_pool
 from tbt.services.support_storage import build_support_ticket, create_support_ticket, list_support_tickets, update_support_ticket
@@ -843,13 +846,55 @@ def _live_radar_allowed(account: dict) -> bool:
     return str(account.get("status") or "").lower() in {"active","lifetime"} and str(account.get("plan") or "").lower() in {"elite","legend","goat"}
 
 
-def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
-    """Run/cached LIVE scan and publish at most once per fresh scan per instance.
+def _public_live_radar_payload(result: dict) -> dict:
+    candidates=result.get("candidates") or []
+    signals=result.get("signals") or []
+    public_candidate=lambda x:{k:x.get(k) for k in ("event_id","favorite","opponent","first_set","second_set","stage","reason","tournament","second_set_probability","second_set_model","second_set_quality","second_set_samples","second_set_odds","second_set_fair_probability","second_set_edge","second_set_ev","second_set_market") if k in x}
+    return {
+        "ok": True,
+        "scanned_at": result.get("scanned_at"),
+        "live_events": int(result.get("live_events") or 0),
+        "candidates": len(candidates) if isinstance(candidates,list) else int(result.get("candidates") or 0),
+        "signals": len(signals) if isinstance(signals,list) else int(result.get("signals") or 0),
+        "candidate_items": [public_candidate(x) for x in candidates[:3] if isinstance(x,dict)] if isinstance(candidates,list) else list(result.get("candidate_items") or [])[:3],
+        "signal_items": [public_candidate(x) for x in signals[:3] if isinstance(x,dict)] if isinstance(signals,list) else list(result.get("signal_items") or [])[:3],
+        "new_alerts": int(result.get("created") or result.get("new_alerts") or 0),
+        "cached": bool(result.get("cached")),
+        "alert_storage_unavailable": bool(result.get("alert_storage_unavailable")),
+        "thresholds": result.get("thresholds") or {},
+    }
 
-    Azure Static Web Apps managed Functions do not provide a dependable timer
-    trigger for this app shape, so ELITE/admin HTTP polling is the scheduler.
-    Provider calls are protected by the 45-second cache and alert writes remain
-    idempotent in persistent storage.
+
+def _live_worker_token_ok(req) -> bool:
+    expected=str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip()
+    supplied=str((getattr(req,"headers",{}) or {}).get("X-Blinq-Worker-Token") or "").strip()
+    return bool(expected and supplied and hmac.compare_digest(expected,supplied))
+
+
+def _live_worker_snapshot(max_age_seconds: int = 180) -> dict | None:
+    try:
+        snapshot=load_live_worker_status()
+    except AdminStorageUnavailable:
+        return None
+    if not snapshot:
+        return None
+    raw=str(snapshot.get("updated_at") or snapshot.get("scanned_at") or "").strip()
+    try:
+        moment=datetime.fromisoformat(raw.replace("Z","+00:00"))
+        if moment.tzinfo is None: moment=moment.replace(tzinfo=timezone.utc)
+        age=(datetime.now(timezone.utc)-moment.astimezone(timezone.utc)).total_seconds()
+    except ValueError:
+        return None
+    if age<0 or age>max_age_seconds:
+        return None
+    return {**snapshot,"cached":True,"worker_snapshot":True}
+
+
+def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
+    """Run/cached LIVE scan and publish idempotent alerts.
+
+    Production scheduling is handled by the autonomous LIVE worker workflow.
+    Browser polling is only a freshness fallback when the worker heartbeat is stale.
     """
     global _LIVE_RADAR_CACHE, _LIVE_RADAR_LAST_PUBLISHED_SCAN
     now=time.monotonic(); fresh=False
@@ -859,22 +904,30 @@ def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
         else:
             scan=None
     if scan is None:
-        feed_payload=read_feed(FEED); client=RapidTennisClient(settings)
-        try:
-            live_events=client.live_events()
-            scan=scan_comeback_radar(feed_payload,live_events)
-            odds_payloads={}
-            max_odds_events=max(0,min(12,int(os.getenv("BLINQ_LIVE_SET2_ODDS_MAX_EVENTS","6"))))
-            for candidate in (scan.get("candidates") or [])[:max_odds_events]:
-                eid=str(candidate.get("event_id") or "").strip() if isinstance(candidate,dict) else ""
-                if not eid:continue
-                try:odds_payloads[eid]=client.event_odds(eid,provider_id=1)
-                except Exception as exc:
-                    logging.info("Set-2 odds unavailable for %s: %s",eid,exc.__class__.__name__)
-            scan=attach_second_set_odds(scan,odds_payloads,live_events)
-        finally:
-            try:client.close()
-            except Exception:pass
+        feed_payload=read_feed(FEED)
+        prime_pool=feed_payload.get("prime_picks") if isinstance(feed_payload.get("prime_picks"),list) else []
+        eligible_pool=[row for row in prime_pool if isinstance(row,dict) and prime_radar_eligible(row)]
+        if not eligible_pool:
+            # Do not spend a provider request when there is no pre-match PRIME
+            # candidate that could possibly qualify for Comeback LIVE.
+            scan=scan_comeback_radar(feed_payload,[])
+        else:
+            client=RapidTennisClient(settings)
+            try:
+                live_events=client.live_events()
+                scan=scan_comeback_radar(feed_payload,live_events)
+                odds_payloads={}
+                max_odds_events=max(0,min(12,int(os.getenv("BLINQ_LIVE_SET2_ODDS_MAX_EVENTS","6"))))
+                for candidate in (scan.get("candidates") or [])[:max_odds_events]:
+                    eid=str(candidate.get("event_id") or "").strip() if isinstance(candidate,dict) else ""
+                    if not eid:continue
+                    try:odds_payloads[eid]=client.event_odds(eid,provider_id=1)
+                    except Exception as exc:
+                        logging.info("Set-2 odds unavailable for %s: %s",eid,exc.__class__.__name__)
+                scan=attach_second_set_odds(scan,odds_payloads,live_events)
+            finally:
+                try:client.close()
+                except Exception:pass
         scan["cached"]=False; fresh=True
         with _LIVE_RADAR_CACHE_LOCK:_LIVE_RADAR_CACHE=(time.monotonic(),dict(scan))
 
@@ -922,16 +975,44 @@ def live_radar(req):
         if is_suspended(user):return response({"error":"account_suspended"},403)
         account=public_account(user,cfg=settings,profile=_profile_for(user))
         if not _live_radar_allowed(account):return response({"error":"elite_required"},403)
-        # ELITE/Admin polling is the production scheduler. Provider calls are
-        # cached for 45 s and alert writes are idempotent / once per fresh scan.
+        # Prefer the autonomous worker snapshot. If its heartbeat is stale or
+        # durable storage is temporarily unavailable, fall back to one cached
+        # on-demand scan so ELITE+/admin users still get a usable service.
+        snapshot=_live_worker_snapshot()
+        if snapshot is not None:
+            return response({**_public_live_radar_payload(snapshot),"autonomous":True})
         r=_run_live_radar(force=False,publish=True)
-        candidates=r.get("candidates") or []; signals=r.get("signals") or []
-        public_candidate=lambda x:{k:x.get(k) for k in ("event_id","favorite","opponent","first_set","second_set","stage","reason","tournament","second_set_probability","second_set_model","second_set_quality","second_set_samples","second_set_odds","second_set_fair_probability","second_set_edge","second_set_ev","second_set_market") if k in x}
-        return response({"ok":True,"scanned_at":r.get("scanned_at"),"live_events":r.get("live_events",0),"candidates":len(candidates),"signals":len(signals),"candidate_items":[public_candidate(x) for x in candidates[:3] if isinstance(x,dict)],"signal_items":[public_candidate(x) for x in signals[:3] if isinstance(x,dict)],"new_alerts":int(r.get("created") or 0),"cached":bool(r.get("cached")),"alert_storage_unavailable":bool(r.get("alert_storage_unavailable")),"thresholds":r.get("thresholds") or {}})
+        return response({**_public_live_radar_payload(r),"autonomous":False,"fallback_scan":True})
     except AuthUnavailable:return response({"error":"auth_unavailable"},503)
     except AdminStorageUnavailable:return response({"error":"live_radar_storage_unavailable"},503)
     except Exception as exc:
         logging.exception("Comeback LIVE Radar scan failed");return response({"error":"live_radar_unavailable"},503)
+
+
+@app.route(route="v1/internal/live-radar-worker", methods=["POST"])
+def internal_live_radar_worker(req):
+    """Secret-protected autonomous scheduler hook; never exposed to browser auth."""
+    if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
+        return response({"error":"live_worker_not_configured"},503)
+    if not _live_worker_token_ok(req):
+        return response({"error":"forbidden"},403)
+    try:
+        result=_run_live_radar(force=True,publish=True)
+        public=_public_live_radar_payload(result)
+        persisted=True
+        try:
+            save_live_worker_status(public)
+        except AdminStorageUnavailable:
+            persisted=False
+            logging.warning("LIVE worker heartbeat storage unavailable")
+        return response({**public,"autonomous":True,"heartbeat_persisted":persisted})
+    except Exception as exc:
+        logging.exception("Autonomous LIVE Radar worker failed")
+        try:
+            save_live_worker_status({"scanned_at":datetime.now(timezone.utc).isoformat(),"last_error":exc.__class__.__name__})
+        except Exception:
+            pass
+        return response({"error":"live_worker_failed","detail":exc.__class__.__name__},503)
 
 
 @app.route(route="v1/admin/live-radar", methods=["GET","POST"])
@@ -1128,6 +1209,22 @@ def admin_diagnostics(req):
         storage_ok = storage.get("backend") != "unavailable"
         media = media_storage_diagnostics()
         push = push_storage_diagnostics()
+        worker_configured = bool(str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip())
+        try:
+            worker_status = load_live_worker_status() or {}
+        except AdminStorageUnavailable:
+            worker_status = {}
+        worker_age_seconds = None
+        worker_healthy = False
+        raw_worker_time = str(worker_status.get("updated_at") or worker_status.get("scanned_at") or "").strip()
+        if raw_worker_time:
+            try:
+                worker_moment = datetime.fromisoformat(raw_worker_time.replace("Z", "+00:00"))
+                if worker_moment.tzinfo is None: worker_moment = worker_moment.replace(tzinfo=timezone.utc)
+                worker_age_seconds = max(0, int((datetime.now(timezone.utc)-worker_moment.astimezone(timezone.utc)).total_seconds()))
+                worker_healthy = bool(worker_configured and worker_age_seconds <= 180 and not worker_status.get("last_error"))
+            except ValueError:
+                pass
         feed_health = {"ready": False, "stale": True, "generated_at": None, "upcoming": 0, "results": 0, "model_version": None}
         try:
             raw_feed = read_feed(FEED)
@@ -1149,6 +1246,7 @@ def admin_diagnostics(req):
             "support_storage": bool(storage_services.get("support")),
             "info_storage": bool(storage_services.get("premium_info")),
             "live_data": bool(feed_health.get("ready") and not feed_health.get("stale")),
+            "live_worker": bool(worker_healthy),
         }
         provider_health = {
             "configured": bool(str(getattr(settings, "rapidapi_key", "") or "").strip()),
@@ -1178,6 +1276,10 @@ def admin_diagnostics(req):
             problems.append("admin_storage_unavailable")
         if not media.get("configured") or not media.get("available"):
             problems.append("media_storage_unavailable")
+        if not worker_configured:
+            problems.append("live_worker_token_missing")
+        elif not worker_healthy:
+            problems.append("live_worker_stale")
         if not push.get("enabled"):
             problems.append("webpush_not_configured")
         elif not push.get("storage_available"):
@@ -1190,6 +1292,17 @@ def admin_diagnostics(req):
             "support_email_configured": support_email_configured(),
             "media_storage": media,
             "webpush": push,
+            "live_worker": {
+                "configured": worker_configured,
+                "healthy": worker_healthy,
+                "age_seconds": worker_age_seconds,
+                "scanned_at": worker_status.get("scanned_at"),
+                "live_events": int(worker_status.get("live_events") or 0),
+                "candidates": int(worker_status.get("candidates") or 0),
+                "signals": int(worker_status.get("signals") or 0),
+                "new_alerts": int(worker_status.get("new_alerts") or 0),
+                "last_error": str(worker_status.get("last_error") or "")[:160],
+            },
             "auth_provider": auth_provider(settings),
             "admin_storage": storage.get("backend"),
             "storage": storage,

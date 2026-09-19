@@ -79,7 +79,11 @@ def test_release_and_cache_revision_cannot_drift():
     assert revision == "7.3.6"
     assert release["release"] == revision
     assert f'data-web-release="{revision}"' in INDEX
-    assert 'content="736-r6"' in INDEX
+    patch = re.search(r'<meta name="blinq-web-patch" content="736-r(\d+)"', INDEX)
+    assert patch, "missing web patch marker"
+    patch_n = patch.group(1)
+    assert f'/app.js?v={asset_revision}&p={patch_n}' in INDEX
+    assert f'/final-polish-736.css?v={asset_revision}&p={patch_n}' in INDEX
     refs = re.findall(r'(?:src|href)="(/[^"?#]+\.(?:js|css)\?v=(\d+)[^"]*)"', INDEX)
     assert refs, "expected versioned frontend assets"
     bad = [(ref, version) for ref, version in refs if version != asset_revision]

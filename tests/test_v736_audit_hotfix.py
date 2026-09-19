@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / 'web' / 'app.js').read_text(encoding='utf-8')
@@ -36,6 +37,10 @@ def test_footer_is_neutral_but_keeps_live_diagnostic_signal():
 
 
 def test_changed_assets_have_patch_cache_bust_without_breaking_release_contract():
-    assert '/app.js?v=7360&p=6' in INDEX
-    assert '/final-polish-736.css?v=7360&p=6' in INDEX
+    patch = re.search(r'<meta name="blinq-web-patch" content="736-r(\d+)"', INDEX)
+    assert patch, "missing 736 patch marker"
+    n = patch.group(1)
+    assert int(n) >= 6
+    assert f'/app.js?v=7360&p={n}' in INDEX
+    assert f'/final-polish-736.css?v=7360&p={n}' in INDEX
     assert 'data-web-release="7.3.6"' in INDEX

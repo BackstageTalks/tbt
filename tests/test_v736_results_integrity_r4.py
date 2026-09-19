@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 from tbt.services.engine import betting_performance
 
@@ -56,8 +57,10 @@ def test_backend_metrics_collapse_legacy_duplicate_publication_keys():
     assert abs(metrics["overall"]["profit_units"] - 0.8) < 1e-12
 
 
-def test_release_stays_736_and_only_patch_cache_moves_to_r4():
+def test_release_stays_736_and_patch_cache_matches_patch_marker():
     assert 'data-web-release="7.3.6"' in INDEX
-    assert 'content="736-r6"' in INDEX
-    assert '/app.js?v=7360&p=6' in INDEX
-    assert '/final-polish-736.css?v=7360&p=6' in INDEX
+    patch = re.search(r'<meta name="blinq-web-patch" content="736-r(\d+)"', INDEX)
+    assert patch
+    n = patch.group(1)
+    assert f'/app.js?v=7360&p={n}' in INDEX
+    assert f'/final-polish-736.css?v=7360&p={n}' in INDEX

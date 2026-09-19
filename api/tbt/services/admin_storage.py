@@ -255,6 +255,55 @@ def load_runtime_ui_config() -> dict | None:
     return parsed if isinstance(parsed, dict) else None
 
 
+
+def save_live_worker_status(payload: object) -> dict:
+    """Persist a tiny, non-secret heartbeat/snapshot for the autonomous LIVE worker."""
+    data = dict(payload or {}) if isinstance(payload, dict) else {}
+    now = datetime.now(timezone.utc).isoformat()
+    safe = {
+        "scanned_at": str(data.get("scanned_at") or now)[:64],
+        "live_events": max(0, int(data.get("live_events") or 0)),
+        "candidates": max(0, int(data.get("candidates") or 0)),
+        "signals": max(0, int(data.get("signals") or 0)),
+        "new_alerts": max(0, int(data.get("new_alerts") or 0)),
+        "candidate_items": data.get("candidate_items") if isinstance(data.get("candidate_items"), list) else [],
+        "signal_items": data.get("signal_items") if isinstance(data.get("signal_items"), list) else [],
+        "thresholds": data.get("thresholds") if isinstance(data.get("thresholds"), dict) else {},
+        "last_error": str(data.get("last_error") or "")[:160],
+        "updated_at": now,
+    }
+    # Keep snapshots deliberately tiny; the durable insight table is the alert history.
+    safe["candidate_items"] = safe["candidate_items"][:3]
+    safe["signal_items"] = safe["signal_items"][:3]
+    entity = {
+        "PartitionKey": "runtime",
+        "RowKey": "live-radar-worker-status",
+        "payload": json.dumps(safe, ensure_ascii=False, separators=(",", ":")),
+        "updated_at": now,
+    }
+    try:
+        _table(UI_TABLE).upsert_entity(entity, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save LIVE worker status") from exc
+    return safe
+
+
+def load_live_worker_status() -> dict | None:
+    """Load the most recent autonomous LIVE worker heartbeat/snapshot."""
+    try:
+        entity = _table(UI_TABLE).get_entity(partition_key="runtime", row_key="live-radar-worker-status")
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        name = exc.__class__.__name__.lower()
+        if status == 404 or "notfound" in name or isinstance(exc, KeyError):
+            return None
+        raise AdminStorageUnavailable("Unable to load LIVE worker status") from exc
+    try:
+        payload = json.loads(str(entity.get("payload") or "{}"))
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
 def validate_ui_config(payload: object) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Invalid UI configuration")

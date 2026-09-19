@@ -265,7 +265,7 @@
 
   async function loadUiConfig() {
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=6');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=9');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
@@ -3013,7 +3013,7 @@
   }
   function systemState(ok,warning=false){return ok?'ok':warning?'warning':'error';}
   function renderAdminSystem(){
-    const d=state.adminDiagnostics||{},feed=d.feed||{},provider=d.provider||{},ops=d.ops||{},counts=ops.counts||{};
+    const d=state.adminDiagnostics||{},feed=d.feed||{},provider=d.provider||{},worker=d.live_worker||{},ops=d.ops||{},counts=ops.counts||{};
     const storage=d.storage||{},storageServices=storage.services||{},services=d.services||{},assets=d.assets||{};
     const playerImages=assets.player_images||{},tournamentLogos=assets.tournament_logos||{};
     const privateServicesReady=Boolean(storageServices.premium_info&&storageServices.live_alert_history&&storageServices.support);
@@ -3028,6 +3028,7 @@
       ['SUPPORT STORAGE',Boolean(services.support_storage),services.support_storage?'ONLINE':'NEED STORAGE'],
       ['INFO STORAGE',Boolean(services.info_storage),services.info_storage?'ONLINE':'NEED STORAGE'],
       ['LIVE DATA',Boolean(services.live_data),services.live_data?'FRESH':(feed.ready?'STALE':'NO FEED')],
+      ['LIVE WORKER',Boolean(worker.healthy),worker.healthy?`AUTO · ${Math.max(0,Number(worker.age_seconds)||0)}s`:(worker.configured?'STALE':'TOKEN MISSING')],
       ['DATA PROVIDER',Boolean(provider.configured),provider.configured?'CONFIGURED':'MISSING KEY'],
       ['ERRORS · 24H',Number(counts.error||0)===0,String(counts.error||0)],
     ];
@@ -3073,6 +3074,24 @@
 
   function rerenderAdmin(){ if(state.route!=='admin')return; const host=$('routePanel');host.innerHTML=renderAdminRoute();wireAdmin(); }
   function saveDraft(){ localStorage.setItem(draftKey(),JSON.stringify(state.ui)); showStatus('Admin koncept bol uložený v tomto prehliadači.'); }
+  async function publishUiConfig(){
+    if(!state.ui)return;
+    showStatus('Publikujem nastavenie…');
+    try{
+      const result=await BlinqAuth.adminSaveUiConfig(state.ui);
+      if(!result?.saved)throw new Error('Server nepotvrdil uloženie konfigurácie.');
+      try{localStorage.removeItem(draftKey());}catch{}
+      state.runtimeConfigLoaded=true;
+      state.uiSource=clone(state.ui);
+      showStatus('Nastavenie bolo publikované na live web.');
+      renderAllUiContent();
+      rerenderAdmin();
+    }catch(error){
+      const message=error?.status===503?'Admin storage nie je dostupný. Skontroluj Admin → Systém.':(error?.message||'Nastavenie sa nepodarilo publikovať.');
+      showStatus(message);
+      return false;
+    }
+  }
   function exportUiConfig(){ const blob=new Blob([JSON.stringify(state.ui,null,2)+'\n'],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download='ui-config.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),0); }
   async function loadAdminDiagnostics(force=false){
     if(state.adminDiagnosticsLoading||(!force&&state.adminDiagnostics))return;
@@ -3209,7 +3228,7 @@
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
         const d=state.adminDiagnostics||{};
-        const safe={release:d.release||'',accounts_ready:Boolean(d.accounts_ready),content_storage_ready:Boolean(d.content_storage_ready),auth_provider:d.auth_provider||'',admin_storage:d.admin_storage||'unavailable',firebase_server_configured:Boolean(d.firebase_server_configured),firebase_admin_users:Boolean(d.firebase_admin_users),storage:{backend:d.storage?.backend||'unavailable',azure_configured:Boolean(d.storage?.azure_configured),azure_available:Boolean(d.storage?.azure_available),azure_connection_source:d.storage?.azure_connection_source||'',firestore_available:Boolean(d.storage?.firestore_available)},assets:d.assets||{},services:d.services||{},media_storage:{configured:Boolean(d.media_storage?.configured),available:Boolean(d.media_storage?.available),container:d.media_storage?.container||''},webpush:{enabled:Boolean(d.webpush?.enabled),keys_configured:Boolean(d.webpush?.keys_configured),storage_available:Boolean(d.webpush?.storage_available),subscriptions:d.webpush?.subscriptions??null},problems:Array.isArray(d.problems)?d.problems:[]};
+        const safe={release:d.release||'',accounts_ready:Boolean(d.accounts_ready),content_storage_ready:Boolean(d.content_storage_ready),auth_provider:d.auth_provider||'',admin_storage:d.admin_storage||'unavailable',firebase_server_configured:Boolean(d.firebase_server_configured),firebase_admin_users:Boolean(d.firebase_admin_users),storage:{backend:d.storage?.backend||'unavailable',azure_configured:Boolean(d.storage?.azure_configured),azure_available:Boolean(d.storage?.azure_available),azure_connection_source:d.storage?.azure_connection_source||'',firestore_available:Boolean(d.storage?.firestore_available)},assets:d.assets||{},services:d.services||{},media_storage:{configured:Boolean(d.media_storage?.configured),available:Boolean(d.media_storage?.available),container:d.media_storage?.container||''},webpush:{enabled:Boolean(d.webpush?.enabled),keys_configured:Boolean(d.webpush?.keys_configured),storage_available:Boolean(d.webpush?.storage_available),subscriptions:d.webpush?.subscriptions??null},live_worker:{configured:Boolean(d.live_worker?.configured),healthy:Boolean(d.live_worker?.healthy),age_seconds:d.live_worker?.age_seconds??null,scanned_at:d.live_worker?.scanned_at||'',live_events:Number(d.live_worker?.live_events||0),candidates:Number(d.live_worker?.candidates||0),signals:Number(d.live_worker?.signals||0),new_alerts:Number(d.live_worker?.new_alerts||0),last_error:d.live_worker?.last_error||''},problems:Array.isArray(d.problems)?d.problems:[]};
         const value=JSON.stringify(safe,null,2);
         try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(value);else{const ta=document.createElement('textarea');ta.value=value;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus('Bezpečná diagnostika bola skopírovaná. Môžeš ju poslať bez kľúčov a tokenov.');}catch{showStatus('Diagnostiku sa nepodarilo skopírovať.');}
         return;
@@ -3763,9 +3782,14 @@
       const target=e.target.closest('[data-route]');if(!target)return;const route=target.dataset.route;if(!routeMeta[route])return;e.preventDefault();if(route==='account'){openAccountDialog();return;}const upgradeDialog=$('upgradeDialog');if(upgradeDialog?.open&&target.closest('#upgradeDialog'))upgradeDialog.close();const matchDialog=$('matchDialog');if(matchDialog?.open&&target.closest('#matchDialog'))matchDialog.close();setRoute(route);
     });
     document.addEventListener('pointerover',e=>{const target=e.target.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])');if(!target||state.route==='admin'||window.matchMedia('(hover: none)').matches)return;clearTimeout(accessHintHoverTimer);accessHintHoverTimer=setTimeout(()=>showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false),320);});
-    document.addEventListener('pointerout',e=>{const target=e.target.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])');if(!target)return;const next=e.relatedTarget;if(next instanceof Node&&target.contains(next))return;clearTimeout(accessHintHoverTimer);hideAccessHint(120);});
+    document.addEventListener('pointerout',e=>{const target=e.target.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])');if(!target)return;const next=e.relatedTarget;const hint=$('accessHint');if(next instanceof Node&&(target.contains(next)||hint?.contains(next)))return;clearTimeout(accessHintHoverTimer);hideAccessHint(240);});
+    const accessHintNode=$('accessHint');
+    if(accessHintNode){
+      accessHintNode.addEventListener('pointerenter',()=>{clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);});
+      accessHintNode.addEventListener('pointerleave',e=>{const next=e.relatedTarget;if(next instanceof Node&&accessHintTarget?.contains?.(next))return;hideAccessHint(220);});
+    }
     document.addEventListener('focusin',e=>{const target=e.target.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])');if(target&&state.route!=='admin')showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false);});
-    document.addEventListener('focusout',e=>{if(e.target.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])'))hideAccessHint(100);});
+    document.addEventListener('focusout',e=>{if(e.target.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])'))hideAccessHint(180);});
     window.addEventListener('scroll',()=>hideAccessHint(),{passive:true});
     window.addEventListener('resize',()=>{if(accessHintTarget&&!$('accessHint')?.hidden)positionAccessHint(accessHintTarget);},{passive:true});
     let resizeTimer,lastCardCapacity=dashboardCardsPerPanel(); window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{const capacity=dashboardCardsPerPanel();if(capacity===lastCardCapacity)return;lastCardCapacity=capacity;if(state.route==='predictions'){state.page=0;Object.keys(state.marketPage||{}).forEach(k=>{state.marketPage[k]=0;});renderPredictions();renderMarketSections();renderDashboardComposition();}},120)});
