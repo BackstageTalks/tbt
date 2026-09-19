@@ -40,4 +40,6 @@ assert.match(css,/hub-action-cell \.hub-detail/);
 // Admin health cards expose the concrete runtime checks requested for launch.
 for (const label of ['PLAYER IMAGES','TOURNAMENT LOGOS','INFO STORAGE','LIVE DATA']) assert.ok(app.includes(label), label);
 
-console.log('PASS: BlinQ 7.3.6-r13 UI regression contract');
+const patch = html.match(/<meta name="blinq-web-patch" content="736-r(\d+)"/);
+assert.ok(patch);
+console.log(`PASS: BlinQ 7.3.6-r${patch[1]} UI regression contract`);

@@ -93,15 +93,6 @@ _BANNER_RATE_BUCKETS = defaultdict(deque)
 _BANNER_RATE_GLOBAL = deque()
 _BANNER_RATE_LOCK = Lock()
 
-# Public support is deliberately reachable before sign-in. Keep a stricter
-# best-effort guard here so the admin inbox cannot be trivially flooded. Raw
-# addresses are never retained: the worker stores only short-lived hashes.
-_SUPPORT_RATE_WINDOW_SECONDS = 10 * 60.0
-_SUPPORT_RATE_MAX_EVENTS = 5
-_SUPPORT_RATE_GLOBAL_MAX_EVENTS = 200
-_SUPPORT_RATE_BUCKETS = defaultdict(deque)
-_SUPPORT_RATE_GLOBAL = deque()
-_SUPPORT_RATE_LOCK = Lock()
 
 # Short-lived in-process cache for presentation-only match intelligence.  The
 # endpoint can otherwise trigger several provider calls whenever a modal opens.
@@ -138,38 +129,6 @@ def _banner_event_allowed(payload):
             stale = [k for k, values in list(_BANNER_RATE_BUCKETS.items())[:2000] if not values or values[-1] < cutoff]
             for stale_key in stale:
                 _BANNER_RATE_BUCKETS.pop(stale_key, None)
-    return True
-
-
-def _support_request_allowed(req, payload):
-    # Azure exposes a forwarded client address in production; user-agent/email
-    # are only additional entropy. Everything is hashed before it reaches the
-    # in-memory bucket and expires after the short window.
-    headers = getattr(req, "headers", {}) or {}
-    forwarded = str(headers.get("X-Forwarded-For") or headers.get("X-Azure-ClientIP") or "")
-    client = forwarded.split(",", 1)[0].strip()[:128]
-    agent = str(headers.get("User-Agent") or "")[:160]
-    email = str((payload or {}).get("email") or "").strip().lower()[:160]
-    raw_key = "|".join((client or "unknown", agent, email))
-    key = hashlib.sha256(raw_key.encode("utf-8")).hexdigest()[:24]
-    now = time.monotonic()
-    cutoff = now - _SUPPORT_RATE_WINDOW_SECONDS
-    with _SUPPORT_RATE_LOCK:
-        while _SUPPORT_RATE_GLOBAL and _SUPPORT_RATE_GLOBAL[0] < cutoff:
-            _SUPPORT_RATE_GLOBAL.popleft()
-        if len(_SUPPORT_RATE_GLOBAL) >= _SUPPORT_RATE_GLOBAL_MAX_EVENTS:
-            return False
-        bucket = _SUPPORT_RATE_BUCKETS[key]
-        while bucket and bucket[0] < cutoff:
-            bucket.popleft()
-        if len(bucket) >= _SUPPORT_RATE_MAX_EVENTS:
-            return False
-        bucket.append(now)
-        _SUPPORT_RATE_GLOBAL.append(now)
-        if len(_SUPPORT_RATE_BUCKETS) > 5000:
-            stale = [k for k, values in list(_SUPPORT_RATE_BUCKETS.items())[:1000] if not values or values[-1] < cutoff]
-            for stale_key in stale:
-                _SUPPORT_RATE_BUCKETS.pop(stale_key, None)
     return True
 
 

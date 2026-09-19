@@ -346,16 +346,6 @@
   async function adminDeleteUser(userId) {
     return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}`, {method: 'DELETE'});
   }
-  async function adminPayments(userId) {
-    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/payments`);
-  }
-  async function adminAddPayment(userId, payload) {
-    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/payments`, {method: 'POST', body: JSON.stringify(payload || {})});
-  }
-  async function adminAudit(targetId = '') {
-    const suffix = targetId ? `?target_id=${encodeURIComponent(targetId)}` : '';
-    return apiWithSession(`/api/v1/admin/audit${suffix}`);
-  }
   async function runtimeUiConfig() { return json('/api/v1/ui-config'); }
   async function contentNews() { return json('/api/v1/content/news'); }
   async function bannerEvent(payload, keepalive = false) {
@@ -363,9 +353,6 @@
   }
   async function adminSaveUiConfig(payload) {
     return apiWithSession('/api/v1/admin/ui-config', {method: 'PUT', body: JSON.stringify(payload || {})});
-  }
-  async function adminBannerAnalytics(days = 30) {
-    return apiWithSession(`/api/v1/admin/banner-analytics?days=${encodeURIComponent(days)}`);
   }
   async function pushConfig() {
     return apiWithSession('/api/v1/push/config');
@@ -401,7 +388,7 @@
     init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
     insights, liveRadar, adminLiveRadar, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
-    adminPayments, adminAddPayment, adminAudit, runtimeUiConfig, contentNews,
-    bannerEvent, adminSaveUiConfig, adminBannerAnalytics, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
+    runtimeUiConfig, contentNews,
+    bannerEvent, adminSaveUiConfig, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
   };
 })();

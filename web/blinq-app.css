@@ -3771,7 +3771,7 @@ body#blinqPremium .admin-self-note{padding:0 10px 9px!important}
 
 /* SOURCE: polish-685.css */
 /* BlinQ 6.8.5 — professionalization pass
-   Admin workspace, legal/support content, cookie consent and crisp control details. */
+   Admin workspace, legal content, cookie consent and crisp control details. */
 
 :root{
   --bq-685-panel:#071923;
@@ -3894,7 +3894,7 @@ body.blinq-admin .dashboard-topbar .reference-search{opacity:.42}
 /* Cookie consent ---------------------------------------------------------- */
 .cookie-consent{position:fixed;z-index:10000;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);width:min(850px,calc(100vw - 28px));padding:14px 15px;border:1px solid rgba(87,149,171,.38);border-radius:15px;background:rgba(4,20,28,.97);box-shadow:0 20px 60px rgba(0,0,0,.45);backdrop-filter:blur(14px);display:grid;grid-template-columns:1fr auto;gap:16px;align-items:center}.cookie-consent[hidden]{display:none!important}.cookie-consent-copy{display:grid;gap:3px}.cookie-consent-copy>span{font-size:7px;letter-spacing:.14em;color:#a77eff;font-weight:800}.cookie-consent-copy>strong{font-size:12px;color:#f0f8fa}.cookie-consent-copy>p{margin:0;color:#8ca5b0;font-size:9px;line-height:1.45}.cookie-consent-copy>button{width:max-content;padding:0;border:0;background:none;color:#9ec0cb;font-size:8px;text-decoration:underline;cursor:pointer}.cookie-consent-actions{display:flex;gap:7px;align-items:center;white-space:nowrap}
 
-/* Footer can now carry legal/support links without collapsing ------------- */
+/* Legacy footer link layout retained only for content-page compatibility --- */
 .site-footer .footer-left{min-width:0}.site-footer #footerLearnNavigation{display:flex;align-items:center;gap:13px;flex-wrap:wrap}.site-footer #footerLearnNavigation a{white-space:nowrap}
 
 
@@ -3915,13 +3915,13 @@ body.blinq-admin .dashboard-topbar .reference-search{opacity:.42}
   .admin-console-v685{width:min(100% - 20px,900px);grid-template-columns:1fr}
   .admin-side-nav{position:static;min-height:0;padding:10px}.admin-side-brand{display:none}.admin-tabs-v685{grid-template-columns:repeat(4,minmax(0,1fr))!important;overflow:auto}.admin-tabs-v685 button{min-width:120px}.admin-side-foot{display:none}
   .admin-workarea-head{min-height:0}.admin-workarea-head{align-items:flex-start;flex-direction:column}.admin-workarea-head .admin-global-actions{justify-content:flex-start}
-  .admin-support-controls{grid-template-columns:1fr 1fr}.admin-support-controls .btn{grid-column:1/-1}.admin-content-pages{grid-template-columns:1fr}.support-panel{grid-template-columns:1fr}.admin-system-details{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .admin-content-pages{grid-template-columns:1fr}.admin-system-details{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media(max-width:620px){
   .admin-console-v685{width:calc(100% - 12px);gap:9px}.admin-side-nav{border-radius:13px}.admin-tabs-v685{grid-template-columns:repeat(3,124px)!important}.admin-tabs-v685 button{min-height:44px}.admin-tabs-v685 small{display:none}
   .admin-panel-v685{padding:9px;border-radius:13px}.admin-workarea-head{padding:13px;border-radius:13px}.admin-workarea-head h2{font-size:19px}
-  .admin-system-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-system-details{grid-template-columns:1fr}.admin-support-controls{grid-template-columns:1fr}.admin-user-payment{grid-template-columns:1fr 1fr}.admin-user-payment>span:last-child{grid-column:1/-1}
-  .content-page-hero{padding:19px 17px;border-radius:14px}.content-page-hero h2{font-size:27px}.content-section-card{padding:15px 13px;grid-template-columns:26px 1fr}.support-form-grid{grid-template-columns:1fr}.support-form-grid .span-2{grid-column:auto}
+  .admin-system-cards{grid-template-columns:repeat(2,minmax(0,1fr))}.admin-system-details{grid-template-columns:1fr}.admin-user-payment{grid-template-columns:1fr 1fr}.admin-user-payment>span:last-child{grid-column:1/-1}
+  .content-page-hero{padding:19px 17px;border-radius:14px}.content-page-hero h2{font-size:27px}.content-section-card{padding:15px 13px;grid-template-columns:26px 1fr}
   .public-content-dialog{width:calc(100vw - 12px);max-height:94vh;border-radius:15px}.public-content-dialog #publicContentDialogContent{padding:62px 10px 12px}
   .cookie-consent{width:calc(100vw - 16px);bottom:8px;grid-template-columns:1fr;gap:10px}.cookie-consent-actions{justify-content:stretch}.cookie-consent-actions .btn{flex:1}
 }
@@ -4112,7 +4112,6 @@ body.blinq-admin .admin-tabs-v685 button.active .admin-nav-mark{
   box-shadow:0 0 14px rgba(45,242,173,.42)!important;
 }
 body.blinq-admin .admin-tabs-v685 button.active small{color:#a2beb8!important}
-body.blinq-admin .admin-support-filters button.active{border-color:rgba(45,242,173,.42)!important;background:rgba(45,242,173,.09)!important}
 body.blinq-admin .admin-payment-ledger{border-color:rgba(45,242,173,.20)!important;background:linear-gradient(135deg,rgba(45,242,173,.035),rgba(8,31,42,.08))!important}
 
 /* Sidebar grouping ------------------------------------------------------- */
@@ -5856,4 +5855,43 @@ body#blinqPremium .boot-splash.boot-splash-tennis{
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source{position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:hidden!important;}
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source>img{position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;object-position:center center!important;border:0!important;border-radius:0!important;background:transparent!important;filter:none!important;}
 
-/* BlinQ runtime patch 7.3.6-r13 */
+/* BlinQ runtime patch 7.3.6-r15 */
+
+
+/* ---- 7.3.6-r15: Telegram community panel + visible footer watermark ---- */
+body#blinqPremium .site-footer.site-footer-minimal,
+body#blinqPremium.blinq-home .site-footer.site-footer-minimal{min-height:74px!important;margin-top:24px!important;padding:16px 4px 18px!important;overflow:visible!important}
+body#blinqPremium .site-footer-minimal .footer-left{min-width:220px!important}
+body#blinqPremium .site-footer-minimal .footer-watermark-logo{width:126px!important;max-height:54px!important;object-fit:contain!important;object-position:left center!important;opacity:.20!important;filter:grayscale(1) brightness(1.9) contrast(.9)!important;mix-blend-mode:screen!important}
+body#blinqPremium .site-footer-minimal .web-release-stamp{margin-left:2px!important}
+body#blinqPremium .telegram-groups-panel{margin:18px 0 4px!important;border:1px solid rgba(54,151,121,.24)!important;border-radius:16px!important;background:linear-gradient(135deg,rgba(5,31,27,.88),rgba(3,18,18,.96))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.025)!important;padding:18px!important}
+body#blinqPremium .telegram-groups-panel[hidden]{display:none!important}
+body#blinqPremium .tg-panel-head{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:20px!important;margin-bottom:14px!important}
+body#blinqPremium .tg-panel-head small{display:block!important;color:#39e5ad!important;font-size:8px!important;font-weight:900!important;letter-spacing:.16em!important;margin-bottom:4px!important}
+body#blinqPremium .tg-panel-head h2{margin:0!important;color:#f2fbf7!important;font-size:18px!important;line-height:1.12!important}
+body#blinqPremium .tg-panel-head p{margin:5px 0 0!important;color:#7f9b91!important;font-size:10px!important}
+body#blinqPremium .tg-panel-mark{display:grid!important;place-items:center!important;width:38px!important;height:38px!important;border:1px solid rgba(49,222,164,.32)!important;border-radius:12px!important;background:rgba(17,101,76,.18)!important;color:#42eab0!important;font-size:10px!important;font-weight:950!important;letter-spacing:.08em!important}
+body#blinqPremium .tg-group-grid{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(260px,1fr))!important;gap:10px!important}
+body#blinqPremium .tg-group-card{display:grid!important;grid-template-columns:auto minmax(0,1fr) auto!important;align-items:center!important;gap:12px!important;min-height:84px!important;border:1px solid rgba(66,143,119,.20)!important;border-radius:13px!important;background:rgba(3,22,20,.72)!important;padding:12px 14px!important}
+body#blinqPremium .tg-group-card.is-locked{background:rgba(4,18,18,.58)!important}
+body#blinqPremium .tg-group-icon{width:40px!important;height:40px!important;display:grid!important;place-items:center!important;border:1px solid rgba(54,222,164,.24)!important;border-radius:12px!important;background:rgba(19,103,78,.16)!important}
+body#blinqPremium .tg-group-icon svg{width:20px!important;height:20px!important;fill:#45e8b0!important}
+body#blinqPremium .tg-group-copy{min-width:0!important}
+body#blinqPremium .tg-group-copy small{display:block!important;color:#36c997!important;font-size:7px!important;font-weight:900!important;letter-spacing:.12em!important}
+body#blinqPremium .tg-group-copy strong{display:block!important;color:#eef8f4!important;font-size:12px!important;margin-top:2px!important}
+body#blinqPremium .tg-group-copy p{margin:3px 0 0!important;color:#78948a!important;font-size:9px!important;line-height:1.35!important}
+body#blinqPremium .tg-group-cta{display:inline-flex!important;align-items:center!important;gap:8px!important;white-space:nowrap!important;border:1px solid rgba(55,214,161,.34)!important;border-radius:9px!important;background:rgba(19,111,82,.16)!important;color:#bcf8e3!important;padding:8px 10px!important;font-size:9px!important;font-weight:900!important;text-decoration:none!important}
+body#blinqPremium button.tg-group-cta{font-family:inherit!important;cursor:pointer!important}
+body#blinqPremium .tg-group-cta.is-disabled{opacity:.5!important;cursor:default!important}
+body#blinqPremium .tg-group-cta.is-locked{color:#92aa9f!important;border-color:rgba(122,159,146,.18)!important;background:rgba(8,34,30,.35)!important}
+body#blinqPremium .admin-tg-list{display:grid!important;gap:12px!important;margin-top:14px!important}
+body#blinqPremium .admin-tg-card{border:1px solid rgba(44,129,109,.3)!important;border-radius:14px!important;background:rgba(3,23,24,.64)!important;padding:14px!important}
+body#blinqPremium .admin-tg-card-head{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:16px!important;margin-bottom:12px!important}
+body#blinqPremium .admin-tg-card-head small{display:block!important;color:#4bdcaf!important;font-size:8px!important;letter-spacing:.12em!important;font-weight:900!important}
+body#blinqPremium .admin-tg-card-head strong{display:block!important;color:#ecf8f4!important;margin-top:2px!important}
+body#blinqPremium .admin-tg-grid{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important}
+body#blinqPremium .admin-tg-grid label{display:grid!important;gap:5px!important;color:#78968c!important;font-size:8px!important}
+body#blinqPremium .admin-tg-wide{grid-column:1/-1!important}
+body#blinqPremium .admin-tg-check{display:flex!important;align-items:center!important;gap:8px!important;align-self:end!important;min-height:38px!important}
+body#blinqPremium .admin-tg-check input{width:auto!important}
+@media(max-width:760px){body#blinqPremium .site-footer-minimal .footer-watermark-logo{width:104px!important;opacity:.18!important}body#blinqPremium .tg-group-card{grid-template-columns:auto 1fr!important}body#blinqPremium .tg-group-cta{grid-column:1/-1!important;justify-content:center!important}body#blinqPremium .admin-tg-grid{grid-template-columns:1fr!important}body#blinqPremium .admin-tg-wide{grid-column:auto!important}}

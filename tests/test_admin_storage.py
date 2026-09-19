@@ -91,19 +91,16 @@ def test_banner_event_rejects_bad_ids(monkeypatch):
         raise AssertionError("Expected invalid analytics identifier")
 
 
-def test_runtime_ui_config_accepts_fixed_campaign_creative_variants():
+def test_runtime_ui_config_accepts_current_hero_creative_variants():
     payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
-    payload["advertisers"]["partner-a"] = {"name": "Partner A"}
-    payload["campaigns"]["campaign-a"] = {
-        "name": "Campaign A",
-        "advertiser_id": "partner-a",
-        "creative_mode": "full",
-        "show_copy": False,
-        "image_url": "/assets/fallback.webp",
-        "images": {
-            "1": "/assets/ad-small.webp",
-            "2": "https://cdn.example/ad-wide.webp",
-            "4": "/assets/ad-full.webp",
-        },
-    }
+    hero = payload["hero_banner"]
+    hero["enabled"] = True
+    hero["slot_count"] = 2
+    hero["rotation_seconds"] = 6
+
+    elements = payload["elements"]
+    elements["HERO_BANNER_1"]["content"]["image_url"] = "/assets/hero-reference-exact-v680.webp"
+    elements["HERO_BANNER_1"]["content"]["mobile_image_url"] = "/assets/tennis-hero-v6524.webp"
+    elements["HERO_BANNER_1"]["content"]["headline"] = "Tennis insights for a smarter tomorrow."
+
     assert admin_storage.validate_ui_config(payload) is payload

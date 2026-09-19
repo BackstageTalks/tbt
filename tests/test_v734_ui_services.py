@@ -44,9 +44,11 @@ def test_helper_copy_is_json_backed():
     assert 'loading' in SITE['ui_copy'] and 'auth' in SITE['ui_copy'] and 'footer' not in SITE['ui_copy']
 
 
-def test_admin_exposes_support_system_and_all_info_audiences():
+def test_admin_exposes_system_and_info_audiences_without_retired_support():
     assert "['system','Systém','Diagnostika']" in APP
     assert "['rookie','pro','elite','legend','goat'].filter" in APP
+    assert "['support'" not in APP.lower()
+    assert 'SUPPORT STORAGE' not in APP
 
 
 def test_live_radar_not_mislabelled_offline_when_only_history_storage_is_down():

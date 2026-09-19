@@ -62,19 +62,20 @@ def test_hide_ads_and_fallback_inventory_are_configured_without_collapsing_layou
         *(f"CONTENT_BOTTOM_{i}" for i in range(1, 5)),
     ]:
         content = cfg["elements"][slot]["content"]
-        assert "campaign_id" in content
-        assert "advertiser_id" in content
+        assert "campaign_id" not in content
+        assert "advertiser_id" not in content
         assert content["ad_hidden_fallback"] in {"auto", "rss", "image", "internal"}
 
 
-def test_banner_analytics_contract_uses_viewport_threshold_and_campaign_identity():
+def test_banner_analytics_contract_tracks_fixed_slots_without_campaign_manager():
     cfg = _cfg()
     assert cfg["analytics"]["impression_threshold"] == 0.5
     assert cfg["analytics"]["impression_ms"] == 1000
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert "IntersectionObserver" in app_js
-    assert "data-campaign-id" in app_js
-    assert "unique_impressions" in app_js
+    assert "data-banner-slot" in app_js
+    assert "BlinqAuth.bannerEvent" in app_js
+    assert "renderAdminAnalytics" not in app_js
 
 
 def test_admin_runtime_secret_never_enters_web_bundle():
@@ -122,15 +123,16 @@ def test_large_content_rows_use_only_fixed_supported_merge_presets():
     assert "data-admin-row-preset" not in route
 
 
-def test_campaigns_remain_available_while_rss_is_retired_from_public_admin():
+def test_campaign_manager_is_retired_and_rss_is_not_exposed_in_public_admin():
     cfg = _cfg()
-    assert isinstance(cfg["advertisers"], dict)
-    assert isinstance(cfg["campaigns"], dict)
+    assert "advertisers" not in cfg
+    assert "campaigns" not in cfg
     assert cfg["rss"]["enabled"] is False
     assert cfg["rss"]["sources"] == []
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    assert "renderAdminCampaigns" in app_js
-    assert "campaignContent" in app_js
+    assert "renderAdminCampaigns" not in app_js
+    assert "campaignContent" not in app_js
+    assert "data-campaign-field" not in app_js
     route = app_js.split("function renderAdminRoute()", 1)[1].split("function rerenderAdmin", 1)[0]
     assert "RSS feeds" not in route
 
@@ -152,22 +154,15 @@ def test_rookie_pick_entitlement_is_stable_across_filters():
     assert all(cfg[f"TOP_PICK_{i}"]["access"]["rookie"] == "blurred" for i in range(4, 9))
 
 
-def test_campaign_manager_supports_fixed_size_creative_variants():
-    cfg = _cfg()
-    specs = cfg["creative_specs"]
-    assert specs["large_1"]["recommended"] == "1200 × 180 px"
-    assert specs["large_2"]["recommended"] == "600 × 180 px"
-    assert specs["large_4"]["recommended"] == "300 × 180 px"
-    assert specs["large_1"]["minimum"] == "900 × 135 px"
-    assert specs["large_4"]["safe_area"] == "center 82%"
+def test_hero_manager_uses_current_desktop_mobile_creative_contract():
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    assert "data-campaign-image" in app_js
-    assert "creative_mode:'full'" in app_js
-    assert "show_copy:false" in app_js
-    assert "creative-full" in app_js
-    css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
-    assert ".promo-card.creative-full .promo-image" in css
-    assert ".promo-card.no-copy .promo-copy" in css
+    assert "data-admin-hero-count" in app_js
+    assert "data-admin-hero-seconds" in app_js
+    assert 'data-simple-banner-field="image_url"' in app_js
+    assert 'data-simple-banner-field="mobile_image_url"' in app_js
+    assert "1920×640" in app_js
+    assert "1080×720" in app_js
+    assert "data-campaign-image" not in app_js
 
 
 def test_dashboard_market_structure_matches_approved_order_and_rules():
@@ -229,8 +224,8 @@ def test_banner_adaptation_and_watermark_controls_are_exposed_in_admin():
     assert "mobile_image_url" in app_js
     assert "image_fit" in app_js
     assert "image_position" in app_js
-    assert "data-admin-watermark" in app_js
-    assert "COMING SOON" in app_js
+    assert "data-simple-banner-field" in app_js
+    assert "data-admin-watermark" not in app_js
     assert ".promo-image.fit-cover" in css
     assert ".promo-image.pos-center" in css
     assert not any(key.startswith("SIDEBAR_PROMO_") for key in cfg["elements"])
@@ -251,4 +246,9 @@ def test_public_sidebar_is_betting_first_and_admin_is_isolated_at_bottom():
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert 'id="adminNavigationWrap"' not in html
     assert "btts" not in nav
-    assert "renderAdminPerformance" in app
+    assert "renderAdminPerformance" not in app
+    route = app.split("function renderAdminRoute()", 1)[1].split("function rerenderAdmin", 1)[0]
+    for tab in ("accounts", "layout", "banners", "insights", "system"):
+        assert f"['{tab}'" in route
+    for retired in ("campaigns", "analytics", "audit", "support"):
+        assert f"['{retired}'" not in route

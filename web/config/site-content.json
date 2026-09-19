@@ -6,7 +6,6 @@
     "legal_name": "DOPLNIŤ PREVÁDZKOVATEĽA",
     "company_id": "DOPLNIŤ IČO",
     "registered_address": "DOPLNIŤ SÍDLO",
-    "support_email": "support@blinq.sk",
     "privacy_email": "privacy@blinq.sk"
   },
   "pages": {
@@ -119,7 +118,7 @@
           },
           {
             "q": "Ako kontaktujem podporu?",
-            "a": "Použite BlinQ Support. Pri prihlásenom účte sa správa automaticky spojí s vaším používateľským profilom."
+            "a": "Použite oficiálny BlinQ Telegram kanál. Je to hlavný kontaktný kanál pre podporu používateľov."
           }
         ]
       },
@@ -188,7 +187,7 @@
         "sections": [
           {
             "title": "Aké údaje spracúvame",
-            "body": "Podľa používaných funkcií môžeme spracúvať e-mail, používateľský identifikátor, Telegram nickname, zvolený avatar, úroveň a platnosť členstva, manuálne platobné referencie, interné servisné poznámky, support komunikáciu a technické údaje potrebné na bezpečnú prevádzku služby."
+            "body": "Podľa používaných funkcií môžeme spracúvať e-mail, používateľský identifikátor, Telegram nickname, zvolený avatar, úroveň a platnosť členstva, manuálne platobné referencie, interné servisné poznámky a technické údaje potrebné na bezpečnú prevádzku služby."
           },
           {
             "title": "Na čo údaje používame",
@@ -204,7 +203,7 @@
           },
           {
             "title": "Práva používateľa",
-            "body": "Používateľ môže požiadať o prístup k svojim údajom, opravu, obmedzenie alebo vymazanie v rozsahu, ktorý umožňujú platné právne predpisy. Požiadavku je možné odoslať cez BlinQ Support alebo na kontaktný e-mail prevádzkovateľa."
+            "body": "Používateľ môže požiadať o prístup k svojim údajom, opravu, obmedzenie alebo vymazanie v rozsahu, ktorý umožňujú platné právne predpisy. Požiadavku je možné odoslať cez oficiálny BlinQ Telegram kanál alebo na kontaktný e-mail prevádzkovateľa."
           },
           {
             "title": "Bezpečnosť",
@@ -345,7 +344,7 @@
           },
           {
             "q": "Jak kontaktuji podporu?",
-            "a": "Použijte BlinQ Support. U přihlášeného účtu se zpráva automaticky spojí s uživatelským profilem."
+            "a": "Použijte oficiální BlinQ Telegram kanál. Je to hlavní kontaktní kanál pro uživatelskou podporu."
           }
         ]
       },
@@ -414,7 +413,7 @@
         "sections": [
           {
             "title": "Jaké údaje můžeme zpracovávat",
-            "body": "Podle používaných funkcí můžeme zpracovávat e-mail, uživatelský identifikátor, Telegram nickname, zvolený avatar, úroveň a platnost členství, manuální platební reference, interní poznámky podpory, technickou diagnostiku a support zprávy."
+            "body": "Podle používaných funkcí můžeme zpracovávat e-mail, uživatelský identifikátor, Telegram nickname, zvolený avatar, úroveň a platnost členství, manuální platební reference, interní servisní poznámky a technickou diagnostiku."
           },
           {
             "title": "K čemu údaje používáme",
@@ -430,7 +429,7 @@
           },
           {
             "title": "Práva uživatele",
-            "body": "Uživatel může požádat o přístup, opravu, omezení nebo vymazání údajů v rozsahu, který umožňují platné právní předpisy. Požadavek lze odeslat přes BlinQ Support."
+            "body": "Uživatel může požádat o přístup, opravu, omezení nebo vymazání údajů v rozsahu, který umožňují platné právní předpisy. Požadavek lze odeslat přes oficiální BlinQ Telegram kanál."
           },
           {
             "title": "Bezpečnost",
@@ -570,8 +569,8 @@
             "a": "Your current level and access validity are shown in your BlinQ account."
           },
           {
-            "q": "How do I contact support?",
-            "a": "Use BlinQ Support. When signed in, the message is automatically linked to your user profile."
+            "q": "How do I contact BlinQ?",
+            "a": "Use the official BlinQ Telegram channel. It is the primary user-support contact channel."
           }
         ]
       },
@@ -613,7 +612,7 @@
           },
           {
             "title": "3. Membership and manual activation",
-            "body": "Available content depends on membership level. Paid access is activated manually by an administrator after payment confirmation and may not be immediate. Membership and manual changes may be recorded for operational and support purposes."
+            "body": "Available content depends on membership level. Paid access is activated manually by an administrator after payment confirmation and may not be immediate. Membership and manual changes may be recorded for operational purposes."
           },
           {
             "title": "4. Service availability",
@@ -640,11 +639,11 @@
         "sections": [
           {
             "title": "Data we may process",
-            "body": "Depending on the features used, we may process email address, user identifier, Telegram nickname, selected avatar, membership level and validity, manual payment references, internal support notes, technical diagnostics and support messages."
+            "body": "Depending on the features used, we may process email address, user identifier, Telegram nickname, selected avatar, membership level and validity, manual payment references, internal service notes and technical diagnostics."
           },
           {
             "title": "Why we use data",
-            "body": "Data is used for authentication, account and membership management, manual payment confirmation, customer support, security, operational diagnostics and improvement of BlinQ. We do not sell personal data to advertisers."
+            "body": "Data is used for authentication, account and membership management, manual payment confirmation, user communication, security, operational diagnostics and improvement of BlinQ. We do not sell personal data to advertisers."
           },
           {
             "title": "External providers",
@@ -652,11 +651,11 @@
           },
           {
             "title": "Retention",
-            "body": "Data is retained for as long as needed to operate accounts, provide support, maintain security, keep membership records and meet legal obligations. Operational history may be retained after access ends where justified."
+            "body": "Data is retained for as long as needed to operate accounts, handle user communication, maintain security, keep membership records and meet legal obligations. Operational history may be retained after access ends where justified."
           },
           {
             "title": "User rights",
-            "body": "Users may request access, correction, restriction or deletion of their personal data to the extent allowed by applicable law. Requests can be submitted through BlinQ Support."
+            "body": "Users may request access, correction, restriction or deletion of their personal data to the extent allowed by applicable law. Requests can be submitted through the official BlinQ Telegram channel."
           },
           {
             "title": "Security",
