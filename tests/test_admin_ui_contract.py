@@ -18,10 +18,11 @@ def test_admin_layout_has_fixed_slot_inventory_and_access_states():
     assert {f"CONTENT_MID_{i}" for i in range(1, 5)} <= set(elements)
     assert {f"CONTENT_BOTTOM_{i}" for i in range(1, 5)} <= set(elements)
     assert {
-        "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3", "SIDEBAR_PROMO_4",
         "PRIME_PICKS_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
-        "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "DOUBLES_PANEL", "BTTS_BONUS_PANEL", "FOOTER_SYSTEM",
+        "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "DOUBLES_PANEL", "RESULTS_PANEL",
     } <= set(elements)
+    retired = {"SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3", "SIDEBAR_PROMO_4", "BTTS_BONUS_PANEL", "FOOTER_SYSTEM", "VIP_RAIL"}
+    assert retired.isdisjoint(elements)
     contexts = {"trial", "expired", "rookie", "pro", "elite", "goat", "legend"}
     valid = {"active", "locked", "blurred", "hidden"}
     for element in elements.values():
@@ -134,12 +135,11 @@ def test_campaigns_remain_available_while_rss_is_retired_from_public_admin():
     assert "RSS feeds" not in route
 
 
-def test_virtual_future_permissions_are_configurable_without_changing_layout():
+def test_retired_virtual_permissions_are_removed_from_runtime_config():
     elements = _cfg()["elements"]
-    assert elements["VIP_TELEGRAM"]["kind"] == "feature"
-    assert elements["FOOTBALL_ACCESS"]["kind"] == "feature"
-    assert elements["VIP_TELEGRAM"]["access"]["elite"] == "active"
-    assert elements["VIP_TELEGRAM"]["access"]["goat"] == "active"
+    assert "VIP_TELEGRAM" not in elements
+    assert "FOOTBALL_ACCESS" not in elements
+    assert "VIP_RAIL" not in elements
 
 
 def test_rookie_pick_entitlement_is_stable_across_filters():
@@ -165,7 +165,7 @@ def test_campaign_manager_supports_fixed_size_creative_variants():
     assert "creative_mode:'full'" in app_js
     assert "show_copy:false" in app_js
     assert "creative-full" in app_js
-    css = (ROOT / "web" / "styles.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
     assert ".promo-card.creative-full .promo-image" in css
     assert ".promo-card.no-copy .promo-copy" in css
 
@@ -214,10 +214,10 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["match_winner_assignment"]["priority"] == ["value", "prime", "top_daily"]
     assert set(rules["ace"]["markets"]) == {"aces", "double_faults"}
     assert set(rules["sg"]["markets"]) == {"sets", "games"}
-    assert rules["btts"]["href"] == "#btts"
+    assert "btts" not in rules
     dashboard = cfg["dashboard"]
-    assert set(dashboard["section_order"]) == {"prime", "top_daily", "value", "doubles", "ace", "sg", "results", "btts"}
-    assert len(dashboard["section_order"]) == 8
+    assert set(dashboard["section_order"]) == {"prime", "top_daily", "value", "doubles", "ace", "sg", "results"}
+    assert len(dashboard["section_order"]) == 7
     assert dashboard["visible_slots"] == 6
     assert dashboard["user_switches"] is False
 
@@ -225,7 +225,7 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
 def test_banner_adaptation_and_watermark_controls_are_exposed_in_admin():
     cfg = _cfg()
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    css = (ROOT / "web" / "styles.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
     assert "mobile_image_url" in app_js
     assert "image_fit" in app_js
     assert "image_position" in app_js
@@ -233,7 +233,7 @@ def test_banner_adaptation_and_watermark_controls_are_exposed_in_admin():
     assert "COMING SOON" in app_js
     assert ".promo-image.fit-cover" in css
     assert ".promo-image.pos-center" in css
-    assert cfg["elements"]["SIDEBAR_PROMO_2"]["watermark"]["text"] == "COMING SOON"
+    assert not any(key.startswith("SIDEBAR_PROMO_") for key in cfg["elements"])
 
 
 def test_public_sidebar_is_betting_first_and_admin_is_isolated_at_bottom():
@@ -243,13 +243,12 @@ def test_public_sidebar_is_betting_first_and_admin_is_isolated_at_bottom():
         key=lambda item: item["order"],
     )
     nav = {item["content"]["route"]: item["content"]["label"] for item in nav_items}
-    assert list(nav) == ["predictions", "prime", "top_daily", "value", "doubles", "ace", "sg", "results", "btts"]
+    assert list(nav) == ["predictions", "prime", "top_daily", "value", "doubles", "ace", "sg", "results"]
     assert nav["prime"] == "Short Odds"
     for removed in ("tournaments", "players", "stats", "model", "backtests", "account"):
         assert removed not in nav
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    assert 'id="adminNavigationWrap"' in html
-    assert "doubles:'◈'" in app
-    assert "btts:'⚽'" in app
+    assert 'id="adminNavigationWrap"' not in html
+    assert "btts" not in nav
     assert "renderAdminPerformance" in app

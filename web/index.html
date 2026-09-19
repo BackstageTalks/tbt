@@ -5,31 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#05111f" />
   <meta name="blinq-web-release" content="7.3.6" />
-  <meta name="blinq-web-patch" content="736-r9" />
+  <meta name="blinq-web-patch" content="736-r10" />
   <title>BlinQ · Tennis Intelligence</title>
   <link rel="icon" href="/assets/blinq_favi.png" type="image/png" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="stylesheet" href="/styles.css?v=7360" media="not all" />
-  <link rel="stylesheet" href="/responsive.css?v=7360" media="not all" />
-  <link rel="stylesheet" href="/premium.css?v=7360" media="not all" />
-  <link rel="stylesheet" href="/blinq.css?v=7360" />
-  <link rel="stylesheet" href="/redesign-680.css?v=7360" />
-  <link rel="stylesheet" href="/polish-681.css?v=7360" />
-  <link rel="stylesheet" href="/polish-683.css?v=7360" />
-  <link rel="stylesheet" href="/polish-684.css?v=7360" />
-  <link rel="stylesheet" href="/polish-685.css?v=7360" />
-  <link rel="stylesheet" href="/auth-polish-686.css?v=7360" />
-  <link rel="stylesheet" href="/admin-polish-687.css?v=7360" />
-  <link rel="stylesheet" href="/blinq-lean-700.css?v=7360" />
-  <link rel="stylesheet" href="/final-polish-724.css?v=7360" />
-  <link rel="stylesheet" href="/final-polish-725.css?v=7360" />
-  <link rel="stylesheet" href="/final-polish-731.css?v=7360" />
-  <link rel="stylesheet" href="/final-polish-734.css?v=7360" />
-  <link rel="stylesheet" href="/final-polish-735.css?v=7360" />
-  <link rel="stylesheet" href="/final-polish-736.css?v=7360&p=9" />
+  <link rel="stylesheet" href="/blinq-app.css?v=7360&p=10" />
   <script defer src="/auth.js?v=7360"></script>
-  <script defer src="/responsive.js?v=7360"></script>
-  <script defer src="/app.js?v=7360&p=9"></script>
+  <script defer src="/responsive.js?v=7360&p=10"></script>
+  <script defer src="/app.js?v=7360&p=10"></script>
 </head>
 <body id="blinqPremium" class="blinq-home" data-web-release="7.3.6">
   <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
@@ -50,12 +33,6 @@
   </div>
 
   <div id="appShell" class="app-shell" hidden>
-    <button id="navBackdrop" class="legacy-nav-hook" hidden></button>
-    <aside id="appNavigation" class="legacy-nav-hook" hidden aria-label="Legacy navigation">
-      <button id="menuClose" type="button" aria-label="Zavrieť menu"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M5 5l10 10M15 5 5 15"></path></svg></button>
-      <nav id="adminNavigationWrap" hidden><div id="adminNavigation"></div></nav>
-      <div id="sidebarPromoZone"></div>
-    </aside>
 
     <header class="site-header dashboard-topbar reference-topbar">
       <div class="header-top">
@@ -90,12 +67,6 @@
           </div>
         </div>
       </div>
-
-      <div class="header-nav-row" hidden aria-hidden="true">
-        <nav id="mainNavigation" class="main-navigation" aria-label="Hlavná navigácia"></nav>
-      </div>
-      <button id="menuToggle" class="legacy-nav-hook" hidden></button>
-      <div class="legacy-nav-hook" hidden><strong id="headerTime">—</strong><span id="headerDate">—</span><span id="headerModelState">Produkcia</span></div>
     </header>
 
     <main id="mainContent" class="site-main" tabindex="-1">
@@ -147,8 +118,6 @@
 
       <section id="routePanel" class="route-panel" hidden></section>
 
-      <section id="vipRail" class="vip-rail" aria-label="BlinQ členstvo"></section>
-
       <footer class="site-footer site-footer-minimal">
         <div class="footer-left"><img class="footer-watermark-logo" src="/assets/blinq_logo.svg" alt="BlinQ" /><small class="web-release-stamp" title="Frontend release">UI 7.3.6</small></div>
         <div class="footer-right"><nav id="footerLanguages" class="languages"><span>JAZYK</span><a href="?lang=sk#predictions" data-lang="sk" class="active">SK</a><a href="?lang=cz#predictions" data-lang="cz">CZ</a><a href="?lang=en#predictions" data-lang="en">EN</a></nav></div>
@@ -171,7 +140,7 @@
       <div id="dashboardSectionSwitcher"><div id="dashboardSectionToggles"></div><span id="dashboardSectionsStatus"></span></div><div id="dashboardDisabledSections"></div>
       <div id="bannerBottom"></div><div id="dailyHubInsightBoard"><div id="dailyHubInsightMain"></div></div>
       <section id="predictionsPanel"><span id="updatedAt"></span><span id="matchCount"></span><button id="refreshButton"></button><div id="predictionGrid"></div><a id="primeSeeAllCard"><span id="primeSeeAllCardCount"></span></a></section>
-      <section id="topDailyPanel"></section><section id="valuePanel"></section><section id="acePanel"></section><section id="sgPanel"></section><section id="doublesPanel"></section><section id="resultsPreviewPanel"><div id="resultsPreviewContent"></div><span id="resultsPreviewCount"></span><span id="resultsSeeAllCardCount"></span></section><section id="bttsBonusPanel"></section>
+      <section id="topDailyPanel"></section><section id="valuePanel"></section><section id="acePanel"></section><section id="sgPanel"></section><section id="doublesPanel"></section><section id="resultsPreviewPanel"><div id="resultsPreviewContent"></div><span id="resultsPreviewCount"></span><span id="resultsSeeAllCardCount"></span></section>
       <input id="searchInput"/><input id="headerSearchInput" type="search" tabindex="-1" aria-hidden="true"/><select id="tourFilter"><option value=""></option></select><select id="tournamentFilter"><option value=""></option></select><select id="surfaceFilter"><option value=""></option></select><select id="confidenceFilter"><option value=""></option></select><button id="prevPick"></button><button id="nextPick"></button>
       <div id="carouselDots"></div>
     </div>

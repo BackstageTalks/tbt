@@ -877,48 +877,6 @@
         "en": "Sign in to your analytics workspace"
       }
     },
-    "footer": {
-      "updated": {
-        "sk": "Aktualizované",
-        "cz": "Aktualizováno",
-        "en": "Updated"
-      },
-      "minutes_ago": {
-        "sk": "pred {n} min",
-        "cz": "před {n} min",
-        "en": "{n} min ago"
-      },
-      "just_now": {
-        "sk": "práve teraz",
-        "cz": "právě teď",
-        "en": "just now"
-      },
-      "live_ok": {
-        "sk": "LIVE radar aktívny",
-        "cz": "LIVE radar aktivní",
-        "en": "LIVE radar active"
-      },
-      "live_error": {
-        "sk": "LIVE radar je dočasne nedostupný",
-        "cz": "LIVE radar je dočasně nedostupný",
-        "en": "LIVE radar is temporarily unavailable"
-      },
-      "feed_fresh": {
-        "sk": "Dáta sú aktuálne",
-        "cz": "Data jsou aktuální",
-        "en": "Data is current"
-      },
-      "feed_old": {
-        "sk": "Dáta sú staršie",
-        "cz": "Data jsou starší",
-        "en": "Data is older"
-      },
-      "feed_stale": {
-        "sk": "Čaká sa na aktualizáciu dát",
-        "cz": "Čeká se na aktualizaci dat",
-        "en": "Waiting for data refresh"
-      }
-    },
     "private_feed": {
       "history_unavailable": {
         "sk": "História upozornení je dočasne nedostupná. LIVE radar ďalej funguje.",

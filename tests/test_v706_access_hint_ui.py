@@ -20,7 +20,7 @@ def test_live_is_visible_but_locked_below_elite():
 
 
 def test_mobile_hint_and_compact_profile_styles_exist():
-    css=(ROOT/'web'/'blinq-lean-700.css').read_text(encoding='utf-8')
+    css=(ROOT/'web'/'blinq-app.css').read_text(encoding='utf-8')
     assert '.access-hint' in css
     assert '@media(max-width:560px)' in css
     assert '.reference-topbar .profile-shell' in css

@@ -22,7 +22,7 @@ def test_static_asset_contract_is_configured():
 
 def test_web_links_favicon_background_and_fallback_logic():
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
-    css = (ROOT / "web" / "styles.css").read_text(encoding="utf-8")
+    css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
     js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     assert '/assets/blinq_favi.png' in html
     assert "url('/assets/blinq_background.webp')" in css

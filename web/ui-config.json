@@ -975,73 +975,6 @@
         "goat": true
       }
     },
-    "FOOTER_SYSTEM": {
-      "label": "Footer system content",
-      "zone": "footer",
-      "kind": "panel",
-      "order": 80,
-      "content": {},
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "active",
-        "expired": "active",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      }
-    },
-    "VIP_TELEGRAM": {
-      "label": "VIP Telegram",
-      "zone": "features",
-      "kind": "feature",
-      "order": 70,
-      "content": {
-        "label": "VIP Telegram"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "locked",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      }
-    },
-    "FOOTBALL_ACCESS": {
-      "label": "Football project access",
-      "zone": "features",
-      "kind": "feature",
-      "order": 71,
-      "content": {
-        "label": "Football project"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "locked",
-        "elite": "locked",
-        "legend": "active",
-        "goat": "active"
-      }
-    },
     "SIDEBAR_PREDICTIONS": {
       "label": "Dashboard",
       "zone": "sidebar",
@@ -1217,189 +1150,6 @@
         "goat": "active"
       }
     },
-    "SIDEBAR_BTTS": {
-      "label": "BTTS Bonus",
-      "zone": "sidebar",
-      "kind": "navigation",
-      "order": 9,
-      "content": {
-        "label": "BTTS Bonus",
-        "route": "btts",
-        "icon": "⚽",
-        "beta": true,
-        "href": "#btts"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "locked",
-        "expired": "locked",
-        "rookie": "locked",
-        "pro": "active",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      }
-    },
-    "SIDEBAR_PROMO_1": {
-      "label": "VIP Telegram",
-      "zone": "sidebar",
-      "kind": "sidebar_promo",
-      "order": 20,
-      "content": {
-        "type": "internal",
-        "eyebrow": "VIP",
-        "headline": "VIP Telegram",
-        "text": "Exclusive predictions & live updates.",
-        "button_text": "Open",
-        "link": "#account",
-        "route": "account",
-        "theme": "blue",
-        "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "auto",
-        "enabled": true,
-        "active_from": "",
-        "active_until": "",
-        "image_url": "",
-        "image_fit": "cover",
-        "image_position": "center",
-        "mobile_image_url": ""
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "violet",
-        "position": "bottom-right",
-        "opacity": 0.42,
-        "size": 1.0
-      },
-      "access": {
-        "trial": "active",
-        "expired": "active",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      },
-      "click_access": {
-        "trial": true,
-        "expired": true,
-        "rookie": true,
-        "pro": true,
-        "elite": true,
-        "legend": true,
-        "goat": true
-      }
-    },
-    "SIDEBAR_PROMO_2": {
-      "label": "Football by BlinQ",
-      "zone": "sidebar",
-      "kind": "sidebar_promo",
-      "order": 21,
-      "content": {
-        "type": "internal",
-        "eyebrow": "BLINQ FOOTBALL",
-        "headline": "Football by BlinQ",
-        "text": "Same intelligence. More sports.",
-        "button_text": "Preview",
-        "link": "#btts",
-        "route": "",
-        "theme": "purple",
-        "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "auto",
-        "enabled": true,
-        "active_from": "",
-        "active_until": "",
-        "image_url": "",
-        "image_fit": "cover",
-        "image_position": "center",
-        "mobile_image_url": ""
-      },
-      "watermark": {
-        "enabled": true,
-        "text": "COMING SOON",
-        "preset": "violet",
-        "position": "bottom-right",
-        "opacity": 0.42,
-        "size": 1.0
-      },
-      "access": {
-        "trial": "active",
-        "expired": "active",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      },
-      "click_access": {
-        "trial": true,
-        "expired": true,
-        "rookie": true,
-        "pro": true,
-        "elite": true,
-        "legend": true,
-        "goat": true
-      }
-    },
-    "SIDEBAR_PROMO_3": {
-      "label": "Upgrade to Elite",
-      "zone": "sidebar",
-      "kind": "sidebar_promo",
-      "order": 22,
-      "content": {
-        "type": "promo",
-        "eyebrow": "ELITE",
-        "headline": "Upgrade to Elite",
-        "text": "Unlock premium predictions and analytics.",
-        "button_text": "Upgrade",
-        "link": "#account",
-        "route": "account",
-        "theme": "violet",
-        "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "auto",
-        "enabled": true,
-        "active_from": "",
-        "active_until": "",
-        "image_url": "",
-        "image_fit": "cover",
-        "image_position": "center",
-        "mobile_image_url": ""
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "violet",
-        "position": "bottom-right",
-        "opacity": 0.42,
-        "size": 1.0
-      },
-      "access": {
-        "trial": "active",
-        "expired": "active",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      },
-      "click_access": {
-        "trial": true,
-        "expired": true,
-        "rookie": true,
-        "pro": true,
-        "elite": true,
-        "legend": true,
-        "goat": true
-      }
-    },
     "TOP_DAILY_PANEL": {
       "label": "TOP Predictions panel",
       "zone": "predictions",
@@ -1476,29 +1226,6 @@
       "order": 90,
       "content": {
         "label": "S/G Predictions panel"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "default"
-      },
-      "access": {
-        "trial": "active",
-        "expired": "locked",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      }
-    },
-    "BTTS_BONUS_PANEL": {
-      "label": "BTTS Bonus BETA panel",
-      "zone": "predictions",
-      "kind": "panel",
-      "order": 100,
-      "content": {
-        "label": "BTTS Bonus BETA panel"
       },
       "watermark": {
         "enabled": false,
@@ -2154,144 +1881,6 @@
         "legend": true,
         "goat": true
       }
-    },
-    "VIP_RAIL": {
-      "label": "BlinQ VIP membership rail",
-      "zone": "vip_rail",
-      "kind": "large_banner",
-      "order": 95,
-      "content": {
-        "eyebrow": "BLINQ ČLENSTVO",
-        "headline": "BlinQ VIP",
-        "text": "Prémiové predikcie. Hlbšie dáta. Väčší prehľad.",
-        "button_text": "Zobraziť plány",
-        "link": "#account",
-        "route": "account",
-        "theme": "gold",
-        "icon": "♛",
-        "benefit_1_title": "Prémiové predikcie",
-        "benefit_1_text": "Hlbšie dáta. Väčší prehľad.",
-        "benefit_2_title": "Pokročilé modely",
-        "benefit_2_text": "Viac než len štatistiky.",
-        "benefit_3_title": "Detailné štatistiky",
-        "benefit_3_text": "Kontext v každom zápase.",
-        "enabled": true,
-        "show_copy": true,
-        "image_url": "",
-        "mobile_image_url": "",
-        "image_fit": "cover",
-        "image_position": "center",
-        "active_from": "",
-        "active_until": "",
-        "campaign_id": "",
-        "advertiser_id": "blinq",
-        "ad_hidden_fallback": "internal",
-        "type": "promo",
-        "sponsored": false,
-        "plan_id": "",
-        "benefit_4_title": "Exkluzívna komunita",
-        "benefit_4_text": "Diskusie. Insighty. Výhoda.",
-        "benefit_1_icon": "♛",
-        "benefit_1_icon_url": "",
-        "benefit_1_link": "#predictions",
-        "benefit_1_title_size": 14,
-        "benefit_1_text_size": 11,
-        "benefit_2_icon": "⌁",
-        "benefit_2_icon_url": "",
-        "benefit_2_link": "#model_data",
-        "benefit_2_title_size": 14,
-        "benefit_2_text_size": 11,
-        "benefit_3_icon": "◫",
-        "benefit_3_icon_url": "",
-        "benefit_3_link": "#results",
-        "benefit_3_title_size": 14,
-        "benefit_3_text_size": 11,
-        "benefit_4_icon": "◎",
-        "benefit_4_icon_url": "",
-        "benefit_4_link": "#account",
-        "benefit_4_title_size": 14,
-        "benefit_4_text_size": 11,
-        "brand_logo": "/assets/blinq_logo.svg"
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "",
-        "preset": "gold",
-        "position": "bottom-right",
-        "opacity": 0.3,
-        "size": 1.0
-      },
-      "access": {
-        "trial": "active",
-        "expired": "active",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      },
-      "click_access": {
-        "trial": true,
-        "expired": true,
-        "rookie": true,
-        "pro": true,
-        "elite": true,
-        "legend": true,
-        "goat": true
-      }
-    },
-    "SIDEBAR_PROMO_4": {
-      "label": "Partner / Sponsored",
-      "zone": "sidebar",
-      "kind": "sidebar_promo",
-      "order": 23,
-      "content": {
-        "type": "advertisement",
-        "eyebrow": "PARTNER",
-        "headline": "Partner BlinQ",
-        "text": "Natívny partnerský priestor v BlinQ.",
-        "button_text": "Viac",
-        "link": "#account",
-        "route": "account",
-        "theme": "green",
-        "campaign_id": "",
-        "advertiser_id": "",
-        "ad_hidden_fallback": "auto",
-        "enabled": true,
-        "active_from": "",
-        "active_until": "",
-        "image_url": "",
-        "image_fit": "cover",
-        "image_position": "center",
-        "mobile_image_url": "",
-        "sponsored": true
-      },
-      "watermark": {
-        "enabled": false,
-        "text": "COMING SOON",
-        "preset": "violet",
-        "position": "bottom-right",
-        "opacity": 0.42,
-        "size": 1.0
-      },
-      "access": {
-        "trial": "active",
-        "expired": "active",
-        "rookie": "active",
-        "pro": "active",
-        "elite": "active",
-        "legend": "active",
-        "goat": "active"
-      },
-      "click_access": {
-        "trial": true,
-        "expired": true,
-        "rookie": true,
-        "pro": true,
-        "elite": true,
-        "legend": true,
-        "goat": true
-      }
     }
   },
   "admin": {
@@ -2367,12 +1956,6 @@
   "campaigns": {},
   "creative_specs": {
     "header_slot": {
-      "aspect_ratio": "3:1",
-      "recommended": "900 × 300 px",
-      "minimum": "600 × 200 px",
-      "safe_area": "center 80%"
-    },
-    "sidebar_promo": {
       "aspect_ratio": "3:1",
       "recommended": "900 × 300 px",
       "minimum": "600 × 200 px",
@@ -2580,11 +2163,6 @@
       "presentation_preview_limit": 10,
       "target_count": 10,
       "fill_policy": "confidence_only_never_bypass_data_depth_or_sample_gates"
-    },
-    "btts": {
-      "beta": true,
-      "sport": "football",
-      "href": "#btts"
     },
     "match_winner_assignment": {
       "exclusive": true,
@@ -3017,59 +2595,6 @@
             "order": 7
           }
         }
-      },
-      "btts": {
-        "label": "BTTS Bonus",
-        "panel_id": "bttsBonusPanel",
-        "sidebar_element": "SIDEBAR_BTTS",
-        "sidebar_enabled": false,
-        "dashboard_enabled": false,
-        "dashboard_order": 8,
-        "preview_limit": 5,
-        "plans": {
-          "trial": {
-            "visible_picks": 2,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 8
-          },
-          "expired": {
-            "visible_picks": 1,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 8
-          },
-          "rookie": {
-            "visible_picks": 2,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 8
-          },
-          "pro": {
-            "visible_picks": 5,
-            "blur_remaining": true,
-            "see_all": true,
-            "order": 8
-          },
-          "elite": {
-            "visible_picks": "ALL",
-            "blur_remaining": false,
-            "see_all": true,
-            "order": 8
-          },
-          "legend": {
-            "visible_picks": "ALL",
-            "blur_remaining": false,
-            "see_all": true,
-            "order": 8
-          },
-          "goat": {
-            "visible_picks": "ALL",
-            "blur_remaining": false,
-            "see_all": true,
-            "order": 8
-          }
-        }
       }
     },
     "show_live_chip": false,
@@ -3080,8 +2605,7 @@
       "value",
       "doubles",
       "sg",
-      "results",
-      "btts"
+      "results"
     ],
     "visible_slots": 6,
     "user_switches": false,
@@ -3766,75 +3290,6 @@
     "sources": []
   },
   "revision": "7.3.6",
-  "footer": {
-    "copyright": "© 2026 BlinQ",
-    "system_status": "Všetky systémy funkčné",
-    "links": [
-      {
-        "id": "how_blinq_works",
-        "label": "Ako funguje BlinQ",
-        "href": "#how_blinq_works",
-        "enabled": true,
-        "order": 101
-      },
-      {
-        "id": "methodology",
-        "label": "Metodika",
-        "href": "#methodology",
-        "enabled": true,
-        "order": 102
-      },
-      {
-        "id": "model_data",
-        "label": "Model a dáta",
-        "href": "#model_data",
-        "enabled": true,
-        "order": 103
-      },
-      {
-        "id": "faq",
-        "label": "FAQ",
-        "href": "#faq",
-        "enabled": true,
-        "order": 104
-      },
-      {
-        "id": "responsible_use",
-        "label": "Zodpovedné používanie",
-        "href": "#responsible_use",
-        "enabled": true,
-        "order": 105
-      },
-      {
-        "id": "terms",
-        "label": "Podmienky",
-        "href": "#terms",
-        "enabled": true,
-        "order": 106
-      },
-      {
-        "id": "privacy",
-        "label": "Súkromie",
-        "href": "#privacy",
-        "enabled": true,
-        "order": 107
-      },
-      {
-        "id": "cookies",
-        "label": "Cookies",
-        "href": "#cookies",
-        "enabled": true,
-        "order": 108
-      },
-      {
-        "id": "support",
-        "label": "Support",
-        "href": "#support",
-        "enabled": true,
-        "order": 109
-      }
-    ]
-  },
   "notifications": {
     "enabled": true,
     "label": "BlinQ Insights",
@@ -3942,5 +3397,6 @@
         "en": "Premium Info needs persistent storage. Messages will return automatically when storage is restored."
       }
     }
-  }
+  },
+  "ui_patch": "736-r10"
 }

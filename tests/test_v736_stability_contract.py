@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 INDEX = (WEB / "index.html").read_text(encoding="utf-8")
 APP = (WEB / "app.js").read_text(encoding="utf-8")
-CSS = (WEB / "final-polish-736.css").read_text(encoding="utf-8")
+CSS = (WEB / "blinq-app.css").read_text(encoding="utf-8")
 UI = json.loads((WEB / "ui-config.json").read_text(encoding="utf-8"))
 TIERS = json.loads((WEB / "config" / "membership-tiers.json").read_text(encoding="utf-8"))
 SITE = json.loads((WEB / "config" / "site-content.json").read_text(encoding="utf-8"))
@@ -83,7 +83,7 @@ def test_release_and_cache_revision_cannot_drift():
     assert patch, "missing web patch marker"
     patch_n = patch.group(1)
     assert f'/app.js?v={asset_revision}&p={patch_n}' in INDEX
-    assert f'/final-polish-736.css?v={asset_revision}&p={patch_n}' in INDEX
+    assert f'/blinq-app.css?v={asset_revision}&p={patch_n}' in INDEX
     refs = re.findall(r'(?:src|href)="(/[^"?#]+\.(?:js|css)\?v=(\d+)[^"]*)"', INDEX)
     assert refs, "expected versioned frontend assets"
     bad = [(ref, version) for ref, version in refs if version != asset_revision]

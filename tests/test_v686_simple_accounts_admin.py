@@ -5,7 +5,7 @@ APP=(ROOT/'web/app.js').read_text(encoding='utf-8')
 AUTH=(ROOT/'web/auth.js').read_text(encoding='utf-8')
 API=(ROOT/'api/function_app.py').read_text(encoding='utf-8')
 ADMIN_ACCOUNTS=(ROOT/'api/tbt/services/admin_accounts.py').read_text(encoding='utf-8')
-CSS=(ROOT/'web/admin-polish-687.css').read_text(encoding='utf-8')
+CSS=(ROOT/'web/blinq-app.css').read_text(encoding='utf-8')
 
 
 def _editor():

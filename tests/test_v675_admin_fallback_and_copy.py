@@ -50,8 +50,9 @@ def test_public_static_copy_avoids_slovak_tipy_and_bety():
     assert "tipy" not in html
     assert "bety" not in html
     assert "naša predikcia" in html
-    # The VIP rail is JSON/admin managed in 6.7.7 instead of hardcoded in index.html.
-    assert "prémiové predikcie" in ui
+    # Retired VIP rail copy must not survive in the runtime UI configuration.
+    assert '"vip_rail"' not in ui
+    assert '"vip_telegram"' not in ui
 
 
 def test_admin_route_has_single_page_title_source():

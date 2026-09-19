@@ -1,43 +1,19 @@
-/* Responsive presentation only. Authentication, entitlements and data remain in app.js. */
+/* BlinQ responsive helpers — 7.3.6-r10. Navigation drawers were removed; this file
+   now contains only active responsive/table/sync behaviour. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
-  const compact = () => matchMedia('(max-width: 1023px)').matches;
-  let lastFocus, menuOpen = false, publishedAt = '';
+  let publishedAt = '';
   const pageLang=()=>document.documentElement.lang||'sk';
   const isSk=()=>pageLang().toLowerCase().startsWith('sk');
   const isCz=()=>pageLang().toLowerCase().startsWith('cs');
   const uiText=(en,sk,cz)=>isSk()?sk:isCz()?cz:en;
 
-  function closeMenu(restore = true) {
-    if (!menuOpen) return;
-    menuOpen = false;
-    document.body.classList.remove('nav-open');
-    const backdrop=$('navBackdrop'),toggle=$('menuToggle'),nav=$('appNavigation'),main=$('mainContent'),tabs=$('mobileTabs');
-    if(backdrop)backdrop.hidden=true;
-    if(toggle)toggle.setAttribute('aria-expanded','false');
-    if(nav){nav.removeAttribute('role');nav.removeAttribute('aria-modal');nav.inert=compact();}
-    if(main)main.inert=false;
-    if(tabs)tabs.inert=false;
-    if (restore && lastFocus?.isConnected) lastFocus.focus();
-  }
-  function openMenu() {
-    if (!compact()) return;
-    lastFocus = document.activeElement;
-    menuOpen = true;
-    document.body.classList.add('nav-open');
-    const backdrop=$('navBackdrop'),toggle=$('menuToggle'),nav=$('appNavigation'),main=$('mainContent'),tabs=$('mobileTabs'),close=$('menuClose');
-    if(backdrop)backdrop.hidden=false;
-    if(toggle)toggle.setAttribute('aria-expanded','true');
-    if(nav){nav.inert=false;nav.setAttribute('role','dialog');nav.setAttribute('aria-modal','true');}
-    if(main)main.inert=true;
-    if(tabs)tabs.inert=true;
-    close?.focus();
-  }
+  function closeMenu(){ /* compatibility no-op: legacy drawer removed in r10 */ }
+
   function routeChanged(route, focus) {
-    closeMenu(false);
     document.body.dataset.currentRoute = route;
-    document.querySelectorAll('.nav-link, .mobile-tabs a').forEach(link => {
+    document.querySelectorAll('.mobile-tabs a').forEach(link => {
       const active = link.dataset.route === route;
       link.classList.toggle('active', active);
       if (active) link.setAttribute('aria-current', 'page');
@@ -45,14 +21,17 @@
     });
     if (focus) {
       window.scrollTo({top: 0, behavior: 'instant'});
-      $('pageTitle').focus({preventScroll: true});
+      $('pageTitle')?.focus({preventScroll: true});
     }
   }
+
   function cardsPerPanel() {
     return Math.max(1, parseInt(getComputedStyle(document.documentElement).getPropertyValue('--cards-per-panel'), 10) || 1);
   }
+
   function pager(host, page, count) {
-    const shell = host.parentElement;
+    const shell = host?.parentElement;
+    if(!shell) return;
     let label = shell.querySelector('.page-position');
     if (!label) {
       label = document.createElement('span');
@@ -64,8 +43,9 @@
     label.hidden = count <= 1;
     shell.classList.toggle('has-pages', count > 1);
   }
+
   function prepareRoute(host) {
-    // Preserve real table semantics on desktop and expose column names on narrow screens.
+    if(!host) return;
     host.querySelectorAll('.picks-table, .results-table').forEach(table => {
       table.setAttribute('role', 'table');
       table.querySelectorAll('thead,tbody').forEach(group => group.setAttribute('role', 'rowgroup'));
@@ -78,6 +58,7 @@
       table.querySelectorAll('th').forEach(th => {th.setAttribute('scope', 'col');th.setAttribute('role', 'columnheader');});
     });
     host.querySelectorAll('.route-rules').forEach(rule => {
+      if(rule.closest('.selection-details')) return;
       const details = document.createElement('details');
       details.className = 'selection-details';
       const summary = document.createElement('summary');
@@ -86,6 +67,7 @@
       details.append(summary, rule);
     });
   }
+
   function sync(status, generatedAt) {
     if (generatedAt) publishedAt = generatedAt;
     const node = $('syncStatus');
@@ -102,33 +84,15 @@
       error: uiText('REFRESH FAILED','OBNOVENIE ZLYHALO','OBNOVENÍ SELHALO'),
       offline: uiText('OFFLINE · Cached data','OFFLINE · Dáta z cache','OFFLINE · Data z cache')
     }[status] || uiText('DATA · Connecting…','DÁTA · Pripájam…','DATA · Připojuji…');
-    $('syncRefresh').disabled = status === 'loading';
+    const refresh=$('syncRefresh'); if(refresh) refresh.disabled = status === 'loading';
   }
-  function refreshFinished() { $('syncRefresh').disabled = false; }
+
+  function refreshFinished() { const refresh=$('syncRefresh'); if(refresh) refresh.disabled = false; }
+
   function init() {
-    const skip=document.querySelector('.skip-link'),toggle=$('menuToggle'),close=$('menuClose'),backdrop=$('navBackdrop'),nav=$('appNavigation');
+    const skip=document.querySelector('.skip-link');
     if(skip)skip.onclick=event=>{event.preventDefault();$('mainContent')?.focus();};
-    if(toggle)toggle.onclick=openMenu;
-    if(close)close.onclick=()=>closeMenu();
-    if(backdrop)backdrop.onclick=()=>closeMenu();
-    if(nav)nav.inert=compact();
-    matchMedia('(max-width: 1023px)').addEventListener('change', () => {
-      closeMenu();
-      const nav=$('appNavigation');if(nav)nav.inert=compact();
-    });
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') {
-        if (menuOpen) {event.preventDefault();closeMenu();}
-        const menu = $('profileMenu');
-        if (!menu.hidden) {menu.hidden = true;$('profileMenuToggle').setAttribute('aria-expanded', 'false');$('profileMenuToggle').focus();}
-      }
-      if (!menuOpen || event.key !== 'Tab') return;
-      const focusable = [...$('appNavigation').querySelectorAll('a[href],button:not(:disabled)')].filter(n => n.getClientRects().length);
-      const first = focusable[0], last = focusable[focusable.length - 1];
-      if (event.shiftKey && document.activeElement === first) {event.preventDefault();last?.focus();}
-      else if (!event.shiftKey && document.activeElement === last) {event.preventDefault();first?.focus();}
-    });
-    // Swipe is optional; visible arrow buttons remain available to all input types.
+
     document.querySelectorAll('.pick-carousel-shell, .market-carousel-shell').forEach(shell => {
       let start = null;
       shell.addEventListener('pointerdown', event => {
@@ -145,7 +109,7 @@
       }, {passive: true});
       shell.addEventListener('pointercancel', () => {start = null;}, {passive: true});
     });
-    // Recover absent market-player photos without inline handlers (CSP compatible).
+
     document.addEventListener('error', event => {
       const img = event.target;
       if (img.tagName !== 'IMG' || !img.closest('.market-card .player-avatar')) return;
@@ -154,5 +118,6 @@
       avatar.textContent = name.split(/\s+/).slice(0,2).map(s => s[0]).join('').toUpperCase();
     }, true);
   }
+
   window.BlinqUI = Object.freeze({init, cardsPerPanel, pager, prepareRoute, routeChanged, closeMenu, sync, refreshFinished});
 })();

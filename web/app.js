@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, boardMode:'live', dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:'',board:''}, railMatch:null, railMatchTab:'overview', railDetailTab:'overview', insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, privateUpdatesLastPoll:0, privateUpdatesBusy:false, railPromoIndex:0, railPromoTimer:null, railPromoPaused:false, presentationConfig:null, siteContent:null, adminSupport:null, adminSupportLoading:false, adminSupportError:'', adminSupportStatus:'all', adminPayments:{}, adminAudit:null, adminAuditLoading:false, adminUserAudit:{}, supportSubmitting:false, pushConfig:null, pushBusy:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), adminAnalytics:null, adminAnalyticsLoading:false, runtimeConfigLoaded:false, adminCampaignId:null, adminAdvertiserId:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, boardMode:'live', dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, adminSupport:null, adminSupportLoading:false, adminSupportError:'', adminSupportStatus:'all', adminPayments:{}, adminAudit:null, adminAuditLoading:false, adminUserAudit:{}, supportSubmitting:false, pushConfig:null, pushBusy:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -137,7 +137,7 @@
     sk: {
       'Skip to content':'Preskočiť na obsah','Close navigation':'Zavrieť navigáciu','Open navigation':'Otvoriť navigáciu',
       'Main navigation':'Hlavná navigácia','Quick navigation':'Rýchla navigácia','Language versions':'Jazykové verzie',
-      'Dashboard':'Prehľad','Prime Predictions':'Short Odds','Short Odds':'Short Odds','TOP Predictions':'TOP','Value Predictions':'Value','Doubles':'Štvorhra','Ace Predictions':'Esá','S/G Predictions':'Sety / hry','Results':'Výsledky','BTTS Bonus':'BTTS Bonus',
+      'Dashboard':'Prehľad','Prime Predictions':'Short Odds','Short Odds':'Short Odds','TOP Predictions':'TOP','Value Predictions':'Value','Doubles':'Štvorhra','Ace Predictions':'Esá','S/G Predictions':'Sety / hry','Results':'Výsledky',
       'Plans':'Plány','Upgrade':'Upgrade','Level':'Úroveň','Remaining':'Zostáva','Account':'Účet','Account & membership':'Účet a členstvo','Profile, access and plans':'Profil, prístup a plány','Sign out':'Odhlásiť sa','End this session':'Ukončiť túto reláciu',
       'Sign in to your analytics workspace':'Prihlás sa do svojho analytického priestoru','Get access':'Získaj prístup','Restore your access':'Obnov svoj prístup','Set a new password':'Nastav nové heslo',
       'Welcome back.':'Vitaj späť.','Sign in to your tennis intelligence workspace.':'Prihlás sa do svojho tenisového analytického priestoru.','Create your BlinQ account.':'Vytvor si účet BlinQ.','Create an account to access your BlinQ workspace.':'Vytvor si účet a získaj prístup do BlinQ.','Restore access.':'Obnov prístup.','We will send a password recovery link to your email.':'Na e-mail ti pošleme odkaz na obnovenie hesla.','Set a new password.':'Nastav nové heslo.','Choose a password with at least eight characters.':'Zvoľ heslo s minimálne ôsmimi znakmi.',
@@ -156,7 +156,7 @@
       'Incorrect email or password.':'Nesprávny e-mail alebo heslo.','An account with this email already exists.':'Účet s týmto e-mailom už existuje.','Choose a stronger password with at least eight characters.':'Zvoľ silnejšie heslo s minimálne ôsmimi znakmi.','Enter a valid email address.':'Zadaj platnú e-mailovú adresu.','Too many attempts. Try again later.':'Príliš veľa pokusov. Skús to neskôr.','This account has been disabled.':'Tento účet bol deaktivovaný.','Verify your email before opening the BlinQ workspace.':'Pred otvorením BlinQ over svoj e-mail.','Your session expired. Sign in again.':'Tvoja relácia vypršala. Prihlás sa znova.','Your session is no longer valid. Sign in again.':'Tvoja relácia už nie je platná. Prihlás sa znova.',
       '✓ Email verified':'✓ E-mail overený','! Email not verified':'! E-mail nie je overený','! Legacy admin · verify email':'! Legacy admin · over e-mail','← Dashboard':'← Prehľad','Loading current model predictions…':'Načítavam aktuálne predikcie modelu…','Data could not be refreshed. Please try again.':'Dáta sa nepodarilo obnoviť. Skús to znova.','Published data is older than 12 hours. Check prediction creation times before evaluating them.':'Publikované dáta sú staršie ako 12 hodín. Pred vyhodnotením skontroluj čas vytvorenia predikcií.','Managed manually':'Spravované manuálne','Production feed':'Produkčný feed','Production':'Produkcia','Member':'Člen','BlinQ User':'Používateľ BlinQ',
       'Short Odds Prediction':'Short Odds','Value Prediction':'Value predikcia','Ace / DF Prediction':'Predikcia es / dvojchýb','Set / Game Prediction':'Predikcia setu / hry','TOP Prediction':'TOP predikcia','Sets Projection':'Projekcia setov','Games Projection':'Projekcia hier','Ace / DF Projection':'Predikcia es / dvojchýb','Projection':'Predikcia','Projection only · no odds':'Iba projekcia · bez kurzu','Baseline':'Základ','Gap':'Rozdiel','Score':'Skóre','Opponent proj.':'Projekcia súpera','Data':'Dáta','games':'hier','proj.':'proj.','MODEL':'MODEL','VERY HIGH':'VEĽMI VYSOKÁ','HIGH':'VYSOKÁ','MEDIUM':'STREDNÁ','LOW':'NÍZKA','PROJECTION':'PREDIKCIA',
-      'No published predictions are available in this section yet.':'V tejto sekcii zatiaľ nie sú dostupné publikované predikcie.','Both Teams To Score':'Oba tímy dajú gól','The BlinQ BTTS module is prepared, but live football data and published predictions are not connected in this repository yet.':'Modul BlinQ BTTS je pripravený, ale live futbalové dáta a publikované predikcie zatiaľ nie sú v tomto repozitári pripojené.','Data not connected':'Dáta nie sú pripojené','No demo or fabricated predictions are shown.':'Nezobrazujú sa žiadne demo ani vymyslené predikcie.','BETA · FOOTBALL':'BETA · FUTBAL',
+      'No published predictions are available in this section yet.':'V tejto sekcii zatiaľ nie sú dostupné publikované predikcie.','Data not connected':'Dáta nie sú pripojené','No demo or fabricated predictions are shown.':'Nezobrazujú sa žiadne demo ani vymyslené predikcie.',
       'Entry access to the BlinQ workspace.':'Základný prístup do BlinQ.','Start with BlinQ':'Začni s BlinQ','Core predictions':'Hlavné predikcie','Core predictions + expanded daily board.':'Hlavné predikcie a rozšírený denný prehľad.','Advanced analytics':'Pokročilá analytika','Expanded analytical access for users who follow more matches and context.':'Rozšírený analytický prístup pre používateľov, ktorí sledujú viac zápasov a kontextu.','Maximum public access':'Najvyšší verejný prístup','The highest publicly available BlinQ tier.':'Najvyššia verejne dostupná úroveň BlinQ.','Private all-access':'Súkromný plný prístup','Lifetime access · All BlinQ features. Private top-tier access for selected members.':'Doživotný prístup · Všetky funkcie BlinQ. Súkromná najvyššia úroveň pre vybraných členov.','Choose Rookie':'Vybrať Rookie','Upgrade to PRO':'Prejsť na PRO','Choose Elite':'Vybrať Elite','Choose Legend':'Vybrať Legend',
       'Tournament':'Turnaj','Market':'Trh','Projection pick':'Predikcia','Proj.':'Proj.','Opp. proj.':'Proj. súpera','Overall sample':'Celková vzorka','Surface sample':'Vzorka na povrchu','Avg Odds':'Priem. kurz','Sample':'Vzorka','Accuracy':'Presnosť','Log loss':'Log loss','Brier score':'Brier skóre','Published and scored':'Publikované a vyhodnotené','filtered settled sample':'filtrovaná vyhodnotená vzorka','no issued odds':'bez publikovaných kurzov','flat 1u on issued odds':'výpočet pri 1u na publikovaných kurzoch','profit · flat 1u stake':'zisk · výpočet pri 1u','settled published rows':'vyhodnotené publikované záznamy','Production artifact':'Produkčný artefakt','Chronological holdout':'Chronologický holdout','Evaluation report':'Vyhodnocovací report','Negative is better':'Záporné je lepšie','Data window':'Dátové obdobie','Model':'Model',
       'TBA':'Bude určené','ending':'končí'
@@ -167,7 +167,7 @@
       'Welcome back.':'Vítej zpět.','Sign in to your tennis intelligence workspace.':'Přihlas se do svého tenisového analytického prostoru.','Create your BlinQ account.':'Vytvoř si účet BlinQ.','Create an account to access your BlinQ workspace.':'Vytvoř si účet a získej přístup do BlinQ.','Restore access.':'Obnov přístup.','We will send a password recovery link to your email.':'Na e-mail ti pošleme odkaz pro obnovu hesla.','Set a new password.':'Nastav nové heslo.','Choose a password with at least eight characters.':'Zvol heslo s minimálně osmi znaky.','Email':'E-mail','Password':'Heslo','Enter your email':'Zadej svůj e-mail','Enter your password':'Zadej své heslo','Show':'Zobrazit','Hide':'Skrýt','Show password':'Zobrazit heslo','Hide password':'Skrýt heslo','Sign in':'Přihlásit se','Create account':'Vytvořit účet','Back to sign in':'Zpět na přihlášení','Forgot password':'Zapomenuté heslo','Resend verification email':'Poslat ověřovací e-mail znovu','Send recovery link':'Poslat odkaz pro obnovu','Save password':'Uložit heslo',
       'Your account':'Tvůj účet','YOUR ACCOUNT':'TVŮJ ÚČET','CURRENT ACCESS':'AKTUÁLNÍ PŘÍSTUP','Email verified':'E-mail ověřen','Email not verified':'E-mail není ověřen','Telegram nick':'Telegram nick','Avatar style':'Typ avatara','Default':'Výchozí','Male':'Muž','Female':'Žena','Save profile':'Uložit profil','Reset password':'Obnovit heslo','BLINQ MEMBERSHIP':'BLINQ ČLENSTVÍ','Available plans':'Dostupné plány','Current plan':'Aktuální plán','CURRENT PLAN':'AKTUÁLNÍ PLÁN','INVITE ONLY':'JEN NA POZVÁNKU','Invite only':'Jen na pozvánku','Request invite':'Požádat o pozvánku','Lifetime access':'Doživotní přístup','Active':'Aktivní','No active access':'Bez aktivního přístupu','Rookie Trial':'Rookie zkušební verze','Lifetime':'Doživotně','Active membership':'Aktivní členství','Expired':'Expirované','Access':'Přístup','Validity':'Platnost','Member since':'Člen od','Security':'Zabezpečení','Verified email':'Ověřený e-mail','Verification required':'Vyžaduje se ověření',
       'Refresh':'Obnovit','Auto-refresh on':'Automatické obnovení zapnuto','picks':'predikcí','published':'publikovaných','settled':'vyhodnocených','See more':'Zobrazit více','See more →':'Zobrazit více →','All Tours':'Všechny okruhy','All Tournaments':'Všechny turnaje','All Surfaces':'Všechny povrchy','All Confidence':'Všechny úrovně jistoty','Unlock this pick':'Odemkni tuto predikci','Upgrade to unlock →':'Upgrade pro odemknutí →','Odds':'Kurz','Model edge':'Výhoda modelu','Category':'Kategorie','All published':'Všechny publikované','Tour':'Okruh','Surface':'Povrch','Period':'Období','All time':'Celé období','24 hours':'24 hodin','7 days':'7 dní','30 days':'30 dní','90 days':'90 dní','Date':'Datum','Match':'Zápas','Pick':'Predikcia','Probability':'Pravděpodobnost','Result':'Výsledek','Units':'Jednotky','WON':'VÝHRA','LOST':'PROHRA','VOID':'VOID','Record':'Bilance','Hit rate':'Úspěšnost','Vyhodnotené predikcie':'Vyhodnocené predikce','TENNIS INTELLIGENCE':'TENISOVÁ ANALYTIKA','MATCH WINNER':'VÍTĚZ ZÁPASU','CONFIDENCE FIRST':'JISTOTA NA PRVNÍM MÍSTĚ','VALUE EDGE':'VALUE VÝHODA','SETTLED PICKS':'VYHODNOCENÉ PREDIKCE','BLINQ MEMBERS':'BLINQ ČLENSTVÍ','LEARN':'INFO','How BlinQ Works':'Jak funguje BlinQ','Methodology':'Metodika','Model & Data':'Model a data','Responsible Use':'Zodpovědné používání','BlinQ Prediction':'BlinQ predikce','LANGUAGE':'JAZYK',
-      'COMMUNITY':'KOMUNITA','Join our Telegram Community':'Přidej se do Telegram komunity','News · Predictions · Discussions':'Novinky · Predikce · Diskuse','JOIN':'PŘIDAT SE','Premium Predictions':'Prémiové predikce','Higher value. Better decisions.':'Vyšší hodnota. Lepší rozhodnutí.','OPEN':'OTEVŘÍT','RESULTS & STATS':'VÝSLEDKY A STATISTIKY','Track performance':'Sleduj výkonnost','Transparent. Verified.':'Transparentní. Ověřené.','VIEW':'ZOBRAZIT','Data. Analysis.':'Data. Analýza.','Better Decisions.':'Lepší rozhodnutí.','Advanced tennis intelligence for informed players.':'Pokročilá tenisová analytika pro informovaná rozhodnutí.','Join the BlinQ':'Přidej se do BlinQ','Telegram Community':'Telegram komunity','Track performance.':'Sleduj výkonnost.','Stay informed.':'Měj přehled.','Transparent model results and published statistics.':'Transparentní výsledky modelu a publikované statistiky.','SEE RESULTS':'VÝSLEDKY','✓ Email verified':'✓ E-mail ověřen','! Email not verified':'! E-mail není ověřen','← Dashboard':'← Přehled','Loading current model predictions…':'Načítám aktuální predikce modelu…','Data could not be refreshed. Please try again.':'Data se nepodařilo obnovit. Zkus to znovu.','Published data is older than 12 hours. Check prediction creation times before evaluating them.':'Publikovaná data jsou starší než 12 hodin. Před vyhodnocením zkontroluj čas vytvoření predikcí.','Short Odds Prediction':'Short Odds','Value Prediction':'Value predikce','Ace / DF Prediction':'Esa / dvojchyby','Set / Game Prediction':'Predikce setu / hry','TOP Prediction':'TOP predikce','Projection only · no odds':'Pouze projekce · bez kurzu','VERY HIGH':'VELMI VYSOKÁ','HIGH':'VYSOKÁ','MEDIUM':'STŘEDNÍ','LOW':'NÍZKÁ','PROJECTION':'PREDIKCE','No published predictions are available in this section yet.':'V této sekci zatím nejsou dostupné publikované predikce.','Both Teams To Score':'Oba týmy dají gól','Data not connected':'Data nejsou připojena','No demo or fabricated predictions are shown.':'Nezobrazují se žádné demo ani vymyšlené predikce.','BETA · FOOTBALL':'BETA · FOTBAL',
+      'COMMUNITY':'KOMUNITA','Join our Telegram Community':'Přidej se do Telegram komunity','News · Predictions · Discussions':'Novinky · Predikce · Diskuse','JOIN':'PŘIDAT SE','Premium Predictions':'Prémiové predikce','Higher value. Better decisions.':'Vyšší hodnota. Lepší rozhodnutí.','OPEN':'OTEVŘÍT','RESULTS & STATS':'VÝSLEDKY A STATISTIKY','Track performance':'Sleduj výkonnost','Transparent. Verified.':'Transparentní. Ověřené.','VIEW':'ZOBRAZIT','Data. Analysis.':'Data. Analýza.','Better Decisions.':'Lepší rozhodnutí.','Advanced tennis intelligence for informed players.':'Pokročilá tenisová analytika pro informovaná rozhodnutí.','Join the BlinQ':'Přidej se do BlinQ','Telegram Community':'Telegram komunity','Track performance.':'Sleduj výkonnost.','Stay informed.':'Měj přehled.','Transparent model results and published statistics.':'Transparentní výsledky modelu a publikované statistiky.','SEE RESULTS':'VÝSLEDKY','✓ Email verified':'✓ E-mail ověřen','! Email not verified':'! E-mail není ověřen','← Dashboard':'← Přehled','Loading current model predictions…':'Načítám aktuální predikce modelu…','Data could not be refreshed. Please try again.':'Data se nepodařilo obnovit. Zkus to znovu.','Published data is older than 12 hours. Check prediction creation times before evaluating them.':'Publikovaná data jsou starší než 12 hodin. Před vyhodnocením zkontroluj čas vytvoření predikcí.','Short Odds Prediction':'Short Odds','Value Prediction':'Value predikce','Ace / DF Prediction':'Esa / dvojchyby','Set / Game Prediction':'Predikce setu / hry','TOP Prediction':'TOP predikce','Projection only · no odds':'Pouze projekce · bez kurzu','VERY HIGH':'VELMI VYSOKÁ','HIGH':'VYSOKÁ','MEDIUM':'STŘEDNÍ','LOW':'NÍZKÁ','PROJECTION':'PREDIKCE','No published predictions are available in this section yet.':'V této sekci zatím nejsou dostupné publikované predikce.','Data not connected':'Data nejsou připojena','No demo or fabricated predictions are shown.':'Nezobrazují se žádné demo ani vymyšlené predikce.',
       'Entry access to the BlinQ workspace.':'Základní přístup do BlinQ.','Start with BlinQ':'Začni s BlinQ','Core predictions':'Hlavní predikce','Core predictions + expanded daily board.':'Hlavní predikce a rozšířený denní přehled.','Advanced analytics':'Pokročilá analytika','Maximum public access':'Nejvyšší veřejný přístup','The highest publicly available BlinQ tier.':'Nejvyšší veřejně dostupná úroveň BlinQ.','Private all-access':'Soukromý plný přístup','Lifetime access · All BlinQ features. Private top-tier access for selected members.':'Doživotní přístup · Všechny funkce BlinQ. Soukromá nejvyšší úroveň pro vybrané členy.','Tournament':'Turnaj','Market':'Trh','Projection pick':'Predikce','Opp. proj.':'Proj. soupeře','Overall sample':'Celkový vzorek','Surface sample':'Vzorek na povrchu','Avg Odds':'Prům. kurz','Sample':'Vzorek','Accuracy':'Přesnost','Brier score':'Brier skóre','Published and scored':'Publikované a vyhodnocené','Data window':'Datové období',
       'TBA':'Bude určeno','ending':'končí'
     }
@@ -210,7 +210,7 @@
     root.querySelectorAll?.('[placeholder],[aria-label],[title]').forEach(el=>{if(el.closest?.('.admin-route,.admin-canvas,.admin-inspector,.admin-toolbar,.admin-tabbar'))return;['placeholder','aria-label','title'].forEach(attr=>{if(!el.hasAttribute(attr))return;const raw=el.getAttribute(attr);const translated=publicText(raw);if(translated!==raw)el.setAttribute(attr,translated);});});
   }
   const dashboardPickSectionKeys=['prime','top_daily','value','doubles','ace','sg'];
-  const dashboardSectionKeys=[...dashboardPickSectionKeys,'results','btts'];
+  const dashboardSectionKeys=[...dashboardPickSectionKeys,'results'];
   const dashboardSectionFallback={
     prime:{label:'Short Odds',panel_id:'predictionsPanel',sidebar_element:'SIDEBAR_PRIME',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:1,preview_limit:5},
     top_daily:{label:'TOP Predictions',panel_id:'topDailyPanel',sidebar_element:'SIDEBAR_TOP_DAILY',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:2,preview_limit:5},
@@ -219,7 +219,6 @@
     ace:{label:'Ace Predictions',panel_id:'acePanel',sidebar_element:'SIDEBAR_ACE',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:5,preview_limit:5},
     sg:{label:'S/G Predictions',panel_id:'sgPanel',sidebar_element:'SIDEBAR_SG',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:6,preview_limit:5},
     results:{label:'Results',panel_id:'resultsPreviewPanel',sidebar_element:'SIDEBAR_RESULTS',sidebar_enabled:true,dashboard_enabled:false,dashboard_order:7,preview_limit:5},
-    btts:{label:'BTTS Bonus',panel_id:'bttsBonusPanel',sidebar_element:'SIDEBAR_BTTS',sidebar_enabled:true,dashboard_enabled:false,dashboard_order:8,preview_limit:5},
   };
   const isAdminAccount = () => Boolean(state.feed?.account?.is_admin || String(state.feed?.account?.role||'').toLowerCase() === 'admin');
   const draftKey = () => state.ui?.admin?.draft_storage_key || state.uiSource?.admin?.draft_storage_key || 'blinq_admin_ui_config_v1';
@@ -243,13 +242,11 @@
   }
   async function loadEditablePresentationConfig(){
     try{
-      const [tiers,banners,footer,theme,siteContent]=await Promise.all([getJSON('/config/membership-tiers.json'),getJSON('/config/banners.json'),getJSON('/config/footer-links.json'),getJSON('/config/site-theme.json'),getJSON('/config/site-content.json')]);
-      state.presentationConfig={tiers,banners,footer,theme,siteContent}; state.siteContent=siteContent;
+      const [tiers,banners,theme,siteContent]=await Promise.all([getJSON('/config/membership-tiers.json'),getJSON('/config/banners.json'),getJSON('/config/site-theme.json'),getJSON('/config/site-content.json')]);
+      state.presentationConfig={tiers,banners,theme,siteContent}; state.siteContent=siteContent;
       Object.entries(tiers?.tiers||{}).forEach(([id,data])=>{if(!state.ui?.plans?.[id])return;const p=state.ui.plans[id];['label','card_title','description','short_description','cta_label','invite_only'].forEach(k=>{if(data[k]!==undefined)p[k]=data[k];});const u=safeExternalUrl(data.url||'');if(u)p.url=u;else if(data.url==='')p.url='';});
       const hero=banners?.main_banner||{};if(state.ui){const liveHero=state.ui.hero_banner||{};state.ui.hero_banner={...liveHero,rotation_seconds:liveHero.rotation_seconds??hero.rotation_seconds??6,auto_rotate:liveHero.auto_rotate??hero.auto_rotate??true,show_dots:liveHero.show_dots??hero.show_dots??true,pause_on_hover:liveHero.pause_on_hover??hero.pause_on_hover??true,slot_count:liveHero.slot_count??(Array.isArray(hero.slides)?Math.min(5,hero.slides.filter(x=>x?.enabled!==false).length):1)};}
       (hero.slides||[]).slice(0,5).forEach((row,i)=>{const item=state.ui?.elements?.[`HERO_BANNER_${i+1}`];if(item){item.content={...row,...(item.content||{})};}});
-      const small=banners?.home_small_banners||{};(small.slides||[]).slice(0,4).forEach((row,i)=>{const item=state.ui?.elements?.[`SIDEBAR_PROMO_${i+1}`];if(item){item.content={...row,...(item.content||{})};}});
-      const rail=state.ui?.elements?.VIP_RAIL;if(rail&&footer){const c=rail.content=rail.content||{};(footer.links||[]).slice(0,4).forEach((row,i)=>{const n=i+1;c[`benefit_${n}_title`]=row.enabled===false?'':row.title||'';c[`benefit_${n}_text`]=row.text||'';c[`benefit_${n}_title_size`]=row.title_size||15;c[`benefit_${n}_text_size`]=row.text_size||12;c[`benefit_${n}_icon`]=row.icon||'';c[`benefit_${n}_icon_url`]=row.icon_url||'';c[`benefit_${n}_link`]=row.link||'#predictions';});if(footer.cta){c.button_text=footer.cta.label||c.button_text;c.link=footer.cta.link||c.link;}};
       const bg=theme?.background||{};const style=document.documentElement.style;style.setProperty('--blinq-page-bg',`url("${String(bg.image||bg.fallback||'')}")`);style.setProperty('--blinq-page-bg-fallback',`url("${String(bg.fallback||'')}")`);style.setProperty('--blinq-page-bg-position',String(bg.position||'center top'));style.setProperty('--blinq-page-bg-size',String(bg.size||'cover'));style.setProperty('--blinq-page-bg-opacity',String(bg.enabled===false?0:(Number(bg.opacity)||0.2)));style.setProperty('--blinq-page-bg-overlay',String(bg.overlay||'linear-gradient(rgba(0,9,13,.8),rgba(0,9,13,.95))'));if(theme?.login?.background_image)style.setProperty('--blinq-login-bg',`url("${String(theme.login.background_image)}")`);if(theme?.login?.card_width)style.setProperty('--blinq-login-width',`${Number(theme.login.card_width)}px`);if(theme?.login?.logo_width)style.setProperty('--blinq-login-logo-width',`${Number(theme.login.logo_width)}px`);
     }catch{}
   }
@@ -265,7 +262,7 @@
 
   async function loadUiConfig() {
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=9');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=10');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
@@ -360,20 +357,6 @@
     }catch{}
   }
 
-  function renderNavigationGroup(items, containerId) {
-    const host=$(containerId); host.innerHTML='';
-    [...(items||[])].filter(x=>x.enabled!==false).sort((a,b)=>Number(a.order||0)-Number(b.order||0)).forEach(item=>{
-      const href=item.id==='btts'?'#btts':(item.href||`#${item.id}`);
-      const direct=href.startsWith('/')||/^https?:\/\//i.test(href);
-      const a=document.createElement('a'); a.href=href;
-      if(!direct&&item.id) a.dataset.route=item.id;
-      if(item.element_id) a.dataset.uiElement=item.element_id;
-      a.className=`nav-link${state.route===item.id?' active':''}`;
-      a.innerHTML=`<span class="nav-icon">${escapeHtml(item.icon||'•')}</span><span>${escapeHtml(item.label||item.id)}${item.beta?' <em class="nav-beta">BETA</em>':''}</span>`;
-      host.appendChild(a);
-    });
-  }
-
   function dashboardSectionConfig(key){
     const base=dashboardSectionFallback[key]||{};
     const configured=state.ui?.dashboard?.sections?.[key]||{};
@@ -429,7 +412,7 @@
   function upgradePlanLabel(plan){return state.ui?.plans?.[plan]?.label||String(plan||'PRO').toUpperCase();}
   function dashboardSectionKeyForSidebarElement(elementId){return dashboardSectionKeys.find(key=>dashboardSectionConfig(key).sidebar_element===elementId)||'';}
   function dashboardSectionKeyForPanelId(panelId){return dashboardSectionKeys.find(key=>dashboardSectionConfig(key).panel_id===panelId)||'';}
-  function sectionSeeAllNode(key){if(key==='prime')return $('primeSeeAllCard');if(key==='btts')return $('bttsBonusPanel')?.querySelector('.section-see-all-card')||null;return document.querySelector(`[data-route="${key}"][class~="section-see-all-card"]`);}
+  function sectionSeeAllNode(key){if(key==='prime')return $('primeSeeAllCard');return document.querySelector(`[data-route="${key}"][class~="section-see-all-card"]`);}
   function dashboardVisibilityDefaults(){
     const out={};dashboardPickSectionKeys.forEach(key=>{out[key]=dashboardSectionConfig(key).dashboard_enabled!==false;});return out;
   }
@@ -504,12 +487,12 @@
       const cfg=dashboardSectionConfig(key),panel=$(cfg.panel_id);if(!panel)return;
       panel.hidden=true; panel.setAttribute('aria-hidden','true');
     });
-    for(const key of ['results','btts']){const cfg=dashboardSectionConfig(key),panel=$(cfg.panel_id);if(panel)panel.hidden=true;}
+    {const cfg=dashboardSectionConfig('results'),panel=$(cfg.panel_id);if(panel)panel.hidden=true;}
     dashboardSectionKeys.forEach(key=>{
       const see=sectionSeeAllNode(key),ent=dashboardPlanEntitlement(key);if(!see)return;
       see.hidden=false;see.classList.toggle('section-see-all-locked',!ent.see_all);see.dataset.dashboardSection=key;
       const b=see.querySelector('b');
-      if(ent.see_all){see.dataset.route=key;see.href=key==='btts'?'#btts':`#${key}`;delete see.dataset.upgradePlan;if(b)b.textContent=key==='btts'?'Open →':'See more →';}
+      if(ent.see_all){see.dataset.route=key;see.href=`#${key}`;delete see.dataset.upgradePlan;if(b)b.textContent='See more →';}
       else{delete see.dataset.route;see.href='#';see.dataset.upgradePlan=firstUnlockPlan(key,0,true);if(b)b.textContent=`${lcopy('Available with','Dostupné s','Dostupné s')} ${upgradePlanLabel(see.dataset.upgradePlan).replace(/^BlinQ\s+/i,'')} →`;}
     });
     renderDashboardSectionToggles();
@@ -526,10 +509,7 @@
   }
 
   function renderNavigation(){
-    // Keep the visible top navigation in sync with the current route.
-    // Secondary prediction routes belong to Predikcie, results to Štatistiky,
-    // and informational model pages to Modely.
-    const predictionRoutes=new Set(['predictions','prime','top_daily','value','doubles','ace','sg','btts']);
+    const predictionRoutes=new Set(['predictions','prime','top_daily','value','doubles','ace','sg']);
     const modelRoutes=new Set(['model_data','methodology','how_blinq_works']);
     const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
     const referenceNav=document.querySelector('.reference-navigation');
@@ -539,32 +519,8 @@
         node.classList.toggle('active',active);
         if(active)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');
       });
-      const community=referenceNav.querySelector('[data-open-insights]');
-      if(community){community.classList.remove('active');community.removeAttribute('aria-current');}
-    }
-    const navIcons={prime:'✦',top_daily:'★',value:'◇',doubles:'◈',ace:'♠',sg:'▥',results:'✓',btts:'⚽'};
-    const orderedSections=[...dashboardSectionKeys].filter(id=>id!=='btts').sort((a,b)=>sectionPlanOrder(a)-sectionPlanOrder(b)||Number(dashboardSectionConfig(a).dashboard_order||99)-Number(dashboardSectionConfig(b).dashboard_order||99));
-    const primaryNav=[['predictions','Prehľad','⌂'],...orderedSections.map(id=>[id,dashboardSectionConfig(id).label||id,navIcons[id]||'•'])];
-    const configNav=elementList('navigation');
-    const main=primaryNav.map(([id,label,icon],index)=>{
-      const item=configNav.find(entry=>entry.content?.route===id);
-      const section=dashboardSectionKeys.includes(id)?dashboardSectionConfig(id):null;
-      const access=item?.id?elementAccess(item.id):'active';return {id,label:publicText(label),icon,order:index+1,enabled:(section?section.sidebar_enabled!==false:true)&&access!=='hidden',beta:id==='btts',href:id==='btts'?'#btts':`#${id}`,element_id:item?.id||''};
-    });
-    renderNavigationGroup(main,'mainNavigation');
-    const adminWrap=$('adminNavigationWrap');
-    if(adminWrap){
-      adminWrap.hidden=!isAdminAccount();
-      renderNavigationGroup(isAdminAccount()?[{id:'admin',href:'#admin',icon:'⚙',label:'Admin',order:1,enabled:true}]:[],'adminNavigation');
     }
     const profileAdmin=$('profileAdminLink');if(profileAdmin)profileAdmin.hidden=!isAdminAccount();
-    const footer=$('footerLearnNavigation');
-    if(footer){
-      footer.innerHTML='';
-      [...(state.ui?.footer?.links||state.ui?.navigation?.learn||[])].filter(x=>x.enabled!==false).sort((a,b)=>Number(a.order||0)-Number(b.order||0)).forEach(item=>{
-        const a=document.createElement('a'); a.href=item.href||`#${item.id}`; a.dataset.route=item.id||''; a.textContent=publicText(item.label||item.id); footer.appendChild(a);
-      });
-    }
   }
 
   function watermarkHtml(item){
@@ -813,11 +769,6 @@
     });
   }
 
-  function renderSidebarPromos(){
-    const host=$('sidebarPromoZone'); if(!host)return;
-    host.innerHTML=elementList('sidebar_promo','sidebar').map((item,index)=>bannerHtml(item,true,index+8)).join('');
-    installBannerTracking(host);
-  }
   function visitorId(){
     const key='blinq_banner_visitor_v1'; let value=localStorage.getItem(key);
     if(!value){const secure=(window.crypto&&typeof window.crypto.randomUUID==='function')?window.crypto.randomUUID():'';value=secure||`${Date.now()}-${Math.random().toString(36).slice(2)}`;localStorage.setItem(key,value);} return value;
@@ -844,8 +795,8 @@
     nodes.forEach(node=>state.bannerObserver.observe(node));
   }
   async function loadNewsPool(){
-    const rssSlots=elementList().some(item=>['header_slot','hero_banner','large_banner','sidebar_promo'].includes(item.kind)&&item.content?.type==='rss');
-    const adSlots=elementList().some(item=>['header_slot','hero_banner','large_banner','sidebar_promo'].includes(item.kind)&&(item.content?.type==='advertisement'||item.content?.sponsored===true));
+    const rssSlots=elementList().some(item=>['header_slot','hero_banner','large_banner'].includes(item.kind)&&item.content?.type==='rss');
+    const adSlots=elementList().some(item=>['header_slot','hero_banner','large_banner'].includes(item.kind)&&(item.content?.type==='advertisement'||item.content?.sponsored===true));
     const needed=Boolean(state.ui?.ad_fallbacks?.rss_enabled!==false&&(rssSlots||adSlots));
     if(!needed){state.newsPool=[];return;}
     try{const data=await BlinqAuth.contentNews();state.newsPool=Array.isArray(data?.items)?data.items:[];}catch{state.newsPool=[];}
@@ -898,58 +849,6 @@
   function updateLanguageLinks(){
     document.querySelectorAll('#footerLanguages [data-lang],#authLanguages [data-lang]').forEach(link=>{const lang=link.dataset.lang||'sk';link.href=link.closest('#authLanguages')?`?lang=${encodeURIComponent(lang)}`:`?lang=${encodeURIComponent(lang)}#${encodeURIComponent(state.route||'predictions')}`;link.classList.toggle('active',lang===locale);});
   }
-  function vipFeatureIcon(index=0){
-    const icons=[
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 18 3.8 8.8 9 12l3-6 3 6 5.2-3.2L19 18z"></path><path d="M5 21h14"></path></svg>',
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 16c3.5-7 6.5 1 10-6 1.5-2.6 3.3-3.4 6-2"></path><circle cx="4" cy="16" r="1.3"></circle><circle cx="14" cy="10" r="1.3"></circle><circle cx="20" cy="8" r="1.3"></circle></svg>',
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"></path><path d="M9 5v14M15 5v14M5 10h14M5 15h14"></path></svg>',
-      '<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"></circle><circle cx="12" cy="12" r="2.4"></circle><path d="M12 2.5V5M21.5 12H19M12 21.5V19M2.5 12H5"></path></svg>'
-    ];return icons[index]||icons[0];
-  }
-  function lockIcon(){return '<svg class="inline-lock-icon" viewBox="0 0 20 20" aria-hidden="true"><rect x="4.5" y="8.5" width="11" height="8" rx="2"></rect><path d="M7 8.5V6a3 3 0 0 1 6 0v2.5"></path></svg>';}
-  function renderVipRail(){
-    const host=$('vipRail');if(!host)return;
-    const item=elements()?.VIP_RAIL,c=item?.content||{};
-    if(!item||c.enabled===false||elementAccess('VIP_RAIL')==='hidden'){host.hidden=true;host.innerHTML='';return;}
-    host.hidden=false;
-    const benefits=[1,2,3,4].map((n,i)=>{
-      const title=String(c[`benefit_${n}_title`]||'').trim(),text=String(c[`benefit_${n}_text`]||'').trim();
-      if(!title&&!text)return '';
-      const iconUrl=safeUiAsset(c[`benefit_${n}_icon_url`]||'')||safeExternalUrl(c[`benefit_${n}_icon_url`]||'');
-      const icon=iconUrl?`<img src="${escapeHtml(iconUrl)}" alt="" loading="lazy">`:`<span class="vip-feature-svg" aria-hidden="true">${vipFeatureIcon(i)}</span>`;
-      const rawLink=String(c[`benefit_${n}_link`]||'').trim();
-      const href=rawLink?safeLink(rawLink,''):'';
-      const external=href&&isExternalLink(href);
-      const arrow=external?'↗':'→';
-      const inner=`<span class="vip-link-icon">${icon}</span><span class="vip-link-copy"><strong>${escapeHtml(title)}</strong><small>${escapeHtml(text)}</small></span><span class="vip-link-arrow" aria-hidden="true">${arrow}</span>`;
-      return href?`<a class="vip-link-card" href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''}>${inner}</a>`:`<div class="vip-link-card is-static">${inner}</div>`;
-    }).filter(Boolean).join('');
-    if(!benefits){host.hidden=true;host.innerHTML='';return;}
-    host.innerHTML=`<div class="vip-rail-content vip-links-only"><div class="vip-benefits">${benefits}</div></div>`;
-  }
-  function renderFooterConfig(){
-    const footer=state.ui?.footer||{};
-    const copyright=$('footerCopyright');if(copyright)copyright.innerHTML=`${escapeHtml(String(footer.copyright||'© 2026 BlinQ'))} <small class="web-release-stamp" title="Frontend release">UI 7.3.6</small>`;
-    const wrap=document.querySelector('.system-status'),status=wrap?.querySelector('strong');
-    const model=$('footerModelState');
-    const generated=state.feed?.generated_at||'',generatedMs=Date.parse(generated);
-    const feedAgeMin=Number.isFinite(generatedMs)?Math.max(0,(Date.now()-generatedMs)/60000):Infinity;
-    const liveScan=state.userLiveRadarStatus?.scanned_at||'',liveMs=Date.parse(liveScan);
-    const liveAgeMin=Number.isFinite(liveMs)?Math.max(0,(Date.now()-liveMs)/60000):Infinity;
-    const liveError=Boolean(state.userLiveRadarStatus?.error);
-    const feedStale=Boolean(state.feed?.stale)||feedAgeMin>90,feedOld=feedAgeMin>30,liveFresh=liveAgeMin<=3&&!liveError;
-    const ageText=minutes=>{if(!Number.isFinite(minutes))return '—';const n=Math.max(0,Math.round(minutes));return n<=1?uiCopy('footer.just_now',lcopy('just now','práve teraz','právě teď')):uiCopyTemplate('footer.minutes_ago',lcopy('{n} min ago','pred {n} min','před {n} min'),{n});};
-    if(wrap){wrap.classList.toggle('is-error',liveError&&!Number.isFinite(generatedMs));wrap.classList.toggle('is-warning',!liveFresh&&(feedOld||feedStale||liveError));wrap.classList.toggle('is-ok',liveFresh||(!feedOld&&!feedStale&&!liveError));}
-    const liveServiceLabel=uiCopy('footer.live_ok',lcopy('LIVE radar active','LIVE radar aktívny','LIVE radar aktivní'));
-    if(wrap)wrap.dataset.liveService=liveFresh?liveServiceLabel:'';
-    if(status){
-      if(!Number.isFinite(generatedMs))status.textContent=uiCopy('footer.feed_missing',lcopy('Waiting for first sync','Čaká sa na prvú synchronizáciu','Čeká se na první synchronizaci'));
-      else if(feedStale)status.textContent=`${uiCopy('footer.feed_stale',lcopy('Waiting for data refresh','Čaká sa na aktualizáciu dát','Čeká se na aktualizaci dat'))} · ${ageText(feedAgeMin)}`;
-      else if(feedOld)status.textContent=`${uiCopy('footer.feed_old',lcopy('Last update','Posledná aktualizácia','Poslední aktualizace'))} · ${ageText(feedAgeMin)}`;
-      else status.textContent=`${uiCopy('footer.feed_fresh',lcopy('Data synced','Dáta synchronizované','Data synchronizována'))} · ${ageText(feedAgeMin)}`;
-    }
-    if(model){const original=model.dataset.baseTitle||model.title||model.textContent||'';model.dataset.baseTitle=original;model.title=liveFresh?`${original} · LIVE ${ageText(liveAgeMin)}`.trim():original;}
-  }
   const cookieConsentKey='blinq_cookie_consent_v1';
   function cookieConsentValue(){try{return localStorage.getItem(cookieConsentKey)||'';}catch{return '';}}
   function analyticsConsentAllowed(){return cookieConsentValue()==='analytics';}
@@ -971,7 +870,7 @@
     if(route==='support')wireSupportForm();
     if(!dialog.open)dialog.showModal();
   }
-  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeaderSlots(); renderHeroBanner(); renderBanners(); renderVipRail(); renderFooterConfig(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); translatePublicDom(document.body); }
+  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeaderSlots(); renderHeroBanner(); renderBanners(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); translatePublicDom(document.body); }
 
   function auth(mode='login'){
     feedGeneration++;
@@ -1164,46 +1063,6 @@
   function highlightRow(){
     return dashboardDailyRows()[0]||dailyHubRows('top')[0]||dailyHubRows('value')[0]||null;
   }
-  function clearRailPromoRotation(){if(state.railPromoTimer){clearInterval(state.railPromoTimer);state.railPromoTimer=null;}}
-  function railPromoItems(){return elementList('sidebar_promo','sidebar').slice(0,4);}
-  function railPromoSlideHtml(item,index){
-    const raw=resolvedBannerContent(item,index+8),c={...raw,eyebrow:publicText(raw.eyebrow||''),headline:publicText(raw.headline||''),text:publicText(raw.text||''),button_text:publicText(raw.button_text||'')};
-    const route=c.route||'',href=safeLink(c.link,route?`#${route}`:'#account'),external=isExternalLink(href),clickable=bannerClickAllowed(item),lockedPlan=clickable?'':firstBannerClickPlan(item),finalHref=clickable?href:'#';
-    const theme=String(c.theme||'green').replace(/[^a-z0-9_-]/gi,'');
-    const sponsored=c.sponsored===true||c.type==='advertisement';
-    const image=safePhotoUrl(c.image_url||'');
-    const attrs=`${clickable&&route&&!external?`data-route="${escapeHtml(route)}"`:''} ${!clickable?`data-upgrade-plan="${escapeHtml(lockedPlan)}" data-upgrade-section="${escapeHtml(c.headline||item.label||'Premium banner')}"`:''} data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)}`;
-    return `<a class="rail-native-banner theme-${theme}${bannerCreativeClasses(c)}${index===state.railPromoIndex?' is-active':''}" ${bannerCreativeStyle(c)} href="${escapeHtml(finalHref)}" ${clickable&&external?'target="_blank" rel="noopener"':''} ${attrs} data-rail-promo-slide="${index}" aria-hidden="${index===state.railPromoIndex?'false':'true'}">${image?`<img src="${escapeHtml(image)}" alt="" loading="lazy">`:''}<span class="rail-native-glow" aria-hidden="true"></span><div class="rail-native-copy">${sponsored?`<small class="rail-sponsored">${escapeHtml(lcopy('Sponsored','Sponzorované','Sponzorováno'))}</small>`:`<small>${escapeHtml(c.eyebrow||'BLINQ')}</small>`}<strong>${escapeHtml(c.headline||item.label||'BlinQ')}</strong><p>${escapeHtml(c.text||'')}</p><b>${escapeHtml(c.button_text||lcopy('Open','Otvoriť','Otevřít'))} →</b></div>${watermarkHtml(item)}</a>`;
-  }
-  function setRailPromoSlide(index,restart=false){
-    const host=$('dashboardRightRailContent'),slides=[...(host?.querySelectorAll('[data-rail-promo-slide]')||[])];
-    if(!slides.length)return;
-    state.railPromoIndex=((Number(index)||0)%slides.length+slides.length)%slides.length;
-    slides.forEach((slide,i)=>{const active=i===state.railPromoIndex;slide.classList.toggle('is-active',active);slide.setAttribute('aria-hidden',active?'false':'true');slide.tabIndex=active?0:-1;});
-    [...host.querySelectorAll('[data-rail-promo-dot]')].forEach((dot,i)=>{const active=i===state.railPromoIndex;dot.classList.toggle('is-active',active);dot.setAttribute('aria-current',active?'true':'false');});
-    const counter=host.querySelector('[data-rail-promo-counter]');if(counter)counter.textContent=`${state.railPromoIndex+1}/${slides.length}`;
-    if(restart)startRailPromoRotation();
-  }
-  function startRailPromoRotation(){
-    clearRailPromoRotation();const items=railPromoItems();
-    if(items.length<2||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
-    state.railPromoTimer=setInterval(()=>{if(state.railPromoPaused||document.hidden||state.route!=='predictions'||state.railMatch)return;setRailPromoSlide(state.railPromoIndex+1,false);},9000);
-  }
-  function renderDashboardRightRailDefault(){
-    const defaultPanel=$('dashboardSidebarDefault'),matchPanel=$('dashboardSidebarMatch'),host=$('dashboardRightRailContent');
-    if(defaultPanel)defaultPanel.hidden=false;if(matchPanel){matchPanel.hidden=true;matchPanel.innerHTML='';}
-    if(!host||state.railMatch)return;
-    clearRailPromoRotation();
-    const items=railPromoItems();
-    if(!items.length){host.innerHTML=`<div class="rail-empty">${escapeHtml(lcopy('No banners are active.','Nie sú aktívne žiadne bannery.','Nejsou aktivní žádné bannery.'))}</div>`;return;}
-    state.railPromoIndex=Math.max(0,Math.min(state.railPromoIndex,items.length-1));
-    host.innerHTML=`<section class="rail-native-carousel" aria-label="BlinQ banners"><div class="rail-native-slides">${items.map((item,index)=>railPromoSlideHtml(item,index)).join('')}</div><div class="rail-native-controls"><button type="button" data-rail-promo-prev aria-label="Previous"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m12.5 5-5 5 5 5"></path></svg></button><div class="rail-native-dots">${items.map((_,index)=>`<button type="button" data-rail-promo-dot="${index}" class="${index===state.railPromoIndex?'is-active':''}" aria-label="Banner ${index+1}" aria-current="${index===state.railPromoIndex?'true':'false'}"></button>`).join('')}</div><span data-rail-promo-counter>${state.railPromoIndex+1}/${items.length}</span><button type="button" data-rail-promo-next aria-label="Next"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7.5 5 5 5-5 5"></path></svg></button></div></section>`;
-    host.querySelector('[data-rail-promo-prev]')?.addEventListener('click',()=>setRailPromoSlide(state.railPromoIndex-1,true));
-    host.querySelector('[data-rail-promo-next]')?.addEventListener('click',()=>setRailPromoSlide(state.railPromoIndex+1,true));
-    host.querySelectorAll('[data-rail-promo-dot]').forEach(dot=>dot.addEventListener('click',()=>setRailPromoSlide(Number(dot.dataset.railPromoDot)||0,true)));
-    host.onmouseenter=()=>{state.railPromoPaused=true;};host.onmouseleave=()=>{state.railPromoPaused=false;};
-    installBannerTracking(host);setRailPromoSlide(state.railPromoIndex,false);startRailPromoRotation();
-  }
   function findRowByEventId(id){
     const target=String(id||'');
     for(const tab of ['daily','prime','top','value','ace','games','sets','doubles']){
@@ -1212,37 +1071,6 @@
     }
     return null;
   }
-  function renderSidebarMatchDetail(row=state.railMatch){
-    if(!row)return '';
-    const match=normalize(row),prob=marketProbability(row),m1=playerInsightStats(row,1),m2=playerInsightStats(row,2);
-    const compactMetrics=[
-      [lcopy('Rank','Rebríček','Žebříček'),m1.rankDisplay,m2.rankDisplay],
-      [lcopy('Form','Forma','Forma'),m1.formDisplay,m2.formDisplay],
-      [lcopy('Surface','Povrch','Povrch'),m1.surfaceDisplay,m2.surfaceDisplay],
-      ['H2H',m1.h2hDisplay,m2.h2hDisplay]
-    ];
-    const active=state.railDetailTab||'overview';
-    const tabs=[['overview','Prehľad'],['stats','Štatistiky'],['radar','Radar'],['history','História']];
-    const overview=`<div class="rail-detail-panel rail-detail-overview-compact" data-rail-panel="overview" ${active==='overview'?'':'hidden'}><div class="rail-player-pair">${insightPlayerCard(row,1)}${insightPlayerCard(row,2)}</div><section class="rail-compare rail-compare-compact">${compactMetrics.map(([label,a,b])=>`<div class="rail-compare-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(a))}</strong><b>${escapeHtml(String(b))}</b></div>`).join('')}</section></div>`;
-    const stats=`<div class="rail-detail-panel" data-rail-panel="stats" ${active==='stats'?'':'hidden'}><section class="rail-compare"><div class="rail-section-title"><div><small>${escapeHtml(lcopy('Match context','Kontext zápasu','Kontext zápasu'))}</small><h3>${escapeHtml(lcopy('Key metrics','Kľúčové metriky','Klíčové metriky'))}</h3></div></div>${compactMetrics.map(([label,a,b])=>`<div class="rail-compare-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(a))}</strong><b>${escapeHtml(String(b))}</b></div>`).join('')}</section></div>`;
-    const radar=`<div class="rail-detail-panel" data-rail-panel="radar" ${active==='radar'?'':'hidden'}><section class="rail-radar">${renderRadarComparison(row)}</section></div>`;
-    const history=`<div class="rail-detail-panel" data-rail-panel="history" ${active==='history'?'':'hidden'}><section class="rail-history">${renderMatchHistoryPanel(row)}</section></div>`;
-    return `<article class="rail-match-detail"><header class="rail-match-head"><div><small>${escapeHtml(String(match.tour||'').toUpperCase())} · ${escapeHtml(match.tournament)}</small><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div><div class="rail-match-head-actions"><button type="button" data-rail-open-modal aria-label="${escapeHtml(lcopy('Open full detail','Otvoriť celý detail','Otevřít celý detail'))}" title="${escapeHtml(lcopy('Open full detail','Otvoriť celý detail','Otevřít celý detail'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M10 8h6v6"/></svg></button><button type="button" data-rail-close-match aria-label="${escapeHtml(lcopy('Back to highlight','Späť na highlight','Zpět na highlight'))}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 7 10 10M17 7 7 17"/></svg></button></div></header><div class="rail-pick"><div><small>BLINQ PREDICTION</small><strong>${escapeHtml(match.pick)}</strong></div><b>${prob==null?'—':pct(prob)}</b></div><nav class="rail-detail-tabs" aria-label="Detail zápasu">${tabs.map(([id,label])=>`<button type="button" data-rail-detail-tab="${id}" class="${active===id?'active':''}">${label}</button>`).join('')}</nav>${overview}${stats}${radar}${history}<button class="rail-open-full-detail" type="button" data-rail-open-modal>${escapeHtml(lcopy('Open full detail','Otvoriť celý detail','Otevřít celý detail'))}<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M10 8h6v6"/></svg></button>${row?.__liveIntelligenceLoading?`<div class="match-intelligence-status is-loading">${escapeHtml(lcopy('Loading live player analytics…','Načítavam analytické dáta hráčov…','Načítám analytická data hráčů…'))}</div>`:row?.__liveIntelligenceFailed?`<div class="match-intelligence-status is-error">${escapeHtml(lcopy('Extra live analytics are temporarily unavailable.','Doplnkové analytické dáta sú dočasne nedostupné.','Doplňková analytická data jsou dočasně nedostupná.'))}</div>`:''}<footer class="rail-match-footer"><span>${escapeHtml(String(match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span></footer></article>`;
-  }
-  function renderDashboardSidebar(){
-    const defaultPanel=$('dashboardSidebarDefault'),matchPanel=$('dashboardSidebarMatch');
-    if(state.railMatch){if(defaultPanel)defaultPanel.hidden=true;if(matchPanel){matchPanel.hidden=false;matchPanel.innerHTML=renderSidebarMatchDetail(state.railMatch);}return;}
-    if(matchPanel){matchPanel.hidden=true;matchPanel.innerHTML='';}if(defaultPanel)defaultPanel.hidden=false;renderDashboardRightRailDefault();
-  }
-  function renderMatchRail(){renderDashboardSidebar();}
-  function selectMatchInRail(row,tab='daily'){
-    if(!row)return;
-    clearRailPromoRotation();state.railMatch=row;state.railMatchTab=tab;state.railDetailTab='overview';
-    renderMatchRail();
-    if(!row.__liveIntelligenceLoaded&&!row.__liveIntelligenceLoading)requestLiveMatchIntelligence(row,tab);
-    if(innerWidth<1100)$('dashboardRightRail')?.scrollIntoView({behavior:'smooth',block:'start'});
-  }
-  function clearMatchRail(){state.railMatch=null;state.railDetailTab='overview';renderDashboardSidebar();}
 
   function notificationReadIds(){
     return new Set((state.insights||[]).filter(item=>item?.read).map(item=>String(item?.id||'')).filter(Boolean));
@@ -1355,7 +1183,7 @@
     state.userLiveRadarLoading=true;renderInsightDrawer();
     try{state.userLiveRadarStatus={...(await BlinqAuth.liveRadar()),ok:true};}
     catch(error){state.userLiveRadarStatus={error:error.message||'live_unavailable'};}
-    finally{state.userLiveRadarLoading=false;renderInsightBell();renderInsightDrawer();renderFooterConfig();}
+    finally{state.userLiveRadarLoading=false;renderInsightBell();renderInsightDrawer();}
   }
   function setInsightDrawer(open,channel=null){
     const drawer=$('insightDrawer'),backdrop=$('insightBackdrop');if(!drawer||!backdrop)return;
@@ -2152,7 +1980,6 @@
       mergeLiveMatchIntelligence(row,payload);
       row.__liveIntelligenceLoading=false;
       const dialog=$('matchDialog');
-      if(state.railMatch&&eventKey(state.railMatch)===eventKey(row)){state.railMatch=row;renderMatchRail();}
       if(dialog?.open)openMatch(normalize(row),tab,row,true);
     }).catch(()=>{
       row.__liveIntelligenceLoading=false;
@@ -2175,7 +2002,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq.css?v=7016"><link rel="stylesheet" href="/redesign-680.css?v=7016"><link rel="stylesheet" href="/polish-681.css?v=7016"><link rel="stylesheet" href="/polish-683.css?v=7016"><link rel="stylesheet" href="/polish-684.css?v=7016"><link rel="stylesheet" href="/polish-685.css?v=7016"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=10"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     const row=rowOverride||m?.raw||m;
@@ -2196,13 +2023,13 @@
 
 
   const routeMetaEn={
-    predictions:['TENNIS INTELLIGENCE','Dashboard','Daily predictions, model signals and current BlinQ intelligence.'],prime:['SHORT ODDS','Short Odds','Short-priced favourite selections with strong model probability and data quality.'],top_daily:['CONFIDENCE FIRST','TOP','Strongest daily predictions ranked by model probability and data quality.'],value:['VALUE EDGE','Value','Predictions with stronger model value; EV is shown only as context.'],doubles:['DOUBLES','Doubles','Separate doubles model and team-pair intelligence.'],ace:['ACES + DOUBLE FAULTS','Aces','Top Aces and Double Faults market selections.'],sg:['SETS + GAMES','Sets / Games','Top Sets and Games market selections.'],results:['SETTLED PREDICTIONS','Results','Settled predictions, hit rate, ROI, units and related performance statistics.'],btts:['FOOTBALL · BETA','BTTS Bonus','Both Teams To Score is prepared as a separate BlinQ beta module.'],account:['BLINQ MEMBERS','Account','Profile, security, membership and access.'],admin:['BLINQ CONTROL','Admin centrum','Správa modelu, publikovania, prístupov, účtov a obsahu BlinQ.'],how_blinq_works:['LEARN','How BlinQ Works','How the BlinQ workflow turns point-in-time tennis data into probabilities.'],methodology:['LEARN','Methodology','The principles used to keep predictions point-in-time and auditable.'],model_data:['LEARN','Model & Data','What the published feed exposes about data and model state.'],faq:['LEARN','FAQ','Common questions about probabilities, results and model output.'],responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.'],terms:['LEGAL','Terms of Use','Rules for using the BlinQ service.'],privacy:['LEGAL','Privacy','How BlinQ works with account and service data.'],cookies:['LEGAL','Cookies','Browser storage, essential functionality and analytics preferences.'],support:['SUPPORT','BlinQ Support','Account, membership, data or technical help.']
+    predictions:['TENNIS INTELLIGENCE','Dashboard','Daily predictions, model signals and current BlinQ intelligence.'],prime:['SHORT ODDS','Short Odds','Short-priced favourite selections with strong model probability and data quality.'],top_daily:['CONFIDENCE FIRST','TOP','Strongest daily predictions ranked by model probability and data quality.'],value:['VALUE EDGE','Value','Predictions with stronger model value; EV is shown only as context.'],doubles:['DOUBLES','Doubles','Separate doubles model and team-pair intelligence.'],ace:['ACES + DOUBLE FAULTS','Aces','Top Aces and Double Faults market selections.'],sg:['SETS + GAMES','Sets / Games','Top Sets and Games market selections.'],results:['SETTLED PREDICTIONS','Results','Settled predictions, hit rate, ROI, units and related performance statistics.'],account:['BLINQ MEMBERS','Account','Profile, security, membership and access.'],admin:['BLINQ CONTROL','Admin centrum','Správa modelu, publikovania, prístupov, účtov a obsahu BlinQ.'],how_blinq_works:['LEARN','How BlinQ Works','How the BlinQ workflow turns point-in-time tennis data into probabilities.'],methodology:['LEARN','Methodology','The principles used to keep predictions point-in-time and auditable.'],model_data:['LEARN','Model & Data','What the published feed exposes about data and model state.'],faq:['LEARN','FAQ','Common questions about probabilities, results and model output.'],responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.'],terms:['LEGAL','Terms of Use','Rules for using the BlinQ service.'],privacy:['LEGAL','Privacy','How BlinQ works with account and service data.'],cookies:['LEGAL','Cookies','Browser storage, essential functionality and analytics preferences.'],support:['SUPPORT','BlinQ Support','Account, membership, data or technical help.']
   };
   const routeMetaSk={
-    predictions:['TENISOVÁ ANALYTIKA','Prehľad','Denné predikcie, kľúčové modelové signály a aktuálna BlinQ analytika.'],prime:['SHORT ODDS','Short Odds','Predikcie favoritov s nižším kurzom a silnou modelovou pravdepodobnosťou.'],top_daily:['NAJSILNEJŠIE SIGNÁLY','TOP','Najsilnejšie denné predikcie zoradené podľa pravdepodobnosti modelu a kvality dát.'],value:['MODEL VALUE','Value','Predikcie so zvýšenou modelovou hodnotou a priaznivým pomerom rizika a ceny.'],doubles:['ŠTVORHRA','Štvorhra','Samostatný model štvorhry a inteligencia dvojíc/tímov.'],ace:['ESÁ + DVOJCHYBY','Esá','Najlepšie projekcie pre esá a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Najlepšie projekcie pre sety a počet hier.'],results:['VYHODNOTENÉ PREDIKCIE','Výsledky','Vyhodnotené predikcie, úspešnosť, ROI, jednotky a súvisiace štatistiky výkonu.'],btts:['FUTBAL · BETA','BTTS Bonus','Both Teams To Score je pripravený ako samostatný beta modul BlinQ.'],account:['BLINQ ČLENSTVO','Účet','Profil, zabezpečenie, členstvo a prístup.'],how_blinq_works:['INFO','Ako funguje BlinQ','Ako BlinQ mení point-in-time tenisové dáta na pravdepodobnosti.'],methodology:['INFO','Metodika','Princípy, ktoré udržujú predikcie point-in-time a auditovateľné.'],model_data:['INFO','Model a dáta','Čo publikovaný feed ukazuje o dátach a stave modelu.'],faq:['INFO','FAQ','Najčastejšie otázky o pravdepodobnostiach, výsledkoch a výstupe modelu.'],responsible_use:['INFO','Zodpovedné používanie','Pravdepodobnosti používaj ako informáciu, nikdy nie ako záruku.'],terms:['LEGAL','Podmienky používania','Pravidlá používania služby BlinQ.'],privacy:['LEGAL','Ochrana súkromia','Ako BlinQ pracuje s údajmi používateľov.'],cookies:['LEGAL','Cookies','Nevyhnutné úložisko, preferencie a analytika.'],support:['PODPORA','BlinQ Support','Účet, členstvo, dáta alebo technický problém.']
+    predictions:['TENISOVÁ ANALYTIKA','Prehľad','Denné predikcie, kľúčové modelové signály a aktuálna BlinQ analytika.'],prime:['SHORT ODDS','Short Odds','Predikcie favoritov s nižším kurzom a silnou modelovou pravdepodobnosťou.'],top_daily:['NAJSILNEJŠIE SIGNÁLY','TOP','Najsilnejšie denné predikcie zoradené podľa pravdepodobnosti modelu a kvality dát.'],value:['MODEL VALUE','Value','Predikcie so zvýšenou modelovou hodnotou a priaznivým pomerom rizika a ceny.'],doubles:['ŠTVORHRA','Štvorhra','Samostatný model štvorhry a inteligencia dvojíc/tímov.'],ace:['ESÁ + DVOJCHYBY','Esá','Najlepšie projekcie pre esá a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Najlepšie projekcie pre sety a počet hier.'],results:['VYHODNOTENÉ PREDIKCIE','Výsledky','Vyhodnotené predikcie, úspešnosť, ROI, jednotky a súvisiace štatistiky výkonu.'],account:['BLINQ ČLENSTVO','Účet','Profil, zabezpečenie, členstvo a prístup.'],how_blinq_works:['INFO','Ako funguje BlinQ','Ako BlinQ mení point-in-time tenisové dáta na pravdepodobnosti.'],methodology:['INFO','Metodika','Princípy, ktoré udržujú predikcie point-in-time a auditovateľné.'],model_data:['INFO','Model a dáta','Čo publikovaný feed ukazuje o dátach a stave modelu.'],faq:['INFO','FAQ','Najčastejšie otázky o pravdepodobnostiach, výsledkoch a výstupe modelu.'],responsible_use:['INFO','Zodpovedné používanie','Pravdepodobnosti používaj ako informáciu, nikdy nie ako záruku.'],terms:['LEGAL','Podmienky používania','Pravidlá používania služby BlinQ.'],privacy:['LEGAL','Ochrana súkromia','Ako BlinQ pracuje s údajmi používateľov.'],cookies:['LEGAL','Cookies','Nevyhnutné úložisko, preferencie a analytika.'],support:['PODPORA','BlinQ Support','Účet, členstvo, dáta alebo technický problém.']
   };
   const routeMetaCz={
-    predictions:['TENISOVÁ ANALYTIKA','Přehled','Denní predikce, klíčové modelové signály a aktuální BlinQ analytika.'],prime:['SHORT ODDS','Short Odds','Predikce favoritů s nižším kurzem a silnou modelovou pravděpodobností.'],top_daily:['NEJSILNĚJŠÍ SIGNÁLY','TOP','Nejsilnější denní predikce seřazené podle pravděpodobnosti modelu a kvality dat.'],value:['MODEL VALUE','Value','Predikce se zvýšenou modelovou hodnotou a příznivým poměrem rizika a ceny.'],doubles:['ČTYŘHRA','Čtyřhra','Samostatný model čtyřhry a inteligence dvojic/týmů.'],ace:['ESA + DVOJCHYBY','Esa','Nejlepší projekce pro esa a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Nejlepší projekce pro sety a počet her.'],results:['VYHODNOCENÉ PREDIKCE','Výsledky','Vyhodnocené predikce, úspěšnost, ROI, jednotky a související statistiky výkonu.'],btts:['FOTBAL · BETA','BTTS Bonus','Both Teams To Score je připraven jako samostatný beta modul BlinQ.'],account:['BLINQ ČLENSTVÍ','Účet','Profil, zabezpečení, členství a přístup.'],how_blinq_works:['INFO','Jak funguje BlinQ','Jak BlinQ mění point-in-time tenisová data na pravděpodobnosti.'],methodology:['INFO','Metodika','Principy, které udržují predikce point-in-time a auditovatelné.'],model_data:['INFO','Model a data','Co publikovaný feed ukazuje o datech a stavu modelu.'],faq:['INFO','FAQ','Nejčastější otázky o pravděpodobnostech, výsledcích a výstupu modelu.'],responsible_use:['INFO','Zodpovědné používání','Pravděpodobnosti používej jako informaci, nikdy ne jako záruku.'],terms:['LEGAL','Podmínky používání','Pravidla používání služby BlinQ.'],privacy:['LEGAL','Ochrana soukromí','Jak BlinQ pracuje s údaji uživatelů.'],cookies:['LEGAL','Cookies','Nezbytné úložiště, preference a analytika.'],support:['PODPORA','BlinQ Support','Účet, členství, data nebo technický problém.']
+    predictions:['TENISOVÁ ANALYTIKA','Přehled','Denní predikce, klíčové modelové signály a aktuální BlinQ analytika.'],prime:['SHORT ODDS','Short Odds','Predikce favoritů s nižším kurzem a silnou modelovou pravděpodobností.'],top_daily:['NEJSILNĚJŠÍ SIGNÁLY','TOP','Nejsilnější denní predikce seřazené podle pravděpodobnosti modelu a kvality dat.'],value:['MODEL VALUE','Value','Predikce se zvýšenou modelovou hodnotou a příznivým poměrem rizika a ceny.'],doubles:['ČTYŘHRA','Čtyřhra','Samostatný model čtyřhry a inteligence dvojic/týmů.'],ace:['ESA + DVOJCHYBY','Esa','Nejlepší projekce pro esa a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Nejlepší projekce pro sety a počet her.'],results:['VYHODNOCENÉ PREDIKCE','Výsledky','Vyhodnocené predikce, úspěšnost, ROI, jednotky a související statistiky výkonu.'],account:['BLINQ ČLENSTVÍ','Účet','Profil, zabezpečení, členství a přístup.'],how_blinq_works:['INFO','Jak funguje BlinQ','Jak BlinQ mění point-in-time tenisová data na pravděpodobnosti.'],methodology:['INFO','Metodika','Principy, které udržují predikce point-in-time a auditovatelné.'],model_data:['INFO','Model a data','Co publikovaný feed ukazuje o datech a stavu modelu.'],faq:['INFO','FAQ','Nejčastější otázky o pravděpodobnostech, výsledcích a výstupu modelu.'],responsible_use:['INFO','Zodpovědné používání','Pravděpodobnosti používej jako informaci, nikdy ne jako záruku.'],terms:['LEGAL','Podmínky používání','Pravidla používání služby BlinQ.'],privacy:['LEGAL','Ochrana soukromí','Jak BlinQ pracuje s údaji uživatelů.'],cookies:['LEGAL','Cookies','Nezbytné úložiště, preference a analytika.'],support:['PODPORA','BlinQ Support','Účet, členství, data nebo technický problém.']
   };
   const routeMeta=locale==='sk'?{...routeMetaEn,...routeMetaSk}:locale==='cz'?{...routeMetaEn,...routeMetaCz}:routeMetaEn;
 
@@ -2465,7 +2292,7 @@
   function adminMiniBlock(id, compact=false, extraClass='', customSmall=''){
     const item=elements()?.[id]; if(!item)return '';
     const mode=elementAccess(id,state.adminPlan),selected=state.selectedElement===id?' selected':'';
-    const kindLabel={navigation:'NAV',header_slot:'CTA',hero_banner:'MAIN BANNER',large_banner:'BANNER',feature:'FEATURE',pick:'PICK',sidebar_promo:'PROMO'}[item.kind]||item.zone||'ELEMENT';
+    const kindLabel={navigation:'NAV',header_slot:'CTA',hero_banner:'MAIN BANNER',large_banner:'BANNER',feature:'FEATURE',pick:'PICK'}[item.kind]||item.zone||'ELEMENT';
     return `<button type="button" title="${escapeHtml(id)}" class="admin-mini-block ${compact?'compact ':''}${extraClass}state-${mode}${selected}" data-admin-element="${escapeHtml(id)}"><small>${escapeHtml(customSmall||kindLabel)}</small><strong>${escapeHtml(item.label||id)}</strong><span>${mode.toUpperCase()}</span></button>`;
   }
   function rowPrefix(zone){ return zone==='content_top'?'CONTENT_TOP_':zone==='content_mid'?'CONTENT_MID_':'CONTENT_BOTTOM_'; }
@@ -2483,7 +2310,7 @@
     const hero=heroItems().map(item=>adminMiniBlock(item.id,true)).join('')||'BANNER VYPNUTÝ';
     const ordered=orderedDashboardKeys(state.adminPlan);
     const sections=ordered.map(key=>{const cfg=dashboardSectionConfig(key);const id=Object.keys({PRIME_PICKS_PANEL:'prime',TOP_DAILY_PANEL:'top_daily',VALUE_PICKS_PANEL:'value',DOUBLES_PANEL:'doubles',ACE_PICKS_PANEL:'ace',SG_PICKS_PANEL:'sg'}).find(x=>adminDashboardSectionKeyForElement(x)===key);return id?adminMiniBlock(id,false,'',`ORDER ${sectionPlanOrder(key,state.adminPlan)}`):'';}).join('');
-    const extra=adminMiniBlock('RESULTS_PANEL')+adminMiniBlock('BTTS_BONUS_PANEL');
+    const extra=adminMiniBlock('RESULTS_PANEL');
     return `<div class="admin-canvas admin-canvas-v658"><div class="admin-canvas-header"><div class="admin-logo-lock">BLINQ LOGO<br><small>PEVNÉ</small></div><div class="admin-header-slots row-count-${headerCount}">${headerBlocks||'<div class="admin-row-off-label">HORNÉ CTA VYPNUTÉ</div>'}</div><div class="admin-account-lock">PLÁNY · ÚČET<br><small>PEVNÉ</small></div></div><div class="admin-topnav-map"><b>HORNÁ NAVIGÁCIA</b><div>${nav}</div></div><div class="admin-canvas-main admin-canvas-main-full"><div class="admin-hero-lock admin-hero-rotator"><strong>HLAVNÝ ROTUJÚCI BANNER</strong><span>${hero}</span><small>${Math.max(3,Math.min(300,Number(state.ui?.hero_banner?.rotation_seconds)||10))} s rotácia · max. 5 bannerov</small></div><div class="admin-row-caption"><span>SEKCIE DASHBOARDU · ${escapeHtml(accessLabel(state.adminPlan))}</span><b>Poradie nastavíš číslom PORADIE</b></div><div class="admin-dashboard-section-map">${sections}</div><div class="admin-functional-row">${extra}</div></div></div>`;
   }
 
@@ -2503,7 +2330,6 @@
     const count=Math.max(1,Math.min(4,Number(layoutOverride||layoutCountForElement(item?.id))||1));
     if(item?.kind==='header_slot')return specs[`header_${count}`]||specs.header_slot||{};
     if(item?.kind==='hero_banner')return specs.hero_banner||specs.large_1||{};
-    if(item?.kind==='sidebar_promo')return specs.sidebar_promo||{};
     if(item?.kind==='large_banner')return specs[`large_${count}`]||specs.large_1||{};
     return {};
   }
@@ -2516,9 +2342,9 @@
   function contentEditor(item){
     const c=item.content||{};
     if(item.kind==='navigation') return `<div class="admin-field-grid"><label>Button label<input data-admin-content="label" value="${escapeHtml(c.label||'')}"></label><label>Icon<input data-admin-content="icon" value="${escapeHtml(c.icon||'')}"></label><label>Route<input data-admin-content="route" value="${escapeHtml(c.route||'')}"></label></div>`;
-    if(!['header_slot','hero_banner','large_banner','sidebar_promo'].includes(item.kind)) return '<p class="admin-muted">Funkčný prvok dashboardu. Verejné umiestnenie a viditeľnosť predikcií nastav v bloku zobrazenia dashboardu nižšie.</p>';
-    const sidebarDestination=item.kind==='sidebar_promo'?`<div class="admin-link-callout span-2"><div><strong>Cieľ bočného bannera</strong><span>Celý banner je klikateľný. Použi externú https:// URL alebo internú #route.</span></div><label>URL po kliknutí na banner<input data-admin-content="link" value="${escapeHtml(c.link||'')}" placeholder="https://... or #account"></label></div>`:'';
-    const standardDestination=item.kind!=='sidebar_promo'?`<label>Cieľová URL / odkaz<input data-admin-content="link" value="${escapeHtml(c.link||'')}" placeholder="https://... or #account"></label>`:'';
+    if(!['header_slot','hero_banner','large_banner'].includes(item.kind)) return '<p class="admin-muted">Funkčný prvok dashboardu. Verejné umiestnenie a viditeľnosť predikcií nastav v bloku zobrazenia dashboardu nižšie.</p>';
+    const sidebarDestination='';
+    const standardDestination=`<label>Cieľová URL / odkaz<input data-admin-content="link" value="${escapeHtml(c.link||'')}" placeholder="https://... or #account"></label>`;
     return `<div class="admin-field-grid">
       ${sidebarDestination}
       <label>Typ obsahu<select data-admin-content="type"><option value="internal"${c.type==='internal'?' selected':''}>Interný</option><option value="advertisement"${c.type==='advertisement'?' selected':''}>Reklama</option><option value="image"${c.type==='image'?' selected':''}>Obrázok</option><option value="promo"${(!c.type||c.type==='promo')?' selected':''}>Promo</option></select></label>
@@ -2548,14 +2374,14 @@
     </div>`;
   }
   function watermarkEditor(item){
-    if(!['header_slot','hero_banner','large_banner','sidebar_promo'].includes(item.kind))return '';
+    if(!['header_slot','hero_banner','large_banner'].includes(item.kind))return '';
     const wm=item.watermark||{},presets=state.ui?.watermark_presets||{violet:{label:'BlinQ Violet'},blue:{label:'Deep Blue'},cyan:{label:'Cyan'},gold:{label:'Legend Gold'},slate:{label:'Slate'}};
     const preset=String(wm.preset||'violet'),position=String(wm.position||'bottom-right'),opacity=Number(wm.opacity)||.42,size=Number(wm.size)||1;
     return `<div class="admin-section"><div class="admin-section-title"><strong>Watermark overlay</strong><span>Text, color, position and intensity</span></div><div class="admin-field-grid watermark-controls"><label class="check-field"><input type="checkbox" data-admin-watermark="enabled" ${wm.enabled?'checked':''}> Enable watermark</label><label>Watermark text<input data-admin-watermark="text" value="${escapeHtml(wm.text||'COMING SOON')}"></label><label>Color<select data-admin-watermark="preset">${Object.entries(presets).map(([id,row])=>`<option value="${escapeHtml(id)}"${id===preset?' selected':''}>${escapeHtml(row?.label||id)}</option>`).join('')}</select></label><label>Position<select data-admin-watermark="position">${['top-left','top-right','bottom-left','bottom-right','center'].map(v=>`<option value="${v}"${v===position?' selected':''}>${v.replaceAll('-',' ').toUpperCase()}</option>`).join('')}</select></label><label>Opacity<input type="number" min="0.12" max="1" step="0.05" data-admin-watermark="opacity" value="${opacity}"></label><label>Scale<input type="number" min="0.7" max="1.6" step="0.1" data-admin-watermark="size" value="${size}"></label></div><div class="watermark-preview wm-${escapeHtml(preset)}"><span>${escapeHtml(wm.text||'COMING SOON')}</span></div></div>`;
   }
 
   function adminDashboardSectionKeyForElement(id){
-    const map={PRIME_PICKS_PANEL:'prime',TOP_DAILY_PANEL:'top_daily',VALUE_PICKS_PANEL:'value',DOUBLES_PANEL:'doubles',ACE_PICKS_PANEL:'ace',SG_PICKS_PANEL:'sg',RESULTS_PANEL:'results',BTTS_BONUS_PANEL:'btts'};
+    const map={PRIME_PICKS_PANEL:'prime',TOP_DAILY_PANEL:'top_daily',VALUE_PICKS_PANEL:'value',DOUBLES_PANEL:'doubles',ACE_PICKS_PANEL:'ace',SG_PICKS_PANEL:'sg',RESULTS_PANEL:'results'};
     return map[id]||dashboardSectionKeyForSidebarElement(id)||'';
   }
   function dashboardDisplayEditor(elementId){
@@ -2567,7 +2393,7 @@
     return `<div class="admin-section dashboard-inspector-section" data-dashboard-section="${escapeHtml(key)}"><div class="admin-section-title"><strong>Pravidlá sekcie · ${escapeHtml(adminSectionLabelSk(key,cfg.label||key))}</strong><span>Viditeľnosť, počet predikcií a poradie nastavíš samostatne pre každú úroveň členstva.</span></div><div class="admin-field-grid"><label class="check-field"><input type="checkbox" data-dashboard-field="sidebar_enabled" ${cfg.sidebar_enabled!==false?'checked':''}> Zobraziť v hornej navigácii</label><label class="check-field"><input type="checkbox" data-dashboard-field="dashboard_enabled" ${cfg.dashboard_enabled!==false?'checked':''}> Sekcia zapnutá</label><label>Limit náhľadu<select data-dashboard-field="preview_limit">${preview}</select></label></div><div class="admin-plan-rules">${rows}</div><small class="field-hint">Viditeľné predikcie = 0 + Rozmazať zvyšok znamená, že sekcia ostane viditeľná, ale všetky predikcie budú rozmazané. Poradie môže byť pre každú úroveň odlišné.</small></div>`;
   }
   function bannerAudienceEditor(item){
-    if(!['header_slot','hero_banner','large_banner','sidebar_promo'].includes(item.kind))return '';
+    if(!['header_slot','hero_banner','large_banner'].includes(item.kind))return '';
     item.click_access=item.click_access||{};
     return `<div class="admin-section"><div class="admin-section-title"><strong>Zobrazenie / prístup</strong><span>Každý banner môže byť pre každú úroveň zobrazený, rozmazaný alebo skrytý. Kliknutie sa riadi samostatne.</span></div><div class="admin-audience-grid">${accessContexts.map(plan=>{const mode=elementAccess(item.id,plan),click=item.click_access?.[plan]!==false;return `<div class="admin-audience-row"><b>${escapeHtml(state.ui?.plans?.[plan]?.label||plan.toUpperCase())}</b><label>Stav<select data-banner-state-plan="${escapeHtml(plan)}"><option value="active"${mode==='active'?' selected':''}>ZOBRAZIŤ</option><option value="blurred"${mode==='blurred'||mode==='locked'?' selected':''}>ROZMAZAŤ</option><option value="hidden"${mode==='hidden'?' selected':''}>SKRYŤ</option></select></label><label><input type="checkbox" data-banner-click-plan="${escapeHtml(plan)}" ${click?'checked':''}> Odkaz aktívny</label></div>`;}).join('')}</div></div>`;
   }
@@ -2579,7 +2405,7 @@
       ${watermarkEditor(item)}
       ${dashboardDisplayEditor(state.selectedElement)}
       ${bannerAudienceEditor(item)}
-      ${['header_slot','hero_banner','large_banner','sidebar_promo'].includes(item.kind)?'':`<div class="admin-section"><div class="admin-section-title"><strong>Plan access</strong><span>Layout stays reserved even when hidden</span></div><div class="admin-access-grid">${accessContexts.map(plan=>`<label><span>${escapeHtml(state.ui?.plans?.[plan]?.label||plan.toUpperCase())}</span>${accessSelect(state.selectedElement,plan)}</label>`).join('')}</div></div>`}
+      ${['header_slot','hero_banner','large_banner'].includes(item.kind)?'':`<div class="admin-section"><div class="admin-section-title"><strong>Plan access</strong><span>Layout stays reserved even when hidden</span></div><div class="admin-access-grid">${accessContexts.map(plan=>`<label><span>${escapeHtml(state.ui?.plans?.[plan]?.label||plan.toUpperCase())}</span>${accessSelect(state.selectedElement,plan)}</label>`).join('')}</div></div>`}
     </aside>`;
   }
   function renderDashboardQuickControls(){
@@ -2614,7 +2440,7 @@
     return `<div class="admin-section-rule-row${compact?' compact':''}" data-dashboard-plan-row="${escapeHtml(plan)}"><b>${escapeHtml(state.ui?.plans?.[plan]?.label||plan.toUpperCase())}</b><label><span>Prístup na stránku</span><select data-dashboard-route-access>${adminSectionAccessOptions(routeAccess)}</select></label><label><span>Viditeľné predikcie</span><select data-dashboard-matrix-field="visible_picks">${adminVisiblePickOptions(ent.visible_picks)}</select></label><label><span>Poradie</span><input type="number" min="1" max="20" data-dashboard-matrix-field="order" value="${order}"></label><label class="admin-toggle-line"><input type="checkbox" data-dashboard-matrix-field="blur_remaining" ${ent.blur_remaining!==false?'checked':''}><span>Rozmazať zvyšok</span></label><label class="admin-toggle-line"><input type="checkbox" data-dashboard-matrix-field="see_all" ${ent.see_all?'checked':''}><span>Zobraziť viac</span></label></div>`;
   }
   function adminSectionLabelSk(key, fallback){
-    const labels={prime:'Short Odds',top_daily:'TOP',ace:'Esá',value:'Value',doubles:'Štvorhra',sg:'Sety / hry',results:'Výsledky',btts:'BTTS Bonus'};
+    const labels={prime:'Short Odds',top_daily:'TOP',ace:'Esá',value:'Value',doubles:'Štvorhra',sg:'Sety / hry',results:'Výsledky'};
     return labels[key]||fallback||key;
   }
   function renderAdminSectionCard(key){
@@ -2671,7 +2497,7 @@
       </div>
       <details class="admin-compact-tools"><summary>Kopírovať nastavenie z iného levelu</summary><div class="admin-copy-strip"><label>Zdrojová úroveň<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Skopírovať všetky pravidlá → ${escapeHtml(levelLabel)}</button><small>Skopíruje prístupy, počty predikcií, poradie, rozmazanie a oprávnenia bannerov.</small></div></details>
       <details class="admin-layout-advanced"><summary><span><strong>Rozšírené sekcie dashboardu</strong><small>TOP / Short Odds / Value / Esá / Sety a hry / Štvorhra – poradie, navigácia a limity</small></span><b>Rozbaliť</b></summary><div class="admin-layout-advanced-body"><div class="admin-section-list">${ordered.map(renderAdminSectionCard).join('')}</div></div></details>
-      <details class="admin-layout-advanced"><summary><span><strong>Ďalšie stránky</strong><small>Prístup k Results a ďalším samostatným stránkam</small></span><b>Rozbaliť</b></summary><div class="admin-layout-advanced-body"><div class="admin-section-list admin-page-list">${['results','btts'].map(renderAdminPageCard).join('')}</div></div></details>
+      <details class="admin-layout-advanced"><summary><span><strong>Ďalšie stránky</strong><small>Prístup k Results a ďalším samostatným stránkam</small></span><b>Rozbaliť</b></summary><div class="admin-layout-advanced-body"><div class="admin-section-list admin-page-list">${['results'].map(renderAdminPageCard).join('')}</div></div></details>
     </section>`;
   }
 
@@ -2713,7 +2539,7 @@
   function bannerLibraryButton(id,index,kind){
     const item=elements()?.[id];if(!item)return '';
     const c=item.content||{},selected=state.selectedElement===id,active=c.enabled!==false,link=String(c.link||'').trim();
-    return `<button type="button" class="admin-banner-library-card${selected?' selected':''}" data-admin-element="${escapeHtml(id)}"><span class="admin-banner-index">${index}</span><span><small>${kind==='hero'?'MAIN SLIDE':kind==='content'?'CONTENT':kind==='vip'?'VIP RAIL':'TOP CTA'}</small><strong>${escapeHtml(c.headline||item.label||id)}</strong><em>${active?'ACTIVE':'OFF'}${link?' · LINKED':''}</em></span><b>›</b></button>`;
+    return `<button type="button" class="admin-banner-library-card${selected?' selected':''}" data-admin-element="${escapeHtml(id)}"><span class="admin-banner-index">${index}</span><span><small>${kind==='hero'?'MAIN SLIDE':kind==='content'?'CONTENT':'TOP CTA'}</small><strong>${escapeHtml(c.headline||item.label||id)}</strong><em>${active?'ACTIVE':'OFF'}${link?' · LINKED':''}</em></span><b>›</b></button>`;
   }
   function bannerPreviewForPlan(id,item,kind,plan){
     const visible=elementAccess(id,plan)!=='hidden',click=bannerClickAllowed(item,plan),label=state.ui?.plans?.[plan]?.label||plan.toUpperCase();
@@ -2727,16 +2553,10 @@
     const rows=accessContexts.map(plan=>{const visible=elementAccess(id,plan)!=='hidden',click=item.click_access?.[plan]!==false;return `<div class="admin-banner-access-row"><b>${escapeHtml(state.ui?.plans?.[plan]?.label||plan.toUpperCase())}${plan==='goat'?'<small>TOP</small>':''}</b><label><input type="checkbox" data-simple-banner-visible="${escapeHtml(plan)}" ${visible?'checked':''}><span>Viditeľné</span></label><label><input type="checkbox" data-simple-banner-click="${escapeHtml(plan)}" ${click?'checked':''}><span>Link aktívny</span></label></div>`;}).join('');
     return `<div class="admin-banner-access-matrix">${allRow}${rows}</div>`;
   }
-  /* Legacy/static QA anchors for VIP admin fields: data-simple-banner-field="benefit_1_title" data-simple-banner-field="benefit_2_title" data-simple-banner-field="benefit_3_title" */
   function renderBannerEditor(id){
     const item=elements()?.[id];if(!item)return '<div class="admin-empty-panel">Choose a banner.</div>';
-    const c=item.content=item.content||{},isHero=item.kind==='hero_banner',isContent=item.kind==='large_banner',isVip=id==='VIP_RAIL',kind=isHero?'hero':isContent?'content':'header',themes=['blue','green','gold','purple','violet'];
-    if(isVip){
-      const linkEditors=[1,2,3,4].map(n=>`<article class="admin-footer-link-item"><div class="admin-footer-link-index">0${n}</div><label>Názov<input data-simple-banner-field="benefit_${n}_title" value="${escapeHtml(c[`benefit_${n}_title`]||'')}" placeholder="Napr. VIP komunita"></label><label>Popis<input data-simple-banner-field="benefit_${n}_text" value="${escapeHtml(c[`benefit_${n}_text`]||'')}" placeholder="Krátky popis odkazu"></label><label class="span-2">Odkaz<input data-simple-banner-field="benefit_${n}_link" value="${escapeHtml(c[`benefit_${n}_link`]||'')}" placeholder="https://t.me/... alebo #results"></label></article>`).join('');
-      const preview=[1,2,3,4].map((n,i)=>{const title=c[`benefit_${n}_title`]||`Odkaz ${n}`,text=c[`benefit_${n}_text`]||'Krátky popis',link=String(c[`benefit_${n}_link`]||'').trim();return `<div class="admin-footer-preview-card"><span class="admin-footer-preview-icon">${vipFeatureIcon(i)}</span><span><strong>${escapeHtml(title)}</strong><small>${escapeHtml(text)}</small></span><b>${link?'↗':'—'}</b></div>`;}).join('');
-      return `<article class="admin-banner-editor admin-footer-editor" data-simple-banner="${escapeHtml(id)}"><div class="admin-banner-editor-head"><div><small>SPODNÉ ODKAZY</small><h2>Footer odkazy</h2><p>Názov · popis · URL. Bez zbytočných bannerových nastavení.</p></div><label class="admin-master-switch"><input type="checkbox" data-simple-banner-field="enabled" ${c.enabled!==false?'checked':''}><span>Zapnuté</span></label></div><div class="admin-footer-preview">${preview}</div><div class="admin-form-section admin-footer-links-editor"><div class="admin-form-section-title"><strong>4 odkazy</strong><span>Telegram, VIP skupina, výsledky, štatistiky alebo ľubovoľná externá URL.</span></div><div class="admin-footer-link-grid">${linkEditors}</div></div></article>`;
-    }
-    return `<article class="admin-banner-editor" data-simple-banner="${escapeHtml(id)}"><div class="admin-banner-editor-head"><div><small>${isVip?'SPODNÝ VIP BANNER':isHero?'HLAVNÝ ROTUJÚCI BANNER':isContent?'OBSAHOVÝ BANNER':'HORNÝ CTA BANNER'}</small><h2>${escapeHtml(c.headline||item.label||id)}</h2><p>${escapeHtml(id)}</p></div><label class="admin-master-switch"><input type="checkbox" data-simple-banner-field="enabled" ${c.enabled!==false?'checked':''}><span>Zapnuté</span></label></div><div class="admin-banner-preview-toolbar"><span>Náhľad ako</span>${adminLevelChips(state.adminBannerPreviewPlan,'admin-banner-preview-plan',true)}</div>${bannerPreviewForPlan(id,item,kind,state.adminBannerPreviewPlan)}<div class="admin-form-section"><div class="admin-form-section-title"><strong>Obsah</strong><span>Všetko, čo návštevník vidí.</span></div><div class="admin-form-grid"><label>Horný popis<input data-simple-banner-field="eyebrow" value="${escapeHtml(c.eyebrow||'')}" placeholder="COMMUNITY"></label><label>Téma<select data-simple-banner-field="theme">${themes.map(v=>`<option value="${v}"${v===(c.theme||'blue')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label><label class="span-2">Nadpis<input data-simple-banner-field="headline" value="${escapeHtml(c.headline||'')}" placeholder="Join our Telegram community"></label>${isHero?`<label class="span-2">Zvýraznený riadok<input data-simple-banner-field="accent_text" value="${escapeHtml(c.accent_text||'')}" placeholder="Telegram komunita"></label>`:''}<label class="span-2">Podnadpis<input data-simple-banner-field="text" value="${escapeHtml(c.text||'')}" placeholder="Novinky · Predikcie · Diskusia"></label><label>Text tlačidla<input data-simple-banner-field="button_text" value="${escapeHtml(c.button_text||'')}" placeholder="PRIDAŤ SA"></label>${!isHero?`<label>Ikona / emoji<input data-simple-banner-field="icon" value="${escapeHtml(c.icon||'')}" placeholder="✈"></label>`:''}</div></div>${isVip?`<div class="admin-form-section admin-footer-links-editor"><div class="admin-form-section-title"><strong>Spodné odkazy</strong><span>Stačí názov, krátky popis a cieľový odkaz. Vhodné pre Telegram, VIP skupinu, štatistiky alebo internú stránku.</span></div><div class="admin-footer-link-grid">${[1,2,3,4].map(n=>`<article class="admin-footer-link-item"><div class="admin-footer-link-index">0${n}</div><label>Názov<input data-simple-banner-field="benefit_${n}_title" value="${escapeHtml(c[`benefit_${n}_title`]||'')}" placeholder="Napr. VIP komunita"></label><label>Popis<input data-simple-banner-field="benefit_${n}_text" value="${escapeHtml(c[`benefit_${n}_text`]||'')}" placeholder="Krátky popis odkazu"></label><label class="span-2">Odkaz<input data-simple-banner-field="benefit_${n}_link" value="${escapeHtml(c[`benefit_${n}_link`]||'')}" placeholder="https://t.me/... alebo #results"></label></article>`).join('')}</div></div>`:''}<div class="admin-form-section"><div class="admin-form-section-title"><strong>Odkaz</strong><span>Telegram, web alebo interná stránka BlinQ.</span></div><label class="admin-wide-field">Cieľová URL / odkaz<input data-simple-banner-field="link" value="${escapeHtml(c.link||'')}" placeholder="https://t.me/... or #results"></label></div><div class="admin-form-section"><div class="admin-form-section-title"><strong>Podklad bannera</strong><span>Nahraj alebo zadaj cestu k obrázku a text BlinQ sa vykreslí nad ním.</span></div><div class="field-hint-box">Odporúčaný formát pre tento slot: ${escapeHtml(creativeSpecText(item))}</div><div class="admin-form-grid"><label class="span-2">Obrázok pre desktop<input data-simple-banner-field="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/banner.webp or https://..."></label><label class="span-2">Obrázok pre mobil (voliteľný)<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/banner-mobile.webp or https://..."></label><label>Prispôsobenie<select data-simple-banner-field="image_fit"><option value="cover"${(c.image_fit||'cover')==='cover'?' selected':''}>Cover</option><option value="contain"${c.image_fit==='contain'?' selected':''}>Contain</option></select></label><label>Pozícia<select data-simple-banner-field="image_position">${['center','left','right','top','bottom'].map(v=>`<option value="${v}"${v===(c.image_position||'center')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label><label class="admin-toggle-line span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť vlastný text a CTA nad podkladom</span></label></div></div><div class="admin-form-section audience-section"><div class="admin-form-section-title"><strong>Kto ho môže vidieť a otvoriť?</strong><span>Viditeľnosť a možnosť kliknutia sa nastavujú samostatne.</span></div><div class="admin-banner-presets"><button type="button" class="btn btn-ghost" data-banner-preset="all">Všetci</button><button type="button" class="btn btn-ghost" data-banner-preset="teaser-elite">Viditeľné pre všetkých · odkaz ELITE+</button><button type="button" class="btn btn-ghost" data-banner-preset="pro-only">Iba PRO+</button><button type="button" class="btn btn-ghost" data-banner-preset="goat-only">Iba GOAT</button></div>${renderBannerAccessMatrix(id,item)}</div><details class="admin-advanced"><summary>Pokročilé možnosti</summary><div class="admin-form-grid"><label>Aktívne od<input type="datetime-local" data-simple-banner-field="active_from" value="${escapeHtml(String(c.active_from||'').replace('Z','').slice(0,16))}"></label><label>Aktívne do<input type="datetime-local" data-simple-banner-field="active_until" value="${escapeHtml(String(c.active_until||'').replace('Z','').slice(0,16))}"></label></div>${watermarkEditor(item)}</details></article>`;
+    const c=item.content=item.content||{},isHero=item.kind==='hero_banner',isContent=item.kind==='large_banner',kind=isHero?'hero':isContent?'content':'header',themes=['blue','green','gold'];
+    return `<article class="admin-banner-editor" data-simple-banner="${escapeHtml(id)}"><div class="admin-banner-editor-head"><div><small>${isHero?'HLAVNÝ ROTUJÚCI BANNER':isContent?'OBSAHOVÝ BANNER':'HORNÝ CTA BANNER'}</small><h2>${escapeHtml(c.headline||item.label||id)}</h2><p>${escapeHtml(id)}</p></div><label class="admin-master-switch"><input type="checkbox" data-simple-banner-field="enabled" ${c.enabled!==false?'checked':''}><span>Zapnuté</span></label></div><div class="admin-banner-preview-toolbar"><span>Náhľad ako</span>${adminLevelChips(state.adminBannerPreviewPlan,'admin-banner-preview-plan',true)}</div>${bannerPreviewForPlan(id,item,kind,state.adminBannerPreviewPlan)}<div class="admin-form-section"><div class="admin-form-section-title"><strong>Obsah</strong><span>Všetko, čo návštevník vidí.</span></div><div class="admin-form-grid"><label>Horný popis<input data-simple-banner-field="eyebrow" value="${escapeHtml(c.eyebrow||'')}" placeholder="COMMUNITY"></label><label>Téma<select data-simple-banner-field="theme">${themes.map(v=>`<option value="${v}"${v===(c.theme||'blue')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label><label class="span-2">Nadpis<input data-simple-banner-field="headline" value="${escapeHtml(c.headline||'')}" placeholder="Join our Telegram community"></label>${isHero?`<label class="span-2">Zvýraznený riadok<input data-simple-banner-field="accent_text" value="${escapeHtml(c.accent_text||'')}" placeholder="Telegram komunita"></label>`:''}<label class="span-2">Podnadpis<input data-simple-banner-field="text" value="${escapeHtml(c.text||'')}" placeholder="Novinky · Predikcie · Diskusia"></label><label>Text tlačidla<input data-simple-banner-field="button_text" value="${escapeHtml(c.button_text||'')}" placeholder="PRIDAŤ SA"></label>${!isHero?`<label>Ikona / emoji<input data-simple-banner-field="icon" value="${escapeHtml(c.icon||'')}" placeholder="✈"></label>`:''}</div></div><div class="admin-form-section"><div class="admin-form-section-title"><strong>Odkaz</strong><span>Telegram, web alebo interná stránka BlinQ.</span></div><label class="admin-wide-field">Cieľová URL / odkaz<input data-simple-banner-field="link" value="${escapeHtml(c.link||'')}" placeholder="https://t.me/... or #results"></label></div><div class="admin-form-section"><div class="admin-form-section-title"><strong>Podklad bannera</strong><span>Nahraj alebo zadaj cestu k obrázku a text BlinQ sa vykreslí nad ním.</span></div><div class="field-hint-box">Odporúčaný formát pre tento slot: ${escapeHtml(creativeSpecText(item))}</div><div class="admin-form-grid"><label class="span-2">Obrázok pre desktop<input data-simple-banner-field="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/banner.webp or https://..."></label><label class="span-2">Obrázok pre mobil (voliteľný)<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/banner-mobile.webp or https://..."></label><label>Prispôsobenie<select data-simple-banner-field="image_fit"><option value="cover"${(c.image_fit||'cover')==='cover'?' selected':''}>Cover</option><option value="contain"${c.image_fit==='contain'?' selected':''}>Contain</option></select></label><label>Pozícia<select data-simple-banner-field="image_position">${['center','left','right','top','bottom'].map(v=>`<option value="${v}"${v===(c.image_position||'center')?' selected':''}>${v.toUpperCase()}</option>`).join('')}</select></label><label class="admin-toggle-line span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť vlastný text a CTA nad podkladom</span></label></div></div><div class="admin-form-section audience-section"><div class="admin-form-section-title"><strong>Kto ho môže vidieť a otvoriť?</strong><span>Viditeľnosť a možnosť kliknutia sa nastavujú samostatne.</span></div><div class="admin-banner-presets"><button type="button" class="btn btn-ghost" data-banner-preset="all">Všetci</button><button type="button" class="btn btn-ghost" data-banner-preset="teaser-elite">Viditeľné pre všetkých · odkaz ELITE+</button><button type="button" class="btn btn-ghost" data-banner-preset="pro-only">Iba PRO+</button><button type="button" class="btn btn-ghost" data-banner-preset="goat-only">Iba GOAT</button></div>${renderBannerAccessMatrix(id,item)}</div><details class="admin-advanced"><summary>Pokročilé možnosti</summary><div class="admin-form-grid"><label>Aktívne od<input type="datetime-local" data-simple-banner-field="active_from" value="${escapeHtml(String(c.active_from||'').replace('Z','').slice(0,16))}"></label><label>Aktívne do<input type="datetime-local" data-simple-banner-field="active_until" value="${escapeHtml(String(c.active_until||'').replace('Z','').slice(0,16))}"></label></div>${watermarkEditor(item)}</details></article>`;
   }
   function adminBannerMapSlot(id,label,size='normal'){
     const item=elements()?.[id];if(!item)return '';
@@ -2747,7 +2567,7 @@
   }
   function renderAdminBannerMap(){
     const row=(zone,label)=>`<section class="admin-site-map-row"><header><strong>${escapeHtml(label)}</strong><span>${rowEnabled(zone)?`${rowSlotCount(zone)} aktívne sloty`:'riadok vypnutý'}</span></header><div class="admin-site-map-slots">${[1,2,3,4].map(i=>adminBannerMapSlot(`${rowPrefix(zone)}${i}`,`Slot ${i}`,'content')).join('')}</div></section>`;
-    return `<div class="admin-site-map"><div class="admin-site-map-browser"><div class="admin-site-map-browserbar"><i></i><i></i><i></i><span>BLINQ · HLAVNÁ STRÁNKA</span></div><div class="admin-site-map-header"><div class="admin-site-map-logo">BlinQ</div><div class="admin-site-map-header-slots">${[1,2,3].map(i=>adminBannerMapSlot(`HEADER_BANNER_${i}`,`CTA ${i}`,'header')).join('')}</div><div class="admin-site-map-account">ÚČET</div></div><section class="admin-site-map-hero"><header><strong>Hlavný banner</strong><span>Klikni na konkrétny slide</span></header><div>${[1,2,3,4,5].map(i=>adminBannerMapSlot(`HERO_BANNER_${i}`,`Slide ${i}`,'hero')).join('')}</div></section><div class="admin-site-map-content"><div class="admin-site-map-table"><span></span><span></span><span></span><span></span></div>${row('content_top','Obsah · horný rad')}${row('content_mid','Obsah · stredný rad')}${row('content_bottom','Obsah · spodný rad')}<div class="admin-site-map-table compact"><span></span><span></span><span></span></div></div><section class="admin-site-map-vip"><header><strong>Spodný VIP / membership banner</strong><span>Fixná pozícia</span></header>${adminBannerMapSlot('VIP_RAIL','VIP RAIL','vip')}</section></div><p class="admin-site-map-help">Rozloženie stránky ostáva pevné. Meníš iba obsah vo vybranom slote, takže kreatíva s rovnakým pomerom strán nerozhodí layout.</p></div>`;
+    return `<div class="admin-site-map"><div class="admin-site-map-browser"><div class="admin-site-map-browserbar"><i></i><i></i><i></i><span>BLINQ · HLAVNÁ STRÁNKA</span></div><div class="admin-site-map-header"><div class="admin-site-map-logo">BlinQ</div><div class="admin-site-map-header-slots">${[1,2,3].map(i=>adminBannerMapSlot(`HEADER_BANNER_${i}`,`CTA ${i}`,'header')).join('')}</div><div class="admin-site-map-account">ÚČET</div></div><section class="admin-site-map-hero"><header><strong>Hlavný banner</strong><span>Klikni na konkrétny slide</span></header><div>${[1,2,3,4,5].map(i=>adminBannerMapSlot(`HERO_BANNER_${i}`,`Slide ${i}`,'hero')).join('')}</div></section><div class="admin-site-map-content"><div class="admin-site-map-table"><span></span><span></span><span></span><span></span></div>${row('content_top','Obsah · horný rad')}${row('content_mid','Obsah · stredný rad')}${row('content_bottom','Obsah · spodný rad')}<div class="admin-site-map-table compact"><span></span><span></span><span></span></div></div></div><p class="admin-site-map-help">Rozloženie stránky ostáva pevné. Meníš iba obsah vo vybranom slote, takže kreatíva s rovnakým pomerom strán nerozhodí layout.</p></div>`;
   }
   function renderAdminBanners(){
     const heroIds=[1,2,3,4,5].map(i=>`HERO_BANNER_${i}`);
@@ -3569,7 +3389,6 @@
     else if(route==='players'){const names=[...new Set((feed.upcoming||[]).flatMap(x=>[x.player1?.name,x.player2?.name]).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):escapeHtml(publicText('No upcoming players are currently published.'))}</div>`;}
     else if(route==='stats') body=metricCards([[publicText('Vyhodnotené predikcie'),String(p.n??0),publicText('Published and scored')],[publicText('Accuracy'),p.accuracy!=null?pct(p.accuracy):'—',publicText('Observed results')],['Log loss',number(p.log_loss),publicText('Lower is better')],[publicText('Brier score'),number(p.brier_score),publicText('Probability quality')]])+`<div class="route-sub"><h3>${escapeHtml(publicText('Results'))}</h3>${renderResults()}</div>`;
     else if(route==='model'||route==='backtests'){const h=report.holdout||{},delta=report.delta_vs_elo||{};body=metricCards([[publicText('Model'),String(feed.model?.version||'—'),publicText('Production artifact')],['Holdout n',String(h.n??'—'),publicText('Chronological holdout')],['Holdout úspešnosť',h.accuracy!=null?pct(h.accuracy):'—',publicText('Evaluation report')],['Δ log loss vs Elo',delta.log_loss!=null?number(delta.log_loss):'—',publicText('Negative is better')]])+`<div class="route-sub static-copy"><h3>${escapeHtml(publicText('Data window'))}</h3><p>${escapeHtml(history.start?fmtDate(history.start):'—')} → ${escapeHtml(history.end?fmtDate(history.end):'—')} · ${escapeHtml(lcopy(`${history.matches??'—'} historical matches in the current serving metadata.`,`${history.matches??'—'} historických zápasov v aktuálnych metadátach.`,`${history.matches??'—'} historických zápasů v aktuálních metadatech.`))}</p><p>${escapeHtml(lcopy('No result here is presented as a guarantee. Holdout metrics describe a specific historical evaluation period.','Žiadny výsledok tu nie je prezentovaný ako záruka. Holdout metriky opisujú konkrétne historické obdobie vyhodnotenia.','Žádný výsledek zde není prezentován jako záruka. Holdout metriky popisují konkrétní historické období vyhodnocení.'))}</p></div>`;}
-    else if(route==='btts') body=`<section class="btts-beta-page"><span class="btts-beta-badge">${escapeHtml(publicText('BETA · FOOTBALL'))}</span><h2>${escapeHtml(publicText('Both Teams To Score'))}</h2><p>${escapeHtml(publicText('The BlinQ BTTS module is prepared, but live football data and published predictions are not connected in this repository yet.'))}</p><div class="btts-beta-state"><i></i><span><strong>${escapeHtml(publicText('Data not connected'))}</strong><small>${escapeHtml(publicText('No demo or fabricated predictions are shown.'))}</small></span></div></section>`;
     else if(route==='account') body=renderAccountPage();
     else if(['how_blinq_works','methodology','model_data','faq','responsible_use','terms','privacy','cookies','support'].includes(route)) body=renderSiteContentPage(route);
     else body=`<div class="static-copy"><p>${escapeHtml(lcopy('This section is available in the BlinQ workspace.','Táto sekcia je dostupná v BlinQ.','Tato sekce je dostupná v BlinQ.'))}</p></div>`;
@@ -3725,17 +3544,13 @@
       if(tooltipEmail)tooltipEmail.textContent=a.email||'—';
       if(tooltipPlan)tooltipPlan.textContent=a.plan_label||state.ui?.plans?.[String(a.plan||'').toLowerCase()]?.label||a.plan||planLabel||'Member';
       if(tooltipRemaining){const status=String(a.status||'active').toLowerCase();tooltipRemaining.textContent=status==='lifetime'?publicText('Lifetime'):a.expires_at?remainingLabel(a.expires_at):(status==='active'?publicText('Managed manually'):status.toUpperCase());}
-      $('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—'; $('todayLabel').textContent=fmtToday(); updateHeaderClock();
+      $('updatedAt').textContent=feed.generated_at?fmtTime(feed.generated_at):'—'; $('todayLabel').textContent=fmtToday();
       const fullModelVersion=String(feed?.model?.version||'').trim(),compactModelVersion=shortModelVersion(fullModelVersion);
-      const footerModel=$('footerModelState'); if(footerModel){footerModel.textContent=compactModelVersion?`Model ${compactModelVersion}`:publicText('Production feed');footerModel.title=fullModelVersion||publicText('Production feed');}
-      const headerModel=$('headerModelState');if(headerModel){headerModel.textContent=compactModelVersion||publicText('Production');headerModel.title=fullModelVersion||publicText('Production');}
       const staleNotice=$('staleNotice'); if(staleNotice){staleNotice.hidden=true;staleNotice.textContent='';} $('appShell').hidden=false; if($('authDialog').open)$('authDialog').close();
-      if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();renderDashboardKpis();loadInsights(true);renderFooterConfig();window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
-    }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact support if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');const footerStatus=document.querySelector('.system-status');if(footerStatus&&!$('appShell').hidden){footerStatus.classList.add('is-error');footerStatus.classList.remove('is-warning');const label=footerStatus.querySelector('strong');if(label)label.textContent=lcopy('Refresh problem','Problém s aktualizáciou','Problém s aktualizací');}if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{feedLoading=false;window.BlinqUI.refreshFinished();}
+      if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();renderDashboardKpis();loadInsights(true);window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
+    }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact support if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{feedLoading=false;window.BlinqUI.refreshFinished();}
   }
   async function refreshWorkspace(showLoading=false){await loadUiConfig();return loadFeed(showLoading);}
-
-  function updateHeaderClock(){const date=$('headerDate'),time=$('headerTime');if(date)date.textContent=fmtToday();if(time)time.textContent=fmtClock();}
 
   function showStatus(message){const n=$('statusBanner');n.textContent=message;n.hidden=!message;if(message)setTimeout(()=>{n.hidden=true},5000)}
 
@@ -3762,12 +3577,6 @@
       const liveTab=event.target.closest('[data-live-radar-tab]');if(liveTab){state.liveRadarTab=liveTab.dataset.liveRadarTab==='set2'?'set2':'comeback';state.insightFilter='all';renderInsightDrawer();return;}
       const article=event.target.closest('[data-insight-id]');if(article)markInsightRead(article.dataset.insightId);
       const matchButton=event.target.closest('[data-insight-match]');if(matchButton){const found=findRowByEventId(matchButton.dataset.insightMatch);if(found){setInsightDrawer(false);setRoute('predictions');openMatch(normalize(found.row),found.tab,found.row);}else showStatus(lcopy('This match is not on the current board.','Tento zápas už nie je v aktuálnej ponuke.','Tento zápas už není v aktuální nabídce.'));}
-    };
-    if($('dashboardRightRail'))$('dashboardRightRail').onclick=event=>{
-      if(event.target.closest('[data-rail-close-match]')){clearMatchRail();return;}
-      if(event.target.closest('[data-rail-open-modal]')){if(state.railMatch)openMatch(normalize(state.railMatch),state.railMatchTab||'daily',state.railMatch);return;}
-      const detailTab=event.target.closest('[data-rail-detail-tab]');if(detailTab){state.railDetailTab=detailTab.dataset.railDetailTab||'overview';renderDashboardSidebar();return;}
-      const open=event.target.closest('[data-rail-open-highlight]');if(open){const found=findRowByEventId(open.dataset.railOpenHighlight);if(found)selectMatchInRail(found.row,found.tab);}
     };
     document.addEventListener('click',e=>{
       if(!e.target.closest('#profileShell'))closeProfileMenu();
@@ -3809,7 +3618,7 @@
 
   function finishBootSplash(){const splash=$('bootSplash');if(!splash)return;splash.classList.add('is-done');setTimeout(()=>splash.remove(),220);}
   async function boot(){
-    setupEvents();window.BlinqUI.init();setupLiveRefresh();updateHeaderClock();setInterval(updateHeaderClock,30000);
+    setupEvents();window.BlinqUI.init();setupLiveRefresh();
     const hash=location.hash.replace(/^#/,'');if(routeMeta[hash])state.route=hash;
     try{
       // UI config and auth config are independent network calls; do them in parallel to reduce cold-start time.

@@ -92,12 +92,11 @@ jobs:
         run: |
           set -euo pipefail
           test -s web/index.html
-          test -s web/styles.css
           test -s web/staticwebapp.config.json
-          test -s web/final-polish-736.css
+          test -s web/blinq-app.css
           test -s web/release.json
           grep -q 'data-web-release="7.3.6"' web/index.html
-          grep -q '/final-polish-736.css?v=7360' web/index.html
+          grep -q '/blinq-app.css?v=7360&p=10' web/index.html
           test -s api/function_app.py
           test -s api/requirements.txt
           test -s scripts/prepare_feed.py
@@ -163,9 +162,9 @@ jobs:
           stamp="${GITHUB_SHA}"
           curl -fsSL -H 'Cache-Control: no-cache' "$base/?__blinq_release=$stamp" -o /tmp/blinq-index.html
           grep -q 'data-web-release="7.3.6"' /tmp/blinq-index.html
-          grep -q '/final-polish-736.css?v=7360' /tmp/blinq-index.html
-          curl -fsSL -H 'Cache-Control: no-cache' "$base/final-polish-736.css?__blinq_release=$stamp" -o /tmp/blinq-final.css
-          grep -q 'BlinQ 7.3.6' /tmp/blinq-final.css
+          grep -q '/blinq-app.css?v=7360&p=10' /tmp/blinq-index.html
+          curl -fsSL -H 'Cache-Control: no-cache' "$base/blinq-app.css?__blinq_release=$stamp" -o /tmp/blinq-app.css
+          grep -q 'consolidated 7.3.6-r10' /tmp/blinq-app.css
           curl -fsSL -H 'Cache-Control: no-cache' "$base/release.json?__blinq_release=$stamp" -o /tmp/blinq-release.json
           python - <<'PYWEB'
           import json

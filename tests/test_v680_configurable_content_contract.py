@@ -3,13 +3,14 @@ import json
 ROOT=Path(__file__).resolve().parents[1]
 
 def test_editable_json_files_exist_and_parse():
-    for name in ["membership-tiers.json","banners.json","footer-links.json","site-theme.json"]:
+    for name in ["membership-tiers.json","banners.json","site-theme.json","site-content.json"]:
         data=json.loads((ROOT/"web"/"config"/name).read_text(encoding="utf-8"))
-        assert data.get("schema") == 1
+        assert data.get("schema") in {1, 2}
 
-def test_banners_support_ads_mode():
+def test_retired_home_small_banner_feed_is_removed():
     data=json.loads((ROOT/"web"/"config"/"banners.json").read_text(encoding="utf-8"))
-    assert any(x.get("mode")=="ads" for x in data["home_small_banners"]["slides"])
+    assert "home_small_banners" not in data
+    assert not (ROOT/"web"/"config"/"footer-links.json").exists()
 
 def test_goat_is_regular_upgrade_tier():
     data=json.loads((ROOT/"web"/"config"/"membership-tiers.json").read_text(encoding="utf-8"))

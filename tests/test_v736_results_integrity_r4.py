@@ -63,4 +63,4 @@ def test_release_stays_736_and_patch_cache_matches_patch_marker():
     assert patch
     n = patch.group(1)
     assert f'/app.js?v=7360&p={n}' in INDEX
-    assert f'/final-polish-736.css?v=7360&p={n}' in INDEX
+    assert f'/blinq-app.css?v=7360&p={n}' in INDEX

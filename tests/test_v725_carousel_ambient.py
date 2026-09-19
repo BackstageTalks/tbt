@@ -5,15 +5,15 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 APP = (WEB / "app.js").read_text(encoding="utf-8")
 INDEX = (WEB / "index.html").read_text(encoding="utf-8")
-CSS = (WEB / "final-polish-725.css").read_text(encoding="utf-8")
+CSS = (WEB / "blinq-app.css").read_text(encoding="utf-8")
 UI = json.loads((WEB / "ui-config.json").read_text(encoding="utf-8"))
 BANNERS = json.loads((WEB / "config" / "banners.json").read_text(encoding="utf-8"))
 cache = str(UI["asset_revision"])
 
 
 def test_v725_visual_layer_is_loaded_last():
-    assert f'/final-polish-725.css?v={cache}' in INDEX
-    assert INDEX.index(f'/final-polish-725.css?v={cache}') > INDEX.index(f'/final-polish-724.css?v={cache}')
+    assert f'/blinq-app.css?v={cache}&p=10' in INDEX
+    assert 'final-polish-' not in INDEX
 
 
 def test_v725_has_five_fixed_hero_slots_and_admin_tabs():

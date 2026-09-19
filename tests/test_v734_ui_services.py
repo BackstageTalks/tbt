@@ -5,38 +5,39 @@ ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / 'web' / 'app.js').read_text(encoding='utf-8')
 AUTH = (ROOT / 'web' / 'auth.js').read_text(encoding='utf-8')
 INDEX = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8')
-CSS735 = (ROOT / 'web' / 'final-polish-735.css').read_text(encoding='utf-8')
-CSS736 = (ROOT / 'web' / 'final-polish-736.css').read_text(encoding='utf-8')
+CSS735 = (ROOT / 'web' / 'blinq-app.css').read_text(encoding='utf-8')
+CSS736 = (ROOT / 'web' / 'blinq-app.css').read_text(encoding='utf-8')
 CSS = CSS735 + '\n' + CSS736
 UI = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
 SITE = json.loads((ROOT / 'web' / 'config' / 'site-content.json').read_text(encoding='utf-8'))
 
 
-def test_v735_asset_revision_and_polish_loaded_last():
+def test_runtime_css_is_consolidated_on_current_asset_revision():
     assert UI['revision'] == '7.3.6'
     assert UI['asset_revision'] == 7360
-    assert '/final-polish-736.css?v=7360' in INDEX
-    assert INDEX.index('/final-polish-731.css') < INDEX.index('/final-polish-736.css')
+    assert '/blinq-app.css?v=7360&p=10' in INDEX
+    assert 'final-polish-' not in INDEX
 
 
 def test_login_loader_and_footer_have_blinq_background_watermarks():
-    assert "url('/assets/blinq_loading_scene_v736.webp')" in CSS736
+    assert "blinq_loading_scene_v736.webp" not in CSS736
+    assert not (ROOT / 'web' / 'assets' / 'blinq_loading_scene_v736.webp').exists()
     assert "url('/assets/blinq_background.webp')" in CSS735
     assert CSS735.count("url('/assets/blinq_logo.svg')") >= 2
     assert 'bootEyebrow' in INDEX and 'bootStatus' in INDEX
     assert 'auth-copy h2' in CSS and 'font-size:17px' in CSS
 
 
-def test_footer_status_is_freshness_aware_not_hardcoded_live():
-    assert 'feedAgeMin' in APP and 'liveAgeMin' in APP
-    assert "liveAgeMin<=3" in APP
-    assert "footer.feed_stale" in APP
-    assert "footer.live_ok" in APP
+def test_footer_is_static_minimal_and_has_no_runtime_freshness_widget():
+    assert 'site-footer site-footer-minimal' in INDEX
+    assert 'UI 7.3.6' in INDEX
+    assert 'system-status' not in INDEX
+    assert 'renderFooterConfig' not in APP
 
 
 def test_helper_copy_is_json_backed():
     assert 'ui_copy' in SITE
-    assert 'loading' in SITE['ui_copy'] and 'auth' in SITE['ui_copy'] and 'footer' in SITE['ui_copy']
+    assert 'loading' in SITE['ui_copy'] and 'auth' in SITE['ui_copy'] and 'footer' not in SITE['ui_copy']
     assert 'form_copy' in SITE['support']
     assert 'supportFormCopy()' in APP
 

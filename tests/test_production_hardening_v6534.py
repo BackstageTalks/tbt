@@ -129,7 +129,7 @@ def test_release_and_asset_versions_are_consistent():
     release = str(config["ui_revision"])
     cache_version = str(config["asset_revision"])
     assert f'RELEASE = "{release}"' in function_app
-    for asset in ("styles.css", "responsive.css", "premium.css", "auth.js", "responsive.js", "app.js"):
+    for asset in ("blinq-app.css", "blinq-app.css", "blinq-app.css", "auth.js", "responsive.js", "app.js"):
         assert f"/{asset}?v={cache_version}" in html
 
 

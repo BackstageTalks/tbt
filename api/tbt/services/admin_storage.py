@@ -26,7 +26,7 @@ ANALYTICS_TABLE = "BlinQBannerAnalytics"
 INSIGHTS_TABLE = "BlinQInsights"
 INSIGHT_READS_TABLE = "BlinQInsightReads"
 _VALID_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
-_VALID_BANNER_SLOT = re.compile(r"^(?:HEADER_BANNER_[1-4]|HERO_BANNER_[1-5]|CONTENT_(?:TOP|MID|BOTTOM)_[1-4]|SIDEBAR_PROMO_[1-4]|VIP_RAIL)$")
+_VALID_BANNER_SLOT = re.compile(r"^(?:HEADER_BANNER_[1-4]|HERO_BANNER_[1-5]|CONTENT_(?:TOP|MID|BOTTOM)_[1-4])$")
 
 
 def _valid_destination(value: object, *, allow_internal: bool = True) -> bool:
@@ -339,10 +339,8 @@ def validate_ui_config(payload: object) -> dict:
         *(f"CONTENT_TOP_{i}" for i in range(1, 5)),
         *(f"CONTENT_MID_{i}" for i in range(1, 5)),
         *(f"CONTENT_BOTTOM_{i}" for i in range(1, 5)),
-        "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3", "SIDEBAR_PROMO_4",
         "PRIME_PICKS_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
         "DOUBLES_PANEL", "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "RESULTS_PANEL",
-        "BTTS_BONUS_PANEL", "FOOTER_SYSTEM",
     }
     if not required_elements.issubset(elements):
         raise ValueError("UI configuration would change the fixed slot inventory")
@@ -364,7 +362,7 @@ def validate_ui_config(payload: object) -> dict:
     sections = dashboard.get("sections") or {}
     pick_section_order = ["prime", "top_daily", "value", "doubles", "ace", "sg"]
     section_order = dashboard.get("section_order") or []
-    if not isinstance(section_order, list) or set(section_order) != {"prime", "top_daily", "value", "doubles", "ace", "sg", "results", "btts"}:
+    if not isinstance(section_order, list) or set(section_order) != {"prime", "top_daily", "value", "doubles", "ace", "sg", "results"}:
         raise ValueError("Dashboard section order must contain each public section exactly once")
     visible_slots = dashboard.get("visible_slots")
     if not isinstance(visible_slots, int) or not 1 <= visible_slots <= 6:
@@ -420,7 +418,7 @@ def validate_ui_config(payload: object) -> dict:
                 if not 1 <= index <= 10 or str(state) not in {"active", "blurred", "hidden"}:
                     raise ValueError(f"Invalid Daily Picks row override {tab_id}/{plan_id}/{position}")
 
-    valid_dashboard_sections = {"prime", "top_daily", "value", "doubles", "ace", "sg", "results", "btts"}
+    valid_dashboard_sections = {"prime", "top_daily", "value", "doubles", "ace", "sg", "results"}
     if not isinstance(sections, dict) or not valid_dashboard_sections.issubset(sections):
         raise ValueError("Invalid dashboard section configuration")
     active_pick_windows = [key for key in pick_section_order if isinstance(sections.get(key), dict) and sections[key].get("dashboard_enabled") is True]

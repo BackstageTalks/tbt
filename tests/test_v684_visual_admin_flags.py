@@ -5,7 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 APP = (WEB / "app.js").read_text(encoding="utf-8")
 INDEX = (WEB / "index.html").read_text(encoding="utf-8")
-CSS = (WEB / "polish-684.css").read_text(encoding="utf-8")
+CSS = (WEB / "blinq-app.css").read_text(encoding="utf-8")
 
 
 def test_local_country_flags_are_packaged_and_used():
@@ -54,11 +54,11 @@ def test_account_admin_is_simple_and_supports_flexible_expiry():
     for days in ('30','90','180','365'):
         assert f'data-admin-expiry-days="{days}"' in APP
     assert 'adminUserEmail' in APP and 'adminUserTelegram' in APP
-    assert '.admin-simple-plans' in (WEB / 'admin-polish-687.css').read_text(encoding='utf-8')
+    assert '.admin-simple-plans' in (WEB / 'blinq-app.css').read_text(encoding='utf-8')
 
 
 def test_684_visual_layer_is_loaded_with_current_cache():
     cfg = json.loads((WEB / 'ui-config.json').read_text(encoding='utf-8'))
     cache = cfg['asset_revision']
-    assert f'/polish-684.css?v={cache}' in INDEX
-    assert f'/app.js?v={cache}' in INDEX
+    assert f'/blinq-app.css?v={cache}&p=10' in INDEX
+    assert f'/app.js?v={cache}&p=10' in INDEX

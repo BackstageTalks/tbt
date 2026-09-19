@@ -4,13 +4,13 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 APP=(ROOT/'web/app.js').read_text(encoding='utf-8')
 INDEX=(ROOT/'web/index.html').read_text(encoding='utf-8')
-CSS=(ROOT/'web/final-polish-731.css').read_text(encoding='utf-8')
+CSS=(ROOT/'web/blinq-app.css').read_text(encoding='utf-8')
 cache = str(json.loads((ROOT/'web/ui-config.json').read_text(encoding='utf-8'))['asset_revision'])
 
 
 def test_v731_layer_is_loaded_last():
-    assert f'/final-polish-731.css?v={cache}' in INDEX
-    assert INDEX.index('/final-polish-725.css') < INDEX.index('/final-polish-731.css')
+    assert f'/blinq-app.css?v={cache}&p=10' in INDEX
+    assert 'final-polish-' not in INDEX
 
 
 def test_player_photos_are_in_daily_board_and_results():

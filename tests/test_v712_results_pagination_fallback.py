@@ -1,7 +1,7 @@
 from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / 'web' / 'app.js').read_text(encoding='utf-8')
-CSS = (ROOT / 'web' / 'blinq-lean-700.css').read_text(encoding='utf-8')
+CSS = (ROOT / 'web' / 'blinq-app.css').read_text(encoding='utf-8')
 DATA = (ROOT / '.github' / 'workflows' / 'data.yml').read_text(encoding='utf-8')
 
 def test_results_are_paginated_50_or_100_rows():

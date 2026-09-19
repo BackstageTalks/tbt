@@ -1,7 +1,7 @@
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 APP=(ROOT/'web/app.js').read_text(encoding='utf-8')
-CSS=(ROOT/'web/blinq-lean-700.css').read_text(encoding='utf-8')
+CSS=(ROOT/'web/blinq-app.css').read_text(encoding='utf-8')
 
 def test_esa_rows_do_not_use_generic_match_detail():
     assert "if(sourceTab==='ace')" in APP
