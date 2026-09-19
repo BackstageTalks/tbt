@@ -156,6 +156,47 @@ if 'campaigns' in ui or 'advertisers' in ui:
     fail('retired campaign/advertiser manager remains in ui-config')
 ok('retired support/VIP/BTTS/sidebar/campaign admin runtime removed')
 
+# 4b. Legacy visual systems must stay removed while current advanced controls remain.
+elements = ui.get('elements') or {}
+for key in ('content_rows', 'header_cta', 'creative_specs'):
+    if key in ui:
+        fail(f'retired visual config returned: {key}')
+for key in ('show_header_feature_strip', 'snapshot_cards'):
+    if key in (ui.get('dashboard') or {}):
+        fail(f'retired dashboard visual config returned: {key}')
+for element_id in ('PREDICTION_TOOLBAR', 'SIDEBAR_PREDICTIONS'):
+    if element_id in elements:
+        fail(f'dead visual access element returned: {element_id}')
+if 'row_presets' in (ui.get('admin') or {}):
+    fail('retired admin row preset visual config returned')
+legacy_kinds = sorted(element_id for element_id, item in elements.items() if str((item or {}).get('kind')) in {'header_slot', 'large_banner'})
+if legacy_kinds:
+    fail(f'retired header/content banner elements returned: {legacy_kinds}')
+for i in range(1, 6):
+    hero_id = f'HERO_BANNER_{i}'
+    hero_item = elements.get(hero_id) or {}
+    if hero_item.get('kind') != 'hero_banner':
+        fail(f'current hero slot missing/invalid: {hero_id}')
+    if 'access' in hero_item or 'click_access' in hero_item:
+        fail(f'hero membership gating returned: {hero_id}')
+for token in ('headerFeatureStrip', 'bannerTop', 'bannerMid', 'bannerBottom'):
+    if token in index:
+        fail(f'retired visible DOM hook returned: {token}')
+for token in ('function renderHeaderSlots', 'function renderBanners', 'rowPresetMap', 'data-admin-row-preset', 'data-simple-banner-state', 'data-banner-state-plan', 'data-banner-preset', 'Viditeľnosť podľa levelu'):
+    if token in app:
+        fail(f'retired visual/admin runtime returned: {token}')
+if 'admin-row-advanced' not in app or 'data-admin-hub-row-state' not in app:
+    fail('current advanced per-row prediction controls were removed during visual cleanup')
+for token in ('.legacy-nav-hook', '#headerFeatureStrip', '.promo-zone', '.header-slot', '.admin-banner-workspace', '.admin-overview-v687', '.admin-console-v675', '.admin-accounts-toolbar-v669'):
+    if token in css:
+        fail(f'retired CSS selector returned: {token}')
+banners_cfg = load_json(WEB / 'config' / 'banners.json')
+if 'ads_help' in banners_cfg:
+    fail('unused legacy banner editor help metadata returned')
+if 'closeMenu' in responsive or 'BlinqUI.closeMenu' in app:
+    fail('retired navigation drawer compatibility API returned')
+ok('r23 legacy visual/header/promo/banner-tier systems removed')
+
 # 5. Critical local assets and fallbacks.
 critical_assets = [
     WEB / 'assets' / 'blinq_loading_animated_v6.svg',

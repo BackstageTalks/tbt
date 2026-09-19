@@ -69,19 +69,19 @@ def test_banner_analytics_are_aggregated_by_campaign_and_unique_visitor(monkeypa
     monkeypatch.setattr(admin_storage, "_table", lambda name: table)
 
     admin_storage.record_banner_event({
-        "event_type": "impression", "slot_id": "CONTENT_TOP_1",
+        "event_type": "impression", "slot_id": "HERO_BANNER_1",
         "campaign_id": "campaign-1", "advertiser_id": "partner-a", "client_id": "browser-a",
     })
     admin_storage.record_banner_event({
-        "event_type": "impression", "slot_id": "CONTENT_TOP_1",
+        "event_type": "impression", "slot_id": "HERO_BANNER_1",
         "campaign_id": "campaign-1", "advertiser_id": "partner-a", "client_id": "browser-a",
     })
     admin_storage.record_banner_event({
-        "event_type": "click", "slot_id": "CONTENT_TOP_1",
+        "event_type": "click", "slot_id": "HERO_BANNER_1",
         "campaign_id": "campaign-1", "advertiser_id": "partner-a", "client_id": "browser-a",
     })
     admin_storage.record_banner_event({
-        "event_type": "impression", "slot_id": "CONTENT_BOTTOM_2",
+        "event_type": "impression", "slot_id": "HERO_BANNER_2",
         "campaign_id": "campaign-1", "advertiser_id": "partner-a", "client_id": "browser-b",
     })
 
@@ -97,8 +97,8 @@ def test_banner_analytics_are_aggregated_by_campaign_and_unique_visitor(monkeypa
     assert row["impressions"] == 3
     assert row["unique_impressions"] == 2
     assert row["clicks"] == 1
-    assert row["slots"]["CONTENT_TOP_1"] == 3
-    assert row["slots"]["CONTENT_BOTTOM_2"] == 1
+    assert row["slots"]["HERO_BANNER_1"] == 3
+    assert row["slots"]["HERO_BANNER_2"] == 1
 
 
 def test_banner_event_rejects_bad_ids(monkeypatch):

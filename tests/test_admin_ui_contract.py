@@ -9,26 +9,31 @@ def _cfg():
     return json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
 
 
-def test_admin_layout_has_fixed_slot_inventory_and_access_states():
+def test_admin_layout_has_current_inventory_and_access_states():
     cfg = _cfg()
     assert cfg["schema"] == 2
     elements = cfg["elements"]
-    assert {f"HEADER_BANNER_{i}" for i in range(1, 4)} <= set(elements)
-    assert {f"CONTENT_TOP_{i}" for i in range(1, 5)} <= set(elements)
-    assert {f"CONTENT_MID_{i}" for i in range(1, 5)} <= set(elements)
-    assert {f"CONTENT_BOTTOM_{i}" for i in range(1, 5)} <= set(elements)
+    assert {f"HERO_BANNER_{i}" for i in range(1, 6)} <= set(elements)
     assert {
         "PRIME_PICKS_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
         "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "DOUBLES_PANEL", "RESULTS_PANEL",
     } <= set(elements)
-    retired = {"SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3", "SIDEBAR_PROMO_4", "BTTS_BONUS_PANEL", "FOOTER_SYSTEM", "VIP_RAIL"}
+    retired = {
+        "SIDEBAR_PROMO_1", "SIDEBAR_PROMO_2", "SIDEBAR_PROMO_3", "SIDEBAR_PROMO_4",
+        "BTTS_BONUS_PANEL", "FOOTER_SYSTEM", "VIP_RAIL",
+    }
     assert retired.isdisjoint(elements)
+    assert not any(item.get("kind") in {"header_slot", "large_banner"} for item in elements.values())
     contexts = {"trial", "expired", "rookie", "pro", "elite", "goat", "legend"}
     valid = {"active", "locked", "blurred", "hidden"}
     for element in elements.values():
-        assert contexts <= set(element["access"])
-        assert set(element["access"].values()) <= valid
-        assert element["access"]["trial"] == element["access"]["rookie"]
+        if element.get("kind") == "hero_banner":
+            assert "access" not in element
+            assert "click_access" not in element
+        else:
+            assert contexts <= set(element["access"])
+            assert set(element["access"].values()) <= valid
+            assert element["access"]["trial"] == element["access"]["rookie"]
         assert "watermark" in element
 
 
@@ -46,7 +51,7 @@ def test_plan_catalogue_has_requested_default_terms_and_active_legend():
     assert "admin" not in plans
 
 
-def test_hide_ads_and_fallback_inventory_are_configured_without_collapsing_layout():
+def test_hide_ads_and_hero_fallback_inventory_are_configured_without_plan_gating():
     cfg = _cfg()
     assert cfg["plans"]["rookie"]["hide_ads_allowed"] is False
     assert cfg["plans"]["pro"]["hide_ads_allowed"] is False
@@ -56,15 +61,13 @@ def test_hide_ads_and_fallback_inventory_are_configured_without_collapsing_layou
     assert cfg["ad_fallbacks"]["priority"] == ["active_advertisement", "blinq_internal"]
     assert cfg["ad_fallbacks"]["mode"] == "mixed"
     assert isinstance(cfg["ad_fallbacks"]["fallback_images"], list)
-    for slot in [
-        *(f"CONTENT_TOP_{i}" for i in range(1, 5)),
-        *(f"CONTENT_MID_{i}" for i in range(1, 5)),
-        *(f"CONTENT_BOTTOM_{i}" for i in range(1, 5)),
-    ]:
-        content = cfg["elements"][slot]["content"]
+    for slot in (f"HERO_BANNER_{i}" for i in range(1, 6)):
+        element = cfg["elements"][slot]
+        content = element["content"]
         assert "campaign_id" not in content
         assert "advertiser_id" not in content
         assert content["ad_hidden_fallback"] in {"auto", "rss", "image", "internal"}
+        assert "access" not in element and "click_access" not in element
 
 
 def test_banner_analytics_contract_tracks_fixed_slots_without_campaign_manager():
@@ -109,18 +112,19 @@ def test_rss_sources_live_in_backend_json_and_are_empty_until_owner_configures_t
     assert content["rss"]["sources"] == []
 
 
-def test_large_content_rows_use_only_fixed_supported_merge_presets():
+def test_legacy_header_and_content_banner_visuals_are_removed():
     cfg = _cfg()
-    assert set(cfg["content_rows"]) == {"content_top", "content_mid", "content_bottom"}
-    supported = {"1", "2", "3", "4"}
-    assert all(cfg["content_rows"][zone]["preset"] in supported for zone in cfg["content_rows"])
-    assert all(isinstance(cfg["content_rows"][zone]["enabled"], bool) for zone in cfg["content_rows"])
-    assert set(cfg["admin"]["row_presets"]) == supported
+    assert "content_rows" not in cfg
+    assert "header_cta" not in cfg
+    assert "creative_specs" not in cfg
+    assert "row_presets" not in cfg.get("admin", {})
+    assert not any(item.get("kind") in {"header_slot", "large_banner"} for item in cfg["elements"].values())
     app_js = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
-    assert "rowPresetMap" in app_js
-    route = app_js.split("function renderAdminRoute()", 1)[1].split("function rerenderAdmin", 1)[0]
-    assert "CONTENT_TOP_" not in route
-    assert "data-admin-row-preset" not in route
+    assert "function renderHeaderSlots" not in app_js
+    assert "function renderBanners" not in app_js
+    assert "rowPresetMap" not in app_js
+    assert "data-admin-row-preset" not in app_js
+    assert "data-banner-preset" not in app_js
 
 
 def test_campaign_manager_is_retired_and_rss_is_not_exposed_in_public_admin():
@@ -226,29 +230,33 @@ def test_banner_adaptation_and_watermark_controls_are_exposed_in_admin():
     assert "image_position" in app_js
     assert "data-simple-banner-field" in app_js
     assert "data-admin-watermark" not in app_js
-    assert ".promo-image.fit-cover" in css
-    assert ".promo-image.pos-center" in css
+    assert ".hero-slide-image{object-fit:cover}" in css
+    assert ".hero-slide-image.fit-contain{object-fit:contain}" in css
+    assert ".hero-slide-image.pos-left{object-position:left}" in css
     assert not any(key.startswith("SIDEBAR_PROMO_") for key in cfg["elements"])
 
 
-def test_public_sidebar_is_betting_first_and_admin_is_isolated_at_bottom():
+def test_current_section_access_inventory_and_public_header_are_clean():
     cfg = _cfg()
     nav_items = sorted(
         [item for item in cfg["elements"].values() if item.get("kind") == "navigation"],
         key=lambda item: item["order"],
     )
     nav = {item["content"]["route"]: item["content"]["label"] for item in nav_items}
-    assert list(nav) == ["predictions", "prime", "top_daily", "value", "doubles", "ace", "sg", "results"]
+    assert list(nav) == ["prime", "top_daily", "value", "doubles", "ace", "sg", "results"]
     assert nav["prime"] == "Short Odds"
+    assert "predictions" not in nav  # old SIDEBAR_PREDICTIONS access stub is retired
     for removed in ("tournaments", "players", "stats", "model", "backtests", "account"):
         assert removed not in nav
     html = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert '<nav class="reference-navigation"' in html
+    assert 'data-route="predictions"' in html and 'data-route="results"' in html
     assert 'id="adminNavigationWrap"' not in html
     assert "btts" not in nav
     assert "renderAdminPerformance" not in app
     route = app.split("function renderAdminRoute()", 1)[1].split("function rerenderAdmin", 1)[0]
-    for tab in ("accounts", "layout", "banners", "insights", "system"):
+    for tab in ("accounts", "levels", "layout", "banners", "telegram", "insights", "system"):
         assert f"['{tab}'" in route
     for retired in ("campaigns", "analytics", "audit", "support"):
         assert f"['{retired}'" not in route

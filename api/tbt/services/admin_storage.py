@@ -28,7 +28,7 @@ ANALYTICS_TABLE = "BlinQBannerAnalytics"
 INSIGHTS_TABLE = "BlinQInsights"
 INSIGHT_READS_TABLE = "BlinQInsightReads"
 _VALID_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
-_VALID_BANNER_SLOT = re.compile(r"^(?:HEADER_BANNER_[1-4]|HERO_BANNER_[1-5]|CONTENT_(?:TOP|MID|BOTTOM)_[1-4])$")
+_VALID_BANNER_SLOT = re.compile(r"^HERO_BANNER_[1-5]$")
 
 
 def _valid_destination(value: object, *, allow_internal: bool = True) -> bool:
@@ -357,11 +357,7 @@ def validate_ui_config(payload: object) -> dict:
         if not _valid_destination(plans[plan].get("url"), allow_internal=False):
             raise ValueError(f"{plan} membership URL must use HTTPS")
     required_elements = {
-        *(f"HEADER_BANNER_{i}" for i in range(1, 5)),
         *(f"HERO_BANNER_{i}" for i in range(1, 6)),
-        *(f"CONTENT_TOP_{i}" for i in range(1, 5)),
-        *(f"CONTENT_MID_{i}" for i in range(1, 5)),
-        *(f"CONTENT_BOTTOM_{i}" for i in range(1, 5)),
         "PRIME_PICKS_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
         "DOUBLES_PANEL", "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "RESULTS_PANEL",
     }
@@ -369,17 +365,6 @@ def validate_ui_config(payload: object) -> dict:
         raise ValueError("UI configuration would change the fixed slot inventory")
     valid_states = {"active", "locked", "blurred", "hidden"}
     contexts = {"trial", "expired", "rookie", "pro", "elite", "goat", "legend"}
-    row_presets = {"1", "2", "3", "4", "1+1+1+1", "2+2", "2+1+1", "1+1+2"}
-    content_rows = payload.get("content_rows") or {}
-    for zone in ("content_top", "content_mid", "content_bottom"):
-        row = content_rows.get(zone)
-        if not isinstance(row, dict) or str(row.get("preset") or "") not in row_presets:
-            raise ValueError(f"Invalid fixed row preset for {zone}")
-        if "enabled" in row and not isinstance(row.get("enabled"), bool):
-            raise ValueError(f"Invalid enabled flag for {zone}")
-        slot_count = row.get("slot_count")
-        if slot_count is not None and (not isinstance(slot_count, int) or not 0 <= slot_count <= 4):
-            raise ValueError(f"Invalid slot count for {zone}")
 
     dashboard = payload.get("dashboard") or {}
     sections = dashboard.get("sections") or {}
@@ -540,28 +525,20 @@ def validate_ui_config(payload: object) -> dict:
     for element_id, element in elements.items():
         if not isinstance(element, dict):
             raise ValueError(f"Invalid UI element {element_id}")
-        access = element.get("access")
-        if not isinstance(access, dict) or not contexts.issubset(access):
-            raise ValueError(f"UI element {element_id} lacks access rules")
-        if any(str(access[key]).lower() not in valid_states for key in contexts):
-            raise ValueError(f"UI element {element_id} has an invalid access state")
-        if str(access.get("trial")).lower() != str(access.get("rookie")).lower():
-            raise ValueError(f"UI element {element_id} trial access must inherit Rookie")
-        click_access = element.get("click_access") or {}
-        if click_access and (not isinstance(click_access, dict) or any(plan not in contexts or not isinstance(value, bool) for plan, value in click_access.items())):
-            raise ValueError(f"Invalid click access for {element_id}")
-        if click_access and "trial" in click_access and "rookie" in click_access and click_access["trial"] != click_access["rookie"]:
-            raise ValueError(f"UI element {element_id} trial click access must inherit Rookie")
+        if element.get("kind") != "hero_banner":
+            access = element.get("access")
+            if not isinstance(access, dict) or not contexts.issubset(access):
+                raise ValueError(f"UI element {element_id} lacks access rules")
+            if any(str(access[key]).lower() not in valid_states for key in contexts):
+                raise ValueError(f"UI element {element_id} has an invalid access state")
+            if str(access.get("trial")).lower() != str(access.get("rookie")).lower():
+                raise ValueError(f"UI element {element_id} trial access must inherit Rookie")
+        elif element.get("access") or element.get("click_access"):
+            raise ValueError(f"Hero banner {element_id} must not carry membership access rules")
         content = element.get("content") or {}
         if isinstance(content, dict) and not _valid_destination(content.get("link"), allow_internal=True):
             raise ValueError(f"UI element {element_id} has an invalid destination URL")
 
-    header_cta = payload.get("header_cta") or {}
-    if not isinstance(header_cta, dict) or not isinstance(header_cta.get("enabled", True), bool):
-        raise ValueError("Invalid header CTA configuration")
-    header_count = header_cta.get("slot_count", 0)
-    if not isinstance(header_count, int) or not 0 <= header_count <= 4:
-        raise ValueError("Invalid header CTA slot count")
 
     hero = payload.get("hero_banner") or {}
     if not isinstance(hero, dict) or not isinstance(hero.get("enabled", True), bool):

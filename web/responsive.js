@@ -1,5 +1,4 @@
-/* BlinQ responsive helpers — 7.3.6-r17. Navigation drawers were removed; this file
-   now contains only active responsive/table/sync behaviour. */
+/* BlinQ responsive helpers — 7.3.6-r23. Active responsive/table/sync behaviour only. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);
@@ -9,7 +8,6 @@
   const isCz=()=>pageLang().toLowerCase().startsWith('cs');
   const uiText=(en,sk,cz)=>isSk()?sk:isCz()?cz:en;
 
-  function closeMenu(){ /* compatibility no-op: legacy drawer removed in r10 */ }
 
   function routeChanged(route, focus) {
     document.body.dataset.currentRoute = route;
@@ -119,5 +117,5 @@
     }, true);
   }
 
-  window.BlinqUI = Object.freeze({init, cardsPerPanel, pager, prepareRoute, routeChanged, closeMenu, sync, refreshFinished});
+  window.BlinqUI = Object.freeze({init, cardsPerPanel, pager, prepareRoute, routeChanged, sync, refreshFinished});
 })();

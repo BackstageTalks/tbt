@@ -23,11 +23,11 @@ def test_runtime_css_is_consolidated_on_current_asset_revision():
 
 
 def test_login_loader_and_footer_have_blinq_background_watermarks():
-    assert "url('/assets/blinq_background.webp')" in CSS736
+    assert "/assets/blinq_background.webp" in CSS736
     assert (ROOT / 'web' / 'assets' / 'blinq_loading_scene_v736.webp').is_file()
     loader = (ROOT / 'web' / 'assets' / 'blinq_loading_animated_v6.svg').read_text(encoding='utf-8')
     assert 'data:image/webp;base64,' not in loader
-    assert CSS735.count("url('/assets/blinq_logo.svg')") >= 2
+    assert CSS735.count("/assets/blinq_logo.svg") >= 2
     assert 'bootEyebrow' in INDEX and 'bootStatus' in INDEX
     assert 'auth-copy h2' in CSS and 'font-size:17px' in CSS
 
@@ -46,7 +46,7 @@ def test_helper_copy_is_json_backed():
 
 def test_admin_exposes_system_and_info_audiences_without_retired_support():
     assert "['system','Systém','Diagnostika']" in APP
-    assert "['rookie','pro','elite','legend','goat'].filter" in APP
+    assert "membershipHierarchy.filter" in APP
     assert "['support'" not in APP.lower()
     assert 'SUPPORT STORAGE' not in APP
 

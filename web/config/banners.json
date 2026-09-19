@@ -118,24 +118,5 @@
       }
     ],
     "pause_on_hover": true
-  },
-  "ads_help": {
-    "mode_native": "Použije natívny BlinQ podklad/gradient a text.",
-    "mode_ads": "Nahraj image_url presne v rozmere banneru; text ostáva samostatná vrstva.",
-    "editable_fields": [
-      "image_url",
-      "image_fit",
-      "image_position",
-      "text_position",
-      "headline_size",
-      "text_size",
-      "eyebrow_size",
-      "headline_color",
-      "text_color",
-      "overlay",
-      "effect",
-      "animation_delay_ms",
-      "link"
-    ]
   }
 }

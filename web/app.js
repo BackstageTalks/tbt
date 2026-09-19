@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminPlanId:'rookie', adminBannerPreviewPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, boardMode:'live', dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, boardMode:'live', dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',games:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -263,12 +263,12 @@
   async function loadUiConfig() {
     let runtimeConfigSnapshot=null;
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=22');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=23');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=22');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=23');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -279,8 +279,8 @@
         state.ui=mergeConfig(state.uiSource,runtime.config); state.runtimeConfigLoaded=true;
         if(String(runtime.config.ui_revision||'')!==String(state.uiSource.ui_revision||'')){
           // Merge the new release schema around the already-published settings.
-          // User-managed order, visibility, banner images/links and rotation must
-          // survive an application update instead of silently reverting to repo defaults.
+          // User-managed order, hero images/links and rotation must survive an application update
+          // instead of silently reverting to repo defaults.
           state.ui.ui_revision=state.uiSource.ui_revision;
           state.ui.dashboard=mergeConfig(state.uiSource.dashboard||{},runtime.config.dashboard||{});
           // 6.7.0 product decision: Prime Predictions ship OFF. Apply this once when an
@@ -292,10 +292,8 @@
           }
           state.ui.dashboard.user_switches=false;
           state.ui.dashboard.show_disabled_strip=false;
-          state.ui.content_rows=mergeConfig(state.uiSource.content_rows||{},runtime.config.content_rows||{});
-          state.ui.header_cta=mergeConfig(state.uiSource.header_cta||{},runtime.config.header_cta||{});
           state.ui.hero_banner=mergeConfig(state.uiSource.hero_banner||{enabled:true,slot_count:1,rotation_seconds:10,auto_rotate:true,show_dots:true,pause_on_hover:true},runtime.config.hero_banner||{});
-          // 6.6.0 visual migration: reset only the first hero COPY to the approved base while preserving any admin-managed image, link, schedule and access. Once published under this revision, future edits are preserved.
+          // Keep the first hero copy aligned with the approved release while preserving admin-managed media and links.
           const srcHero=state.uiSource?.elements?.HERO_BANNER_1?.content,liveHero=state.ui?.elements?.HERO_BANNER_1?.content;
           if(srcHero&&liveHero){['eyebrow','headline','accent_text','text','button_text','theme','show_copy','creative_mode'].forEach(k=>{liveHero[k]=srcHero[k];});}
         }
@@ -343,15 +341,15 @@
     // config is still published. Existing plan rules remain untouched.
     const sourceTabs=state.uiSource?.dashboard?.daily_hub?.tabs||{},liveHub=state.ui.dashboard?.daily_hub;
     if(liveHub){liveHub.tabs=liveHub.tabs||{};['prime','top','doubles'].forEach(tab=>{if(!liveHub.tabs[tab]&&sourceTabs[tab])liveHub.tabs[tab]=clone(sourceTabs[tab]);});}
-    // Replace only untouched stock middle placeholders with the new internal
-    // information banners. Admin-edited or campaign-managed content survives.
-    for(let i=1;i<=4;i++){
-      const id=`CONTENT_MID_${i}`,live=state.ui?.elements?.[id],src=state.uiSource?.elements?.[id];
-      const headline=String(live?.content?.headline||'');
-      const untouched=/^Middle external slot/i.test(headline)||/^PARTNER SLOT$/i.test(String(live?.content?.eyebrow||''));
-      if(live&&src&&untouched){live.content={...clone(src.content),active_from:live.content?.active_from||'',active_until:live.content?.active_until||''};}
-    }
-    if(state.adminTab==='feeds')state.adminTab='banners';
+    // r23 visual cleanup: purge retired header/content promo systems from both
+    // repository defaults and previously published runtime configurations.
+    delete state.ui.content_rows; delete state.ui.header_cta; delete state.ui.creative_specs;
+    if(state.ui.dashboard){delete state.ui.dashboard.show_header_feature_strip;delete state.ui.dashboard.snapshot_cards;}
+    delete state.ui.elements?.PREDICTION_TOOLBAR; delete state.ui.elements?.SIDEBAR_PREDICTIONS;
+    Object.entries(state.ui.elements||{}).forEach(([id,item])=>{
+      if(['header_slot','large_banner'].includes(String(item?.kind||''))){delete state.ui.elements[id];return;}
+      if(item?.kind==='hero_banner'){delete item.access;delete item.click_access;}
+    });
   }
 
   function loadAdminDraft(){
@@ -390,16 +388,6 @@
   }
   function orderedDashboardKeys(plan=dashboardPlanKey()){
     return [...dashboardPickSectionKeys].sort((a,b)=>sectionPlanOrder(a,plan)-sectionPlanOrder(b,plan)||Number(dashboardSectionConfig(a).dashboard_order||99)-Number(dashboardSectionConfig(b).dashboard_order||99));
-  }
-  function bannerClickAllowed(item,plan=accountPlan()){
-    if(plan==='admin'&&!state.previewPlan)return true;
-    const normalized=plan==='trial'?'rookie':plan,map=item?.click_access||{};
-    const value=Object.prototype.hasOwnProperty.call(map,plan)?map[plan]:Object.prototype.hasOwnProperty.call(map,normalized)?map[normalized]:true;
-    return value!==false;
-  }
-  function firstBannerClickPlan(item){
-    const plans=['rookie','pro','elite','legend','goat'].filter(id=>state.ui?.plans?.[id]?.enabled!==false).sort((a,b)=>Number(state.ui?.plans?.[a]?.order||99)-Number(state.ui?.plans?.[b]?.order||99));
-    return plans.find(plan=>bannerClickAllowed(item,plan))||'goat';
   }
   function visiblePickCount(key,total){
     const raw=dashboardPlanEntitlement(key).visible_picks;
@@ -481,7 +469,6 @@
     const view=$('predictionsView');if(!view)return;
     if($('overviewTitle'))$('overviewTitle').textContent=lcopy('Tennis. A clearer perspective.','Tenis pod drobnohľadom.','Tenis pod drobnohledem.');
     if($('overviewDescription'))$('overviewDescription').textContent=lcopy('Predictions and model projections, all in one place.','Predikcie a modelové projekcie na jednom mieste.','Predikce a modelové projekce na jednom místě.');
-    const top=$('bannerTop'),mid=$('bannerMid'),bottom=$('bannerBottom');if(top)top.style.order='10';if(mid)mid.style.order='45';if(bottom)bottom.style.order='80';
     const prefs=dashboardVisibilityState(),max=Math.max(1,Number(state.ui?.dashboard?.visible_slots)||4);
     const orderedKeys=orderedDashboardKeys();const configured=orderedKeys.filter(key=>{const cfg=dashboardSectionConfig(key);return prefs[key]&&cfg.sidebar_enabled!==false&&elementAccess(cfg.sidebar_element)!=='hidden';}).slice(0,max);
     const countFor=key=>marketRows(key).length;
@@ -599,35 +586,12 @@
     if(content.type==='rss')return fallbackContent({...item,content:{...content,ad_hidden_fallback:'rss'}},index);
     return content;
   }
-  // v6.5.8 fixed banner zones: the outer row is stable; 1–4 active blocks divide it equally.
-  const contentRowZones=['content_top','content_mid','content_bottom'];
-  const rowPresetMap={'1':1,'2':2,'3':3,'4':4,'1+1+1+1':4,'2+2':2,'2+1+1':3,'1+1+2':3};
-  function rowConfig(zone){ return state.ui?.content_rows?.[zone]||{}; }
-  function rowEnabled(zone){ return rowConfig(zone).enabled!==false && rowSlotCount(zone)>0; }
-  function rowSlotCount(zone){
-    const row=rowConfig(zone);
-    const explicit=Number(row.slot_count);
-    if(Number.isInteger(explicit)&&explicit>=0&&explicit<=4)return explicit;
-    return rowPresetMap[String(row.preset||'1')]||1;
-  }
-  function rowPreset(zone){ return String(rowSlotCount(zone)); }
-  function rowItems(zone){
-    const count=rowSlotCount(zone);if(!rowEnabled(zone)||!count)return [];
-    const all=elementList('large_banner',zone).filter(item=>item?.content?.enabled!==false&&elementAccess(item.id)!=='hidden');
-    return all.slice(0,count).map((item,index)=>({item,index,span:1,layoutCount:count}));
-  }
-
   function marketingAvatarUrl(planId){
     const id=String(planId||'').toLowerCase();
     const entry=state.ui?.assets?.account_avatars?.[id]||{};
     // v6.5.16: membership artwork is image-only. Plan labels are rendered beside
     // the avatar and never baked/overlaid into the circular artwork.
     return avatarAssetSrc(entry.marketing||entry.default||entry.w||entry.m||'');
-  }
-  function promoPlanAvatarHtml(content,compact=false){
-    const planId=String(content?.plan_id||'').toLowerCase();if(!planId)return '';
-    const src=marketingAvatarUrl(planId);if(!src)return '';
-    return `<span class="promo-plan-avatar plan-${escapeHtml(planId)}${compact?' compact':''}" aria-hidden="true"><img src="${escapeHtml(src)}" alt="" loading="lazy"></span>`;
   }
 
   function bannerAttrs(item,content){
@@ -636,40 +600,6 @@
     const advertiser=String(content?.advertiser_id||'unassigned');
     return `data-banner-slot="${escapeHtml(slot)}" data-campaign-id="${escapeHtml(campaign)}" data-advertiser-id="${escapeHtml(advertiser)}"`;
   }
-  function bannerImageHtml(content,span=1){
-    const variants=content?.images&&typeof content.images==='object'?content.images:{};
-    const raw=variants[String(span)]||variants[span]||content?.image_url||'';
-    const mobileRaw=content?.mobile_image_url||'';
-    const src=safeLink(raw,'');
-    const mobile=safeLink(mobileRaw,'');
-    const fit=['cover','contain'].includes(String(content?.image_fit||'cover'))?String(content.image_fit||'cover'):'cover';
-    const position=['center','left','right','top','bottom'].includes(String(content?.image_position||'center'))?String(content.image_position||'center'):'center';
-    if(!src||src.startsWith('#'))return '<div class="promo-art" aria-hidden="true"></div>';
-    const image=`<img class="promo-image fit-${escapeHtml(fit)} pos-${escapeHtml(position)}" src="${escapeHtml(src)}" alt="" loading="lazy">`;
-    if(mobile&&!mobile.startsWith('#'))return `<picture class="promo-picture"><source media="(max-width: 700px)" srcset="${escapeHtml(mobile)}">${image}</picture>`;
-    return image;
-  }
-  function headerSlotHtml(item,index=0){
-    const rawContent=resolvedBannerContent(item,index),c={...rawContent,eyebrow:publicText(rawContent.eyebrow||''),headline:publicText(rawContent.headline||''),accent_text:publicText(rawContent.accent_text||''),text:publicText(rawContent.text||''),button_text:publicText(rawContent.button_text||'')},route=c.route||'',href=safeLink(c.link,route?`#${route}`:'#predictions'),external=isExternalLink(href);
-    const theme=String(c.theme||'blue').replace(/[^a-z0-9_-]/gi,'');
-    const icon=String(c.icon||({blue:'✈',gold:'♛',green:'▥',purple:'✦',violet:'✦'}[theme]||'✦')).slice(0,3);
-    const image=safeLink(c.image_url,'');
-    const imageHtml=image&&!image.startsWith('#')?`<span class="header-slot-image"><img src="${escapeHtml(image)}" alt="" loading="lazy"></span>`:`<span class="header-slot-icon" aria-hidden="true">${escapeHtml(icon)}</span>`;
-    const clickable=bannerClickAllowed(item),lockedPlan=clickable?'':firstBannerClickPlan(item),finalHref=clickable?href:'#';
-    return `<a href="${escapeHtml(finalHref)}" ${clickable&&external?'target="_blank" rel="noopener"':''} ${clickable&&route&&!external?`data-route="${escapeHtml(route)}"`:''} ${!clickable?`data-upgrade-plan="${escapeHtml(lockedPlan)}" data-upgrade-section="${escapeHtml(c.headline||item.label||'Premium banner')}"`:''} data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} class="header-slot theme-${escapeHtml(theme)}${c.plan_id?' has-plan-avatar':''}${clickable?'':' is-link-locked'}">${imageHtml}<div class="header-slot-copy"><small>${escapeHtml(c.eyebrow||item.label)}</small><strong>${escapeHtml(c.headline||'')}</strong><span>${escapeHtml(c.text||'')}</span></div><b class="header-slot-cta">${!clickable?'🔒 '+escapeHtml(upgradePlanLabel(lockedPlan).replace(/^BlinQ\s+/i,'')):escapeHtml(c.button_text||'OPEN')+' →'}</b>${watermarkHtml(item)}</a>`;
-  }
-  function renderHeaderSlots(){
-    const host=$('headerFeatureStrip'); if(!host)return;
-    const cfg=state.ui?.header_cta||{};
-    const requested=Math.max(0,Math.min(3,Number(cfg.slot_count??3)||0));
-    const managed=elementList('header_slot','header').filter(item=>item?.content?.enabled!==false&&elementAccess(item.id)!=='hidden').slice(0,requested);
-    host.hidden=cfg.enabled===false||!managed.length;
-    host.dataset.layout=String(managed.length);
-    host.style.setProperty('--header-slot-count',String(Math.max(1,managed.length)));
-    host.innerHTML=managed.map((item,index)=>headerSlotHtml(item,index)).join('');
-    if(managed.length)installBannerTracking(host);
-  }
-
   function heroConfig(){
     return state.ui?.hero_banner||{};
   }
@@ -677,7 +607,7 @@
     const cfg=heroConfig();
     const requested=Math.max(0,Math.min(5,Number(cfg.slot_count??1)||0));
     if(cfg.enabled===false||!requested)return [];
-    return elementList('hero_banner','hero').slice(0,requested).filter(item=>item?.content?.enabled!==false&&elementAccess(item.id)!=='hidden');
+    return elementList('hero_banner','hero').slice(0,requested).filter(item=>item?.content?.enabled!==false);
   }
   function heroImageHtml(content){
     const desktop=safeLink(content?.image_url,'');
@@ -700,8 +630,7 @@
     const titleHtml=accent?`<h2><span>${title}</span><strong>${escapeHtml(accent)}</strong></h2>`:`<h2><strong>${title}</strong></h2>`;
     const heroEyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
     const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${escapeHtml(heroEyebrow)}</small>`:''}${titleHtml}<p>${escapeHtml(c.text||'')}</p>${c.button_text?`<b class="hero-slide-cta">${escapeHtml(c.button_text)} →</b>`:''}</div>`:'';
-    const clickable=bannerClickAllowed(item),lockedPlan=clickable?'':firstBannerClickPlan(item),finalHref=clickable?href:'#';
-    return `<a class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}${clickable?'':' is-link-locked'}" ${bannerCreativeStyle(c)} href="${escapeHtml(finalHref)}" ${clickable&&external?'target="_blank" rel="noopener"':''} ${clickable&&route&&!external?`data-route="${escapeHtml(route)}"`:''} ${!clickable?`data-upgrade-plan="${escapeHtml(lockedPlan)}" data-upgrade-section="${escapeHtml(c.headline||item.label||'Premium banner')}"`:''} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${sponsored}${image}${copy}${art}${watermarkHtml(item)}</a>`;
+    return `<a class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}" ${bannerCreativeStyle(c)} href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${sponsored}${image}${copy}${art}${watermarkHtml(item)}</a>`;
   }
   function clearHeroRotation(){
     if(state.heroTimer){clearInterval(state.heroTimer);state.heroTimer=null;}
@@ -737,30 +666,6 @@
     startHeroRotation();
   }
 
-  function bannerHtml(item, sidebar=false, index=0, layoutCount=1){
-    const rawContent=resolvedBannerContent(item,index),c={...rawContent,eyebrow:publicText(rawContent.eyebrow||''),headline:publicText(rawContent.headline||''),accent_text:publicText(rawContent.accent_text||''),text:publicText(rawContent.text||''),button_text:publicText(rawContent.button_text||'')},route=c.route||'',href=safeLink(c.link,route?`#${route}`:'#account'),external=isExternalLink(href),clickable=bannerClickAllowed(item),lockedPlan=clickable?'':firstBannerClickPlan(item),finalHref=clickable?href:'#'; const theme=String(c.theme||'violet').replace(/[^a-z0-9_-]/gi,'');
-    const sponsored=c.sponsored?'<span class="sponsored-label">SPONSORED</span>':'';
-    const attrs=`aria-label="${escapeHtml(c.headline||c.button_text||item.label||'Open partner content')}" ${clickable&&route&&!external?`data-route="${escapeHtml(route)}"`:''} ${!clickable?`data-upgrade-plan="${escapeHtml(lockedPlan)}" data-upgrade-section="${escapeHtml(c.headline||item.label||'Premium banner')}"`:''} data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)}`;
-    const target=clickable&&external?'target="_blank" rel="noopener"':'';
-    if(sidebar){
-      return `<a class="sidebar-promo theme-${theme}${c.plan_id?' has-plan-avatar':''}" href="${escapeHtml(finalHref)}" ${target} ${attrs}>${sponsored}<div class="sidebar-promo-copy"><small>${escapeHtml(c.eyebrow||'BLINQ')}</small><strong>${escapeHtml(c.headline||'')}</strong><span>${escapeHtml(c.text||'')}</span><b>${escapeHtml(c.button_text||'Open')}</b></div>${promoPlanAvatarHtml(c,true)}${watermarkHtml(item)}</a>`;
-    }
-    const count=Math.max(1,Math.min(4,Number(layoutCount)||1));
-    const fullCreative=c.creative_mode==='full'||(c.type==='advertisement'&&c.show_copy===false);
-    const showCopy=c.show_copy!==false;
-    return `<a class="promo-banner promo-card theme-${theme} layout-${count}${fullCreative?' creative-full':''}${showCopy?'':' no-copy'}${c.plan_id?' has-plan-avatar':''}" href="${escapeHtml(finalHref)}" ${target} ${attrs}>${sponsored}${bannerImageHtml(c,count)}${showCopy?`<div class="promo-copy"><span class="promo-eyebrow">${escapeHtml(c.eyebrow||'BLINQ')}</span><strong>${escapeHtml(c.headline||'')}</strong><p>${escapeHtml(c.text||'')}</p><span class="promo-cta">${escapeHtml(c.button_text||'Open')}</span></div>`:''}${promoPlanAvatarHtml(c,false)}${watermarkHtml(item)}</a>`;
-  }
-  function renderBanners(){
-    const hostByZone={content_top:'bannerTop',content_mid:'bannerMid',content_bottom:'bannerBottom'};
-    contentRowZones.forEach((zone,rowIndex)=>{
-      const host=$(hostByZone[zone]);if(!host)return;
-      const visible=rowItems(zone),count=visible.length;
-      host.hidden=!count;host.dataset.layout=String(count);host.dataset.rowEnabled=count?'true':'false';
-      host.style.setProperty('--banner-slot-count',String(Math.max(1,count)));
-      host.innerHTML=visible.map((entry,index)=>bannerHtml(entry.item,false,rowIndex*4+index,count)).join('');
-      if(count)installBannerTracking(host);
-    });
-  }
 
   function visitorId(){
     const key='blinq_banner_visitor_v1'; let value=localStorage.getItem(key);
@@ -788,8 +693,8 @@
     nodes.forEach(node=>state.bannerObserver.observe(node));
   }
   async function loadNewsPool(){
-    const rssSlots=elementList().some(item=>['header_slot','hero_banner','large_banner'].includes(item.kind)&&item.content?.type==='rss');
-    const adSlots=elementList().some(item=>['header_slot','hero_banner','large_banner'].includes(item.kind)&&(item.content?.type==='advertisement'||item.content?.sponsored===true));
+    const rssSlots=elementList('hero_banner','hero').some(item=>item.content?.type==='rss');
+    const adSlots=elementList('hero_banner','hero').some(item=>item.content?.type==='advertisement'||item.content?.sponsored===true);
     const needed=Boolean(state.ui?.ad_fallbacks?.rss_enabled!==false&&(rssSlots||adSlots));
     if(!needed){state.newsPool=[];return;}
     try{const data=await BlinqAuth.contentNews();state.newsPool=Array.isArray(data?.items)?data.items:[];}catch{state.newsPool=[];}
@@ -886,11 +791,11 @@
     const panelEyebrow=Object.prototype.hasOwnProperty.call(cfg,'eyebrow')?String(cfg.eyebrow||'').trim():'BLINQ COMMUNITY';
     host.hidden=false;host.innerHTML=`<div class="tg-panel-head"><div>${panelEyebrow?`<small>${escapeHtml(panelEyebrow)}</small>`:''}<h2>${escapeHtml(String(cfg.title||'Telegram skupiny'))}</h2><p>${escapeHtml(String(cfg.description||''))}</p></div><span class="tg-panel-mark">TG</span></div><div class="tg-group-grid">${cards}</div>`;
   }
-  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeaderSlots(); renderHeroBanner(); renderBanners(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); renderTelegramGroupsPanel(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); translatePublicDom(document.body); }
+  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeroBanner(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); renderTelegramGroupsPanel(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); translatePublicDom(document.body); }
 
   function auth(mode='login'){
     feedGeneration++;
-    window.BlinqUI.closeMenu(false); $('appShell').hidden=true;
+    $('appShell').hidden=true;
     state.authMode=mode; $('authMessage').textContent=''; if($('resendVerification'))$('resendVerification').hidden=true;
     $('authDialog').dataset.mode=mode;
     $('nameLabel').hidden=mode!=='signup'; $('emailLabel').hidden=mode==='recovery'; $('passwordLabel').hidden=mode==='reset'; if($('authLegalConsentLabel'))$('authLegalConsentLabel').hidden=mode!=='signup'; if(mode!=='signup'&&$('authLegalConsent'))$('authLegalConsent').checked=false;
@@ -2091,7 +1996,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=22"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=23"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     const row=rowOverride||m?.raw||m;
@@ -2362,35 +2267,6 @@
     if(plan.lifetime)return 'Doživotne';
     const days=Number(plan.duration_days); return Number.isFinite(days)&&days>0?`${days} dní`:'Vlastná platnosť';
   }
-  function layoutCountForElement(id){
-    const item=elements()?.[id];if(item?.kind==='header_slot')return Math.max(1,Math.min(4,Number(state.ui?.header_cta?.slot_count)||1));
-    if(item?.kind==='hero_banner')return 1;
-    for(const zone of contentRowZones){if(elementList('large_banner',zone).some(row=>row.id===id))return Math.max(1,rowSlotCount(zone));}
-    return 1;
-  }
-  function creativeSpecForItem(item,layoutOverride=null){
-    const specs=state.ui?.creative_specs||{};
-    const count=Math.max(1,Math.min(4,Number(layoutOverride||layoutCountForElement(item?.id))||1));
-    if(item?.kind==='header_slot')return specs[`header_${count}`]||specs.header_slot||{};
-    if(item?.kind==='hero_banner')return specs.hero_banner||specs.large_1||{};
-    if(item?.kind==='large_banner')return specs[`large_${count}`]||specs.large_1||{};
-    return {};
-  }
-  function creativeSpecText(item,layoutOverride=null){
-    const spec=creativeSpecForItem(item,layoutOverride);
-    const parts=[spec.aspect_ratio?`ratio ${spec.aspect_ratio}`:'',spec.recommended?`recommended ${spec.recommended}`:'',spec.minimum?`min ${spec.minimum}`:'',spec.safe_area?`safe ${spec.safe_area}`:''].filter(Boolean);
-    return parts.join(' · ')||'fixed BlinQ creative format';
-  }
-
-  function adminDashboardSectionKeyForElement(id){
-    const map={PRIME_PICKS_PANEL:'prime',TOP_DAILY_PANEL:'top_daily',VALUE_PICKS_PANEL:'value',DOUBLES_PANEL:'doubles',ACE_PICKS_PANEL:'ace',SG_PICKS_PANEL:'sg',RESULTS_PANEL:'results'};
-    return map[id]||dashboardSectionKeyForSidebarElement(id)||'';
-  }
-  function bannerAudienceEditor(item){
-    if(!['header_slot','hero_banner','large_banner'].includes(item.kind))return '';
-    item.click_access=item.click_access||{};
-    return `<div class="admin-section"><div class="admin-section-title"><strong>Zobrazenie / prístup</strong><span>Každý banner môže byť pre každú úroveň zobrazený, rozmazaný alebo skrytý. Kliknutie sa riadi samostatne.</span></div><div class="admin-audience-grid">${accessContexts.map(plan=>{const mode=elementAccess(item.id,plan),click=item.click_access?.[plan]!==false;return `<div class="admin-audience-row"><b>${escapeHtml(state.ui?.plans?.[plan]?.label||plan.toUpperCase())}</b><label>Stav<select data-banner-state-plan="${escapeHtml(plan)}"><option value="active"${mode==='active'?' selected':''}>ZOBRAZIŤ</option><option value="blurred"${mode==='blurred'||mode==='locked'?' selected':''}>ROZMAZAŤ</option><option value="hidden"${mode==='hidden'?' selected':''}>SKRYŤ</option></select></label><label><input type="checkbox" data-banner-click-plan="${escapeHtml(plan)}" ${click?'checked':''}> Odkaz aktívny</label></div>`;}).join('')}</div></div>`;
-  }
   function adminLevelChips(selected,attr='admin-plan-chip',includeExpired=true){
     const ids=includeExpired?accessContexts:membershipHierarchy;
     return `<div class="admin-level-chips">${ids.map(id=>`<button type="button" class="admin-level-chip${id===selected?' active':''}${id==='goat'?' top-tier':''}" data-${attr}="${escapeHtml(id)}"><span>${escapeHtml(state.ui?.plans?.[id]?.label||id.toUpperCase())}</span>${id==='goat'?'<small>TOP</small>':''}</button>`).join('')}</div>`;
@@ -2429,7 +2305,7 @@
         <div class="admin-daily-matrix">${rows}</div>
         <div class="admin-admin-legend"><span><i class="is-global"></i><b>SHOW</b> = plný obsah</span><span><i class="is-level"></i><b>BLUR</b> = viditeľný premium teaser bez citlivých dát v HTML</span><span><i class="is-lock"></i><b>HIDE</b> = prvok sa pre level nezobrazí</span></div>
       </div>
-      <details class="admin-compact-tools"><summary>Kopírovať nastavenie z iného levelu</summary><div class="admin-copy-strip"><label>Zdrojová úroveň<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Skopírovať všetky pravidlá → ${escapeHtml(levelLabel)}</button><small>Skopíruje prístupy, počty predikcií, poradie, rozmazanie a oprávnenia bannerov.</small></div></details>
+      <details class="admin-compact-tools"><summary>Kopírovať nastavenie z iného levelu</summary><div class="admin-copy-strip"><label>Zdrojová úroveň<select id="adminCopyFrom">${copyOptions}</select></label><button class="btn btn-ghost" type="button" data-admin-action="copy-plan">Skopírovať všetky pravidlá → ${escapeHtml(levelLabel)}</button><small>Skopíruje prístupy, počty predikcií, poradie a rozmazanie. Bannery sú spoločné pre všetky levely.</small></div></details>
     </section>`;
   }
 
@@ -2451,7 +2327,6 @@
     const tabs=heroIds.map((id,index)=>{const slot=elements()?.[id]||{},content=slot.content||{},active=index<activeCount,selected=id===selectedId,ready=Boolean(String(content.image_url||'').trim());return `<button type="button" class="admin-hero-tab${selected?' is-selected':''}${active?' is-live':''}${ready?' is-ready':''}" data-admin-element="${id}"><span>0${index+1}</span><strong>Banner ${index+1}</strong><small>${active?'AKTÍVNY':ready?'PRIPRAVENÝ':'NEAKTÍVNY'}</small></button>`;}).join('');
     const countOptions=[1,2,3,4,5].map(n=>`<option value="${n}"${n===activeCount?' selected':''}>${n}</option>`).join('');
     const delayOptions=[3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===rotation?' selected':''}>${n} s</option>`).join('');
-    const bannerAccessRows=accessContexts.map(plan=>{const mode=elementAccess(selectedId,plan),click=bannerClickAllowed(item,plan),label=state.ui?.plans?.[plan]?.label||plan.toUpperCase();return `<div class="admin-banner-access-row"><b>${escapeHtml(label)}</b><label>Stav<select data-simple-banner-state="${escapeHtml(plan)}"><option value="active"${mode==='active'?' selected':''}>SHOW</option><option value="blurred"${mode==='blurred'||mode==='locked'?' selected':''}>BLUR</option><option value="hidden"${mode==='hidden'?' selected':''}>HIDE</option></select></label><label><input type="checkbox" data-simple-banner-click="${escapeHtml(plan)}" ${click?'checked':''}><span>Link aktívny</span></label></div>`;}).join('');
     return `<section class="admin-ux-section lean-admin-banners admin-hero-manager" data-simple-banner="${escapeHtml(selectedId)}">
       <div class="admin-ux-heading"><div><small>BANNERY</small><h2>Hero carousel</h2><p>Pripravených je 5 pevných bannerových pozícií. Vyplň ďalší banner a potom zvýš počet aktívnych bannerov.</p></div></div>
       <div class="admin-hero-carousel-controls">
@@ -2479,7 +2354,6 @@
       <div class="admin-form-section admin-page-background-editor" data-simple-banner="HERO_BANNER_1"><div class="admin-form-section-title"><strong>Pozadie celej stránky</strong><span>Spoločné pre všetkých 5 bannerov. Nad obrázkom sa automaticky pridáva jemný BlinQ ambient efekt.</span></div><div class="admin-form-grid">
         <label class="span-2">Background · odporúčané 1920×1080<input data-simple-banner-field="site_background_url" value="${escapeHtml(hero1.site_background_url||bg)}" placeholder="/assets/blinq_background.webp"></label>
       </div></div>
-      <div class="admin-form-section"><div class="admin-form-section-title"><strong>Viditeľnosť podľa levelu</strong><span>SHOW / BLUR / HIDE a klikateľnosť bannera sú oddelené.</span></div><div class="admin-banner-access-matrix">${bannerAccessRows}</div></div>
       <div class="admin-banner-save-note"><span></span><strong>Po úprave klikni Publikovať.</strong><small>Prepínanie na webe sa aktivuje automaticky pri 2–5 banneroch.</small></div>
     </section>`;
   }
@@ -2684,7 +2558,7 @@
     const tabs=[['accounts','Účty','Prístup · platnosť'],['levels','Členstvá','Levely · odkazy'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
     const renderers={accounts:renderAdminAccounts,levels:renderAdminLevels,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,system:renderAdminSystem};const panel=renderers[state.adminTab]();
-    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','SHOW / BLUR / HIDE, klik, hero, mobil a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
+    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
     else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy sa publikujú okamžite</div>';
@@ -2795,8 +2669,6 @@
       const tgAction=event.target.closest('[data-admin-action="tg-add"],[data-admin-action="tg-remove"]');if(tgAction){const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]};cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];if(tgAction.dataset.adminAction==='tg-add'){cfg.groups.push({id:`group_${Date.now()}`,enabled:true,badge:'KOMUNITA',title:'Telegram skupina',description:'',cta:'Otvoriť Telegram',url:'',min_plan:'rookie'});}else{const index=Number(tgAction.dataset.tgIndex);if(Number.isInteger(index)&&index>=0)cfg.groups.splice(index,1);}renderTelegramGroupsPanel();rerenderAdmin();return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
       const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','value','ace','doubles','games','sets','see_all'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.tab_enabled=true;rule.row_overrides={};if(tab==='see_all'){rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=preset!=='full';rule.see_all=preset==='full';rule.display_state=preset==='full'?'active':preset==='hidden'?'hidden':'blurred';if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);return;}if(preset==='full'){rule.display_state='active';rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.display_state='active';rule.visible_rows=3;rule.selection_mode='first';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='rookie2'){rule.display_state='active';rule.visible_rows=tab==='daily'?2:Math.min(1,Number(rule.visible_rows)||1);rule.selection_mode='stable_random';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='blurred'){rule.display_state='blurred';rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.display_state='hidden';rule.visible_rows=0;rule.blur_remaining=false;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Zobrazenie · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
-      const bannerPreviewChip=event.target.closest('[data-admin-banner-preview-plan]');if(bannerPreviewChip){state.adminBannerPreviewPlan=bannerPreviewChip.dataset.adminBannerPreviewPlan;rerenderAdmin();return;}
-      const bannerPreset=event.target.closest('[data-banner-preset]');if(bannerPreset){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.click_access=item.click_access||{};const preset=bannerPreset.dataset.bannerPreset;accessContexts.forEach(plan=>{let visible=true,click=true;if(preset==='teaser-elite')click=['elite','legend','goat'].includes(plan);if(preset==='pro-only'){visible=['pro','elite','legend','goat'].includes(plan);click=visible;}if(preset==='goat-only'){visible=plan==='goat';click=visible;}item.access[plan]=visible?'active':'hidden';item.click_access[plan]=click;});item.access.trial=item.access.rookie;item.click_access.trial=item.click_access.rookie;renderAllUiContent();rerenderAdmin();}return;}
       const element=event.target.closest('[data-admin-element]');if(element){setSelectedElement(element.dataset.adminElement);return;}
       const userButton=event.target.closest('[data-admin-user]');if(userButton){state.adminSelectedUser=(state.adminUsers||[]).find(x=>String(x.id)===String(userButton.dataset.adminUser))||null;rerenderAdmin();return;}
       const quick=event.target.closest('[data-admin-user-plan]');if(quick){const input=$('adminUserPlan');if(input){input.value=quick.dataset.adminUserPlan;host.querySelectorAll('[data-admin-user-plan]').forEach(btn=>btn.classList.toggle('active',btn===quick));setAdminPlanDefaults(input.value,false);}return;}
@@ -2820,7 +2692,7 @@
       else if(action==='publish-config')await publishUiConfig();
       else if(action==='export')exportUiConfig();
       else if(action==='reset'){localStorage.removeItem(draftKey());state.ui=clone(state.uiSource);state.selectedElement='HERO_BANNER_1';renderAllUiContent();rerenderAdmin();showStatus('Reset to repository defaults. Publish if you want this reset live.');}
-      else if(action==='copy-plan'){const source=$('adminCopyFrom')?.value,target=state.adminPlan;if(source&&target){Object.values(elements()).forEach(item=>{item.access=item.access||{};item.access[target]=item.access[source]||'active';if(item.click_access){item.click_access[target]=item.click_access[source]!==false;}if(target==='rookie'){item.access.trial=item.access[target];if(item.click_access)item.click_access.trial=item.click_access[target];}});Object.keys(state.ui?.dashboard?.sections||{}).forEach(key=>{const cfg=state.ui.dashboard.sections[key];cfg.plans=cfg.plans||{};if(cfg.plans[source])cfg.plans[target]=clone(cfg.plans[source]);if(target==='rookie'&&cfg.plans.rookie)cfg.plans.trial=clone(cfg.plans.rookie);});state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();showStatus(`All rules copied from ${accessLabel(source)} to ${accessLabel(target)}.`);}}
+      else if(action==='copy-plan'){const source=$('adminCopyFrom')?.value,target=state.adminPlan;if(source&&target){Object.values(elements()).forEach(item=>{if(!item?.access||item.kind==='hero_banner')return;item.access[target]=item.access[source]||'active';if(target==='rookie')item.access.trial=item.access[target];});Object.keys(state.ui?.dashboard?.sections||{}).forEach(key=>{const cfg=state.ui.dashboard.sections[key];cfg.plans=cfg.plans||{};if(cfg.plans[source])cfg.plans[target]=clone(cfg.plans[source]);if(target==='rookie'&&cfg.plans.rookie)cfg.plans.trial=clone(cfg.plans.rookie);});state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();showStatus(`All access rules copied from ${accessLabel(source)} to ${accessLabel(target)}.`);}}
       else if(action==='preview-demo'){state.previewPlan=null;enableDemoBoardPreview();}
       else if(action==='preview'){state.previewPlan=state.adminPlan;renderAllUiContent();setRoute('predictions');showStatus(`Previewing page as ${accessLabel(state.previewPlan)}.`);}
       else if(action==='clear-preview'){state.previewPlan=null;renderAllUiContent();rerenderAdmin();showStatus('Admin preview disabled.');}
@@ -2841,27 +2713,17 @@
       if(t.id==='adminUserStatusFilter'){uf.status=t.value;adminApplyUserFilters();return;}
       if(t.id==='adminUserSort'){uf.sort=t.value;rerenderAdmin();adminApplyUserFilters();return;}
       if(t.id==='adminPlanSelect'){state.adminPlan=t.value;rerenderAdmin();return;}
-      if(t.dataset.adminHeaderCount!==undefined){const count=Math.max(0,Math.min(3,Number(t.value)||0));state.ui.header_cta=state.ui.header_cta||{};state.ui.header_cta.enabled=count>0;state.ui.header_cta.slot_count=count;renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHeroCount!==undefined){const count=Math.max(1,Math.min(5,Number(t.value)||1));state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.enabled=true;state.ui.hero_banner.slot_count=count;state.ui.hero_banner.auto_rotate=count>1;state.ui.hero_banner.show_dots=count>1;state.ui.hero_banner.pause_on_hover=true;[1,2,3,4,5].forEach(i=>{const slot=elements()?.[`HERO_BANNER_${i}`];if(slot){slot.content=slot.content||{};slot.content.enabled=i<=count;}});state.heroIndex=0;renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHeroSeconds!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.rotation_seconds=Math.max(3,Math.min(10,Number(t.value)||6));renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroRotate!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.auto_rotate=t.checked;renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
       if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();}return;}
-      if(simpleBanner&&t.dataset.simpleBannerState){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id],plan=t.dataset.simpleBannerState;if(item){item.access=item.access||{};item.access[plan]=t.value;if(plan==='rookie')item.access.trial=t.value;renderAllUiContent();rerenderAdmin();}return;}
-      if(simpleBanner&&t.dataset.simpleBannerVisible){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id],plan=t.dataset.simpleBannerVisible;if(item){item.access=item.access||{};if(plan==='ALL'){accessContexts.forEach(level=>{item.access[level]=t.checked?'active':'hidden';});}else{item.access[plan]=t.checked?'active':'hidden';if(plan==='rookie')item.access.trial=item.access[plan];}renderAllUiContent();rerenderAdmin();}return;}
-      if(simpleBanner&&t.dataset.simpleBannerClick){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id],plan=t.dataset.simpleBannerClick;if(item){item.click_access=item.click_access||{};if(plan==='ALL'){accessContexts.forEach(level=>{item.click_access[level]=t.checked;});}else{item.click_access[plan]=t.checked;if(plan==='rookie')item.click_access.trial=t.checked;}renderAllUiContent();rerenderAdmin();}return;}
-      if(t.dataset.adminRowCount){const zone=t.dataset.adminRowCount,count=Math.max(0,Math.min(4,Number(t.value)||0));state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows[zone]=state.ui.content_rows[zone]||{};state.ui.content_rows[zone].enabled=count>0;state.ui.content_rows[zone].slot_count=count;state.ui.content_rows[zone].preset=String(count||1);renderAllUiContent();rerenderAdmin();return;}
-      if(t.dataset.adminRowEnabled){const zone=t.dataset.adminRowEnabled;state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows[zone]=state.ui.content_rows[zone]||{};state.ui.content_rows[zone].enabled=t.checked;renderAllUiContent();rerenderAdmin();return;}
-      if(t.dataset.adminRowPreset){const zone=t.dataset.adminRowPreset;state.ui.content_rows=state.ui.content_rows||{};state.ui.content_rows[zone]=state.ui.content_rows[zone]||{};state.ui.content_rows[zone].preset=t.value;renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.dashboardGlobalField){state.ui.dashboard=state.ui.dashboard||{};let value=t.type==='checkbox'?t.checked:Number(t.value);state.ui.dashboard[t.dataset.dashboardGlobalField]=value;state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHubGlobalField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc[t.dataset.adminHubGlobalField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();showStatus(`${dailyHubTabLabel(tab)} · ${tc.enabled===false?'vypnuté':'zapnuté'} globálne.`);return;}
       if(t.dataset.adminHubField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{visible_rows:0,blur_remaining:true,tab_enabled:true,see_all:false,selection_mode:'first',display_state:'active',row_overrides:{}};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.adminHubField==='visible_rows'&&String(value).toUpperCase()!=='ALL')value=Number(value);rule[t.dataset.adminHubField]=value;rule.tab_enabled=rule.display_state!=='hidden';if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHubRowState){const tab=t.dataset.adminHubTab,position=String(t.dataset.adminHubRowState),hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.row_overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};if(t.value==='active')delete rule.row_overrides[position];else rule.row_overrides[position]=t.value;if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminLevelField){const card=t.closest('[data-admin-level-plan]'),id=String(card?.dataset.adminLevelPlan||'').toLowerCase();if(membershipHierarchy.includes(id)){const p=state.ui.plans[id]=state.ui.plans[id]||{};const field=t.dataset.adminLevelField;let value=t.type==='checkbox'?t.checked:t.value;if(field==='duration_days')value=value===''?null:Math.max(1,Math.min(3650,Number(value)||30));else if(field==='features')value=String(value||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);p[field]=value;showStatus(`${String(p.label||id).replace(/^BlinQ\s+/i,'')} · zmena je v koncepte. Klikni Publikovať.`);}return;}
-      if(t.dataset.bannerStatePlan){const item=elements()?.[state.selectedElement],plan=t.dataset.bannerStatePlan;if(item){item.access=item.access||{};item.access[plan]=t.value;if(plan==='rookie')item.access.trial=t.value;renderAllUiContent();rerenderAdmin();}return;}
-      if(t.dataset.bannerVisiblePlan){const item=elements()?.[state.selectedElement],plan=t.dataset.bannerVisiblePlan;if(item){item.access=item.access||{};item.access[plan]=t.checked?'active':'hidden';if(plan==='rookie')item.access.trial=item.access[plan];renderAllUiContent();rerenderAdmin();}return;}
-      if(t.dataset.bannerClickPlan){const item=elements()?.[state.selectedElement],plan=t.dataset.bannerClickPlan;if(item){item.click_access=item.click_access||{};item.click_access[plan]=t.checked;if(plan==='rookie')item.click_access.trial=t.checked;renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.adminAccess){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.access[t.dataset.adminAccess]=t.value;if(t.dataset.adminAccess==='rookie')item.access.trial=t.value;rerenderAdmin();}return;}
     };
     const search=$('adminUserSearch');if(search)search.oninput=()=>{adminUserFilterState().q=search.value;adminApplyUserFilters();};
@@ -3192,7 +3054,6 @@
     return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${lockedContext&&below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy"><small>${escapeHtml(id.toUpperCase())}</small><strong>${escapeHtml(title)}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:''}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
   }
   function showUpgradePrompt(planId='pro',sectionLabel='this content',lockedContext=false){
-    window.BlinqUI.closeMenu(false);
     const dialog=$('upgradeDialog'),host=$('upgradeDialogContent');if(!dialog||!host)return;
     const a=state.feed?.account||{};
     const requiredId=membershipHierarchy.includes(String(planId||'').toLowerCase())?String(planId).toLowerCase():'pro';
