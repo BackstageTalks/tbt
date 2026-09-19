@@ -1061,6 +1061,63 @@ def insights_mark_read(req):
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
 
+def _feed_asset_health(raw_feed: dict) -> dict:
+    """Describe player/tournament media coverage without spending provider requests."""
+    rows = []
+    seen_rows = set()
+    for key in ("upcoming", "results", "prime_picks", "top_daily_picks", "value_picks", "ace_picks", "sg_picks", "doubles_picks"):
+        for row in raw_feed.get(key) or []:
+            if not isinstance(row, dict):
+                continue
+            row_key = str(row.get("id") or row.get("event_id") or row.get("scheduled_at") or id(row))
+            if row_key in seen_rows:
+                continue
+            seen_rows.add(row_key)
+            rows.append(row)
+
+    players = {}
+    tournaments = {}
+    for row in rows:
+        for side in ("player1", "player2"):
+            player = row.get(side) or {}
+            if not isinstance(player, dict):
+                player = {}
+            pid = str(player.get("id") or row.get(f"{side}_id") or "").strip()
+            name = str(player.get("name") or row.get(f"{side}_name") or "").strip()
+            key = pid or name.lower()
+            if not key:
+                continue
+            explicit = str(player.get("photo_url") or player.get("image_url") or player.get("photo") or row.get(f"{side}_photo_url") or row.get(f"{side}_image_url") or "").strip()
+            proxy_ref = bool(pid.isdigit())
+            players[key] = bool(players.get(key) or explicit or proxy_ref)
+
+        tournament = str(row.get("tournament") or row.get("competition_name") or row.get("competition") or "").strip()
+        tid = str(row.get("tournament_logo_id") or row.get("tournament_id") or row.get("unique_tournament_id") or "").strip()
+        tkey = tid or tournament.lower()
+        if tkey:
+            explicit_logo = str(row.get("tournament_logo_url") or row.get("competition_logo_url") or row.get("competition_logo") or row.get("tournament_logo") or "").strip()
+            tournaments[tkey] = bool(tournaments.get(tkey) or explicit_logo or tid.isdigit())
+
+    player_total = len(players)
+    player_refs = sum(1 for ok in players.values() if ok)
+    tournament_total = len(tournaments)
+    tournament_refs = sum(1 for ok in tournaments.values() if ok)
+    return {
+        "player_images": {
+            "total": player_total,
+            "provider_or_proxy_refs": player_refs,
+            "fallback_needed": max(0, player_total - player_refs),
+            "ok": player_total == 0 or player_refs == player_total,
+        },
+        "tournament_logos": {
+            "total": tournament_total,
+            "provider_or_proxy_refs": tournament_refs,
+            "fallback_needed": max(0, tournament_total - tournament_refs),
+            "ok": tournament_total == 0 or tournament_refs == tournament_total,
+        },
+    }
+
+
 @app.route(route="v1/admin/diagnostics", methods=["GET"])
 def admin_diagnostics(req):
     try:
@@ -1086,6 +1143,13 @@ def admin_diagnostics(req):
             }
         except Exception as exc:
             feed_health["error"] = exc.__class__.__name__
+        asset_health = _feed_asset_health(raw_feed if 'raw_feed' in locals() else {})
+        storage_services = storage.get("services") or {}
+        service_health = {
+            "support_storage": bool(storage_services.get("support")),
+            "info_storage": bool(storage_services.get("premium_info")),
+            "live_data": bool(feed_health.get("ready") and not feed_health.get("stale")),
+        }
         provider_health = {
             "configured": bool(str(getattr(settings, "rapidapi_key", "") or "").strip()),
             "host": str(getattr(settings, "rapidapi_host", "") or "")[:120],
@@ -1132,6 +1196,8 @@ def admin_diagnostics(req):
             "firebase_server_configured": firebase_server_configured,
             "firebase_admin_users": users_ok,
             "feed": feed_health,
+            "assets": asset_health,
+            "services": service_health,
             "provider": provider_health,
             "ops": ops,
             "problems": problems,
