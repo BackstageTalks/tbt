@@ -80,7 +80,6 @@
       EMAIL_NOT_VERIFIED: 'Verify your email before opening the BlinQ workspace.',
       TOKEN_EXPIRED: 'Your session expired. Sign in again.',
       INVALID_ID_TOKEN: 'Your session is no longer valid. Sign in again.',
-      SUPPORT_STORAGE_UNAVAILABLE: 'Support storage is temporarily unavailable.',
       ADMIN_STORAGE_UNAVAILABLE: 'Persistent service storage is temporarily unavailable.',
       LIVE_RADAR_STORAGE_UNAVAILABLE: 'LIVE alert storage is temporarily unavailable.',
       UI_CONFIG_STORAGE_UNAVAILABLE: 'Content storage is temporarily unavailable.',
@@ -347,30 +346,6 @@
   async function adminDeleteUser(userId) {
     return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}`, {method: 'DELETE'});
   }
-  async function supportSubmit(payload) {
-    const s = await restore();
-    return json('/api/v1/support', {
-      method: 'POST',
-      headers: s ? {'X-Blinq-Access-Token': s.access_token} : {},
-      body: JSON.stringify(payload || {}),
-    });
-  }
-  async function adminSupport(status = 'all') {
-    return apiWithSession(`/api/v1/admin/support?status=${encodeURIComponent(status)}`);
-  }
-  async function adminUpdateSupport(ticketId, payload) {
-    return apiWithSession(`/api/v1/admin/support/${encodeURIComponent(ticketId)}`, {method: 'PUT', body: JSON.stringify(payload || {})});
-  }
-  async function adminPayments(userId) {
-    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/payments`);
-  }
-  async function adminAddPayment(userId, payload) {
-    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/payments`, {method: 'POST', body: JSON.stringify(payload || {})});
-  }
-  async function adminAudit(targetId = '') {
-    const suffix = targetId ? `?target_id=${encodeURIComponent(targetId)}` : '';
-    return apiWithSession(`/api/v1/admin/audit${suffix}`);
-  }
   async function runtimeUiConfig() { return json('/api/v1/ui-config'); }
   async function contentNews() { return json('/api/v1/content/news'); }
   async function bannerEvent(payload, keepalive = false) {
@@ -415,7 +390,7 @@
   window.BlinqAuth = {
     init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
     insights, liveRadar, adminLiveRadar, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
-    adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser, supportSubmit, adminSupport, adminUpdateSupport,
+    adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     adminPayments, adminAddPayment, adminAudit, runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminBannerAnalytics, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
   };

@@ -3,7 +3,6 @@ from pathlib import Path
 
 from tbt.services.admin_storage import validate_ui_config
 from tbt.services.entitlements import filter_feed_for_access
-from tbt.services import support_storage
 
 ROOT=Path(__file__).resolve().parents[1]
 UI=json.loads((ROOT/'web'/'ui-config.json').read_text(encoding='utf-8'))
@@ -76,15 +75,8 @@ def test_upgrade_auth_footer_and_copy_are_v735_native():
     assert 'UI 7.3.6' in INDEX
     assert 'auth-copy p,#authSubtitle' in CSS
     assert 'site-footer:before' in CSS
-    assert 'ui_copy' in SITE and 'upgrade' in SITE['ui_copy'] and 'support' in SITE['ui_copy']
+    assert 'ui_copy' in SITE and 'upgrade' in SITE['ui_copy']
 
-
-def test_support_has_email_only_fallback_when_storage_is_down():
-    assert 'build_support_ticket' in FUNCTION
-    assert 'delivery": "email_only"' in FUNCTION
-    public, entity=support_storage.build_support_ticket({'category':'technical','email':'a@example.com','message':'test message'},user=None)
-    assert public['ticket_id'].startswith('BLQ-')
-    assert entity['PartitionKey']=='support'
 
 
 def test_rookie_manifest_marks_remaining_offer_as_blurred_without_sending_rows():

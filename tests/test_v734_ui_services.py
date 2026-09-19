@@ -15,7 +15,7 @@ SITE = json.loads((ROOT / 'web' / 'config' / 'site-content.json').read_text(enco
 def test_runtime_css_is_consolidated_on_current_asset_revision():
     assert UI['revision'] == '7.3.6'
     assert UI['asset_revision'] == 7360
-    assert '/blinq-app.css?v=7360&p=10' in INDEX
+    assert '/blinq-app.css?v=7360&p=11' in INDEX
     assert 'final-polish-' not in INDEX
 
 
@@ -38,12 +38,9 @@ def test_footer_is_static_minimal_and_has_no_runtime_freshness_widget():
 def test_helper_copy_is_json_backed():
     assert 'ui_copy' in SITE
     assert 'loading' in SITE['ui_copy'] and 'auth' in SITE['ui_copy'] and 'footer' not in SITE['ui_copy']
-    assert 'form_copy' in SITE['support']
-    assert 'supportFormCopy()' in APP
 
 
 def test_admin_exposes_support_system_and_all_info_audiences():
-    assert "['support','Support','Požiadavky']" in APP
     assert "['system','Systém','Diagnostika']" in APP
     assert "['rookie','pro','elite','legend','goat'].filter" in APP
 
@@ -55,7 +52,6 @@ def test_live_radar_not_mislabelled_offline_when_only_history_storage_is_down():
 
 
 def test_storage_errors_are_user_friendly():
-    assert 'SUPPORT_STORAGE_UNAVAILABLE' in AUTH
     assert 'ADMIN_STORAGE_UNAVAILABLE' in AUTH
 
 def test_admin_storage_reuses_unified_or_media_connection(monkeypatch):
@@ -76,8 +72,8 @@ def test_storage_diagnostics_explain_private_service_dependency():
     import inspect
     source = inspect.getsource(admin_storage.admin_storage_diagnostics)
     assert 'recommended_setting' in source
-    assert 'premium_info' in source and 'live_alert_history' in source and 'support' in source
-    assert 'INFO / LIVE / SUPPORT' in APP
+    assert 'premium_info' in source and 'live_alert_history' in source and 'admin_config' in source
+    assert 'INFO STORAGE' in APP and 'LIVE DATA' in APP
     assert 'BLINQ_STORAGE_CONNECTION_STRING' in APP
 
 

@@ -63,8 +63,6 @@ from tbt.services.admin_storage import (
     load_live_worker_status,
 )
 from tbt.services.content_news import news_pool
-from tbt.services.support_storage import build_support_ticket, create_support_ticket, list_support_tickets, update_support_ticket
-from tbt.services.support_notifications import notify_support_ticket, support_email_configured
 from tbt.services.media_storage import (
     MediaStorageUnavailable, download_media, media_storage_diagnostics, upload_media,
 )
@@ -1243,7 +1241,6 @@ def admin_diagnostics(req):
         asset_health = _feed_asset_health(raw_feed if 'raw_feed' in locals() else {})
         storage_services = storage.get("services") or {}
         service_health = {
-            "support_storage": bool(storage_services.get("support")),
             "info_storage": bool(storage_services.get("premium_info")),
             "live_data": bool(feed_health.get("ready") and not feed_health.get("stale")),
             "live_worker": bool(worker_healthy),
@@ -1289,7 +1286,6 @@ def admin_diagnostics(req):
             "accounts_ready": bool(users_ok),
             "content_storage_ready": bool(storage_ok),
             "release": RELEASE,
-            "support_email_configured": support_email_configured(),
             "media_storage": media,
             "webpush": push,
             "live_worker": {
@@ -1522,92 +1518,6 @@ def admin_user_metadata(req):
     except (TypeError, KeyError):
         logging.exception("Admin metadata update failed")
         return response({"error": "admin_update_unavailable"}, 503)
-
-
-@app.route(route="v1/support", methods=["POST"])
-def support_submit(req):
-    """Create a lightweight support ticket.
-
-    Signed-in users are linked automatically. Logged-out visitors may submit an
-    email address so support is still reachable from authentication/legal pages.
-    """
-    try:
-        try:
-            payload = req.get_json()
-        except ValueError:
-            return response({"error": "invalid_json"}, 400)
-        if not isinstance(payload, dict):
-            return response({"error": "invalid_support_request"}, 400)
-        if len(json.dumps(payload, ensure_ascii=False).encode("utf-8")) > 16000:
-            return response({"error": "support_request_too_large"}, 413)
-        if not _support_request_allowed(req, payload):
-            return response({"error": "rate_limited"}, 429)
-        user = None
-        token = request_authorization(req.headers)
-        if token:
-            try:
-                user = verify_user(token, settings)
-            except AuthUnavailable:
-                user = None
-        try:
-            ticket = create_support_ticket(payload, user=user)
-            delivery = "stored"
-        except AdminStorageUnavailable:
-            ticket, _ = build_support_ticket(payload, user=user)
-            notification = notify_support_ticket(ticket)
-            if notification.get("sent"):
-                return response({"accepted": True, "ticket": ticket, "email_notification": True, "delivery": "email_only", "storage_unavailable": True}, 202)
-            raise
-        notification = notify_support_ticket(ticket)
-        if notification.get("configured") and not notification.get("sent"):
-            logging.warning("Support email notification failed for %s: %s", ticket.get("ticket_id"), notification.get("reason"))
-        return response({"accepted": True, "ticket": ticket, "email_notification": bool(notification.get("sent")), "delivery": delivery}, 201)
-    except ValueError as exc:
-        return response({"error": str(exc)}, 400)
-    except AdminStorageUnavailable:
-        return response({"error": "support_storage_unavailable"}, 503)
-
-
-@app.route(route="v1/admin/support", methods=["GET"])
-def admin_support_list(req):
-    try:
-        _, denied = _admin_user(req)
-        if denied:
-            return denied
-        status = str(req.params.get("status") or "all")
-        try:
-            limit = int(req.params.get("limit") or 250)
-        except (TypeError, ValueError):
-            return response({"error": "invalid_limit"}, 400)
-        return response({"items": list_support_tickets(status=status, limit=limit)})
-    except ValueError as exc:
-        return response({"error": str(exc)}, 400)
-    except AuthUnavailable:
-        return response({"error": "admin_auth_unavailable"}, 503)
-    except AdminStorageUnavailable:
-        return response({"error": "admin_storage_unavailable"}, 503)
-
-
-@app.route(route="v1/admin/support/{ticket_id}", methods=["PUT"])
-def admin_support_update(req):
-    try:
-        actor, denied = _admin_user(req)
-        if denied:
-            return denied
-        ticket_id = str((req.route_params or {}).get("ticket_id") or "").strip()
-        try:
-            payload = req.get_json()
-        except ValueError:
-            return response({"error": "invalid_json"}, 400)
-        return response(update_support_ticket(ticket_id, payload, actor_id=str(actor.get("id") or "")))
-    except KeyError:
-        return response({"error": "support_ticket_not_found"}, 404)
-    except ValueError as exc:
-        return response({"error": str(exc)}, 400)
-    except AuthUnavailable:
-        return response({"error": "admin_auth_unavailable"}, 503)
-    except AdminStorageUnavailable:
-        return response({"error": "admin_storage_unavailable"}, 503)
 
 
 @app.route(route="v1/admin/users/{user_id}/payments", methods=["GET", "POST"])

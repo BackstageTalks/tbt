@@ -12,7 +12,7 @@ cache = str(UI["asset_revision"])
 
 
 def test_v725_visual_layer_is_loaded_last():
-    assert f'/blinq-app.css?v={cache}&p=10' in INDEX
+    assert f'/blinq-app.css?v={cache}&p=11' in INDEX
     assert 'final-polish-' not in INDEX
 
 

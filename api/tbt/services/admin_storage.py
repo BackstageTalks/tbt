@@ -47,7 +47,7 @@ def _connection_string_source() -> tuple[str, str]:
     """Return the first configured durable-storage connection and its safe source name.
 
     A single general-purpose Azure Storage account can back admin config, INFO,
-    LIVE alert history, support tickets and media.  Keeping the explicit admin
+    LIVE alert history and media. Keeping the explicit admin
     setting first preserves separation when desired, while the unified/media
     aliases avoid an unnecessary outage when the same account is already
     configured for banner uploads.  Secrets are never returned by diagnostics.
@@ -192,7 +192,6 @@ def admin_storage_diagnostics() -> dict:
         "services": {
             "premium_info": backend != "unavailable",
             "live_alert_history": backend != "unavailable",
-            "support": backend != "unavailable",
             "admin_config": backend != "unavailable",
         },
     }

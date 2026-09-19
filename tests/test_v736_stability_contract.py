@@ -65,7 +65,7 @@ def test_detail_column_has_clean_end_without_arrow_glyph():
 
 
 def test_admin_system_surfaces_media_storage_and_live_checks():
-    for label in ("PLAYER IMAGES", "TOURNAMENT LOGOS", "SUPPORT STORAGE", "INFO STORAGE", "LIVE DATA"):
+    for label in ("PLAYER IMAGES", "TOURNAMENT LOGOS", "INFO STORAGE", "LIVE DATA"):
         assert label in APP
     assert "def _feed_asset_health" in API
     assert '"assets": asset_health' in API

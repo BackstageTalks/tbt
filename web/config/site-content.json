@@ -234,21 +234,6 @@
             "body": "Cookie preferencie môžete kedykoľvek zmeniť priamo na tejto stránke. Nevyhnutné technické úložisko nie je možné vypnúť bez obmedzenia fungovania účtu."
           }
         ]
-      },
-      "support": {
-        "eyebrow": "BLINQ SUPPORT",
-        "title": "Ako vám môžeme pomôcť?",
-        "subtitle": "Účet, členstvo, dáta alebo technický problém — pošlite nám správu.",
-        "sections": [
-          {
-            "title": "Rýchlejšie vyriešenie",
-            "body": "Pri technickom probléme uveďte, čo ste robili tesne pred chybou. Ak ste prihlásený, e-mail a identifikácia účtu sa k správe pripoja automaticky."
-          },
-          {
-            "title": "Odpoveď",
-            "body": "Support správy spracúvame manuálne. Stav požiadavky môže byť Nová, Rieši sa alebo Vyriešená. Citlivé údaje, heslá ani celé platobné údaje do správy neposielajte."
-          }
-        ]
       }
     },
     "cz": {
@@ -473,21 +458,6 @@
           {
             "title": "Změna nastavení",
             "body": "Cookie preference můžete kdykoli změnit přímo na této stránce. Nezbytné technické úložiště nelze vypnout bez omezení fungování účtu."
-          }
-        ]
-      },
-      "support": {
-        "eyebrow": "PODPORA",
-        "title": "Jak vám můžeme pomoci?",
-        "subtitle": "Účet, členství, data nebo technický problém — pošlete nám zprávu",
-        "sections": [
-          {
-            "title": "Rychlejší vyřešení",
-            "body": "U technického problému popište, co jste dělali těsně před chybou. Jste-li přihlášeni, e-mail a identifikace účtu se ke zprávě připojí automaticky."
-          },
-          {
-            "title": "Odpověď",
-            "body": "Support zprávy zpracováváme manuálně. Stav požadavku může být Nový, Řeší se nebo Vyřešený. Do zprávy neposílejte hesla ani úplné údaje platební karty."
           }
         ]
       }
@@ -716,111 +686,6 @@
             "body": "Cookie preferences can be changed at any time directly on this page. Essential technical storage cannot be disabled without limiting account functionality."
           }
         ]
-      },
-      "support": {
-        "eyebrow": "SUPPORT",
-        "title": "How can we help?",
-        "subtitle": "Account, membership, data or technical issue — send us a message",
-        "sections": [
-          {
-            "title": "Faster resolution",
-            "body": "For technical problems, describe what you did immediately before the issue. When signed in, the account email and identifier are linked automatically."
-          },
-          {
-            "title": "Response",
-            "body": "Support requests are handled manually. A request can be New, In progress or Resolved. Never include passwords or full payment-card details in a support message."
-          }
-        ]
-      }
-    }
-  },
-  "support": {
-    "categories": [
-      {
-        "id": "account",
-        "sk": "Účet a prihlásenie",
-        "cz": "Účet a přihlášení",
-        "en": "Account & sign-in"
-      },
-      {
-        "id": "membership",
-        "sk": "Členstvo a platba",
-        "cz": "Členství a platba",
-        "en": "Membership & payment"
-      },
-      {
-        "id": "predictions",
-        "sk": "Predikcie a dáta",
-        "cz": "Predikce a data",
-        "en": "Predictions & data"
-      },
-      {
-        "id": "technical",
-        "sk": "Technický problém",
-        "cz": "Technický problém",
-        "en": "Technical issue"
-      },
-      {
-        "id": "partnership",
-        "sk": "Spolupráca / reklama",
-        "cz": "Spolupráce / reklama",
-        "en": "Partnership / advertising"
-      },
-      {
-        "id": "privacy",
-        "sk": "Súkromie a osobné údaje",
-        "cz": "Soukromí a osobní údaje",
-        "en": "Privacy & personal data"
-      },
-      {
-        "id": "other",
-        "sk": "Iné",
-        "cz": "Jiné",
-        "en": "Other"
-      }
-    ],
-    "form_copy": {
-      "sk": {
-        "eyebrow": "BLINQ SUPPORT",
-        "title": "Napíšte nám",
-        "intro": "Podporu riešime manuálne a pri prihlásenom účte sa požiadavka automaticky spojí s vaším profilom.",
-        "category": "Kategória",
-        "email": "E-mail",
-        "subject": "Predmet",
-        "subject_placeholder": "Krátky popis",
-        "message": "Správa",
-        "message_placeholder": "Popíšte, čo sa stalo a čo ste očakávali.",
-        "send": "Odoslať požiadavku",
-        "sending": "Odosielam…",
-        "privacy": "Nikdy neposielajte heslá ani celé údaje platobnej karty."
-      },
-      "cz": {
-        "eyebrow": "BLINQ SUPPORT",
-        "title": "Napište nám",
-        "intro": "Podporu řešíme manuálně a u přihlášeného účtu se požadavek automaticky spojí s vaším profilem.",
-        "category": "Kategorie",
-        "email": "E-mail",
-        "subject": "Předmět",
-        "subject_placeholder": "Krátký popis",
-        "message": "Zpráva",
-        "message_placeholder": "Popište, co se stalo a co jste očekávali.",
-        "send": "Odeslat požadavek",
-        "sending": "Odesílám…",
-        "privacy": "Nikdy neposílejte hesla ani celé údaje platební karty."
-      },
-      "en": {
-        "eyebrow": "BLINQ SUPPORT",
-        "title": "Send us a message",
-        "intro": "We handle support manually and keep the request linked to your account when you are signed in.",
-        "category": "Category",
-        "email": "Email",
-        "subject": "Subject",
-        "subject_placeholder": "Short description",
-        "message": "Message",
-        "message_placeholder": "Describe what happened and what you expected.",
-        "send": "Send request",
-        "sending": "Sending…",
-        "privacy": "Never send passwords or full payment-card details."
       }
     }
   },
@@ -892,33 +757,6 @@
         "sk": "Premium Info je dočasne nedostupné",
         "cz": "Premium Info je dočasně nedostupné",
         "en": "Premium Info is temporarily unavailable"
-      }
-    },
-    "support": {
-      "sending": {
-        "sk": "Odosielam…",
-        "cz": "Odesílám…",
-        "en": "Sending…"
-      },
-      "sent": {
-        "sk": "Odoslané",
-        "cz": "Odesláno",
-        "en": "Sent"
-      },
-      "email_only": {
-        "sk": "Odoslané e-mailom. História supportu je dočasne nedostupná.",
-        "cz": "Odesláno e-mailem. Historie podpory je dočasně nedostupná.",
-        "en": "Sent by email. Support history is temporarily unavailable."
-      },
-      "storage_unavailable": {
-        "sk": "Podpora je dočasne nedostupná. Skúste to znova o chvíľu.",
-        "cz": "Podpora je dočasně nedostupná. Zkuste to znovu za chvíli.",
-        "en": "Support is temporarily unavailable. Please try again shortly."
-      },
-      "send_failed": {
-        "sk": "Požiadavku sa nepodarilo odoslať.",
-        "cz": "Požadavek se nepodařilo odeslat.",
-        "en": "Could not send the request."
       }
     },
     "upgrade": {
