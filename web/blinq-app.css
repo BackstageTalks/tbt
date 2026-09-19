@@ -5855,10 +5855,10 @@ body#blinqPremium .boot-splash.boot-splash-tennis{
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source{position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:hidden!important;}
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source>img{position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;object-position:center center!important;border:0!important;border-radius:0!important;background:transparent!important;filter:none!important;}
 
-/* BlinQ runtime patch 7.3.6-r15 */
+/* BlinQ runtime patch 7.3.6-r16 */
 
 
-/* ---- 7.3.6-r15: Telegram community panel + visible footer watermark ---- */
+/* ---- 7.3.6-r16: Telegram community panel + visible footer watermark ---- */
 body#blinqPremium .site-footer.site-footer-minimal,
 body#blinqPremium.blinq-home .site-footer.site-footer-minimal{min-height:74px!important;margin-top:24px!important;padding:16px 4px 18px!important;overflow:visible!important}
 body#blinqPremium .site-footer-minimal .footer-left{min-width:220px!important}

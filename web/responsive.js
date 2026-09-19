@@ -1,4 +1,4 @@
-/* BlinQ responsive helpers — 7.3.6-r15. Navigation drawers were removed; this file
+/* BlinQ responsive helpers — 7.3.6-r16. Navigation drawers were removed; this file
    now contains only active responsive/table/sync behaviour. */
 (() => {
   'use strict';

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -228,11 +229,31 @@ if 'run-name: "BlinQ CI · ${{ github.sha }}"' not in ci_yml:
 ok('workflow stale-deploy + stale-rerun safeguards present')
 
 # 9. Production tree cleanliness.
-for path in ROOT.rglob('*'):
-    if not path.is_file():
-        continue
+# In CI the checkout itself necessarily contains .git/.git metadata.  The audit must
+# inspect files tracked by Git, not every file present in the runner workspace.
+def tracked_repo_files() -> list[Path]:
+    try:
+        proc = subprocess.run(
+            ['git', '-C', str(ROOT), 'ls-files', '-z'],
+            check=True, capture_output=True, text=False,
+        )
+        return [ROOT / raw.decode('utf-8') for raw in proc.stdout.split(b'\0') if raw]
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        # ZIP/local fallback: walk the shipped tree, but never treat VCS/runtime
+        # metadata as a production artifact.
+        out: list[Path] = []
+        for candidate in ROOT.rglob('*'):
+            if not candidate.is_file():
+                continue
+            rel = candidate.relative_to(ROOT)
+            if any(part in {'.git', '.pytest_cache', '__pycache__'} for part in rel.parts):
+                continue
+            out.append(candidate)
+        return out
+
+for path in tracked_repo_files():
     rel = path.relative_to(ROOT)
-    if any(part in {'.git', '.pytest_cache', '__pycache__'} for part in rel.parts):
+    if any(part in {'.pytest_cache', '__pycache__'} for part in rel.parts):
         fail(f'cache/build artifact committed: {rel}')
     if path.suffix in {'.pyc', '.pyo'} or path.name.endswith(('.bak', '.tmp')):
         fail(f'temporary/compiled artifact committed: {rel}')
