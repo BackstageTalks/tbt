@@ -5929,3 +5929,20 @@ body#blinqPremium .boot-tennis-card.boot-tennis-card-source>#bootStatus{
 /* BlinQ runtime patch 7.3.6-r19: admin access + footer watermark */
 body#blinqPremium .site-footer-minimal .footer-watermark-logo{display:block!important;visibility:visible!important;opacity:.22!important;width:126px!important;height:auto!important;max-height:56px!important;object-fit:contain!important;object-position:left center!important;filter:grayscale(1) brightness(1.9) contrast(.9)!important;mix-blend-mode:screen!important}
 @media(max-width:760px){body#blinqPremium .site-footer-minimal .footer-watermark-logo{display:block!important;visibility:visible!important;width:104px!important;opacity:.19!important}}
+
+
+/* BlinQ runtime patch 7.3.6-r20: clean results, loader scene, diagnostics, membership CTA */
+body#blinqPremium .boot-splash.boot-splash-tennis{display:grid!important;place-items:center!important;padding:20px!important;background:url('/assets/blinq_background.webp') center/cover no-repeat fixed!important;overflow:hidden!important;}
+body#blinqPremium .boot-splash.boot-splash-tennis::before{content:""!important;position:absolute!important;inset:0!important;background:rgba(1,10,11,.38)!important;pointer-events:none!important;}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source{position:relative!important;z-index:1!important;width:min(420px,78vw)!important;aspect-ratio:1/1!important;height:auto!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;backdrop-filter:none!important;overflow:visible!important;}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source::before,body#blinqPremium .boot-tennis-card.boot-tennis-card-source::after{display:none!important;content:none!important;}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source>img{position:static!important;display:block!important;width:100%!important;height:auto!important;max-height:none!important;object-fit:contain!important;border-radius:0!important;filter:drop-shadow(0 22px 54px rgba(0,0,0,.36))!important;}
+body#blinqPremium .boot-copy-eyebrow,body#blinqPremium .boot-copy-status{display:none!important;}
+body#blinqPremium .header-upgrade{height:34px!important;min-height:34px!important;padding:0 11px!important;border:1px solid rgba(119,166,151,.20)!important;border-radius:9px!important;background:rgba(255,255,255,.018)!important;color:#a6bbb4!important;box-shadow:none!important;font-size:9px!important;letter-spacing:.06em!important;}
+body#blinqPremium .header-upgrade svg{opacity:.58!important;width:12px!important;height:12px!important;}
+body#blinqPremium .header-upgrade:hover{border-color:rgba(54,226,158,.42)!important;background:rgba(39,185,126,.07)!important;color:#dff8ed!important;transform:none!important;}
+body#blinqPremium .results-section-clean{margin-top:12px!important;}
+body#blinqPremium .results-section-clean>h3,body#blinqPremium .results-section-clean>p{display:none!important;}
+body#blinqPremium .route-heading #pageEyebrow[hidden],body#blinqPremium .route-heading #pageSubtitle[hidden]{display:none!important;}
+body#blinqPremium .admin-system-actions .btn-primary{background:rgba(36,214,151,.12)!important;color:#aef3d5!important;border-color:rgba(49,226,156,.34)!important;}
+body#blinqPremium .admin-runtime-note.is-warning{border-color:rgba(247,200,101,.30)!important;background:rgba(87,67,19,.12)!important;}

@@ -12,7 +12,8 @@
       "description": "Novinky, diskusia a oznámenia z BlinQ.",
       "cta": "Otvoriť Telegram",
       "url": "",
-      "min_plan": "rookie"
+      "min_plan": "rookie",
+      "badge": "KOMUNITA"
     },
     {
       "id": "vip",
@@ -21,7 +22,8 @@
       "description": "Extra info picky a prémiové upozornenia pre ELITE a vyššie úrovne.",
       "cta": "Otvoriť VIP skupinu",
       "url": "",
-      "min_plan": "elite"
+      "min_plan": "elite",
+      "badge": "ELITE"
     }
   ]
 }

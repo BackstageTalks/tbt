@@ -11,8 +11,8 @@ const loader = fs.readFileSync('web/assets/blinq_loading_animated_v6.svg','utf8'
 assert.match(html,/blinq_loading_animated_v6\.svg\?v=7360/);
 assert.match(loader,/<animateTransform/);
 assert.equal(loader.includes('data:image/webp;base64,'),false);
-assert.ok(fs.existsSync('web/assets/blinq_loading_scene_v736.webp'));
-assert.match(css,/blinq_loading_scene_v736\.webp/);
+assert.ok(fs.existsSync('web/assets/blinq_background.webp'));
+assert.match(css,/blinq_background\.webp/);
 assert.match(css,/boot-splash\.boot-splash-tennis::after/);
 assert.match(css,/app-shell:not\(\[hidden\]\)::after/);
 

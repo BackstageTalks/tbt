@@ -23,7 +23,7 @@ def test_runtime_css_is_consolidated_on_current_asset_revision():
 
 
 def test_login_loader_and_footer_have_blinq_background_watermarks():
-    assert "url('/assets/blinq_loading_scene_v736.webp')" in CSS736
+    assert "url('/assets/blinq_background.webp')" in CSS736
     assert (ROOT / 'web' / 'assets' / 'blinq_loading_scene_v736.webp').is_file()
     loader = (ROOT / 'web' / 'assets' / 'blinq_loading_animated_v6.svg').read_text(encoding='utf-8')
     assert 'data:image/webp;base64,' not in loader
