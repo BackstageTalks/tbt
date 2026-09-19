@@ -860,6 +860,7 @@ def select_market_sections(
     section_priority: tuple[str, ...] = SECTION_PRIORITY,
     ace_picks: list[dict[str, Any]] | None = None,
     sg_picks: list[dict[str, Any]] | None = None,
+    doubles_picks: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Split priced Match Winner predictions by BlinQ Probability and odds.
 
@@ -869,7 +870,12 @@ def select_market_sections(
     current short-price fallback. Value remains 60%+ with >=1.80 odds. EV/edge never
     qualify or disqualify Prime/Top/Value; they are diagnostics only.
     """
-    cards = [card for row in predictions if (card := _market_card(row)) is not None]
+    cards = [
+        card for row in predictions
+        if isinstance(row, dict)
+        and row.get("prediction_family") != "doubles"
+        and (card := _market_card(row)) is not None
+    ]
 
     prime_core_floor = max(PRIME_TOP_CORE_PROBABILITY, float(prime_min_probability))
     top_core_floor = max(PRIME_TOP_CORE_PROBABILITY, float(top_min_probability))
@@ -974,6 +980,7 @@ def select_market_sections(
         "value_picks": value,
         "ace_picks": deepcopy(ace_picks or []),
         "sg_picks": deepcopy(sg_picks or []),
+        "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 14,
             "selection_policy": "probability_first_odds_buckets_v11_top_dynamic_68_150_to_60_145",
@@ -1004,10 +1011,10 @@ def select_market_sections(
                 "limited_out_by_section": limited_out,
                 "limit_aware": True,
             },
-            "current_outputs": (["match_winner"] + (["aces_projection", "double_faults_projection"] if ace_picks else []) + (["sets_projection", "games_projection"] if sg_picks else [])),
+            "current_outputs": (["match_winner"] + (["doubles_match_winner"] if doubles_picks else []) + (["aces_projection", "double_faults_projection"] if ace_picks else []) + (["sets_projection", "games_projection"] if sg_picks else [])),
             "pending_outputs": ["aces_odds", "double_faults_odds", "sets_odds", "games_odds"],
             "odds_backed": True,
-            "odds_backed_outputs": ["match_winner"],
+            "odds_backed_outputs": ["match_winner"] + (["doubles_match_winner"] if doubles_picks else []),
             "projection_only_outputs": ((["aces_projection", "double_faults_projection"] if ace_picks else []) + (["sets_projection", "games_projection"] if sg_picks else [])),
             "main_candidate_rule": {
                 "core_probability": PRIME_TOP_CORE_PROBABILITY,
@@ -1056,6 +1063,13 @@ def select_market_sections(
                 "edge_ev_role": "diagnostic_only",
                 "limit": top_limit,
                 "sort": "probability_desc_then_data_depth_then_sample_depth",
+            },
+            "doubles_rule": {
+                "model": "DOUBLES-ELO-v1",
+                "separate_from_singles": True,
+                "requires_member_identity": True,
+                "requires_real_match_winner_odds": True,
+                "published": len(doubles_picks or []),
             },
             "value_rule": {
                 "objective": "probability_plus_close_odds",
@@ -1282,6 +1296,8 @@ def attach_market_sections_to_feed(
     ace_report: dict[str, Any] | None = None,
     sg_picks: list[dict[str, Any]] | None = None,
     sg_report: dict[str, Any] | None = None,
+    doubles_picks: list[dict[str, Any]] | None = None,
+    doubles_report: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Attach live market presentation without changing prediction commitments."""
     result = deepcopy(feed)
@@ -1302,7 +1318,7 @@ def attach_market_sections_to_feed(
     result["upcoming"] = upcoming
 
     sections = select_market_sections(
-        enriched_predictions, ace_picks=ace_picks, sg_picks=sg_picks
+        enriched_predictions, ace_picks=ace_picks, sg_picks=sg_picks, doubles_picks=doubles_picks
     )
     result.update(sections)
     result["market_selection"] = {
@@ -1323,5 +1339,10 @@ def attach_market_sections_to_feed(
         result["market_selection"] = {
             **result.get("market_selection", {}),
             "sg_projection_report": deepcopy(sg_report),
+        }
+    if doubles_report is not None:
+        result["market_selection"] = {
+            **result.get("market_selection", {}),
+            "doubles_report": deepcopy(doubles_report),
         }
     return result

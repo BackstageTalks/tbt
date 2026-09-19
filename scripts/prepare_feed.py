@@ -105,6 +105,13 @@ def _feed_player_ids(payload: dict) -> set[str]:
                     player_id = str(player.get("id") or "").strip()
                     if player_id:
                         ids.add(player_id)
+                    members = player.get("members") if isinstance(player.get("members"), list) else []
+                    for member in members:
+                        if not isinstance(member, dict):
+                            continue
+                        member_id = str(member.get("id") or "").strip()
+                        if member_id:
+                            ids.add(member_id)
     markets = payload.get("markets")
     if isinstance(markets, dict):
         for rows in markets.values():
@@ -269,6 +276,10 @@ def _merge_player_profiles(payload: dict, profiles: dict[str, dict], photos: set
                 player = row.get(key)
                 if isinstance(player, dict):
                     _merge_player_profile(player, profiles, photos)
+                    members = player.get("members") if isinstance(player.get("members"), list) else []
+                    for member in members:
+                        if isinstance(member, dict):
+                            _merge_player_profile(member, profiles, photos)
 
     for key in (
         "upcoming", "results", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",

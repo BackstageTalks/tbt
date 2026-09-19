@@ -335,18 +335,22 @@ def _current_players(feed: dict[str, Any]) -> list[dict[str, Any]]:
             player = row.get(key)
             if not isinstance(player, dict):
                 continue
-            player_id = str(player.get("id") or "").strip()
-            if not player_id or not player_id.isdigit():
-                continue
-            item = scored.get(player_id)
-            candidate = {
-                "id": player_id,
-                "name": str(player.get("name") or "").strip(),
-                "tour": tour,
-                "priority": score,
-            }
-            if item is None or candidate["priority"] > item["priority"]:
-                scored[player_id] = candidate
+            candidates = [player]
+            members = player.get("members") if isinstance(player.get("members"), list) else []
+            candidates.extend(member for member in members if isinstance(member, dict))
+            for candidate_player in candidates:
+                player_id = str(candidate_player.get("id") or "").strip()
+                if not player_id or not player_id.isdigit():
+                    continue
+                item = scored.get(player_id)
+                candidate = {
+                    "id": player_id,
+                    "name": str(candidate_player.get("name") or "").strip(),
+                    "tour": tour,
+                    "priority": score,
+                }
+                if item is None or candidate["priority"] > item["priority"]:
+                    scored[player_id] = candidate
     return sorted(scored.values(), key=lambda row: (-row["priority"], row["name"], row["id"]))
 
 

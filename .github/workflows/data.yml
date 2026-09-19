@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [mega-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, train, backtest, refresh]
+        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -27,6 +27,10 @@ on:
         description: Current betting-day events to enrich with provider-1 odds during refresh
         type: number
         default: 120
+      doubles_odds_max_events:
+        description: Current betting-day doubles candidates to enrich with provider-1 Match Winner odds
+        type: number
+        default: 40
       betting_day_start_hour:
         description: Europe/Bratislava hour that starts the BlinQ betting day
         type: number
@@ -74,6 +78,7 @@ jobs:
       END_DATE: ${{ inputs.end }}
       MAX_REQUESTS: ${{ inputs.max_requests || (github.event.schedule == '40 22 * * *' && 4000 || 750) }}
       MARKET_ODDS_MAX_EVENTS: ${{ inputs.market_odds_max_events || 120 }}
+      DOUBLES_ODDS_MAX_EVENTS: ${{ inputs.doubles_odds_max_events || 40 }}
       BETTING_DAY_START_HOUR: ${{ inputs.betting_day_start_hour || 6 }}
       ACE_TARGET_SAMPLES: ${{ inputs.ace_target_samples || 18 }}
       ACE_LOOKBACK_DAYS: ${{ inputs.ace_lookback_days || 550 }}
@@ -120,6 +125,15 @@ jobs:
             if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
             if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
             python scripts/download_tennis_history.py "${args[@]}"
+          elif [[ "$MODE" == doubles-data ]]; then
+            args=(
+              --data-repository "$TBT_DATA_REPOSITORY"
+              --lookback-days "$LOOKBACK_DAYS"
+              --max-requests "$MAX_REQUESTS"
+            )
+            if [[ -n "$START_DATE" ]]; then args+=(--start "$START_DATE"); fi
+            if [[ -n "$END_DATE" ]]; then args+=(--end "$END_DATE"); fi
+            python scripts/enrich_doubles_history.py "${args[@]}"
           elif [[ "$MODE" == ace-statistics ]]; then
             python scripts/enrich_ace_history.py \
               --data-repository "$TBT_DATA_REPOSITORY" \
@@ -215,6 +229,7 @@ jobs:
               "$MODE"
               --max-requests "$MAX_REQUESTS"
               --market-odds-max-events "$MARKET_ODDS_MAX_EVENTS"
+              --doubles-odds-max-events "$DOUBLES_ODDS_MAX_EVENTS"
               --betting-day-start-hour "$BETTING_DAY_START_HOUR"
             )
             if [[ "$PROMOTE" == true ]]; then args+=(--promote); fi
@@ -254,6 +269,15 @@ jobs:
         with:
           name: blinq-feature-v3-${{ github.run_id }}
           path: .cache/tbt/feature-v3/coverage.json
+          if-no-files-found: error
+
+      - name: Upload doubles history report
+        if: ${{ always() && env.MODE == 'doubles-data' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-doubles-data-${{ github.run_id }}
+          path: |
+            .cache/tbt/doubles/doubles_history_report.json
           if-no-files-found: error
 
       - name: Upload SG score enrichment report

@@ -988,6 +988,66 @@ class RapidTennisClient:
 
         return _merge_matches(matches)
 
+    def doubles_for_day(
+        self,
+        day: date,
+        historical: bool,
+    ) -> list[MatchRecord]:
+        """Return non-mixed ATP/WTA doubles events without contaminating singles history.
+
+        Category/event calls are shared with ``matches_for_day`` through the
+        provider cache, so a normal refresh can collect doubles from the same raw
+        daily payloads with almost no extra discovery requests.  Doubles are kept
+        in a separate history/model pipeline and are never replayed through the
+        singles feature builder.
+        """
+        matches: list[MatchRecord] = []
+        for category in self.calendar_categories(day):
+            category_id = self._category_id(category)
+            if category_id is None:
+                continue
+            nested_category = category.get("category") if isinstance(category.get("category"), dict) else {}
+            category_name = str(
+                first_present(category, "name", "title", "slug")
+                or first_present(nested_category, "name", "title", "slug")
+                or ""
+            )
+            for raw in self.category_events(category_id, day):
+                if self._is_singles_event(raw):
+                    continue
+                text = self._event_text(raw)
+                if "mixed double" in text or "mixed doubles" in text:
+                    # Mixed doubles needs a separate gender-aware calibration.
+                    continue
+                event_tour = self._event_tour(raw, category_id, category_name)
+                if event_tour not in {"atp", "wta"}:
+                    continue
+                event = self._annotate_event(raw, category_id, category_name)
+                event["_tbt_doubles"] = True
+                try:
+                    match = self.normalize_match(event, tour=event_tour, historical=historical)
+                except ValueError as exc:
+                    if historical:
+                        logger.warning("Skipping doubles event with invalid identity/date: %s", exc)
+                    continue
+                matches.append(match)
+        return _merge_matches(matches)
+
+    def doubles_upcoming(
+        self,
+        start: date,
+        end: date | None = None,
+    ) -> list[MatchRecord]:
+        end = end or start
+        if end < start:
+            raise ValueError("end must be on or after start")
+        matches: list[MatchRecord] = []
+        day = start
+        while day <= end:
+            matches.extend(self.doubles_for_day(day, historical=False))
+            day += timedelta(days=1)
+        return _merge_matches(matches)
+
     def upcoming(
         self,
         tour: str,

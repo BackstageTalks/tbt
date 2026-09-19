@@ -28,6 +28,12 @@ from tbt.services.publication import (
 )
 from tbt.services.ace_selection import select_ace_picks
 from tbt.services.sg_selection import select_sg_picks
+from tbt.services.doubles_selection import (
+    build_predictions as build_doubles_predictions,
+    select_picks as select_doubles_picks,
+    merge_history as merge_doubles_history,
+    history_report as doubles_history_report,
+)
 from tbt.services.comeback_projection import annotate_live_second_set_projections
 from tbt.services.market_selection import (
     annotate_market_publication_candidates,
@@ -234,10 +240,41 @@ def _load_prediction_ledger(store):
         validate_market_publication_candidate(feed, ledger)
     return ledger
 
+DOUBLES_HISTORY_ASSET = "doubles_history.json"
+DOUBLES_REPORT_ASSET = "doubles_history_report.json"
+
+
+def _load_doubles_history(store):
+    assets = store._asset_names()
+    if DOUBLES_HISTORY_ASSET not in assets:
+        return []
+    store.download(extra_names=(DOUBLES_HISTORY_ASSET,), required_names=(DOUBLES_HISTORY_ASSET,))
+    payload = read_json(store.directory / DOUBLES_HISTORY_ASSET, {})
+    rows = payload.get("matches") if isinstance(payload, dict) else []
+    return rows if isinstance(rows, list) else []
+
+
+def _save_doubles_history(store, rows, *, extra_report=None):
+    report = {
+        **doubles_history_report(rows),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        **(extra_report or {}),
+    }
+    write_json(store.directory / DOUBLES_HISTORY_ASSET, {
+        "schema": 1,
+        "generated_at": report["generated_at"],
+        "matches": rows,
+    })
+    write_json(store.directory / DOUBLES_REPORT_ASSET, report)
+    store.upload_bundle([store.directory / DOUBLES_HISTORY_ASSET, store.directory / DOUBLES_REPORT_ASSET])
+    return report
+
+
 def _publish_predictions(
     store, ledger, predictions, matches, model, report, upcoming,
     *, odds_report=None, ace_picks=None, ace_report=None,
-    sg_picks=None, sg_report=None,
+    sg_picks=None, sg_report=None, doubles_picks=None, doubles_report=None,
+    doubles_matches=None, doubles_upcoming=None,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -246,15 +283,21 @@ def _publish_predictions(
     # probability may already be public before provider odds arrive, so freeze
     # pending Daily / Prime / Value candidates independently and confirm them only
     # after the exact feed is deployed.
-    predictions = annotate_market_publication_candidates(predictions, ace_picks=ace_picks, sg_picks=sg_picks)
-    records = reconcile_ledger(ledger, predictions, matches, now)
-    feed = serving_feed(records, model, matches, report, upcoming, now)
+    ledger_predictions = list(predictions) + list(doubles_picks or [])
+    ledger_predictions = annotate_market_publication_candidates(
+        ledger_predictions, ace_picks=ace_picks, sg_picks=sg_picks, doubles_picks=doubles_picks
+    )
+    settlement_matches = list(matches) + list(doubles_matches or [])
+    records = reconcile_ledger(ledger, ledger_predictions, settlement_matches, now)
+    feed_upcoming = list(upcoming) + list(doubles_upcoming or [])
+    feed = serving_feed(records, model, matches, report, feed_upcoming, now)
     # Market presentation fields are derived from current odds-backed predictions
     # and never alter the immutable Match Winner probability commitment.
     feed = attach_market_sections_to_feed(
-        feed, predictions, odds_report=odds_report,
+        feed, ledger_predictions, odds_report=odds_report,
         ace_picks=ace_picks, ace_report=ace_report,
         sg_picks=sg_picks, sg_report=sg_report,
+        doubles_picks=doubles_picks, doubles_report=doubles_report,
     )
     # PRIME remains internal, but its rows carry a separately trained-on-history
     # conditional projection used only after the favourite loses set 1 LIVE.
@@ -285,6 +328,12 @@ def main():
         help="Maximum provider-1 odds calls for the current BlinQ betting day",
     )
     parser.add_argument(
+        "--doubles-odds-max-events",
+        type=int,
+        default=40,
+        help="Maximum provider-1 Match Winner odds calls for isolated doubles candidates",
+    )
+    parser.add_argument(
         "--betting-day-start-hour",
         type=int,
         default=6,
@@ -296,6 +345,8 @@ def main():
         parser.error("refresh allowance must be 1..3000")
     if args.market_odds_max_events < 0:
         parser.error("market-odds-max-events must be >= 0")
+    if args.doubles_odds_max_events < 0:
+        parser.error("doubles-odds-max-events must be >= 0")
     if not 0 <= args.betting_day_start_hour <= 23:
         parser.error("betting-day-start-hour must be 0..23")
     cache = ROOT / ".cache/tbt"
@@ -397,6 +448,9 @@ def main():
         prediction_dir,
     )
     prediction_ledger = _load_prediction_ledger(prediction_store)
+    doubles_dir = cache / "doubles"
+    doubles_store = ReleaseStore(args.data_repository, "tbt-doubles-data-v1", doubles_dir)
+    doubles_history = _load_doubles_history(doubles_store)
     budget_path = history_dir / "request_budget.json"
     ledger, allowance = reserve_allocation(read_json(budget_path, {}), args.max_requests,
         run_id=os.getenv("GITHUB_RUN_ID", "manual"), purpose="refresh")
@@ -415,13 +469,53 @@ def main():
     ace_report = None
     sg_picks = []
     sg_report = None
+    doubles_picks = []
+    doubles_report = None
+    doubles_completed = []
+    doubles_upcoming = []
     try:
         matches = _refresh_history(provider, matches, history_dir, history_store,
                                    now.date() - timedelta(days=7), now.date())
         for tour in ("atp", "wta"):
             upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
 
-        # Generate the model probabilities first, then spend additional provider
+        # Doubles uses a separate pair/member model. The raw daily event calls are
+        # already cached by the singles refresh above, so maintaining the recent
+        # doubles history adds very little discovery traffic.
+        doubles_day = now.date() - timedelta(days=7)
+        while doubles_day <= now.date():
+            doubles_completed.extend(
+                match for match in provider.doubles_for_day(doubles_day, historical=True)
+                if match.is_completed
+            )
+            doubles_day += timedelta(days=1)
+        doubles_history = merge_doubles_history(doubles_history, doubles_completed)
+        doubles_history_state = _save_doubles_history(
+            doubles_store, doubles_history,
+            extra_report={"recent_completed_refreshed": len(doubles_completed)},
+        )
+        doubles_upcoming = provider.doubles_upcoming(now.date(), now.date() + timedelta(days=3))
+        doubles_predictions, doubles_model_report = build_doubles_predictions(
+            doubles_history, doubles_upcoming, now=now
+        )
+        doubles_odds_report = {}
+        if args.doubles_odds_max_events and doubles_predictions:
+            doubles_predictions, doubles_odds_report = enrich_current_betting_day_odds(
+                provider, doubles_predictions, now=now,
+                max_events=args.doubles_odds_max_events, provider_id=1,
+                timezone_name="Europe/Bratislava", start_hour=args.betting_day_start_hour,
+                candidate_min_probability=0.55, candidate_min_data_depth=0.35,
+                candidate_min_surface_matches=2,
+            )
+        doubles_picks, doubles_selection_report = select_doubles_picks(doubles_predictions)
+        doubles_report = {
+            "history": doubles_history_state,
+            "model": doubles_model_report,
+            "odds": doubles_odds_report,
+            "selection": doubles_selection_report,
+        }
+
+        # Generate the singles model probabilities first, then spend additional provider
         # calls only on the current BlinQ betting day. The odds layer now powers
         # Prime / Top Bets / Value discovery with mutually exclusive public assignment.
         predictions = predict(model, matches, upcoming)
@@ -460,6 +554,8 @@ def main():
         predictions, matches, model, report, upcoming,
         odds_report=odds_report, ace_picks=ace_picks, ace_report=ace_report,
         sg_picks=sg_picks, sg_report=sg_report,
+        doubles_picks=doubles_picks, doubles_report=doubles_report,
+        doubles_matches=doubles_completed, doubles_upcoming=doubles_upcoming,
     )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -474,6 +570,8 @@ def main():
         "ace_projection": ace_report or {},
         "sg": len(feed.get("sg_picks", [])),
         "sg_projection": sg_report or {},
+        "doubles": len(feed.get("doubles_picks", [])),
+        "doubles_model": doubles_report or {},
         "odds": odds_report or {},
         "settled": len(feed["results"]),
         "model": model.version,

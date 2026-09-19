@@ -357,8 +357,9 @@ def main() -> None:
             "stat_key_counts": inventory.get("stat_key_counts"),
         },
         "doubles": {
-            "status": "probe_only",
-            "reason": "Separate doubles collector/model is gated on stable pair/member identity and odds coverage.",
+            "status": "collector_model_available",
+            "reason": "Separate doubles collector/model is isolated from singles and activates after the doubles-data history gate is met.",
+            "activation_run": "data.yml -> doubles-data",
             "probe_summary": probe.get("summary"),
             "market_capabilities": (probe.get("market_capabilities") or {}).get("doubles"),
         },

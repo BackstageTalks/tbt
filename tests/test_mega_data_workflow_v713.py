@@ -17,7 +17,7 @@ def test_mega_data_has_one_global_budget_and_expected_phases():
     for token in ('provider-probe', 'history', 'ace-statistics', 'sg-scores', 'statistics'):
         assert token in SCRIPT
     assert 'requests_unused' in SCRIPT
-    assert 'probe_only' in SCRIPT
+    assert 'collector_model_available' in SCRIPT
 
 
 def test_targeted_jobs_write_request_summaries_for_budget_rollover():

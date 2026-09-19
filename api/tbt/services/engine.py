@@ -796,7 +796,11 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
             row["market_publications"] = publications
             results.append(row)
 
-    winner_results = [r for r in results if isinstance(r.get("result"), dict)]
+    winner_results = [
+        r for r in results
+        if isinstance(r.get("result"), dict)
+        and r.get("prediction_family") != "doubles"
+    ]
     metrics = evaluate_probabilities(
         [int(r["result"]["winner_id"] == r["player1"]["id"]) for r in winner_results],
         [r["player1"]["probability"] for r in winner_results]) if winner_results else {}
