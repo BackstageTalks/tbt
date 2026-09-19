@@ -10,7 +10,9 @@ const loader = fs.readFileSync('web/assets/blinq_loading_animated_v6.svg','utf8'
 // Loading: animated rally remains present and both loader + normal app have watermark contracts.
 assert.match(html,/blinq_loading_animated_v6\.svg\?v=7360/);
 assert.match(loader,/<animateTransform/);
-assert.equal(loader.includes('data:image/webp;base64,'),true);
+assert.equal(loader.includes('data:image/webp;base64,'),false);
+assert.ok(fs.existsSync('web/assets/blinq_loading_scene_v736.webp'));
+assert.match(css,/blinq_loading_scene_v736\.webp/);
 assert.match(css,/boot-splash\.boot-splash-tennis::after/);
 assert.match(css,/app-shell:not\(\[hidden\]\)::after/);
 
@@ -38,4 +40,4 @@ assert.match(css,/hub-action-cell \.hub-detail/);
 // Admin health cards expose the concrete runtime checks requested for launch.
 for (const label of ['PLAYER IMAGES','TOURNAMENT LOGOS','INFO STORAGE','LIVE DATA']) assert.ok(app.includes(label), label);
 
-console.log('PASS: BlinQ 7.3.6-r11 UI regression contract');
+console.log('PASS: BlinQ 7.3.6-r12 UI regression contract');

@@ -96,7 +96,9 @@ jobs:
           test -s web/blinq-app.css
           test -s web/release.json
           grep -q 'data-web-release="7.3.6"' web/index.html
-          grep -q '/blinq-app.css?v=7360&p=10' web/index.html
+          patch=$(python -c "import re,pathlib; s=pathlib.Path('web/index.html').read_text(); print(re.search(r'blinq-web-patch\" content=\"736-r(\\d+)',s).group(1))")
+          grep -q "/blinq-app.css?v=7360&p=${patch}" web/index.html
+          grep -q "/app.js?v=7360&p=${patch}" web/index.html
           test -s api/function_app.py
           test -s api/requirements.txt
           test -s scripts/prepare_feed.py
@@ -162,9 +164,11 @@ jobs:
           stamp="${GITHUB_SHA}"
           curl -fsSL -H 'Cache-Control: no-cache' "$base/?__blinq_release=$stamp" -o /tmp/blinq-index.html
           grep -q 'data-web-release="7.3.6"' /tmp/blinq-index.html
-          grep -q '/blinq-app.css?v=7360&p=10' /tmp/blinq-index.html
+          patch=$(python -c "import re,pathlib; s=pathlib.Path('/tmp/blinq-index.html').read_text(); print(re.search(r'blinq-web-patch\" content=\"736-r(\\d+)',s).group(1))")
+          grep -q "/blinq-app.css?v=7360&p=${patch}" /tmp/blinq-index.html
+          grep -q "/app.js?v=7360&p=${patch}" /tmp/blinq-index.html
           curl -fsSL -H 'Cache-Control: no-cache' "$base/blinq-app.css?__blinq_release=$stamp" -o /tmp/blinq-app.css
-          grep -q 'consolidated 7.3.6-r10' /tmp/blinq-app.css
+          grep -q "BlinQ runtime patch 7.3.6-r${patch}" /tmp/blinq-app.css
           curl -fsSL -H 'Cache-Control: no-cache' "$base/release.json?__blinq_release=$stamp" -o /tmp/blinq-release.json
           python - <<'PYWEB'
           import json

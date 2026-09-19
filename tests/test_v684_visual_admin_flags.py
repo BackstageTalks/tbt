@@ -1,5 +1,6 @@
 from pathlib import Path
 import json
+import re
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
@@ -36,14 +37,14 @@ def test_tournament_logo_resolver_and_fallback_assets():
         assert (fallback_dir / name).is_file()
 
 
-def test_banner_admin_uses_clickable_homepage_map():
-    assert "function adminBannerMapSlot" in APP
-    assert "function renderAdminBannerMap" in APP
-    assert "admin-site-map" in APP
-    assert "Rozloženie stránky ostáva pevné" in APP
-    assert "data-admin-element" in APP
-    assert ".admin-site-map" in CSS
-    assert ".admin-banner-map-workspace" in CSS
+def test_banner_admin_uses_current_hero_manager():
+    assert "admin-hero-tabs" in APP
+    assert "Počet aktívnych bannerov" in APP
+    assert "Interval automatickej zmeny" in APP
+    assert "data-admin-hero-count" in APP
+    assert "data-admin-hero-seconds" in APP
+    assert 'data-simple-banner-field="image_url"' in APP
+    assert 'data-simple-banner-field="mobile_image_url"' in APP
 
 
 def test_account_admin_is_simple_and_supports_flexible_expiry():
@@ -60,5 +61,8 @@ def test_account_admin_is_simple_and_supports_flexible_expiry():
 def test_684_visual_layer_is_loaded_with_current_cache():
     cfg = json.loads((WEB / 'ui-config.json').read_text(encoding='utf-8'))
     cache = cfg['asset_revision']
-    assert f'/blinq-app.css?v={cache}&p=10' in INDEX
-    assert f'/app.js?v={cache}&p=10' in INDEX
+    patch = re.search(r'<meta name="blinq-web-patch" content="736-r(\d+)"', INDEX)
+    assert patch
+    p = patch.group(1)
+    assert f'/blinq-app.css?v={cache}&p={p}' in INDEX
+    assert f'/app.js?v={cache}&p={p}' in INDEX

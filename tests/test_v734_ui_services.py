@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,14 +16,17 @@ SITE = json.loads((ROOT / 'web' / 'config' / 'site-content.json').read_text(enco
 def test_runtime_css_is_consolidated_on_current_asset_revision():
     assert UI['revision'] == '7.3.6'
     assert UI['asset_revision'] == 7360
-    assert '/blinq-app.css?v=7360&p=11' in INDEX
+    patch = re.search(r'<meta name="blinq-web-patch" content="736-r(\d+)"', INDEX)
+    assert patch
+    assert f'/blinq-app.css?v=7360&p={patch.group(1)}' in INDEX
     assert 'final-polish-' not in INDEX
 
 
 def test_login_loader_and_footer_have_blinq_background_watermarks():
-    assert "blinq_loading_scene_v736.webp" not in CSS736
-    assert not (ROOT / 'web' / 'assets' / 'blinq_loading_scene_v736.webp').exists()
-    assert "url('/assets/blinq_background.webp')" in CSS735
+    assert "url('/assets/blinq_loading_scene_v736.webp')" in CSS736
+    assert (ROOT / 'web' / 'assets' / 'blinq_loading_scene_v736.webp').is_file()
+    loader = (ROOT / 'web' / 'assets' / 'blinq_loading_animated_v6.svg').read_text(encoding='utf-8')
+    assert 'data:image/webp;base64,' not in loader
     assert CSS735.count("url('/assets/blinq_logo.svg')") >= 2
     assert 'bootEyebrow' in INDEX and 'bootStatus' in INDEX
     assert 'auth-copy h2' in CSS and 'font-size:17px' in CSS

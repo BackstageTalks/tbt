@@ -1,4 +1,5 @@
 import json
+import re
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[1]
@@ -9,7 +10,9 @@ cache = str(json.loads((ROOT/'web/ui-config.json').read_text(encoding='utf-8'))[
 
 
 def test_v731_layer_is_loaded_last():
-    assert f'/blinq-app.css?v={cache}&p=10' in INDEX
+    patch = re.search(r'<meta name="blinq-web-patch" content="736-r(\d+)"', INDEX)
+    assert patch
+    assert f'/blinq-app.css?v={cache}&p={patch.group(1)}' in INDEX
     assert 'final-polish-' not in INDEX
 
 
