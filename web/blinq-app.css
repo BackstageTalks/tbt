@@ -5855,7 +5855,7 @@ body#blinqPremium .boot-splash.boot-splash-tennis{
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source{position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:hidden!important;}
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source>img{position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;object-position:center center!important;border:0!important;border-radius:0!important;background:transparent!important;filter:none!important;}
 
-/* BlinQ runtime patch 7.3.6-r16 */
+/* BlinQ runtime patch 7.3.6-r17 */
 
 
 /* ---- 7.3.6-r16: Telegram community panel + visible footer watermark ---- */
@@ -5895,3 +5895,32 @@ body#blinqPremium .admin-tg-wide{grid-column:1/-1!important}
 body#blinqPremium .admin-tg-check{display:flex!important;align-items:center!important;gap:8px!important;align-self:end!important;min-height:38px!important}
 body#blinqPremium .admin-tg-check input{width:auto!important}
 @media(max-width:760px){body#blinqPremium .site-footer-minimal .footer-watermark-logo{width:104px!important;opacity:.18!important}body#blinqPremium .tg-group-card{grid-template-columns:auto 1fr!important}body#blinqPremium .tg-group-cta{grid-column:1/-1!important;justify-content:center!important}body#blinqPremium .admin-tg-grid{grid-template-columns:1fr!important}body#blinqPremium .admin-tg-wide{grid-column:auto!important}}
+
+
+/* ---- 7.3.6-r17: centered compact loading scene; animated rally ball only. ---- */
+body#blinqPremium .boot-splash.boot-splash-tennis{
+  position:fixed!important;inset:0!important;display:grid!important;place-items:center!important;
+  padding:0!important;overflow:hidden!important;
+  background:linear-gradient(90deg,rgba(1,11,12,.90),rgba(2,22,20,.74),rgba(1,10,12,.90)),url('/assets/blinq_background.webp') center/cover no-repeat!important;
+}
+body#blinqPremium .boot-splash.boot-splash-tennis::before{
+  content:""!important;position:absolute!important;inset:0!important;pointer-events:none!important;
+  background:radial-gradient(520px 420px at 50% 50%,rgba(45,224,157,.09),transparent 72%)!important;opacity:1!important;
+}
+body#blinqPremium .boot-splash.boot-splash-tennis::after{display:none!important;}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source{
+  position:relative!important;inset:auto!important;width:min(420px,78vw)!important;height:auto!important;aspect-ratio:1/1!important;
+  max-width:420px!important;max-height:420px!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;
+  background:transparent url('/assets/blinq_loading_scene_v736.webp') center/contain no-repeat!important;
+  box-shadow:none!important;overflow:visible!important;z-index:1!important;
+}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source>img{
+  position:absolute!important;inset:0!important;width:100%!important;height:100%!important;max-width:none!important;max-height:none!important;
+  object-fit:contain!important;object-position:center!important;border:0!important;border-radius:0!important;background:transparent!important;
+  filter:none!important;mix-blend-mode:normal!important;opacity:1!important;pointer-events:none!important;
+}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source>#bootEyebrow,
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source>#bootStatus{
+  position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;
+}
+@media(max-width:560px){body#blinqPremium .boot-tennis-card.boot-tennis-card-source{width:min(350px,86vw)!important;max-width:350px!important;max-height:350px!important;}}

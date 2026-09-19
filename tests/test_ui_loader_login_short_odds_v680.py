@@ -39,3 +39,12 @@ def test_frontend_cache_bust_for_final_ui_pass():
     for asset in ('blinq-app.css','app.js'):
         assert f'/{asset}?v={cache}' in INDEX
     assert f'/assets/blinq_loading_animated_v6.svg?v={cache}' in INDEX
+
+
+def test_loader_r17_is_compact_centered_scene_with_ball_overlay():
+    css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
+    assert "7.3.6-r17: centered compact loading scene" in css
+    assert "width:min(420px,78vw)!important" in css
+    assert "blinq_loading_scene_v736.webp" in css
+    assert "blinq_loading_animated_v6.svg" in INDEX
+    assert 'repeatCount="indefinite"' in LOADER

@@ -8,6 +8,8 @@ BLINQ_ADMIN_STORAGE_CONNECTION_STRING is supplied.
 from __future__ import annotations
 
 from collections import defaultdict
+import base64
+import gzip
 from datetime import datetime, timedelta, timezone
 import hashlib
 import json
@@ -233,6 +235,35 @@ def _table(name: str):
                 raise AdminStorageUnavailable("Admin storage is unavailable") from inner
 
 
+def _encode_runtime_ui_payload(config: dict) -> str:
+    """Encode UI config safely for Azure Table string-property limits.
+
+    Azure Table stores strings as UTF-16. The current BlinQ UI config is large
+    enough that a plain JSON string can exceed a single property limit even
+    though its UTF-8 size still looks modest. Compressing the JSON keeps the
+    entity small while remaining portable to the Firestore adapter.
+    """
+    raw = json.dumps(config, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    packed = gzip.compress(raw, compresslevel=9, mtime=0)
+    return "gzip:" + base64.b64encode(packed).decode("ascii")
+
+
+def _decode_runtime_ui_payload(payload: object) -> dict | None:
+    if not isinstance(payload, str) or not payload:
+        return None
+    try:
+        if payload.startswith("gzip:"):
+            packed = base64.b64decode(payload[5:].encode("ascii"), validate=True)
+            raw = gzip.decompress(packed).decode("utf-8")
+            parsed = json.loads(raw)
+        else:
+            # Backward compatibility with pre-r17 rows stored as plain JSON.
+            parsed = json.loads(payload)
+    except (ValueError, TypeError, UnicodeError, OSError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def load_runtime_ui_config() -> dict | None:
     client = _table(UI_TABLE)
     try:
@@ -244,14 +275,7 @@ def load_runtime_ui_config() -> dict | None:
         if status == 404 or "resourcenotfound" in name or "resourcenotfounderror" in name:
             return None
         raise AdminStorageUnavailable("Unable to load runtime UI configuration") from exc
-    payload = entity.get("payload")
-    if not isinstance(payload, str):
-        return None
-    try:
-        parsed = json.loads(payload)
-    except ValueError:
-        return None
-    return parsed if isinstance(parsed, dict) else None
+    return _decode_runtime_ui_payload(entity.get("payload"))
 
 
 
@@ -555,10 +579,12 @@ def validate_ui_config(payload: object) -> dict:
 def save_runtime_ui_config(payload: object, *, actor_id: str = "") -> dict:
     config = validate_ui_config(payload)
     now = datetime.now(timezone.utc).isoformat()
+    encoded = _encode_runtime_ui_payload(config)
     entity = {
         "PartitionKey": "runtime",
         "RowKey": "ui-config",
-        "payload": json.dumps(config, ensure_ascii=False, separators=(",", ":")),
+        "payload": encoded,
+        "payload_encoding": "gzip+base64",
         "updated_at": now,
         "updated_by": str(actor_id or "")[:256],
     }

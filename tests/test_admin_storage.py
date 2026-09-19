@@ -43,6 +43,27 @@ def test_runtime_ui_config_round_trip(monkeypatch):
     assert table.single["updated_by"] == "admin"
 
 
+def test_runtime_ui_config_is_compressed_for_azure_table_property(monkeypatch):
+    table = FakeTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    payload["telegram_groups"] = json.loads((ROOT / "web" / "config" / "telegram-groups.json").read_text(encoding="utf-8"))
+    admin_storage.save_runtime_ui_config(payload, actor_id="admin")
+    stored = table.single["payload"]
+    assert stored.startswith("gzip:")
+    # Keep well below Azure Table's single-property ceiling.
+    assert len(stored.encode("utf-8")) < 60_000
+    assert admin_storage.load_runtime_ui_config() == payload
+
+
+def test_runtime_ui_config_reads_legacy_plain_json(monkeypatch):
+    table = FakeTable()
+    payload = {"schema": 1, "legacy": True}
+    table.single = {"PartitionKey": "runtime", "RowKey": "ui-config", "payload": json.dumps(payload)}
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    assert admin_storage.load_runtime_ui_config() == payload
+
+
 def test_banner_analytics_are_aggregated_by_campaign_and_unique_visitor(monkeypatch):
     table = FakeTable()
     monkeypatch.setattr(admin_storage, "_table", lambda name: table)
