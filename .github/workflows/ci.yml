@@ -86,6 +86,7 @@ jobs:
           node tests/test_auth_refresh_race.js
           node tests/test_firebase_web_auth.js
           node tests/test_firebase_email_verification.js
+          node tests/test_v736_ui_regression_contract.js
 
       - name: Check production web artifact
         run: |

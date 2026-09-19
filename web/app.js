@@ -1558,16 +1558,10 @@
     const explicitCity=String(row?.venue_city||row?.tournament_city||row?.location?.city||'').trim();
     const explicitCountryName=String(row?.venue_country||row?.tournament_country||row?.location?.country||row?.country_name||'').trim();
     const countryCode=explicitTournamentCountry(row);
-    let name=rawName,location=[explicitCity,explicitCountryName].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(', ');
-    // Historical rows sometimes carry "Tournament, Country" in one field. Split only
-    // a plain trailing location token; never split draw labels such as "Group D".
-    if(!location&&rawName.includes(',')){
-      const parts=rawName.split(',').map(v=>v.trim()).filter(Boolean);
-      const tail=parts.at(-1)||'';
-      const looksLikeDraw=/^(men|women|singles|doubles|qualifying|qualification|group\s+[a-z0-9]+|round\s+\d+|r\d+|qf|sf|final)$/i.test(tail);
-      if(parts.length===2&&!looksLikeDraw&&tail.length>=3){name=parts[0];location=tail;}
-    }
-    return {name:name||rawName||'Turnaj',location,countryCode};
+    // Location is rendered only when the API/provider exposes it explicitly.
+    // Never infer a venue from the tournament title or a draw/group suffix.
+    const location=[explicitCity,explicitCountryName].filter(Boolean).filter((v,i,a)=>a.indexOf(v)===i).join(', ');
+    return {name:rawName||'Turnaj',location,countryCode};
   }
   function tournamentIdentityHtml(row,compact=false){
     const meta=tournamentDisplayMeta(row);
@@ -1914,7 +1908,7 @@
     }
     if(sourceTab==='ace'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=modelPickName(row),market=aceMarketName(row);
-      const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia ESA','Projekce ESA'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}<span aria-hidden="true">→</span></button>`:'';
+      const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia ESA','Projekce ESA'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button>`:'';
       const actionCell=tab==='see_all'?`<td class="hub-action-cell hub-optional-action">${action}</td>`:'';
       return `<tr${rowClass} data-hub-event="${key}" data-hub-market="ace">${leading}<td class="hub-pick">${hubPredictionHtml('ace',pick,market||'ESA')}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(projection)?projection.toFixed(2):'—',lcopy('projection','projekcia','projekce'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
     }
@@ -1925,9 +1919,9 @@
       const edge=Number(row?.edge??row?.betting?.edge);
       const value=Number.isFinite(ev)?ev:Number.isFinite(edge)?edge:null;
       const valueText=value==null?'—':`${value>0?'+':''}${(value*(Math.abs(value)<=1?100:1)).toFixed(1)}%`;
-      return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-edge-cell metric-positive">${hubNumberHtml(valueText,'edge')}</td><td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><span aria-hidden="true">→</span></button></td></tr>`;
+      return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-edge-cell metric-positive">${hubNumberHtml(valueText,'edge')}</td><td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span></button></td></tr>`;
     }
-    return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><span aria-hidden="true">→</span></button></td></tr>`;
+    return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span></button></td></tr>`;
   }
 
   function dailyHubLockedRow(tab,index,requiredPlan='pro'){
@@ -2994,14 +2988,20 @@
   function systemState(ok,warning=false){return ok?'ok':warning?'warning':'error';}
   function renderAdminSystem(){
     const d=state.adminDiagnostics||{},feed=d.feed||{},provider=d.provider||{},ops=d.ops||{},counts=ops.counts||{};
-    const storage=d.storage||{},storageServices=storage.services||{};
+    const storage=d.storage||{},storageServices=storage.services||{},services=d.services||{},assets=d.assets||{};
+    const playerImages=assets.player_images||{},tournamentLogos=assets.tournament_logos||{};
     const privateServicesReady=Boolean(storageServices.premium_info&&storageServices.live_alert_history&&storageServices.support);
+    const privateServicesLabel='INFO / LIVE / SUPPORT'; // legacy aggregate label kept for diagnostics compatibility
     const storageDetail=d.content_storage_ready?`${d.admin_storage||'storage'}${storage.azure_connection_source?' · '+storage.azure_connection_source:''}`:(storage.recommended_setting?`SET ${storage.recommended_setting}`:'unavailable');
+    const mediaDetail=item=>`${Number(item.provider_or_proxy_refs||0)}/${Number(item.total||0)} ref · ${Number(item.fallback_needed||0)} fallback`;
     const cards=[
       ['API / AUTH',Boolean(d.accounts_ready),d.auth_provider||'—'],
       ['ADMIN STORAGE',Boolean(d.content_storage_ready),storageDetail],
-      ['INFO / LIVE / SUPPORT',privateServicesReady,privateServicesReady?'ONLINE':'NEED STORAGE'],
-      ['PUBLISHED FEED',Boolean(feed.ready)&&!feed.stale,feed.ready?(feed.stale?'STALE':'FRESH'):'NO FEED'],
+      ['PLAYER IMAGES',Boolean(playerImages.ok),mediaDetail(playerImages)],
+      ['TOURNAMENT LOGOS',Boolean(tournamentLogos.ok),mediaDetail(tournamentLogos)],
+      ['SUPPORT STORAGE',Boolean(services.support_storage),services.support_storage?'ONLINE':'NEED STORAGE'],
+      ['INFO STORAGE',Boolean(services.info_storage),services.info_storage?'ONLINE':'NEED STORAGE'],
+      ['LIVE DATA',Boolean(services.live_data),services.live_data?'FRESH':(feed.ready?'STALE':'NO FEED')],
       ['DATA PROVIDER',Boolean(provider.configured),provider.configured?'CONFIGURED':'MISSING KEY'],
       ['ERRORS · 24H',Number(counts.error||0)===0,String(counts.error||0)],
     ];
@@ -3183,7 +3183,7 @@
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
         const d=state.adminDiagnostics||{};
-        const safe={release:d.release||'',accounts_ready:Boolean(d.accounts_ready),content_storage_ready:Boolean(d.content_storage_ready),auth_provider:d.auth_provider||'',admin_storage:d.admin_storage||'unavailable',firebase_server_configured:Boolean(d.firebase_server_configured),firebase_admin_users:Boolean(d.firebase_admin_users),storage:{backend:d.storage?.backend||'unavailable',azure_configured:Boolean(d.storage?.azure_configured),azure_available:Boolean(d.storage?.azure_available),azure_connection_source:d.storage?.azure_connection_source||'',firestore_available:Boolean(d.storage?.firestore_available)},media_storage:{configured:Boolean(d.media_storage?.configured),available:Boolean(d.media_storage?.available),container:d.media_storage?.container||''},webpush:{enabled:Boolean(d.webpush?.enabled),keys_configured:Boolean(d.webpush?.keys_configured),storage_available:Boolean(d.webpush?.storage_available),subscriptions:d.webpush?.subscriptions??null},problems:Array.isArray(d.problems)?d.problems:[]};
+        const safe={release:d.release||'',accounts_ready:Boolean(d.accounts_ready),content_storage_ready:Boolean(d.content_storage_ready),auth_provider:d.auth_provider||'',admin_storage:d.admin_storage||'unavailable',firebase_server_configured:Boolean(d.firebase_server_configured),firebase_admin_users:Boolean(d.firebase_admin_users),storage:{backend:d.storage?.backend||'unavailable',azure_configured:Boolean(d.storage?.azure_configured),azure_available:Boolean(d.storage?.azure_available),azure_connection_source:d.storage?.azure_connection_source||'',firestore_available:Boolean(d.storage?.firestore_available)},assets:d.assets||{},services:d.services||{},media_storage:{configured:Boolean(d.media_storage?.configured),available:Boolean(d.media_storage?.available),container:d.media_storage?.container||''},webpush:{enabled:Boolean(d.webpush?.enabled),keys_configured:Boolean(d.webpush?.keys_configured),storage_available:Boolean(d.webpush?.storage_available),subscriptions:d.webpush?.subscriptions??null},problems:Array.isArray(d.problems)?d.problems:[]};
         const value=JSON.stringify(safe,null,2);
         try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(value);else{const ta=document.createElement('textarea');ta.value=value;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus('Bezpečná diagnostika bola skopírovaná. Môžeš ju poslať bez kľúčov a tokenov.');}catch{showStatus('Diagnostiku sa nepodarilo skopírovať.');}
         return;
@@ -3574,6 +3574,9 @@
   }
 
   function upgradePlanFeatureList(planId){
+    const id=String(planId||'').toLowerCase();
+    const configured=state.presentationConfig?.tiers?.tiers?.[id]?.features;
+    if(Array.isArray(configured)&&configured.length)return configured.map(value=>String(value||'').trim()).filter(Boolean);
     const features={
       pro:[
         lcopy('3 TOP picks per day','3 TOP picky denne','3 TOP tipy denně'),
@@ -3600,46 +3603,47 @@
         lcopy('Banner advertising benefit','Výhoda na reklamný banner','Výhoda na reklamní banner')
       ]
     };
-    return features[String(planId||'').toLowerCase()]||[];
+    return features[id]||[];
   }
-  function renderUpgradeTierCard(id,p,requiredIndex){
+  function renderUpgradeTierCard(id,p,requiredIndex,lockedContext=false){
     const idx=membershipHierarchy.indexOf(id),below=requiredIndex>0&&idx<requiredIndex;
     const url=safeExternalUrl(p?.url||''),label=String(p?.label||id.toUpperCase()),title=p?.card_title||label;
     const short=String(p?.short_description||p?.description||p?.note||'').trim();
     const fullDescription=String(p?.description||p?.note||short).trim();
     const detail=fullDescription&&fullDescription!==short?fullDescription:'';
     const features=upgradePlanFeatureList(id);
-    const required=idx===requiredIndex;
+    const required=Boolean(lockedContext&&idx===requiredIndex);
     const actionLabel=p?.cta_label||lcopy(`Upgrade to ${id.toUpperCase()}`,`Upgrade na ${id.toUpperCase()}`,`Upgrade na ${id.toUpperCase()}`);
     let action='';
     if(url) action=`<a class="upgrade-tier-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(actionLabel)} →</a>`;
     else action=`<button class="upgrade-tier-cta" type="button" data-upgrade-account-route="1">${escapeHtml(actionLabel)} →</button>`;
-    const note=below
+    const note=lockedContext&&below
       ?`<span class="upgrade-tier-note is-warning">${escapeHtml(lcopy('Does not unlock this section','Neodomkne túto sekciu','Neodemkne tuto sekci'))}</span>`
-      :required?`<span class="upgrade-tier-note">${escapeHtml(lcopy('Required for this section','Požadovaná úroveň','Požadovaná úroveň'))}</span>`:'';
-    return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy"><small>${escapeHtml(id.toUpperCase())}</small><strong>${escapeHtml(title)}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:''}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
+      :required?`<span class="upgrade-tier-note">${escapeHtml(lcopy('Required for this section','Potrebné pre túto sekciu','Potřebné pro tuto sekci'))}</span>`:'';
+    return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${lockedContext&&below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy"><small>${escapeHtml(id.toUpperCase())}</small><strong>${escapeHtml(title)}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:''}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
   }
-  function showUpgradePrompt(planId='pro',sectionLabel='this content'){
+  function showUpgradePrompt(planId='pro',sectionLabel='this content',lockedContext=false){
     window.BlinqUI.closeMenu(false);
     const dialog=$('upgradeDialog'),host=$('upgradeDialogContent');if(!dialog||!host)return;
     const a=state.feed?.account||{};
     const requiredId=membershipHierarchy.includes(String(planId||'').toLowerCase())?String(planId).toLowerCase():'pro';
-    const requiredIndex=Math.max(1,membershipHierarchy.indexOf(requiredId));
+    const requiredIndex=lockedContext?Math.max(1,membershipHierarchy.indexOf(requiredId)):0;
     const requiredName=String(state.ui?.plans?.[requiredId]?.label||upgradePlanLabel(requiredId)||requiredId).replace(/^BlinQ\s+/i,'').toUpperCase();
     const isAdmin=Boolean(a.is_admin||String(a.role||'').toLowerCase()==='admin');
-    const currentPlan=accountPlan();
-    const currentLabel=isAdmin?'ADMIN':String(a.plan_label||state.ui?.plans?.[currentPlan]?.label||accessLabel()||currentPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
+    const rawMembership=String(a.plan||((String(a.status||'').toLowerCase()==='trial')?'rookie':'rookie')).toLowerCase();
+    const currentPlan=membershipHierarchy.includes(rawMembership)?rawMembership:'rookie';
+    const currentLabel=String(a.plan_label||state.ui?.plans?.[currentPlan]?.label||currentPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
     const accountName=String(a.name||a.telegram_nick||a.email||'BlinQ User');
     const avatar=accountAvatarUrl(a);
     const upgradePlans=['pro','elite','legend','goat'].filter(id=>state.ui?.plans?.[id]?.enabled!==false);
     const section=String(sectionLabel||'').trim();
-    const availability=section&&section!=='BlinQ Membership'
+    const availability=lockedContext
       ?lcopy(`This content requires ${requiredName} or higher.`, `Táto sekcia je dostupná od úrovne ${requiredName} a vyššie.`, `Tato sekce je dostupná od úrovně ${requiredName} a výše.`)
-      :lcopy('Choose the membership level that fits you best.','Vyber si úroveň, ktorá ti najviac vyhovuje.','Vyber si úroveň, která ti nejvíc vyhovuje.');
-    const badge=section&&section!=='BlinQ Membership'
-      ?lcopy(`Requires ${requiredName}`,`Vyžaduje ${requiredName}`,`Vyžaduje ${requiredName}`)
-      :lcopy('Membership upgrade','Upgrade členstva','Upgrade členství');
-    host.innerHTML=`<div class="upgrade-dialog-head"><div class="upgrade-dialog-intro"><span class="upgrade-dialog-eyebrow">${escapeHtml(uiCopy('upgrade.eyebrow',lcopy('BLINQ MEMBERSHIP','BLINQ ČLENSTVO','BLINQ ČLENSTVÍ')))}</span><span class="upgrade-requires-pill">▣ ${escapeHtml(badge)}</span><h2 id="upgradeDialogTitle" class="upgrade-dialog-title">${escapeHtml(lcopy('Unlock higher access','Odomknúť ','Odemknout '))}<span class="accent">${escapeHtml(lcopy('higher access','vyšší prístup','vyšší přístup'))}</span></h2><p class="upgrade-dialog-copy"><strong>${escapeHtml(availability)}</strong><span>${escapeHtml(lcopy('More predictions, more data and premium functions in one BlinQ workspace.','Viac predikcií, viac dát a prémiových funkcií v jednom BlinQ priestore.','Více predikcí, více dat a prémiových funkcí v jednom BlinQ prostoru.'))}</span></p></div><div class="upgrade-account-summary"><span class="upgrade-account-avatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:escapeHtml(accountAvatarFallback(a))}</span><div class="upgrade-account-copy"><small>${escapeHtml(lcopy('Your account','Tvoj účet','Tvůj účet'))}</small><strong>${escapeHtml(accountName)}</strong><span>${escapeHtml(lcopy('Current access','Aktuálny prístup','Aktuální přístup'))}</span><b>${escapeHtml(currentLabel||'ROOKIE')}</b></div><div class="upgrade-account-promise"><i>♛</i><div><strong>${escapeHtml(lcopy('Unlock your full potential','Odomkni svoj plný potenciál','Odemkni svůj plný potenciál'))}</strong><span>${escapeHtml(lcopy('Choose a higher plan and move further.','Vyber si vyšší plán a posuň sa ďalej.','Vyber si vyšší plán a posuň se dál.'))}</span></div></div></div></div><div class="upgrade-tier-heading"><div><h3>${escapeHtml(lcopy('Choose your level','Vyber si svoju úroveň','Vyber si svou úroveň'))}</h3></div><p>${escapeHtml(lcopy('Every higher level adds more data, functions and access.','Každá vyššia úroveň prináša viac dát, funkcií a prístupu.','Každá vyšší úroveň přináší více dat, funkcí a přístupu.'))}</p></div><div class="upgrade-plan-grid">${upgradePlans.map(id=>renderUpgradeTierCard(id,state.ui?.plans?.[id]||{},requiredIndex)).join('')}</div><div class="upgrade-benefit-strip"><span><i>▥</i><span><strong>${escapeHtml(lcopy('Real data','Reálne dáta','Reálná data'))}</strong><small>${escapeHtml(lcopy('Not just impressions','Nie len dojmy','Ne jen dojmy'))}</small></span></span><span><i>◎</i><span><strong>${escapeHtml(lcopy('More precise predictions','Presnejšie predikcie','Přesnější predikce'))}</strong><small>${escapeHtml(lcopy('Thanks to advanced analytics','Vďaka pokročilým analýzam','Díky pokročilým analýzám'))}</small></span></span><span><i>♛</i><span><strong>${escapeHtml(lcopy('Exclusive content','Exkluzívny obsah','Exkluzivní obsah'))}</strong><small>${escapeHtml(lcopy('For higher membership levels','Pre vyššie úrovne členstva','Pro vyšší úrovně členství'))}</small></span></span></div>`;
+      :uiCopy('upgrade.generic_availability',lcopy('Choose the membership level that fits you best.','Vyber si úroveň, ktorá ti najviac vyhovuje.','Vyber si úroveň, která ti nejvíc vyhovuje.'));
+    const badge=lockedContext
+      ?uiCopyTemplate('upgrade.requires',lcopy(`Requires ${requiredName}`,`Vyžaduje ${requiredName}`,`Vyžaduje ${requiredName}`),{plan:requiredName})
+      :uiCopy('upgrade.generic_badge',lcopy('Membership upgrade','Upgrade členstva','Upgrade členství'));
+    host.innerHTML=`<div class="upgrade-dialog-head"><div class="upgrade-dialog-intro"><span class="upgrade-dialog-eyebrow">${escapeHtml(uiCopy('upgrade.eyebrow',lcopy('BLINQ MEMBERSHIP','BLINQ ČLENSTVO','BLINQ ČLENSTVÍ')))}</span><span class="upgrade-requires-pill${lockedContext?' is-required-context':''}">▣ ${escapeHtml(badge)}</span><h2 id="upgradeDialogTitle" class="upgrade-dialog-title">${escapeHtml(lcopy('Unlock higher access','Odomknúť ','Odemknout '))}<span class="accent">${escapeHtml(lcopy('higher access','vyšší prístup','vyšší přístup'))}</span></h2><p class="upgrade-dialog-copy"><strong>${escapeHtml(availability)}</strong><span>${escapeHtml(lcopy('More predictions, more data and premium functions in one BlinQ workspace.','Viac predikcií, viac dát a prémiových funkcií v jednom BlinQ priestore.','Více predikcí, více dat a prémiových funkcí v jednom BlinQ prostoru.'))}</span></p></div><div class="upgrade-account-summary"><span class="upgrade-account-avatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:escapeHtml(accountAvatarFallback(a))}</span><div class="upgrade-account-copy"><small>${escapeHtml(lcopy('Your account','Tvoj účet','Tvůj účet'))}</small><strong>${escapeHtml(accountName)}</strong><span>${escapeHtml(lcopy('Membership','Členstvo','Členství'))}</span><b>${escapeHtml(currentLabel||'ROOKIE')}</b>${isAdmin?`<em class="upgrade-account-role">ADMIN</em>`:''}</div></div></div><div class="upgrade-tier-heading"><div><h3>${escapeHtml(lcopy('Choose your level','Vyber si svoju úroveň','Vyber si svou úroveň'))}</h3></div><p>${escapeHtml(lcopy('Every higher level adds more data, functions and access.','Každá vyššia úroveň prináša viac dát, funkcií a prístupu.','Každá vyšší úroveň přináší více dat, funkcí a přístupu.'))}</p></div><div class="upgrade-plan-grid">${upgradePlans.map(id=>renderUpgradeTierCard(id,state.ui?.plans?.[id]||{},requiredIndex,lockedContext)).join('')}</div>`;
     host.querySelectorAll('[data-upgrade-account-route]').forEach(button=>button.onclick=()=>{if(dialog.open)dialog.close();setRoute('account',true);});
     if(locale!=='en')translatePublicDom(dialog);if(!dialog.open)dialog.showModal();
   }
@@ -3723,7 +3727,7 @@
     document.addEventListener('click',e=>{
       if(!e.target.closest('#profileShell'))closeProfileMenu();
       const dashboardToggle=e.target.closest('[data-dashboard-toggle]');if(dashboardToggle&&state.route==='predictions'){e.preventDefault();toggleDashboardSection(dashboardToggle.dataset.dashboardToggle);return;}
-      const accessUpgrade=e.target.closest('#accessHintUpgrade');if(accessUpgrade){e.preventDefault();e.stopPropagation();hideAccessHint();showUpgradePrompt(accessUpgrade.dataset.upgradePlan||'elite',accessUpgrade.dataset.upgradeSection||'BlinQ');return;}
+      const accessUpgrade=e.target.closest('#accessHintUpgrade');if(accessUpgrade){e.preventDefault();e.stopPropagation();hideAccessHint();showUpgradePrompt(accessUpgrade.dataset.upgradePlan||'elite',accessUpgrade.dataset.upgradeSection||'BlinQ',true);return;}
       const upgradeTarget=e.target.closest('[data-upgrade-plan]');if(upgradeTarget&&state.route!=='admin'){e.preventDefault();e.stopPropagation();const plan=upgradeTarget.dataset.upgradePlan||'pro',section=upgradeTarget.dataset.upgradeSection||'this content';if(upgradeTarget.dataset.upgradeExplicit==='1')showUpgradePrompt(plan,section);else showAccessHint(upgradeTarget,plan,section,true);return;}
       const restricted=e.target.closest('[data-ui-element].ui-state-locked,[data-ui-element].ui-state-blurred,[data-ui-element].ui-state-hidden');
       if(restricted&&state.route!=='admin'){e.preventDefault();e.stopPropagation();const plan=firstUnlockPlan(dashboardSectionKeyForSidebarElement(restricted.dataset.uiElement)||'top_daily',0,true);showAccessHint(restricted,plan,restricted.querySelector('span:nth-child(2)')?.textContent||'this content',true);return;}

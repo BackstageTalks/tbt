@@ -1013,6 +1013,16 @@
         "sk": "Prejsť na {plan}",
         "cz": "Přejít na {plan}",
         "en": "Upgrade to {plan}"
+      },
+      "generic_badge": {
+        "sk": "Upgrade členstva",
+        "cz": "Upgrade členství",
+        "en": "Membership upgrade"
+      },
+      "generic_availability": {
+        "sk": "Vyber si úroveň, ktorá ti najviac vyhovuje.",
+        "cz": "Vyber si úroveň, která ti nejvíc vyhovuje.",
+        "en": "Choose the membership level that fits you best."
       }
     },
     "access": {

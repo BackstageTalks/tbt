@@ -8,7 +8,12 @@
       "description": "Ochutnávková úroveň pre základný prístup k BlinQ.",
       "cta_label": "Vybrať ROOKIE",
       "url": "",
-      "invite_only": false
+      "invite_only": false,
+      "features": [
+        "2 stabilné denné TOP náhľady",
+        "Základný dashboard",
+        "Ukážka BlinQ ponuky"
+      ]
     },
     "pro": {
       "label": "BlinQ PRO",
@@ -17,7 +22,13 @@
       "description": "Plný dashboard a denný prístup k hlavným predikciám BlinQ.",
       "cta_label": "Upgrade na PRO",
       "url": "https://backstagetalks.tipsterpage.com/sk0y2du0/sk",
-      "invite_only": false
+      "invite_only": false,
+      "features": [
+        "3 TOP picky denne",
+        "3 PRIME value picky",
+        "Plný dashboard",
+        "Vlastné upozornenia"
+      ]
     },
     "elite": {
       "label": "BlinQ ELITE",
@@ -26,7 +37,13 @@
       "description": "VIP skupina, See All, Overview a premium analytický prístup.",
       "cta_label": "Upgrade na ELITE",
       "url": "https://backstagetalks.tipsterpage.com/qYBLx1L0/sk",
-      "invite_only": false
+      "invite_only": false,
+      "features": [
+        "Všetko z PRO",
+        "VIP skupina",
+        "See All",
+        "Overview + pokročilé analýzy"
+      ]
     },
     "legend": {
       "label": "BlinQ LEGEND",
@@ -35,7 +52,13 @@
       "description": "ELITE plus výsledky a pokročilé štatistiky výkonu.",
       "cta_label": "Upgrade na LEGEND",
       "url": "https://t.me/+5ANwTY1STQExOTY0",
-      "invite_only": false
+      "invite_only": false,
+      "features": [
+        "Všetko z ELITE",
+        "Výsledky",
+        "Pokročilé štatistiky výkonu",
+        "Dlhodobý analytický prehľad"
+      ]
     },
     "goat": {
       "label": "BlinQ GOAT",
@@ -44,7 +67,13 @@
       "description": "Najvyššia úroveň BlinQ s doživotným prístupom a partner/reklamnými výhodami.",
       "cta_label": "Upgrade na GOAT",
       "url": "",
-      "invite_only": false
+      "invite_only": false,
+      "features": [
+        "Všetko z LEGEND",
+        "Maximum BlinQ",
+        "Partner / reklamné privilégiá",
+        "Výhoda na reklamný banner"
+      ]
     }
   }
 }
