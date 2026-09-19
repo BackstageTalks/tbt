@@ -182,6 +182,9 @@ def _admin_hub_rule(ui_config: dict | None, tab: str, plan: str) -> tuple[object
     a redacted placeholder. `row_overrides` applies to numbered positions in
     the selected daily list and follows the same rule.
     """
+    # ADMIN is an operational role, not a membership tier. It must never
+    # inherit ROOKIE rules just because the UI config has no `admin` entry.
+    if str(plan or "").strip().lower() == "admin": return None
     if not isinstance(ui_config, dict): return None
     hub=((ui_config.get("dashboard") or {}).get("daily_hub") or {})
     if hub.get("enabled") is False: return (0, True, False, False, "first", {}, "hidden")

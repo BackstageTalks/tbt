@@ -262,12 +262,12 @@
 
   async function loadUiConfig() {
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=18');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=19');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=18');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=19');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -1045,6 +1045,10 @@
   function renderDashboardKpis(){
     const host=$('dashboardKpis');if(!host)return;
     const rows=dashboardDailyRows();
+    // Show the complete TOP supply for today, not only the rows exposed to
+    // the current membership (e.g. ROOKIE can see 2 while the KPI says 10).
+    const dailyEnt=dailyHubEntitlement('daily');
+    const totalToday=Math.max(Number(dailyEnt?.total)||0,rows.length);
     const odds=rows.map(r=>Number(r?.odds??r?.betting?.odds)).filter(Number.isFinite);
     const edges=rows.map(r=>Number(r?.edge??r?.betting?.edge)).filter(Number.isFinite);
     const perf=state.feed?.performance||{};
@@ -1060,7 +1064,7 @@
     const rawDelta=firstFinite(perf?.accuracy_delta,perf?.accuracy_change,perf?.trend_accuracy,perf?.last_7d_delta);
     const delta=rawDelta==null?'':`${rawDelta>0?'+':''}${(rawDelta*(Math.abs(rawDelta)<=1?100:1)).toFixed(1)}%`;
     const cards=[
-      [icons.board,lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(rows.length),lcopy('matches','zápasov','zápasů'),''],
+      [icons.board,lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(totalToday),lcopy('matches','zápasov','zápasů'),''],
       [icons.target,lcopy('MODEL SUCCESS','MODEL ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—',lcopy('(last 7 days)','(posledných 7 dní)','(posledních 7 dní)'),delta],
       [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'',''],
       [icons.coins,lcopy('AVERAGE EDGE','PRIEMERNÝ EDGE','PRŮMĚRNÝ EDGE'),avgEdge==null?'—':`${avgEdge>0?'+':''}${(avgEdge*(Math.abs(avgEdge)<=1?100:1)).toFixed(1)}%`,'','']
@@ -1261,6 +1265,21 @@
     return {visible_picks:visible,blur_remaining:blur,enabled,see_all:Boolean(rule.see_all),total,returned,locked_count:Math.max(0,total-returned),selection_mode:String(rule.selection_mode||'first'),display_state:display,slot_states,row_overrides:overrides};
   }
   function dailyHubEntitlement(tab){
+    // ADMIN is unrestricted outside explicit Admin preview mode. Ignore any
+    // stale membership slot states that may have been cached before login.
+    if(accountPlan()==='admin'&&!state.previewPlan){
+      if(tab==='see_all'){
+        const daily=state.feed?.entitlements?.sections?.daily||{};
+        const value=state.feed?.entitlements?.sections?.value||{};
+        const total=Math.max(0,Number(daily.total)||dailyHubRows('daily').length)+Math.max(0,Number(value.total)||dailyHubRows('value').length);
+        return {visible_picks:'ALL',blur_remaining:false,enabled:true,see_all:true,total,returned:total,locked_count:0,slot_states:[]};
+      }
+      const key=tab==='calendar'?'daily':tab==='daily'?'daily':tab==='ace'?'ace':tab==='games'?'games':tab==='sets'?'sets':tab;
+      const server=state.feed?.entitlements?.sections?.[key]||{};
+      const rows=dailyHubRows(tab);
+      const total=Math.max(Number(server.total)||0,rows.length);
+      return {...server,visible_picks:'ALL',blur_remaining:false,enabled:server.enabled!==false,see_all:true,total,returned:rows.length,locked_count:0,slot_states:[]};
+    }
     if(tab==='see_all'){
       const plan=accountPlan();
       const allowed=['elite','legend','goat','admin'].includes(plan);
@@ -2027,7 +2046,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=18"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=19"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     const row=rowOverride||m?.raw||m;

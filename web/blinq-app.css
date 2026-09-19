@@ -5924,3 +5924,8 @@ body#blinqPremium .boot-tennis-card.boot-tennis-card-source>#bootStatus{
   position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;
 }
 @media(max-width:560px){body#blinqPremium .boot-tennis-card.boot-tennis-card-source{width:min(350px,86vw)!important;max-width:350px!important;max-height:350px!important;}}
+
+
+/* BlinQ runtime patch 7.3.6-r19: admin access + footer watermark */
+body#blinqPremium .site-footer-minimal .footer-watermark-logo{display:block!important;visibility:visible!important;opacity:.22!important;width:126px!important;height:auto!important;max-height:56px!important;object-fit:contain!important;object-position:left center!important;filter:grayscale(1) brightness(1.9) contrast(.9)!important;mix-blend-mode:screen!important}
+@media(max-width:760px){body#blinqPremium .site-footer-minimal .footer-watermark-logo{display:block!important;visibility:visible!important;width:104px!important;opacity:.19!important}}
