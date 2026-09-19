@@ -5848,7 +5848,7 @@ body#blinqPremium .boot-tennis-card.boot-tennis-card-source>img{position:absolut
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source>#bootEyebrow,body#blinqPremium .boot-tennis-card.boot-tennis-card-source>#bootStatus{position:absolute!important;width:1px!important;height:1px!important;overflow:hidden!important;clip:rect(0 0 0 0)!important;}
 
 
-/* 7.3.6-r12 — full-bleed original loading scene + transparent animated ball overlay. */
+/* 7.3.6-r13 — full-bleed original loading scene + transparent animated ball overlay. */
 body#blinqPremium .boot-splash.boot-splash-tennis{
   background-image:linear-gradient(180deg,rgba(0,8,10,.10),rgba(0,10,12,.18)),url('/assets/blinq_loading_scene_v736.webp')!important;
   background-size:cover!important;background-position:center center!important;background-repeat:no-repeat!important;
@@ -5856,4 +5856,4 @@ body#blinqPremium .boot-splash.boot-splash-tennis{
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source{position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;margin:0!important;padding:0!important;border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:hidden!important;}
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source>img{position:absolute!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:cover!important;object-position:center center!important;border:0!important;border-radius:0!important;background:transparent!important;filter:none!important;}
 
-/* BlinQ runtime patch 7.3.6-r12 */
+/* BlinQ runtime patch 7.3.6-r13 */

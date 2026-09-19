@@ -346,6 +346,16 @@
   async function adminDeleteUser(userId) {
     return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}`, {method: 'DELETE'});
   }
+  async function adminPayments(userId) {
+    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/payments`);
+  }
+  async function adminAddPayment(userId, payload) {
+    return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}/payments`, {method: 'POST', body: JSON.stringify(payload || {})});
+  }
+  async function adminAudit(targetId = '') {
+    const suffix = targetId ? `?target_id=${encodeURIComponent(targetId)}` : '';
+    return apiWithSession(`/api/v1/admin/audit${suffix}`);
+  }
   async function runtimeUiConfig() { return json('/api/v1/ui-config'); }
   async function contentNews() { return json('/api/v1/content/news'); }
   async function bannerEvent(payload, keepalive = false) {
