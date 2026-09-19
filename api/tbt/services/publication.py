@@ -164,10 +164,24 @@ _MARKET_SECTION_KEYS = {
     "top_daily": "top_daily_picks",
     "prime": "prime_picks",
     "value": "value_picks",
-    # Projection-only Aces / Double Faults are also frozen at deploy time so
-    # Results can later grade the exact projection that users actually saw.
+    "doubles": "doubles_picks",
+    # Projection-only markets are frozen at deploy time so Results can later
+    # grade the exact projection that users actually saw.
     "ace": "ace_picks",
+    "sets": "sg_picks",
+    "games": "sg_picks",
 }
+
+
+def _section_feed_rows(feed, section, key):
+    rows = feed.get(key, [])
+    if rows is None:
+        return []
+    if not isinstance(rows, list):
+        raise ValueError(f"Invalid market section: {key}")
+    if section in {"sets", "games"}:
+        return [row for row in rows if isinstance(row, dict) and str(row.get("market") or "").strip().lower() == section]
+    return rows
 
 
 def _market_commitment_from_feed_row(row, section):
@@ -239,12 +253,7 @@ def validate_market_publication_candidate(feed, ledger):
 
     validated = 0
     for section, key in _MARKET_SECTION_KEYS.items():
-        rows = feed.get(key, [])
-        if rows is None:
-            continue
-        if not isinstance(rows, list):
-            raise ValueError(f"Invalid market section: {key}")
-        for feed_row in rows:
+        for feed_row in _section_feed_rows(feed, section, key):
             commitment = _market_commitment_from_feed_row(feed_row, section)
             event_id = commitment[0]
             ledger_row = ledger_index.get(event_id)
@@ -284,11 +293,7 @@ def restore_published_market_snapshots(feed, ledger):
         index[event] = row
     for section, key in _MARKET_SECTION_KEYS.items():
         key_present = key in result
-        rows = result.get(key, [])
-        if rows is None:
-            continue
-        if not isinstance(rows, list):
-            raise ValueError(f"Invalid market section: {key}")
+        rows = _section_feed_rows(result, section, key)
 
         # Odds-backed bets remain strictly fail-closed: a deployment must never
         # guess which price/probability users were shown. Projection-only ESA
@@ -313,7 +318,7 @@ def restore_published_market_snapshots(feed, ledger):
                 same_identity = stored[:4] == commitment[:4] and stored[8] == commitment[8]
                 # Projection scope + metric are part of the semantic identity.
                 # They disambiguate e.g. player aces from any future totals.
-                if section == "ace":
+                if section in {"ace", "sets", "games"}:
                     same_identity = (
                         same_identity
                         and stored[11] == commitment[11]
@@ -322,7 +327,7 @@ def restore_published_market_snapshots(feed, ledger):
                 if same_identity and publication.get("issued_at") and publication.get("publication_status") == "published":
                     matches.append(publication)
 
-            if section == "ace" and matches:
+            if section in {"ace", "sets", "games"} and matches:
                 # Multiple ledger rows are safe only when they encode exactly the
                 # same immutable projection snapshot. Collapse lifecycle-only
                 # duplicates; never choose between conflicting projections.
@@ -333,7 +338,7 @@ def restore_published_market_snapshots(feed, ledger):
                 matches = list(unique.values())
 
             if len(matches) != 1:
-                if section == "ace":
+                if section in {"ace", "sets", "games"}:
                     # Fail closed at card granularity for legacy projection
                     # corruption. The rest of the site remains deployable and a
                     # subsequent refresh regenerates a clean publication row.
@@ -358,19 +363,27 @@ def restore_published_market_snapshots(feed, ledger):
                     for player in players:
                         player["probability"] = probability if player is selected[0] else 1 - probability
                     row["confidence"] = max(probability, 1 - probability)
-            if section == "ace":
+            if section in {"ace", "sets", "games"}:
                 for field in (
-                    "projection", "opponent_projection", "projection_scope",
-                    "projection_metric", "projection_confidence", "projection_label",
+                    "projection", "opponent_projection", "reference_projection",
+                    "projection_gap", "projection_scope", "projection_metric",
+                    "projection_direction", "projection_confidence", "projection_label",
                     "projection_kind", "projection_subject", "projection_samples",
-                    "data_depth", "price_status",
+                    "projection_unit", "best_of", "data_depth", "price_status",
                 ):
                     if field in snapshot:
                         row[field] = deepcopy(snapshot.get(field))
             restored_rows.append(row)
 
         if key_present:
-            result[key] = restored_rows
+            if key == "sg_picks":
+                untouched = [
+                    item for item in result.get(key, []) or []
+                    if not isinstance(item, dict) or str(item.get("market") or "").strip().lower() != section
+                ]
+                result[key] = untouched + restored_rows
+            else:
+                result[key] = restored_rows
     validate_market_publication_candidate(result, ledger)
     return result
 
@@ -382,7 +395,7 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
 
     deployed = set()
     for section, key in _MARKET_SECTION_KEYS.items():
-        for row in deployed_feed.get(key, []) or []:
+        for row in _section_feed_rows(deployed_feed, section, key):
             commitment = _market_commitment_from_feed_row(row, section)
             deployed.add(commitment)
 

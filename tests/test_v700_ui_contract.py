@@ -27,7 +27,7 @@ def test_v700_public_prediction_categories_are_current():
     # PRIME/Short Odds is internal, not a public prediction tab.
     assert tabs["prime"]["enabled"] is False
     assert tabs["top"]["enabled"] is False
-    assert tabs["doubles"]["enabled"] is False
+    assert tabs["doubles"]["enabled"] is True
     assert tabs["board"]["enabled"] is False
 
 

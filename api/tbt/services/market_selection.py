@@ -1080,6 +1080,8 @@ def annotate_market_publication_candidates(
     predictions: list[dict[str, Any]],
     *,
     ace_picks: list[dict[str, Any]] | None = None,
+    sg_picks: list[dict[str, Any]] | None = None,
+    doubles_picks: list[dict[str, Any]] | None = None,
     **selection_kwargs: Any,
 ) -> list[dict[str, Any]]:
     """Attach one pending betting-section publication per underlying pick.
@@ -1111,6 +1113,27 @@ def annotate_market_publication_candidates(
         selection_id = str(card.get("selection_id") or "").strip()
         if event and market in {"aces", "double_faults"} and selection_id:
             ace_by_event.setdefault(event, []).append(card)
+
+    sg_by_event: dict[str, list[dict[str, Any]]] = {}
+    for card in sg_picks or []:
+        if not isinstance(card, dict):
+            continue
+        event = str(card.get("event_id") or "").strip()
+        market = str(card.get("market") or "").strip().lower()
+        selection_id = str(card.get("selection_id") or "").strip()
+        if event and market in {"sets", "games"} and selection_id:
+            sg_by_event.setdefault(event, []).append(card)
+
+    doubles_by_event: dict[str, list[dict[str, Any]]] = {}
+    for card in doubles_picks or []:
+        if not isinstance(card, dict):
+            continue
+        event = str(card.get("event_id") or "").strip()
+        betting = card.get("betting") if isinstance(card.get("betting"), dict) else {}
+        selection_id = str(betting.get("selection_id") or card.get("selection_id") or "").strip()
+        market = str(betting.get("market") or card.get("market") or "match_winner").strip()
+        if event and selection_id and market:
+            doubles_by_event.setdefault(event, []).append(card)
 
     annotated: list[dict[str, Any]] = []
     for source in predictions:
@@ -1178,6 +1201,69 @@ def annotate_market_publication_candidates(
                 "projection_confidence": card.get("projection_confidence"),
                 "projection_samples": deepcopy(card.get("projection_samples")),
                 "data_depth": card.get("data_depth"),
+                "issued_at": None,
+                "publication_status": "pending",
+                "result": None,
+            })
+        for card in sg_by_event.get(event_id, []):
+            market = str(card.get("market") or "").strip().lower()
+            selection_id = str(card.get("selection_id") or "").strip()
+            scope = str(card.get("projection_scope") or "match_total").strip() or "match_total"
+            selection_key = f"projection:{market}:{scope}:{event_id}:{selection_id}"
+            publications.append({
+                "schema": 2,
+                "publication_key": f"{market}:{selection_key}",
+                "selection_key": selection_key,
+                "section": market,
+                "primary_section": market,
+                "market": market,
+                "selection": card.get("selection") or card.get("pick"),
+                "selection_id": selection_id,
+                "odds": None,
+                "model_probability": None,
+                "edge": None,
+                "expected_value": None,
+                "betting_day": None,
+                "price_status": "projection_only",
+                "projection": card.get("projection"),
+                "reference_projection": card.get("reference_projection") or card.get("baseline_projection"),
+                "projection_gap": card.get("projection_gap"),
+                "projection_scope": scope,
+                "projection_metric": card.get("projection_metric") or market,
+                "projection_direction": card.get("projection_direction"),
+                "projection_label": card.get("projection_label"),
+                "projection_confidence": card.get("projection_confidence"),
+                "projection_samples": deepcopy(card.get("projection_samples")),
+                "projection_unit": card.get("projection_unit"),
+                "best_of": card.get("best_of"),
+                "data_depth": card.get("data_depth"),
+                "issued_at": None,
+                "publication_status": "pending",
+                "result": None,
+            })
+        for card in doubles_by_event.get(event_id, []):
+            betting = card.get("betting") if isinstance(card.get("betting"), dict) else {}
+            selection_id = str(betting.get("selection_id") or card.get("selection_id") or "").strip()
+            market = str(betting.get("market") or card.get("market") or "match_winner").strip()
+            betting_day = str(betting.get("betting_day") or card.get("betting_day") or "").strip()
+            selection_key = f"doubles:{market}:{betting_day}:{event_id}:{selection_id}"
+            publications.append({
+                "schema": 1,
+                "publication_key": f"doubles:{selection_key}",
+                "selection_key": selection_key,
+                "section": "doubles",
+                "primary_section": "doubles",
+                "market": market,
+                "selection": betting.get("selection") or card.get("selection") or card.get("pick"),
+                "selection_id": selection_id,
+                "odds": betting.get("odds") if betting else card.get("odds"),
+                "fair_implied_probability": betting.get("fair_implied_probability") if betting else card.get("fair_implied_probability"),
+                "model_probability": betting.get("model_probability") if betting else card.get("probability"),
+                "edge": betting.get("edge") if betting else card.get("edge"),
+                "expected_value": betting.get("expected_value") if betting else card.get("expected_value"),
+                "provider_id": betting.get("provider_id") if betting else card.get("provider_id"),
+                "captured_at": betting.get("captured_at") if betting else card.get("captured_at"),
+                "betting_day": betting_day or None,
                 "issued_at": None,
                 "publication_status": "pending",
                 "result": None,

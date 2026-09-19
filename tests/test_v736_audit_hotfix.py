@@ -36,6 +36,6 @@ def test_footer_is_neutral_but_keeps_live_diagnostic_signal():
 
 
 def test_changed_assets_have_patch_cache_bust_without_breaking_release_contract():
-    assert '/app.js?v=7360&p=3' in INDEX
-    assert '/final-polish-736.css?v=7360&p=3' in INDEX
+    assert '/app.js?v=7360&p=6' in INDEX
+    assert '/final-polish-736.css?v=7360&p=6' in INDEX
     assert 'data-web-release="7.3.6"' in INDEX

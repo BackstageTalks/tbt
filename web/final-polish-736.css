@@ -330,3 +330,20 @@ body#blinqPremium .upgrade-benefit-strip{display:none!important}
   body#blinqPremium:not(.blinq-admin) .app-shell:not([hidden])::after{right:12px;bottom:12px;width:92px;height:36px;opacity:.032}
   body#blinqPremium .daily-hub-table .hub-action-cell{padding-right:8px!important}
 }
+
+
+/* ----- 736-r6 consolidated: loader cleanup, doubles tab, 10 visible rows without inner scrollbar ----- */
+body#blinqPremium .boot-splash.boot-splash-tennis{isolation:isolate!important;}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source{z-index:1!important;}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source>img{mix-blend-mode:screen!important;opacity:.985!important;filter:drop-shadow(0 24px 68px rgba(0,0,0,.40)) brightness(1.01)!important;}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source::after{content:""!important;position:absolute!important;left:50%!important;top:50%!important;transform:translate(-50%,-50%)!important;width:min(76%,430px)!important;height:min(76%,430px)!important;background:radial-gradient(circle at 50% 48%,rgba(4,20,22,0) 0 49%,rgba(4,20,22,.36) 63%,rgba(4,20,22,.78) 82%,transparent 100%)!important;pointer-events:none!important;mix-blend-mode:normal!important;}
+@media (min-width:1081px){
+  body#blinqPremium .table-scroller{max-height:none!important;overflow:visible!important;scrollbar-width:none!important;background:rgba(3,14,12,.12)!important;}
+  body#blinqPremium .table-scroller::-webkit-scrollbar{display:none!important;}
+  body#blinqPremium .daily-hub-table td{height:56px!important;padding:6px 11px!important;font-size:10px!important;}
+  body#blinqPremium .daily-hub-table th{height:34px!important;padding:0 11px!important;font-size:8.5px!important;}
+  body#blinqPremium .hub-tournament-logo,body#blinqPremium .hub-tour-logo{width:36px!important;height:36px!important;flex-basis:36px!important;}
+  body#blinqPremium .hub-player img,body#blinqPremium .hub-player-avatar,body#blinqPremium .hub-avatar{width:30px!important;height:30px!important;flex-basis:30px!important;}
+  body#blinqPremium .hub-player-copy strong,body#blinqPremium .hub-player-meta strong{max-width:150px!important;}
+  body#blinqPremium .hub-detail{padding:6px 10px!important;}
+}

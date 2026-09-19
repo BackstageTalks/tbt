@@ -265,7 +265,7 @@
 
   async function loadUiConfig() {
     try {
-      state.uiSource = await getJSON('/ui-config.json');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=6');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
@@ -1439,6 +1439,7 @@
     (marketRows('value')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'value'}));
     (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'daily'}));
     (marketRows('ace')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'ace'}));
+    (marketRows('doubles')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'doubles'}));
     (marketRows('sg')||[]).filter(offerSurfaceEligible).forEach(row=>{const market=String(row?.market||'').toLowerCase();if(market==='games'||market==='sets')add({...row,_hub_source:market});});
     return rows.sort((a,b)=>(marketProbability(b)||0)-(marketProbability(a)||0));
   }
@@ -1450,6 +1451,7 @@
     }
     if(tab==='value')return marketRows('value').filter(offerSurfaceEligible);
     if(tab==='ace')return marketRows('ace').filter(offerSurfaceEligible);
+    if(tab==='doubles')return marketRows('doubles').filter(offerSurfaceEligible);
     if(tab==='games'||tab==='sets')return marketRows('sg').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()===tab);
     if(tab==='see_all')return ['elite','legend','goat','admin'].includes(accountPlan())?leanSeeAllRows():[];
     return [];
@@ -1479,19 +1481,21 @@
     });
   }
   function dailyHubTabLabel(tab){
-    return {daily:'TOP',value:'VALUE',ace:'ESA',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
+    return {daily:'TOP',value:'VALUE',ace:'ESA',doubles:'DOUBLES',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
   }
   function dailyHubIsComingSoon(tab){return false;}
   function dailyHubColumns(tab){
     if(dailyHubIsComingSoon(tab))return [''];
     if(tab==='value')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %','EDGE',''];
     if(tab==='ace')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];
+    if(tab==='doubles')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %',''];
     if(tab==='games'||tab==='sets')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];
     return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %',''];
   }
   function dailyHubColumnKeys(tab){
     if(tab==='value')return ['rank','time','tournament','match','pick','number','confidence','edge','action'];
     if(tab==='ace'||tab==='games'||tab==='sets')return ['rank','time','tournament','match','pick','number','confidence'];
+    if(tab==='doubles')return ['rank','time','tournament','match','pick','number','confidence','action'];
     return ['rank','time','tournament','match','pick','number','confidence','action'];
   }
   function hubDataDepthLabel(row){
@@ -1932,7 +1936,7 @@
   function renderDailyHub(){
     const host=$('dailyHub'); if(!host)return; wireDailyHub();
     const cfg=dailyHubConfig(); host.hidden=cfg.enabled===false; if(host.hidden)return;
-    const tabs=['daily','value','ace','games','sets','see_all'];
+    const tabs=['daily','value','ace','doubles','games','sets','see_all'];
     if(!tabs.includes(state.dailyHubTab))state.dailyHubTab='daily';
     const plan=accountPlan();
     const visibleTabs=tabs.filter(tab=>tab==='see_all'||dailyHubEntitlement(tab).enabled!==false);
@@ -2287,7 +2291,7 @@
   function resultCategoryLabel(value){const en=({all:'All published',prime:'Short Odds',top_daily:'TOP Prediction',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets & Games',games:'Sets & Games'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP Prediction':'TOP predikcie','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP Prediction':'TOP predikce','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy'})[en]||en;return en;}
   function resultPublication(row,category='all'){
     const pubs=issuedMarketPublications(row);
-    const filtered=['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category)?pubs.filter(p=>publicationMatchesResultCategory(p,category)):pubs;
+    const filtered=['prime','top_daily','value','doubles','ace','double_faults','sg','sets','games'].includes(category)?pubs.filter(p=>publicationMatchesResultCategory(p,category)):pubs;
     return filtered.sort((a,b)=>new Date(a.issued_at)-new Date(b.issued_at))[0]||null;
   }
   function publicationOutcome(publication){
@@ -2307,7 +2311,9 @@
     const toTs=to?new Date(`${to}T23:59:59.999`).getTime():null;
     return (state.feed.results||[]).filter(row=>{
       if(filters.tour&&String(row?.tour||'').toUpperCase()!==filters.tour)return false;
-      if(filters.surface){const raw=String(row?.surface||'').toLowerCase();const mapped=raw==='indoor_hard'?'hard':raw;if(mapped!==filters.surface)return false;}else if(String(row?.surface||'').toLowerCase()==='unknown')return false;
+      // "All surfaces" really means all settled published rows. Unknown/missing
+      // surface metadata must never hide a valid historical result.
+      if(filters.surface){const raw=String(row?.surface||'').toLowerCase();const mapped=raw==='indoor_hard'?'hard':raw;if(mapped!==filters.surface)return false;}
       const ts=new Date(row?.scheduled_at||0).getTime();
       if(filters.window==='custom'){
         if(fromTs!==null&&(!Number.isFinite(ts)||ts<fromTs))return false;
@@ -2333,14 +2339,34 @@
     const option=(value,label,selected)=>`<option value="${escapeHtml(value)}"${value===selected?' selected':''}>${escapeHtml(label)}</option>`;
     if(hours){state.resultsFilters.window=String(hours/24);state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}
     const periodOptions=hours?[[String(hours/24),hours===24?lcopy('Last 24 hours','Posledných 24 hodín','Posledních 24 hodin'):lcopy('Last 48 hours','Posledných 48 hodín','Posledních 48 hodin')]]:[['all',publicText('All time')],['1',publicText('24 hours')],['7',publicText('7 days')],['30',publicText('30 days')],['90',publicText('90 days')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
-    const accessNote=hours?`<div class="results-access-note"><strong>${hours===24?'ROOKIE FREE':'PRO'}</strong><span>${hours===24?'História posledných 24 hodín.':'História posledných 48 hodín.'}</span><b>ELITE+ odomyká celú históriu</b></div>`:`<div class="results-access-note is-full"><strong>${escapeHtml(String(accountPlan()).toUpperCase())}</strong><span>Celá história výsledkov</span><b>ROI · Yield · mesačné obdobia</b></div>`;
+    const resetRaw=state.feed?.results_meta?.history_cutoff||'';
+    const resetDate=resetRaw?new Date(resetRaw):null;
+    const resetLabel=resetDate&&!Number.isNaN(resetDate.getTime())?`${String(resetDate.getDate()).padStart(2,'0')}. ${String(resetDate.getMonth()+1).padStart(2,'0')}. ${resetDate.getFullYear()}`:'';
+    const accessNote=hours?`<div class="results-access-note"><strong>${hours===24?'ROOKIE FREE':'PRO'}</strong><span>${hours===24?'História posledných 24 hodín.':'História posledných 48 hodín.'}</span><b>ELITE+ odomyká celú históriu</b></div>`:`<div class="results-access-note is-full"><strong>${escapeHtml(String(accountPlan()).toUpperCase())}</strong><span>${resetLabel?`Výsledky od ${escapeHtml(resetLabel)}`:'Celá história výsledkov'}</span><b>TOP · Short Odds · VALUE · ESA · SETS · GAMES · DOUBLES</b></div>`;
     return `${accessNote}<div class="results-filter-bar results-filter-bar-v683">
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top_daily','value','ace','double_faults','sg','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
+      <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top_daily','prime','value','ace','double_faults','sg','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow" ${hours?'disabled':''}>${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
       ${hours?'':`<label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('From','Od','Od'))}</span><span class="date-shell"><input id="resultsDateFrom" type="date" value="${escapeHtml(filters.dateFrom||'')}"><i aria-hidden="true"></i></span></label><label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('To','Do','Do'))}</span><span class="date-shell"><input id="resultsDateTo" type="date" value="${escapeHtml(filters.dateTo||'')}"><i aria-hidden="true"></i></span></label>`}
     </div>`;
+  }
+  function canonicalResultPublicationKey(row,publication,index=0){
+    // Old ledgers may contain the same public bet under more than one lifecycle
+    // key (for example before/after betting-day identity was introduced). Results
+    // are a semantic view: one event + market/projection + selection = one row.
+    const eventId=String(row?.event_id||row?.id||row?.match_id||'').trim();
+    const market=String(publication?.market||'match_winner').trim().toLowerCase();
+    const scope=String(publication?.projection_scope||'').trim().toLowerCase();
+    const metric=String(publication?.projection_metric||'').trim().toLowerCase();
+    const selection=String(publication?.selection_id||publication?.selection||'').trim().toLowerCase();
+    if(eventId&&selection)return `${eventId}::${market}::${scope}::${metric}::${selection}`;
+    const p1=String(row?.player1?.id||row?.player1?.name||'').trim().toLowerCase();
+    const p2=String(row?.player2?.id||row?.player2?.name||'').trim().toLowerCase();
+    const players=[p1,p2].filter(Boolean).sort().join('::');
+    const scheduled=String(row?.scheduled_at||'').trim();
+    if((scheduled||players)&&selection)return `${scheduled}::${players}::${market}::${scope}::${metric}::${selection}`;
+    return String(publication?.selection_key||publication?.publication_key||`${scheduled}::${players}::${publication?.section||''}::${selection||index}`);
   }
   function settledPublishedEntries(rows,category='all'){
     const specific=['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category);
@@ -2348,7 +2374,7 @@
     (rows||[]).forEach(row=>{
       const pubs=issuedMarketPublications(row).filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category)).filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
-        const key=String(publication.selection_key||publication.publication_key||`${row?.id||row?.event_id||row?.scheduled_at||''}::${publication.section||''}::${publication.selection_id||publication.selection||index}`);
+        const key=canonicalResultPublicationKey(row,publication,index);
         const current=unique.get(key);
         if(!current||new Date(publication.issued_at)<new Date(current.publication.issued_at))unique.set(key,{row,publication});
       });

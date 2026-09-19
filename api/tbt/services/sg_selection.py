@@ -455,7 +455,7 @@ def select_sg_picks(
         "cutoff_utc": cutoff.isoformat(),
         "projection_only": True,
         "odds_backed": False,
-        "settlement_enabled": False,
+        "settlement_enabled": True,
         "history_matches_with_structured_score": score_matches,
         "history_best_of_inferred": 0,
         "history_best_of_inference_sources": {},

@@ -3512,7 +3512,7 @@
         },
         "doubles": {
           "label": "Štvorhra",
-          "enabled": false,
+          "enabled": true,
           "plans": {
             "trial": {
               "visible_rows": 0,

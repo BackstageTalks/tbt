@@ -63,7 +63,7 @@ def test_sg_projection_publishes_sets_and_games_when_history_signal_is_deep():
     assert games["projection_unit"] == "games"
     assert games["projection"] > games["reference_projection"]
     assert report["projection_only"] is True
-    assert report["settlement_enabled"] is False
+    assert report["settlement_enabled"] is True
 
 
 def test_same_utc_day_score_is_excluded():

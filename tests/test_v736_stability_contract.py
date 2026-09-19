@@ -79,7 +79,7 @@ def test_release_and_cache_revision_cannot_drift():
     assert revision == "7.3.6"
     assert release["release"] == revision
     assert f'data-web-release="{revision}"' in INDEX
-    assert 'content="736-r3"' in INDEX
+    assert 'content="736-r6"' in INDEX
     refs = re.findall(r'(?:src|href)="(/[^"?#]+\.(?:js|css)\?v=(\d+)[^"]*)"', INDEX)
     assert refs, "expected versioned frontend assets"
     bad = [(ref, version) for ref, version in refs if version != asset_revision]

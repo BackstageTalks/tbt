@@ -209,6 +209,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/confirm_prediction_publication.py \
-            --data-repository "$TBT_DATA_REPOSITORY" \
-            --deployed-feed api/data/feed.json
+          for attempt in 1 2 3; do
+            if python scripts/confirm_prediction_publication.py \
+              --data-repository "$TBT_DATA_REPOSITORY" \
+              --deployed-feed api/data/feed.json; then
+              break
+            fi
+            if [[ "$attempt" == "3" ]]; then
+              echo "Prediction publication confirmation failed after 3 attempts" >&2
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done

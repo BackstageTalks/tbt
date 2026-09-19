@@ -16,6 +16,11 @@ from .publication import confirm_publication
 from .countries import normalize_country_code
 
 
+# Public Results were intentionally reset when the product moved to the unified
+# section publication ledger. Private training/history data remains untouched.
+PUBLIC_RESULTS_RESET_AT = datetime(2026, 9, 19, 0, 0, tzinfo=timezone.utc)
+
+
 def event_id(match):
     raw = match.provider_payload or {}
     return str(next((raw.get(k) for k in ("_tbt_provider_event_id", "provider_event_id", "event_id", "eventId", "id") if raw.get(k)), match.match_id))
@@ -420,6 +425,101 @@ def _settle_projection_publications(row, match, now):
         publication["result"] = settled
 
 
+def _settle_sg_projection_publications(row, match, now):
+    """Grade published Sets/Games projections against structured final scores."""
+    publications = row.get("market_publications")
+    if not isinstance(publications, list):
+        return
+    stats = match.stats if isinstance(match.stats, dict) else {}
+    for publication in publications:
+        if not isinstance(publication, dict):
+            continue
+        market = str(publication.get("market") or "").strip().lower()
+        if market not in {"sets", "games"}:
+            continue
+        issued_at = publication.get("issued_at")
+        if not issued_at:
+            continue
+        try:
+            issued = datetime.fromisoformat(str(issued_at).replace("Z", "+00:00"))
+        except ValueError:
+            publication["excluded_reason"] = "invalid_issued_at"
+            continue
+        if issued.tzinfo is None or issued >= match.scheduled_at:
+            publication["excluded_reason"] = "invalid_issued_at" if issued.tzinfo is None else "issued_after_actual_start"
+            continue
+
+        key = "total_sets" if market == "sets" else "total_games"
+        try:
+            actual = float(stats.get(key))
+        except (TypeError, ValueError):
+            publication["excluded_reason"] = "projection_result_unavailable"
+            continue
+        if not np.isfinite(actual) or actual <= 0:
+            publication["excluded_reason"] = "projection_result_unavailable"
+            continue
+
+        selection_id = str(publication.get("selection_id") or "").strip().lower()
+        reference = publication.get("reference_projection")
+        try:
+            reference = float(reference)
+        except (TypeError, ValueError):
+            reference = None
+
+        correct = None
+        status = "void"
+        if market == "sets":
+            parts = selection_id.split(":")
+            if len(parts) >= 3 and parts[0] == "sets" and parts[1] in {"over", "under"}:
+                try:
+                    line = float(parts[2])
+                except ValueError:
+                    line = None
+                if line is not None and np.isfinite(line):
+                    if actual == line:
+                        status, correct = "void", None
+                    else:
+                        correct = actual > line if parts[1] == "over" else actual < line
+                        status = "hit" if correct else "miss"
+                    reference = line
+        else:
+            direction = str(publication.get("projection_direction") or "").strip().lower()
+            if not direction and selection_id.startswith("games:"):
+                direction = selection_id.split(":", 1)[1]
+            if direction in {"high", "low"} and reference is not None and np.isfinite(reference):
+                if actual == reference:
+                    status, correct = "void", None
+                else:
+                    correct = actual > reference if direction == "high" else actual < reference
+                    status = "hit" if correct else "miss"
+
+        if status == "void" and correct is None and reference is None:
+            publication["excluded_reason"] = "projection_result_unavailable"
+            continue
+
+        publication.pop("excluded_reason", None)
+        existing = publication.get("result") if isinstance(publication.get("result"), dict) else None
+        settled = {
+            "status": status,
+            "correct": correct,
+            "actual_count": actual,
+            "projection": publication.get("projection"),
+            "reference_projection": reference,
+            "projection_scope": publication.get("projection_scope") or "match_total",
+            "projection_metric": publication.get("projection_metric") or market,
+            "data_depth": publication.get("data_depth"),
+            "settled_at": (existing or {}).get("settled_at") or now.isoformat(),
+            "scheduled_at": match.scheduled_at.isoformat(),
+        }
+        if existing is not None and (
+            existing.get("status") != status
+            or existing.get("actual_count") != actual
+            or existing.get("reference_projection") != reference
+        ):
+            settled["corrected_at"] = now.isoformat()
+        publication["result"] = settled
+
+
 def _projection_metrics(publications):
     rows = [
         p for p in publications
@@ -464,37 +564,63 @@ def _betting_metrics(publications):
     }
 
 
+def _result_publication_semantic_key(row, publication):
+    """Stable identity for one public result, independent of lifecycle schema.
+
+    Historical ledgers can contain two publication keys for the same event and
+    selection after publication-key schema changes. Metrics and the public
+    Results view must count that immutable bet once, not once per bookkeeping key.
+    """
+    event = str(row.get("event_id") or row.get("id") or row.get("match_id") or "").strip()
+    market = str(publication.get("market") or "match_winner").strip().lower()
+    scope = str(publication.get("projection_scope") or "").strip().lower()
+    metric = str(publication.get("projection_metric") or "").strip().lower()
+    selection = str(publication.get("selection_id") or publication.get("selection") or "").strip().lower()
+    if event and selection:
+        return (event, market, scope, metric, selection)
+    return (str(publication.get("selection_key") or publication.get("publication_key") or ""),)
+
+
+def _dedupe_result_publications(entries):
+    unique = {}
+    for row, publication in entries:
+        key = _result_publication_semantic_key(row, publication)
+        if not any(key):
+            continue
+        prior = unique.get(key)
+        if prior is None or str(publication.get("issued_at") or "") < str(prior[1].get("issued_at") or ""):
+            unique[key] = (row, publication)
+    return list(unique.values())
+
+
 def betting_performance(results):
     """Aggregate settled, actually-issued betting selections with flat 1u stakes."""
-    publications = []
+    entries = []
     for row in results:
         for publication in row.get("market_publications", []) or []:
             if isinstance(publication, dict) and publication.get("issued_at"):
-                publications.append(publication)
+                entries.append((row, publication))
 
-    # Overall counts each underlying selection only once even when the same bet
-    # was published in multiple Daily / Prime / Value sections. Earliest public
-    # publication is the canonical overall snapshot.
-    unique = {}
-    for publication in publications:
-        key = str(publication.get("selection_key") or publication.get("publication_key") or "")
-        if not key:
-            continue
-        prior = unique.get(key)
-        if prior is None or str(publication.get("issued_at") or "") < str(prior.get("issued_at") or ""):
-            unique[key] = publication
+    # Semantic dedupe is intentionally independent of selection_key/publication_key.
+    # Those keys changed across historical schemas and can otherwise double-count
+    # an identical event/market/selection after a migration.
+    canonical_entries = _dedupe_result_publications(entries)
+    canonical_publications = [publication for _, publication in canonical_entries]
 
     sections = {}
-    for section in ("top_daily", "prime", "value", "ace", "double_faults", "sets", "games"):
-        sections[section] = _betting_metrics([p for p in publications if p.get("section") == section])
+    for section in ("top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"):
+        section_entries = _dedupe_result_publications([(row, p) for row, p in entries if p.get("section") == section])
+        sections[section] = _betting_metrics([p for _, p in section_entries])
     markets = {}
-    for market in sorted({str(p.get("market") or "") for p in publications if p.get("market")}):
-        markets[market] = _betting_metrics([p for p in publications if p.get("market") == market])
-    projection_publications = [p for p in publications if p.get("price_status") == "projection_only"]
+    for market in sorted({str(p.get("market") or "") for _, p in entries if p.get("market")}):
+        market_entries = _dedupe_result_publications([(row, p) for row, p in entries if p.get("market") == market])
+        markets[market] = _betting_metrics([p for _, p in market_entries])
+    projection_entries = _dedupe_result_publications([(row, p) for row, p in entries if p.get("price_status") == "projection_only"])
+    projection_publications = [p for _, p in projection_entries]
     return {
         "schema": 2,
         "stake_model": "flat_1u",
-        "overall": _betting_metrics(list(unique.values())),
+        "overall": _betting_metrics(canonical_publications),
         "sections": sections,
         "markets": markets,
         "projections": {
@@ -574,6 +700,7 @@ def reconcile_ledger(ledger, predictions, history, now=None):
         row["scheduled_at"] = match.scheduled_at.isoformat()
         _settle_match_winner_publications(row, match, now)
         _settle_projection_publications(row, match, now)
+        _settle_sg_projection_publications(row, match, now)
         issued_at = row.get("issued_at")
         if not issued_at:
             # Pending predictions are never scored until a successful public
@@ -624,19 +751,69 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
     now = now or datetime.now(timezone.utc)
     future = {event_id(m) for m in upcoming if m.scheduled_at > now
               and not m.is_completed and m.status in {"upcoming", "notstarted", "scheduled"}}
-    results = [row for row in ledger if row.get("result") is not None
-               and not row.get("excluded_reason") and not row.get("settlement_quarantine")]
+
+    cutoff = PUBLIC_RESULTS_RESET_AT if now >= PUBLIC_RESULTS_RESET_AT else None
+
+    def public_publications(row):
+        publications = []
+        for publication in row.get("market_publications", []) or []:
+            if not isinstance(publication, dict) or not publication.get("issued_at"):
+                continue
+            if publication.get("excluded_reason") or not isinstance(publication.get("result"), dict):
+                continue
+            try:
+                issued = datetime.fromisoformat(str(publication.get("issued_at")).replace("Z", "+00:00"))
+            except ValueError:
+                continue
+            if issued.tzinfo is None:
+                continue
+            if cutoff is not None and issued < cutoff:
+                continue
+            publications.append(deepcopy(publication))
+        return publications
+
+    # Public Results intentionally start from the reset date. The immutable
+    # private ledger and canonical training history are preserved for audit and
+    # model quality, while the UI receives only publications users actually saw
+    # after the reset. Historical/offline replay before the reset keeps the legacy
+    # behaviour so point-in-time model tests remain reproducible.
+    if cutoff is None:
+        results = [
+            deepcopy(row) for row in ledger
+            if row.get("result") is not None
+            and not row.get("excluded_reason")
+            and not row.get("settlement_quarantine")
+        ]
+    else:
+        results = []
+        for source in ledger:
+            if source.get("excluded_reason") or source.get("settlement_quarantine"):
+                continue
+            publications = public_publications(source)
+            if not publications:
+                continue
+            row = deepcopy(source)
+            row["market_publications"] = publications
+            results.append(row)
+
+    winner_results = [r for r in results if isinstance(r.get("result"), dict)]
     metrics = evaluate_probabilities(
-        [int(r["result"]["winner_id"] == r["player1"]["id"]) for r in results],
-        [r["player1"]["probability"] for r in results]) if results else {}
+        [int(r["result"]["winner_id"] == r["player1"]["id"]) for r in winner_results],
+        [r["player1"]["probability"] for r in winner_results]) if winner_results else {}
     quality_frame = pd.DataFrame([{'target': int(r['result']['winner_id'] == r['player1']['id']),
         'tour': r['tour'], 'surface': r['surface'], 'competition': r.get('competition', 'unknown'),
         'tournament': r.get('tournament', 'unknown'),
         'history_band': r.get('quality', {}).get('history_band', 'unknown'),
-        'surface_history_band': r.get('quality', {}).get('surface_history_band', 'unknown')} for r in results])
-    quality_report = subgroup_report(quality_frame, [r['player1']['probability'] for r in results]) if results else {}
+        'surface_history_band': r.get('quality', {}).get('surface_history_band', 'unknown')} for r in winner_results])
+    quality_report = subgroup_report(quality_frame, [r['player1']['probability'] for r in winner_results]) if winner_results else {}
     betting = betting_performance(results)
-    result_rows = list(reversed(results))[:1000]
+    # Do not rely on incidental ledger ordering. Recent settled rows must never
+    # disappear from the 1000-row public window after a merge/migration.
+    result_rows = sorted(
+        results,
+        key=lambda row: datetime.fromisoformat(str(row.get("scheduled_at") or "1970-01-01T00:00:00+00:00").replace("Z", "+00:00")),
+        reverse=True,
+    )[:1000]
     return {"schema": 1, "ready": True, "generated_at": now.isoformat(),
             "model": {"version": model.version, "report": report, "objective": "accuracy"},
             "upcoming": [r for r in ledger if r["event_id"] in future and r.get("result") is None
@@ -644,7 +821,9 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
                          and not r.get("excluded_reason") and not r.get("settlement_quarantine")],
             "results": result_rows, "performance": metrics,
             "betting_performance": betting,
-            "results_meta": {"settled_total": len(results), "returned": len(result_rows), "limit": 1000},
+            "results_meta": {"settled_total": len(results), "returned": len(result_rows), "limit": 1000,
+                             "history_cutoff": cutoff.isoformat() if cutoff is not None else None,
+                             "history_reset": cutoff is not None},
             "performance_subgroups": quality_report,
             "history": {"matches": len(history), "start": min((m.scheduled_at for m in history), default=now).isoformat(),
                         "end": max((m.scheduled_at for m in history), default=now).isoformat()}}

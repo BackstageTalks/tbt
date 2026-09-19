@@ -117,3 +117,104 @@ def test_settled_market_publications_produce_real_flat_unit_roi(match_factory):
     assert feed['betting_performance']['sections']['prime']['n'] == 0
     assert feed['betting_performance']['sections']['value']['n'] == 0
     assert feed['results_meta']['settled_total'] == 1
+
+
+def test_public_results_reset_hides_pre_reset_publications_but_keeps_new_ones():
+    def settled_row(event_id, issued_at, scheduled_at):
+        row = _market_row(event_id=event_id)
+        row['scheduled_at'] = scheduled_at
+        row['result'] = {'winner_id': 'A', 'correct': True, 'settled_at': scheduled_at}
+        row['market_publications'] = [{
+            'schema': 1,
+            'publication_key': f'top_daily:{event_id}',
+            'selection_key': f'match_winner:{event_id}:A',
+            'section': 'top_daily',
+            'market': 'match_winner',
+            'selection': 'Alpha',
+            'selection_id': 'A',
+            'odds': 1.9,
+            'model_probability': .8,
+            'issued_at': issued_at,
+            'publication_status': 'published',
+            'result': {
+                'winner_id': 'A', 'correct': True, 'staked_units': 1.0,
+                'return_units': 1.9, 'profit_units': .9,
+                'settled_at': scheduled_at, 'scheduled_at': scheduled_at,
+            },
+        }]
+        return row
+
+    old = settled_row('old', '2026-09-18T08:00:00+00:00', '2026-09-18T15:00:00+00:00')
+    new = settled_row('new', '2026-09-19T08:00:00+00:00', '2026-09-19T15:00:00+00:00')
+    feed = serving_feed(
+        [old, new], SimpleNamespace(version='test'), [], {}, [],
+        datetime(2026, 9, 20, 8, 0, tzinfo=timezone.utc),
+    )
+    assert [row['event_id'] for row in feed['results']] == ['new']
+    assert feed['results_meta']['history_reset'] is True
+    assert feed['results_meta']['history_cutoff'] == '2026-09-19T00:00:00+00:00'
+    assert feed['betting_performance']['overall']['n'] == 1
+
+
+def test_sets_and_games_are_confirmed_and_settled_from_public_feed(match_factory):
+    scheduled = datetime(2026, 9, 20, 15, 0, tzinfo=timezone.utc)
+    base = _market_row(event_id='sg-event')
+    base['scheduled_at'] = scheduled.isoformat()
+    base.pop('betting', None)
+    base.pop('match_winner_market', None)
+    base['issued_at'] = None
+    base['publication_status'] = 'pending'
+
+    sg_picks = [
+        {
+            **base,
+            'market': 'sets', 'selection_id': 'sets:over:2.5',
+            'selection': 'Over 2.5 Sets', 'pick': 'Over 2.5 Sets',
+            'projection': .72, 'projection_confidence': .72,
+            'projection_scope': 'match_total', 'projection_metric': 'sets',
+            'reference_projection': 2.5, 'price_status': 'projection_only',
+        },
+        {
+            **base,
+            'market': 'games', 'selection_id': 'games:high',
+            'selection': 'High Total Games', 'pick': 'High Total Games',
+            'projection': 28.0, 'projection_confidence': .75,
+            'projection_scope': 'match_total', 'projection_metric': 'games',
+            'projection_direction': 'high', 'reference_projection': 24.0,
+            'price_status': 'projection_only',
+        },
+    ]
+    annotated = annotate_market_publication_candidates([base], sg_picks=sg_picks)[0]
+    ledger = [{**base, 'market_publications': annotated['market_publication_candidates']}]
+    feed_candidate = {
+        'top_daily_picks': [], 'prime_picks': [], 'value_picks': [],
+        'ace_picks': [], 'doubles_picks': [], 'sg_picks': sg_picks,
+        'market_selection': {'publication_schema': 1},
+    }
+    assert validate_market_publication_candidate(feed_candidate, ledger) == 2
+    confirmed, count = confirm_market_publications(
+        ledger, feed_candidate, datetime(2026, 9, 20, 9, 0, tzinfo=timezone.utc)
+    )
+    assert count == 2
+
+    completed = match_factory('completed-sg', 'A', 'B', 'A', day=20)
+    completed.provider_payload = {'id': 'sg-event'}
+    completed.scheduled_at = scheduled
+    completed.stats = {
+        'total_sets': 3.0, 'total_games': 30.0,
+        'p1_sets_won': 2, 'p2_sets_won': 1,
+    }
+    settled = reconcile_ledger(
+        confirmed, [], [completed], datetime(2026, 9, 20, 18, 0, tzinfo=timezone.utc)
+    )
+    publications = {p['section']: p for p in settled[0]['market_publications']}
+    assert publications['sets']['result']['status'] == 'hit'
+    assert publications['games']['result']['status'] == 'hit'
+
+    public = serving_feed(
+        settled, SimpleNamespace(version='test'), [completed], {}, [],
+        datetime(2026, 9, 20, 18, 0, tzinfo=timezone.utc),
+    )
+    assert len(public['results']) == 1
+    assert {p['section'] for p in public['results'][0]['market_publications']} == {'sets', 'games'}
+    assert public['betting_performance']['projections']['overall']['n'] == 2
