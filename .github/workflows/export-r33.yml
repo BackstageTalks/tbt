@@ -1,0 +1,19 @@
+name: Export r33 repository
+on:
+  push:
+    branches: [export-r33]
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build repository ZIP
+        run: |
+          zip -qr tbt-main-v736-r33.zip . -x ".git/*" "tbt-main-v736-r33.zip"
+          unzip -tq tbt-main-v736-r33.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tbt-main-v736-r33
+          path: tbt-main-v736-r33.zip
+          retention-days: 1
