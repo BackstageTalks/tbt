@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from tbt.services.entitlements import filter_feed_for_access
+
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
 APP = (WEB / "app.js").read_text(encoding="utf-8")
@@ -43,7 +45,36 @@ def test_locked_results_navigation_has_lock_and_click_stable_minimum_level_hint(
     assert ".reference-navigation a.access-nav-locked" in CSS
 
 
-def test_rookie_daily_top_is_stable_random_not_first_two_source_rows():
-    rookie = UI["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"]["rookie"]
-    assert rookie["visible_rows"] == 2
-    assert rookie["selection_mode"] == "stable_random"
+def test_rookie_daily_top_and_short_odds_are_stable_random():
+    daily = UI["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"]["rookie"]
+    prime = UI["dashboard"]["daily_hub"]["tabs"]["prime"]["plans"]["rookie"]
+    assert daily["visible_rows"] == 2
+    assert daily["selection_mode"] == "stable_random"
+    assert prime["visible_rows"] == 1
+    assert prime["selection_mode"] == "stable_random"
+
+
+def test_old_runtime_config_is_migrated_to_rookie_short_odds_stable_random():
+    cfg = json.loads(json.dumps(UI))
+    cfg["ui_patch"] = "736-r32"
+    cfg["dashboard"]["daily_hub"]["tabs"]["prime"]["plans"]["rookie"]["selection_mode"] = "first"
+    rows = []
+    for i in range(4):
+        rows.append({
+            "event_id": f"prime-{i}",
+            "scheduled_at": f"2026-09-20T1{i}:00:00Z",
+            "tour": "ATP",
+            "player1": {"id": f"a{i}", "name": f"A{i}", "probability": .8},
+            "player2": {"id": f"b{i}", "name": f"B{i}", "probability": .2},
+            "betting": {"odds": 1.25},
+        })
+    payload = {
+        "prime_picks": rows,
+        "top_daily_picks": [], "value_picks": [], "doubles_picks": [],
+        "ace_picks": [], "sg_picks": [], "upcoming": rows, "results": [],
+    }
+    _, manifest = filter_feed_for_access(
+        payload, {"status": "active", "plan": "rookie", "id": "r33-rookie"}, cfg
+    )
+    assert manifest["sections"]["prime"]["visible_picks"] == 1
+    assert manifest["sections"]["prime"]["selection_mode"] == "stable_random"
