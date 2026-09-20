@@ -430,7 +430,7 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
             limit=_narrow_limit(hard_cap,runtime_limit)
         else:
             limit=default_limit
-        selection_mode=runtime_rule[4] if runtime_rule else "first"
+        selection_mode=runtime_rule[4] if runtime_rule else ("stable_random" if plan=="rookie" and section in {"daily","prime","top_daily"} else "first")
         row_overrides=runtime_rule[5] if runtime_rule else {}
         display_state=runtime_rule[6] if runtime_rule else "active"
         configured_slots=len(rows) if str(limit).upper()=="ALL" else min(len(rows),max(0,int(limit)))
