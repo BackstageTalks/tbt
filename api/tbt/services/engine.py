@@ -876,33 +876,20 @@ def reconcile_ledger(ledger, predictions, history, now=None):
 
 
 _RESULT_ROW_FIELDS = (
-    "event_id", "id", "match_id", "scheduled_at", "tour", "surface",
-    "tournament", "competition", "competition_name", "tournament_id",
-    "tournamentId", "unique_tournament_id", "tournament_logo_id",
-    "tournament_logo_url", "competition_logo_url", "competition_logo",
-    "tournament_logo", "venue_city", "tournament_city", "venue_country",
-    "tournament_country", "country_name", "venue_country_code",
-    "tournament_country_code", "country_code", "category",
-    "tournament_level", "level", "category_name", "round", "round_name",
-    "prediction_family", "winner_id", "issued_at", "publication_status",
-)
-
-_RESULT_PLAYER_FIELDS = (
-    "id", "name", "country_code", "country_code2", "country_code3",
-    "photo_url", "image_url", "photo", "gender", "sex", "rank", "ranking",
-    "current_rank",
+    # Keep only fields consumed by the public Results UI. The immutable private
+    # ledger remains the source of truth for audit/rebuilds.
+    "event_id", "scheduled_at", "tour", "surface", "tournament",
+    "competition", "tournament_id", "unique_tournament_id",
+    "tournament_logo_id", "venue_city", "tournament_city",
+    "venue_country", "tournament_country", "country_name",
+    "venue_country_code", "tournament_country_code", "country_code",
+    "round", "prediction_family",
 )
 
 _RESULT_PUBLICATION_FIELDS = (
-    "schema", "publication_key", "selection_key", "section", "primary_section",
-    "market", "selection", "selection_id", "odds", "model_probability",
-    "fair_implied_probability", "edge", "expected_value", "provider_id",
-    "captured_at", "betting_day", "issued_at", "publication_status",
-    "price_status", "projection", "opponent_projection", "reference_projection",
-    "projection_gap", "projection_scope", "projection_metric",
-    "projection_direction", "projection_kind", "projection_subject",
-    "projection_label", "projection_confidence", "projection_samples",
-    "projection_unit", "best_of", "data_depth", "result",
+    "section", "market", "selection", "selection_id", "odds",
+    "model_probability", "issued_at", "price_status", "projection",
+    "projection_scope", "projection_metric", "data_depth", "result",
 )
 
 
@@ -922,21 +909,44 @@ def _compact_public_result_row(source):
     for side in ("player1", "player2"):
         player = source.get(side)
         if isinstance(player, dict):
-            row[side] = {
-                field: deepcopy(player[field])
-                for field in _RESULT_PLAYER_FIELDS
-                if field in player and player[field] is not None
-            }
+            compact_player = {}
+            for field in ("id", "name"):
+                if player.get(field) is not None:
+                    compact_player[field] = deepcopy(player[field])
+            country = (
+                player.get("country_code")
+                or player.get("country_code2")
+                or player.get("country_code3")
+            )
+            if country:
+                compact_player["country_code"] = deepcopy(country)
+            gender = player.get("gender") or player.get("sex")
+            if gender:
+                compact_player["gender"] = deepcopy(gender)
+            row[side] = compact_player
 
     publications = []
     for publication in source.get("market_publications", []) or []:
         if not isinstance(publication, dict):
             continue
-        publications.append({
+        compact_publication = {
             field: deepcopy(publication[field])
             for field in _RESULT_PUBLICATION_FIELDS
             if field in publication and publication[field] is not None
-        })
+        }
+        result = compact_publication.get("result")
+        if isinstance(result, dict):
+            compact_publication["result"] = {
+                field: deepcopy(result[field])
+                for field in (
+                    "correct", "status", "outcome", "settlement", "result",
+                    "void", "is_void", "reason", "void_reason",
+                    "settlement_reason", "profit_units", "staked_units",
+                    "actual_count", "opponent_actual_count", "data_depth",
+                )
+                if field in result and result[field] is not None
+            }
+        publications.append(compact_publication)
     row["market_publications"] = publications
 
     result = source.get("result")
