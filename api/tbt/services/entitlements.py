@@ -122,20 +122,41 @@ def _result_timestamp(row: dict) -> datetime | None:
     return None
 
 
+PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
+PUBLIC_RESULT_MARKETS = {"aces", "double_faults"}
+
+
+def _public_result_publications(row: dict) -> list[dict]:
+    out = []
+    for publication in row.get("market_publications", []) or []:
+        if not isinstance(publication, dict):
+            continue
+        section = str(publication.get("section") or "").strip().lower()
+        market = str(publication.get("market") or "").strip().lower()
+        if section in PUBLIC_RESULT_SECTIONS or market in PUBLIC_RESULT_MARKETS:
+            out.append(deepcopy(publication))
+    return out
+
+
 def _filter_result_history(rows: list, hours: int | None, now: datetime | None = None) -> list:
-    if hours is None:
-        return deepcopy(rows)
-    if hours <= 0:
+    if hours is not None and hours <= 0:
         return []
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    cutoff = now - timedelta(hours=hours)
+    cutoff = None if hours is None else now - timedelta(hours=hours)
     out = []
     for row in rows:
         if not isinstance(row, dict):
             continue
-        ts = _result_timestamp(row)
-        if ts is not None and cutoff <= ts <= now + timedelta(hours=6):
-            out.append(deepcopy(row))
+        if cutoff is not None:
+            ts = _result_timestamp(row)
+            if ts is None or not (cutoff <= ts <= now + timedelta(hours=6)):
+                continue
+        publications = _public_result_publications(row)
+        if not publications:
+            continue
+        copy = deepcopy(row)
+        copy["market_publications"] = publications
+        out.append(copy)
     return out
 
 
