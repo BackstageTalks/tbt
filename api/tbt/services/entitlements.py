@@ -9,6 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
+import re
 
 
 SECTION_TO_FEED_KEY = {
@@ -122,20 +123,41 @@ def _result_timestamp(row: dict) -> datetime | None:
     return None
 
 
+PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
+PUBLIC_RESULT_MARKETS = {"aces", "double_faults"}
+
+
+def _public_result_publications(row: dict) -> list[dict]:
+    out = []
+    for publication in row.get("market_publications", []) or []:
+        if not isinstance(publication, dict):
+            continue
+        section = str(publication.get("section") or "").strip().lower()
+        market = str(publication.get("market") or "").strip().lower()
+        if section in PUBLIC_RESULT_SECTIONS or market in PUBLIC_RESULT_MARKETS:
+            out.append(deepcopy(publication))
+    return out
+
+
 def _filter_result_history(rows: list, hours: int | None, now: datetime | None = None) -> list:
-    if hours is None:
-        return deepcopy(rows)
-    if hours <= 0:
+    if hours is not None and hours <= 0:
         return []
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    cutoff = now - timedelta(hours=hours)
+    cutoff = None if hours is None else now - timedelta(hours=hours)
     out = []
     for row in rows:
         if not isinstance(row, dict):
             continue
-        ts = _result_timestamp(row)
-        if ts is not None and cutoff <= ts <= now + timedelta(hours=6):
-            out.append(deepcopy(row))
+        if cutoff is not None:
+            ts = _result_timestamp(row)
+            if ts is None or not (cutoff <= ts <= now + timedelta(hours=6)):
+                continue
+        publications = _public_result_publications(row)
+        if not publications:
+            continue
+        copy = deepcopy(row)
+        copy["market_publications"] = publications
+        out.append(copy)
     return out
 
 
@@ -238,6 +260,14 @@ def _admin_hub_rule(ui_config: dict | None, tab: str, plan: str) -> tuple[object
     see_all=bool(row.get("see_all", False))
     selection=str(row.get("selection_mode") or "first").lower()
     if selection not in {"first", "stable_random"}: selection="first"
+    # r33 product rule: ROOKIE Short Odds is a stable random daily sample.
+    # Older admin-published runtime configs used "first"; migrate those once
+    # until the r33 config is published, without changing post-r33 admin choices.
+    patch_text=str(ui_config.get("ui_patch") or "")
+    patch_match=re.search(r"r(\d+)$", patch_text)
+    patch_number=int(patch_match.group(1)) if patch_match else 0
+    if tab=="prime" and plan=="rookie" and patch_number<33:
+        selection="stable_random"
     overrides=row.get("row_overrides") if isinstance(row.get("row_overrides"), dict) else {}
     overrides={str(k):str(v).lower() for k,v in overrides.items() if str(v).lower() in {"active","blurred","hidden"}}
     if display == "blurred":
@@ -400,7 +430,7 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
             limit=_narrow_limit(hard_cap,runtime_limit)
         else:
             limit=default_limit
-        selection_mode=runtime_rule[4] if runtime_rule else "first"
+        selection_mode=runtime_rule[4] if runtime_rule else ("stable_random" if plan=="rookie" and section in {"daily","prime","top_daily"} else "first")
         row_overrides=runtime_rule[5] if runtime_rule else {}
         display_state=runtime_rule[6] if runtime_rule else "active"
         configured_slots=len(rows) if str(limit).upper()=="ALL" else min(len(rows),max(0,int(limit)))

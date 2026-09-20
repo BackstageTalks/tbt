@@ -708,7 +708,7 @@
         "preset": "violet",
         "position": "bottom-right",
         "opacity": 0.42,
-        "size": 1.0
+        "size": 1
       }
     },
     "HERO_BANNER_2": {
@@ -746,7 +746,7 @@
         "preset": "violet",
         "position": "bottom-right",
         "opacity": 0.42,
-        "size": 1.0
+        "size": 1
       }
     },
     "HERO_BANNER_3": {
@@ -784,7 +784,7 @@
         "preset": "violet",
         "position": "bottom-right",
         "opacity": 0.42,
-        "size": 1.0
+        "size": 1
       }
     },
     "HERO_BANNER_4": {
@@ -822,7 +822,7 @@
         "preset": "violet",
         "position": "bottom-right",
         "opacity": 0.42,
-        "size": 1.0
+        "size": 1
       }
     },
     "HERO_BANNER_5": {
@@ -860,7 +860,7 @@
         "preset": "violet",
         "position": "bottom-right",
         "opacity": 0.42,
-        "size": 1.0
+        "size": 1
       }
     }
   },
@@ -1856,7 +1856,7 @@
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false,
-              "selection_mode": "first",
+              "selection_mode": "stable_random",
               "display_state": "active",
               "row_overrides": {}
             },
@@ -2428,7 +2428,7 @@
       }
     }
   },
-  "ui_patch": "736-r32",
+  "ui_patch": "736-r33",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,
