@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
@@ -224,7 +225,7 @@ def test_sets_and_games_are_confirmed_and_settled_from_public_feed(match_factory
 
 def test_public_results_keep_all_history_but_strip_private_feature_payload():
     rows = []
-    for index in range(1005):
+    for index in range(3104):
         event = f"hist-{index}"
         row = _market_row(event_id=event)
         row["issued_at"] = "2026-09-18T08:00:00+00:00"
@@ -260,7 +261,8 @@ def test_public_results_keep_all_history_but_strip_private_feature_payload():
         rows, SimpleNamespace(version="test"), [], {}, [],
         datetime(2026, 9, 20, 8, 0, tzinfo=timezone.utc),
     )
-    assert len(feed["results"]) == 1005
-    assert feed["results_meta"]["settled_total"] == 1005
+    assert len(feed["results"]) == 3104
+    assert feed["results_meta"]["settled_total"] == 3104
+    assert len(json.dumps(feed, separators=(",", ":")).encode("utf-8")) < 10 * 1024 * 1024
     assert all("signals" not in row and "quality" not in row for row in feed["results"])
     assert all(row["market_publications"] for row in feed["results"])
