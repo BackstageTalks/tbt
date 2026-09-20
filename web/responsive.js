@@ -1,4 +1,4 @@
-/* BlinQ responsive helpers — 7.3.6-r28. Active responsive/table/sync behaviour only. */
+/* BlinQ responsive helpers — 7.3.6-r29. Active responsive/table/sync behaviour only. */
 (() => {
   'use strict';
   const $ = id => document.getElementById(id);

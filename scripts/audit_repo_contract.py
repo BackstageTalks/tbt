@@ -338,19 +338,23 @@ if "_normalize_membership_invariants(payload)" not in _admin_storage:
 
 _app = app
 _ui = ui
-if _ui.get("ui_patch") != "736-r28" or not (((_ui.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}).get("prime", {}).get("enabled"):
-    fail("r28 Short Odds public configuration is missing")
+if _ui.get("ui_patch") != "736-r29" or not (((_ui.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}).get("prime", {}).get("enabled"):
+    fail("r29 Short Odds public configuration is missing")
 if "Kopírovať nastavenie z iného levelu" in _app or "data-admin-action=\"copy-plan\"" in _app or "adminCopyFrom" in _app:
     fail("retired copy-from-level admin tool is still present")
 if "admin-see-all-rule-note" in _app or "const rows=['daily','prime','value','ace','doubles','games','sets','see_all'].map" not in _app:
     fail("unified SEE ALL controls are missing")
-if "BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract" not in css:
-    fail("r28 final responsive stability layer is missing")
+if "BlinQ runtime patch 7.3.6-r29 — mobile-first stability contract" not in css:
+    fail("r29 final responsive stability layer is missing")
 if "blinq-mobile-keyboard-open" not in responsive or "--bq-viewport-height" not in responsive:
     fail("r28 dynamic mobile viewport/keyboard handling is missing")
 if "const mobileLabels=dailyHubColumns(tab);" not in _app:
     fail("r28 semantic mobile table labels are missing")
-ok('r26-r28 publish, Short Odds, SEE ALL and mobile responsive contracts present')
+if "function predictionFamily(row)" not in _app or "function marketRowMatches(key,row)" not in _app:
+    fail("r29 semantic market-family guard is missing")
+if "ESÁ / DVOJCHYBY" not in _app or "ŠTVORHRA" not in _app:
+    fail("r29 Slovak category labels are not semantically explicit")
+ok('r26-r29 publish, Short Odds, SEE ALL, mobile responsive and semantic category contracts present')
 
 if errors:
     print('BlinQ repository contract audit: FAIL', file=sys.stderr)

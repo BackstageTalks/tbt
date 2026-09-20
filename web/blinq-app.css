@@ -1,4 +1,4 @@
-/* BlinQ runtime stylesheet — consolidated 7.3.6-r28. Legacy-only visual selectors are removed; retained cascade rules support the active UI. */
+/* BlinQ runtime stylesheet — consolidated 7.3.6-r29. Legacy-only visual selectors are removed; retained cascade rules support the active UI. */
 
 /* SOURCE: blinq.css */
 :root{--bg:#030d18;--bg2:#071522;--panel:#071a29;--panel2:#0a2031;--line:#183c52;--line2:#245a73;--text:#f7fbff;--muted:#8ea7b8;--cyan:#2ae3ff;--lime:#42f39a;--violet:#8b5cf6;--violet2:#6d37e9;--gold:#ffc930;--danger:#ff5f7c;--shadow:0 22px 70px rgba(0,0,0,.32);--radius:18px;--radius-sm:12px;--font:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Arial,sans-serif}
@@ -6006,7 +6006,7 @@ body#blinqPremium .admin-inactivity-danger>small{font-size:7px!important;line-he
 /* BlinQ runtime patch 7.3.6-r27: Short Odds public controls + unified SEE ALL + Telegram icon */
 
 /* ========================================================================
-   BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract
+   BlinQ runtime patch 7.3.6-r29 — mobile-first stability contract
    Final cascade layer. Desktop geometry (>900px) is intentionally unchanged.
    This replaces the accumulated small-screen overrides with one semantic,
    class-based responsive contract for public routes, results and Telegram.
