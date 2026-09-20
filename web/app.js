@@ -337,6 +337,10 @@
     const loadedPatch=String(state.ui?.ui_patch||'');
     const loadedPatchNumber=Number((loadedPatch.match(/r(\d+)$/)||[])[1]||0);
     if(loadedPatchNumber<27){const primeTab=state.ui?.dashboard?.daily_hub?.tabs?.prime;if(primeTab)primeTab.enabled=true;}
+    if(loadedPatchNumber<33){
+      const rookiePrime=state.ui?.dashboard?.daily_hub?.tabs?.prime?.plans?.rookie;
+      if(rookiePrime)rookiePrime.selection_mode='stable_random';
+    }
     state.ui.ui_patch='736-r33';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
