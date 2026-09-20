@@ -197,6 +197,7 @@ def _sets_card(
     adjusted_probability = 0.5 + (raw_probability - 0.5) * evidence
     is_over = adjusted_probability > 0.5
     selected_probability = adjusted_probability if is_over else 1.0 - adjusted_probability
+    selected_probability = min(0.90, selected_probability)
     distance = abs(adjusted_probability - 0.5)
     if selected_probability < 0.60:
         return None
@@ -210,6 +211,10 @@ def _sets_card(
     card.update({
         "market": "sets",
         "market_type": "Total Sets Projection",
+        "projection_scope": "match_total",
+        "projection_metric": "sets",
+        "projection_kind": "match_total_sets",
+        "projection_label": "Zápas · Sety",
         "pick": selection,
         "selection": selection,
         "selection_id": f"sets:{'over' if is_over else 'under'}:{line:.1f}",
@@ -225,7 +230,7 @@ def _sets_card(
         "edge": None,
         "expected_value": None,
         "price_status": "projection_only",
-        "projection_model": "sets-games-projection-v2",
+        "projection_model": "sets-games-projection-v3",
         "projection_source": "historical_structured_scores",
         "projection_samples": {
             "player1": int(p1["samples"]), "player2": int(p2["samples"]),
@@ -260,13 +265,18 @@ def _games_card(
     surface_factor = min(1.0, surface_depth / 8.0) if surface_depth else 0.0
 
     v1, v2 = float(p1.get("variance") or 0.0), float(p2.get("variance") or 0.0)
-    n1, n2 = max(1, int(p1["samples"])), max(1, int(p2["samples"]))
-    se = math.sqrt(max(1.5 ** 2, 0.25 * (v1 / n1 + v2 / n2)))
+    # Future match totals remain noisy even with large historical samples.  The
+    # old v2 divided variance by sample count (uncertainty of the mean), which
+    # could make a 1.5-game deviation look nearly certain.  Use predictive
+    # variance of a new match instead, with a conservative format-specific floor.
+    predictive_floor = 3.5 if best_of == 3 else 5.5
+    predictive_variance = max(predictive_floor ** 2, 0.25 * (v1 + v2))
+    se = math.sqrt(predictive_variance)
     z = abs(deviation) / se if se > 0 else 0.0
     raw_direction_probability = 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
     evidence = min(1.0, 0.85 * math.sqrt(depth) + 0.15 * surface_factor)
     confidence = 0.5 + (raw_direction_probability - 0.5) * evidence
-    confidence = max(0.5, min(0.97, confidence))
+    confidence = max(0.5, min(0.90, confidence))
     if confidence < 0.60:
         return None
 
@@ -276,6 +286,8 @@ def _games_card(
     card.pop("match_winner_market", None)
     card.update({
         "market": "games", "market_type": "Total Games Projection",
+        "projection_scope": "match_total", "projection_metric": "games",
+        "projection_kind": "match_total_games", "projection_label": "Zápas · Gamy",
         "pick": selection, "selection": selection, "selection_id": f"games:{direction.lower()}",
         "projection": round(float(estimate), 2), "projection_unit": "games",
         "reference_projection": round(float(baseline), 2),
@@ -286,7 +298,7 @@ def _games_card(
         "projection_uncertainty": round(se, 3),
         "probability": None, "odds": None, "edge": None, "expected_value": None,
         "price_status": "projection_only",
-        "projection_model": "sets-games-projection-v2",
+        "projection_model": "sets-games-projection-v3",
         "projection_source": "historical_structured_scores",
         "projection_samples": {
             "player1": int(p1["samples"]), "player2": int(p2["samples"]),
@@ -463,7 +475,7 @@ def select_sg_picks(
     }
     return combined, {
         "schema": 4,
-        "model": "sets-games-projection-v2",
+        "model": "sets-games-projection-v3",
         "cutoff_utc": cutoff.isoformat(),
         "projection_only": True,
         "odds_backed": False,
@@ -487,6 +499,8 @@ def select_sg_picks(
         "candidate_cards": {market: len(by_market[market]) for market in ("sets", "games")},
         "adaptive_confidence_floor": applied_floors,
         "adaptive_tier_counts": tier_counts_by_market,
+        "confidence_caps": {"sets": 0.90, "games": 0.90},
+        "uncertainty_model": "future_match_predictive_variance",
         "fill_policy": "independent_market_fill_evidence_adjusted_hard_floor_0.60",
         "baselines": baseline_report,
     }

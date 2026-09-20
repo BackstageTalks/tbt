@@ -62,6 +62,12 @@ def test_sg_projection_publishes_sets_and_games_when_history_signal_is_deep():
     assert games["pick"] == "High Total Games"
     assert games["projection_unit"] == "games"
     assert games["projection"] > games["reference_projection"]
+    assert sets["projection_scope"] == "match_total"
+    assert sets["projection_metric"] == "sets"
+    assert games["projection_scope"] == "match_total"
+    assert games["projection_metric"] == "games"
+    assert games["projection_uncertainty"] >= 3.5
+    assert games["projection_confidence"] <= .90
     assert report["projection_only"] is True
     assert report["settlement_enabled"] is True
 

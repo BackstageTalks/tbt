@@ -830,6 +830,9 @@ def _public_live_radar_payload(result: dict) -> dict:
         "candidate_items": [public_candidate(x) for x in candidates[:3] if isinstance(x,dict)] if isinstance(candidates,list) else list(result.get("candidate_items") or [])[:3],
         "signal_items": [public_candidate(x) for x in signals[:3] if isinstance(x,dict)] if isinstance(signals,list) else list(result.get("signal_items") or [])[:3],
         "new_alerts": int(result.get("created") or result.get("new_alerts") or 0),
+        "prime_total": int(result.get("prime_total") or 0),
+        "prime_eligible": int(result.get("prime_eligible") or 0),
+        "provider_skipped_reason": result.get("provider_skipped_reason"),
         "cached": bool(result.get("cached")),
         "alert_storage_unavailable": bool(result.get("alert_storage_unavailable")),
         "thresholds": result.get("thresholds") or {},
@@ -906,6 +909,8 @@ def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
             finally:
                 try:client.close()
                 except Exception:pass
+        scan["prime_total"]=len(prime_pool)
+        scan["prime_eligible"]=len(eligible_pool)
         scan["cached"]=False; fresh=True
         with _LIVE_RADAR_CACHE_LOCK:_LIVE_RADAR_CACHE=(time.monotonic(),dict(scan))
 

@@ -119,5 +119,7 @@ def test_double_fault_confidence_is_predictive_and_capped_below_old_97_percent()
 
     assert df["projection_confidence"] <= .88
     assert df["projection_uncertainty"] > 1.0
-    assert df["projection_model"] == "ace-count-projection-v3"
+    assert df["projection_model"] == "ace-count-projection-v4"
+    assert report["settlement_enabled"] is True
+    assert "empirical_calibration" in report
     assert report["uncertainty_model"] == "future_count_predictive_variance"

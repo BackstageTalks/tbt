@@ -104,3 +104,24 @@ def test_projection_lifecycle_duplicates_with_identical_snapshot_are_safe():
     restored = restore_published_market_snapshots(feed, ledger)
     assert len(restored['ace_picks']) == 1
     assert restored['ace_picks'][0]['projection'] == 6.8
+
+
+def test_sg_pending_snapshot_uses_match_total_identity_and_survives_restore():
+    row = {
+        'event_id':'sg-1','market':'games','selection_id':'games:high','selection':'High Total Games',
+        'projection':24.7,'reference_projection':20.5,'projection_scope':'match_total',
+        'projection_metric':'games','projection_confidence':.71,'projection_label':'Zápas · Gamy',
+        'price_status':'projection_only',
+    }
+    publication = {
+        'section':'games','market':'games','selection_id':'games:high','selection':'High Total Games',
+        'odds':None,'model_probability':None,'edge':None,'expected_value':None,'betting_day':None,
+        'projection':24.7,'opponent_projection':None,'projection_scope':'match_total','projection_metric':'games',
+        'projection_confidence':.71,'projection_label':'Zápas · Gamy','price_status':'projection_only',
+        'issued_at':None,'publication_status':'pending',
+    }
+    feed={'sg_picks':[row]}
+    ledger=[{'event_id':'sg-1','market_publications':[publication]}]
+    restored=restore_published_market_snapshots(feed,ledger)
+    assert restored['sg_picks']==[row]
+    assert validate_market_publication_candidate(restored,ledger)==1

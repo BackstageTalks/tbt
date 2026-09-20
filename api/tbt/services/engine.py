@@ -634,6 +634,8 @@ def betting_performance(results):
             "overall": _projection_metrics(projection_publications),
             "aces": _projection_metrics([p for p in projection_publications if p.get("market") == "aces"]),
             "double_faults": _projection_metrics([p for p in projection_publications if p.get("market") == "double_faults"]),
+            "sets": _projection_metrics([p for p in projection_publications if p.get("market") == "sets"]),
+            "games": _projection_metrics([p for p in projection_publications if p.get("market") == "games"]),
         },
     }
 
@@ -699,11 +701,49 @@ def performance_windows(winner_results, public_results, *, now):
     elif candidates:
         # If history is still young, prefer the most stable available sample
         # instead of cherry-picking a tiny perfect streak.
-        best_days, best_accuracy, best_n = max(candidates, key=lambda item: (item[2], item[1], item[0]))
+        best_days, best_accuracy, best_n = max(candidates, key=lambda item: (item[2], item[1], -item[0]))
         mode = "largest_available_sample"
     else:
         best_days = best_accuracy = best_n = None
         mode = "no_settled_model_results"
+    category_map = {
+        "top_daily": ("betting", "sections", "top_daily"),
+        "prime": ("betting", "sections", "prime"),
+        "value": ("betting", "sections", "value"),
+        "doubles": ("betting", "sections", "doubles"),
+        "ace": ("betting", "projections", "aces"),
+        "double_faults": ("betting", "projections", "double_faults"),
+        "sets": ("betting", "projections", "sets"),
+        "games": ("betting", "projections", "games"),
+    }
+    category_best = {}
+    for category, path in category_map.items():
+        category_candidates = []
+        for days in PERFORMANCE_WINDOWS_DAYS:
+            metric = windows[str(days)]
+            for key in path:
+                metric = metric.get(key, {}) if isinstance(metric, dict) else {}
+            rate = metric.get("hit_rate") if isinstance(metric, dict) else None
+            n = int(metric.get("n") or 0) if isinstance(metric, dict) else 0
+            if isinstance(rate, (int, float)) and math.isfinite(float(rate)) and n > 0:
+                category_candidates.append((days, float(rate), n))
+        category_eligible = [item for item in category_candidates if item[2] >= PERFORMANCE_BEST_MIN_SAMPLE]
+        if category_eligible:
+            c_days, c_rate, c_n = max(category_eligible, key=lambda item: (item[1], item[2], -item[0]))
+            c_mode = "best_hit_rate_min_sample"
+        elif category_candidates:
+            # With young history use the largest sample, never a tiny perfect
+            # streak. The UI always displays n and the chosen window.
+            c_days, c_rate, c_n = max(category_candidates, key=lambda item: (item[2], item[1], -item[0]))
+            c_mode = "largest_available_sample"
+        else:
+            c_days = c_rate = c_n = None
+            c_mode = "no_settled_results"
+        category_best[category] = {
+            "best_days": c_days, "best_hit_rate": c_rate, "best_n": c_n,
+            "selection_mode": c_mode, "minimum_sample_for_best": PERFORMANCE_BEST_MIN_SAMPLE,
+        }
+
     summary = {
         "windows_days": list(PERFORMANCE_WINDOWS_DAYS),
         "minimum_sample_for_best": PERFORMANCE_BEST_MIN_SAMPLE,
@@ -711,6 +751,7 @@ def performance_windows(winner_results, public_results, *, now):
         "best_days": best_days,
         "best_accuracy": best_accuracy,
         "best_n": best_n,
+        "categories": category_best,
         "transparent_all_windows": True,
     }
     return windows, summary

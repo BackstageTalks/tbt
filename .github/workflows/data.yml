@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, train, backtest, refresh]
+        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, results-rebuild, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -187,6 +187,12 @@ jobs:
             python scripts/repair_history_data.py --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == history-self-match-repair ]]; then
             python scripts/repair_history_self_match.py --data-repository "$TBT_DATA_REPOSITORY"
+          elif [[ "$MODE" == production-audit ]]; then
+            python scripts/audit_production_predictions.py \
+              --data-repository "$TBT_DATA_REPOSITORY"
+          elif [[ "$MODE" == results-rebuild ]]; then
+            python scripts/rebuild_results_history.py \
+              --data-repository "$TBT_DATA_REPOSITORY"
           elif [[ "$MODE" == production-preflight ]]; then
             python scripts/download_production_preflight_inputs.py
             profiles=()
@@ -334,6 +340,24 @@ jobs:
             .cache/tbt/history/download_progress.json
           if-no-files-found: warn
 
+      - name: Upload production prediction audit
+        if: ${{ always() && env.MODE == 'production-audit' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-production-audit-${{ github.run_id }}
+          path: |
+            .cache/tbt/production-audit/production_prediction_audit.json
+            .cache/tbt/production-audit/production_prediction_audit.md
+          if-no-files-found: error
+
+      - name: Upload results rebuild report
+        if: ${{ always() && env.MODE == 'results-rebuild' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-results-rebuild-${{ github.run_id }}
+          path: .cache/tbt/results-rebuild/results_rebuild_report.json
+          if-no-files-found: error
+
       - name: Upload production preflight artifacts
         if: env.MODE == 'production-preflight'
         uses: actions/upload-artifact@v4
@@ -374,7 +398,7 @@ jobs:
             --max-tournament-logo-requests 120
 
       - name: Prepare refreshed serving feed and cached player assets
-        if: env.MODE == 'refresh'
+        if: env.MODE == 'refresh' || env.MODE == 'results-rebuild'
         shell: bash
         run: |
           set -euo pipefail
@@ -383,7 +407,7 @@ jobs:
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
 
       - name: Guard against stale application deployment
-        if: env.MODE == 'refresh'
+        if: env.MODE == 'refresh' || env.MODE == 'results-rebuild'
         shell: bash
         run: |
           set -euo pipefail
@@ -401,7 +425,7 @@ jobs:
         run: python scripts/clean_generated_artifacts.py
 
       - name: Deploy refreshed feed and application
-        if: env.MODE == 'refresh' && env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        if: (env.MODE == 'refresh' || env.MODE == 'results-rebuild') && env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
@@ -411,7 +435,7 @@ jobs:
           output_location: ''
           skip_app_build: true
       - name: Confirm deployed prediction publication
-        if: env.MODE == 'refresh' && env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        if: (env.MODE == 'refresh' || env.MODE == 'results-rebuild') && env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         shell: bash
         run: |
           set -euo pipefail

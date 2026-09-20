@@ -270,6 +270,30 @@ def _save_doubles_history(store, rows, *, extra_report=None):
     return report
 
 
+def _projection_presentation_integrity(feed, *, ace_picks=None, sg_picks=None):
+    expected = {
+        "aces": sum(1 for row in (ace_picks or []) if str(row.get("market") or "").lower() == "aces"),
+        "double_faults": sum(1 for row in (ace_picks or []) if str(row.get("market") or "").lower() == "double_faults"),
+        "sets": sum(1 for row in (sg_picks or []) if str(row.get("market") or "").lower() == "sets"),
+        "games": sum(1 for row in (sg_picks or []) if str(row.get("market") or "").lower() == "games"),
+    }
+    actual = {
+        "aces": sum(1 for row in (feed.get("ace_picks") or []) if str(row.get("market") or "").lower() == "aces"),
+        "double_faults": sum(1 for row in (feed.get("ace_picks") or []) if str(row.get("market") or "").lower() == "double_faults"),
+        "sets": sum(1 for row in (feed.get("sg_picks") or []) if str(row.get("market") or "").lower() == "sets"),
+        "games": sum(1 for row in (feed.get("sg_picks") or []) if str(row.get("market") or "").lower() == "games"),
+    }
+    mismatches = {market: {"selected": expected[market], "published": actual[market]}
+                  for market in expected if expected[market] != actual[market]}
+    report = {"ok": not mismatches, "selected": expected, "published": actual, "mismatches": mismatches}
+    if mismatches:
+        raise RuntimeError(
+            "Projection presentation integrity failure: selector output was lost before publication: "
+            + json.dumps(mismatches, sort_keys=True)
+        )
+    return report
+
+
 def _publish_predictions(
     store, ledger, predictions, matches, model, report, upcoming,
     *, odds_report=None, ace_picks=None, ace_report=None,
@@ -308,6 +332,8 @@ def _publish_predictions(
     }
     feed = clean(feed)
     feed = restore_published_market_snapshots(feed, records)
+    integrity = _projection_presentation_integrity(feed, ace_picks=ace_picks, sg_picks=sg_picks)
+    feed["market_selection"] = {**(feed.get("market_selection") or {}), "presentation_integrity": integrity}
     validate_publication_candidate(feed, records)
     validate_market_publication_candidate(feed, records)
     write_json(store.directory / "ledger.json", records)

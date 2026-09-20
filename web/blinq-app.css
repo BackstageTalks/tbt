@@ -6304,3 +6304,17 @@ body#blinqPremium .boot-copy-eyebrow,body#blinqPremium .boot-copy-status{display
 @media(prefers-reduced-motion:reduce){
   body#blinqPremium .boot-splash.boot-splash-tennis::before,body#blinqPremium .boot-splash.boot-splash-tennis::after,body#blinqPremium .boot-tennis-card.boot-tennis-card-source::before{animation:none!important;}
 }
+
+/* r30: transparent best-window performance on each prediction category. */
+body#blinqPremium .daily-hub-tab-copy{display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0}
+body#blinqPremium .daily-hub-tab-copy>small{font-size:6.8px;line-height:1.05;font-weight:750;letter-spacing:.015em;color:#7894a4;white-space:nowrap}
+body#blinqPremium .daily-hub-tab.active .daily-hub-tab-copy>small{color:#075332}
+@media(max-width:760px){body#blinqPremium .daily-hub-tab-copy>small{font-size:6.3px}}
+
+/* BlinQ runtime patch 7.3.6-r30: calibrated projection markets, recoverable history rebuild, per-category rolling KPI. */
+
+/* r30: transparent rolling performance highlight on each prediction card. */
+body#blinqPremium .market-card-performance{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 0;padding:7px 9px;border:1px solid rgba(79,216,151,.16);border-radius:10px;background:rgba(18,58,45,.18)}
+body#blinqPremium .market-card-performance small{font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#789a8f}
+body#blinqPremium .market-card-performance strong{font-size:10px;font-weight:850;white-space:nowrap;color:#d7f7e7}
+@media(max-width:760px){body#blinqPremium .market-card-performance{padding:6px 8px}body#blinqPremium .market-card-performance small{font-size:7px}body#blinqPremium .market-card-performance strong{font-size:9px}}

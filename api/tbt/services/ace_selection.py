@@ -184,11 +184,180 @@ def _projection(
     }
 
 
+
+
+def _predictive_confidence(
+    market: str,
+    p1_projection: dict[str, Any],
+    p2_projection: dict[str, Any],
+) -> tuple[float, float, float, float]:
+    """Return evidence-adjusted next-match superiority confidence.
+
+    Unlike a confidence interval for a historical mean, a future count retains
+    match-to-match variance even with deep samples.  The returned tuple is
+    (confidence, raw_superiority, predictive_sd, gap).
+    """
+    e1, e2 = float(p1_projection["estimate"]), float(p2_projection["estimate"])
+    gap = abs(e1 - e2)
+    depth_n = min(int(p1_projection["samples"]), int(p2_projection["samples"]))
+    depth = min(1.0, depth_n / 20.0)
+    surface_depth = min(int(p1_projection["surface_samples"]), int(p2_projection["surface_samples"]))
+    surface_factor = min(1.0, surface_depth / 8.0) if surface_depth else 0.0
+    v1 = float(p1_projection.get("variance") or 0.0)
+    v2 = float(p2_projection.get("variance") or 0.0)
+    poisson_scale = 0.90 if market == "aces" else 1.10
+    variance_floor = 1.20 ** 2 if market == "aces" else 0.95 ** 2
+    predictive_v1 = max(variance_floor, v1, max(0.0, e1) * poisson_scale)
+    predictive_v2 = max(variance_floor, v2, max(0.0, e2) * poisson_scale)
+    predictive_sd = math.sqrt(predictive_v1 + predictive_v2)
+    z = gap / predictive_sd if predictive_sd > 0 else 0.0
+    raw_superiority = 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
+    evidence = min(1.0, 0.85 * depth + 0.15 * surface_factor)
+    confidence = 0.5 + (raw_superiority - 0.5) * evidence
+    return confidence, raw_superiority, predictive_sd, gap
+
+
+def _pav_points(examples: list[tuple[float, int]], *, min_bin: int = 60) -> list[dict[str, Any]]:
+    """Small dependency-free isotonic calibrator over chronological backtest data."""
+    if not examples:
+        return []
+    ordered = sorted((float(p), int(y)) for p, y in examples if 0.5 <= float(p) <= 1.0 and int(y) in {0, 1})
+    if not ordered:
+        return []
+    bins = []
+    for start in range(0, len(ordered), max(20, int(min_bin))):
+        chunk = ordered[start:start + max(20, int(min_bin))]
+        if len(chunk) < max(15, int(min_bin) // 3) and bins:
+            bins[-1]["items"].extend(chunk)
+        else:
+            bins.append({"items": list(chunk)})
+    blocks = []
+    for b in bins:
+        items = b["items"]
+        n = len(items); wins = sum(y for _, y in items)
+        # Beta(2,2) shrinkage keeps small bins away from 0/1 extremes.
+        rate = (wins + 2.0) / (n + 4.0)
+        blocks.append({"n": n, "wins": wins, "rate": rate, "min": items[0][0], "max": items[-1][0]})
+    i = 0
+    while i < len(blocks) - 1:
+        if blocks[i]["rate"] <= blocks[i + 1]["rate"] + 1e-12:
+            i += 1; continue
+        a, b = blocks[i], blocks[i + 1]
+        n = a["n"] + b["n"]; wins = a["wins"] + b["wins"]
+        merged = {"n": n, "wins": wins, "rate": (wins + 2.0) / (n + 4.0), "min": a["min"], "max": b["max"]}
+        blocks[i:i + 2] = [merged]
+        i = max(0, i - 1)
+    return [
+        {"min_raw": round(float(b["min"]), 4), "max_raw": round(float(b["max"]), 4),
+         "calibrated": round(float(b["rate"]), 4), "n": int(b["n"])}
+        for b in blocks
+    ]
+
+
+def _mapped_probability(raw: float, points: list[dict[str, Any]]) -> float:
+    if not points:
+        return float(raw)
+    value = float(raw)
+    for point in points:
+        if value <= float(point.get("max_raw") or 1.0) + 1e-12:
+            return float(point.get("calibrated") or value)
+    return float(points[-1].get("calibrated") or value)
+
+
+def _apply_empirical_calibration(market: str, raw: float, calibration: dict[str, Any] | None) -> float:
+    cfg = (calibration or {}).get(market) if isinstance(calibration, dict) else None
+    if not isinstance(cfg, dict) or not cfg.get("applied"):
+        return float(raw)
+    mapped = _mapped_probability(raw, cfg.get("points") or [])
+    # Calibration is deliberately one-sided: production history may reduce an
+    # overconfident card but never inflate a raw model confidence for marketing.
+    return max(0.5, min(float(raw), float(mapped)))
+
+
+def build_ace_market_calibration(history, cutoff: datetime) -> dict[str, Any]:
+    """Walk-forward backtest Aces/DF and build conservative empirical calibration.
+
+    Every example is predicted from matches strictly earlier than that example,
+    so the calibration has no same/future-match leakage.  A chronological 70/30
+    split decides whether calibration improves Brier score before it is enabled.
+    """
+    if cutoff.tzinfo is None:
+        raise ValueError("build_ace_market_calibration requires timezone-aware cutoff")
+    histories: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    sums = {"aces": 0.0, "double_faults": 0.0}
+    counts = {"aces": 0, "double_faults": 0}
+    examples: dict[str, list[tuple[float, int]]] = {"aces": [], "double_faults": []}
+    fallback = {"aces": 4.0, "double_faults": 2.5}
+    rows = sorted((m for m in history if m.scheduled_at < cutoff), key=lambda m: m.scheduled_at)
+    for match in rows:
+        if str(match.status or "").strip().lower() in EXCLUDED_STATUSES:
+            continue
+        stats = match.stats if isinstance(match.stats, dict) else {}
+        actuals = {
+            "aces": (_number(stats.get("p1_aces")), _number(stats.get("p2_aces"))),
+            "double_faults": (_number(stats.get("p1_double_faults")), _number(stats.get("p2_double_faults"))),
+        }
+        surface = str(match.surface or "unknown").lower()
+        best_of = match.best_of
+        p1_id, p2_id = str(match.player1_id), str(match.player2_id)
+        when = match.scheduled_at.astimezone(timezone.utc)
+        for market in ("aces", "double_faults"):
+            a1, a2 = actuals[market]
+            if a1 is None or a2 is None:
+                continue
+            baseline = sums[market] / counts[market] if counts[market] else fallback[market]
+            q1 = _projection(p1_id, p2_id, market, histories, baseline, when, surface=surface, best_of=best_of)
+            q2 = _projection(p2_id, p1_id, market, histories, baseline, when, surface=surface, best_of=best_of)
+            if q1 is not None and q2 is not None:
+                conf, _, _, gap = _predictive_confidence(market, q1, q2)
+                min_gap = 0.85 if market == "aces" else 0.45
+                if gap >= min_gap and conf >= 0.5 and a1 != a2:
+                    selected_p1 = float(q1["estimate"]) > float(q2["estimate"])
+                    hit = int((a1 > a2) if selected_p1 else (a2 > a1))
+                    examples[market].append((max(0.5, min(0.99, float(conf))), hit))
+        common = {"scheduled_at": when, "surface": surface, "best_of": best_of}
+        a1, a2 = actuals["aces"]; d1, d2 = actuals["double_faults"]
+        histories[p1_id].append({**common, "own_aces": a1, "opponent_aces": a2, "own_double_faults": d1, "opponent_double_faults": d2})
+        histories[p2_id].append({**common, "own_aces": a2, "opponent_aces": a1, "own_double_faults": d2, "opponent_double_faults": d1})
+        for market, pair in actuals.items():
+            for value in pair:
+                if value is not None:
+                    sums[market] += float(value); counts[market] += 1
+
+    out = {"schema": 1, "method": "walk_forward_isotonic_conservative", "cutoff_utc": cutoff.isoformat()}
+    for market in ("aces", "double_faults"):
+        ex = examples[market]
+        split = max(1, int(len(ex) * 0.70)) if ex else 0
+        train, valid = ex[:split], ex[split:]
+        train_points = _pav_points(train) if len(train) >= 80 else []
+        raw_brier = sum((p - y) ** 2 for p, y in valid) / len(valid) if valid else None
+        calibrated_brier = (
+            sum((min(p, _mapped_probability(p, train_points)) - y) ** 2 for p, y in valid) / len(valid)
+            if valid and train_points else None
+        )
+        applied = bool(
+            len(train) >= 80 and len(valid) >= 30 and train_points
+            and calibrated_brier is not None and raw_brier is not None
+            and calibrated_brier <= raw_brier + 0.0025
+        )
+        points = _pav_points(ex) if applied else []
+        out[market] = {
+            "applied": applied, "examples": len(ex), "train_n": len(train), "validation_n": len(valid),
+            "hit_rate": round(sum(y for _, y in ex) / len(ex), 4) if ex else None,
+            "mean_raw_confidence": round(sum(p for p, _ in ex) / len(ex), 4) if ex else None,
+            "validation_raw_brier": round(raw_brier, 6) if raw_brier is not None else None,
+            "validation_calibrated_brier": round(calibrated_brier, 6) if calibrated_brier is not None else None,
+            "points": points,
+        }
+    return out
+
 def _card(
     row: dict[str, Any],
     market: str,
     p1_projection: dict[str, Any],
     p2_projection: dict[str, Any],
+    *,
+    calibration: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
     p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
@@ -204,30 +373,11 @@ def _card(
     )
     depth_n = min(int(p1_projection["samples"]), int(p2_projection["samples"]))
     depth = min(1.0, depth_n / 20.0)
-    surface_depth = min(int(p1_projection["surface_samples"]), int(p2_projection["surface_samples"]))
-    surface_factor = min(1.0, surface_depth / 8.0) if surface_depth else 0.0
 
-    # Predictive superiority confidence for the *next match*.
-    #
-    # The old implementation divided historical variance by sample size. That is
-    # appropriate for estimating uncertainty of a historical mean, but it is not
-    # the variance of a future count. With deep history the denominator therefore
-    # collapsed toward zero and Double Fault cards routinely hit the 97% cap.
-    # Future ace/DF counts remain noisy even when the historical mean is known very
-    # precisely, so use predictive count variance instead. A Poisson-like floor is
-    # deliberately conservative and the DF cap is lower because double faults are
-    # especially volatile from match to match.
-    v1 = float(p1_projection.get("variance") or 0.0)
-    v2 = float(p2_projection.get("variance") or 0.0)
-    poisson_scale = 0.90 if market == "aces" else 1.10
-    variance_floor = 1.20 ** 2 if market == "aces" else 0.95 ** 2
-    predictive_v1 = max(variance_floor, v1, max(0.0, float(e1)) * poisson_scale)
-    predictive_v2 = max(variance_floor, v2, max(0.0, float(e2)) * poisson_scale)
-    predictive_sd = math.sqrt(predictive_v1 + predictive_v2)
-    z = gap / predictive_sd if predictive_sd > 0 else 0.0
-    raw_superiority = 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
-    evidence = min(1.0, 0.85 * depth + 0.15 * surface_factor)
-    confidence = 0.5 + (raw_superiority - 0.5) * evidence
+    uncalibrated_confidence, raw_superiority, predictive_sd, _ = _predictive_confidence(
+        market, p1_projection, p2_projection
+    )
+    confidence = _apply_empirical_calibration(market, uncalibrated_confidence, calibration)
     confidence_cap = 0.93 if market == "aces" else 0.88
     confidence = max(0.5, min(confidence_cap, confidence))
     if confidence < 0.60:
@@ -253,6 +403,7 @@ def _card(
         "opponent_projection": round(float(opponent_projection["estimate"]), 2),
         "projection_gap": round(float(gap), 2),
         "projection_confidence": round(float(confidence), 4),
+        "uncalibrated_projection_confidence": round(float(uncalibrated_confidence), 4),
         "raw_superiority_confidence": round(float(raw_superiority), 4),
         "projection_uncertainty": round(float(predictive_sd), 3),
         "probability": None,
@@ -260,7 +411,7 @@ def _card(
         "edge": None,
         "expected_value": None,
         "price_status": "projection_only",
-        "projection_model": "ace-count-projection-v3",
+        "projection_model": "ace-count-projection-v4",
         "projection_source": "historical_event_statistics",
         "projection_samples": {
             "player1": int(p1_projection["samples"]),
@@ -323,6 +474,7 @@ def select_ace_picks(
     # Match Winner policy: no same-UTC-day post-match statistics are consumed.
     cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
     histories, baselines, stat_matches = _history_index(history, cutoff)
+    calibration = build_ace_market_calibration(history, cutoff)
 
     by_market: dict[str, list[dict[str, Any]]] = {"aces": [], "double_faults": []}
     eligible_matches = 0
@@ -351,7 +503,7 @@ def select_ace_picks(
             )
             if p1_projection is None or p2_projection is None:
                 continue
-            card = _card(row, market, p1_projection, p2_projection)
+            card = _card(row, market, p1_projection, p2_projection, calibration=calibration)
             if card is not None:
                 by_market[market].append(card)
 
@@ -390,11 +542,11 @@ def select_ace_picks(
 
     return combined, {
         "schema": 4,
-        "model": "ace-count-projection-v3",
+        "model": "ace-count-projection-v4",
         "cutoff_utc": cutoff.isoformat(),
         "projection_only": True,
         "odds_backed": False,
-        "settlement_enabled": False,
+        "settlement_enabled": True,
         "eligible_upcoming_matches": eligible_matches,
         "history_matches_with_aces": stat_matches["aces"],
         "history_matches_with_double_faults": stat_matches["double_faults"],
@@ -412,5 +564,6 @@ def select_ace_picks(
         "adaptive_tier_counts": tier_counts_by_market,
         "confidence_caps": {"aces": 0.93, "double_faults": 0.88},
         "uncertainty_model": "future_count_predictive_variance",
+        "empirical_calibration": calibration,
         "fill_policy": "independent_market_fill_evidence_adjusted_hard_floor_0.60",
     }
