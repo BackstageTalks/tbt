@@ -12,13 +12,13 @@ UI = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
 
 
 def test_r31_release_and_footer_live_heartbeat_contract():
-    assert UI["ui_patch"] == "736-r31"
-    assert 'content="736-r31"' in INDEX
+    assert UI["ui_patch"] == "736-r32"
+    assert 'content="736-r32"' in INDEX
     assert 'id="footerSystemStatus"' in INDEX
     assert "Všetky systémy funkčné" in INDEX
-    assert 'id="footerLastUpdate">Last update: —' in INDEX
+    assert 'id="footerLastUpdate">Aktualizácia modelu: —' in INDEX
     assert "function renderSystemFooterStatus()" in APP
-    assert "`Last update: ${fmtTime(raw)}`" in APP
+    assert "`Aktualizácia modelu: ${fmtTime(raw)}`" in APP
     assert "state.liveRadarHeartbeat=data?.live_radar_status" in APP
     assert 'payload["live_radar_status"] = _public_live_worker_heartbeat()' in FUNCTION_APP
     assert '"fresh": fresh' in FUNCTION_APP
@@ -69,7 +69,8 @@ def test_r31_match_detail_has_section_locks_and_no_status_meta_footer():
     assert "matchDetailLockHtml" in block
     assert "dialog-meta" not in block
     assert "dialog-system-ok" not in block
-    assert "#8b5cf6" not in CSS[CSS.index("/* Match detail: remove purple language"):]
+    assert "Match detail keeps the established r30 visual language" in CSS
+    assert "Preserve the established detail-card visual; improve only lower-panel readability." in CSS
 
 
 def test_r31_preserves_original_results_entitlements_and_adds_admin_visibility_toggle():
@@ -77,7 +78,7 @@ def test_r31_preserves_original_results_entitlements_and_adds_admin_visibility_t
     assert '"rookie": 24' in entitlements
     assert '"pro": 48' in entitlements
     block = APP[APP.index("function resultsHistoryHours"):APP.index("function renderResultsFilters")]
-    assert "plan==='rookie'?24:plan==='pro'?48:null" in block
+    assert "results_history_hours" in block
     assert 'data-admin-results-plan="${escapeHtml(id)}"' in APP
     assert "SIDEBAR_RESULTS" in APP
     assert 'data-ui-element="SIDEBAR_RESULTS"' in INDEX
@@ -86,7 +87,7 @@ def test_r31_preserves_original_results_entitlements_and_adds_admin_visibility_t
 def test_r31_rolling_performance_is_only_rendered_as_single_model_success_kpi():
     engine = (ROOT / "api" / "tbt" / "services" / "engine.py").read_text(encoding="utf-8")
     assert 'PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30)' in engine
-    assert 'best_accuracy_of_requested_windows' in engine
+    assert 'best_accuracy_min_sample' in engine
     assert '"dashboard_model_success"' in engine
     assert 'dashboardBest=state.feed?.dashboard_model_success' in APP
     assert 'dailyHubPerformanceText' not in APP

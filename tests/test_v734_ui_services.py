@@ -36,7 +36,7 @@ def test_footer_is_minimal_and_uses_live_worker_freshness_status():
     assert 'site-footer site-footer-minimal' in INDEX
     assert 'id="footerSystemStatus"' in INDEX
     assert 'Všetky systémy funkčné' in INDEX
-    assert 'Last update: —' in INDEX
+    assert 'Aktualizácia modelu: —' in INDEX
     assert 'renderSystemFooterStatus' in APP
     assert 'renderFooterConfig' not in APP
 

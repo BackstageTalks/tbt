@@ -38,7 +38,7 @@ function response(status, payload) {
       if (target.includes('accounts:signUp')) return response(200, {idToken:'signup-token',refreshToken:'signup-refresh',expiresIn:'3600'});
       if (target.includes('accounts:update')) return response(200, {idToken:'signup-token'});
       if (url === '/api/v1/auth/profile') return response(200, {telegram_nick:'@member_test'});
-      if (target.includes('accounts:sendOobCode')) return response(200, {email:'member@example.com'});
+      if (url === '/api/v1/auth/email') return response(200, {ok:true,accepted:true});
       if (target.includes('accounts:signInWithPassword')) return response(200, {idToken:'login-token',refreshToken:'login-refresh',expiresIn:'3600'});
       if (target.includes('accounts:lookup')) return response(200, {users:[{email:'member@example.com',emailVerified:verified}]});
       throw new Error(`Unexpected fetch: ${target}`);
@@ -54,8 +54,9 @@ function response(status, payload) {
   const profileSave = calls.find(call => call.url === '/api/v1/auth/profile');
   assert(profileSave, 'signup must save the Telegram nickname');
   assert.strictEqual(profileSave.body.telegram_nick, '@member_test');
-  const verifyMail = calls.find(call => call.url.includes('accounts:sendOobCode') && call.body.requestType === 'VERIFY_EMAIL');
-  assert(verifyMail, 'signup must request a Firebase VERIFY_EMAIL mail');
+  const verifyMail = calls.find(call => call.url === '/api/v1/auth/email' && call.body.type === 'verify');
+  assert(verifyMail, 'signup must request a BlinQ-branded Firebase verification mail');
+  assert.strictEqual(verifyMail.options.headers['X-Blinq-Access-Token'], 'signup-token');
   assert.strictEqual(context.localStorage.getItem('blinq_v4_session'), null, 'signup must not leave an active app session before verification');
 
   let verificationError = null;
@@ -70,8 +71,8 @@ function response(status, payload) {
   assert.strictEqual(preVerifySession.access_token, 'login-token', 'Firebase session must be kept so resend can work');
 
   await context.BlinqAuth.resendVerification();
-  assert(calls.filter(call => call.url.includes('accounts:sendOobCode') && call.body.requestType === 'VERIFY_EMAIL').length >= 2,
-    'resend must request another VERIFY_EMAIL message');
+  assert(calls.filter(call => call.url === '/api/v1/auth/email' && call.body.type === 'verify').length >= 2,
+    'resend must request another BlinQ verification message');
 
   verified = true;
   await context.BlinqAuth.signIn('member@example.com','password123');

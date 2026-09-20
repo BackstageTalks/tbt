@@ -5,10 +5,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_top_dynamic_fallback_contract_present():
     src=(ROOT/'api/tbt/services/market_selection.py').read_text()
-    assert 'TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.60' in src
-    assert 'TOP_FALLBACK_MIN_ODDS = 1.45' in src
+    assert 'TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65' in src
+    assert 'TOP_FALLBACK_MIN_ODDS = 1.50' in src
     assert 'TOP_MIN_COUNT = 5' in src
-    assert '(0.60, 1.45)' in src
+    assert '(0.65, 1.50)' in src
 
 
 def test_info_general_audience_and_live_minimum_is_dynamic(monkeypatch):
@@ -113,3 +113,16 @@ def test_results_ui_calls_esa_a_projection_not_prediction():
     assert 'DATA DEPTH' in app
     assert '✓ HIT' in app and '× MISS' in app
     assert 'MODEL 2. SETU · samostatný podporný signál' in app
+
+
+def test_info_minimum_is_dynamic_and_cannot_be_widened(monkeypatch):
+    from tbt.services import admin_storage
+    monkeypatch.setattr(admin_storage, 'load_runtime_ui_config', lambda: {'notifications': {'info_min_level': 'pro', 'live_min_level': 'elite'}})
+    info=admin_storage.normalize_insight({'title':'Info','body':'Body','type':'vip','levels':['pro','elite','legend','goat']})
+    assert info['levels'][0]=='pro'
+    try:
+        admin_storage.normalize_insight({'title':'Info','body':'Body','type':'vip','levels':['rookie']})
+    except ValueError as exc:
+        assert 'PRO' in str(exc)
+    else:
+        raise AssertionError('INFO must respect the published INFO minimum')

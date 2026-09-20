@@ -18,7 +18,7 @@ def test_telegram_panel_has_json_and_admin_editor():
 def test_footer_live_status_is_visible_and_legacy_rail_is_removed():
     assert 'footer-watermark-logo' not in INDEX
     assert 'id="footerSystemStatus"' in INDEX
-    assert 'Všetky systémy funkčné' in INDEX and 'Last update: —' in INDEX
+    assert 'Všetky systémy funkčné' in INDEX and 'Aktualizácia modelu: —' in INDEX
     assert '@keyframes blinqStatusBreath' in CSS
     assert 'legacy-component-marker' not in INDEX
     assert 'Prémiové predikcie' not in INDEX

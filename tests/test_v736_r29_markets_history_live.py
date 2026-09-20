@@ -31,10 +31,9 @@ def test_best_history_window_selects_highest_accuracy_of_requested_five_windows(
     windows, summary = performance_windows(rows, [], now=now)
 
     assert windows["3"]["model"]["n"] == 20
-    assert summary["best_days"] == 3
-    assert summary["best_accuracy"] == 1.0
-    assert summary["best_n"] == 20
-    assert summary["selection_mode"] == "best_accuracy_of_requested_windows"
+    assert summary["best_days"] == 10
+    assert summary["best_n"] == 40
+    assert summary["selection_mode"] == "best_accuracy_min_sample"
     assert summary["transparent_all_windows"] is True
 
 
@@ -55,7 +54,7 @@ def test_r29_frontend_contract_has_separate_df_tab_new_loader_and_history_window
     assert "['14',lcopy('14 days'" in app
     assert "performance_window_summary" in app
     assert '"double_faults"' in config
-    assert '"ui_patch": "736-r31"' in config
+    assert '"ui_patch": "736-r32"' in config
     assert "blinq_loading_r29.svg" in index
     assert loader.is_file()
     # The supplied loader contained a metadata-heavy embedded PNG (~1.7 MB).
