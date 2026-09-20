@@ -153,7 +153,19 @@
 
   async function init() {
     clearLegacy();
-    config = await json('/api/v1/auth/config');
+    let lastError = null;
+    for (const delay of [0, 350]) {
+      if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+      try {
+        config = await json('/api/v1/auth/config');
+        lastError = null;
+        break;
+      } catch (error) {
+        lastError = error;
+        if (error?.status && error.status < 500) break;
+      }
+    }
+    if (!config) throw lastError || new Error('Authentication is temporarily unavailable.');
     if (provider() !== 'firebase') throw new Error('Firebase authentication is not configured.');
     if (config.project_id && config.project_id !== FIREBASE_WEB.projectId) {
       throw new Error('Firebase project configuration mismatch.');
