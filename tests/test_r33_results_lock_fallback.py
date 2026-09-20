@@ -78,3 +78,26 @@ def test_old_runtime_config_is_migrated_to_rookie_short_odds_stable_random():
     )
     assert manifest["sections"]["prime"]["visible_picks"] == 1
     assert manifest["sections"]["prime"]["selection_mode"] == "stable_random"
+
+
+def test_rookie_random_sampling_survives_missing_runtime_ui_config():
+    rows = []
+    for i in range(5):
+        rows.append({
+            "event_id": f"fallback-prime-{i}",
+            "scheduled_at": f"2026-09-20T1{i}:00:00Z",
+            "tour": "ATP",
+            "player1": {"id": f"a{i}", "name": f"A{i}", "probability": .8},
+            "player2": {"id": f"b{i}", "name": f"B{i}", "probability": .2},
+            "betting": {"odds": 1.25},
+        })
+    payload = {
+        "prime_picks": rows,
+        "top_daily_picks": [], "value_picks": [], "doubles_picks": [],
+        "ace_picks": [], "sg_picks": [], "upcoming": rows, "results": [],
+    }
+    _, manifest = filter_feed_for_access(
+        payload, {"status": "active", "plan": "rookie", "id": "no-runtime"}, None
+    )
+    assert manifest["sections"]["prime"]["selection_mode"] == "stable_random"
+    assert manifest["sections"]["prime"]["returned"] == 1
