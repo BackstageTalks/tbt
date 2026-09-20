@@ -51,8 +51,6 @@ BOARD_MIN_DATA_DEPTH = 0.80
 BOARD_MIN_SURFACE_MATCHES = 5
 BOARD_PLANS = {"legend", "goat", "admin"}
 
-MEMBERSHIP_LEVELS = ("rookie", "pro", "elite", "legend", "goat")
-
 RESULT_HISTORY_HOURS = {
     "rookie": 24,
     "pro": 48,
@@ -348,26 +346,10 @@ def _board_rows(payload: dict, key: str) -> list[dict]:
     )
 
 
-
-def _detail_min_level(ui_config: dict | None) -> str:
-    if not isinstance(ui_config, dict):
-        return "rookie"
-    hub = ((ui_config.get("dashboard") or {}).get("daily_hub") or {})
-    level = str(hub.get("detail_min_level") or "rookie").strip().lower()
-    return level if level in MEMBERSHIP_LEVELS else "rookie"
-
-
-def _detail_allowed(plan: str, min_level: str) -> bool:
-    if plan == "admin":
-        return True
-    if plan not in MEMBERSHIP_LEVELS or min_level not in MEMBERSHIP_LEVELS:
-        return False
-    return MEMBERSHIP_LEVELS.index(plan) >= MEMBERSHIP_LEVELS.index(min_level)
-
 def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: dict | None = None) -> dict:
     plan = effective_plan(access)
     if plan == "suspended":
-        return {"plan": plan, "sections": {}, "details": {"enabled": False, "min_level": _detail_min_level(ui_config)}, "results": False, "performance": False, "results_history_hours": 0}
+        return {"plan": plan, "sections": {}, "results": False, "performance": False, "results_history_hours": 0}
     policy = _POLICY.get(plan, _POLICY["expired"])
     payload = payload or {}
     sections = {}
@@ -462,45 +444,13 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
         "official_prediction": False,
     }
     history_hours = RESULT_HISTORY_HOURS.get(plan, 0)
-    detail_min = _detail_min_level(ui_config)
     return {
         "plan": plan,
         "sections": sections,
-        "details": {"enabled": _detail_allowed(plan, detail_min), "min_level": detail_min},
         "results": history_hours != 0,
         "performance": history_hours is None,
         "results_history_hours": history_hours,
     }
-
-
-_DETAIL_ONLY_FIELDS = {
-    "opponent_projection",
-    "projection_gap",
-    "projection_samples",
-    "projection_source",
-    "reference_projection",
-    "baseline_projection",
-}
-
-
-def _strip_prediction_detail_fields(rows):
-    """Remove detail-only projection internals when the account cannot open details.
-
-    Summary fields required by the public table/card (pick, projection, confidence,
-    data depth, odds/line) stay intact; the richer drill-down payload does not.
-    """
-    if not isinstance(rows, list):
-        return rows
-    safe = []
-    for row in rows:
-        if not isinstance(row, dict):
-            safe.append(row)
-            continue
-        copy = deepcopy(row)
-        for key in _DETAIL_ONLY_FIELDS:
-            copy.pop(key, None)
-        safe.append(copy)
-    return safe
 
 
 def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None = None) -> tuple[dict, dict]:
@@ -584,14 +534,6 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
             )
             authorized_sg.extend(selected)
     result[SECTION_TO_FEED_KEY["sg"]]=authorized_sg
-
-    # Detail access is an API boundary as well as a UI control. Accounts below
-    # the configured threshold still receive the summary needed for their
-    # authorized rows, but not projection internals used only by the detail view.
-    if not bool((manifest.get("details") or {}).get("enabled")):
-        for feed_key in ("daily_picks", "prime_picks", "top_daily_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"):
-            if isinstance(result.get(feed_key), list):
-                result[feed_key] = _strip_prediction_detail_fields(result[feed_key])
 
     if manifest["plan"] not in {"elite","legend","goat","admin"}:
         permitted_ids={str(row.get("event_id") or "") for feed_key in ["daily_picks","prime_picks","top_daily_picks","value_picks","doubles_picks","ace_picks","sg_picks"] for row in result.get(feed_key,[]) if isinstance(row,dict)}

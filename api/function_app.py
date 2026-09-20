@@ -553,20 +553,6 @@ def match_intelligence(req):
             return response({"error": "email_not_verified"}, 403)
         if is_suspended(user):
             return response({"error": "account_suspended"}, 403)
-        # r30: detail access is server enforced as well as hidden/locked in the
-        # browser. This prevents a lower tier from bypassing the UI and calling
-        # the live enrichment endpoint directly.
-        try:
-            runtime_ui = load_runtime_ui_config() or {}
-        except AdminStorageUnavailable:
-            runtime_ui = {}
-        hub_cfg = ((runtime_ui.get("dashboard") or {}).get("daily_hub") or {}) if isinstance(runtime_ui, dict) else {}
-        detail_min = str(hub_cfg.get("detail_min_level") or "rookie").strip().lower()
-        if detail_min not in {"rookie", "pro", "elite", "legend", "goat"}:
-            detail_min = "rookie"
-        account_data = public_account(user, cfg=settings, profile=_profile_for(user))
-        if not _membership_allowed(account_data, detail_min):
-            return response({"error": "detail_access_required", "required_plan": detail_min}, 403)
         p1 = str(req.params.get("player1_id") or "").strip()
         p2 = str(req.params.get("player2_id") or "").strip()
         surface = str(req.params.get("surface") or "").strip()[:48]

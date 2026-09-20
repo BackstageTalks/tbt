@@ -505,10 +505,6 @@ def validate_ui_config(payload: object) -> dict:
         value = daily_hub.get(field)
         if not isinstance(value, int) or not 1 <= value <= 20:
             raise ValueError(f"Invalid Daily Picks setting: {field}")
-    detail_min = str(daily_hub.get("detail_min_level") or "rookie").strip().lower()
-    if detail_min not in _INSIGHT_LEVELS:
-        raise ValueError("Invalid prediction detail minimum membership level")
-    daily_hub["detail_min_level"] = detail_min
     hub_tabs = daily_hub.get("tabs") or {}
     required_hub_tabs = {"daily", "value", "ace", "games", "sets"}
     allowed_hub_tabs = required_hub_tabs | {"prime", "top", "doubles", "board", "see_all"}

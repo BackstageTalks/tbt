@@ -438,12 +438,12 @@
       }
     },
     "SIDEBAR_ACE": {
-      "label": "Aces / Double Faults",
+      "label": "Ace Predictions",
       "zone": "sidebar",
       "kind": "navigation",
       "order": 6,
       "content": {
-        "label": "Aces / Double Faults",
+        "label": "Ace Predictions",
         "route": "ace",
         "icon": "♠"
       },
@@ -559,12 +559,12 @@
       }
     },
     "ACE_PICKS_PANEL": {
-      "label": "Aces / Double Faults panel",
+      "label": "Ace Predictions panel",
       "zone": "predictions",
       "kind": "panel",
       "order": 80,
       "content": {
-        "label": "Aces / Double Faults panel"
+        "label": "Ace Predictions panel"
       },
       "watermark": {
         "enabled": false,
@@ -1269,7 +1269,7 @@
         }
       },
       "ace": {
-        "label": "Aces / Double Faults",
+        "label": "Ace Predictions",
         "panel_id": "acePanel",
         "sidebar_element": "SIDEBAR_ACE",
         "sidebar_enabled": true,
@@ -1643,7 +1643,7 @@
           }
         },
         "ace": {
-          "label": "Esá / dvojchyby",
+          "label": "ESA",
           "enabled": true,
           "plans": {
             "trial": {
@@ -2194,8 +2194,7 @@
             }
           }
         }
-      },
-      "detail_min_level": "rookie"
+      }
     }
   },
   "ui_revision": "7.3.6",
@@ -2354,7 +2353,7 @@
       }
     }
   },
-  "ui_patch": "736-r30",
+  "ui_patch": "736-r28",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,

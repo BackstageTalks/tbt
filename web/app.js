@@ -137,7 +137,7 @@
     sk: {
       'Skip to content':'Preskočiť na obsah','Close navigation':'Zavrieť navigáciu','Open navigation':'Otvoriť navigáciu',
       'Main navigation':'Hlavná navigácia','Quick navigation':'Rýchla navigácia','Language versions':'Jazykové verzie',
-      'Dashboard':'Prehľad','Prime Predictions':'Short Odds','Short Odds':'Short Odds','TOP Predictions':'TOP','Value Predictions':'Value','Doubles':'Štvorhra','Ace Predictions':'Esá / dvojchyby','Aces / Double Faults':'Esá / dvojchyby','S/G Predictions':'Sety / hry','Results':'Výsledky',
+      'Dashboard':'Prehľad','Prime Predictions':'Short Odds','Short Odds':'Short Odds','TOP Predictions':'TOP','Value Predictions':'Value','Doubles':'Štvorhra','Ace Predictions':'Esá','S/G Predictions':'Sety / hry','Results':'Výsledky',
       'Plans':'Plány','Upgrade':'Upgrade','Level':'Úroveň','Remaining':'Zostáva','Account':'Účet','Account & membership':'Účet a členstvo','Profile, access and plans':'Profil, prístup a plány','Sign out':'Odhlásiť sa','End this session':'Ukončiť túto reláciu',
       'Sign in to your analytics workspace':'Prihlás sa do svojho analytického priestoru','Get access':'Získaj prístup','Restore your access':'Obnov svoj prístup','Set a new password':'Nastav nové heslo',
       'Welcome back.':'Vitaj späť.','Sign in to your tennis intelligence workspace.':'Prihlás sa do svojho tenisového analytického priestoru.','Create your BlinQ account.':'Vytvor si účet BlinQ.','Create an account to access your BlinQ workspace.':'Vytvor si účet a získaj prístup do BlinQ.','Restore access.':'Obnov prístup.','We will send a password recovery link to your email.':'Na e-mail ti pošleme odkaz na obnovenie hesla.','Set a new password.':'Nastav nové heslo.','Choose a password with at least eight characters.':'Zvoľ heslo s minimálne ôsmimi znakmi.',
@@ -162,7 +162,7 @@
       'TBA':'Bude určené','ending':'končí'
     },
     cz: {
-      'Skip to content':'Přeskočit na obsah','Dashboard':'Přehled','Prime Predictions':'Short Odds','Short Odds':'Short Odds','TOP Predictions':'TOP','Value Predictions':'Value','Doubles':'Čtyřhra','Ace Predictions':'Esa / dvojchyby','Aces / Double Faults':'Esa / dvojchyby','S/G Predictions':'Sety / hry','Results':'Výsledky','Plans':'Plány','Level':'Úroveň','Remaining':'Zbývá','Account':'Účet','Account & membership':'Účet a členství','Profile, access and plans':'Profil, přístup a plány','Sign out':'Odhlásit se','End this session':'Ukončit tuto relaci',
+      'Skip to content':'Přeskočit na obsah','Dashboard':'Přehled','Prime Predictions':'Short Odds','Short Odds':'Short Odds','TOP Predictions':'TOP','Value Predictions':'Value','Doubles':'Čtyřhra','Ace Predictions':'Esa','S/G Predictions':'Sety / hry','Results':'Výsledky','Plans':'Plány','Level':'Úroveň','Remaining':'Zbývá','Account':'Účet','Account & membership':'Účet a členství','Profile, access and plans':'Profil, přístup a plány','Sign out':'Odhlásit se','End this session':'Ukončit tuto relaci',
       'Sign in to your analytics workspace':'Přihlas se do svého analytického prostoru','Get access':'Získej přístup','Restore your access':'Obnov svůj přístup','Set a new password':'Nastav nové heslo',
       'Welcome back.':'Vítej zpět.','Sign in to your tennis intelligence workspace.':'Přihlas se do svého tenisového analytického prostoru.','Create your BlinQ account.':'Vytvoř si účet BlinQ.','Create an account to access your BlinQ workspace.':'Vytvoř si účet a získej přístup do BlinQ.','Restore access.':'Obnov přístup.','We will send a password recovery link to your email.':'Na e-mail ti pošleme odkaz pro obnovu hesla.','Set a new password.':'Nastav nové heslo.','Choose a password with at least eight characters.':'Zvol heslo s minimálně osmi znaky.','Email':'E-mail','Password':'Heslo','Enter your email':'Zadej svůj e-mail','Enter your password':'Zadej své heslo','Show':'Zobrazit','Hide':'Skrýt','Show password':'Zobrazit heslo','Hide password':'Skrýt heslo','Sign in':'Přihlásit se','Create account':'Vytvořit účet','Back to sign in':'Zpět na přihlášení','Forgot password':'Zapomenuté heslo','Resend verification email':'Poslat ověřovací e-mail znovu','Send recovery link':'Poslat odkaz pro obnovu','Save password':'Uložit heslo',
       'Your account':'Tvůj účet','YOUR ACCOUNT':'TVŮJ ÚČET','CURRENT ACCESS':'AKTUÁLNÍ PŘÍSTUP','Email verified':'E-mail ověřen','Email not verified':'E-mail není ověřen','Telegram nick':'Telegram nick','Avatar style':'Typ avatara','Default':'Výchozí','Male':'Muž','Female':'Žena','Save profile':'Uložit profil','Reset password':'Obnovit heslo','BLINQ MEMBERSHIP':'BLINQ ČLENSTVÍ','Available plans':'Dostupné plány','Current plan':'Aktuální plán','CURRENT PLAN':'AKTUÁLNÍ PLÁN','INVITE ONLY':'JEN NA POZVÁNKU','Invite only':'Jen na pozvánku','Request invite':'Požádat o pozvánku','Lifetime access':'Doživotní přístup','Active':'Aktivní','No active access':'Bez aktivního přístupu','Rookie Trial':'Rookie zkušební verze','Lifetime':'Doživotně','Active membership':'Aktivní členství','Expired':'Expirované','Access':'Přístup','Validity':'Platnost','Member since':'Člen od','Security':'Zabezpečení','Verified email':'Ověřený e-mail','Verification required':'Vyžaduje se ověření',
@@ -216,7 +216,7 @@
     top_daily:{label:'TOP Predictions',panel_id:'topDailyPanel',sidebar_element:'SIDEBAR_TOP_DAILY',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:2,preview_limit:5},
     value:{label:'Value Predictions',panel_id:'valuePanel',sidebar_element:'SIDEBAR_VALUE',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:3,preview_limit:5},
     doubles:{label:'Doubles',panel_id:'doublesPanel',sidebar_element:'SIDEBAR_DOUBLES',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:4,preview_limit:5},
-    ace:{label:'Aces / Double Faults',panel_id:'acePanel',sidebar_element:'SIDEBAR_ACE',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:5,preview_limit:5},
+    ace:{label:'Ace Predictions',panel_id:'acePanel',sidebar_element:'SIDEBAR_ACE',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:5,preview_limit:5},
     sg:{label:'S/G Predictions',panel_id:'sgPanel',sidebar_element:'SIDEBAR_SG',sidebar_enabled:true,dashboard_enabled:true,dashboard_order:6,preview_limit:5},
     results:{label:'Results',panel_id:'resultsPreviewPanel',sidebar_element:'SIDEBAR_RESULTS',sidebar_enabled:true,dashboard_enabled:false,dashboard_order:7,preview_limit:5},
   };
@@ -263,12 +263,12 @@
   async function loadUiConfig() {
     let runtimeConfigSnapshot=null;
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=30');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=28');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=30');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=28');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -336,7 +336,7 @@
     const loadedPatch=String(state.ui?.ui_patch||'');
     const loadedPatchNumber=Number((loadedPatch.match(/r(\d+)$/)||[])[1]||0);
     if(loadedPatchNumber<27){const primeTab=state.ui?.dashboard?.daily_hub?.tabs?.prime;if(primeTab)primeTab.enabled=true;}
-    state.ui.ui_patch='736-r30';
+    state.ui.ui_patch='736-r28';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -365,13 +365,6 @@
     const goatPlan=state.ui.plans.goat||{},goatDays=Number(goatPlan.duration_days);
     state.ui.plans.goat={...goatPlan,lifetime:false,unlimited:false,duration_days:Number.isFinite(goatDays)&&goatDays>0?Math.trunc(goatDays):Math.max(1,Number(state.uiSource?.plans?.goat?.duration_days)||365)};
     state.ui.account_inactivity=mergeConfig({enabled:true,inactive_days:90,warning_days:7,notify_admin:true,notify_user:false,auto_expire_rookie:false},state.ui.account_inactivity||{});
-    // r30: prediction detail is one global premium boundary. Old runtime
-    // configurations default to ROOKIE so an application update never removes
-    // access until the Admin explicitly raises the minimum level.
-    state.ui.dashboard=state.ui.dashboard||{};
-    state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};
-    const detailMin=String(state.ui.dashboard.daily_hub.detail_min_level||state.uiSource?.dashboard?.daily_hub?.detail_min_level||'rookie').toLowerCase();
-    state.ui.dashboard.daily_hub.detail_min_level=membershipHierarchy.includes(detailMin)?detailMin:'rookie';
 
     // r23 visual cleanup: purge retired header/content promo systems from both
     // repository defaults and previously published runtime configurations.
@@ -926,39 +919,11 @@
   }
   function filtered(){ const rows=rankedPredictions(),tour=$('tourFilter')?.value||'',tournament=$('tournamentFilter')?.value||'',surface=$('surfaceFilter')?.value||'',confidence=$('confidenceFilter')?.value||'',q=($('searchInput')?.value||'').trim().toLowerCase(); return rows.filter(m=>{ if(tour&&m.tour!==tour)return false;if(tournament&&m.tournament!==tournament)return false;if(surface&&m.surface!==surface)return false;if(confidence&&m.confidence!==confidence)return false;if(q&&!`${m.p1} ${m.p2} ${m.tournament}`.toLowerCase().includes(q))return false;return true; }); }
 
-  function predictionFamily(row){
-    if(!row||typeof row!=='object')return 'unknown';
-    const market=String(row.market||row.market_type||row.projection_metric||'').trim().toLowerCase();
-    if(market==='ace'||market==='aces'||(market.includes('double')&&market.includes('fault')))return 'ace';
-    if(market==='games'||market==='total_games'||market==='game_total')return 'games';
-    if(market==='sets'||market==='total_sets'||market==='set_total')return 'sets';
-    const explicit=String(row.prediction_family||row.model_family||row.family||'').trim().toLowerCase();
-    if(explicit==='doubles'||explicit==='double')return 'doubles';
-    if(explicit==='ace'||explicit==='aces'||explicit==='double_faults')return 'ace';
-    if(explicit==='games'||explicit==='sets')return explicit;
-    if(row.doubles&&typeof row.doubles==='object')return 'doubles';
-    const p1=row.player1||{},p2=row.player2||{};
-    const pair1=Array.isArray(row.player1_members)?row.player1_members:Array.isArray(p1.members)?p1.members:Array.isArray(p1.players)?p1.players:[];
-    const pair2=Array.isArray(row.player2_members)?row.player2_members:Array.isArray(p2.members)?p2.members:Array.isArray(p2.players)?p2.players:[];
-    if(pair1.length>=2&&pair2.length>=2)return 'doubles';
-    return 'singles';
-  }
-  function marketRowMatches(key,row){
-    const family=predictionFamily(row);
-    if(key==='ace')return family==='ace';
-    if(key==='doubles')return family==='doubles';
-    if(key==='sg')return family==='games'||family==='sets';
-    if(['prime','top_daily','value'].includes(key))return family==='singles';
-    return true;
-  }
   function marketRows(key){
     const candidates={prime:['prime_picks','prime'],top_daily:['top_daily_picks','daily_picks','top_daily'],value:['value_picks','value'],doubles:['doubles_picks','doubles'],ace:['ace_picks','aces','ace_markets'],sg:['sg_picks','sets_games','set_game_picks']}[key]||[];
-    let rows=[];
-    for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value)){rows=value;break;}}
-    if(!rows.length){const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))rows=markets[key];}
-    const clean=rows.filter(row=>marketRowMatches(key,row));
-    if(clean.length!==rows.length&&typeof console!=='undefined')console.warn(`[BlinQ] filtered ${rows.length-clean.length} mismatched ${key} row(s)`);
-    return clean;
+    for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return value;}
+    const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return markets[key];
+    return [];
   }
   function marketProbability(row){const raw=row?.blinq_probability??row?.probability??row?.win_probability??row?.model_probability??row?.confidence_probability;const value=Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;}
   function surfaceSampleLabel(row){const q=row?.quality||{},s1=Number(q?.player1?.surface_matches),s2=Number(q?.player2?.surface_matches);return Number.isFinite(s1)&&Number.isFinite(s2)?`${Math.min(s1,s2)}+`:'—';}
@@ -1077,34 +1042,6 @@
     if(String(plan||'').toLowerCase()==='admin')return true;
     const current=membershipHierarchy.indexOf(String(plan||'').toLowerCase()),required=membershipHierarchy.indexOf(String(minPlan||'').toLowerCase());
     return current>=0&&required>=0&&current>=required;
-  }
-  function predictionDetailAccess(){
-    const configured=String(dailyHubConfig()?.detail_min_level||'rookie').toLowerCase();
-    const configuredMin=membershipHierarchy.includes(configured)?configured:'rookie';
-    if(accountPlan()==='admin'&&!state.previewPlan)return {allowed:true,min_level:configuredMin};
-    if(state.previewPlan&&isAdminAccount())return {allowed:membershipAtLeast(state.previewPlan,configuredMin),min_level:configuredMin};
-    const server=state.feed?.entitlements?.details;
-    if(server&&typeof server==='object'){
-      const serverRaw=String(server.min_level||configuredMin).toLowerCase();
-      const min=membershipHierarchy.includes(serverRaw)?serverRaw:configuredMin;
-      return {allowed:server.enabled===true,min_level:min};
-    }
-    return {allowed:membershipAtLeast(accountPlan(),configuredMin),min_level:configuredMin};
-  }
-  function predictionDetailRequiredLabel(){
-    const access=predictionDetailAccess(),label=String(upgradePlanLabel(access.min_level)||access.min_level).replace(/^BlinQ\s+/i,'').toUpperCase();
-    return label||'ROOKIE';
-  }
-  function predictionDetailButton(available=true){
-    if(!available)return '';
-    const access=predictionDetailAccess(),label=escapeHtml(lcopy('Detail','Detail','Detail'));
-    if(access.allowed)return `<button class="hub-detail" type="button" data-hub-detail aria-label="${label}"><span>${label}</span></button>`;
-    return `<button class="hub-detail hub-detail-locked access-locked" type="button" data-upgrade-plan="${escapeHtml(access.min_level)}" data-upgrade-section="${escapeHtml(lcopy('Prediction detail','Detail predikcie','Detail predikce'))}" aria-label="${escapeHtml(lcopy('Locked detail','Zamknutý detail','Zamčený detail'))}"><span><i aria-hidden="true">◆</i>${label}</span></button>`;
-  }
-  function ensurePredictionDetailAccess(source=null){
-    const access=predictionDetailAccess();if(access.allowed)return true;
-    const anchor=source instanceof Element?source:(document.activeElement instanceof Element?document.activeElement:document.body);
-    showAccessHint(anchor,access.min_level,lcopy('Prediction detail','Detail predikcie','Detail predikce'),true);return false;
   }
   function insightTypeLabel(type){return ({info:'Info',insight:'Premium Info',alert:'LIVE · COMEBACK',live_watch:'LIVE · WATCH',set2:'LIVE · 2. SET',vip:'Premium Info'})[String(type||'').toLowerCase()]||'Insight';}
   function insightAudienceText(levels){
@@ -1340,7 +1277,7 @@
     const add=row=>{const id=dailyPickIdentity(row);if(!row||!id||seen.has(id))return;seen.add(id);rows.push(row);};
     (marketRows('prime')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'prime'}));
     (marketRows('value')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'value'}));
-    (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(row=>offerSurfaceEligible(row)&&marketRowMatches('top_daily',row)).forEach(row=>add({...row,_hub_source:'daily'}));
+    (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'daily'}));
     (marketRows('ace')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'ace'}));
     (marketRows('doubles')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'doubles'}));
     (marketRows('sg')||[]).filter(offerSurfaceEligible).forEach(row=>{const market=String(row?.market||'').toLowerCase();if(market==='games'||market==='sets')add({...row,_hub_source:market});});
@@ -1350,7 +1287,7 @@
     if(tab==='daily'){
       // `daily_picks` is already server-authorized: ROOKIE=2 stable/day, PRO=3, ELITE+=ALL.
       // Do not re-merge the legacy prime/top arrays here or a low tier could receive extra rows.
-      return (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(row=>offerSurfaceEligible(row)&&marketRowMatches('top_daily',row));
+      return (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible);
     }
     if(tab==='prime')return marketRows('prime').filter(offerSurfaceEligible);
     if(tab==='value')return marketRows('value').filter(offerSurfaceEligible);
@@ -1385,25 +1322,20 @@
     });
   }
   function dailyHubTabLabel(tab){
-    const labels={
-      en:{daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ACES / DOUBLE FAULTS',doubles:'DOUBLES',games:'GAMES',sets:'SETS',see_all:'SEE ALL'},
-      sk:{daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ESÁ / DVOJCHYBY',doubles:'ŠTVORHRA',games:'GEMY',sets:'SETY',see_all:'SEE ALL'},
-      cz:{daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ESA / DVOJCHYBY',doubles:'ČTYŘHRA',games:'GEMY',sets:'SETY',see_all:'SEE ALL'}
-    };
-    return (labels[locale]||labels.en)[tab]||String(tab||'').toUpperCase();
+    return {daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ESA',doubles:'DOUBLES',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
   }
   function dailyHubIsComingSoon(tab){return false;}
   function dailyHubColumns(tab){
     if(dailyHubIsComingSoon(tab))return [''];
     if(tab==='value')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %','EDGE',''];
-    if(tab==='ace')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA',''];
+    if(tab==='ace')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];
     if(tab==='doubles')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %',''];
-    if(tab==='games'||tab==='sets')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA',''];
+    if(tab==='games'||tab==='sets')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];
     return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','KURZ','BLINQ %',''];
   }
   function dailyHubColumnKeys(tab){
     if(tab==='value')return ['rank','time','tournament','match','pick','number','confidence','edge','action'];
-    if(tab==='ace'||tab==='games'||tab==='sets')return ['rank','time','tournament','match','pick','number','confidence','action'];
+    if(tab==='ace'||tab==='games'||tab==='sets')return ['rank','time','tournament','match','pick','number','confidence'];
     if(tab==='doubles')return ['rank','time','tournament','match','pick','number','confidence','action'];
     return ['rank','time','tournament','match','pick','number','confidence','action'];
   }
@@ -1424,7 +1356,7 @@
     return `<span class="hub-confidence"><strong>${escapeHtml(pct(n))}</strong><i aria-hidden="true"><b style="width:${p.toFixed(1)}%"></b></i>${depth?`<small class="hub-data-depth" title="${escapeHtml(lcopy('Usable historical sample behind this prediction','Použiteľná historická vzorka za touto predikciou','Použitelný historický vzorek za touto predikcí'))}">${escapeHtml(depth)}</small>`:''}</span>`;
   }
   function hubPredictionHtml(sourceTab,text,subLabel=''){
-    const label=subLabel||dailyHubTabLabel(sourceTab);
+    const label=subLabel||({daily:'TOP',value:'VALUE',ace:'ESA',games:'GAMES',sets:'SETS'}[sourceTab]||String(sourceTab||'').toUpperCase());
     return `<span class="hub-pick-stack"><small>${escapeHtml(label)}</small><strong title="${escapeHtml(text)}">${escapeHtml(text)}</strong></span>`;
   }
   function hubNumberHtml(value,label=''){
@@ -1736,8 +1668,7 @@
       [lcopy('Surface sample','Povrchová vzorka','Povrchový vzorek'),s1.surfaceDisplay,s2.surfaceDisplay],
       [lcopy('History sample','Historická vzorka','Historický vzorek'),s1.historyDisplay,s2.historyDisplay]
     ];
-    const detailAccess=predictionDetailAccess(),detailCta=detailAccess.allowed?`<button class="btn btn-ghost insight-modal-cta" type="button" id="dailyHubInsightOpen">${escapeHtml(lcopy('Open comparison + radar','Otvoriť porovnanie + radar','Otevřít porovnání + radar'))}</button>`:`<button class="btn btn-ghost insight-modal-cta access-locked" type="button" data-upgrade-plan="${escapeHtml(detailAccess.min_level)}" data-upgrade-section="${escapeHtml(lcopy('Prediction detail','Detail predikcie','Detail predikce'))}">◆ ${escapeHtml(lcopy('Detail','Detail','Detail'))} · ${escapeHtml(predictionDetailRequiredLabel())}+</button>`;
-    main.innerHTML='<div class="insight-main-head"><div><small>'+escapeHtml(String(row?.tour||match.tour||'').toUpperCase()+' · '+String(row?.round||match.round||'').toUpperCase())+'</small><h3>'+escapeHtml(match.p1)+' <span>vs</span> '+escapeHtml(match.p2)+'</h3><p>'+escapeHtml((row?.tournament||row?.competition||match.tournament)+' · '+String(match.surface||'').replaceAll('_',' ').toUpperCase()+' · '+fmtDate(match.date)+' · '+fmtTime(match.date))+'</p></div><div class="insight-main-score"><small>BlinQ</small><strong>'+escapeHtml(probability==null?'—':pct(probability))+'</strong><span class="confidence '+escapeHtml(match.confidence)+'">'+escapeHtml(confidenceLabel(match.confidence))+'</span></div></div>'+insightSummaryCards(row,state.dailyHubTab)+'<div class="insight-versus-grid">'+insightPlayerCard(row,1)+insightPlayerCard(row,2)+'</div><div class="insight-inline-footer"><div class="insight-compare-list">'+quick.map(([label,a,b])=>'<div class="insight-compare-row"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(String(a))+'</strong><b>'+escapeHtml(String(b))+'</b></div>').join('')+'</div>'+detailCta+'</div>';
+    main.innerHTML='<div class="insight-main-head"><div><small>'+escapeHtml(String(row?.tour||match.tour||'').toUpperCase()+' · '+String(row?.round||match.round||'').toUpperCase())+'</small><h3>'+escapeHtml(match.p1)+' <span>vs</span> '+escapeHtml(match.p2)+'</h3><p>'+escapeHtml((row?.tournament||row?.competition||match.tournament)+' · '+String(match.surface||'').replaceAll('_',' ').toUpperCase()+' · '+fmtDate(match.date)+' · '+fmtTime(match.date))+'</p></div><div class="insight-main-score"><small>BlinQ</small><strong>'+escapeHtml(probability==null?'—':pct(probability))+'</strong><span class="confidence '+escapeHtml(match.confidence)+'">'+escapeHtml(confidenceLabel(match.confidence))+'</span></div></div>'+insightSummaryCards(row,state.dailyHubTab)+'<div class="insight-versus-grid">'+insightPlayerCard(row,1)+insightPlayerCard(row,2)+'</div><div class="insight-inline-footer"><div class="insight-compare-list">'+quick.map(([label,a,b])=>'<div class="insight-compare-row"><span>'+escapeHtml(label)+'</span><strong>'+escapeHtml(String(a))+'</strong><b>'+escapeHtml(String(b))+'</b></div>').join('')+'</div><button class="btn btn-ghost insight-modal-cta" type="button" id="dailyHubInsightOpen">'+escapeHtml(lcopy('Open comparison + radar','Otvoriť porovnanie + radar','Otevřít porovnání + radar'))+'</button></div>';
     const open=$('dailyHubInsightOpen'); if(open) open.onclick=()=>openMatch(match,state.dailyHubTab,row);
   }
   function aceProjectionDetailData(row){
@@ -1762,6 +1693,7 @@
     if(!d.useful)return '';
     const metric=(label,value,wide=false)=>value===null||value===undefined||value===''?'' : `<div class="ace-detail-metric${wide?' wide':''}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(String(value))}</strong></div>`;
     const metrics=[];
+    metrics.push(metric(d.market,lcopy('Projection','Projekcia','Projekce')+' '+d.projection.toFixed(2),true));
     if(Number.isFinite(d.opponentProjection)&&d.opponentProjection>0)metrics.push(metric(lcopy('Opponent projection','Projekcia súpera','Projekce soupeře'),d.opponentProjection.toFixed(2)));
     if(Number.isFinite(d.gap)&&d.gap>0)metrics.push(metric(lcopy('Projection gap','Rozdiel projekcie','Rozdíl projekce'),'+'+d.gap.toFixed(2)));
     if(Number.isFinite(d.confidence)&&d.confidence>0)metrics.push(metric(lcopy('Model confidence','Istota modelu','Jistota modelu'),pct(d.confidence)));
@@ -1772,10 +1704,10 @@
     if(Number.isFinite(d.p1Surface)&&d.p1Surface>0)surfaceParts.push(`${d.p1Name} ${Math.trunc(d.p1Surface)}`);
     if(Number.isFinite(d.p2Surface)&&d.p2Surface>0)surfaceParts.push(`${d.p2Name} ${Math.trunc(d.p2Surface)}`);
     if(surfaceParts.length)metrics.push(metric(lcopy('Surface samples','Vzorka na povrchu','Vzorek na povrchu'),surfaceParts.join(' · '),true));
-    return `<div class="match-detail-shell ace-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">${escapeHtml(d.market.toUpperCase())} · ${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div></header><div class="ace-detail-pick"><div><small>${escapeHtml(d.market)}</small><strong>${escapeHtml(d.selectedName)}</strong></div><div class="ace-detail-main"><b>${escapeHtml(d.projection.toFixed(2))}</b><small>${escapeHtml(lcopy('projection','projekcia','projekce'))}</small></div></div><div class="ace-detail-grid">${metrics.filter(Boolean).join('')}</div><p class="ace-detail-note">${escapeHtml(lcopy('Only verified Aces / Double Faults projection data are shown here. Missing serve or return statistics are intentionally hidden.','Zobrazujeme iba overené projekčné dáta pre esá a dvojchyby. Chýbajúce štatistiky podania alebo returnu zámerne nezobrazujeme.','Zobrazujeme pouze ověřená projekční data pro esa a dvojchyby. Chybějící statistiky podání nebo returnu záměrně nezobrazujeme.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>${escapeHtml(String(row?.projection_source||'historical_event_statistics').replaceAll('_',' '))}</span></div></div>`;
+    return `<div class="match-detail-shell ace-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">ESA · ${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div></header><div class="ace-detail-pick"><div><small>${escapeHtml(d.market)}</small><strong>${escapeHtml(d.selectedName)}</strong></div><div class="ace-detail-main"><b>${escapeHtml(d.projection.toFixed(2))}</b><small>${escapeHtml(lcopy('projection','projekcia','projekce'))}</small></div></div><div class="ace-detail-grid">${metrics.filter(Boolean).join('')}</div><p class="ace-detail-note">${escapeHtml(lcopy('Only verified Aces / Double Faults projection data are shown here. Missing serve or return statistics are intentionally hidden.','Zobrazujeme iba overené projekčné dáta pre esá a dvojchyby. Chýbajúce štatistiky podania alebo returnu zámerne nezobrazujeme.','Zobrazujeme pouze ověřená projekční data pro esa a dvojchyby. Chybějící statistiky podání nebo returnu záměrně nezobrazujeme.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>${escapeHtml(String(row?.projection_source||'historical_event_statistics').replaceAll('_',' '))}</span></div></div>`;
   }
   function openAceProjection(row){
-    if(!aceProjectionDetailAvailable(row)||!ensurePredictionDetailAccess())return;
+    if(!aceProjectionDetailAvailable(row))return;
     const dialog=$('matchDialog'),content=$('dialogContent');if(!dialog||!content)return;
     content.innerHTML=aceProjectionDetailHtml(row);
     dialog.classList.remove('sg-projection-dialog');dialog.classList.add('ace-projection-dialog');
@@ -1801,7 +1733,6 @@
     return `<div class="match-detail-shell sg-detail-shell" data-detail-market="${escapeHtml(d.market)}"><header class="match-detail-head"><div><div class="dialog-eyebrow">${isSets?'SETS':'GAMES'} · ${escapeHtml(d.match.tour)} · ${escapeHtml(d.match.tournament)}</div><h2>${escapeHtml(d.match.p1)} <span>vs</span> ${escapeHtml(d.match.p2)}</h2></div></header><div class="sg-detail-hero"><div><small>${escapeHtml(lcopy('Model projection','Modelová projekcia','Modelová projekce'))}</small><strong>${escapeHtml(d.selection)}</strong></div><div><b>${escapeHtml(projectionText)}</b><small>${escapeHtml(isSets?lcopy('direction probability','pravdepodobnosť smeru','pravděpodobnost směru'):lcopy('projected total games','projekcia gemov','projekce gemů'))}</small></div></div><div class="sg-detail-grid"><article><small>${escapeHtml(lcopy('Reference','Referencia','Reference'))}</small><strong>${escapeHtml(baselineText)}</strong></article><article><small>${escapeHtml(lcopy('Projection gap','Rozdiel projekcie','Rozdíl projekce'))}</small><strong>${escapeHtml(gapText)}</strong></article><article><small>${escapeHtml(lcopy('Model confidence','Istota modelu','Jistota modelu'))}</small><strong>${Number.isFinite(d.confidence)?escapeHtml(pct(d.confidence)):'—'}</strong></article><article class="data-depth"><small>DATA DEPTH</small><strong>${escapeHtml(depthText)}</strong></article><article><small>${escapeHtml(lcopy('History samples P1 / P2','Historická vzorka P1 / P2','Historický vzorek P1 / P2'))}</small><strong>${escapeHtml(sample(p1,p2))}</strong></article><article><small>${escapeHtml(lcopy('Surface samples P1 / P2','Vzorka na povrchu P1 / P2','Vzorek na povrchu P1 / P2'))}</small><strong>${escapeHtml(sample(s1,s2))}</strong></article></div><section class="detail-why-card"><small>${escapeHtml(lcopy('Why BlinQ','Prečo BlinQ','Proč BlinQ'))}</small><p>${escapeHtml(why)}</p></section><p class="ace-detail-note">${escapeHtml(lcopy('This is a model projection, not an odds-backed betting market. Odds, edge and EV are shown only when a real provider market exists.','Ide o modelovú projekciu, nie o predikciu podloženú kurzovým marketom. Kurz, edge a EV zobrazujeme iba vtedy, keď existuje reálny market od providera.','Jde o modelovou projekci, ne o predikci podloženou kurzovým marketem. Kurz, edge a EV zobrazujeme pouze tehdy, když existuje reálný market od providera.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(d.match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(d.match.date)} · ${fmtTime(d.match.date)}</span>${Number.isFinite(d.bestOf)?`<span>BO${Math.trunc(d.bestOf)}</span>`:''}<span>${escapeHtml(d.source.replaceAll('_',' '))}</span></div></div>`;
   }
   function openSgProjection(row,sourceTab=''){
-    if(!ensurePredictionDetailAccess())return;
     const dialog=$('matchDialog'),content=$('dialogContent');if(!dialog||!content)return;
     content.innerHTML=sgProjectionDetailHtml(row,sourceTab);
     dialog.classList.remove('ace-projection-dialog');dialog.classList.add('sg-projection-dialog');
@@ -1817,11 +1748,14 @@
       const unit=String(row?.projection_unit||'');
       const projectionText=Number.isFinite(projection)?(unit==='probability'?pct(projection):projection.toFixed(1)):'—';
       const projectionUnit=unit==='probability'?lcopy('model','model','model'):lcopy('games','gemov','gemů');
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td><td class="hub-action-cell">${predictionDetailButton(true)}</td></tr>`;
+      const actionCell=tab==='see_all'?'<td class="hub-action-cell hub-optional-action"><span class="hub-projection-badge">MODEL</span></td>':'';
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
     }
     if(sourceTab==='ace'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=modelPickName(row),market=aceMarketName(row);
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="ace">${leading}<td class="hub-pick">${hubPredictionHtml('ace',pick,market||lcopy('Aces / Double Faults','Esá / dvojchyby','Esa / dvojchyby'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(projection)?projection.toFixed(2):'—',lcopy('projection','projekcia','projekce'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td><td class="hub-action-cell">${predictionDetailButton(aceProjectionDetailAvailable(row))}</td></tr>`;
+      const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia ESA','Projekce ESA'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button>`:'';
+      const actionCell=tab==='see_all'?`<td class="hub-action-cell hub-optional-action">${action}</td>`:'';
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="ace">${leading}<td class="hub-pick">${hubPredictionHtml('ace',pick,market||'ESA')}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(projection)?projection.toFixed(2):'—',lcopy('projection','projekcia','projekce'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
     }
     const probability=marketProbability(row),odds=Number(row?.odds??row?.betting?.odds),pick=modelPickName(row);
     const base=`${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick)}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(probability,row)}</td>`;
@@ -1830,9 +1764,9 @@
       const edge=Number(row?.edge??row?.betting?.edge);
       const value=Number.isFinite(ev)?ev:Number.isFinite(edge)?edge:null;
       const valueText=value==null?'—':`${value>0?'+':''}${(value*(Math.abs(value)<=1?100:1)).toFixed(1)}%`;
-      return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-edge-cell metric-positive">${hubNumberHtml(valueText,'edge')}</td><td class="hub-action-cell">${predictionDetailButton(true)}</td></tr>`;
+      return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-edge-cell metric-positive">${hubNumberHtml(valueText,'edge')}</td><td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span></button></td></tr>`;
     }
-    return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-action-cell">${predictionDetailButton(true)}</td></tr>`;
+    return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span></button></td></tr>`;
   }
 
   function dailyHubLockedRow(tab,index,requiredPlan='pro'){
@@ -2079,11 +2013,15 @@
     const statistics=`<div class="match-detail-statistics">${renderMatchStatsPanel(row)}</div>`;
     const radar=`<div class="match-detail-radar"><div class="dialog-section dialog-radar-wrap">${renderRadarComparison(row)}</div><div class="dialog-section match-model-signals"><h3>${escapeHtml(lcopy('Winner model signals','Signály modelu víťaza','Signály modelu vítěze'))}</h3>${signalRows}</div></div>`;
     const history=`<div class="match-detail-history">${renderMatchHistoryPanel(row)}</div>`;
-    const category=dailyHubTabLabel(tab==='top'?'daily':tab);
-    return `<div class="match-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">${escapeHtml(category)} · ${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div></header><div class="dialog-pick match-detail-pick"><div><small>${escapeHtml(lcopy('BlinQ prediction','BlinQ predikcia','BlinQ predikce'))}</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${marketProbability(row)==null?'—':pct(marketProbability(row))}<small>${escapeHtml(lcopy('win probability','šanca na výhru','šance na výhru'))}</small></div></div><nav class="match-detail-tabs" role="tablist"><button type="button" class="active" data-match-tab="overview">${escapeHtml(lcopy('Overview','Prehľad','Přehled'))}</button><button type="button" data-match-tab="statistics">${escapeHtml(lcopy('Form','Forma','Forma'))}</button><button type="button" data-match-tab="radar">${escapeHtml(lcopy('Model','Model','Model'))}</button><button type="button" data-match-tab="history">H2H</button></nav><section class="match-detail-panel active" data-match-panel="overview">${overview}</section><section class="match-detail-panel" data-match-panel="statistics" hidden>${statistics}</section><section class="match-detail-panel" data-match-panel="radar" hidden>${radar}</section><section class="match-detail-panel" data-match-panel="history" hidden>${history}</section>${row?.__liveIntelligenceLoading?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-loading">${escapeHtml(lcopy('Loading live player analytics…','Načítavam analytické dáta hráčov…','Načítám analytická data hráčů…'))}</div>`:row?.__liveIntelligenceFailed?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-error">${escapeHtml(lcopy('Extra live analytics are temporarily unavailable.','Doplnkové analytické dáta sú dočasne nedostupné.','Doplňková analytická data jsou dočasně nedostupná.'))}</div>`:''}<div class="dialog-meta"><span>${escapeHtml(String(match.surface).replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>Model ${escapeHtml(match.model||'—')}</span></div></div>`;
+    return `<div class="match-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div><button class="match-popout-button" type="button" data-match-popout><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M10 8h6v6"/></svg>${escapeHtml(lcopy('Open in new window','Otvoriť v novom okne','Otevřít v novém okně'))}</button></header><div class="dialog-pick match-detail-pick"><div><small>BlinQ Prediction</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${marketProbability(row)==null?'—':pct(marketProbability(row))}<small>${escapeHtml(lcopy('win probability','šanca na výhru','šance na výhru'))}</small></div></div><nav class="match-detail-tabs" role="tablist"><button type="button" class="active" data-match-tab="overview">${escapeHtml(lcopy('Overview','Prehľad','Přehled'))}</button><button type="button" data-match-tab="statistics">${escapeHtml(lcopy('Form & surface','Forma & povrch','Forma & povrch'))}</button><button type="button" data-match-tab="radar">${escapeHtml(lcopy('Winner model','Model víťaza','Model vítěze'))}</button><button type="button" data-match-tab="history">${escapeHtml(lcopy('History / H2H','História / H2H','Historie / H2H'))}</button></nav><section class="match-detail-panel active" data-match-panel="overview">${overview}</section><section class="match-detail-panel" data-match-panel="statistics" hidden>${statistics}</section><section class="match-detail-panel" data-match-panel="radar" hidden>${radar}</section><section class="match-detail-panel" data-match-panel="history" hidden>${history}</section>${row?.__liveIntelligenceLoading?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-loading">${escapeHtml(lcopy('Loading live player analytics…','Načítavam analytické dáta hráčov…','Načítám analytická data hráčů…'))}</div>`:row?.__liveIntelligenceFailed?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-error">${escapeHtml(lcopy('Extra live analytics are temporarily unavailable.','Doplnkové analytické dáta sú dočasne nedostupné.','Doplňková analytická data jsou dočasně nedostupná.'))}</div>`:''}<div class="dialog-meta"><span>${escapeHtml(String(match.surface).replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>Model ${escapeHtml(match.model||'—')}</span><span class="dialog-system-ok"><i></i>${escapeHtml(lcopy('All systems operational','Všetky systémy funkčné','Všechny systémy funkční'))}</span></div></div>`;
+  }
+  function openMatchPopout(){
+    const source=$('dialogContent');if(!source)return;
+    const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
+    const base=`${location.origin}/`;
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=28"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
-    if(!ensurePredictionDetailAccess())return;
     const row=rowOverride||m?.raw||m;
     const shouldHydrate=!skipLiveHydration&&!row?.__liveIntelligenceLoaded&&!row?.__liveIntelligenceLoading;
     if(shouldHydrate)row.__liveIntelligenceLoading=true;
@@ -2095,19 +2033,20 @@
       dialog.querySelectorAll('[data-match-tab]').forEach(node=>{node.classList.toggle('active',node===button);node.setAttribute('aria-selected',node===button?'true':'false');});
       dialog.querySelectorAll('[data-match-panel]').forEach(panel=>{const active=panel.dataset.matchPanel===id;panel.hidden=!active;panel.classList.toggle('active',active);});
     }));
+    dialog.querySelector('[data-match-popout]')?.addEventListener('click',openMatchPopout);
     if(!dialog.open)dialog.showModal();
     if(shouldHydrate)requestLiveMatchIntelligence(row,tab);
   }
 
 
   const routeMetaEn={
-    predictions:['TENNIS INTELLIGENCE','Dashboard','Daily predictions, model signals and current BlinQ intelligence.'],prime:['SHORT ODDS','Short Odds','Short-priced favourite selections with strong model probability and data quality.'],top_daily:['CONFIDENCE FIRST','TOP','Strongest daily predictions ranked by model probability and data quality.'],value:['VALUE EDGE','Value','Predictions with stronger model value; EV is shown only as context.'],doubles:['DOUBLES','Doubles','Separate doubles model and team-pair intelligence.'],ace:['ACES + DOUBLE FAULTS','Aces / Double Faults','Top Aces and Double Faults market selections.'],sg:['SETS + GAMES','Sets / Games','Top Sets and Games market selections.'],results:['SETTLED PREDICTIONS','Results','Settled predictions, hit rate, ROI, units and related performance statistics.'],account:['BLINQ MEMBERS','Account','Profile, security, membership and access.'],admin:['BLINQ CONTROL','Admin centrum','Správa modelu, publikovania, prístupov, účtov a obsahu BlinQ.'],how_blinq_works:['LEARN','How BlinQ Works','How the BlinQ workflow turns point-in-time tennis data into probabilities.'],methodology:['LEARN','Methodology','The principles used to keep predictions point-in-time and auditable.'],model_data:['LEARN','Model & Data','What the published feed exposes about data and model state.'],faq:['LEARN','FAQ','Common questions about probabilities, results and model output.'],responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.'],terms:['LEGAL','Terms of Use','Rules for using the BlinQ service.'],privacy:['LEGAL','Privacy','How BlinQ works with account and service data.'],cookies:['LEGAL','Cookies','Browser storage, essential functionality and analytics preferences.']
+    predictions:['TENNIS INTELLIGENCE','Dashboard','Daily predictions, model signals and current BlinQ intelligence.'],prime:['SHORT ODDS','Short Odds','Short-priced favourite selections with strong model probability and data quality.'],top_daily:['CONFIDENCE FIRST','TOP','Strongest daily predictions ranked by model probability and data quality.'],value:['VALUE EDGE','Value','Predictions with stronger model value; EV is shown only as context.'],doubles:['DOUBLES','Doubles','Separate doubles model and team-pair intelligence.'],ace:['ACES + DOUBLE FAULTS','Aces','Top Aces and Double Faults market selections.'],sg:['SETS + GAMES','Sets / Games','Top Sets and Games market selections.'],results:['SETTLED PREDICTIONS','Results','Settled predictions, hit rate, ROI, units and related performance statistics.'],account:['BLINQ MEMBERS','Account','Profile, security, membership and access.'],admin:['BLINQ CONTROL','Admin centrum','Správa modelu, publikovania, prístupov, účtov a obsahu BlinQ.'],how_blinq_works:['LEARN','How BlinQ Works','How the BlinQ workflow turns point-in-time tennis data into probabilities.'],methodology:['LEARN','Methodology','The principles used to keep predictions point-in-time and auditable.'],model_data:['LEARN','Model & Data','What the published feed exposes about data and model state.'],faq:['LEARN','FAQ','Common questions about probabilities, results and model output.'],responsible_use:['LEARN','Responsible Use','Use probabilities as information, never as guarantees.'],terms:['LEGAL','Terms of Use','Rules for using the BlinQ service.'],privacy:['LEGAL','Privacy','How BlinQ works with account and service data.'],cookies:['LEGAL','Cookies','Browser storage, essential functionality and analytics preferences.']
   };
   const routeMetaSk={
-    predictions:['TENISOVÁ ANALYTIKA','Prehľad','Denné predikcie, kľúčové modelové signály a aktuálna BlinQ analytika.'],prime:['SHORT ODDS','Short Odds','Predikcie favoritov s nižším kurzom a silnou modelovou pravdepodobnosťou.'],top_daily:['NAJSILNEJŠIE SIGNÁLY','TOP','Najsilnejšie denné predikcie zoradené podľa pravdepodobnosti modelu a kvality dát.'],value:['MODEL VALUE','Value','Predikcie so zvýšenou modelovou hodnotou a priaznivým pomerom rizika a ceny.'],doubles:['ŠTVORHRA','Štvorhra','Samostatný model štvorhry a inteligencia dvojíc/tímov.'],ace:['ESÁ + DVOJCHYBY','Esá / dvojchyby','Najlepšie projekcie pre esá a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Najlepšie projekcie pre sety a počet hier.'],results:['VYHODNOTENÉ PREDIKCIE','Výsledky','Vyhodnotené predikcie, úspešnosť, ROI, jednotky a súvisiace štatistiky výkonu.'],account:['BLINQ ČLENSTVO','Účet','Profil, zabezpečenie, členstvo a prístup.'],how_blinq_works:['INFO','Ako funguje BlinQ','Ako BlinQ mení point-in-time tenisové dáta na pravdepodobnosti.'],methodology:['INFO','Metodika','Princípy, ktoré udržujú predikcie point-in-time a auditovateľné.'],model_data:['INFO','Model a dáta','Čo publikovaný feed ukazuje o dátach a stave modelu.'],faq:['INFO','FAQ','Najčastejšie otázky o pravdepodobnostiach, výsledkoch a výstupe modelu.'],responsible_use:['INFO','Zodpovedné používanie','Pravdepodobnosti používaj ako informáciu, nikdy nie ako záruku.'],terms:['LEGAL','Podmienky používania','Pravidlá používania služby BlinQ.'],privacy:['LEGAL','Ochrana súkromia','Ako BlinQ pracuje s údajmi používateľov.'],cookies:['LEGAL','Cookies','Nevyhnutné úložisko, preferencie a analytika.']
+    predictions:['TENISOVÁ ANALYTIKA','Prehľad','Denné predikcie, kľúčové modelové signály a aktuálna BlinQ analytika.'],prime:['SHORT ODDS','Short Odds','Predikcie favoritov s nižším kurzom a silnou modelovou pravdepodobnosťou.'],top_daily:['NAJSILNEJŠIE SIGNÁLY','TOP','Najsilnejšie denné predikcie zoradené podľa pravdepodobnosti modelu a kvality dát.'],value:['MODEL VALUE','Value','Predikcie so zvýšenou modelovou hodnotou a priaznivým pomerom rizika a ceny.'],doubles:['ŠTVORHRA','Štvorhra','Samostatný model štvorhry a inteligencia dvojíc/tímov.'],ace:['ESÁ + DVOJCHYBY','Esá','Najlepšie projekcie pre esá a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Najlepšie projekcie pre sety a počet hier.'],results:['VYHODNOTENÉ PREDIKCIE','Výsledky','Vyhodnotené predikcie, úspešnosť, ROI, jednotky a súvisiace štatistiky výkonu.'],account:['BLINQ ČLENSTVO','Účet','Profil, zabezpečenie, členstvo a prístup.'],how_blinq_works:['INFO','Ako funguje BlinQ','Ako BlinQ mení point-in-time tenisové dáta na pravdepodobnosti.'],methodology:['INFO','Metodika','Princípy, ktoré udržujú predikcie point-in-time a auditovateľné.'],model_data:['INFO','Model a dáta','Čo publikovaný feed ukazuje o dátach a stave modelu.'],faq:['INFO','FAQ','Najčastejšie otázky o pravdepodobnostiach, výsledkoch a výstupe modelu.'],responsible_use:['INFO','Zodpovedné používanie','Pravdepodobnosti používaj ako informáciu, nikdy nie ako záruku.'],terms:['LEGAL','Podmienky používania','Pravidlá používania služby BlinQ.'],privacy:['LEGAL','Ochrana súkromia','Ako BlinQ pracuje s údajmi používateľov.'],cookies:['LEGAL','Cookies','Nevyhnutné úložisko, preferencie a analytika.']
   };
   const routeMetaCz={
-    predictions:['TENISOVÁ ANALYTIKA','Přehled','Denní predikce, klíčové modelové signály a aktuální BlinQ analytika.'],prime:['SHORT ODDS','Short Odds','Predikce favoritů s nižším kurzem a silnou modelovou pravděpodobností.'],top_daily:['NEJSILNĚJŠÍ SIGNÁLY','TOP','Nejsilnější denní predikce seřazené podle pravděpodobnosti modelu a kvality dat.'],value:['MODEL VALUE','Value','Predikce se zvýšenou modelovou hodnotou a příznivým poměrem rizika a ceny.'],doubles:['ČTYŘHRA','Čtyřhra','Samostatný model čtyřhry a inteligence dvojic/týmů.'],ace:['ESA + DVOJCHYBY','Esa / dvojchyby','Nejlepší projekce pro esa a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Nejlepší projekce pro sety a počet her.'],results:['VYHODNOCENÉ PREDIKCE','Výsledky','Vyhodnocené predikce, úspěšnost, ROI, jednotky a související statistiky výkonu.'],account:['BLINQ ČLENSTVÍ','Účet','Profil, zabezpečení, členství a přístup.'],how_blinq_works:['INFO','Jak funguje BlinQ','Jak BlinQ mění point-in-time tenisová data na pravděpodobnosti.'],methodology:['INFO','Metodika','Principy, které udržují predikce point-in-time a auditovatelné.'],model_data:['INFO','Model a data','Co publikovaný feed ukazuje o datech a stavu modelu.'],faq:['INFO','FAQ','Nejčastější otázky o pravděpodobnostech, výsledcích a výstupu modelu.'],responsible_use:['INFO','Zodpovědné používání','Pravděpodobnosti používej jako informaci, nikdy ne jako záruku.'],terms:['LEGAL','Podmínky používání','Pravidla používání služby BlinQ.'],privacy:['LEGAL','Ochrana soukromí','Jak BlinQ pracuje s údaji uživatelů.'],cookies:['LEGAL','Cookies','Nezbytné úložiště, preference a analytika.']
+    predictions:['TENISOVÁ ANALYTIKA','Přehled','Denní predikce, klíčové modelové signály a aktuální BlinQ analytika.'],prime:['SHORT ODDS','Short Odds','Predikce favoritů s nižším kurzem a silnou modelovou pravděpodobností.'],top_daily:['NEJSILNĚJŠÍ SIGNÁLY','TOP','Nejsilnější denní predikce seřazené podle pravděpodobnosti modelu a kvality dat.'],value:['MODEL VALUE','Value','Predikce se zvýšenou modelovou hodnotou a příznivým poměrem rizika a ceny.'],doubles:['ČTYŘHRA','Čtyřhra','Samostatný model čtyřhry a inteligence dvojic/týmů.'],ace:['ESA + DVOJCHYBY','Esa','Nejlepší projekce pro esa a dvojchyby.'],sg:['SETY + HRY','Sety / hry','Nejlepší projekce pro sety a počet her.'],results:['VYHODNOCENÉ PREDIKCE','Výsledky','Vyhodnocené predikce, úspěšnost, ROI, jednotky a související statistiky výkonu.'],account:['BLINQ ČLENSTVÍ','Účet','Profil, zabezpečení, členství a přístup.'],how_blinq_works:['INFO','Jak funguje BlinQ','Jak BlinQ mění point-in-time tenisová data na pravděpodobnosti.'],methodology:['INFO','Metodika','Principy, které udržují predikce point-in-time a auditovatelné.'],model_data:['INFO','Model a data','Co publikovaný feed ukazuje o datech a stavu modelu.'],faq:['INFO','FAQ','Nejčastější otázky o pravděpodobnostech, výsledcích a výstupu modelu.'],responsible_use:['INFO','Zodpovědné používání','Pravděpodobnosti používej jako informaci, nikdy ne jako záruku.'],terms:['LEGAL','Podmínky používání','Pravidla používání služby BlinQ.'],privacy:['LEGAL','Ochrana soukromí','Jak BlinQ pracuje s údaji uživatelů.'],cookies:['LEGAL','Cookies','Nezbytné úložiště, preference a analytika.']
   };
   const routeMeta=locale==='sk'?{...routeMetaEn,...routeMetaSk}:locale==='cz'?{...routeMetaEn,...routeMetaCz}:routeMetaEn;
 
@@ -2136,7 +2075,6 @@
       const boardMode=target.closest('button[data-board-mode]');
       if(boardMode){state.boardMode=boardMode.dataset.boardMode==='results'?'results':'live';state.dailyHubExpanded=false;renderDailyHub();return;}
       if(target.closest('#dailyHubExpand')){ const ent=dailyHubEntitlement(state.dailyHubTab); if(ent.see_all!==true){ const expand=target.closest('#dailyHubExpand');const plan=state.dailyHubTab==='board'?'legend':firstDailyHubUnlockPlan(state.dailyHubTab,0,true);const label=state.dailyHubTab==='board'?'BlinQ Board':lcopy('Full daily offer','Celá denná ponuka','Celá denní nabídka');showAccessHint(expand,plan,label,true); return; } state.dailyHubExpanded=!state.dailyHubExpanded; renderDailyHub(); return; }
-      if(target.closest('[data-upgrade-plan]'))return;
       const row=target.closest('tr[data-hub-event]');
       if(row){
         const key=String(row.dataset.hubEvent||'');
@@ -2148,10 +2086,14 @@
         }
         if(current){
           const sourceTab=state.dailyHubTab==='see_all'?String(current?._hub_source||''):state.dailyHubTab;
-          if(sourceTab==='ace'&&!aceProjectionDetailAvailable(current))return;
-          if(!ensurePredictionDetailAccess(row))return;
-          if(sourceTab==='ace'){openAceProjection(current);return;}
-          if(sourceTab==='games'||sourceTab==='sets'){openSgProjection(current,sourceTab);return;}
+          if(sourceTab==='ace'){
+            if(aceProjectionDetailAvailable(current))openAceProjection(current);
+            return;
+          }
+          if(sourceTab==='games'||sourceTab==='sets'){
+            openSgProjection(current,sourceTab);
+            return;
+          }
           openMatch(normalize(current),sourceTab||state.dailyHubTab,current);
         }
       }
@@ -2357,8 +2299,6 @@
   function renderAdminLayout(){
     const levelLabel=accessLabel(state.adminPlan);
     const hub=dailyHubConfig();
-    const detailMin=membershipHierarchy.includes(String(hub.detail_min_level||'rookie').toLowerCase())?String(hub.detail_min_level).toLowerCase():'rookie';
-    const detailOptions=membershipHierarchy.filter(id=>state.ui?.plans?.[id]?.enabled!==false).map(id=>`<option value="${id}"${id===detailMin?' selected':''}>${escapeHtml(String(state.ui?.plans?.[id]?.label||id).replace(/^BlinQ\s+/i,'').toUpperCase())}+</option>`).join('');
     const rows=['daily','prime','value','ace','doubles','games','sets','see_all'].map(tab=>{
       const tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{},globalOn=tc.enabled!==false;
       const visible=String(rule.visible_rows??0).toUpperCase(),display=String(rule.display_state||((rule.tab_enabled!==false)?'active':'hidden'));
@@ -2381,7 +2321,6 @@
         <div><small>UPRAVUJEŠ PRÍSTUP PRE</small><strong>${escapeHtml(levelLabel)}</strong><span>Najprv vyber level, potom nastav jeho pravidlá. Globálne vypnutie kategórie ju skryje všetkým.</span></div>
         ${adminLevelChips(state.adminPlan,'admin-plan-chip',true)}
       </div>
-      <div class="admin-detail-access-card"><div><small>DETAIL PREDIKCIE</small><strong>Detail zápasu od ${escapeHtml(String(state.ui?.plans?.[detailMin]?.label||detailMin).replace(/^BlinQ\s+/i,'').toUpperCase())}</strong><span>Jedno globálne pravidlo pre TOP, Short Odds, Value, Esá / dvojchyby, Štvorhru, Gemy, Sety aj SEE ALL. ADMIN má prístup vždy; náhľad levelu toto pravidlo rešpektuje.</span></div><label><span>Minimálny level</span><select data-admin-detail-min-level>${detailOptions}</select><small>Nižšie levely uvidia zamknuté tlačidlo Detail s dynamickým upozornením na potrebný level.</small></label></div>
       <div class="admin-daily-preset-bar"><div><strong>Rýchle nastavenie pre ${escapeHtml(levelLabel)}</strong><span>Voliteľné. Prepíše iba pravidlá dennej ponuky pre tento level, nie globálne zapnutie kategórií.</span></div><div><button type="button" data-admin-daily-preset="full">Plný prístup</button><button type="button" data-admin-daily-preset="preview3">3 riadky</button><button type="button" data-admin-daily-preset="rookie2">2 náhodné + blur</button><button type="button" data-admin-daily-preset="blurred">Rozmazať panely</button><button type="button" data-admin-daily-preset="hidden">Skryť všetko</button></div></div>
       <div class="admin-daily-matrix-card">
         <header><div><small>DENNÁ PONUKA</small><h3>Čo uvidí ${escapeHtml(levelLabel)}</h3><p>Domovská stránka drží maximálne 10 pozícií. „VŠETKY“ odomkne všetky aktuálne riadky. „Celá ponuka“ dovolí otvoriť rozšírený zoznam.</p></div><button class="btn btn-ghost" type="button" data-admin-action="preview">Náhľad ako ${escapeHtml(levelLabel)}</button></header>
@@ -2812,7 +2751,6 @@
       const simpleBanner=t.closest('[data-simple-banner]');
       if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.dashboardGlobalField){state.ui.dashboard=state.ui.dashboard||{};let value=t.type==='checkbox'?t.checked:Number(t.value);state.ui.dashboard[t.dataset.dashboardGlobalField]=value;state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();return;}
-      if(t.dataset.adminDetailMinLevel!==undefined){const value=String(t.value||'rookie').toLowerCase();state.ui.dashboard=state.ui.dashboard||{};state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};state.ui.dashboard.daily_hub.detail_min_level=membershipHierarchy.includes(value)?value:'rookie';renderAllUiContent();rerenderAdmin();showStatus(`Detail predikcie · prístup od ${String(state.ui?.plans?.[state.ui.dashboard.daily_hub.detail_min_level]?.label||state.ui.dashboard.daily_hub.detail_min_level).replace(/^BlinQ\s+/i,'').toUpperCase()}. Klikni Publikovať.`);return;}
       if(t.dataset.adminHubGlobalField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc[t.dataset.adminHubGlobalField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();showStatus(`${dailyHubTabLabel(tab)} · ${tc.enabled===false?'vypnuté':'zapnuté'} globálne.`);return;}
       if(t.dataset.adminHubField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{visible_rows:0,blur_remaining:true,tab_enabled:true,see_all:false,selection_mode:'first',display_state:'active',row_overrides:{}};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.adminHubField==='visible_rows'&&String(value).toUpperCase()!=='ALL')value=Number(value);rule[t.dataset.adminHubField]=value;rule.tab_enabled=rule.display_state!=='hidden';if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHubRowState){const tab=t.dataset.adminHubTab,position=String(t.dataset.adminHubRowState),hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.row_overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};if(t.value==='active')delete rule.row_overrides[position];else rule.row_overrides[position]=t.value;if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
@@ -2989,7 +2927,7 @@
   function resultsSummary(){
     const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category);
     if(category==='ace'||category==='double_faults'){
-      return metricCards([[lcopy('Result','Výsledok','Výsledek'),`${m.wins}-${m.losses}`,lcopy('HIT - MISS','HIT - MISS','HIT - MISS')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),category==='ace'?lcopy('settled Aces projection sample','vyhodnotená vzorka projekcií es','vyhodnocený vzorek projekcí es'):lcopy('settled Double Faults projection sample','vyhodnotená vzorka projekcií dvojchýb','vyhodnocený vzorek projekcí dvojchyb')],[lcopy('Projection type','Typ projekcie','Typ projekce'),category==='ace'?lcopy('ACES','ESÁ','ESA'):lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),lcopy('No invented odds or ROI','Bez vymysleného kurzu a ROI','Bez vymyšleného kurzu a ROI')],[publicText('Sample'),String(m.sample),lcopy('published projections','publikované projekcie','publikované projekce')]]);
+      return metricCards([[lcopy('Result','Výsledok','Výsledek'),`${m.wins}-${m.losses}`,lcopy('HIT - MISS','HIT - MISS','HIT - MISS')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('settled ESA projection sample','vyhodnotená vzorka ESA projekcií','vyhodnocený vzorek ESA projekcí')],[lcopy('Projection type','Typ projekcie','Typ projekce'),category==='ace'?lcopy('ACES','ESÁ','ESA'):lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),lcopy('No invented odds or ROI','Bez vymysleného kurzu a ROI','Bez vymyšleného kurzu a ROI')],[publicText('Sample'),String(m.sample),lcopy('published projections','publikované projekcie','publikované projekce')]]);
     }
     return metricCards([[publicText('Record'),`${m.wins}-${m.losses}`,lcopy('wins - losses','výhry - prehry','výhry - prohry')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],[publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} odds-backed picks`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no issued odds')],['ROI',m.roi==null?'—':pct(m.roi),publicText('flat 1u on issued odds')],[publicText('Units'),m.oddsSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',publicText('profit · flat 1u stake')],[publicText('Sample'),String(m.sample),publicText('settled published rows')]]);
   }

@@ -22,7 +22,7 @@ def test_v700_public_prediction_categories_are_current():
     tabs = ui()["dashboard"]["daily_hub"]["tabs"]
     assert tabs["daily"]["label"] == "TOP" and tabs["daily"]["enabled"] is True
     assert tabs["value"]["label"] == "VALUE" and tabs["value"]["enabled"] is True
-    assert tabs["ace"]["label"] == "Esá / dvojchyby" and tabs["ace"]["enabled"] is True
+    assert tabs["ace"]["label"] == "ESA" and tabs["ace"]["enabled"] is True
     assert tabs["games"]["label"] == "GAMES" and tabs["games"]["enabled"] is True
     # Short Odds is the public PRIME category and is Admin-configurable.
     assert tabs["prime"]["label"] == "Short Odds" and tabs["prime"]["enabled"] is True
