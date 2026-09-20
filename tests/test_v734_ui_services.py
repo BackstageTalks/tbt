@@ -32,10 +32,12 @@ def test_login_loader_and_footer_have_blinq_background_watermarks():
     assert 'auth-copy h2' in CSS and 'font-size:17px' in CSS
 
 
-def test_footer_is_static_minimal_and_has_no_runtime_freshness_widget():
+def test_footer_is_minimal_and_uses_live_worker_freshness_status():
     assert 'site-footer site-footer-minimal' in INDEX
-    assert 'UI 7.3.6' in INDEX
-    assert 'system-status' not in INDEX
+    assert 'id="footerSystemStatus"' in INDEX
+    assert 'Všetky systémy funkčné' in INDEX
+    assert 'Last update: —' in INDEX
+    assert 'renderSystemFooterStatus' in APP
     assert 'renderFooterConfig' not in APP
 
 

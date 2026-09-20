@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, boardMode:'live', dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -263,12 +263,12 @@
   async function loadUiConfig() {
     let runtimeConfigSnapshot=null;
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=30');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=31');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=30');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=31');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -336,7 +336,7 @@
     const loadedPatch=String(state.ui?.ui_patch||'');
     const loadedPatchNumber=Number((loadedPatch.match(/r(\d+)$/)||[])[1]||0);
     if(loadedPatchNumber<27){const primeTab=state.ui?.dashboard?.daily_hub?.tabs?.prime;if(primeTab)primeTab.enabled=true;}
-    state.ui.ui_patch='736-r30';
+    state.ui.ui_patch='736-r31';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -815,9 +815,9 @@
       return `<article class="tg-group-card${allowed?'':' is-locked'}"><div class="tg-group-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20.6 4.1 3.9 10.5c-1.14.46-1.13 1.1-.2 1.39l4.28 1.34 1.64 5.05c.2.56.1.78.69.78.46 0 .66-.21.92-.46l2.08-2.03 4.33 3.2c.8.44 1.37.21 1.57-.74l2.84-13.39c.29-1.17-.45-1.7-1.45-1.54Z"></path></svg></div><div class="tg-group-copy">${badge?`<small>${escapeHtml(badge)}</small>`:''}<strong>${escapeHtml(title)}</strong><p>${escapeHtml(description)}</p></div>${action}</article>`;
     }).join('');
     const panelEyebrow=Object.prototype.hasOwnProperty.call(cfg,'eyebrow')?String(cfg.eyebrow||'').trim():'BLINQ COMMUNITY';
-    host.hidden=false;host.innerHTML=`<div class="tg-panel-head"><div>${panelEyebrow?`<small>${escapeHtml(panelEyebrow)}</small>`:''}<h2>${escapeHtml(String(cfg.title||'Telegram skupiny'))}</h2><p>${escapeHtml(String(cfg.description||''))}</p></div><span class="tg-panel-mark">TG</span></div><div class="tg-group-grid">${cards}</div>`;
+    host.hidden=false;host.innerHTML=`<div class="tg-panel-head"><div>${panelEyebrow?`<small>${escapeHtml(panelEyebrow)}</small>`:''}<h2>${escapeHtml(String(cfg.title||'Telegram skupiny'))}</h2><p>${escapeHtml(String(cfg.description||''))}</p></div></div><div class="tg-group-grid">${cards}</div>`;
   }
-  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeroBanner(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); renderTelegramGroupsPanel(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); translatePublicDom(document.body); }
+  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeroBanner(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); renderTelegramGroupsPanel(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); renderSystemFooterStatus(); translatePublicDom(document.body); }
 
   function auth(mode='login'){
     feedGeneration++;
@@ -992,13 +992,13 @@
     const odds=rows.map(r=>Number(r?.odds??r?.betting?.odds)).filter(Number.isFinite);
     const edges=rows.map(r=>Number(r?.edge??r?.betting?.edge)).filter(Number.isFinite);
     const perf=state.feed?.performance||{};
+    const dashboardBest=state.feed?.dashboard_model_success||{};
     const performanceWindows=state.feed?.performance_windows||{};
     const performanceSummary=state.feed?.performance_window_summary||{};
     const bestDays=Number(performanceSummary?.best_days);
     const bestWindow=Number.isFinite(bestDays)?performanceWindows?.[String(bestDays)]||{}:{};
     const bestModel=bestWindow?.model||{};
-    const accuracy=Number(bestModel?.accuracy??perf?.accuracy);
-    const accuracySample=Number(bestModel?.n??perf?.n);
+    const accuracy=Number(dashboardBest?.accuracy??bestModel?.accuracy??perf?.accuracy);
     const avgOdds=odds.length?odds.reduce((a,b)=>a+b,0)/odds.length:null;
     const avgEdge=edges.length?edges.reduce((a,b)=>a+b,0)/edges.length:null;
     const icons={
@@ -1007,12 +1007,9 @@
       chart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l5-5 4 3 7-9"/><path d="M15 7h5v5"/></svg>',
       coins:'<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>'
     };
-    const windowNote=Number.isFinite(bestDays)&&Number.isFinite(accuracySample)
-      ?lcopy(`best of 3/7/10/14/30 days · ${bestDays}d · n=${Math.trunc(accuracySample)}`,`najlepšie z 3/7/10/14/30 dní · ${bestDays} dní · n=${Math.trunc(accuracySample)}`,`nejlepší z 3/7/10/14/30 dní · ${bestDays} dní · n=${Math.trunc(accuracySample)}`)
-      :lcopy('3/7/10/14/30-day history','história 3/7/10/14/30 dní','historie 3/7/10/14/30 dní');
     const cards=[
       [icons.board,lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(totalToday),lcopy('matches','zápasov','zápasů'),''],
-      [icons.target,lcopy('MODEL SUCCESS','MODEL ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—',windowNote,''],
+      [icons.target,lcopy('MODEL SUCCESS','MODEL ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—','',''],
       [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'',''],
       [icons.coins,lcopy('AVERAGE EDGE','PRIEMERNÝ EDGE','PRŮMĚRNÝ EDGE'),avgEdge==null?'—':`${avgEdge>0?'+':''}${(avgEdge*(Math.abs(avgEdge)<=1?100:1)).toFixed(1)}%`,'','']
     ];
@@ -1049,6 +1046,52 @@
     if(String(plan||'').toLowerCase()==='admin')return true;
     const current=membershipHierarchy.indexOf(String(plan||'').toLowerCase()),required=membershipHierarchy.indexOf(String(minPlan||'').toLowerCase());
     return current>=0&&required>=0&&current>=required;
+  }
+  function matchDetailAccessConfig(){
+    const base={plans:{trial:true,expired:false,rookie:true,pro:true,elite:true,legend:true,goat:true},sections:{overview:'rookie',statistics:'pro',radar:'elite',history:'legend'}};
+    const cfg=state.ui?.dashboard?.match_detail||{};
+    return mergeConfig(base,cfg);
+  }
+  function matchDetailPlanAllowed(plan=accountPlan()){
+    if(String(plan||'').toLowerCase()==='admin')return true;
+    const normalized=String(plan||'').toLowerCase()==='trial'?'rookie':String(plan||'').toLowerCase();
+    const plans=matchDetailAccessConfig().plans||{};
+    return plans[normalized]!==false;
+  }
+  function firstMatchDetailUnlockPlan(plan=accountPlan()){
+    const current=String(plan||'').toLowerCase()==='trial'?'rookie':String(plan||'').toLowerCase();
+    const start=Math.max(0,membershipHierarchy.indexOf(current));
+    const plans=matchDetailAccessConfig().plans||{};
+    for(let i=start;i<membershipHierarchy.length;i++){if(plans[membershipHierarchy[i]]!==false)return membershipHierarchy[i];}
+    for(const id of membershipHierarchy){if(plans[id]!==false)return id;}
+    return 'goat';
+  }
+  function matchDetailSectionMinimum(section){
+    const raw=String(matchDetailAccessConfig()?.sections?.[section]||'rookie').toLowerCase();
+    return membershipHierarchy.includes(raw)?raw:'rookie';
+  }
+  function matchDetailSectionAllowed(section,plan=accountPlan()){
+    return matchDetailPlanAllowed(plan)&&membershipAtLeast(plan,matchDetailSectionMinimum(section));
+  }
+  function matchDetailLockHtml(section,label){
+    const minPlan=matchDetailSectionMinimum(section);
+    const required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
+    return `<div class="match-detail-lock-card" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(label)}"><span class="match-detail-lock-icon" aria-hidden="true">🔒</span><div><small>${escapeHtml(lcopy('LOCKED SECTION','UZAMKNUTÁ SEKCIA','UZAMČENÁ SEKCE'))}</small><strong>${escapeHtml(label)}</strong><p>${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od: ${required}`,`Dostupné od: ${required}`))}</p></div></div>`;
+  }
+  function hubMatchDetailButtonHtml(){
+    if(matchDetailPlanAllowed())return `<button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span></button>`;
+    const minPlan=firstMatchDetailUnlockPlan();
+    const required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
+    return `<button class="hub-detail is-locked" type="button" data-detail-locked data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}" aria-label="${escapeHtml(lcopy(`Match detail available from ${required}`,`Detail zápasu dostupný od ${required}`,`Detail zápasu dostupný od ${required}`))}"><span>🔒 ${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><small>${escapeHtml(required)}</small></button>`;
+  }
+  function renderSystemFooterStatus(){
+    const host=$('footerSystemStatus'),time=$('footerLastUpdate');if(!host||!time)return;
+    const heartbeat=state.liveRadarHeartbeat||state.userLiveRadarStatus||{};
+    const raw=heartbeat?.scanned_at||heartbeat?.updated_at||'';
+    const parsed=Date.parse(raw);
+    time.textContent=Number.isFinite(parsed)?`Last update: ${fmtTime(raw)}`:'Last update: —';
+    const fresh=heartbeat?.fresh===true||(Number.isFinite(parsed)&&Date.now()-parsed<=180000);
+    host.classList.toggle('is-stale',!fresh);
   }
   function insightTypeLabel(type){return ({info:'Info',insight:'Premium Info',alert:'LIVE · COMEBACK',live_watch:'LIVE · WATCH',set2:'LIVE · 2. SET',vip:'Premium Info'})[String(type||'').toLowerCase()]||'Insight';}
   function insightAudienceText(levels){
@@ -1141,9 +1184,9 @@
     if(!['rookie','pro','elite','legend','goat','admin'].includes(plan)){state.insights=[];state.insightsUnread=0;state.insightsStorageUnavailable=false;renderInsightBell();return;}
     if(state.insightsLoading||(!force&&state.insights.length))return;
     const previousUnread=Math.max(0,Number(state.insightsUnread)||0);state.insightsLoading=true;renderInsightDrawer();
-    try{const data=await BlinqAuth.insights();state.insights=Array.isArray(data?.items)?data.items:[];state.insightsUnread=Number(data?.unread)||0;state.insightsStorageUnavailable=Boolean(data?.storage_unavailable);if(force&&state.insightsUnread>previousUnread){const newest=state.insights.find(item=>!item.read);showStatus(newest?`${insightTypeLabel(newest.type)} · ${newest.title}`:'Nová BlinQ správa');}}
+    try{const data=await BlinqAuth.insights();state.insights=Array.isArray(data?.items)?data.items:[];state.insightsUnread=Number(data?.unread)||0;state.insightsStorageUnavailable=Boolean(data?.storage_unavailable);state.liveRadarHeartbeat=data?.live_radar_status&&typeof data.live_radar_status==='object'?data.live_radar_status:state.liveRadarHeartbeat;if(force&&state.insightsUnread>previousUnread){const newest=state.insights.find(item=>!item.read);showStatus(newest?`${insightTypeLabel(newest.type)} · ${newest.title}`:'Nová BlinQ správa');}}
     catch{state.insights=[];state.insightsUnread=0;state.insightsStorageUnavailable=true;}
-    finally{state.insightsLoading=false;renderInsightBell();renderInsightDrawer();}
+    finally{state.insightsLoading=false;renderInsightBell();renderInsightDrawer();renderSystemFooterStatus();}
   }
   async function refreshPrivateUpdates(force=false){
     if(state.privateUpdatesBusy||document.hidden||$('appShell')?.hidden)return;const plan=accountPlan();if(!['rookie','pro','elite','legend','goat','admin'].includes(plan))return;const now=Date.now();if(!force&&now-Number(state.privateUpdatesLastPoll||0)<25000)return;state.privateUpdatesBusy=true;state.privateUpdatesLastPoll=now;try{await loadInsights(true);if(membershipAtLeast(plan,notificationAudienceConfig().live_min_level))await loadUserLiveRadarStatus(false);}finally{state.privateUpdatesBusy=false;}
@@ -1153,9 +1196,9 @@
     const scanned=Date.parse(state.userLiveRadarStatus?.scanned_at||'');
     if(!force&&Number.isFinite(scanned)&&Date.now()-scanned<55000)return;
     state.userLiveRadarLoading=true;renderInsightDrawer();
-    try{state.userLiveRadarStatus={...(await BlinqAuth.liveRadar()),ok:true};}
+    try{state.userLiveRadarStatus={...(await BlinqAuth.liveRadar()),ok:true};if(state.userLiveRadarStatus?.scanned_at)state.liveRadarHeartbeat={...(state.liveRadarHeartbeat||{}),scanned_at:state.userLiveRadarStatus.scanned_at,fresh:true};}
     catch(error){state.userLiveRadarStatus={error:error.message||'live_unavailable'};}
-    finally{state.userLiveRadarLoading=false;renderInsightBell();renderInsightDrawer();}
+    finally{state.userLiveRadarLoading=false;renderInsightBell();renderInsightDrawer();renderSystemFooterStatus();}
   }
   function setInsightDrawer(open,channel=null){
     const drawer=$('insightDrawer'),backdrop=$('insightBackdrop');if(!drawer||!backdrop)return;
@@ -1305,26 +1348,6 @@
     if(tab==='games'||tab==='sets')return marketRows('sg').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()===tab);
     if(tab==='see_all')return leanSeeAllRows();
     return [];
-  }
-  function performanceCategoryForTab(tab){
-    return ({daily:'top_daily',prime:'prime',value:'value',ace:'ace',double_faults:'double_faults',doubles:'doubles',games:'games',sets:'sets'})[String(tab||'')]||'';
-  }
-  function bestPerformanceForTab(tab){
-    const category=performanceCategoryForTab(tab);if(!category)return null;
-    const item=state.feed?.performance_window_summary?.categories?.[category];
-    const days=Number(item?.best_days),rate=Number(item?.best_hit_rate),n=Number(item?.best_n);
-    if(!Number.isFinite(days)||!Number.isFinite(rate)||!Number.isFinite(n)||n<=0)return null;
-    return {days,rate,n,mode:String(item?.selection_mode||'')};
-  }
-  function dailyHubPerformanceText(tab,compact=false){
-    const perf=bestPerformanceForTab(tab);if(!perf)return '';
-    const rate=`${(perf.rate*100).toFixed(1)}%`;
-    if(compact)return `${rate} · ${perf.days}d · n=${Math.trunc(perf.n)}`;
-    return lcopy(
-      `Best result: ${rate} · ${perf.days} days · n=${Math.trunc(perf.n)} · all periods remain available in Results`,
-      `Najlepší výsledok: ${rate} · ${perf.days} dní · n=${Math.trunc(perf.n)} · všetky obdobia zostávajú vo Výsledkoch`,
-      `Nejlepší výsledek: ${rate} · ${perf.days} dní · n=${Math.trunc(perf.n)} · všechna období zůstávají ve Výsledcích`
-    );
   }
 
   function dashboardFilteredRows(rows){
@@ -1794,9 +1817,9 @@
       const edge=Number(row?.edge??row?.betting?.edge);
       const value=Number.isFinite(ev)?ev:Number.isFinite(edge)?edge:null;
       const valueText=value==null?'—':`${value>0?'+':''}${(value*(Math.abs(value)<=1?100:1)).toFixed(1)}%`;
-      return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-edge-cell metric-positive">${hubNumberHtml(valueText,'edge')}</td><td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span></button></td></tr>`;
+      return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-edge-cell metric-positive">${hubNumberHtml(valueText,'edge')}</td><td class="hub-action-cell">${hubMatchDetailButtonHtml()}</td></tr>`;
     }
-    return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-action-cell"><button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span></button></td></tr>`;
+    return `<tr${rowClass} data-hub-event="${key}">${base}<td class="hub-action-cell">${hubMatchDetailButtonHtml()}</td></tr>`;
   }
 
   function dailyHubLockedRow(tab,index,requiredPlan='pro'){
@@ -1817,8 +1840,7 @@
       let count='';
       if(coming)count='<em>COMING SOON</em>';
       else {const total=Number(ent.total);const rows=dailyHubRows(tab);const n=Number.isFinite(total)?total:rows.length;count=n?`<b>${n}</b>`:'';}
-      const performance=coming?'':dailyHubPerformanceText(tab,true);
-      return `<button type="button" role="tab" aria-selected="${tab===state.dailyHubTab?'true':'false'}" class="daily-hub-tab${tab===state.dailyHubTab?' active':''}${coming?' is-coming':''}" data-daily-hub-tab="${tab}"><span class="daily-hub-tab-copy"><span>${escapeHtml(dailyHubTabLabel(tab))}</span>${performance?`<small>${escapeHtml(performance)}</small>`:''}</span>${count}</button>`;
+      return `<button type="button" role="tab" aria-selected="${tab===state.dailyHubTab?'true':'false'}" class="daily-hub-tab${tab===state.dailyHubTab?' active':''}${coming?' is-coming':''}" data-daily-hub-tab="${tab}"><span class="daily-hub-tab-copy"><span>${escapeHtml(dailyHubTabLabel(tab))}</span></span>${count}</button>`;
     }).join('');
     const tab=state.dailyHubTab; host.dataset.tab=tab; host.dataset.plan=plan;
     const empty=$('dailyHubEmpty'),head=$('dailyHubHead'),body=$('dailyHubBody'),expand=$('dailyHubExpand');
@@ -1867,9 +1889,6 @@
       tournamentSelect.innerHTML=`<option value="">${escapeHtml(lcopy('All tournaments','Všetky turnaje','Všechny turnaje'))}</option>`+options.map(name=>`<option value="${escapeHtml(name)}"${name===current?' selected':''}>${escapeHtml(name)}</option>`).join('');if(current&&!options.includes(current)){state.dailyHubTournament='';tournamentSelect.value='';}
     }
     if(expand){const hasMore=allCount>preview;expand.hidden=!hasMore;expand.dataset.locked=ent.see_all===true?'0':'1';expand.setAttribute('aria-expanded',state.dailyHubExpanded?'true':'false');expand.title=state.dailyHubExpanded?lcopy('Show first 10','Zobraziť prvých 10','Zobrazit prvních 10'):lcopy('Show all rows','Zobraziť všetky riadky','Zobrazit všechny řádky');}
-    const boardNotice=$('dailyHubBoardNotice'),boardNoticeCopy=$('dailyHubBoardNoticeCopy');
-    const performanceText=dailyHubPerformanceText(tab,false);
-    if(boardNotice){boardNotice.hidden=!performanceText;if(boardNoticeCopy)boardNoticeCopy.textContent=performanceText;}
   }
 
 
@@ -1899,14 +1918,10 @@
     }
     const p1Photo=safePhotoUrl(p1.photo_url),p2Photo=safePhotoUrl(p2.photo_url);const avatar=(photo,name,gender='')=>playerAvatarHtml(photo,name,row?.tour,gender,'player-avatar');const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
     const metricHtml=metrics.map(([label,value])=>{const raw=String(value??'');const tone=raw.trim().startsWith('+')?' metric-positive':raw.trim().startsWith('-')?' metric-negative':'';return `<span class="card-metric${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(raw)}</strong></span>`}).join('');
-    const rowMarket=String(row?.market||row?.market_key||'').toLowerCase();
-    const performanceTab=key==='top_daily'?'daily':key==='ace'?(rowMarket==='double_faults'?'double_faults':'ace'):key==='sg'?(rowMarket==='games'?'games':'sets'):key;
-    const performanceText=dailyHubPerformanceText(performanceTab,true);
-    const performanceHtml=performanceText?`<div class="market-card-performance"><small>${escapeHtml(lcopy('Best 3/7/10/14/30d','Najlepšie z 3/7/10/14/30d','Nejlepší z 3/7/10/14/30d'))}</small><strong>${escapeHtml(performanceText)}</strong></div>`:'';
     const footer=`<div class="card-metrics-bar match-kpi-bar">${metricHtml}</div><div class="card-link-row"><button class="card-more-link" type="button" data-route="${escapeHtml(key)}">${escapeHtml(publicText('See more →'))}</button></div>`;
     const optionalNote=note&&!compact?`<div class="market-card-note">${escapeHtml(note)}</div>`:'';
     const tournamentMeta=tournamentDisplayMeta(row);
-    return `<article class="prediction-card featured market-card match-card-v3${projectionOnly?' projection-card':''}${compact?' dashboard-preview-card':''}"><div class="card-meta match-card-meta"><span class="tour match-card-tournament">${tournamentVisual(row)}<span class="match-card-tournament-copy"><b>${escapeHtml(tournamentMeta.name)}</b>${tournamentMeta.location?`<small>${escapeHtml(tournamentMeta.location)}</small>`:''}</span></span><span class="time">${escapeHtml(fmtTime(row?.scheduled_at||row?.date))}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(p1Photo,p1Name,p1?.gender||p1?.sex||'')}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${playerMetaHtml(p1.rank,p1.country_code,row?.tour)}</small></div><div class="vs match-vs">VS</div><div class="player">${avatar(p2Photo,p2Name,p2?.gender||p2?.sex||'')}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${playerMetaHtml(p2.rank,p2.country_code,row?.tour)}</small></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="pick-score"><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div></div>${optionalNote}${performanceHtml}${footer}</article>`;
+    return `<article class="prediction-card featured market-card match-card-v3${projectionOnly?' projection-card':''}${compact?' dashboard-preview-card':''}"><div class="card-meta match-card-meta"><span class="tour match-card-tournament">${tournamentVisual(row)}<span class="match-card-tournament-copy"><b>${escapeHtml(tournamentMeta.name)}</b>${tournamentMeta.location?`<small>${escapeHtml(tournamentMeta.location)}</small>`:''}</span></span><span class="time">${escapeHtml(fmtTime(row?.scheduled_at||row?.date))}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(p1Photo,p1Name,p1?.gender||p1?.sex||'')}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${playerMetaHtml(p1.rank,p1.country_code,row?.tour)}</small></div><div class="vs match-vs">VS</div><div class="player">${avatar(p2Photo,p2Name,p2?.gender||p2?.sex||'')}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${playerMetaHtml(p2.rank,p2.country_code,row?.tour)}</small></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="pick-score"><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div></div>${optionalNote}${footer}</article>`;
   }
 
   function renderMarketSection(key,hostId,emptyText){
@@ -2046,19 +2061,32 @@
     const row=rowOverride||m?.raw||m;
     const match=rowOverride?normalize(rowOverride):m;
     const signalRows=Array.isArray(match.signals)&&match.signals.length?match.signals.map(s=>{const meta=signalMeta(s,match);const favoursId=String(s?.player_id??s?.favours_player_id??'');const favours=favoursId===String(match.p1Id)?match.p1:favoursId===String(match.p2Id)?match.p2:'—';return `<div class="dialog-signal"><span>${escapeHtml(meta.label)}</span><strong>${escapeHtml(favours)}</strong><small>${meta.favours?'supports pick':'counter-signal'}</small></div>`;}).join(''):'<p class="signal-empty">No secondary signals are available.</p>';
+    const labels={
+      overview:lcopy('Overview','Prehľad','Přehled'),
+      statistics:lcopy('Form & surface','Forma & povrch','Forma & povrch'),
+      radar:lcopy('Winner model','Model víťaza','Model vítěze'),
+      history:lcopy('History / H2H','História / H2H','Historie / H2H')
+    };
     const overview=`<div class="match-detail-overview">${winnerWhyBlinqHtml(row,tab)}<div class="dialog-duel-grid">${insightPlayerCard(row,1)}${insightPlayerCard(row,2)}</div><div class="match-overview-context">${renderMotivationPanel(row)}</div></div>`;
-    const statistics=`<div class="match-detail-statistics">${renderMatchStatsPanel(row)}</div>`;
-    const radar=`<div class="match-detail-radar"><div class="dialog-section dialog-radar-wrap">${renderRadarComparison(row)}</div><div class="dialog-section match-model-signals"><h3>${escapeHtml(lcopy('Winner model signals','Signály modelu víťaza','Signály modelu vítěze'))}</h3>${signalRows}</div></div>`;
-    const history=`<div class="match-detail-history">${renderMatchHistoryPanel(row)}</div>`;
-    return `<div class="match-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div><button class="match-popout-button" type="button" data-match-popout><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M10 8h6v6"/></svg>${escapeHtml(lcopy('Open in new window','Otvoriť v novom okne','Otevřít v novém okně'))}</button></header><div class="dialog-pick match-detail-pick"><div><small>BlinQ Prediction</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${marketProbability(row)==null?'—':pct(marketProbability(row))}<small>${escapeHtml(lcopy('win probability','šanca na výhru','šance na výhru'))}</small></div></div><nav class="match-detail-tabs" role="tablist"><button type="button" class="active" data-match-tab="overview">${escapeHtml(lcopy('Overview','Prehľad','Přehled'))}</button><button type="button" data-match-tab="statistics">${escapeHtml(lcopy('Form & surface','Forma & povrch','Forma & povrch'))}</button><button type="button" data-match-tab="radar">${escapeHtml(lcopy('Winner model','Model víťaza','Model vítěze'))}</button><button type="button" data-match-tab="history">${escapeHtml(lcopy('History / H2H','História / H2H','Historie / H2H'))}</button></nav><section class="match-detail-panel active" data-match-panel="overview">${overview}</section><section class="match-detail-panel" data-match-panel="statistics" hidden>${statistics}</section><section class="match-detail-panel" data-match-panel="radar" hidden>${radar}</section><section class="match-detail-panel" data-match-panel="history" hidden>${history}</section>${row?.__liveIntelligenceLoading?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-loading">${escapeHtml(lcopy('Loading live player analytics…','Načítavam analytické dáta hráčov…','Načítám analytická data hráčů…'))}</div>`:row?.__liveIntelligenceFailed?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-error">${escapeHtml(lcopy('Extra live analytics are temporarily unavailable.','Doplnkové analytické dáta sú dočasne nedostupné.','Doplňková analytická data jsou dočasně nedostupná.'))}</div>`:''}<div class="dialog-meta"><span>${escapeHtml(String(match.surface).replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>Model ${escapeHtml(match.model||'—')}</span><span class="dialog-system-ok"><i></i>${escapeHtml(lcopy('All systems operational','Všetky systémy funkčné','Všechny systémy funkční'))}</span></div></div>`;
+    const statistics=matchDetailSectionAllowed('statistics')?`<div class="match-detail-statistics">${renderMatchStatsPanel(row)}</div>`:matchDetailLockHtml('statistics',labels.statistics);
+    const radar=matchDetailSectionAllowed('radar')?`<div class="match-detail-radar"><div class="dialog-section dialog-radar-wrap">${renderRadarComparison(row)}</div><div class="dialog-section match-model-signals"><h3>${escapeHtml(lcopy('Winner model signals','Signály modelu víťaza','Signály modelu vítěze'))}</h3>${signalRows}</div></div>`:matchDetailLockHtml('radar',labels.radar);
+    const history=matchDetailSectionAllowed('history')?`<div class="match-detail-history">${renderMatchHistoryPanel(row)}</div>`:matchDetailLockHtml('history',labels.history);
+    const tabButton=(id,label)=>{
+      const locked=id!=='overview'&&!matchDetailSectionAllowed(id);
+      const minPlan=locked?matchDetailSectionMinimum(id):'';
+      const required=locked?String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\s+/i,'').toUpperCase():'';
+      return `<button type="button" class="${id==='overview'?'active ':''}${locked?'is-locked':''}" data-match-tab="${escapeHtml(id)}"${locked?` data-match-locked="1" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(label)}"`:''}><span>${locked?'🔒 ':''}${escapeHtml(label)}</span>${locked?`<small>${escapeHtml(required)}</small>`:''}</button>`;
+    };
+    return `<div class="match-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div><button class="match-popout-button" type="button" data-match-popout><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 16 16 8M10 8h6v6"/></svg>${escapeHtml(lcopy('Open in new window','Otvoriť v novom okne','Otevřít v novém okně'))}</button></header><div class="dialog-pick match-detail-pick"><div><small>BlinQ Prediction</small><strong>${escapeHtml(match.pick)}</strong></div><div class="dialog-prob">${marketProbability(row)==null?'—':pct(marketProbability(row))}<small>${escapeHtml(lcopy('win probability','šanca na výhru','šance na výhru'))}</small></div></div><nav class="match-detail-tabs" role="tablist">${tabButton('overview',labels.overview)}${tabButton('statistics',labels.statistics)}${tabButton('radar',labels.radar)}${tabButton('history',labels.history)}</nav><section class="match-detail-panel active" data-match-panel="overview">${overview}</section><section class="match-detail-panel" data-match-panel="statistics" hidden>${statistics}</section><section class="match-detail-panel" data-match-panel="radar" hidden>${radar}</section><section class="match-detail-panel" data-match-panel="history" hidden>${history}</section>${row?.__liveIntelligenceLoading?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-loading">${escapeHtml(lcopy('Loading live player analytics…','Načítavam analytické dáta hráčov…','Načítám analytická data hráčů…'))}</div>`:row?.__liveIntelligenceFailed?`<div id="matchIntelligenceStatus" class="match-intelligence-status is-error">${escapeHtml(lcopy('Extra live analytics are temporarily unavailable.','Doplnkové analytické dáta sú dočasne nedostupné.','Doplňková analytická data jsou dočasně nedostupná.'))}</div>`:''}</div>`;
   }
   function openMatchPopout(){
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=30"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=31"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
+    if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
     const row=rowOverride||m?.raw||m;
     const shouldHydrate=!skipLiveHydration&&!row?.__liveIntelligenceLoaded&&!row?.__liveIntelligenceLoading;
     if(shouldHydrate)row.__liveIntelligenceLoading=true;
@@ -2109,8 +2137,8 @@
       if(!target)return;
       const tab=target.closest('[data-daily-hub-tab]');
       if(tab){ if(tab.dataset.upgradePlan){showAccessHint(tab,tab.dataset.upgradePlan,tab.dataset.upgradeSection||'SEE ALL',true);return;} state.dailyHubTab=tab.dataset.dailyHubTab; state.dailyHubExpanded=false; renderDailyHub(); return; }
-      const boardMode=target.closest('button[data-board-mode]');
-      if(boardMode){state.boardMode=boardMode.dataset.boardMode==='results'?'results':'live';state.dailyHubExpanded=false;renderDailyHub();return;}
+      const detailLock=target.closest('[data-detail-locked]');
+      if(detailLock){showAccessHint(detailLock,detailLock.dataset.upgradePlan||firstMatchDetailUnlockPlan(),detailLock.dataset.upgradeSection||lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
       if(target.closest('#dailyHubExpand')){ const ent=dailyHubEntitlement(state.dailyHubTab); if(ent.see_all!==true){ const expand=target.closest('#dailyHubExpand');const plan=state.dailyHubTab==='board'?'legend':firstDailyHubUnlockPlan(state.dailyHubTab,0,true);const label=state.dailyHubTab==='board'?'BlinQ Board':lcopy('Full daily offer','Celá denná ponuka','Celá denní nabídka');showAccessHint(expand,plan,label,true); return; } state.dailyHubExpanded=!state.dailyHubExpanded; renderDailyHub(); return; }
       const row=target.closest('tr[data-hub-event]');
       if(row){
@@ -2342,6 +2370,13 @@
   function renderAdminLayout(){
     const levelLabel=accessLabel(state.adminPlan);
     const hub=dailyHubConfig();
+    const detailCfg=matchDetailAccessConfig();
+    const resultsAccess=elements()?.SIDEBAR_RESULTS?.access||{};
+    const resultPlanChecks=membershipHierarchy.map(id=>{const label=String(state.ui?.plans?.[id]?.label||id).replace(/^BlinQ\s+/i,'');const enabled=String(resultsAccess?.[id]||'active').toLowerCase()==='active';return `<label class="admin-detail-plan-check"><input type="checkbox" data-admin-results-plan="${escapeHtml(id)}" ${enabled?'checked':''}><span>${escapeHtml(label)}</span></label>`;}).join('');
+    const resultsSettings=`<div class="admin-detail-access-card admin-results-access-card"><header><div><small>VÝSLEDKY</small><h3>Zobrazenie Výsledkov podľa levelu</h3><p>Zapni alebo vypni iba prístup k stránke Výsledky. Samotná história, obdobia, filtre a existujúce pravidlá výsledkov sa tým nemenia.</p></div></header><div class="admin-detail-plan-grid">${resultPlanChecks}</div><small class="admin-detail-help">ROOKIE a PRO si ponechávajú pôvodný rozsah histórie. Vyššie levely zostávajú bez zmeny. ADMIN má vždy prístup.</small></div>`;
+    const detailPlanChecks=membershipHierarchy.map(id=>{const label=String(state.ui?.plans?.[id]?.label||id).replace(/^BlinQ\s+/i,'');return `<label class="admin-detail-plan-check"><input type="checkbox" data-admin-detail-plan="${escapeHtml(id)}" ${detailCfg?.plans?.[id]!==false?'checked':''}><span>${escapeHtml(label)}</span></label>`;}).join('');
+    const detailSectionSelect=(section,label)=>{const current=matchDetailSectionMinimum(section);return `<label><span>${escapeHtml(label)}</span><select data-admin-detail-section="${escapeHtml(section)}">${membershipHierarchy.map(id=>`<option value="${id}"${id===current?' selected':''}>${escapeHtml(String(state.ui?.plans?.[id]?.label||id).replace(/^BlinQ\s+/i,''))}</option>`).join('')}</select></label>`;};
+    const detailSettings=`<div class="admin-detail-access-card"><header><div><small>DETAIL ZÁPASU</small><h3>Prístup ku karte detailu</h3><p>Jednoducho zapni, ktoré levely môžu otvoriť detail. Vnútri karty môžeš jednotlivé sekcie stupňovať minimálnym levelom.</p></div></header><div class="admin-detail-plan-grid">${detailPlanChecks}</div><div class="admin-detail-section-grid"><strong>Minimálny level pre sekcie</strong>${detailSectionSelect('statistics','Forma & povrch')}${detailSectionSelect('radar','Model víťaza')}${detailSectionSelect('history','História / H2H')}</div><small class="admin-detail-help">Prehľad ostáva základnou sekciou. ADMIN má vždy plný prístup. Neprístupná sekcia sa v detaile zobrazí ako zámok s najnižším potrebným levelom.</small></div>`;
     const rows=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].map(tab=>{
       const tc=hub.tabs?.[tab]||{},rule=tc.plans?.[state.adminPlan]||{},globalOn=tc.enabled!==false;
       const visible=String(rule.visible_rows??0).toUpperCase(),display=String(rule.display_state||((rule.tab_enabled!==false)?'active':'hidden'));
@@ -2371,6 +2406,8 @@
         <div class="admin-daily-matrix">${rows}</div>
         <div class="admin-admin-legend"><span><i class="is-global"></i><b>SHOW</b> = plný obsah</span><span><i class="is-level"></i><b>BLUR</b> = viditeľný premium teaser bez citlivých dát v HTML</span><span><i class="is-lock"></i><b>HIDE</b> = prvok sa pre level nezobrazí</span></div>
       </div>
+      ${resultsSettings}
+      ${detailSettings}
     </section>`;
   }
 
@@ -2797,6 +2834,9 @@
       if(t.dataset.adminHubGlobalField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc[t.dataset.adminHubGlobalField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();showStatus(`${dailyHubTabLabel(tab)} · ${tc.enabled===false?'vypnuté':'zapnuté'} globálne.`);return;}
       if(t.dataset.adminHubField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{visible_rows:0,blur_remaining:true,tab_enabled:true,see_all:false,selection_mode:'first',display_state:'active',row_overrides:{}};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.adminHubField==='visible_rows'&&String(value).toUpperCase()!=='ALL')value=Number(value);rule[t.dataset.adminHubField]=value;rule.tab_enabled=rule.display_state!=='hidden';if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHubRowState){const tab=t.dataset.adminHubTab,position=String(t.dataset.adminHubRowState),hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.row_overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};if(t.value==='active')delete rule.row_overrides[position];else rule.row_overrides[position]=t.value;if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
+      if(t.dataset.adminResultsPlan){const id=String(t.dataset.adminResultsPlan||'').toLowerCase();if(membershipHierarchy.includes(id)){const item=elements()?.SIDEBAR_RESULTS;if(item){item.access=item.access||{};item.access[id]=t.checked?'active':'hidden';if(id==='rookie')item.access.trial=t.checked?'active':'hidden';showStatus(`Výsledky · ${String(state.ui?.plans?.[id]?.label||id).replace(/^BlinQ\s+/i,'')} ${t.checked?'zobrazené':'skryté'} · klikni Publikovať.`);renderAllUiContent();rerenderAdmin();}}return;}
+      if(t.dataset.adminDetailPlan){const id=String(t.dataset.adminDetailPlan||'').toLowerCase();if(membershipHierarchy.includes(id)){state.ui.dashboard=state.ui.dashboard||{};const cfg=state.ui.dashboard.match_detail=matchDetailAccessConfig();cfg.plans=cfg.plans||{};cfg.plans[id]=Boolean(t.checked);if(id==='rookie')cfg.plans.trial=Boolean(t.checked);showStatus(`Detail zápasu · ${String(state.ui?.plans?.[id]?.label||id).replace(/^BlinQ\s+/i,'')} ${t.checked?'zapnutý':'vypnutý'} · klikni Publikovať.`);renderAllUiContent();rerenderAdmin();}return;}
+      if(t.dataset.adminDetailSection){const section=String(t.dataset.adminDetailSection||'');const value=String(t.value||'rookie').toLowerCase();if(['statistics','radar','history'].includes(section)&&membershipHierarchy.includes(value)){state.ui.dashboard=state.ui.dashboard||{};const cfg=state.ui.dashboard.match_detail=matchDetailAccessConfig();cfg.sections=cfg.sections||{};cfg.sections[section]=value;showStatus(`Detail zápasu · ${section} od ${String(state.ui?.plans?.[value]?.label||value).replace(/^BlinQ\s+/i,'')} · klikni Publikovať.`);renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.adminInactivityField){const cfg=state.ui.account_inactivity=state.ui.account_inactivity||{enabled:true,inactive_days:90,warning_days:7,notify_admin:true,notify_user:false,auto_expire_rookie:false};const field=t.dataset.adminInactivityField;let value=t.type==='checkbox'?t.checked:Number(t.value);if(field==='inactive_days')value=Math.max(14,Math.min(3650,Number(value)||90));if(field==='warning_days')value=Math.max(1,Math.min(Math.max(1,Number(cfg.inactive_days||90)-1),Number(value)||7));cfg[field]=value;showStatus('Kontrola neaktivity · zmena je v koncepte. Klikni Publikovať.');return;}
       if(t.dataset.adminLevelField){const card=t.closest('[data-admin-level-plan]'),id=String(card?.dataset.adminLevelPlan||'').toLowerCase();if(membershipHierarchy.includes(id)){const p=state.ui.plans[id]=state.ui.plans[id]||{};const field=t.dataset.adminLevelField;let value=t.type==='checkbox'?t.checked:t.value;if(id==='rookie'&&field==='enabled')value=true;if(id==='rookie'&&field==='duration_days')value=null;else if(field==='duration_days'){value=value===''?null:Math.max(1,Math.min(3650,Number(value)||30));if(id==='goat'){p.lifetime=false;p.unlimited=false;}}else if(field==='features')value=String(value||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);else if(field==='eyebrow')value=String(value||'').slice(0,40);p[field]=value;showStatus(`${String(p.label||id).replace(/^BlinQ\s+/i,'')} · zmena je v koncepte. Klikni Publikovať.`);}return;}
       if(t.dataset.adminAccess){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.access[t.dataset.adminAccess]=t.value;if(t.dataset.adminAccess==='rookie')item.access.trial=t.value;rerenderAdmin();}return;}
@@ -2980,9 +3020,7 @@
     const avatar=(src,name)=>playerAvatarHtml(src,name,m.tour,'','player-avatar');
     const metrics=[[publicText('Odds'),Number.isFinite(m.odds)?m.odds.toFixed(2):'—'],[lcopy('Edge','Výhoda','Výhoda'),Number.isFinite(m.edge)?`${m.edge>=0?'+':''}${(m.edge*100).toFixed(1)} pp`:'—'],['EV',Number.isFinite(m.expectedValue)?`${m.expectedValue>=0?'+':''}${(m.expectedValue*100).toFixed(1)}%`:'—']];
     const metricHtml=metrics.map(([label,value])=>{const raw=String(value);const tone=raw.trim().startsWith('+')?' metric-positive':raw.trim().startsWith('-')?' metric-negative':'';return `<span class="card-metric${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(raw)}</strong></span>`}).join('');
-    const performanceText=dailyHubPerformanceText('prime',true);
-    const performanceHtml=performanceText?`<div class="market-card-performance"><small>${escapeHtml(lcopy('Best 3/7/10/14/30d','Najlepšie z 3/7/10/14/30d','Nejlepší z 3/7/10/14/30d'))}</small><strong>${escapeHtml(performanceText)}</strong></div>`:'';
-    return `<article class="prediction-card featured detail-pick-card match-card-v3"><div class="card-meta match-card-meta"><span class="tour">${escapeHtml(m.tour)} ${escapeHtml(m.tournament)}</span><span class="time">${escapeHtml(fmtTime(m.date))}</span><span class="surface">${escapeHtml(String(m.surface||'').replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(photo1,m.p1)}<strong class="player-name">${escapeHtml(m.p1)}</strong></div><div class="vs match-vs">VS</div><div class="player">${avatar(photo2,m.p2)}<strong class="player-name">${escapeHtml(m.p2)}</strong></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(lcopy('BlinQ prediction','Naša predikcia','Naše predikce'))}</small><strong class="pick-name">${escapeHtml(m.pick)}</strong></div><div class="pick-score"><div class="probability">${pct(m.probability)}</div><span class="confidence ${escapeHtml(m.confidence)}">${escapeHtml(confidenceLabel(m.confidence))}</span></div></div>${performanceHtml}<div class="card-metrics-bar match-kpi-bar">${metricHtml}</div></article>`;
+    return `<article class="prediction-card featured detail-pick-card match-card-v3"><div class="card-meta match-card-meta"><span class="tour">${escapeHtml(m.tour)} ${escapeHtml(m.tournament)}</span><span class="time">${escapeHtml(fmtTime(m.date))}</span><span class="surface">${escapeHtml(String(m.surface||'').replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(photo1,m.p1)}<strong class="player-name">${escapeHtml(m.p1)}</strong></div><div class="vs match-vs">VS</div><div class="player">${avatar(photo2,m.p2)}<strong class="player-name">${escapeHtml(m.p2)}</strong></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(lcopy('BlinQ prediction','Naša predikcia','Naše predikce'))}</small><strong class="pick-name">${escapeHtml(m.pick)}</strong></div><div class="pick-score"><div class="probability">${pct(m.probability)}</div><span class="confidence ${escapeHtml(m.confidence)}">${escapeHtml(confidenceLabel(m.confidence))}</span></div></div><div class="card-metrics-bar match-kpi-bar">${metricHtml}</div></article>`;
   }
   function detailCards(rows,key){
     const cap=Math.max(3,Math.min(5,Number(state.ui?.dashboard?.detail_pick_limit)||5));

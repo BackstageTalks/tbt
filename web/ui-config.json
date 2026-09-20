@@ -2264,6 +2264,23 @@
           }
         }
       }
+    },
+    "match_detail": {
+      "plans": {
+        "trial": true,
+        "expired": false,
+        "rookie": true,
+        "pro": true,
+        "elite": true,
+        "legend": true,
+        "goat": true
+      },
+      "sections": {
+        "overview": "rookie",
+        "statistics": "pro",
+        "radar": "elite",
+        "history": "legend"
+      }
     }
   },
   "ui_revision": "7.3.6",
@@ -2422,7 +2439,7 @@
       }
     }
   },
-  "ui_patch": "736-r30",
+  "ui_patch": "736-r31",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,

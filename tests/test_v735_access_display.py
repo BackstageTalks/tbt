@@ -73,7 +73,8 @@ def test_admin_has_real_display_route_and_show_blur_hide_controls():
 def test_upgrade_auth_footer_and_copy_are_v735_native():
     assert 'upgrade-requires-pill' in APP and 'upgrade-plan-grid' in APP
     assert 'upgrade-dialog-title' in CSS
-    assert 'UI 7.3.6' in INDEX
+    assert 'id="footerSystemStatus"' in INDEX
+    assert 'Last update: —' in INDEX
     assert 'auth-copy p,#authSubtitle' in CSS
     assert 'site-footer:before' in CSS
     assert 'ui_copy' in SITE and 'upgrade' in SITE['ui_copy']

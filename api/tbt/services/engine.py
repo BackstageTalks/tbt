@@ -694,15 +694,12 @@ def performance_windows(winner_results, public_results, *, now):
         n = int(model.get("n") or 0) if isinstance(model, dict) else 0
         if isinstance(accuracy, (int, float)) and math.isfinite(float(accuracy)):
             candidates.append((days, float(accuracy), n))
-    eligible = [item for item in candidates if item[2] >= PERFORMANCE_BEST_MIN_SAMPLE]
-    if eligible:
-        best_days, best_accuracy, best_n = max(eligible, key=lambda item: (item[1], item[2], -item[0]))
-        mode = "best_accuracy_min_sample"
-    elif candidates:
-        # If history is still young, prefer the most stable available sample
-        # instead of cherry-picking a tiny perfect streak.
-        best_days, best_accuracy, best_n = max(candidates, key=lambda item: (item[2], item[1], -item[0]))
-        mode = "largest_available_sample"
+    if candidates:
+        # The homepage KPI is intentionally the strongest observed accuracy from
+        # exactly the five requested rolling windows (3/7/10/14/30 days).
+        # Sample size is only a tie-breaker and is not rendered on the card.
+        best_days, best_accuracy, best_n = max(candidates, key=lambda item: (item[1], item[2], -item[0]))
+        mode = "best_accuracy_of_requested_windows"
     else:
         best_days = best_accuracy = best_n = None
         mode = "no_settled_model_results"
@@ -998,6 +995,12 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
             "betting_performance": betting,
             "performance_windows": rolling_performance,
             "performance_window_summary": rolling_summary,
+            # Public marketing KPI only. Results/history entitlement rules stay
+            # untouched; lower levels receive this single scalar without the
+            # underlying rolling-window detail.
+            "dashboard_model_success": {
+                "accuracy": rolling_summary.get("best_accuracy"),
+            },
             "results_meta": {"settled_total": len(results), "returned": len(result_rows), "limit": 1000,
                              "history_cutoff": None,
                              "history_reset": False,

@@ -856,7 +856,7 @@ def _live_worker_snapshot(max_age_seconds: int = 180) -> dict | None:
         snapshot=load_live_worker_status()
     except AdminStorageUnavailable:
         return None
-    if not snapshot:
+    if not snapshot or snapshot.get("last_error"):
         return None
     raw=str(snapshot.get("updated_at") or snapshot.get("scanned_at") or "").strip()
     try:
@@ -868,6 +868,35 @@ def _live_worker_snapshot(max_age_seconds: int = 180) -> dict | None:
     if age<0 or age>max_age_seconds:
         return None
     return {**snapshot,"cached":True,"worker_snapshot":True}
+
+
+def _public_live_worker_heartbeat() -> dict:
+    """Expose only the non-sensitive autonomous LIVE heartbeat for the footer."""
+    snapshot=load_live_worker_status()
+    if not snapshot:
+        return {"scanned_at": None, "updated_at": None, "fresh": False}
+    last_error=bool(snapshot.get("last_error"))
+    # Prefer the most recent successful scan. Legacy successful snapshots did
+    # not yet carry last_success_at, so their scanned_at remains valid.
+    success_raw=str(snapshot.get("last_success_at") or ((snapshot.get("scanned_at") or "") if not last_error else "")).strip()
+    raw=success_raw
+    age_seconds=None
+    fresh=False
+    if raw:
+        try:
+            moment=datetime.fromisoformat(raw.replace("Z","+00:00"))
+            if moment.tzinfo is None:
+                moment=moment.replace(tzinfo=timezone.utc)
+            age_seconds=max(0,int((datetime.now(timezone.utc)-moment.astimezone(timezone.utc)).total_seconds()))
+            fresh=age_seconds<=180 and not last_error
+        except ValueError:
+            pass
+    return {
+        "scanned_at": success_raw or None,
+        "updated_at": snapshot.get("updated_at"),
+        "fresh": fresh,
+        "age_seconds": age_seconds,
+    }
 
 
 def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
@@ -992,7 +1021,13 @@ def internal_live_radar_worker(req):
     except Exception as exc:
         logging.exception("Autonomous LIVE Radar worker failed")
         try:
-            save_live_worker_status({"scanned_at":datetime.now(timezone.utc).isoformat(),"last_error":exc.__class__.__name__})
+            previous=load_live_worker_status() or {}
+            last_success_at=previous.get("last_success_at") or (previous.get("scanned_at") if not previous.get("last_error") else None)
+            save_live_worker_status({
+                "scanned_at":datetime.now(timezone.utc).isoformat(),
+                "last_success_at":last_success_at,
+                "last_error":exc.__class__.__name__,
+            })
         except Exception:
             pass
         return response({"error":"live_worker_failed","detail":exc.__class__.__name__},503)
@@ -1121,15 +1156,22 @@ def insights_feed(req):
             return response({"error": "account_suspended"}, 403)
         plan = _insight_plan_for_user(user)
         if plan == "expired":
-            return response({"items": [], "unread": 0})
+            try:
+                heartbeat=_public_live_worker_heartbeat()
+            except AdminStorageUnavailable:
+                heartbeat={"scanned_at":None,"updated_at":None,"fresh":False}
+            return response({"items": [], "unread": 0, "live_radar_status": heartbeat})
         # INFO can target any active membership level. LIVE items themselves
         # remain server-restricted to the published LIVE minimum by normalize_insight().
         payload = list_insights(plan=plan, user_id=str(user.get("id") or ""), include_inactive=False, limit=100)
+        # The homepage footer needs only the autonomous worker heartbeat. It is
+        # intentionally separate from the protected LIVE candidates/signals.
+        payload["live_radar_status"] = _public_live_worker_heartbeat()
         return response(payload)
     except AdminStorageUnavailable:
         # Insights are optional presentation content. A storage outage must not
         # break the dashboard/feed itself.
-        return response({"items": [], "unread": 0, "storage_unavailable": True})
+        return response({"items": [], "unread": 0, "storage_unavailable": True, "live_radar_status":{"scanned_at":None,"updated_at":None,"fresh":False}})
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
 

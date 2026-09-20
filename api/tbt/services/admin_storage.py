@@ -323,8 +323,18 @@ def save_live_worker_status(payload: object) -> dict:
     """Persist a tiny, non-secret heartbeat/snapshot for the autonomous LIVE worker."""
     data = dict(payload or {}) if isinstance(payload, dict) else {}
     now = datetime.now(timezone.utc).isoformat()
+    last_error = str(data.get("last_error") or "")[:160]
+    scanned_at = str(data.get("scanned_at") or now)[:64]
+    # `last_success_at` is the timestamp shown as "Last update" in the public
+    # footer. A failed worker attempt must not masquerade as a successful LIVE
+    # refresh. Successful snapshots advance it; error snapshots preserve the
+    # last known success supplied by the worker error handler.
+    last_success_at = str(data.get("last_success_at") or "")[:64]
+    if not last_error:
+        last_success_at = scanned_at
     safe = {
-        "scanned_at": str(data.get("scanned_at") or now)[:64],
+        "scanned_at": scanned_at,
+        "last_success_at": last_success_at,
         "live_events": max(0, int(data.get("live_events") or 0)),
         "candidates": max(0, int(data.get("candidates") or 0)),
         "signals": max(0, int(data.get("signals") or 0)),
@@ -332,7 +342,7 @@ def save_live_worker_status(payload: object) -> dict:
         "candidate_items": data.get("candidate_items") if isinstance(data.get("candidate_items"), list) else [],
         "signal_items": data.get("signal_items") if isinstance(data.get("signal_items"), list) else [],
         "thresholds": data.get("thresholds") if isinstance(data.get("thresholds"), dict) else {},
-        "last_error": str(data.get("last_error") or "")[:160],
+        "last_error": last_error,
         "updated_at": now,
     }
     # Keep snapshots deliberately tiny; the durable insight table is the alert history.
@@ -496,6 +506,22 @@ def validate_ui_config(payload: object) -> dict:
     for field, allowed in (("cards_per_panel_desktop", {1, 2, 3}), ("cards_per_panel_wide", {1, 2, 3, 4})):
         if dashboard.get(field) not in allowed:
             raise ValueError(f"Invalid dashboard card-density setting: {field}")
+    detail = dashboard.get("match_detail") or {}
+    detail_levels = ("rookie", "pro", "elite", "legend", "goat")
+    if not isinstance(detail, dict):
+        raise ValueError("Invalid match detail configuration")
+    detail_plans = detail.get("plans") or {}
+    for plan_id in ("trial", "expired", *detail_levels):
+        if not isinstance(detail_plans.get(plan_id), bool):
+            raise ValueError(f"Invalid match detail access for {plan_id}")
+    detail_sections = detail.get("sections") or {}
+    if not isinstance(detail_sections, dict) or set(detail_sections) != {"overview", "statistics", "radar", "history"}:
+        raise ValueError("Invalid match detail section configuration")
+    if detail_sections.get("overview") != "rookie":
+        raise ValueError("Match detail overview must remain available from ROOKIE")
+    for section_id in ("statistics", "radar", "history"):
+        if str(detail_sections.get(section_id) or "").lower() not in detail_levels:
+            raise ValueError(f"Invalid match detail minimum level for {section_id}")
     daily_hub = dashboard.get("daily_hub") or {}
     if not isinstance(daily_hub, dict) or not isinstance(daily_hub.get("enabled"), bool):
         raise ValueError("Invalid Daily Picks hub configuration")

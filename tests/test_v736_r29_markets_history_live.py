@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from tbt.services.engine import PERFORMANCE_BEST_MIN_SAMPLE, performance_windows
+from tbt.services.engine import performance_windows
 from tbt.services.live_comeback import DEFAULT_MAX_ODDS, DEFAULT_MIN_PROBABILITY
 
 
@@ -19,12 +19,10 @@ def _winner_row(i: int, when: datetime, correct: bool):
     }
 
 
-def test_best_history_window_requires_stable_sample_before_marketing_highlight():
+def test_best_history_window_selects_highest_accuracy_of_requested_five_windows():
     now = datetime(2026, 9, 20, 8, tzinfo=timezone.utc)
     rows = []
-    # 20 perfect recent rows would look spectacular but are deliberately too
-    # small to win the marketing card. Add 20 older rows so 10/14/30-day windows
-    # have a stable denominator and a more representative accuracy.
+    # The 3-day window is perfect while longer windows include older misses.
     for i in range(20):
         rows.append(_winner_row(i, now - timedelta(days=2, hours=i), True))
     for i in range(20, 40):
@@ -32,11 +30,11 @@ def test_best_history_window_requires_stable_sample_before_marketing_highlight()
 
     windows, summary = performance_windows(rows, [], now=now)
 
-    assert PERFORMANCE_BEST_MIN_SAMPLE == 30
     assert windows["3"]["model"]["n"] == 20
-    assert summary["best_n"] >= 30
-    assert summary["best_days"] in {10, 14, 30}
-    assert summary["selection_mode"] == "best_accuracy_min_sample"
+    assert summary["best_days"] == 3
+    assert summary["best_accuracy"] == 1.0
+    assert summary["best_n"] == 20
+    assert summary["selection_mode"] == "best_accuracy_of_requested_windows"
     assert summary["transparent_all_windows"] is True
 
 
@@ -57,7 +55,7 @@ def test_r29_frontend_contract_has_separate_df_tab_new_loader_and_history_window
     assert "['14',lcopy('14 days'" in app
     assert "performance_window_summary" in app
     assert '"double_faults"' in config
-    assert '"ui_patch": "736-r30"' in config
+    assert '"ui_patch": "736-r31"' in config
     assert "blinq_loading_r29.svg" in index
     assert loader.is_file()
     # The supplied loader contained a metadata-heavy embedded PNG (~1.7 MB).

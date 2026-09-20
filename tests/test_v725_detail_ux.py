@@ -3,14 +3,18 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 APP = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
 CSS = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
+INDEX = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 
 
-def test_footer_is_minimal_and_runtime_status_ballast_is_removed():
+def test_footer_is_minimal_with_live_worker_heartbeat_status():
     assert "hubDataDepthLabel" in APP
     assert "renderFooterConfig" not in APP
     assert "footer.live_ok" not in APP
-    assert ".system-status" not in CSS
     assert ".site-footer-minimal" in CSS
+    assert 'id="footerSystemStatus"' in INDEX
+    assert "Všetky systémy funkčné" in INDEX
+    assert "Last update: —" in INDEX
+    assert "renderSystemFooterStatus" in APP
 
 
 def test_market_specific_details_do_not_mix_projection_types():

@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
   <meta name="theme-color" content="#05111f" />
   <meta name="blinq-web-release" content="7.3.6" />
-  <meta name="blinq-web-patch" content="736-r30" />
+  <meta name="blinq-web-patch" content="736-r31" />
   <title>BlinQ · Tennis Intelligence</title>
   <link rel="icon" href="/assets/blinq_favi.png" type="image/png" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="stylesheet" href="/blinq-app.css?v=7360&p=30" />
-  <script defer src="/auth.js?v=7360&p=30"></script>
-  <script defer src="/responsive.js?v=7360&p=30"></script>
-  <script defer src="/app.js?v=7360&p=30"></script>
+  <link rel="stylesheet" href="/blinq-app.css?v=7360&p=31" />
+  <script defer src="/auth.js?v=7360&p=31"></script>
+  <script defer src="/responsive.js?v=7360&p=31"></script>
+  <script defer src="/app.js?v=7360&p=31"></script>
 </head>
 <body id="blinqPremium" class="blinq-home" data-web-release="7.3.6">
   <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
@@ -27,7 +27,7 @@
   <div id="bootSplash" class="boot-splash boot-splash-tennis" aria-live="polite">
     <div class="boot-tennis-card boot-tennis-card-source">
       <span id="bootEyebrow" class="boot-copy-eyebrow">BLINQ INTELLIGENCE</span>
-      <img src="/assets/blinq_loading_r29.svg?v=7360&p=30" alt="Načítavam BlinQ Intelligence" />
+      <img src="/assets/blinq_loading_r29.svg?v=7360&p=31" alt="Načítavam BlinQ Intelligence" />
       <span id="bootStatus" class="boot-copy-status">Načítavam model · dáta · dnešné predikcie</span>
     </div>
   </div>
@@ -43,7 +43,7 @@
 
         <nav class="reference-navigation" aria-label="Hlavná navigácia">
           <a href="#predictions" data-route="predictions" class="active">Predikcie</a>
-          <a href="#results" data-route="results">Results</a>
+          <a href="#results" data-route="results" data-ui-element="SIDEBAR_RESULTS">Results</a>
         </nav>
 
         <div class="header-actions">
@@ -97,13 +97,6 @@
                   <button id="dailyHubExpand" class="daily-expand" type="button" aria-label="Zobraziť celú ponuku"><svg viewBox="0 0 20 20" aria-hidden="true" focusable="false"><path d="M7 4H4v3M13 4h3v3M7 16H4v-3M13 16h3v-3"></path></svg></button>
                 </div>
               </div>
-              <div id="dailyHubBoardNotice" class="daily-board-notice" hidden>
-                <span id="dailyHubBoardNoticeCopy"></span>
-                <div id="dailyHubBoardMode" class="daily-board-mode" aria-label="BlinQ Board zobrazenie">
-                  <button type="button" data-board-mode="live" class="active">Aktívne</button>
-                  <button type="button" data-board-mode="results">Výsledky</button>
-                </div>
-              </div>
               <div class="table-scroller">
                 <table class="daily-hub-table"><thead id="dailyHubHead"></thead><tbody id="dailyHubBody"></tbody></table>
               </div>
@@ -117,7 +110,7 @@
       <section id="routePanel" class="route-panel" hidden></section>
 
       <footer class="site-footer site-footer-minimal">
-        <div class="footer-left"><img class="footer-watermark-logo" src="/assets/blinq_logo.svg" alt="BlinQ" /><small class="web-release-stamp" title="Frontend release">UI 7.3.6</small></div>
+        <div class="footer-left footer-system-status" id="footerSystemStatus" aria-live="polite"><span class="footer-system-dot" id="footerSystemDot" aria-hidden="true"></span><strong>Všetky systémy funkčné</strong><span class="footer-system-divider" aria-hidden="true">|</span><small id="footerLastUpdate">Last update: —</small></div>
         <div class="footer-right"><nav id="footerLanguages" class="languages"><span>JAZYK</span><a href="?lang=sk#predictions" data-lang="sk" class="active">SK</a><a href="?lang=cz#predictions" data-lang="cz">CZ</a><a href="?lang=en#predictions" data-lang="en">EN</a></nav></div>
       </footer>
     </main>

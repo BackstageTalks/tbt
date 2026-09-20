@@ -21,12 +21,14 @@ def test_today_kpi_uses_total_supply_not_authorized_rows():
     assert "const totalToday=Math.max(Number(dailyEnt?.total)||0,rows.length);" in text
     assert 'String(totalToday)' in text
 
-def test_footer_watermark_explicitly_overrides_legacy_hidden_rule():
+def test_footer_status_replaces_legacy_watermark_and_matches_current_patch():
     html=(ROOT/'web/index.html').read_text(encoding='utf-8')
     css=(ROOT/'web/blinq-app.css').read_text(encoding='utf-8')
-    assert 'class="footer-watermark-logo"' in html
+    assert 'id="footerSystemStatus"' in html
+    assert 'footer-watermark-logo' not in html
+    assert 'Všetky systémy funkčné' in html
     assert f"runtime patch 7.3.6-r{PATCH_NUM}" in css
-    assert 'visibility:visible!important' in css
+    assert '@keyframes blinqStatusBreath' in css
 
 def test_current_patch_identity():
     html=(ROOT/'web/index.html').read_text(encoding='utf-8')

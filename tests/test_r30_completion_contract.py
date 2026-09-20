@@ -15,14 +15,14 @@ def test_r30_workflow_exposes_production_audit_and_results_rebuild():
     assert 'scripts/rebuild_results_history.py' in workflow
 
 
-def test_r30_cards_show_transparent_best_window_with_sample_size():
+def test_r30_rolling_windows_feed_single_model_success_card_only():
     app = read('web/app.js')
-    css = read('web/blinq-app.css')
-    assert 'market-card-performance' in app
-    assert "dailyHubPerformanceText(performanceTab,true)" in app
-    assert "dailyHubPerformanceText('prime',true)" in app
-    assert 'Najlepšie z 3/7/10/14/30d' in app
-    assert 'market-card-performance' in css
+    engine = read('api/tbt/services/engine.py')
+    assert 'PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30)' in engine
+    assert '"dashboard_model_success"' in engine
+    assert 'dashboardBest=state.feed?.dashboard_model_success' in app
+    assert 'dailyHubPerformanceText' not in app
+    assert 'market-card-performance' not in app
 
 
 def test_r30_live_radar_diagnostics_and_relaxed_defaults_are_present():

@@ -21,6 +21,7 @@ def _payload():
         "ace_picks": [], "sg_picks": [], "doubles_picks": [], "upcoming": [],
         "results": [_result(12), _result(36), _result(72)],
         "performance": {"roi": 1.23},
+        "dashboard_model_success": {"accuracy": .714},
     }
 
 
@@ -33,6 +34,8 @@ def test_result_history_is_server_limited_by_plan():
     assert em["results_history_hours"] is None and len(elite["results"]) == 3
     assert rookie["performance"] == {} and pro["performance"] == {}
     assert elite["performance"] == {"roi": 1.23}
+    assert rookie["dashboard_model_success"] == {"accuracy": .714}
+    assert pro["dashboard_model_success"] == {"accuracy": .714}
 
 
 def test_short_odds_stays_separate_from_public_top():

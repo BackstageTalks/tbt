@@ -125,3 +125,24 @@ def test_runtime_ui_config_accepts_current_hero_creative_variants():
     elements["HERO_BANNER_1"]["content"]["headline"] = "Tennis insights for a smarter tomorrow."
 
     assert admin_storage.validate_ui_config(payload) is payload
+
+
+def test_live_worker_status_tracks_last_success_separately_from_failed_attempt(monkeypatch):
+    table = FakeTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+
+    first = admin_storage.save_live_worker_status({
+        "scanned_at": "2026-09-20T11:42:00+00:00",
+        "live_events": 4,
+    })
+    assert first["last_success_at"] == "2026-09-20T11:42:00+00:00"
+    assert first["last_error"] == ""
+
+    failed = admin_storage.save_live_worker_status({
+        "scanned_at": "2026-09-20T11:47:00+00:00",
+        "last_success_at": first["last_success_at"],
+        "last_error": "ProviderError",
+    })
+    assert failed["scanned_at"] == "2026-09-20T11:47:00+00:00"
+    assert failed["last_success_at"] == "2026-09-20T11:42:00+00:00"
+    assert failed["last_error"] == "ProviderError"

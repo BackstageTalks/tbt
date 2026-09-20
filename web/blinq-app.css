@@ -6305,16 +6305,89 @@ body#blinqPremium .boot-copy-eyebrow,body#blinqPremium .boot-copy-status{display
   body#blinqPremium .boot-splash.boot-splash-tennis::before,body#blinqPremium .boot-splash.boot-splash-tennis::after,body#blinqPremium .boot-tennis-card.boot-tennis-card-source::before{animation:none!important;}
 }
 
-/* r30: transparent best-window performance on each prediction category. */
-body#blinqPremium .daily-hub-tab-copy{display:flex;flex-direction:column;align-items:flex-start;gap:1px;min-width:0}
-body#blinqPremium .daily-hub-tab-copy>small{font-size:6.8px;line-height:1.05;font-weight:750;letter-spacing:.015em;color:#7894a4;white-space:nowrap}
-body#blinqPremium .daily-hub-tab.active .daily-hub-tab-copy>small{color:#075332}
-@media(max-width:760px){body#blinqPremium .daily-hub-tab-copy>small{font-size:6.3px}}
+/* BlinQ runtime patch 7.3.6-r31: corrected BlinQ visual/detail/live closeout. */
 
-/* BlinQ runtime patch 7.3.6-r30: calibrated projection markets, recoverable history rebuild, per-category rolling KPI. */
+/* r31 · BlinQ visual closeout: green detail system, clean active tabs, LIVE heartbeat footer */
+@keyframes blinqStatusBreath{
+  0%,100%{transform:scale(.88);opacity:.72;box-shadow:0 0 0 0 rgba(56,239,165,.34),0 0 10px rgba(56,239,165,.34)}
+  50%{transform:scale(1.08);opacity:1;box-shadow:0 0 0 6px rgba(56,239,165,0),0 0 18px rgba(56,239,165,.72)}
+}
+body#blinqPremium .site-footer-minimal .footer-system-status{min-width:0!important;display:flex!important;align-items:center!important;gap:9px!important;color:#6d887f!important}
+body#blinqPremium .footer-system-status strong{color:#52e7a8!important;font-size:9px!important;font-weight:800!important;letter-spacing:.01em!important;white-space:nowrap!important}
+body#blinqPremium .footer-system-status small{color:#6b827a!important;font-size:8px!important;font-weight:650!important;white-space:nowrap!important}
+body#blinqPremium .footer-system-divider{color:rgba(108,145,132,.42)!important;font-size:10px!important}
+body#blinqPremium .footer-system-dot{display:inline-block!important;width:8px!important;height:8px!important;min-width:8px!important;border-radius:50%!important;background:#38efa5!important;animation:blinqStatusBreath 2.7s ease-in-out infinite!important;transform-origin:center!important}
+body#blinqPremium .footer-system-status.is-stale .footer-system-dot{animation:none!important;background:#6e837b!important;box-shadow:none!important;opacity:.62!important}
+body#blinqPremium .footer-system-status.is-stale strong{color:#8da099!important}
 
-/* r30: transparent rolling performance highlight on each prediction card. */
-body#blinqPremium .market-card-performance{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:8px 0 0;padding:7px 9px;border:1px solid rgba(79,216,151,.16);border-radius:10px;background:rgba(18,58,45,.18)}
-body#blinqPremium .market-card-performance small{font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#789a8f}
-body#blinqPremium .market-card-performance strong{font-size:10px;font-weight:850;white-space:nowrap;color:#d7f7e7}
-@media(max-width:760px){body#blinqPremium .market-card-performance{padding:6px 8px}body#blinqPremium .market-card-performance small{font-size:7px}body#blinqPremium .market-card-performance strong{font-size:9px}}
+/* No icon/dot decoration on the selected market tab: glow + underline only. */
+body#blinqPremium .daily-hub-tab.active span::before,
+body#blinqPremium .daily-hub-tab.active .daily-hub-tab-copy::before,
+body#blinqPremium .daily-hub-tab.active .daily-hub-tab-copy>span::before{content:none!important;display:none!important}
+body#blinqPremium .daily-hub-tab.active{background:linear-gradient(180deg,rgba(48,218,151,.075),rgba(48,218,151,.018))!important;color:#f3fbf8!important;box-shadow:inset 0 0 18px rgba(49,226,157,.035)!important}
+body#blinqPremium .daily-hub-tab.active::after{height:2px!important;background:#43eda4!important;box-shadow:0 0 12px rgba(67,237,164,.34)!important}
+
+/* Cleaner top bar: subtle glass, thin emerald active line, no heavy framing. */
+body#blinqPremium .reference-topbar{border-color:rgba(79,181,145,.16)!important;background:linear-gradient(180deg,rgba(3,18,16,.94),rgba(3,15,14,.89))!important;box-shadow:0 12px 30px rgba(0,0,0,.11)!important;backdrop-filter:blur(16px)!important}
+body#blinqPremium .reference-navigation a.active{color:#f0f8f5!important}
+body#blinqPremium .reference-navigation a.active::after{background:#45eda5!important;box-shadow:0 0 12px rgba(69,237,165,.32)!important}
+
+/* Match detail: remove purple language and use restrained BlinQ green/teal. */
+body#blinqPremium .dialog-eyebrow{color:#49e7a4!important}
+body#blinqPremium .match-detail-pick{border-color:rgba(66,199,151,.28)!important;background:linear-gradient(180deg,rgba(5,31,25,.96),rgba(5,24,21,.98))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.018)!important}
+body#blinqPremium .match-detail-pick small{color:#52e8a8!important}
+body#blinqPremium .match-detail-tabs{border-color:rgba(72,184,145,.24)!important;background:rgba(4,24,20,.9)!important;box-shadow:none!important}
+body#blinqPremium .match-detail-tabs button{display:grid!important;place-items:center!important;align-content:center!important;gap:2px!important;color:#8aa198!important;border:1px solid transparent!important;background:transparent!important;box-shadow:none!important}
+body#blinqPremium .match-detail-tabs button span{white-space:nowrap!important}
+body#blinqPremium .match-detail-tabs button small{font-size:6px!important;color:#69837a!important;font-weight:850!important;letter-spacing:.08em!important;text-transform:uppercase!important}
+body#blinqPremium .match-detail-tabs button:hover{background:rgba(64,212,155,.035)!important;color:#d8e8e2!important}
+body#blinqPremium .match-detail-tabs button.active{color:#f3faf7!important;background:linear-gradient(180deg,rgba(31,112,82,.30),rgba(18,71,54,.24))!important;border-color:rgba(70,229,165,.22)!important;box-shadow:inset 0 -2px 0 #43eda4!important}
+body#blinqPremium .match-detail-tabs button.is-locked{color:#698179!important;background:rgba(255,255,255,.009)!important}
+body#blinqPremium .match-detail-tabs button.is-locked:hover{border-color:rgba(227,178,81,.16)!important;color:#a8bbb4!important}
+body#blinqPremium .insight-player-card{border-color:rgba(75,167,138,.20)!important;background:linear-gradient(180deg,rgba(7,29,24,.96),rgba(5,23,19,.98))!important;box-shadow:none!important}
+body#blinqPremium .insight-player-card.picked{border-color:rgba(67,237,164,.42)!important;box-shadow:inset 0 0 0 1px rgba(67,237,164,.035)!important}
+body#blinqPremium .insight-player-metrics>span,
+body#blinqPremium .match-history-grid span{border-color:rgba(77,157,132,.16)!important;background:rgba(3,19,16,.62)!important}
+body#blinqPremium .dialog-section,
+body#blinqPremium .match-stat-table,
+body#blinqPremium .match-history-wrap{border-color:rgba(75,162,134,.20)!important;background:rgba(5,24,20,.88)!important}
+body#blinqPremium .match-stat-head{background:rgba(22,71,56,.20)!important;color:#87a69b!important}
+body#blinqPremium .match-stat-row{border-bottom-color:rgba(76,151,128,.14)!important}
+body#blinqPremium .match-history-card+.match-history-card{border-color:rgba(76,151,128,.14)!important}
+body#blinqPremium .match-history-title span{color:#51dfa3!important}
+body#blinqPremium .legend-dot.player-2{background:#5cb6c5!important}
+body#blinqPremium .insight-radar-area.player-2{fill:rgba(92,182,197,.14)!important;stroke:#5cb6c5!important}
+body#blinqPremium .match-model-signals .dialog-signal{border-color:rgba(77,151,128,.13)!important}
+body#blinqPremium .match-intelligence-status{border-color:rgba(74,165,136,.20)!important;background:rgba(5,26,21,.86)!important}
+body#blinqPremium .dialog-meta{display:none!important}
+
+body#blinqPremium .match-detail-lock-card{min-height:250px!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:14px!important;padding:24px!important;border:1px solid rgba(225,176,78,.17)!important;border-radius:13px!important;background:linear-gradient(145deg,rgba(35,29,15,.28),rgba(5,24,20,.82))!important;text-align:left!important}
+body#blinqPremium .match-detail-lock-icon{display:grid!important;place-items:center!important;width:42px!important;height:42px!important;border-radius:12px!important;border:1px solid rgba(225,176,78,.22)!important;background:rgba(225,176,78,.07)!important;font-size:18px!important}
+body#blinqPremium .match-detail-lock-card small{display:block!important;color:#b18c49!important;font-size:7px!important;font-weight:900!important;letter-spacing:.12em!important}
+body#blinqPremium .match-detail-lock-card strong{display:block!important;margin-top:3px!important;color:#e7efeb!important;font-size:15px!important}
+body#blinqPremium .match-detail-lock-card p{margin:5px 0 0!important;color:#c9a35b!important;font-size:10px!important;font-weight:750!important}
+
+body#blinqPremium .hub-detail.is-locked{display:grid!important;grid-template-columns:1fr!important;gap:0!important;align-content:center!important;border-color:rgba(223,175,78,.22)!important;color:#cba65c!important;background:rgba(89,67,25,.10)!important}
+body#blinqPremium .hub-detail.is-locked small{display:block!important;margin-top:1px!important;color:#8b7448!important;font-size:5.7px!important;font-weight:850!important;letter-spacing:.08em!important;line-height:1!important}
+
+/* Simple match-detail controls at the bottom of Admin → Zobrazenie. */
+body#blinqPremium.blinq-admin .admin-detail-access-card{margin-top:14px!important;padding:16px!important;border:1px solid rgba(80,174,142,.20)!important;border-radius:13px!important;background:rgba(5,24,20,.72)!important;box-shadow:none!important}
+body#blinqPremium.blinq-admin .admin-detail-access-card header small{color:#4be3a3!important;font-size:7px!important;font-weight:900!important;letter-spacing:.12em!important}
+body#blinqPremium.blinq-admin .admin-detail-access-card header h3{margin:3px 0 2px!important;color:#edf7f3!important;font-size:15px!important}
+body#blinqPremium.blinq-admin .admin-detail-access-card header p{margin:0!important;color:#79938a!important;font-size:9px!important;line-height:1.45!important}
+body#blinqPremium.blinq-admin .admin-detail-plan-grid{display:flex!important;flex-wrap:wrap!important;gap:7px!important;margin-top:13px!important}
+body#blinqPremium.blinq-admin .admin-detail-plan-check{display:flex!important;align-items:center!important;gap:7px!important;min-height:32px!important;padding:0 10px!important;border:1px solid rgba(87,159,136,.17)!important;border-radius:9px!important;background:rgba(255,255,255,.015)!important;color:#cfe0da!important;font-size:9px!important;font-weight:750!important}
+body#blinqPremium.blinq-admin .admin-detail-plan-check input{accent-color:#43eda4!important}
+body#blinqPremium.blinq-admin .admin-detail-section-grid{display:grid!important;grid-template-columns:1.2fr repeat(3,minmax(130px,1fr))!important;align-items:end!important;gap:9px!important;margin-top:12px!important;padding-top:12px!important;border-top:1px solid rgba(83,151,130,.12)!important}
+body#blinqPremium.blinq-admin .admin-detail-section-grid>strong{align-self:center!important;color:#9bb0a9!important;font-size:9px!important}
+body#blinqPremium.blinq-admin .admin-detail-section-grid label{display:grid!important;gap:5px!important;color:#789088!important;font-size:8px!important}
+body#blinqPremium.blinq-admin .admin-detail-section-grid select{height:32px!important;border:1px solid rgba(83,151,130,.18)!important;border-radius:8px!important;background:#061c17!important;color:#d8e8e2!important;font-size:9px!important}
+body#blinqPremium.blinq-admin .admin-detail-help{display:block!important;margin-top:10px!important;color:#607a71!important;font-size:8px!important;line-height:1.45!important}
+
+@media(max-width:760px){
+  body#blinqPremium .footer-system-status{flex-wrap:wrap!important;gap:6px 8px!important}
+  body#blinqPremium .footer-system-divider{display:none!important}
+  body#blinqPremium .footer-system-status small{width:100%!important;padding-left:17px!important}
+  body#blinqPremium.blinq-admin .admin-detail-section-grid{grid-template-columns:1fr!important}
+  body#blinqPremium .match-detail-tabs button small{font-size:5.5px!important}
+}
