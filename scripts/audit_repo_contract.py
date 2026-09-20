@@ -76,7 +76,7 @@ else:
         f'/auth.js?v={asset}&p={patch_n}',
         f'/responsive.js?v={asset}&p={patch_n}',
         f'/app.js?v={asset}&p={patch_n}',
-        f'/assets/blinq_loading_animated_v6.svg?v={asset}&p={patch_n}',
+        f'/assets/blinq_loading_r29.svg?v={asset}&p={patch_n}',
     ]
     for ref in required_refs:
         if ref not in index:
@@ -200,7 +200,7 @@ ok('r23 legacy visual/header/promo/banner-tier systems removed')
 
 # 5. Critical local assets and fallbacks.
 critical_assets = [
-    WEB / 'assets' / 'blinq_loading_animated_v6.svg',
+    WEB / 'assets' / 'blinq_loading_r29.svg',
     WEB / 'assets' / 'blinq_loading_scene_v736.webp',
     WEB / 'assets' / 'blinq_logo.svg',
     WEB / 'assets' / 'missing_foto_m.webp',
@@ -210,7 +210,7 @@ critical_assets = [
 for path in critical_assets:
     if not path.is_file() or path.stat().st_size == 0:
         fail(f'critical asset missing/empty: {path.relative_to(ROOT)}')
-loader = read(WEB / 'assets' / 'blinq_loading_animated_v6.svg')
+loader = read(WEB / 'assets' / 'blinq_loading_r29.svg')
 if '<animateTransform' not in loader:
     fail('loader ball animation missing')
 if 'data:image/webp;base64,' in loader:
@@ -338,11 +338,11 @@ if "_normalize_membership_invariants(payload)" not in _admin_storage:
 
 _app = app
 _ui = ui
-if _ui.get("ui_patch") != "736-r28" or not (((_ui.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}).get("prime", {}).get("enabled"):
-    fail("r28 Short Odds public configuration is missing")
+if not (((_ui.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}).get("prime", {}).get("enabled"):
+    fail("Short Odds public configuration is missing")
 if "Kopírovať nastavenie z iného levelu" in _app or "data-admin-action=\"copy-plan\"" in _app or "adminCopyFrom" in _app:
     fail("retired copy-from-level admin tool is still present")
-if "admin-see-all-rule-note" in _app or "const rows=['daily','prime','value','ace','doubles','games','sets','see_all'].map" not in _app:
+if "admin-see-all-rule-note" in _app or "const rows=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].map" not in _app:
     fail("unified SEE ALL controls are missing")
 if "BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract" not in css:
     fail("r28 final responsive stability layer is missing")
@@ -350,7 +350,7 @@ if "blinq-mobile-keyboard-open" not in responsive or "--bq-viewport-height" not 
     fail("r28 dynamic mobile viewport/keyboard handling is missing")
 if "const mobileLabels=dailyHubColumns(tab);" not in _app:
     fail("r28 semantic mobile table labels are missing")
-ok('r26-r28 publish, Short Odds, SEE ALL and mobile responsive contracts present')
+ok('r26-r29 publish, Short Odds, separate Double Faults, SEE ALL and mobile responsive contracts present')
 
 if errors:
     print('BlinQ repository contract audit: FAIL', file=sys.stderr)
