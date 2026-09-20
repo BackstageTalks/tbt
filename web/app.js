@@ -2154,7 +2154,7 @@
     });
     return tags;
   }
-  function isProjectionPublication(publication){return publication?.price_status==='projection_only'||['aces','double_faults'].includes(String(publication?.market||''));}
+  function isProjectionPublication(publication){return publication?.price_status==='projection_only'||['aces','double_faults','sets','games'].includes(String(publication?.market||''));}
   function publicationMatchesResultCategory(publication,category='all'){
     if(category==='all')return true;
     if(category==='sg')return ['sets','games'].includes(String(publication?.section||''));
@@ -2283,7 +2283,7 @@
     const pages=Math.max(1,Math.ceil(entries.length/pageSize));
     state.resultsPage=Math.max(0,Math.min(Number(state.resultsPage)||0,pages-1));
     const startIndex=state.resultsPage*pageSize,endIndex=Math.min(entries.length,startIndex+pageSize);
-    const projectionOnly=category==='ace'||category==='double_faults';
+    const projectionOnly=['ace','double_faults','sets','games','sg'].includes(category);
     const body=entries.slice(startIndex,endIndex).map(({row:r,publication})=>{
       const p1=r.player1||{},p2=r.player2||{},outcome=publicationOutcome(publication),projection=isProjectionPublication(publication);
       const pickId=publication?.selection_id,pickName=publication?.selection||(pickId===p1.id?p1.name:pickId===p2.id?p2.name:'—');
