@@ -8,8 +8,8 @@ RELEASE = json.loads((ROOT / "web" / "release.json").read_text(encoding="utf-8")
 
 
 def test_r29_release_identity_and_exact_public_labels():
-    assert UI["ui_patch"] == "736-r29"
-    assert RELEASE["patch"] == "736-r29"
+    assert UI["ui_patch"] == "736-r30"
+    assert RELEASE["patch"] == "736-r30"
     assert "ESÁ / DVOJCHYBY" in APP
     assert "ŠTVORHRA" in APP
     assert UI["dashboard"]["daily_hub"]["tabs"]["ace"]["label"] == "Esá / dvojchyby"

@@ -15,4 +15,9 @@ def test_esa_detail_is_projection_specific_and_hides_missing_stats():
     assert '.ace-detail-grid' in CSS
 
 def test_esa_tab_has_no_forced_detail_column():
-    assert "if(tab==='ace')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];" in APP
+    assert "if(tab==='ace')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA',''];" in APP
+
+
+def test_esa_detail_action_is_membership_gated():
+    assert 'predictionDetailButton' in APP
+    assert 'ensurePredictionDetailAccess' in APP

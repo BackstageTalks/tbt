@@ -2194,7 +2194,8 @@
             }
           }
         }
-      }
+      },
+      "detail_min_level": "rookie"
     }
   },
   "ui_revision": "7.3.6",
@@ -2353,7 +2354,7 @@
       }
     }
   },
-  "ui_patch": "736-r29",
+  "ui_patch": "736-r30",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,
