@@ -8,6 +8,7 @@ import logging
 import json
 import os
 import time
+import smtplib
 
 import azure.functions as func
 
@@ -24,6 +25,7 @@ from tbt.services.auth import (
     request_authorization,
     update_firebase_profile,
     verify_user,
+    firebase_get_user_by_email,
 )
 from tbt.services.admin_accounts import (
     delete_user_account,
@@ -82,6 +84,7 @@ from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
     attach_second_set_odds,
 )
+from tbt.services.auth_email import send_blinq_action_email
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
@@ -248,6 +251,54 @@ def auth_config(req):
             "auth_domain": f"{settings.firebase_project_id}.firebaseapp.com",
         })
     return response(payload)
+
+
+@app.route(route="v1/auth/email", methods=["POST"])
+def auth_email(req):
+    """Send BlinQ-branded Firebase verification or password-reset e-mail."""
+    try:
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        if not isinstance(payload, dict):
+            return response({"error": "invalid_json"}, 400)
+        kind = str(payload.get("type") or "").strip().lower()
+        if kind not in {"verify", "reset"}:
+            return response({"error": "invalid_email_action"}, 400)
+
+        if kind == "verify":
+            user = _verified_user(req)
+            if not user:
+                return response({"error": "unauthorized"}, 401)
+            if is_suspended(user):
+                return response({"error": "account_suspended"}, 403)
+            recipient = str(user.get("email") or "").strip().lower()
+            requested = str(payload.get("email") or recipient).strip().lower()
+            if not recipient or requested != recipient:
+                return response({"error": "email_mismatch"}, 403)
+            if bool(user.get("email_verified", False)):
+                return response({"ok": True, "accepted": True, "already_verified": True})
+            send_blinq_action_email(settings, recipient, "verify")
+            return response({"ok": True, "accepted": True})
+
+        recipient = str(payload.get("email") or "").strip().lower()
+        if not recipient or "@" not in recipient or len(recipient) > 320:
+            return response({"error": "invalid_email"}, 400)
+        # Password reset must not reveal whether an address exists.  We still
+        # use Firebase Admin for the lookup so no reset e-mail is sent to an
+        # unknown account, but the public response is identical either way.
+        existing = firebase_get_user_by_email(settings, recipient)
+        if existing is not None:
+            send_blinq_action_email(settings, recipient, "reset")
+        return response({"ok": True, "accepted": True})
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+    except (RuntimeError, OSError, smtplib.SMTPException):
+        logging.exception("BlinQ auth e-mail delivery failed")
+        return response({"error": "email_delivery_unavailable"}, 503)
 
 
 @app.route(route="v1/auth/me", methods=["GET"])

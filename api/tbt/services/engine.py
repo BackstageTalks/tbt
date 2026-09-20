@@ -616,7 +616,7 @@ def betting_performance(results):
 
     sections = {}
     for section in ("top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"):
-        section_entries = _dedupe_result_publications([(row, p) for row, p in entries if p.get("section") == section])
+        section_entries = [(row, p) for row, p in canonical_entries if p.get("section") == section]
         sections[section] = _betting_metrics([p for _, p in section_entries])
     markets = {}
     for market in sorted({str(p.get("market") or "") for _, p in entries if p.get("market")}):
@@ -638,6 +638,8 @@ def betting_performance(results):
             "games": _projection_metrics([p for p in projection_publications if p.get("market") == "games"]),
         },
     }
+
+PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 
 PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30)
 PERFORMANCE_BEST_MIN_SAMPLE = 30
@@ -694,12 +696,13 @@ def performance_windows(winner_results, public_results, *, now):
         n = int(model.get("n") or 0) if isinstance(model, dict) else 0
         if isinstance(accuracy, (int, float)) and math.isfinite(float(accuracy)):
             candidates.append((days, float(accuracy), n))
-    if candidates:
-        # The homepage KPI is intentionally the strongest observed accuracy from
-        # exactly the five requested rolling windows (3/7/10/14/30 days).
-        # Sample size is only a tie-breaker and is not rendered on the card.
-        best_days, best_accuracy, best_n = max(candidates, key=lambda item: (item[1], item[2], -item[0]))
-        mode = "best_accuracy_of_requested_windows"
+    eligible = [item for item in candidates if item[2] >= PERFORMANCE_BEST_MIN_SAMPLE]
+    if eligible:
+        best_days, best_accuracy, best_n = max(eligible, key=lambda item: (item[1], item[2], -item[0]))
+        mode = "best_accuracy_min_sample"
+    elif candidates:
+        best_days, best_accuracy, best_n = max(candidates, key=lambda item: (item[2], item[1], -item[0]))
+        mode = "largest_available_sample"
     else:
         best_days = best_accuracy = best_n = None
         mode = "no_settled_model_results"
@@ -871,93 +874,6 @@ def reconcile_ledger(ledger, predictions, history, now=None):
 
 
 
-
-_RESULT_ROW_FIELDS = (
-    # Keep only fields consumed by the public Results UI. The immutable private
-    # ledger remains the source of truth for audit/rebuilds.
-    "event_id", "scheduled_at", "tour", "surface", "tournament",
-    "competition", "tournament_id", "unique_tournament_id",
-    "tournament_logo_id", "venue_city", "tournament_city",
-    "venue_country", "tournament_country", "country_name",
-    "venue_country_code", "tournament_country_code", "country_code",
-    "round", "prediction_family",
-)
-
-_RESULT_PUBLICATION_FIELDS = (
-    "section", "market", "selection", "selection_id", "odds",
-    "model_probability", "issued_at", "price_status", "projection",
-    "projection_scope", "projection_metric", "data_depth", "result",
-)
-
-
-def _compact_public_result_row(source):
-    """Return the immutable Results presentation subset.
-
-    The private ledger keeps the full prediction/features for audit and rebuilds.
-    The public serving feed only needs identity, display metadata and the issued
-    publication snapshots. Keeping thousands of full training-feature rows in
-    feed.json caused the all-history rebuild to exceed the 10 MB serving cap.
-    """
-    row = {
-        field: deepcopy(source[field])
-        for field in _RESULT_ROW_FIELDS
-        if field in source and source[field] is not None
-    }
-    for side in ("player1", "player2"):
-        player = source.get(side)
-        if isinstance(player, dict):
-            compact_player = {}
-            for field in ("id", "name"):
-                if player.get(field) is not None:
-                    compact_player[field] = deepcopy(player[field])
-            country = (
-                player.get("country_code")
-                or player.get("country_code2")
-                or player.get("country_code3")
-            )
-            if country:
-                compact_player["country_code"] = deepcopy(country)
-            gender = player.get("gender") or player.get("sex")
-            if gender:
-                compact_player["gender"] = deepcopy(gender)
-            row[side] = compact_player
-
-    publications = []
-    for publication in source.get("market_publications", []) or []:
-        if not isinstance(publication, dict):
-            continue
-        compact_publication = {
-            field: deepcopy(publication[field])
-            for field in _RESULT_PUBLICATION_FIELDS
-            if field in publication and publication[field] is not None
-        }
-        result = compact_publication.get("result")
-        if isinstance(result, dict):
-            compact_publication["result"] = {
-                field: deepcopy(result[field])
-                for field in (
-                    "correct", "status", "outcome", "settlement", "result",
-                    "void", "is_void", "reason", "void_reason",
-                    "settlement_reason", "profit_units", "staked_units",
-                    "actual_count", "opponent_actual_count", "data_depth",
-                )
-                if field in result and result[field] is not None
-            }
-        publications.append(compact_publication)
-    row["market_publications"] = publications
-
-    result = source.get("result")
-    if isinstance(result, dict):
-        row["result"] = {
-            field: deepcopy(result[field])
-            for field in (
-                "winner_id", "correct", "settled_at", "scheduled_at",
-                "corrected_at", "status", "outcome", "reason",
-            )
-            if field in result and result[field] is not None
-        }
-    return row
-
 def serving_feed(ledger, model, history, report, upcoming, now=None):
     now = now or datetime.now(timezone.utc)
     future = {event_id(m) for m in upcoming if m.scheduled_at > now
@@ -1046,6 +962,22 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
         row["market_publications"] = publications
         results.append(row)
 
+    # The public Results page is intentionally narrower than the internal model
+    # ledger. Only predictions that were actually published in a named BlinQ
+    # product category are exposed. Legacy/model-only winner rows stay available
+    # to model-quality calculations but never inflate TOP / Short Odds / Value
+    # or the "all published" Results table.
+    public_results = []
+    for row in results:
+        publications = [
+            deepcopy(p) for p in row.get("market_publications", []) or []
+            if isinstance(p, dict) and str(p.get("section") or "").strip().lower() in PUBLIC_RESULT_SECTIONS
+        ]
+        if publications:
+            copy = deepcopy(row)
+            copy["market_publications"] = publications
+            public_results.append(copy)
+
     # Model-success KPIs count only match-winner predictions that themselves have
     # immutable issuance evidence. A row published solely for an Aces/DF/S/G
     # projection must not silently enter winner-model accuracy. Legacy row-level
@@ -1064,18 +996,15 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
         'history_band': r.get('quality', {}).get('history_band', 'unknown'),
         'surface_history_band': r.get('quality', {}).get('surface_history_band', 'unknown')} for r in winner_results])
     quality_report = subgroup_report(quality_frame, [r['player1']['probability'] for r in winner_results]) if winner_results else {}
-    betting = betting_performance(results)
-    rolling_performance, rolling_summary = performance_windows(winner_results, results, now=now)
+    betting = betting_performance(public_results)
+    rolling_performance, rolling_summary = performance_windows(winner_results, public_results, now=now)
     # Do not rely on incidental ledger ordering. Recent settled rows must never
     # disappear from the 1000-row public window after a merge/migration.
-    result_rows = [
-        _compact_public_result_row(row)
-        for row in sorted(
-            results,
-            key=lambda row: datetime.fromisoformat(str(row.get("scheduled_at") or "1970-01-01T00:00:00+00:00").replace("Z", "+00:00")),
-            reverse=True,
-        )
-    ]
+    result_rows = sorted(
+        public_results,
+        key=lambda row: datetime.fromisoformat(str(row.get("scheduled_at") or "1970-01-01T00:00:00+00:00").replace("Z", "+00:00")),
+        reverse=True,
+    )[:1000]
     return {"schema": 1, "ready": True, "generated_at": now.isoformat(),
             "model": {"version": model.version, "report": report, "objective": "accuracy"},
             "upcoming": [r for r in ledger if r["event_id"] in future and r.get("result") is None
@@ -1091,7 +1020,7 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
             "dashboard_model_success": {
                 "accuracy": rolling_summary.get("best_accuracy"),
             },
-            "results_meta": {"settled_total": len(results), "returned": len(result_rows), "limit": 1000,
+            "results_meta": {"settled_total": len(public_results), "returned": len(result_rows), "limit": 1000,
                              "history_cutoff": None,
                              "history_reset": False,
                              "history_policy": "all_actually_issued_settled"},

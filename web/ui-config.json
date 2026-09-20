@@ -700,7 +700,7 @@
         "route": "",
         "plan_id": "",
         "effect": "fade-up",
-        "site_background_url": "/assets/blinq_background.webp"
+        "site_background_url": "/assets/blinq_page_background.webp"
       },
       "watermark": {
         "enabled": false,
@@ -966,7 +966,7 @@
       "standard_probability": 0.76,
       "target_count": 10,
       "presentation_preview_limit": 10,
-      "cascade": "68% / 1.50 core; if fewer than 5 after Value priority, relax stepwise and stop immediately at 5; hard floor 60% / 1.45",
+      "cascade": "68% / 1.50 core; if fewer than 5 after Value priority, relax probability only to 67% / 66% / 65%; odds always stay >=1.50",
       "confidence_tiers": [
         0.8,
         0.78,
@@ -977,9 +977,9 @@
         0.68
       ],
       "minimum_dashboard_count": 5,
-      "fallback_min_probability": 0.6,
+      "fallback_min_probability": 0.65,
       "fallback_only_if_core_count_below": 5,
-      "fallback_min_odds": 1.45,
+      "fallback_min_odds": 1.5,
       "dynamic_fallback_tiers": [
         {
           "min_probability": 0.67,
@@ -987,31 +987,11 @@
         },
         {
           "min_probability": 0.66,
-          "min_odds": 1.49
+          "min_odds": 1.5
         },
         {
           "min_probability": 0.65,
-          "min_odds": 1.49
-        },
-        {
-          "min_probability": 0.64,
-          "min_odds": 1.48
-        },
-        {
-          "min_probability": 0.63,
-          "min_odds": 1.48
-        },
-        {
-          "min_probability": 0.62,
-          "min_odds": 1.47
-        },
-        {
-          "min_probability": 0.61,
-          "min_odds": 1.46
-        },
-        {
-          "min_probability": 0.6,
-          "min_odds": 1.45
+          "min_odds": 1.5
         }
       ]
     },
@@ -1074,7 +1054,7 @@
   },
   "assets": {
     "favicon": "/assets/blinq_favi.png",
-    "background": "/assets/blinq_background.webp",
+    "background": "/assets/blinq_page_background.webp",
     "player_fallback": {
       "atp": "/assets/missing_foto_m.webp",
       "wta": "/assets/missing_foto_w.webp"
@@ -2281,6 +2261,14 @@
         "radar": "elite",
         "history": "legend"
       }
+    },
+    "results_history_window": {
+      "trial": "24h",
+      "rookie": "24h",
+      "pro": "48h",
+      "elite": "all",
+      "legend": "all",
+      "goat": "all"
     }
   },
   "ui_revision": "7.3.6",
@@ -2351,7 +2339,8 @@
       "elite",
       "legend",
       "goat"
-    ]
+    ],
+    "info_min_level": "rookie"
   },
   "asset_revision": 7360,
   "ui_copy": {
@@ -2439,7 +2428,7 @@
       }
     }
   },
-  "ui_patch": "736-r31",
+  "ui_patch": "736-r32",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,

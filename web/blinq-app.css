@@ -5309,7 +5309,7 @@ body#blinqPremium .boot-copy-eyebrow{padding:2px 0 10px;color:#7d9b90;font-size:
 body#blinqPremium .boot-copy-status{padding:11px 0 3px;color:#819a91;font-size:9px;font-weight:650;letter-spacing:.015em}
 
 /* LOGIN — same background family + subtle watermark. Title deliberately quieter. */
-body#blinqPremium .auth-dialog[open]{isolation:isolate!important;background-image:linear-gradient(90deg,rgba(1,12,13,.94),rgba(1,18,17,.84),rgba(1,10,12,.95)),url("/assets/blinq_background.webp")!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important}
+body#blinqPremium .auth-dialog[open]{isolation:isolate!important;background-image:linear-gradient(90deg,rgba(1,12,13,.94),rgba(1,18,17,.84),rgba(1,10,12,.95)),url("/assets/blinq_page_background.webp")!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important}
 body#blinqPremium .auth-dialog[open]::after{content:"";position:fixed;right:42px;bottom:34px;width:150px;height:58px;background:url("/assets/blinq_logo.svg") center/contain no-repeat;opacity:.055;filter:grayscale(1);pointer-events:none;z-index:0}
 body#blinqPremium .auth-card{z-index:1!important;background:linear-gradient(160deg,rgba(5,29,36,.955),rgba(3,18,24,.98))!important;border-color:rgba(55,151,145,.36)!important;box-shadow:0 32px 100px rgba(0,0,0,.50),0 0 55px rgba(47,229,158,.04)!important}
 body#blinqPremium .auth-copy h2{max-width:320px!important;margin:7px auto 18px!important;color:#a9bbb5!important;font-size:18px!important;line-height:1.22!important;letter-spacing:-.018em!important;font-weight:680!important;text-align:center!important}
@@ -5365,7 +5365,7 @@ body#blinqPremium .boot-copy-eyebrow{color:#91aaa0!important;font-size:9px!impor
 body#blinqPremium .boot-copy-status{color:#a6bbb3!important;font-size:10px!important}
 
 /* Login belongs to the same visual system as the dashboard. */
-body#blinqPremium .auth-dialog[open]{background-image:linear-gradient(90deg,rgba(1,11,12,.80),rgba(2,23,20,.58),rgba(1,10,12,.82)),url("/assets/blinq_background.webp")!important;background-size:cover!important;background-position:center!important}
+body#blinqPremium .auth-dialog[open]{background-image:linear-gradient(90deg,rgba(1,11,12,.80),rgba(2,23,20,.58),rgba(1,10,12,.82)),url("/assets/blinq_page_background.webp")!important;background-size:cover!important;background-position:center!important}
 body#blinqPremium .auth-dialog[open]::after{background-image:url("/assets/blinq_logo.svg")!important;background-position:center!important;background-size:contain!important;background-repeat:no-repeat!important;right:38px!important;bottom:30px!important;width:170px!important;height:66px!important;opacity:.075!important;filter:grayscale(1) brightness(1.35)!important}
 body#blinqPremium .auth-card{background:linear-gradient(155deg,rgba(5,31,35,.965),rgba(3,19,24,.98))!important;border:1px solid rgba(65,188,163,.34)!important;box-shadow:0 34px 105px rgba(0,0,0,.50),0 0 70px rgba(53,231,164,.045)!important}
 body#blinqPremium .auth-copy{margin:16px 0 18px!important;text-align:center!important}
@@ -6305,7 +6305,7 @@ body#blinqPremium .boot-copy-eyebrow,body#blinqPremium .boot-copy-status{display
   body#blinqPremium .boot-splash.boot-splash-tennis::before,body#blinqPremium .boot-splash.boot-splash-tennis::after,body#blinqPremium .boot-tennis-card.boot-tennis-card-source::before{animation:none!important;}
 }
 
-/* BlinQ runtime patch 7.3.6-r31: corrected BlinQ visual/detail/live closeout. */
+/* BlinQ runtime patch 7.3.6-r32: corrected BlinQ visual/detail/live closeout. */
 
 /* r31 · BlinQ visual closeout: green detail system, clean active tabs, LIVE heartbeat footer */
 @keyframes blinqStatusBreath{
@@ -6332,33 +6332,7 @@ body#blinqPremium .reference-topbar{border-color:rgba(79,181,145,.16)!important;
 body#blinqPremium .reference-navigation a.active{color:#f0f8f5!important}
 body#blinqPremium .reference-navigation a.active::after{background:#45eda5!important;box-shadow:0 0 12px rgba(69,237,165,.32)!important}
 
-/* Match detail: remove purple language and use restrained BlinQ green/teal. */
-body#blinqPremium .dialog-eyebrow{color:#49e7a4!important}
-body#blinqPremium .match-detail-pick{border-color:rgba(66,199,151,.28)!important;background:linear-gradient(180deg,rgba(5,31,25,.96),rgba(5,24,21,.98))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.018)!important}
-body#blinqPremium .match-detail-pick small{color:#52e8a8!important}
-body#blinqPremium .match-detail-tabs{border-color:rgba(72,184,145,.24)!important;background:rgba(4,24,20,.9)!important;box-shadow:none!important}
-body#blinqPremium .match-detail-tabs button{display:grid!important;place-items:center!important;align-content:center!important;gap:2px!important;color:#8aa198!important;border:1px solid transparent!important;background:transparent!important;box-shadow:none!important}
-body#blinqPremium .match-detail-tabs button span{white-space:nowrap!important}
-body#blinqPremium .match-detail-tabs button small{font-size:6px!important;color:#69837a!important;font-weight:850!important;letter-spacing:.08em!important;text-transform:uppercase!important}
-body#blinqPremium .match-detail-tabs button:hover{background:rgba(64,212,155,.035)!important;color:#d8e8e2!important}
-body#blinqPremium .match-detail-tabs button.active{color:#f3faf7!important;background:linear-gradient(180deg,rgba(31,112,82,.30),rgba(18,71,54,.24))!important;border-color:rgba(70,229,165,.22)!important;box-shadow:inset 0 -2px 0 #43eda4!important}
-body#blinqPremium .match-detail-tabs button.is-locked{color:#698179!important;background:rgba(255,255,255,.009)!important}
-body#blinqPremium .match-detail-tabs button.is-locked:hover{border-color:rgba(227,178,81,.16)!important;color:#a8bbb4!important}
-body#blinqPremium .insight-player-card{border-color:rgba(75,167,138,.20)!important;background:linear-gradient(180deg,rgba(7,29,24,.96),rgba(5,23,19,.98))!important;box-shadow:none!important}
-body#blinqPremium .insight-player-card.picked{border-color:rgba(67,237,164,.42)!important;box-shadow:inset 0 0 0 1px rgba(67,237,164,.035)!important}
-body#blinqPremium .insight-player-metrics>span,
-body#blinqPremium .match-history-grid span{border-color:rgba(77,157,132,.16)!important;background:rgba(3,19,16,.62)!important}
-body#blinqPremium .dialog-section,
-body#blinqPremium .match-stat-table,
-body#blinqPremium .match-history-wrap{border-color:rgba(75,162,134,.20)!important;background:rgba(5,24,20,.88)!important}
-body#blinqPremium .match-stat-head{background:rgba(22,71,56,.20)!important;color:#87a69b!important}
-body#blinqPremium .match-stat-row{border-bottom-color:rgba(76,151,128,.14)!important}
-body#blinqPremium .match-history-card+.match-history-card{border-color:rgba(76,151,128,.14)!important}
-body#blinqPremium .match-history-title span{color:#51dfa3!important}
-body#blinqPremium .legend-dot.player-2{background:#5cb6c5!important}
-body#blinqPremium .insight-radar-area.player-2{fill:rgba(92,182,197,.14)!important;stroke:#5cb6c5!important}
-body#blinqPremium .match-model-signals .dialog-signal{border-color:rgba(77,151,128,.13)!important}
-body#blinqPremium .match-intelligence-status{border-color:rgba(74,165,136,.20)!important;background:rgba(5,26,21,.86)!important}
+/* Match detail keeps the established r30 visual language; only readability/access controls are patched here. */
 body#blinqPremium .dialog-meta{display:none!important}
 
 body#blinqPremium .match-detail-lock-card{min-height:250px!important;display:flex!important;align-items:center!important;justify-content:center!important;gap:14px!important;padding:24px!important;border:1px solid rgba(225,176,78,.17)!important;border-radius:13px!important;background:linear-gradient(145deg,rgba(35,29,15,.28),rgba(5,24,20,.82))!important;text-align:left!important}
@@ -6391,3 +6365,38 @@ body#blinqPremium.blinq-admin .admin-detail-help{display:block!important;margin-
   body#blinqPremium.blinq-admin .admin-detail-section-grid{grid-template-columns:1fr!important}
   body#blinqPremium .match-detail-tabs button small{font-size:5.5px!important}
 }
+
+
+/* BlinQ 7.3.6-r32 final UX closeout -------------------------------------- */
+/* Preserve the established detail-card visual; improve only lower-panel readability. */
+body#blinqPremium .match-overview-context .rail-section-title h3{font-size:15px!important;line-height:1.2!important}
+body#blinqPremium .match-overview-context .rail-section-title small,
+body#blinqPremium .match-overview-context .rail-section-title span{font-size:7.6px!important;line-height:1.35!important}
+body#blinqPremium .match-overview-context .context-card{padding:12px!important}
+body#blinqPremium .match-overview-context .context-card>header strong{font-size:11.5px!important;line-height:1.25!important}
+body#blinqPremium .match-overview-context .context-card>header small{font-size:6.8px!important;line-height:1.25!important}
+body#blinqPremium .match-overview-context .context-card .motivation-score{font-size:8.5px!important;padding:4px 7px!important}
+body#blinqPremium .match-overview-context .context-signal-grid{gap:7px!important;margin-top:10px!important}
+body#blinqPremium .match-overview-context .context-signal{padding:8px!important}
+body#blinqPremium .match-overview-context .context-signal small{font-size:7px!important;line-height:1.25!important}
+body#blinqPremium .match-overview-context .context-signal strong{font-size:10px!important;line-height:1.28!important;margin-top:3px!important}
+body#blinqPremium .match-overview-context .context-signal em{font-size:6.6px!important;line-height:1.3!important;margin-top:2px!important}
+
+/* Locked Results stays visible as a premium card instead of disappearing. */
+body#blinqPremium .results-access-lock{min-height:300px;display:flex;align-items:center;justify-content:center;gap:16px;padding:28px;border:1px solid rgba(225,176,78,.20);border-radius:15px;background:linear-gradient(145deg,rgba(43,34,14,.28),rgba(5,21,19,.90));cursor:pointer}
+body#blinqPremium .results-access-lock>span{display:grid;place-items:center;width:48px;height:48px;flex:0 0 auto;border:1px solid rgba(225,176,78,.26);border-radius:13px;background:rgba(225,176,78,.075);font-size:21px}
+body#blinqPremium .results-access-lock small{display:block;color:#b99653;font-size:7px;font-weight:900;letter-spacing:.13em}
+body#blinqPremium .results-access-lock strong{display:block;margin-top:4px;color:#edf5f2;font-size:19px}
+body#blinqPremium .results-access-lock p{margin:6px 0 0;color:#d0ac64;font-size:11px;font-weight:750}
+
+/* Admin level controls: results history + independent INFO/LIVE gates. */
+body#blinqPremium.blinq-admin .admin-results-window-grid{display:grid;grid-template-columns:1.2fr repeat(5,minmax(92px,1fr));align-items:end;gap:9px;margin-top:12px;padding-top:12px;border-top:1px solid rgba(83,151,130,.12)}
+body#blinqPremium.blinq-admin .admin-results-window-grid>strong{align-self:center;color:#9bb0a9;font-size:9px}
+body#blinqPremium.blinq-admin .admin-results-window-grid label{display:grid;gap:5px;color:#789088;font-size:8px}
+body#blinqPremium.blinq-admin .admin-results-window-grid select{height:32px;border:1px solid rgba(83,151,130,.18);border-radius:8px;background:#061c17;color:#d8e8e2;font-size:9px;padding:0 8px}
+body#blinqPremium.blinq-admin .admin-notification-access-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+body#blinqPremium .insight-bell.is-access-locked,
+body#blinqPremium .insight-shortcut.is-access-locked{opacity:1!important;color:#c4a362!important;border-color:rgba(224,177,82,.25)!important}
+
+@media(max-width:980px){body#blinqPremium.blinq-admin .admin-results-window-grid{grid-template-columns:repeat(3,minmax(110px,1fr))}body#blinqPremium.blinq-admin .admin-results-window-grid>strong{grid-column:1/-1}}
+@media(max-width:760px){body#blinqPremium.blinq-admin .admin-results-window-grid,body#blinqPremium.blinq-admin .admin-notification-access-grid{grid-template-columns:1fr}body#blinqPremium .results-access-lock{min-height:220px;padding:20px}}

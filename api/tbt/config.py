@@ -33,6 +33,7 @@ class Settings:
     blinq_smtp_password: str = os.getenv("BLINQ_SMTP_PASSWORD", "")
     blinq_smtp_from: str = os.getenv("BLINQ_SMTP_FROM", "").strip()
     blinq_smtp_starttls: bool = _env_bool("BLINQ_SMTP_STARTTLS", True)
+    blinq_public_url: str = os.getenv("BLINQ_PUBLIC_URL", "").strip().rstrip("/")
     blinq_admin_email: str = os.getenv("BLINQ_ADMIN_EMAIL", "").strip()
     model_artifact: str = str(Path(__file__).resolve().parents[1] / "artifacts/model.joblib")
     min_train_matches: int = 2500

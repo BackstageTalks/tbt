@@ -11,22 +11,7 @@ from download_tennis_history import read_json, write_json
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions
 from tbt.services.engine import reconcile_ledger, serving_feed
-from tbt.services.publication import (
-    restore_published_market_snapshots,
-    validate_market_publication_candidate,
-    validate_publication_candidate,
-)
-
-
-def _projection_counts(feed: dict) -> dict[str, int]:
-    ace_rows = feed.get("ace_picks") if isinstance(feed.get("ace_picks"), list) else []
-    sg_rows = feed.get("sg_picks") if isinstance(feed.get("sg_picks"), list) else []
-    return {
-        "aces": sum(1 for row in ace_rows if isinstance(row, dict) and str(row.get("market") or "").lower() == "aces"),
-        "double_faults": sum(1 for row in ace_rows if isinstance(row, dict) and str(row.get("market") or "").lower() == "double_faults"),
-        "sets": sum(1 for row in sg_rows if isinstance(row, dict) and str(row.get("market") or "").lower() == "sets"),
-        "games": sum(1 for row in sg_rows if isinstance(row, dict) and str(row.get("market") or "").lower() == "games"),
-    }
+from tbt.services.publication import validate_publication_candidate, validate_market_publication_candidate
 
 
 def main():
@@ -36,9 +21,6 @@ def main():
     args = parser.parse_args()
 
     cache = ROOT / ".cache/tbt/results-rebuild"
-    report_path = cache / "results_rebuild_report.json"
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-
     history_store = ReleaseStore(args.data_repository, "tbt-data-v1", cache / "history")
     history_store.download(require_bundle_manifest=True)
     history = load_partitions(history_store.directory)
@@ -50,19 +32,6 @@ def main():
     if not isinstance(feed, dict) or not isinstance(ledger, list):
         raise ValueError("Invalid production prediction bundle")
 
-    # Canonicalize the current public offer against immutable issued snapshots
-    # before touching historical settlement. Projection-only cards from legacy
-    # section identities (e.g. pre-split DF or pre-match_total S/G) are omitted
-    # rather than rewriting the ledger. A following refresh recreates them using
-    # the canonical r30 publication identity.
-    projection_before = _projection_counts(feed)
-    feed = restore_published_market_snapshots(feed, ledger)
-    projection_after = _projection_counts(feed)
-    projection_quarantined = {
-        key: max(0, projection_before[key] - projection_after[key])
-        for key in projection_before
-    }
-
     before_rows = int((feed.get("results_meta") or {}).get("settled_total") or len(feed.get("results") or []))
     now = datetime.now(timezone.utc)
     rebuilt_ledger = reconcile_ledger(ledger, [], history, now)
@@ -70,46 +39,34 @@ def main():
     model = SimpleNamespace(version=str(model_meta.get("version") or "production"))
     derived = serving_feed(rebuilt_ledger, model, history, model_meta.get("report") or {}, [], now)
 
-    # Keep the canonical current offer surface. Only settled history and metrics
-    # are rebuilt from immutable issued ledger evidence.
+    # Keep the live/current offer surface exactly as it was. Only settled history
+    # and metrics are rebuilt from immutable issued ledger evidence.
     for key in (
         "results", "performance", "betting_performance", "performance_windows",
         "performance_window_summary", "results_meta", "performance_subgroups", "history",
     ):
         feed[key] = derived[key]
-
     feed["results_rebuild"] = {
-        "schema": 2,
+        "schema": 1,
         "generated_at": now.isoformat(),
         "before_settled_rows": before_rows,
         "after_settled_rows": int(feed["results_meta"]["settled_total"]),
         "ledger_rows": len(rebuilt_ledger),
         "policy": "immutable_issued_evidence_only",
         "fabricated_rows": 0,
-        "projection_cards_before_restore": projection_before,
-        "projection_cards_after_restore": projection_after,
-        "projection_cards_quarantined": projection_quarantined,
-        "status": "validating",
     }
 
-    try:
-        validate_publication_candidate(feed, rebuilt_ledger)
-        if (feed.get("market_selection") or {}).get("publication_schema") == 1:
-            validate_market_publication_candidate(feed, rebuilt_ledger)
-    except Exception as exc:
-        feed["results_rebuild"]["status"] = "validation_failed"
-        feed["results_rebuild"]["error"] = f"{type(exc).__name__}: {exc}"
-        write_json(report_path, feed["results_rebuild"])
-        raise
+    validate_publication_candidate(feed, rebuilt_ledger)
+    if (feed.get("market_selection") or {}).get("publication_schema") == 1:
+        validate_market_publication_candidate(feed, rebuilt_ledger)
 
-    feed["results_rebuild"]["status"] = "validated"
+    report_path = cache / "results_rebuild_report.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     write_json(report_path, feed["results_rebuild"])
-
     if not args.dry_run:
         write_json(pred_store.directory / "ledger.json", rebuilt_ledger)
         write_json(pred_store.directory / "feed.json", feed)
         pred_store.upload_bundle([pred_store.directory / "ledger.json", pred_store.directory / "feed.json"])
-
     print(json.dumps({**feed["results_rebuild"], "dry_run": bool(args.dry_run)}))
 
 

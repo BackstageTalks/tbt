@@ -522,6 +522,13 @@ def validate_ui_config(payload: object) -> dict:
     for section_id in ("statistics", "radar", "history"):
         if str(detail_sections.get(section_id) or "").lower() not in detail_levels:
             raise ValueError(f"Invalid match detail minimum level for {section_id}")
+    results_windows = dashboard.get("results_history_window") or {}
+    allowed_result_windows = {"24h", "48h", "3d", "7d", "14d", "30d", "all"}
+    if not isinstance(results_windows, dict):
+        raise ValueError("Invalid results history configuration")
+    for plan_id in ("trial", "rookie", "pro", "elite", "legend", "goat"):
+        if str(results_windows.get(plan_id) or "").lower() not in allowed_result_windows:
+            raise ValueError(f"Invalid results history window for {plan_id}")
     daily_hub = dashboard.get("daily_hub") or {}
     if not isinstance(daily_hub, dict) or not isinstance(daily_hub.get("enabled"), bool):
         raise ValueError("Invalid Daily Picks hub configuration")
@@ -569,6 +576,9 @@ def validate_ui_config(payload: object) -> dict:
         live_min = str(notifications.get("live_min_level") or notifications.get("default_min_level") or "elite").lower()
         if live_min not in _INSIGHT_LEVELS:
             raise ValueError("Invalid LIVE minimum membership level")
+        info_min = str(notifications.get("info_min_level") or "rookie").lower()
+        if info_min not in _INSIGHT_LEVELS:
+            raise ValueError("Invalid INFO minimum membership level")
         info_defaults = notifications.get("info_default_levels", list(_INSIGHT_LEVELS))
         if not isinstance(info_defaults, list) or not info_defaults or any(str(level).lower() not in _INSIGHT_LEVELS for level in info_defaults):
             raise ValueError("Invalid INFO default audience")
@@ -883,6 +893,20 @@ def live_min_level(config: dict | None = None) -> str:
 
 def live_alert_levels(config: dict | None = None) -> list[str]:
     return membership_levels_from(live_min_level(config))
+def info_min_level(config: dict | None = None) -> str:
+    runtime = config if isinstance(config, dict) else None
+    if runtime is None:
+        try:
+            runtime = load_runtime_ui_config() or {}
+        except AdminStorageUnavailable:
+            runtime = {}
+    notifications = (runtime.get("notifications") or {}) if isinstance(runtime, dict) else {}
+    level = str(notifications.get("info_min_level") or "rookie").strip().lower()
+    return level if level in _INSIGHT_LEVELS else "rookie"
+
+def info_alert_levels(config: dict | None = None) -> list[str]:
+    return membership_levels_from(info_min_level(config))
+
 _INSIGHT_PRIORITIES = {"normal", "important", "critical"}
 
 
@@ -915,7 +939,7 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
         raise ValueError("Invalid insight type")
     if priority not in _INSIGHT_PRIORITIES:
         raise ValueError("Invalid insight priority")
-    default_levels = live_alert_levels() if insight_type in {"alert", "live_watch", "set2"} else list(_INSIGHT_LEVELS)
+    default_levels = live_alert_levels() if insight_type in {"alert", "live_watch", "set2"} else info_alert_levels()
     raw_levels = payload.get("levels", base.get("levels", default_levels))
     if not isinstance(raw_levels, list):
         raise ValueError("Insight levels must be a list")
@@ -928,15 +952,21 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
             levels.append(level)
     if not levels:
         raise ValueError("Select at least one insight level")
-    # INFO can target any active membership level. LIVE is governed by the
-    # published Admin → Info & LIVE minimum; a manual LIVE item may narrow the
-    # audience, but it may never widen access below that global minimum.
+    # INFO and LIVE each have an independent global minimum configured in
+    # Admin → Info & LIVE. A message may narrow its audience, but it may never
+    # widen access below the corresponding global minimum.
     if insight_type in {"alert", "live_watch", "set2"}:
         allowed_live = set(live_alert_levels())
         invalid_levels = [level for level in levels if level not in allowed_live]
         if invalid_levels:
             required = live_min_level().upper()
             raise ValueError(f"LIVE alerts are available from {required} level")
+    else:
+        allowed_info = set(info_alert_levels())
+        invalid_levels = [level for level in levels if level not in allowed_info]
+        if invalid_levels:
+            required = info_min_level().upper()
+            raise ValueError(f"INFO is available from {required} level")
     link = str(payload.get("link", base.get("link", "")) or "").strip()
     if link and not _valid_destination(link, allow_internal=True):
         raise ValueError("Insight link must use HTTPS or a same-origin path")
@@ -1097,7 +1127,10 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
         if not include_inactive:
             if not item["active"] or (plan and plan not in item["levels"]):
                 continue
-            if plan and str(item.get("type") or "").lower() in {"alert", "live_watch", "set2"} and plan not in set(live_alert_levels()):
+            item_type = str(item.get("type") or "").lower()
+            if plan and item_type in {"alert", "live_watch", "set2"} and plan not in set(live_alert_levels()):
+                continue
+            if plan and item_type not in {"alert", "live_watch", "set2"} and plan not in set(info_alert_levels()):
                 continue
             try:
                 starts = datetime.fromisoformat(item["active_from"]) if item["active_from"] else None

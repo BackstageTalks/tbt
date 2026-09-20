@@ -216,9 +216,14 @@
         body: JSON.stringify(profilePayload),
       });
     }
-    await json(firebaseEndpoint('sendOobCode'), {
+    // Keep the just-created Firebase session until our branded verification
+    // e-mail is accepted. If SMTP is temporarily unavailable the user can retry
+    // via "Resend verification" without creating the account again.
+    replaceSession(data, 'firebase');
+    await json('/api/v1/auth/email', {
       method: 'POST',
-      body: JSON.stringify({requestType: 'VERIFY_EMAIL', idToken: data.idToken}),
+      headers: {'X-Blinq-Access-Token': data.idToken},
+      body: JSON.stringify({type: 'verify', email: String(email || '').trim().toLowerCase()}),
     });
     clear();
     return {verification_required: true, email: String(email || '').trim()};
@@ -232,17 +237,18 @@
     provider();
     const s = await restore();
     if (!s) throw new Error('Sign in once more, then resend the verification email.');
-    await json(firebaseEndpoint('sendOobCode'), {
+    await json('/api/v1/auth/email', {
       method: 'POST',
-      body: JSON.stringify({requestType: 'VERIFY_EMAIL', idToken: s.access_token}),
+      headers: {'X-Blinq-Access-Token': s.access_token},
+      body: JSON.stringify({type: 'verify'}),
     });
     return true;
   }
 
   async function resetFirebase(email) {
-    return json(firebaseEndpoint('sendOobCode'), {
+    return json('/api/v1/auth/email', {
       method: 'POST',
-      body: JSON.stringify({requestType: 'PASSWORD_RESET', email}),
+      body: JSON.stringify({type: 'reset', email}),
     });
   }
   async function reset(email) {

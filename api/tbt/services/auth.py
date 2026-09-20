@@ -153,6 +153,22 @@ def firebase_get_user(cfg, user_id):
         raise AuthUnavailable("Identity service temporarily unavailable") from exc
 
 
+def firebase_get_user_by_email(cfg, email):
+    """Lookup a Firebase user by email without leaking provider exceptions."""
+    normalized = str(email or "").strip().lower()
+    if not normalized or "@" not in normalized or len(normalized) > 320:
+        raise ValueError("Invalid email")
+    _, firebase_auth, _ = _firebase_modules()
+    try:
+        record = firebase_auth.get_user_by_email(normalized, app=firebase_app(cfg))
+        return firebase_user_to_dict(record)
+    except Exception as exc:
+        user_not_found = getattr(firebase_auth, "UserNotFoundError", None)
+        if isinstance(user_not_found, type) and isinstance(exc, user_not_found):
+            return None
+        raise AuthUnavailable("Identity service temporarily unavailable") from exc
+
+
 def _verify_firebase_user(token, cfg):
     _, firebase_auth, _ = _firebase_modules()
     try:

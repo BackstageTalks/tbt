@@ -66,6 +66,37 @@ RESULT_HISTORY_HOURS = {
     "expired": 0,
 }
 
+RESULT_HISTORY_WINDOW_OPTIONS = {
+    "24h": 24,
+    "48h": 48,
+    "3d": 72,
+    "7d": 168,
+    "14d": 336,
+    "30d": 720,
+    "all": None,
+}
+
+def _results_history_hours(ui_config: dict | None, plan: str):
+    if plan == "admin":
+        return None
+    default = RESULT_HISTORY_HOURS.get(plan, 0)
+    if not isinstance(ui_config, dict):
+        return default
+    dashboard = ui_config.get("dashboard") or {}
+    windows = dashboard.get("results_history_window") or {}
+    value = str(windows.get(plan) or (windows.get("rookie") if plan == "trial" else "")).strip().lower()
+    return RESULT_HISTORY_WINDOW_OPTIONS.get(value, default)
+
+def _results_access_allowed(ui_config: dict | None, plan: str) -> bool:
+    if plan == "admin":
+        return True
+    if not isinstance(ui_config, dict):
+        return RESULT_HISTORY_HOURS.get(plan, 0) != 0
+    item = ((ui_config.get("elements") or {}).get("SIDEBAR_RESULTS") or {})
+    access = item.get("access") or {}
+    state = str(access.get(plan) or (access.get("rookie") if plan == "trial" else "active")).strip().lower()
+    return state == "active"
+
 
 def _parse_datetime(value) -> datetime | None:
     if isinstance(value, datetime):
@@ -171,7 +202,7 @@ def _daily_rows(payload: dict) -> list[dict]:
         if ident in seen or ident in value_ids:
             continue
         odds=_row_odds(row)
-        if odds is None or odds < 1.45:
+        if odds is None or odds < 1.50:
             continue
         seen.add(ident)
         out.append(row)
@@ -489,12 +520,13 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
         "min_surface_matches_each": BOARD_MIN_SURFACE_MATCHES,
         "official_prediction": False,
     }
-    history_hours = RESULT_HISTORY_HOURS.get(plan, 0)
+    results_allowed = _results_access_allowed(ui_config, plan)
+    history_hours = _results_history_hours(ui_config, plan) if results_allowed else 0
     return {
         "plan": plan,
         "sections": sections,
-        "results": history_hours != 0,
-        "performance": history_hours is None,
+        "results": bool(results_allowed and history_hours != 0),
+        "performance": bool(results_allowed and history_hours is None),
         "results_history_hours": history_hours,
     }
 

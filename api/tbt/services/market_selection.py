@@ -28,7 +28,7 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME keeps its current short-price fallback. TOP uses a staged daily fallback: start at 68% / 1.50 and relax only until at least five TOP picks exist, never below 60% / 1.45. Value keeps a 60% floor.
+# PRIME keeps its current short-price fallback. TOP uses a staged daily probability fallback: start at 68% and relax only until at least five TOP picks exist, never below 65%. The TOP odds boundary is fixed at >=1.50 and never moves. Value keeps a 60% floor.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
@@ -38,10 +38,9 @@ SECTION_PRIORITY = ("value", "prime", "top_daily")
 PUBLICATION_MIN_PROBABILITY = 0.60
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
-TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.60
+TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65
 TOP_DYNAMIC_FALLBACK_TIERS = (
-    (0.67, 1.50), (0.66, 1.49), (0.65, 1.49), (0.64, 1.48),
-    (0.63, 1.48), (0.62, 1.47), (0.61, 1.46), (0.60, 1.45),
+    (0.67, 1.50), (0.66, 1.50), (0.65, 1.50),
 )
 
 # PRIME: any decimal price below 1.50 (no lower odds bound).
@@ -70,7 +69,7 @@ TOP_MIN_COUNT = 5
 TOP_MIN_DATA_DEPTH = 0.80
 TOP_MIN_SURFACE_MATCHES = 5
 TOP_MIN_ODDS: float | None = 1.50
-TOP_FALLBACK_MIN_ODDS = 1.45
+TOP_FALLBACK_MIN_ODDS = 1.50
 TOP_MIN_EDGE: float | None = None
 TOP_MIN_EXPECTED_VALUE: float | None = None
 TOP_LIMIT: int | None = None
@@ -804,7 +803,7 @@ def _fill_top_dynamic(
     minimum_count: int,
     rank_key,
 ) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
-    """Relax TOP probability/odds in small steps and stop at the first tier reaching the target."""
+    """Relax TOP probability only; the public odds boundary stays fixed at >=1.50."""
     selected = list(core)
     selected.sort(key=rank_key, reverse=True)
     if len(selected) >= int(minimum_count):
@@ -865,9 +864,9 @@ def select_market_sections(
     """Split priced Match Winner predictions by BlinQ Probability and odds.
 
     TOP starts at 68% / 1.50. If fewer than five TOP picks remain after Value
-    priority, the selector relaxes probability/odds stepwise and stops as soon
-    as the target is met, with a hard floor of 60% / 1.45. PRIME keeps its
-    current short-price fallback. Value remains 60%+ with >=1.80 odds. EV/edge never
+    priority, the selector relaxes probability stepwise to a 65% hard floor,
+    while the odds boundary remains fixed at >=1.50. PRIME keeps its current
+    short-price fallback. Value remains 60%+ with >=1.80 odds. EV/edge never
     qualify or disqualify Prime/Top/Value; they are diagnostics only.
     """
     cards = [
@@ -937,8 +936,8 @@ def select_market_sections(
 
     # Value claims overlap with Top before the Top minimum-fill decision.
     # TOP fallback inventory is considered only after Value priority. The
-    # threshold is relaxed stepwise from 68% / 1.50 to at most 60% / 1.45,
-    # stopping immediately once the daily minimum target is reached.
+    # probability threshold is relaxed stepwise from 68% to 65%; the
+    # odds threshold never moves below 1.50. Stop once the daily minimum is met.
     value_ids = {_selection_identity(card) for card in value_qualified}
     top_core = [card for card in top_core if _selection_identity(card) not in value_ids]
     top_fallback = [card for card in top_fallback if _selection_identity(card) not in value_ids]
@@ -983,7 +982,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 14,
-            "selection_policy": "probability_first_odds_buckets_v11_top_dynamic_68_150_to_60_145",
+            "selection_policy": "probability_first_odds_buckets_v12_top_probability_dynamic_fixed_150",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "prime_core_68_plus": len(prime_core),

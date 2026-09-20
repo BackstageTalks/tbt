@@ -358,16 +358,6 @@ jobs:
           path: .cache/tbt/results-rebuild/results_rebuild_report.json
           if-no-files-found: error
 
-      - name: Upload refresh diagnostics
-        if: ${{ always() && env.MODE == 'refresh' }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: blinq-refresh-diagnostics-${{ github.run_id }}
-          path: |
-            .cache/tbt/predictions/refresh_report.json
-            api/data/feed.json
-          if-no-files-found: error
-
       - name: Upload production preflight artifacts
         if: env.MODE == 'production-preflight'
         uses: actions/upload-artifact@v4

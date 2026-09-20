@@ -2,8 +2,8 @@
   "schema": 1,
   "background": {
     "enabled": true,
-    "image": "/assets/blinq_background.webp",
-    "fallback": "/assets/blinq_background.webp",
+    "image": "/assets/blinq_page_background.webp",
+    "fallback": "/assets/blinq_page_background.webp",
     "position": "center top",
     "size": "cover",
     "attachment": "fixed",
@@ -11,7 +11,7 @@
     "overlay": "linear-gradient(180deg,rgba(0,9,13,.60),rgba(0,9,13,.90))"
   },
   "login": {
-    "background_image": "/assets/blinq_background.webp",
+    "background_image": "/assets/blinq_page_background.webp",
     "card_width": 430,
     "logo_width": 126
   }

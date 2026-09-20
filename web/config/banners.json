@@ -26,7 +26,7 @@
         "text_color": "#c5d5db",
         "effect": "fade-up",
         "animation_delay_ms": 80,
-        "site_background_url": "/assets/blinq_background.webp"
+        "site_background_url": "/assets/blinq_page_background.webp"
       },
       {
         "enabled": false,
