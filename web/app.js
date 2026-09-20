@@ -41,8 +41,9 @@
   }
   function playerAvatarHtml(photo,name,tour,gender='',wrapperClass='player-avatar'){
     const safe=safePhotoUrl(photo),fallback=playerFallbackUrl(tour,gender),src=safe||fallback,initial=initials(name);
-    if(!src)return `<span class="${escapeHtml(wrapperClass)}">${escapeHtml(initial)}</span>`;
-    return `<span class="${escapeHtml(wrapperClass)} has-photo"><img data-player-photo data-fallback-src="${escapeHtml(fallback)}" data-fallback-text="${escapeHtml(initial)}" src="${escapeHtml(src)}" alt="" loading="lazy"></span>`;
+    const fallbackClass=fallback.includes('missing_foto_w.webp')?' player-fallback-wta':' player-fallback-atp';
+    if(!src)return `<span class="${escapeHtml(wrapperClass)}${fallbackClass}">${escapeHtml(initial)}</span>`;
+    return `<span class="${escapeHtml(wrapperClass)} has-photo${fallbackClass}"><img data-player-photo data-fallback-src="${escapeHtml(fallback)}" data-fallback-text="${escapeHtml(initial)}" src="${escapeHtml(src)}" alt="" loading="lazy"></span>`;
   }
   function handleAssetImageError(event){
     const img=event?.target;
@@ -263,12 +264,12 @@
   async function loadUiConfig() {
     let runtimeConfigSnapshot=null;
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=32');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=33');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=32');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=33');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -336,7 +337,7 @@
     const loadedPatch=String(state.ui?.ui_patch||'');
     const loadedPatchNumber=Number((loadedPatch.match(/r(\d+)$/)||[])[1]||0);
     if(loadedPatchNumber<27){const primeTab=state.ui?.dashboard?.daily_hub?.tabs?.prime;if(primeTab)primeTab.enabled=true;}
-    state.ui.ui_patch='736-r32';
+    state.ui.ui_patch='736-r33';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -533,14 +534,30 @@
     const predictionRoutes=new Set(['predictions','prime','top_daily','value','doubles','ace','sg']);
     const modelRoutes=new Set(['model_data','methodology','how_blinq_works']);
     const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
-    const referenceNav=document.querySelector('.reference-navigation');
+    const resultsLocked=!resultsAccessAllowed();
+    const resultsPlan=resultsLocked?firstResultsUnlockPlan():'';
+    const decorateResultsAccess=node=>{
+      if(!node)return;
+      node.classList.toggle('access-nav-locked',resultsLocked);
+      if(resultsLocked){
+        node.dataset.upgradePlan=resultsPlan;
+        node.dataset.upgradeSection=lcopy('Results','Výsledky','Výsledky');
+        node.setAttribute('aria-label',`${lcopy('Results','Výsledky','Výsledky')} · ${accessHintDetails(resultsPlan,'').title}`);
+      }else{
+        delete node.dataset.upgradePlan;
+        delete node.dataset.upgradeSection;
+        node.removeAttribute('aria-label');
+      }
+    };
     if(referenceNav){
       referenceNav.querySelectorAll('[data-route]').forEach(node=>{
         const active=Boolean(referenceRoute)&&node.dataset.route===referenceRoute;
         node.classList.toggle('active',active);
         if(active)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');
       });
+      decorateResultsAccess(referenceNav.querySelector('[data-route="results"]'));
     }
+    document.querySelectorAll('#mobileTabs [data-route="results"]').forEach(decorateResultsAccess);
     const profileAdmin=$('profileAdminLink');if(profileAdmin)profileAdmin.hidden=!isAdminAccount();
   }
 
@@ -2073,7 +2090,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=32"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=33"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
@@ -2155,11 +2172,22 @@
     };
   }
 
-  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; document.body.classList.toggle('blinq-home',route==='predictions'); document.body.classList.toggle('blinq-admin',route==='admin'); document.body.classList.toggle('blinq-route',route!=='predictions'&&route!=='admin'); const section=dashboardSectionKeys.includes(route)?dashboardSectionConfig(route):null; if(section&&route!=='predictions'&&route!=='results'&&elementAccess(section.sidebar_element)!=='active'&&state.route!=='admin'){const source=document.querySelector(`[data-route="${CSS.escape(route)}"]`)||document.body;showAccessHint(source,firstUnlockPlan(route,0,true),section.label||route,true);route='predictions';} if(route==='admin') state.previewPlan=null; const routeChanged=state.route!==route;state.route=route;renderCookieConsent(false);if(routeChanged)state.page=0;const meta=routeMeta[route]; const overview=route==='predictions'; const routeHeading=$('routeHeading'); if(routeHeading) routeHeading.hidden=overview; const pageEyebrow=$('pageEyebrow'),pageSubtitle=$('pageSubtitle'); if(pageEyebrow){pageEyebrow.textContent=meta[0];pageEyebrow.hidden=route==='results';} $('pageTitle').textContent=meta[1]; if(pageSubtitle){pageSubtitle.textContent=meta[2];pageSubtitle.hidden=route==='results';} const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDailyHub();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push&&location.hash!==`#${route}`) history.pushState(null,'',`#${route}`); window.BlinqUI.routeChanged(route,push); updateLanguageLinks(); document.title=`${meta[1]} · BlinQ`; if(route!=='admin')translatePublicDom(document.body); }
+  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='results'&&!resultsAccessAllowed()){const source=document.querySelector('.reference-navigation [data-route="results"]')||document.querySelector('#mobileTabs [data-route="results"]')||document.body;const plan=firstResultsUnlockPlan();showAccessHint(source,plan,lcopy('Results','Výsledky','Výsledky'),true);if(location.hash==='#results')history.replaceState(null,'','#predictions');route='predictions';} if(route==='admin'&&!isAdminAccount()) route='predictions'; document.body.classList.toggle('blinq-home',route==='predictions'); document.body.classList.toggle('blinq-admin',route==='admin'); document.body.classList.toggle('blinq-route',route!=='predictions'&&route!=='admin'); const section=dashboardSectionKeys.includes(route)?dashboardSectionConfig(route):null; if(section&&route!=='predictions'&&route!=='results'&&elementAccess(section.sidebar_element)!=='active'&&state.route!=='admin'){const source=document.querySelector(`[data-route="${CSS.escape(route)}"]`)||document.body;showAccessHint(source,firstUnlockPlan(route,0,true),section.label||route,true);route='predictions';} if(route==='admin') state.previewPlan=null; const routeChanged=state.route!==route;state.route=route;renderCookieConsent(false);if(routeChanged)state.page=0;const meta=routeMeta[route]; const overview=route==='predictions'; const routeHeading=$('routeHeading'); if(routeHeading) routeHeading.hidden=overview; const pageEyebrow=$('pageEyebrow'),pageSubtitle=$('pageSubtitle'); if(pageEyebrow){pageEyebrow.textContent=meta[0];pageEyebrow.hidden=route==='results';} $('pageTitle').textContent=meta[1]; if(pageSubtitle){pageSubtitle.textContent=meta[2];pageSubtitle.hidden=route==='results';} const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDailyHub();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push&&location.hash!==`#${route}`) history.pushState(null,'',`#${route}`); window.BlinqUI.routeChanged(route,push); updateLanguageLinks(); document.title=`${meta[1]} · BlinQ`; if(route!=='admin')translatePublicDom(document.body); }
 
   function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
   function issuedMarketPublications(row){
     return (Array.isArray(row?.market_publications)?row.market_publications:[]).filter(p=>p&&p.issued_at&&p.result&&!p.excluded_reason);
+  }
+  const publicResultSections=new Set(['top_daily','prime','value','doubles','ace','double_faults','sets','games']);
+  const publicResultMarkets=new Set(['aces','double_faults']);
+  function isPublicResultPublication(publication){
+    if(!publication||typeof publication!=='object')return false;
+    const section=String(publication.section||'').trim().toLowerCase();
+    const market=String(publication.market||'').trim().toLowerCase();
+    return publicResultSections.has(section)||publicResultMarkets.has(market);
+  }
+  function publicResultPublications(row){
+    return issuedMarketPublications(row).filter(isPublicResultPublication);
   }
   function resultTags(row){
     const tags=[];
@@ -2194,7 +2222,7 @@
   }
   function resultCategoryLabel(value){const en=({all:'All published',prime:'Short Odds',top_daily:'TOP Prediction',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP Prediction':'TOP predikcie','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP Prediction':'TOP predikce','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
   function resultPublication(row,category='all'){
-    const pubs=issuedMarketPublications(row);
+    const pubs=publicResultPublications(row);
     const filtered=['prime','top_daily','value','doubles','ace','double_faults','sg','sets','games'].includes(category)?pubs.filter(p=>publicationMatchesResultCategory(p,category)):pubs;
     return filtered.sort((a,b)=>new Date(a.issued_at)-new Date(b.issued_at))[0]||null;
   }
@@ -2224,7 +2252,7 @@
         if(toTs!==null&&(!Number.isFinite(ts)||ts>toTs))return false;
       }else if(Number.isFinite(windowDays)&&windowDays>0){if(!Number.isFinite(ts)||ts<now-windowDays*86400000)return false;}
       const category=filters.category||'all';
-      const pubs=issuedMarketPublications(row);
+      const pubs=publicResultPublications(row);
       if(!pubs.length)return false;
       if(category!=='all'&&!pubs.some(p=>publicationMatchesResultCategory(p,category)&&publicationOutcome(p).kind!=='pending'))return false;
       return pubs.some(p=>publicationOutcome(p).kind!=='pending');
@@ -2287,7 +2315,7 @@
     const specific=['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category);
     const unique=new Map();
     (rows||[]).forEach(row=>{
-      const pubs=issuedMarketPublications(row).filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category)).filter(p=>publicationOutcome(p).kind!=='pending');
+      const pubs=publicResultPublications(row).filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category)).filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
         const key=canonicalResultPublicationKey(row,publication,index);
         const current=unique.get(key);
@@ -2327,8 +2355,11 @@
       const tags=`<span class="result-tag ${escapeHtml(tag)}">${escapeHtml(projection?projectionResultTypeLabel(publication):resultCategoryLabel(tag||'all'))}</span>`;
       const resultHtml=projection?(outcome.kind==='win'?'<b class="correct">✓ HIT</b>':outcome.kind==='loss'?'<b class="wrong">× MISS</b>':`<b class="void">○ VOID</b>${outcome.reason?`<small class="void-reason">${escapeHtml(outcome.reason)}</small>`:''}`):(outcome.kind==='win'?'<b class="correct">✓ VÝHRA</b>':outcome.kind==='loss'?'<b class="wrong">× PREHRA</b>':`<b class="void">○ VOID</b>${outcome.reason?`<small class="void-reason">${escapeHtml(outcome.reason)}</small>`:''}`);
       const p1Name=p1.name||'Player 1',p2Name=p2.name||'Player 2';
-      const p1Photo=p1.photo_url||p1.image_url||p1.photo||(String(p1.id||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${p1.id}`:'');
-      const p2Photo=p2.photo_url||p2.image_url||p2.photo||(String(p2.id||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${p2.id}`:'');
+      // Historical result rows frequently do not carry a verified player photo.
+      // In that case go directly to the local ATP/WTA fallback instead of first
+      // requesting /player-image and flashing initials after a provider 404.
+      const p1Photo=p1.photo_url||p1.image_url||p1.photo||'';
+      const p2Photo=p2.photo_url||p2.image_url||p2.photo||'';
       const match=`<div class="results-match-player">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong></div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b></span></small>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
