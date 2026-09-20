@@ -3,11 +3,17 @@
 ROOKIE itself is unlimited. This worker is a separate, configurable operational
 policy: it can report dormant accounts, send warning e-mails and (only when the
 admin explicitly enables it) archive long-inactive free ROOKIE access.
+
+Safety invariant: automatic deactivation is never allowed until the user has
+successfully received an inactivity warning and the configured warning period
+has elapsed since that actual delivery time.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.message import EmailMessage
+from html import escape as html_escape
+from pathlib import Path
 import smtplib
 import ssl
 
@@ -15,6 +21,8 @@ from .account_storage import load_account_metadata, save_inactivity_state
 from .admin_accounts import list_users, update_user_access
 from .admin_storage import AdminStorageUnavailable
 from .auth import account_access, is_admin
+
+_LOGO = Path(__file__).resolve().parents[1] / "assets" / "blinq_logo_email.png"
 
 
 def _parse_utc(value):
@@ -43,13 +51,19 @@ def inactivity_policy(runtime_config: object) -> dict:
     except (TypeError, ValueError):
         warning_days = 7
     warning_days = max(1, min(inactive_days - 1, warning_days))
+    auto_expire = raw.get("auto_expire_rookie", False) is True
+    # User notification is ON by default. If automatic deactivation is enabled,
+    # the warning cannot be disabled because it is a prerequisite for expiry.
+    notify_user = raw.get("notify_user", True) is not False
+    if auto_expire:
+        notify_user = True
     return {
         "enabled": raw.get("enabled", True) is not False,
         "inactive_days": inactive_days,
         "warning_days": warning_days,
         "notify_admin": raw.get("notify_admin", True) is not False,
-        "notify_user": raw.get("notify_user", False) is True,
-        "auto_expire_rookie": raw.get("auto_expire_rookie", False) is True,
+        "notify_user": notify_user,
+        "auto_expire_rookie": auto_expire,
     }
 
 
@@ -78,7 +92,22 @@ def _send_mail(cfg, recipient: str, subject: str, body: str) -> bool:
     msg["Subject"] = str(subject or "BlinQ")[:180]
     msg["From"] = str(getattr(cfg, "blinq_smtp_from", "") or "").strip()
     msg["To"] = recipient
-    msg.set_content(str(body or ""))
+    plain = str(body or "")
+    msg.set_content(plain)
+    safe_subject = html_escape(str(subject or "BlinQ"))
+    safe_body = html_escape(plain).replace("\n", "<br>")
+    html = f"""<!doctype html><html><body style=\"margin:0;background:#020c0b;color:#eaf6f1;font-family:Arial,Helvetica,sans-serif\">
+<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"background:#020c0b;padding:28px 12px\"><tr><td align=\"center\">
+<table role=\"presentation\" width=\"100%\" cellspacing=\"0\" cellpadding=\"0\" style=\"max-width:620px;background:#061713;border:1px solid #164c3b;border-radius:18px;overflow:hidden\">
+<tr><td style=\"padding:28px 30px 18px\"><img src=\"cid:blinq-logo\" width=\"150\" alt=\"BlinQ\" style=\"display:block;width:150px;height:auto;border:0\"></td></tr>
+<tr><td style=\"padding:6px 30px 30px\"><div style=\"font-size:12px;letter-spacing:.16em;color:#45e7a2;font-weight:700\">BLINQ ACCOUNT</div>
+<h1 style=\"margin:10px 0 16px;font-size:24px;line-height:1.25;color:#f3fbf8\">{safe_subject}</h1>
+<p style=\"margin:0;color:#a9c2b9;font-size:14px;line-height:1.7\">{safe_body}</p>
+</td></tr></table></td></tr></table></body></html>"""
+    msg.add_alternative(html, subtype="html")
+    if _LOGO.exists():
+        html_part = msg.get_payload()[-1]
+        html_part.add_related(_LOGO.read_bytes(), maintype="image", subtype="png", cid="<blinq-logo>", filename="blinq.png")
 
     host = str(getattr(cfg, "blinq_smtp_host", "") or "").strip()
     port = int(getattr(cfg, "blinq_smtp_port", 587) or 587)
@@ -111,18 +140,25 @@ def _marker_is_for_current_inactivity(marker, last_seen) -> bool:
     return bool(marked and last_seen and marked >= last_seen)
 
 
-def _user_warning_body(user: dict, *, days_inactive: int, days_left: int, will_expire: bool) -> str:
-    greeting = str(user.get("email") or "BlinQ člen")
+def _user_warning_body(user: dict, *, days_inactive: int, warning_days: int, will_expire: bool) -> str:
+    email = str(user.get("email") or "BlinQ člen")
     if will_expire:
-        action = (
-            f"Ak sa neprihlásiš, FREE ROOKIE prístup bude označený ako neaktívny približne o {max(1, days_left)} dní. "
-            "Samotný ROOKIE nemá platenú časovú platnosť; ide iba o správu dlhodobo nepoužívaných účtov."
+        action_sk = (
+            f"Ak sa neprihlásiš, účet bude deaktivovaný najskôr o {warning_days} dní od doručenia tohto upozornenia. "
+            "Stačí sa prihlásiť do BlinQ a počítadlo neaktivity sa obnoví."
+        )
+        action_en = (
+            f"If you do not sign in, the account may be deactivated no earlier than {warning_days} days after this warning is delivered. "
+            "Signing in to BlinQ resets the inactivity period."
         )
     else:
-        action = "Tvoj FREE ROOKIE prístup je bez časového obmedzenia; toto je iba upozornenie na dlhšiu neaktivitu."
+        action_sk = "FREE ROOKIE je bez časového obmedzenia; toto je iba upozornenie na dlhšiu neaktivitu."
+        action_en = "FREE ROOKIE has no time limit; this is only an inactivity notice."
     return (
-        f"Ahoj,\n\nna účte {greeting} sme zaznamenali približne {days_inactive} dní bez prihlásenia.\n\n"
-        f"{action}\n\nAk účet používaš, stačí sa znovu prihlásiť do BlinQ.\n\nBlinQ"
+        f"Ahoj,\n\nna účte {email} sme zaznamenali približne {days_inactive} dní bez prihlásenia.\n\n"
+        f"{action_sk}\n\nBlinQ\n\n---\n\n"
+        f"Hello,\n\nwe noticed approximately {days_inactive} days without a sign-in on {email}.\n\n"
+        f"{action_en}\n\nBlinQ"
     )
 
 
@@ -131,16 +167,16 @@ def _admin_summary_body(policy: dict, warnings: list[dict], expired: list[dict])
         "BlinQ · denná kontrola neaktívnych účtov",
         "",
         f"Limit neaktivity: {policy['inactive_days']} dní · upozornenie: {policy['warning_days']} dní vopred",
-        f"Auto-expirácia FREE ROOKIE: {'zapnutá' if policy['auto_expire_rookie'] else 'vypnutá'}",
+        f"Auto-deaktivácia FREE ROOKIE: {'zapnutá' if policy['auto_expire_rookie'] else 'vypnutá'}",
         "",
         f"Nové upozornenia: {len(warnings)}",
-        f"Novo expirované ROOKIE: {len(expired)}",
+        f"Novo deaktivované ROOKIE: {len(expired)}",
     ]
     if warnings:
         lines += ["", "Upozornenia:"]
         lines.extend(f"- {row['email']} · {row['days_inactive']} dní · {row['plan']}" for row in warnings[:50])
     if expired:
-        lines += ["", "Expirované:"]
+        lines += ["", "Deaktivované:"]
         lines.extend(f"- {row['email']} · {row['days_inactive']} dní" for row in expired[:50])
     if len(warnings) > 50 or len(expired) > 50:
         lines += ["", "Zoznam je skrátený na 50 položiek v každej skupine."]
@@ -166,7 +202,9 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
         "storage_available": True,
         "smtp_configured": mail["configured"],
         "admin_recipient_configured": mail["admin_recipient_configured"],
-        "auto_expire_effective": bool(policy["auto_expire_rookie"] and mail["configured"] and (policy["notify_user"] or (policy["notify_admin"] and mail["admin_recipient_configured"]))),
+        # Automatic deactivation is effective only when we can actually warn the
+        # user. Admin-only mail is never enough to deactivate a user account.
+        "auto_expire_effective": bool(policy["auto_expire_rookie"] and policy["notify_user"] and mail["configured"]),
         "policy": policy,
         "last_error": "",
     }
@@ -183,7 +221,9 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
 
     new_warnings: list[dict] = []
     newly_expired: list[dict] = []
-    pending_markers: set[str] = set()
+    general_warning_markers: set[str] = set()
+    user_warning_markers: set[str] = set()
+    deactivation_warning_markers: set[str] = set()
 
     for user in users:
         if is_admin(user, cfg):
@@ -207,44 +247,71 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
             meta_available = False
             summary["storage_available"] = False
 
-        # Notify once when the account reaches the warning window, even if the
-        # worker is first enabled after the inactivity threshold has already
-        # passed. Durable metadata is required so a storage outage cannot turn
-        # a daily worker into repeated e-mail spam.
         warning_due = days_inactive >= policy["inactive_days"] - policy["warning_days"]
-        warning_already_sent = _marker_is_for_current_inactivity(meta.get("inactivity_warning_sent_at"), last_seen)
-        warning_new = bool(meta_available and warning_due and not warning_already_sent)
+        warning_already_recorded = _marker_is_for_current_inactivity(meta.get("inactivity_warning_sent_at"), last_seen)
+        user_warning_sent_at = _parse_utc(meta.get("inactivity_user_warning_sent_at"))
+        user_warning_already_sent = _marker_is_for_current_inactivity(meta.get("inactivity_user_warning_sent_at"), last_seen)
+        deactivation_warning_sent_at = _parse_utc(meta.get("inactivity_deactivation_warning_sent_at"))
+        deactivation_warning_already_sent = _marker_is_for_current_inactivity(meta.get("inactivity_deactivation_warning_sent_at"), last_seen)
+        warning_new = bool(meta_available and warning_due and not warning_already_recorded)
+
+        row = {
+            "id": str(user.get("id") or ""),
+            "email": str(user.get("email") or ""),
+            "plan": str(access.get("plan") or "rookie").upper(),
+            "days_inactive": days_inactive,
+            "last_seen": last_seen.isoformat(),
+        }
         if warning_new:
-            row = {
-                "id": str(user.get("id") or ""),
-                "email": str(user.get("email") or ""),
-                "plan": str(access.get("plan") or "rookie").upper(),
-                "days_inactive": days_inactive,
-                "last_seen": last_seen.isoformat(),
-            }
             new_warnings.append(row)
-            if policy["notify_user"] and row["email"] and mail["configured"]:
-                days_left = max(1, policy["inactive_days"] - days_inactive)
-                if _send_mail(
-                    cfg,
-                    row["email"],
-                    "BlinQ · upozornenie na neaktívny účet",
-                    _user_warning_body(
-                        user,
-                        days_inactive=days_inactive,
-                        days_left=days_left,
-                        will_expire=policy["auto_expire_rookie"],
-                    ),
-                ):
-                    summary["user_emails"] += 1
-                    pending_markers.add(row["id"])
+
+        # User warning is independently durable. This means an old admin-only
+        # marker can never satisfy the deactivation prerequisite.
+        user_notice_missing = not (deactivation_warning_already_sent if policy["auto_expire_rookie"] else user_warning_already_sent)
+        if (
+            meta_available
+            and warning_due
+            and policy["notify_user"]
+            and row["email"]
+            and mail["configured"]
+            and user_notice_missing
+        ):
+            if _send_mail(
+                cfg,
+                row["email"],
+                f"BlinQ · účet bude o {policy['warning_days']} dní deaktivovaný" if policy["auto_expire_rookie"] else "BlinQ · upozornenie na neaktívny účet",
+                _user_warning_body(
+                    user,
+                    days_inactive=days_inactive,
+                    warning_days=policy["warning_days"],
+                    will_expire=policy["auto_expire_rookie"],
+                ),
+            ):
+                summary["user_emails"] += 1
+                user_warning_markers.add(row["id"])
+                if policy["auto_expire_rookie"]:
+                    deactivation_warning_markers.add(row["id"])
+                general_warning_markers.add(row["id"])
+                # Treat this delivery as effective immediately for reporting,
+                # but not for same-run expiry. The expiry gate below reads only
+                # the persisted marker loaded at the start of the run.
 
         expire_due = days_inactive >= policy["inactive_days"]
-        # Expiration is intentionally one run behind a successfully recorded
-        # warning. That guarantees the optional cleanup policy can never expire
-        # a FREE ROOKIE account before at least one notification path succeeded.
-        notification_ready = bool(policy["notify_user"] or (policy["notify_admin"] and mail["admin_recipient_configured"]))
-        can_auto_expire = bool(policy["auto_expire_rookie"] and mail["configured"] and notification_ready and meta_available and warning_already_sent)
+        # Guarantee the full configured lead time from actual successful user
+        # warning delivery, not merely from the theoretical inactivity threshold.
+        warning_lead_elapsed = bool(
+            deactivation_warning_sent_at
+            and deactivation_warning_sent_at >= last_seen
+            and now >= deactivation_warning_sent_at + timedelta(days=policy["warning_days"])
+        )
+        can_auto_expire = bool(
+            policy["auto_expire_rookie"]
+            and policy["notify_user"]
+            and mail["configured"]
+            and meta_available
+            and deactivation_warning_already_sent
+            and warning_lead_elapsed
+        )
         already_expired_for_cycle = _marker_is_for_current_inactivity(meta.get("inactivity_expired_at"), last_seen)
         if (
             expire_due
@@ -266,13 +333,15 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
             })
             if summary["storage_available"]:
                 save_inactivity_state(user.get("id"), expired_at=now.isoformat())
-            if policy["notify_user"] and user.get("email") and mail["configured"]:
+            if user.get("email") and mail["configured"]:
                 if _send_mail(
                     cfg,
                     str(user.get("email")),
-                    "BlinQ · FREE ROOKIE prístup bol označený ako neaktívny",
-                    "Ahoj,\n\npre dlhodobú neaktivitu bol tvoj FREE ROOKIE prístup označený ako neaktívny. "
-                    "Ak chceš účet znovu používať, kontaktuj BlinQ administrátora.\n\nBlinQ",
+                    "BlinQ · účet bol deaktivovaný pre neaktivitu",
+                    "Ahoj,\n\npo predchádzajúcom upozornení a ďalšom období bez prihlásenia bol tvoj FREE ROOKIE účet deaktivovaný pre dlhodobú neaktivitu. "
+                    "Ak chceš účet znovu používať, kontaktuj BlinQ administrátora.\n\nBlinQ\n\n---\n\n"
+                    "Hello,\n\nafter the previous warning and a further period without a sign-in, your FREE ROOKIE account was deactivated for long-term inactivity. "
+                    "Contact the BlinQ administrator if you want to reactivate it.\n\nBlinQ",
                 ):
                     summary["user_emails"] += 1
 
@@ -286,10 +355,18 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
             _admin_summary_body(policy, new_warnings, newly_expired),
         )
         if summary["admin_email"]:
-            pending_markers.update(row["id"] for row in new_warnings)
+            general_warning_markers.update(row["id"] for row in new_warnings)
 
     if summary["storage_available"]:
-        for uid in sorted(pending_markers):
+        # Persist user-delivery markers first. Both writes are merge upserts.
+        for uid in sorted(user_warning_markers):
+            save_inactivity_state(
+                uid,
+                user_warning_sent_at=now.isoformat(),
+                deactivation_warning_sent_at=now.isoformat() if uid in deactivation_warning_markers else None,
+                warning_sent_at=now.isoformat(),
+            )
+        for uid in sorted(general_warning_markers - user_warning_markers):
             save_inactivity_state(uid, warning_sent_at=now.isoformat())
 
     summary["warnings"] = len(new_warnings)

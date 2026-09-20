@@ -12,8 +12,8 @@ UI = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
 
 
 def test_r31_release_and_footer_live_heartbeat_contract():
-    assert UI["ui_patch"] == "736-r35"
-    assert 'content="736-r35"' in INDEX
+    assert UI["ui_patch"] == "736-r36"
+    assert 'content="736-r36"' in INDEX
     assert 'id="footerSystemStatus"' in INDEX
     assert "Všetky systémy funkčné" in INDEX
     assert 'id="footerLastUpdate">Aktualizácia modelu: —' in INDEX
@@ -73,10 +73,12 @@ def test_r31_match_detail_has_section_locks_and_no_status_meta_footer():
     assert "Preserve the established detail-card visual; improve only lower-panel readability." in CSS
 
 
-def test_r31_preserves_original_results_entitlements_and_adds_admin_visibility_toggle():
+def test_results_default_to_legend_plus_and_keep_admin_visibility_toggle():
     entitlements = (ROOT / "api" / "tbt" / "services" / "entitlements.py").read_text(encoding="utf-8")
-    assert '"rookie": 24' in entitlements
-    assert '"pro": 48' in entitlements
+    assert '"rookie": 0' in entitlements
+    assert '"pro": 0' in entitlements
+    assert '"elite": 0' in entitlements
+    assert '"legend": None' in entitlements
     block = APP[APP.index("function resultsHistoryHours"):APP.index("function renderResultsFilters")]
     assert "results_history_hours" in block
     assert 'data-admin-results-plan="${escapeHtml(id)}"' in APP

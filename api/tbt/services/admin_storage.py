@@ -300,6 +300,64 @@ def _normalize_membership_invariants(payload: object) -> object:
         days = goat.get("duration_days")
         if not isinstance(days, int) or isinstance(days, bool) or days <= 0:
             goat["duration_days"] = 365
+
+    # Access contract v1 aligns legacy runtime rows with the approved product
+    # matrix once. After Admin republishes the migrated config, the marker
+    # preserves future intentional changes instead of reapplying defaults.
+    try:
+        access_revision = int(payload.get("access_contract_revision") or 0)
+    except (TypeError, ValueError):
+        access_revision = 0
+    if access_revision < 1:
+        elements = payload.get("elements") or {}
+        results_access = ((elements.get("SIDEBAR_RESULTS") or {}).get("access") or {})
+        if isinstance(results_access, dict):
+            results_access.update({
+                "trial": "locked", "expired": "locked", "rookie": "locked",
+                "pro": "locked", "elite": "locked", "legend": "active", "goat": "active",
+            })
+
+        dashboard = payload.get("dashboard") or {}
+        tabs = ((dashboard.get("daily_hub") or {}).get("tabs") or {})
+
+        def normalize_rule(tab_id, plan_id, visible_rows, *, selection="first", display="active", blur=True, see_all=False):
+            rule = ((((tabs.get(tab_id) or {}).get("plans") or {}).get(plan_id)))
+            if not isinstance(rule, dict):
+                return
+            rule.update({
+                "visible_rows": visible_rows,
+                "blur_remaining": bool(blur),
+                "tab_enabled": display != "hidden",
+                "see_all": bool(see_all),
+                "selection_mode": selection,
+                "display_state": display,
+                "row_overrides": {},
+            })
+
+        for tab_id in ("daily", "prime", "value"):
+            normalize_rule(tab_id, "rookie", 1, selection="stable_random")
+            normalize_rule(tab_id, "pro", 3)
+        for tab_id in ("ace", "double_faults", "doubles", "games", "sets"):
+            normalize_rule(tab_id, "rookie", 0)
+            normalize_rule(tab_id, "pro", 0)
+        normalize_rule("see_all", "rookie", 0, display="blurred")
+        normalize_rule("see_all", "pro", 0, display="blurred")
+        for plan_id in ("elite", "legend", "goat"):
+            for tab_id in ("daily", "prime", "value", "ace", "double_faults", "doubles", "games", "sets", "see_all"):
+                normalize_rule(tab_id, plan_id, "ALL", blur=False, see_all=True)
+
+        notifications = payload.setdefault("notifications", {})
+        if isinstance(notifications, dict):
+            notifications["live_min_level"] = "elite"
+            notifications["default_min_level"] = "elite"
+            notifications["default_levels"] = ["elite", "legend", "goat"]
+        payload["access_contract_revision"] = 1
+
+    inactivity = payload.get("account_inactivity")
+    if isinstance(inactivity, dict) and inactivity.get("auto_expire_rookie") is True:
+        # A user-facing warning is a hard prerequisite for automated account
+        # deactivation. Heal older Admin drafts/runtime rows defensively.
+        inactivity["notify_user"] = True
     return payload
 
 

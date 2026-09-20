@@ -259,7 +259,7 @@ for tab in ('daily', 'value', 'ace', 'doubles', 'games', 'sets'):
     elif tabs[tab].get('enabled') is False:
         fail(f'daily hub tab unexpectedly disabled: {tab}')
 rookie = ((tabs.get('daily') or {}).get('plans') or {}).get('rookie') or {}
-if str(rookie.get('selection_mode')) != 'stable_random' or int(rookie.get('visible_rows') or 0) != 2 or rookie.get('blur_remaining') is not True:
+if str(rookie.get('selection_mode')) != 'stable_random' or int(rookie.get('visible_rows') or 0) != 1 or rookie.get('blur_remaining') is not True:
     fail(f'ROOKIE daily rule drifted: {rookie}')
 ok('membership + daily hub core schema present')
 

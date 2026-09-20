@@ -27,8 +27,8 @@ def test_suspended_is_denied():
 def test_rookie_never_receives_hidden_rows():
     data, manifest = filter_feed_for_access(feed(), {"status": "active", "plan": "rookie"})
     assert len(data["prime_picks"]) == 1
-    assert len(data["top_daily_picks"]) == 2
-    assert len(data["value_picks"]) == 0
+    assert len(data["top_daily_picks"]) == 1
+    assert len(data["value_picks"]) == 1
     assert len(data["ace_picks"]) == 0
     assert len(data["doubles_picks"]) == 0
     assert len(data["sg_picks"]) == 0
@@ -159,3 +159,46 @@ def test_aces_and_double_faults_have_independent_server_entitlements():
     assert [item["market"] for item in data["ace_picks"]] == ["aces", "double_faults", "double_faults"]
     assert manifest["sections"]["ace"]["returned"] == 1
     assert manifest["sections"]["double_faults"]["returned"] == 2
+
+
+def test_stable_random_unlocks_positions_in_place_instead_of_moving_picks_to_top():
+    cfg = {
+        "dashboard": {"daily_hub": {"enabled": True, "tabs": {
+            "prime": {"enabled": True, "plans": {"rookie": {
+                "visible_rows": 1, "blur_remaining": True, "tab_enabled": True,
+                "see_all": False, "selection_mode": "stable_random", "display_state": "active",
+            }}},
+            "daily": {"enabled": True, "plans": {"rookie": {
+                "visible_rows": 1, "blur_remaining": True, "tab_enabled": True,
+                "see_all": False, "selection_mode": "stable_random", "display_state": "active",
+            }}},
+            "value": {"enabled": True, "plans": {"rookie": {
+                "visible_rows": 1, "blur_remaining": True, "tab_enabled": True,
+                "see_all": False, "selection_mode": "stable_random", "display_state": "active",
+            }}},
+        }}}
+    }
+    payload = feed(10)
+
+    # Search a deterministic account id whose daily hash does not select slot 1;
+    # this makes the regression independent of the calendar date.
+    found = None
+    for i in range(200):
+        access = {"status": "active", "plan": "rookie", "id": f"random-user-{i}"}
+        data, manifest = filter_feed_for_access(payload, access, cfg)
+        states = manifest["sections"]["prime"]["slot_states"]
+        active = [idx for idx, state in enumerate(states[:10]) if state == "active"]
+        if active and active[0] > 0:
+            found = (data, manifest, active[0], access)
+            break
+    assert found is not None
+
+    data, manifest, active_index, access = found
+    assert manifest["sections"]["prime"]["returned"] == 1
+    assert data["prime_picks"][0]["event_id"] == str(active_index)
+    assert manifest["sections"]["prime"]["slot_states"][0] == "blurred"
+
+    # Refreshing the same account on the same day must keep the same unlocked slot.
+    data2, manifest2 = filter_feed_for_access(payload, access, cfg)
+    assert data2["prime_picks"][0]["event_id"] == data["prime_picks"][0]["event_id"]
+    assert manifest2["sections"]["prime"]["slot_states"] == manifest["sections"]["prime"]["slot_states"]

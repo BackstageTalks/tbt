@@ -6,7 +6,7 @@
       "enabled": true,
       "label": "BlinQ ROOKIE",
       "card_title": "Základný vstup",
-      "description": "Základný prístup do BlinQ a ochutnávka denného prehľadu.",
+      "description": "Bezplatná ochutnávka: 1 TOP, 1 Short Odds a 1 Value predikcia denne.",
       "cta_label": "Vybrať ROOKIE",
       "payment_url": ""
     },
@@ -38,7 +38,7 @@
       "enabled": true,
       "label": "BlinQ GOAT",
       "card_title": "Najvyššia úroveň BlinQ",
-      "description": "Doživotný prístup, všetky funkcie BlinQ a partner/reklamné výhody pre vybraných členov.",
+      "description": "Najvyššia úroveň BlinQ so všetkými funkciami a partner/reklamnými výhodami pre vybraných členov.",
       "cta_label": "Požiadať o GOAT",
       "invite_only": true,
       "invite_url": "",

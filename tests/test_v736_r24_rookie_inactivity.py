@@ -52,7 +52,7 @@ def test_inactivity_policy_is_configurable_but_does_not_expire_rookie_by_default
         "inactive_days": 90,
         "warning_days": 7,
         "notify_admin": True,
-        "notify_user": False,
+        "notify_user": True,
         "auto_expire_rookie": False,
     }
     assert 'data-admin-inactivity-field="enabled"' in APP

@@ -40,11 +40,13 @@ def test_result_history_is_server_limited_by_plan():
     rookie, rm = filter_feed_for_access(_payload(), {"status": "active", "plan": "rookie"})
     pro, pm = filter_feed_for_access(_payload(), {"status": "active", "plan": "pro"})
     elite, em = filter_feed_for_access(_payload(), {"status": "active", "plan": "elite"})
-    assert rm["results_history_hours"] == 24 and len(rookie["results"]) == 1
-    assert pm["results_history_hours"] == 48 and len(pro["results"]) == 2
-    assert em["results_history_hours"] is None and len(elite["results"]) == 3
-    assert rookie["performance"] == {} and pro["performance"] == {}
-    assert elite["performance"] == {"roi": 1.23}
+    assert rm["results_history_hours"] == 0 and rookie["results"] == []
+    assert pm["results_history_hours"] == 0 and pro["results"] == []
+    assert em["results_history_hours"] == 0 and elite["results"] == []
+    legend, lm = filter_feed_for_access(_payload(), {"status": "active", "plan": "legend"})
+    assert lm["results_history_hours"] is None and len(legend["results"]) == 3
+    assert rookie["performance"] == {} and pro["performance"] == {} and elite["performance"] == {}
+    assert legend["performance"] == {"roi": 1.23}
     assert rookie["dashboard_model_success"] == {"accuracy": .714}
     assert pro["dashboard_model_success"] == {"accuracy": .714}
 

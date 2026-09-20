@@ -29,13 +29,13 @@ def _feed(n=12):
     return {'top_daily_picks': rows, 'value_picks': [], 'ace_picks': [], 'doubles_picks': [], 'sg_picks': [], 'prime_picks': [], 'upcoming': rows, 'results': []}
 
 
-def test_v735_runtime_config_validates_and_rookie_is_two_stable_random():
+def test_v735_runtime_config_validates_and_rookie_is_one_per_core_category():
     validate_ui_config(UI)
     rule=UI['dashboard']['daily_hub']['tabs']['daily']['plans']['rookie']
-    assert rule['visible_rows']==2
+    assert rule['visible_rows']==1
     assert rule['selection_mode']=='stable_random'
     assert rule['display_state']=='active'
-    assert UI['dashboard']['daily_hub']['tabs']['value']['plans']['rookie']['visible_rows']==0
+    assert UI['dashboard']['daily_hub']['tabs']['value']['plans']['rookie']['visible_rows']==1
     assert UI['dashboard']['daily_hub']['tabs']['ace']['plans']['rookie']['visible_rows']==0
 
 
@@ -44,7 +44,7 @@ def test_stable_random_does_not_change_on_refresh_for_same_account():
     a,_=filter_feed_for_access(_feed(),access,UI)
     b,_=filter_feed_for_access(_feed(),access,UI)
     assert [r['event_id'] for r in a['top_daily_picks']]==[r['event_id'] for r in b['top_daily_picks']]
-    assert len(a['top_daily_picks'])==2
+    assert len(a['top_daily_picks'])==1
 
 
 def test_blurred_row_override_withholds_actual_pick_from_browser_payload():
@@ -84,10 +84,10 @@ def test_upgrade_auth_footer_and_copy_are_v735_native():
 def test_rookie_manifest_marks_remaining_offer_as_blurred_without_sending_rows():
     data,manifest=filter_feed_for_access(_feed(),{'status':'active','plan':'rookie','id':'rookie-blur'},UI)
     daily=manifest['sections']['daily']
-    assert len(data['daily_picks'])==2
+    assert len(data['daily_picks'])==1
     assert len(daily['slot_states'])==12
-    assert daily['slot_states'].count('active')==2
-    assert daily['slot_states'].count('blurred')==10
+    assert daily['slot_states'].count('active')==1
+    assert daily['slot_states'].count('blurred')==11
 
 
 def test_admin_can_force_a_later_row_visible_without_exposing_other_blurred_rows():

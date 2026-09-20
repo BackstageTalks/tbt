@@ -14,10 +14,10 @@ INDEX = (WEB / "index.html").read_text(encoding="utf-8")
 
 
 def test_r33_identity_and_cache_revision():
-    assert RELEASE["patch"] == UI["ui_patch"] == "736-r35"
-    assert 'content="736-r35"' in INDEX
-    assert '/app.js?v=7360&p=35' in INDEX
-    assert '/blinq-app.css?v=7360&p=35' in INDEX
+    assert RELEASE["patch"] == UI["ui_patch"] == "736-r36"
+    assert 'content="736-r36"' in INDEX
+    assert '/app.js?v=7360&p=36' in INDEX
+    assert '/blinq-app.css?v=7360&p=36' in INDEX
 
 
 def test_results_are_filtered_to_real_blinq_public_categories_client_and_server():
@@ -45,13 +45,16 @@ def test_locked_results_navigation_has_lock_and_click_stable_minimum_level_hint(
     assert ".reference-navigation a.access-nav-locked" in CSS
 
 
-def test_rookie_daily_top_and_short_odds_are_stable_random():
+def test_rookie_core_three_are_one_stable_random_each():
     daily = UI["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"]["rookie"]
     prime = UI["dashboard"]["daily_hub"]["tabs"]["prime"]["plans"]["rookie"]
-    assert daily["visible_rows"] == 2
+    assert daily["visible_rows"] == 1
     assert daily["selection_mode"] == "stable_random"
     assert prime["visible_rows"] == 1
     assert prime["selection_mode"] == "stable_random"
+    value = UI["dashboard"]["daily_hub"]["tabs"]["value"]["plans"]["rookie"]
+    assert value["visible_rows"] == 1
+    assert value["selection_mode"] == "stable_random"
 
 
 def test_old_runtime_config_is_migrated_to_rookie_short_odds_stable_random():

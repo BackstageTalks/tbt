@@ -54,6 +54,8 @@ def _public_entity(entity: dict | None) -> dict:
         "legal_consent_locale": str(row.get("legal_consent_locale") or "")[:8],
         "legal_consent_at": row.get("legal_consent_at"),
         "inactivity_warning_sent_at": row.get("inactivity_warning_sent_at"),
+        "inactivity_user_warning_sent_at": row.get("inactivity_user_warning_sent_at"),
+        "inactivity_deactivation_warning_sent_at": row.get("inactivity_deactivation_warning_sent_at"),
         "inactivity_expired_at": row.get("inactivity_expired_at"),
     }
 
@@ -233,13 +235,17 @@ def save_admin_metadata(user_id: object, payload: object, *, actor_id: object = 
     return load_account_metadata(uid)
 
 
-def save_inactivity_state(user_id: object, *, warning_sent_at: object = None, expired_at: object = None) -> dict:
+def save_inactivity_state(user_id: object, *, warning_sent_at: object = None, user_warning_sent_at: object = None, deactivation_warning_sent_at: object = None, expired_at: object = None) -> dict:
     """Persist worker-only inactivity markers used to de-duplicate e-mail notices."""
     uid = str(user_id or "").strip()
     key = _key(uid)
     entity = {"PartitionKey": "account", "RowKey": key, "user_id": uid}
     if warning_sent_at is not None:
         entity["inactivity_warning_sent_at"] = str(warning_sent_at or "")[:64]
+    if user_warning_sent_at is not None:
+        entity["inactivity_user_warning_sent_at"] = str(user_warning_sent_at or "")[:64]
+    if deactivation_warning_sent_at is not None:
+        entity["inactivity_deactivation_warning_sent_at"] = str(deactivation_warning_sent_at or "")[:64]
     if expired_at is not None:
         entity["inactivity_expired_at"] = str(expired_at or "")[:64]
     if len(entity) == 3:

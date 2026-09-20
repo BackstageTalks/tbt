@@ -131,6 +131,10 @@
     document.addEventListener('error', event => {
       const img = event.target;
       if (img.tagName !== 'IMG' || !img.closest('.market-card .player-avatar')) return;
+      // Player photos rendered by app.js have a deterministic two-stage fallback:
+      // provider/local photo -> gender-aware missing_foto asset -> initials.
+      // Do not let the responsive compatibility handler short-circuit that flow.
+      if (img.matches('[data-player-photo]')) return;
       const avatar = img.parentElement, name = avatar.parentElement.querySelector('.player-name')?.textContent || '?';
       avatar.classList.remove('has-photo');
       avatar.textContent = name.split(/\s+/).slice(0,2).map(s => s[0]).join('').toUpperCase();

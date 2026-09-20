@@ -506,8 +506,8 @@
         "trial": "locked",
         "expired": "locked",
         "rookie": "locked",
-        "pro": "active",
-        "elite": "active",
+        "pro": "locked",
+        "elite": "locked",
         "legend": "active",
         "goat": "active"
       }
@@ -1507,7 +1507,7 @@
               "row_overrides": {}
             },
             "rookie": {
-              "visible_rows": 2,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false,
@@ -1576,7 +1576,7 @@
               "row_overrides": {}
             },
             "rookie": {
-              "visible_rows": 0,
+              "visible_rows": 1,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false,
@@ -1649,12 +1649,12 @@
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false,
-              "selection_mode": "stable_random",
+              "selection_mode": "first",
               "display_state": "active",
               "row_overrides": {}
             },
             "pro": {
-              "visible_rows": 3,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false,
@@ -1718,12 +1718,12 @@
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false,
-              "selection_mode": "stable_random",
+              "selection_mode": "first",
               "display_state": "active",
               "row_overrides": {}
             },
             "pro": {
-              "visible_rows": 3,
+              "visible_rows": 0,
               "blur_remaining": true,
               "tab_enabled": true,
               "see_all": false,
@@ -2428,13 +2428,14 @@
       }
     }
   },
-  "ui_patch": "736-r35",
+  "ui_patch": "736-r36",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,
     "warning_days": 7,
     "notify_admin": true,
-    "notify_user": false,
+    "notify_user": true,
     "auto_expire_rookie": false
-  }
+  },
+  "access_contract_revision": 1
 }

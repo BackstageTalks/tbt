@@ -13,11 +13,11 @@
       "how_blinq_works": {
         "eyebrow": "BLINQ INTELLIGENCE",
         "title": "Ako funguje BlinQ",
-        "subtitle": "Od point-in-time tenisových dát po publikovanú predikciu.",
+        "subtitle": "Od časovo konzistentných tenisových dát po publikovanú predikciu",
         "sections": [
           {
             "title": "1. Zber dát",
-            "body": "BlinQ pracuje s tenisovými dátami dostupnými pred začiatkom zápasu. Podľa dostupnosti zahŕňajú ranking, povrch, formu, históriu zápasov, štatistiky podania a returnu, turnajový kontext a ďalšie relevantné signály."
+            "body": "BlinQ pracuje s tenisovými dátami dostupnými pred začiatkom zápasu. Podľa dostupnosti zahŕňajú rebríček, povrch, formu, históriu zápasov, štatistiky podania a returnu, turnajový kontext a ďalšie relevantné signály."
           },
           {
             "title": "2. Modelové spracovanie",
@@ -25,7 +25,7 @@
           },
           {
             "title": "3. Publikovanie",
-            "body": "Publikovaná predikcia uchováva pôvodný modelový výstup a dostupný kurzový snapshot. Po odohraní zápasu sa ten istý záznam vyhodnotí proti skutočnému výsledku."
+            "body": "Publikovaná predikcia uchováva pôvodný modelový výstup a dostupný záznam kurzu. Po odohraní zápasu sa ten istý záznam vyhodnotí proti skutočnému výsledku."
           },
           {
             "title": "4. Vyhodnocovanie",
@@ -36,7 +36,7 @@
       "methodology": {
         "eyebrow": "TRANSPARENTNOSŤ",
         "title": "Metodika",
-        "subtitle": "Pravidlá, ktoré udržujú predikcie chronologické, auditovateľné a porovnateľné.",
+        "subtitle": "Pravidlá, ktoré udržujú predikcie chronologické, auditovateľné a porovnateľné",
         "sections": [
           {
             "title": "Point-in-time princíp",
@@ -63,7 +63,7 @@
       "model_data": {
         "eyebrow": "MODEL & DATA",
         "title": "Model a dáta",
-        "subtitle": "Čo BlinQ zobrazuje, čo nezobrazuje a prečo.",
+        "subtitle": "Čo BlinQ zobrazuje, čo nezobrazuje a prečo",
         "sections": [
           {
             "title": "Dátové zdroje",
@@ -71,22 +71,22 @@
           },
           {
             "title": "Aktuálnosť",
-            "body": "Predikcie a súvisiace údaje sa aktualizujú podľa dostupnosti nových dát. Pri výpadku alebo oneskorení externého providera môže byť časť obsahu dočasne neúplná."
+            "body": "Predikcie a súvisiace údaje sa aktualizujú podľa dostupnosti nových dát. Pri výpadku alebo oneskorení externého poskytovateľa dát môže byť časť obsahu dočasne neúplná."
           },
           {
             "title": "Modelové verzie",
-            "body": "Produkčný model môže byť priebežne aktualizovaný. Verzia modelu a stav publikovaného feedu sa zobrazujú v rozhraní, aby bolo možné spätne rozlíšiť, ktorý model vytvoril konkrétny výstup."
+            "body": "Produkčný model môže byť priebežne aktualizovaný. Verzia modelu a stav publikovaného dátového výstupu sa zobrazujú v rozhraní, aby bolo možné spätne rozlíšiť, ktorý model vytvoril konkrétny výstup."
           },
           {
             "title": "Žiadne dopĺňanie falošných dát",
-            "body": "Ak údaj nie je k dispozícii, aplikácia ho neodhadne iba kvôli vizuálnemu vyplneniu. Pri rankingoch, kurzoch, fotografiách, logách alebo štatistikách sa používa definovaný fallback alebo prázdny stav."
+            "body": "Ak údaj nie je k dispozícii, aplikácia ho neodhadne iba kvôli vizuálnemu vyplneniu. Pri rebríčkoch, kurzoch, fotografiách, logách alebo štatistikách sa používa definované náhradné zobrazenie alebo prázdny stav."
           }
         ]
       },
       "faq": {
         "eyebrow": "POMOC",
         "title": "Najčastejšie otázky",
-        "subtitle": "Krátke odpovede k predikciám, účtom a dátam.",
+        "subtitle": "Krátke odpovede k predikciám, účtom a dátam",
         "faq": [
           {
             "q": "Čo je BlinQ?",
@@ -106,7 +106,7 @@
           },
           {
             "q": "Prečo niekedy chýba kurz alebo štatistika?",
-            "a": "Údaj nemusí byť dostupný od providera alebo nemusí spĺňať požiadavky systému na aktuálnosť a kvalitu. BlinQ chýbajúcu hodnotu nevymýšľa."
+            "a": "Údaj nemusí byť dostupný od poskytovateľa dát alebo nemusí spĺňať požiadavky systému na aktuálnosť a kvalitu. BlinQ chýbajúcu hodnotu nevymýšľa."
           },
           {
             "q": "Ako sa aktivuje platený účet?",
@@ -114,7 +114,7 @@
           },
           {
             "q": "Kde vidím platnosť členstva?",
-            "a": "Aktuálny level a platnosť prístupu nájdete vo svojom BlinQ účte."
+            "a": "Aktuálnu úroveň a platnosť prístupu nájdete vo svojom BlinQ účte."
           },
           {
             "q": "Ako kontaktujem podporu?",
@@ -125,7 +125,7 @@
       "responsible_use": {
         "eyebrow": "RESPONSIBLE USE",
         "title": "Zodpovedné používanie",
-        "subtitle": "Predikcia je informácia, nie istota.",
+        "subtitle": "Predikcia je informácia, nie istota",
         "sections": [
           {
             "title": "Analytický charakter služby",
@@ -148,7 +148,7 @@
       "terms": {
         "eyebrow": "LEGAL",
         "title": "Podmienky používania",
-        "subtitle": "Pravidlá používania služby BlinQ.",
+        "subtitle": "Pravidlá používania služby BlinQ",
         "sections": [
           {
             "title": "1. Charakter služby",
@@ -164,7 +164,7 @@
           },
           {
             "title": "4. Dostupnosť služby",
-            "body": "BlinQ sa snaží zabezpečiť vysokú dostupnosť, nemôže však garantovať nepretržitú prevádzku ani úplnú dostupnosť externých dátových zdrojov. Údržba, výpadky providerov a oneskorené športové dáta môžu dočasne ovplyvniť službu."
+            "body": "BlinQ sa snaží zabezpečiť vysokú dostupnosť, nemôže však garantovať nepretržitú prevádzku ani úplnú dostupnosť externých dátových zdrojov. Údržba, výpadky poskytovateľov dát a oneskorené športové dáta môžu dočasne ovplyvniť službu."
           },
           {
             "title": "5. Zakázané používanie",
@@ -183,11 +183,11 @@
       "privacy": {
         "eyebrow": "LEGAL",
         "title": "Ochrana súkromia",
-        "subtitle": "Ako BlinQ pracuje s údajmi používateľov.",
+        "subtitle": "Ako BlinQ pracuje s údajmi používateľov",
         "sections": [
           {
             "title": "Aké údaje spracúvame",
-            "body": "Podľa používaných funkcií môžeme spracúvať e-mail, používateľský identifikátor, Telegram nickname, zvolený avatar, úroveň a platnosť členstva, manuálne platobné referencie, interné servisné poznámky a technické údaje potrebné na bezpečnú prevádzku služby."
+            "body": "Podľa používaných funkcií môžeme spracúvať e-mail, používateľský identifikátor, Telegram prezývku, zvolený avatar, úroveň a platnosť členstva, manuálne platobné referencie, interné servisné poznámky a technické údaje potrebné na bezpečnú prevádzku služby."
           },
           {
             "title": "Na čo údaje používame",
@@ -195,7 +195,7 @@
           },
           {
             "title": "Externí poskytovatelia",
-            "body": "Niektoré funkcie zabezpečujú technologickí poskytovatelia, napríklad autentifikácia, hosting, databáza, e-mail alebo dátoví provideri. Spracovanie je obmedzené na rozsah potrebný na poskytovanie príslušnej služby."
+            "body": "Niektoré funkcie zabezpečujú technologickí poskytovatelia, napríklad autentifikácia, hosting, databáza, e-mail alebo poskytovatelia dát. Spracovanie je obmedzené na rozsah potrebný na poskytovanie príslušnej služby."
           },
           {
             "title": "Uchovávanie",
@@ -214,7 +214,7 @@
       "cookies": {
         "eyebrow": "LEGAL",
         "title": "Cookies a lokálne úložisko",
-        "subtitle": "Čo si aplikácia ukladá v prehliadači a prečo.",
+        "subtitle": "Čo si aplikácia ukladá v prehliadači a prečo",
         "sections": [
           {
             "title": "Nevyhnutné úložisko",

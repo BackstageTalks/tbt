@@ -27,12 +27,12 @@ _POLICY = {
         "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "rookie": {
-        "daily": (2, False), "prime": (1, False), "top_daily": (2, False), "value": (0, False),
+        "daily": (1, False), "prime": (1, False), "top_daily": (1, False), "value": (1, False),
         "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "pro": {
         "daily": (3, False), "prime": (3, False), "top_daily": (3, False), "value": (3, False),
-        "doubles": (0, False), "ace": (3, False), "sg": (0, False),
+        "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "elite": {key: ("ALL", True) for key in ["daily", *SECTION_TO_FEED_KEY]},
     "legend": {key: ("ALL", True) for key in ["daily", *SECTION_TO_FEED_KEY]},
@@ -58,9 +58,9 @@ BOARD_MIN_SURFACE_MATCHES = 5
 BOARD_PLANS = {"legend", "goat", "admin"}
 
 RESULT_HISTORY_HOURS = {
-    "rookie": 24,
-    "pro": 48,
-    "elite": None,
+    "rookie": 0,
+    "pro": 0,
+    "elite": 0,
     "legend": None,
     "goat": None,
     "admin": None,
@@ -326,8 +326,6 @@ def _select_authorized_rows(
     ROOKIE rule normally unlocks only two rows, or BLUR/HIDE any individual row.
     """
     source=list(rows or [])
-    if selection_mode == "stable_random":
-        source=_stable_order(source, access=access, section=section)
 
     all_visible=str(limit).upper() == "ALL"
     if all_visible:
@@ -336,10 +334,35 @@ def _select_authorized_rows(
         try: visible_count=max(0,int(limit))
         except (TypeError, ValueError): visible_count=0
 
+    # `stable_random` means random *unlocked positions*, not "shuffle the rows
+    # and show the selected rows at the top".  Keep the public offer order and
+    # choose deterministic positions per account/day.  Locked rows never enter
+    # the payload; only their non-sensitive slot state does.  Restrict the
+    # selection pool to the Daily Hub preview (10 rows) so every daily sample is
+    # actually visible without requiring SEE ALL.
+    random_positions=None
+    if selection_mode == "stable_random" and not all_visible and visible_count > 0 and source:
+        pool_count=min(len(source), 10)
+        # _stable_order expects row-like values, so enumerate pairs are not useful
+        # row ids. Build the deterministic score explicitly while retaining the
+        # original slot numbers.
+        stamp=datetime.now(timezone.utc).date().isoformat()
+        seed=f"{_access_identity(access)}|{stamp}|{section}:positions"
+        scored=[]
+        for idx,row in enumerate(source[:pool_count]):
+            ident=f"{_row_id(row if isinstance(row,dict) else {})}|{idx}"
+            scored.append((hashlib.sha256(f"{seed}|{ident}".encode("utf-8")).hexdigest(), idx))
+        random_positions={idx for _,idx in sorted(scored)[:min(visible_count,pool_count)]}
+
     overrides=row_overrides if isinstance(row_overrides,dict) else {}
     allowed=[]; slot_states=[]
     for index,row in enumerate(source, start=1):
-        base_state="active" if all_visible or index <= visible_count else ("blurred" if blur_remaining else "hidden")
+        if all_visible:
+            base_state="active"
+        elif random_positions is not None:
+            base_state="active" if (index-1) in random_positions else ("blurred" if blur_remaining else "hidden")
+        else:
+            base_state="active" if index <= visible_count else ("blurred" if blur_remaining else "hidden")
         state=str(overrides.get(str(index),base_state)).lower()
         if state not in {"active","blurred","hidden"}: state=base_state
         slot_states.append(state)

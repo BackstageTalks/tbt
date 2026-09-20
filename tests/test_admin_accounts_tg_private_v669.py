@@ -73,6 +73,6 @@ def test_frontend_account_manager_keeps_only_simple_filters_and_profile_editing(
     editor=app[start:end]
     assert "TG Private" not in editor
     assert "Manuálne spárovanie platby" not in editor
-    assert "Telegram nickname" in html
+    assert "Telegram prezývka" in html
     assert "Zobrazované meno" not in html
 

@@ -4,15 +4,16 @@
     "rookie": {
       "label": "BlinQ ROOKIE",
       "card_title": "BlinQ ROOKIE",
-      "short_description": "FREE základný prístup do BlinQ bez časového obmedzenia.",
-      "description": "Bezplatná úroveň BlinQ bez pevnej expirácie. Rozsah obsahu sa riadi nastavením prístupu pre ROOKIE.",
+      "short_description": "Bezplatná ochutnávka BlinQ s tromi dennými predikciami.",
+      "description": "Bezplatná úroveň BlinQ bez časového obmedzenia. Denne sprístupní 1 TOP, 1 Short Odds a 1 Value predikciu.",
       "cta_label": "Vybrať ROOKIE",
       "url": "",
       "invite_only": false,
       "features": [
-        "2 stabilné denné TOP náhľady",
-        "Základný dashboard",
-        "Ukážka BlinQ ponuky"
+        "1 TOP pick denne",
+        "1 Short Odds pick denne",
+        "1 Value pick denne",
+        "Základný dashboard"
       ],
       "eyebrow": ""
     },
@@ -26,9 +27,9 @@
       "invite_only": false,
       "features": [
         "3 TOP picky denne",
-        "3 PRIME value picky",
-        "Plný dashboard",
-        "Vlastné upozornenia"
+        "3 Short Odds picky denne",
+        "3 Value picky denne",
+        "Plný dashboard"
       ],
       "eyebrow": ""
     },
@@ -43,6 +44,7 @@
       "features": [
         "Všetko z PRO",
         "VIP skupina",
+        "Kompletná ponuka pickov na dashboarde",
         "See All",
         "Overview + pokročilé analýzy"
       ],

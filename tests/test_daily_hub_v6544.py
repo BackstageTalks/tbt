@@ -20,11 +20,11 @@ def _rows(n):
     ]
 
 
-def test_default_daily_hub_access_is_two_random_three_all():
+def test_default_daily_hub_access_is_one_random_three_all():
     cfg = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     daily = cfg["dashboard"]["daily_hub"]["tabs"]["daily"]["plans"]
     assert cfg["dashboard"]["daily_hub"]["preview_rows"] == 10
-    assert daily["rookie"]["visible_rows"] == 2
+    assert daily["rookie"]["visible_rows"] == 1
     assert daily["rookie"]["selection_mode"] == "stable_random"
     assert daily["rookie"]["see_all"] is False
     assert daily["pro"]["visible_rows"] == 3
@@ -39,7 +39,7 @@ def test_server_policy_keeps_full_offer_elite_only():
     rookie = entitlement_manifest({"status": "active", "plan": "rookie"}, payload, cfg)["sections"]["daily"]
     pro = entitlement_manifest({"status": "active", "plan": "pro"}, payload, cfg)["sections"]["daily"]
     elite = entitlement_manifest({"status": "active", "plan": "elite"}, payload, cfg)["sections"]["daily"]
-    assert rookie["visible_picks"] == 2 and rookie["see_all"] is False
+    assert rookie["visible_picks"] == 1 and rookie["see_all"] is False
     assert rookie["selection_mode"] == "stable_random"
     assert pro["visible_picks"] == 3 and pro["see_all"] is False
     assert elite["visible_picks"] == "ALL" and elite["see_all"] is True
