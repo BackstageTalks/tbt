@@ -871,6 +871,93 @@ def reconcile_ledger(ledger, predictions, history, now=None):
 
 
 
+
+_RESULT_ROW_FIELDS = (
+    # Keep only fields consumed by the public Results UI. The immutable private
+    # ledger remains the source of truth for audit/rebuilds.
+    "event_id", "scheduled_at", "tour", "surface", "tournament",
+    "competition", "tournament_id", "unique_tournament_id",
+    "tournament_logo_id", "venue_city", "tournament_city",
+    "venue_country", "tournament_country", "country_name",
+    "venue_country_code", "tournament_country_code", "country_code",
+    "round", "prediction_family",
+)
+
+_RESULT_PUBLICATION_FIELDS = (
+    "section", "market", "selection", "selection_id", "odds",
+    "model_probability", "issued_at", "price_status", "projection",
+    "projection_scope", "projection_metric", "data_depth", "result",
+)
+
+
+def _compact_public_result_row(source):
+    """Return the immutable Results presentation subset.
+
+    The private ledger keeps the full prediction/features for audit and rebuilds.
+    The public serving feed only needs identity, display metadata and the issued
+    publication snapshots. Keeping thousands of full training-feature rows in
+    feed.json caused the all-history rebuild to exceed the 10 MB serving cap.
+    """
+    row = {
+        field: deepcopy(source[field])
+        for field in _RESULT_ROW_FIELDS
+        if field in source and source[field] is not None
+    }
+    for side in ("player1", "player2"):
+        player = source.get(side)
+        if isinstance(player, dict):
+            compact_player = {}
+            for field in ("id", "name"):
+                if player.get(field) is not None:
+                    compact_player[field] = deepcopy(player[field])
+            country = (
+                player.get("country_code")
+                or player.get("country_code2")
+                or player.get("country_code3")
+            )
+            if country:
+                compact_player["country_code"] = deepcopy(country)
+            gender = player.get("gender") or player.get("sex")
+            if gender:
+                compact_player["gender"] = deepcopy(gender)
+            row[side] = compact_player
+
+    publications = []
+    for publication in source.get("market_publications", []) or []:
+        if not isinstance(publication, dict):
+            continue
+        compact_publication = {
+            field: deepcopy(publication[field])
+            for field in _RESULT_PUBLICATION_FIELDS
+            if field in publication and publication[field] is not None
+        }
+        result = compact_publication.get("result")
+        if isinstance(result, dict):
+            compact_publication["result"] = {
+                field: deepcopy(result[field])
+                for field in (
+                    "correct", "status", "outcome", "settlement", "result",
+                    "void", "is_void", "reason", "void_reason",
+                    "settlement_reason", "profit_units", "staked_units",
+                    "actual_count", "opponent_actual_count", "data_depth",
+                )
+                if field in result and result[field] is not None
+            }
+        publications.append(compact_publication)
+    row["market_publications"] = publications
+
+    result = source.get("result")
+    if isinstance(result, dict):
+        row["result"] = {
+            field: deepcopy(result[field])
+            for field in (
+                "winner_id", "correct", "settled_at", "scheduled_at",
+                "corrected_at", "status", "outcome", "reason",
+            )
+            if field in result and result[field] is not None
+        }
+    return row
+
 def serving_feed(ledger, model, history, report, upcoming, now=None):
     now = now or datetime.now(timezone.utc)
     future = {event_id(m) for m in upcoming if m.scheduled_at > now
@@ -981,11 +1068,14 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
     rolling_performance, rolling_summary = performance_windows(winner_results, results, now=now)
     # Do not rely on incidental ledger ordering. Recent settled rows must never
     # disappear from the 1000-row public window after a merge/migration.
-    result_rows = sorted(
-        results,
-        key=lambda row: datetime.fromisoformat(str(row.get("scheduled_at") or "1970-01-01T00:00:00+00:00").replace("Z", "+00:00")),
-        reverse=True,
-    )[:1000]
+    result_rows = [
+        _compact_public_result_row(row)
+        for row in sorted(
+            results,
+            key=lambda row: datetime.fromisoformat(str(row.get("scheduled_at") or "1970-01-01T00:00:00+00:00").replace("Z", "+00:00")),
+            reverse=True,
+        )
+    ]
     return {"schema": 1, "ready": True, "generated_at": now.isoformat(),
             "model": {"version": model.version, "report": report, "objective": "accuracy"},
             "upcoming": [r for r in ledger if r["event_id"] in future and r.get("result") is None
