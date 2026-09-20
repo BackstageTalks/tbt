@@ -9,10 +9,16 @@
     projectId: 'blinq-182',
   });
 
+  const AUTH_RUNTIME = '736-r35';
+  const AUTH_CONFIG_URL = '/api/v1/auth/config';
+  const AUTH_CONFIG_ATTEMPTS = 3;
+  const TRANSIENT_AUTH_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
+
   const KEY = 'blinq_v4_session';
   const EPOCH_KEY = 'blinq_v4_session_epoch';
   const LEGACY_KEYS = ['blinq_v3_session', 'blinq_v3_session_epoch'];
   let config = null;
+  let initPromise = null;
   let refreshing = null;
 
   function epoch() { return localStorage.getItem(EPOCH_KEY) || ''; }
@@ -87,18 +93,47 @@
     return friendly[code] || raw.replaceAll('_', ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
   }
 
+  function wait(ms) { return new Promise(resolve => setTimeout(resolve, ms)); }
+  function safeTimeout(ms) {
+    return typeof AbortSignal !== 'undefined' && typeof AbortSignal.timeout === 'function'
+      ? AbortSignal.timeout(ms)
+      : undefined;
+  }
+  function codeOf(error) { return String(error?.code || '').trim().toLowerCase(); }
+  function isTransientAuthError(error) {
+    return TRANSIENT_AUTH_STATUSES.has(Number(error?.status || 0));
+  }
+  function isPermanentAuthConfigError(error) {
+    return new Set([
+      'auth_disabled',
+      'firebase_not_configured',
+      'firebase_server_config_invalid',
+      'firebase_project_mismatch',
+    ]).has(codeOf(error));
+  }
+
   async function json(url, options = {}) {
-    const headers = {Accept: 'application/json', ...(options.headers || {})};
-    if (options.body && !Object.keys(headers).some(key => key.toLowerCase() === 'content-type')) {
+    const {timeoutMs = 20000, ...fetchOptions} = options;
+    const headers = {Accept: 'application/json', ...(fetchOptions.headers || {})};
+    if (fetchOptions.body && !Object.keys(headers).some(key => key.toLowerCase() === 'content-type')) {
       headers['Content-Type'] = 'application/json';
     }
-    const timeoutSignal = typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(20000) : undefined;
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      cache: 'no-store',
-      signal: options.signal || timeoutSignal,
-    });
+    let response;
+    try {
+      response = await fetch(url, {
+        ...fetchOptions,
+        headers,
+        cache: 'no-store',
+        signal: fetchOptions.signal || safeTimeout(timeoutMs),
+      });
+    } catch (cause) {
+      const timeout = cause?.name === 'TimeoutError' || cause?.name === 'AbortError';
+      const error = new Error(timeout ? 'Authentication request timed out.' : 'Network request failed.');
+      error.status = 0;
+      error.code = timeout ? 'AUTH_TIMEOUT' : 'AUTH_NETWORK_ERROR';
+      error.cause = cause;
+      throw error;
+    }
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       const error = new Error(errorMessage(data, response.status));
@@ -110,9 +145,17 @@
   }
 
   function provider() {
-    if (!config?.enabled) throw new Error('Authentication is temporarily unavailable.');
+    if (!config?.enabled) {
+      const error = new Error('Authentication is temporarily unavailable.');
+      error.code = 'AUTH_DISABLED';
+      throw error;
+    }
     const value = String(config.provider || '').toLowerCase();
-    if (value !== 'firebase') throw new Error('Firebase authentication is not configured.');
+    if (value !== 'firebase') {
+      const error = new Error('Firebase authentication is not configured.');
+      error.code = 'FIREBASE_NOT_CONFIGURED';
+      throw error;
+    }
     return value;
   }
   function firebaseEndpoint(action) {
@@ -151,14 +194,87 @@
     return refreshing;
   }
 
-  async function init() {
-    clearLegacy();
-    config = await json('/api/v1/auth/config');
-    if (provider() !== 'firebase') throw new Error('Firebase authentication is not configured.');
-    if (config.project_id && config.project_id !== FIREBASE_WEB.projectId) {
-      throw new Error('Firebase project configuration mismatch.');
+  function validateAuthConfig(value) {
+    if (!value || value.enabled !== true) {
+      const error = new Error('Authentication is temporarily unavailable.');
+      error.code = String(value?.error || 'AUTH_DISABLED').toUpperCase();
+      throw error;
     }
-    return {...config, recovery: false};
+    if (String(value.provider || '').toLowerCase() !== 'firebase') {
+      const error = new Error('Firebase authentication is not configured.');
+      error.code = 'FIREBASE_NOT_CONFIGURED';
+      throw error;
+    }
+    if (value.project_id && value.project_id !== FIREBASE_WEB.projectId) {
+      const error = new Error('Firebase project configuration mismatch.');
+      error.code = 'FIREBASE_PROJECT_MISMATCH';
+      throw error;
+    }
+    if (value.server_ready === false) {
+      const error = new Error('Authentication server configuration is invalid.');
+      error.status = 503;
+      error.code = String(value.error || 'FIREBASE_SERVER_CONFIG_INVALID').toUpperCase();
+      throw error;
+    }
+    return value;
+  }
+
+  function degradedClientConfig() {
+    return {
+      enabled: true,
+      provider: 'firebase',
+      release: '7.3.6',
+      project_id: FIREBASE_WEB.projectId,
+      auth_domain: FIREBASE_WEB.authDomain,
+      server_ready: null,
+      degraded: true,
+      config_unavailable: true,
+    };
+  }
+
+  async function loadAuthConfig() {
+    let lastError = null;
+    for (let attempt = 0; attempt < AUTH_CONFIG_ATTEMPTS; attempt += 1) {
+      try {
+        return validateAuthConfig(await json(AUTH_CONFIG_URL, {timeoutMs: 6000}));
+      } catch (error) {
+        lastError = error;
+        if (isPermanentAuthConfigError(error) || !isTransientAuthError(error)) throw error;
+        if (attempt + 1 < AUTH_CONFIG_ATTEMPTS) await wait(250 * (attempt + 1));
+      }
+    }
+    // Firebase web configuration is public and embedded in this bundle. A short
+    // Azure Functions cold start must not disable the login form. Protected API
+    // calls remain authoritative and will still reject unusable sessions.
+    console.warn('[BlinQ auth] auth config endpoint unavailable; continuing with trusted Firebase client configuration.', lastError);
+    return degradedClientConfig();
+  }
+
+  async function performInit() {
+    clearLegacy();
+    config = await loadAuthConfig();
+    provider();
+    return {...config, recovery: false, runtime: AUTH_RUNTIME};
+  }
+
+  async function init(options = {}) {
+    const force = options?.force === true;
+    if (config && !force) return {...config, recovery: false, runtime: AUTH_RUNTIME};
+    if (initPromise && !force) return initPromise;
+    const pending = performInit();
+    initPromise = pending;
+    try { return await pending; }
+    finally { if (initPromise === pending) initPromise = null; }
+  }
+
+  async function ensureReady() {
+    if (!config?.enabled) await init();
+    provider();
+    return config;
+  }
+
+  function status() {
+    return config ? {...config, runtime: AUTH_RUNTIME} : {enabled: false, provider: 'unknown', runtime: AUTH_RUNTIME};
   }
 
   async function firebaseEmailVerified(idToken) {
@@ -191,7 +307,7 @@
     return session();
   }
   async function signIn(email, password) {
-    provider();
+    await ensureReady();
     return signInFirebase(String(email || '').trim().toLowerCase(), password);
   }
 
@@ -229,12 +345,12 @@
     return {verification_required: true, email: String(email || '').trim()};
   }
   async function signUp(email, password, telegramNick, legalConsent = {}) {
-    provider();
+    await ensureReady();
     return signUpFirebase(String(email || '').trim().toLowerCase(), password, telegramNick, legalConsent);
   }
 
   async function resendVerification() {
-    provider();
+    await ensureReady();
     const s = await restore();
     if (!s) throw new Error('Sign in once more, then resend the verification email.');
     await json('/api/v1/auth/email', {
@@ -252,7 +368,7 @@
     });
   }
   async function reset(email) {
-    provider();
+    await ensureReady();
     return resetFirebase(String(email || '').trim().toLowerCase());
   }
 
@@ -277,7 +393,7 @@
     return null;
   }
   async function update(fields) {
-    provider();
+    await ensureReady();
     return updateFirebase(fields);
   }
 
@@ -379,7 +495,7 @@
       'Content-Type': file.type || 'application/octet-stream',
       'X-Blinq-Filename': encodeURIComponent(file.name || 'banner-image').slice(0, 480),
     };
-    const timeoutSignal = typeof AbortSignal?.timeout === 'function' ? AbortSignal.timeout(45000) : undefined;
+    const timeoutSignal = safeTimeout(45000);
     const response = await fetch('/api/v1/admin/media', {method: 'POST', headers, body: file, cache: 'no-store', signal: timeoutSignal});
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -391,7 +507,7 @@
   }
 
   window.BlinqAuth = {
-    init, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
+    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
     insights, liveRadar, adminLiveRadar, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews,

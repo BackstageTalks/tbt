@@ -126,8 +126,9 @@ def test_blinq_board_results_are_separate_from_official_results():
     data, _ = filter_feed_for_access(payload, {"status": "active", "plan": "legend"})
     assert len(data["board_results"]) == 1
     assert data["board_results"][0]["event_id"] == "9"
-    # The ordinary Results payload stays intact; Board owns only a derived view.
-    assert data["results"] == payload["results"]
+    # Board owns a derived view. An unclassified Board-only row must not leak
+    # into the official BlinQ Results categories.
+    assert data["results"] == []
 
 
 def test_aces_and_double_faults_have_independent_server_entitlements():

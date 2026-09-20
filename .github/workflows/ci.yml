@@ -111,6 +111,7 @@ jobs:
           node tests/test_auth_refresh_race.js
           node tests/test_firebase_web_auth.js
           node tests/test_firebase_email_verification.js
+          node tests/test_auth_init_resilience_r35.js
           node tests/test_v736_ui_regression_contract.js
 
       - name: Check production web artifact
@@ -199,6 +200,10 @@ jobs:
           grep -q "/auth.js?v=7360&p=${patch}" /tmp/blinq-index.html
           curl -fsSL -H 'Cache-Control: no-cache' "$base/blinq-app.css?__blinq_release=$stamp" -o /tmp/blinq-app.css
           grep -q "BlinQ runtime patch 7.3.6-r${patch}" /tmp/blinq-app.css
+          curl -fsSL -H 'Cache-Control: no-cache' "$base/auth.js?__blinq_release=$stamp" -o /tmp/blinq-auth.js
+          grep -q "AUTH_RUNTIME = '736-r${patch}'" /tmp/blinq-auth.js
+          curl -fsSL -H 'Cache-Control: no-cache' "$base/app.js?__blinq_release=$stamp" -o /tmp/blinq-app.js
+          grep -q "UI config failed; auth remains available" /tmp/blinq-app.js
           curl -fsSL -H 'Cache-Control: no-cache' "$base/release.json?__blinq_release=$stamp" -o /tmp/blinq-release.json
           python - <<'PYWEB'
           import json
@@ -206,6 +211,34 @@ jobs:
           assert data.get('frontend_marker') == 'blinq-web-736', data
           print(json.dumps(data, indent=2))
           PYWEB
+
+      - name: Smoke deployed authentication readiness
+        if: ${{ vars.TBT_PRODUCTION_URL != '' }}
+        env:
+          TBT_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL }}
+        run: |
+          set -euo pipefail
+          base="${TBT_PRODUCTION_URL%/}"
+          ok=0
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSL -H 'Cache-Control: no-cache' "$base/api/v1/auth/config?__blinq_auth_smoke=${GITHUB_SHA}" -o /tmp/blinq-auth-config.json; then
+              if python - <<'PYAUTH'
+          import json
+          data=json.load(open('/tmp/blinq-auth-config.json', encoding='utf-8'))
+          assert data.get('enabled') is True, data
+          assert data.get('provider') == 'firebase', data
+          assert data.get('project_id') == 'blinq-182', data
+          assert data.get('server_ready') is True, data
+          print(json.dumps(data, indent=2))
+          PYAUTH
+              then
+                ok=1
+                break
+              fi
+            fi
+            sleep $((attempt * 2))
+          done
+          test "$ok" = 1 || { echo 'Deployed authentication readiness check failed' >&2; exit 1; }
 
       - name: Confirm deployed prediction publication
         env:

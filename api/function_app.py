@@ -26,6 +26,7 @@ from tbt.services.auth import (
     update_firebase_profile,
     verify_user,
     firebase_get_user_by_email,
+    firebase_app,
 )
 from tbt.services.admin_accounts import (
     delete_user_account,
@@ -243,13 +244,39 @@ def public_media(req):
 
 @app.route(route="v1/auth/config", methods=["GET"])
 def auth_config(req):
+    """Return public client auth metadata after validating Firebase Admin locally.
+
+    Environment-variable presence alone is not readiness: malformed PEM/client
+    values used to report enabled=True and only fail later on protected requests.
+    Initializing the named Admin app validates the service-account material
+    without requiring a Firebase user lookup.
+    """
     provider = auth_provider(settings)
-    payload = {"enabled": provider != "none", "provider": provider, "release": RELEASE}
-    if provider == "firebase":
+    payload = {
+        "enabled": provider != "none",
+        "provider": provider,
+        "release": RELEASE,
+        "server_ready": False,
+    }
+    if provider != "firebase":
+        payload["error"] = "firebase_not_configured"
+        return response(payload, 503)
+
+    payload.update({
+        "project_id": settings.firebase_project_id,
+        "auth_domain": f"{settings.firebase_project_id}.firebaseapp.com",
+    })
+    try:
+        firebase_app(settings)
+    except AuthUnavailable:
         payload.update({
-            "project_id": settings.firebase_project_id,
-            "auth_domain": f"{settings.firebase_project_id}.firebaseapp.com",
+            "enabled": False,
+            "server_ready": False,
+            "error": "firebase_server_config_invalid",
         })
+        return response(payload, 503)
+
+    payload["server_ready"] = True
     return response(payload)
 
 
@@ -779,9 +806,11 @@ def tournament_logo_proxy(req):
 def runtime_ui_config(req):
     try:
         config = load_runtime_ui_config()
-        return response({"configured": bool(config), "config": config})
+        return response({"configured": bool(config), "config": config, "storage_available": True})
     except AdminStorageUnavailable:
-        return response({"error": "ui_config_storage_unavailable", "configured": False, "config": None, "storage_available": False}, 503)
+        # Public UI has a committed release fallback. Storage availability is
+        # diagnostic metadata, not an application-fatal condition.
+        return response({"configured": False, "config": None, "storage_available": False})
 
 
 @app.route(route="v1/content/news", methods=["GET"])

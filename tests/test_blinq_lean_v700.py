@@ -8,10 +8,21 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _result(hours_ago: int):
     now = datetime.now(timezone.utc)
+    scheduled = now - timedelta(hours=hours_ago)
+    issued = scheduled - timedelta(hours=2)
     return {
         "event_id": f"r{hours_ago}",
-        "scheduled_at": (now - timedelta(hours=hours_ago)).isoformat(),
+        "scheduled_at": scheduled.isoformat(),
         "result": {"correct": True},
+        "market_publications": [{
+            "section": "top_daily",
+            "market": "match_winner",
+            "selection": "A",
+            "selection_id": "a",
+            "issued_at": issued.isoformat(),
+            "publication_status": "published",
+            "result": {"correct": True, "status": "settled"},
+        }],
     }
 
 

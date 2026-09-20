@@ -8,7 +8,7 @@ CSS=(WEB/"blinq-app.css").read_text(encoding="utf-8")
 UI=json.loads((WEB/"ui-config.json").read_text(encoding="utf-8"))
 
 def test_r27_short_odds_is_public_and_admin_managed():
-    assert UI["ui_patch"] == "736-r32"
+    assert UI["ui_patch"] == "736-r35"
     prime=UI["dashboard"]["daily_hub"]["tabs"]["prime"]
     assert prime["enabled"] is True
     assert prime["label"] == "Short Odds"

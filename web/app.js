@@ -2,7 +2,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:false, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -41,8 +41,9 @@
   }
   function playerAvatarHtml(photo,name,tour,gender='',wrapperClass='player-avatar'){
     const safe=safePhotoUrl(photo),fallback=playerFallbackUrl(tour,gender),src=safe||fallback,initial=initials(name);
-    if(!src)return `<span class="${escapeHtml(wrapperClass)}">${escapeHtml(initial)}</span>`;
-    return `<span class="${escapeHtml(wrapperClass)} has-photo"><img data-player-photo data-fallback-src="${escapeHtml(fallback)}" data-fallback-text="${escapeHtml(initial)}" src="${escapeHtml(src)}" alt="" loading="lazy"></span>`;
+    const fallbackClass=fallback.includes('missing_foto_w.webp')?' player-fallback-wta':' player-fallback-atp';
+    if(!src)return `<span class="${escapeHtml(wrapperClass)}${fallbackClass}">${escapeHtml(initial)}</span>`;
+    return `<span class="${escapeHtml(wrapperClass)} has-photo${fallbackClass}"><img data-player-photo data-fallback-src="${escapeHtml(fallback)}" data-fallback-text="${escapeHtml(initial)}" src="${escapeHtml(src)}" alt="" loading="lazy"></span>`;
   }
   function handleAssetImageError(event){
     const img=event?.target;
@@ -263,12 +264,12 @@
   async function loadUiConfig() {
     let runtimeConfigSnapshot=null;
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=32');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=35');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=32');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=35');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -336,7 +337,11 @@
     const loadedPatch=String(state.ui?.ui_patch||'');
     const loadedPatchNumber=Number((loadedPatch.match(/r(\d+)$/)||[])[1]||0);
     if(loadedPatchNumber<27){const primeTab=state.ui?.dashboard?.daily_hub?.tabs?.prime;if(primeTab)primeTab.enabled=true;}
-    state.ui.ui_patch='736-r32';
+    if(loadedPatchNumber<33){
+      const rookiePrime=state.ui?.dashboard?.daily_hub?.tabs?.prime?.plans?.rookie;
+      if(rookiePrime)rookiePrime.selection_mode='stable_random';
+    }
+    state.ui.ui_patch='736-r35';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -533,14 +538,32 @@
     const predictionRoutes=new Set(['predictions','prime','top_daily','value','doubles','ace','sg']);
     const modelRoutes=new Set(['model_data','methodology','how_blinq_works']);
     const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
-    const referenceNav=document.querySelector('.reference-navigation');
+    const resultsLocked=!resultsAccessAllowed();
+    const resultsPlan=resultsLocked?firstResultsUnlockPlan():'';
+    const decorateResultsAccess=node=>{
+      if(!node)return;
+      node.classList.toggle('access-nav-locked',resultsLocked);
+      if(resultsLocked){
+        node.dataset.upgradePlan=resultsPlan;
+        node.dataset.upgradeSection=lcopy('Results','Výsledky','Výsledky');
+        node.dataset.upgradeExplicit='1';
+        node.setAttribute('aria-label',`${lcopy('Results','Výsledky','Výsledky')} · ${accessHintDetails(resultsPlan,'').title}`);
+      }else{
+        delete node.dataset.upgradePlan;
+        delete node.dataset.upgradeSection;
+        delete node.dataset.upgradeExplicit;
+        node.removeAttribute('aria-label');
+      }
+    };
     if(referenceNav){
       referenceNav.querySelectorAll('[data-route]').forEach(node=>{
         const active=Boolean(referenceRoute)&&node.dataset.route===referenceRoute;
         node.classList.toggle('active',active);
         if(active)node.setAttribute('aria-current','page');else node.removeAttribute('aria-current');
       });
+      decorateResultsAccess(referenceNav.querySelector('[data-route="results"]'));
     }
+    document.querySelectorAll('#mobileTabs [data-route="results"]').forEach(decorateResultsAccess);
     const profileAdmin=$('profileAdminLink');if(profileAdmin)profileAdmin.hidden=!isAdminAccount();
   }
 
@@ -844,7 +867,7 @@
     $('authSubmit').textContent=publicText({login:'Sign in',signup:'Create account',reset:'Send recovery link',recovery:'Save password'}[mode]);
     $('switchSignup').textContent=publicText(mode==='login'?'Create account':'Back to sign in'); $('switchReset').hidden=mode!=='login';
     $('authSubmit').disabled=!state.authEnabled;
-    if(!state.authEnabled) $('authMessage').textContent=publicText('Authentication is temporarily unavailable.');
+    if(!state.authEnabled)$('authMessage').textContent=publicText('Authentication is temporarily unavailable.');else $('authMessage').textContent='';
     $('appShell').hidden=true; translatePublicDom(document.body);
     if(!$('authDialog').open) $('authDialog').showModal();
   }
@@ -865,8 +888,10 @@
     if(['login','signup','recovery'].includes(state.authMode)&&!password){message.textContent=publicText('Enter your password.');passwordInput.focus();return;}
     if(['signup','recovery'].includes(state.authMode)&&password.length<8){message.textContent=publicText('Choose a password with at least eight characters.');passwordInput.focus();return;}
     if(state.authMode==='signup'){const nick=$('authName').value.trim();if(!/^@?[A-Za-z0-9_]{5,32}$/.test(nick)){message.textContent='Telegram nickname musí mať 5–32 znakov: písmená, čísla alebo _.';$('authName').focus();return;}if(!$('authLegalConsent')?.checked){message.textContent='Pre vytvorenie účtu potvrď Podmienky používania a Ochranu súkromia.';$('authLegalConsent')?.focus();return;}}
-    button.disabled=true; message.textContent=publicText('Working…');
+    button.disabled=true; button.dataset.busy='1'; message.textContent=publicText('Working…');
     try{
+      const authStatus=await BlinqAuth.ensureReady();
+      state.authEnabled=Boolean(authStatus?.enabled);
       if(state.authMode==='reset'){ await BlinqAuth.reset(email); $('authMessage').textContent=publicText('If the account exists, check your email for the recovery link.'); return; }
       if(state.authMode==='recovery') await BlinqAuth.update({password});
       else if(state.authMode==='signup'){
@@ -895,7 +920,7 @@
       if($('resendVerification'))$('resendVerification').hidden=!verification;
       if(!$('authDialog').open)$('authDialog').showModal();
     }
-    finally{ button.disabled=false; }
+    finally{ button.dataset.busy='0'; button.disabled=!state.authEnabled; }
   }
 
   function normalize(row){
@@ -2073,7 +2098,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=32"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=35"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
@@ -2155,11 +2180,22 @@
     };
   }
 
-  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='admin'&&!isAdminAccount()) route='predictions'; document.body.classList.toggle('blinq-home',route==='predictions'); document.body.classList.toggle('blinq-admin',route==='admin'); document.body.classList.toggle('blinq-route',route!=='predictions'&&route!=='admin'); const section=dashboardSectionKeys.includes(route)?dashboardSectionConfig(route):null; if(section&&route!=='predictions'&&route!=='results'&&elementAccess(section.sidebar_element)!=='active'&&state.route!=='admin'){const source=document.querySelector(`[data-route="${CSS.escape(route)}"]`)||document.body;showAccessHint(source,firstUnlockPlan(route,0,true),section.label||route,true);route='predictions';} if(route==='admin') state.previewPlan=null; const routeChanged=state.route!==route;state.route=route;renderCookieConsent(false);if(routeChanged)state.page=0;const meta=routeMeta[route]; const overview=route==='predictions'; const routeHeading=$('routeHeading'); if(routeHeading) routeHeading.hidden=overview; const pageEyebrow=$('pageEyebrow'),pageSubtitle=$('pageSubtitle'); if(pageEyebrow){pageEyebrow.textContent=meta[0];pageEyebrow.hidden=route==='results';} $('pageTitle').textContent=meta[1]; if(pageSubtitle){pageSubtitle.textContent=meta[2];pageSubtitle.hidden=route==='results';} const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDailyHub();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push&&location.hash!==`#${route}`) history.pushState(null,'',`#${route}`); window.BlinqUI.routeChanged(route,push); updateLanguageLinks(); document.title=`${meta[1]} · BlinQ`; if(route!=='admin')translatePublicDom(document.body); }
+  function setRoute(route,push=true){ if(!routeMeta[route]) route='predictions'; if(route==='results'&&!resultsAccessAllowed()){const source=document.querySelector('.reference-navigation [data-route="results"]')||document.querySelector('#mobileTabs [data-route="results"]')||document.body;const plan=firstResultsUnlockPlan();showAccessHint(source,plan,lcopy('Results','Výsledky','Výsledky'),true);if(location.hash==='#results')history.replaceState(null,'','#predictions');route='predictions';} if(route==='admin'&&!isAdminAccount()) route='predictions'; document.body.classList.toggle('blinq-home',route==='predictions'); document.body.classList.toggle('blinq-admin',route==='admin'); document.body.classList.toggle('blinq-route',route!=='predictions'&&route!=='admin'); const section=dashboardSectionKeys.includes(route)?dashboardSectionConfig(route):null; if(section&&route!=='predictions'&&route!=='results'&&elementAccess(section.sidebar_element)!=='active'&&state.route!=='admin'){const source=document.querySelector(`[data-route="${CSS.escape(route)}"]`)||document.body;showAccessHint(source,firstUnlockPlan(route,0,true),section.label||route,true);route='predictions';} if(route==='admin') state.previewPlan=null; const routeChanged=state.route!==route;state.route=route;renderCookieConsent(false);if(routeChanged)state.page=0;const meta=routeMeta[route]; const overview=route==='predictions'; const routeHeading=$('routeHeading'); if(routeHeading) routeHeading.hidden=overview; const pageEyebrow=$('pageEyebrow'),pageSubtitle=$('pageSubtitle'); if(pageEyebrow){pageEyebrow.textContent=meta[0];pageEyebrow.hidden=route==='results';} $('pageTitle').textContent=meta[1]; if(pageSubtitle){pageSubtitle.textContent=meta[2];pageSubtitle.hidden=route==='results';} const topbar=document.querySelector('.dashboard-topbar'); if(topbar) topbar.classList.toggle('overview-mode',overview); $('predictionsView').hidden=!overview; $('routePanel').hidden=overview; renderNavigation(); if(overview){renderPredictions();renderMarketSections();renderDailyHub();renderDashboardResultsPreview();applyAccessStates();} else renderRoute(route); if(push&&location.hash!==`#${route}`) history.pushState(null,'',`#${route}`); window.BlinqUI.routeChanged(route,push); updateLanguageLinks(); document.title=`${meta[1]} · BlinQ`; if(route!=='admin')translatePublicDom(document.body); }
 
   function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
   function issuedMarketPublications(row){
     return (Array.isArray(row?.market_publications)?row.market_publications:[]).filter(p=>p&&p.issued_at&&p.result&&!p.excluded_reason);
+  }
+  const publicResultSections=new Set(['top_daily','prime','value','doubles','ace','double_faults','sets','games']);
+  const publicResultMarkets=new Set(['aces','double_faults']);
+  function isPublicResultPublication(publication){
+    if(!publication||typeof publication!=='object')return false;
+    const section=String(publication.section||'').trim().toLowerCase();
+    const market=String(publication.market||'').trim().toLowerCase();
+    return publicResultSections.has(section)||publicResultMarkets.has(market);
+  }
+  function publicResultPublications(row){
+    return issuedMarketPublications(row).filter(isPublicResultPublication);
   }
   function resultTags(row){
     const tags=[];
@@ -2194,7 +2230,7 @@
   }
   function resultCategoryLabel(value){const en=({all:'All published',prime:'Short Odds',top_daily:'TOP Prediction',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP Prediction':'TOP predikcie','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP Prediction':'TOP predikce','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
   function resultPublication(row,category='all'){
-    const pubs=issuedMarketPublications(row);
+    const pubs=publicResultPublications(row);
     const filtered=['prime','top_daily','value','doubles','ace','double_faults','sg','sets','games'].includes(category)?pubs.filter(p=>publicationMatchesResultCategory(p,category)):pubs;
     return filtered.sort((a,b)=>new Date(a.issued_at)-new Date(b.issued_at))[0]||null;
   }
@@ -2224,7 +2260,7 @@
         if(toTs!==null&&(!Number.isFinite(ts)||ts>toTs))return false;
       }else if(Number.isFinite(windowDays)&&windowDays>0){if(!Number.isFinite(ts)||ts<now-windowDays*86400000)return false;}
       const category=filters.category||'all';
-      const pubs=issuedMarketPublications(row);
+      const pubs=publicResultPublications(row);
       if(!pubs.length)return false;
       if(category!=='all'&&!pubs.some(p=>publicationMatchesResultCategory(p,category)&&publicationOutcome(p).kind!=='pending'))return false;
       return pubs.some(p=>publicationOutcome(p).kind!=='pending');
@@ -2287,7 +2323,7 @@
     const specific=['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category);
     const unique=new Map();
     (rows||[]).forEach(row=>{
-      const pubs=issuedMarketPublications(row).filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category)).filter(p=>publicationOutcome(p).kind!=='pending');
+      const pubs=publicResultPublications(row).filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category)).filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
         const key=canonicalResultPublicationKey(row,publication,index);
         const current=unique.get(key);
@@ -2327,8 +2363,11 @@
       const tags=`<span class="result-tag ${escapeHtml(tag)}">${escapeHtml(projection?projectionResultTypeLabel(publication):resultCategoryLabel(tag||'all'))}</span>`;
       const resultHtml=projection?(outcome.kind==='win'?'<b class="correct">✓ HIT</b>':outcome.kind==='loss'?'<b class="wrong">× MISS</b>':`<b class="void">○ VOID</b>${outcome.reason?`<small class="void-reason">${escapeHtml(outcome.reason)}</small>`:''}`):(outcome.kind==='win'?'<b class="correct">✓ VÝHRA</b>':outcome.kind==='loss'?'<b class="wrong">× PREHRA</b>':`<b class="void">○ VOID</b>${outcome.reason?`<small class="void-reason">${escapeHtml(outcome.reason)}</small>`:''}`);
       const p1Name=p1.name||'Player 1',p2Name=p2.name||'Player 2';
-      const p1Photo=p1.photo_url||p1.image_url||p1.photo||(String(p1.id||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${p1.id}`:'');
-      const p2Photo=p2.photo_url||p2.image_url||p2.photo||(String(p2.id||'').match(/^\d{1,12}$/)?`/api/v1/player-image/${p2.id}`:'');
+      // Historical result rows frequently do not carry a verified player photo.
+      // In that case go directly to the local ATP/WTA fallback instead of first
+      // requesting /player-image and flashing initials after a provider 404.
+      const p1Photo=p1.photo_url||p1.image_url||p1.photo||'';
+      const p2Photo=p2.photo_url||p2.image_url||p2.photo||'';
       const match=`<div class="results-match-player">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong></div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b></span></small>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
@@ -3246,7 +3285,11 @@
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();renderDashboardKpis();loadInsights(true);window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
     }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact us via the official BlinQ Telegram channel if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{feedLoading=false;window.BlinqUI.refreshFinished();}
   }
-  async function refreshWorkspace(showLoading=false){await loadUiConfig();return loadFeed(showLoading);}
+  async function refreshWorkspace(showLoading=false){
+    try{await loadUiConfig();}
+    catch(error){console.warn('[BlinQ UI] runtime UI refresh failed; keeping last known UI config.',error);}
+    return loadFeed(showLoading);
+  }
 
   function showStatus(message){const n=$('statusBanner');n.textContent=message;n.hidden=!message;if(message)setTimeout(()=>{n.hidden=true},5000)}
 
@@ -3319,16 +3362,50 @@
   async function boot(){
     setupEvents();window.BlinqUI.init();setupLiveRefresh();
     const hash=location.hash.replace(/^#/,'');if(routeMeta[hash])state.route=hash;
+
+    // Authentication is a core subsystem. Editable UI/content configuration is
+    // presentation state and must never be able to disable sign-in or delay the
+    // login form behind an Azure storage/CMS cold start.
+    const uiReady=loadUiConfig()
+      .then(()=>{try{renderCookieConsent(false);}catch(error){console.warn('[BlinQ boot] cookie UI render failed.',error);}return true;})
+      .catch(error=>{console.warn('[BlinQ boot] UI config failed; auth remains available.',error);return false;});
+    const authReady=BlinqAuth.init()
+      .then(cfg=>({cfg,error:null}))
+      .catch(error=>({cfg:null,error}));
+
     try{
-      // UI config and auth config are independent network calls; do them in parallel to reduce cold-start time.
-      const [,cfg]=await Promise.all([loadUiConfig(),BlinqAuth.init()]);
-      renderCookieConsent(false);
-      state.authEnabled=Boolean(cfg.enabled);
-      if(cfg.recovery){auth('recovery');finishBootSplash();return;}
-      const session=await BlinqAuth.restore();
-      if(session)await loadFeed();else auth('login');
-    }catch(error){showStatus(error.message);auth('login');}
-    finally{finishBootSplash();}
+      let session=null;
+      try{session=await BlinqAuth.restore();}
+      catch(error){console.warn('[BlinQ boot] session restore failed; showing sign-in without destroying auth.',error);}
+
+      // Logged-out users see an immediately usable form. The submit action uses
+      // BlinqAuth.ensureReady(), so a still-running init cannot create a race.
+      if(!session)auth('login');
+
+      const {cfg,error:authError}=await authReady;
+      if(cfg){
+        state.authEnabled=Boolean(cfg.enabled&&String(cfg.provider||'').toLowerCase()==='firebase');
+        if($('authSubmit')?.dataset.busy!=='1')$('authSubmit').disabled=!state.authEnabled;
+        if(state.authEnabled&&$('authMessage')?.textContent===publicText('Authentication is temporarily unavailable.'))$('authMessage').textContent='';
+      }else{
+        state.authEnabled=false;
+        if($('authSubmit'))$('authSubmit').disabled=true;
+        if(authError)showStatus(authError.message);
+        if($('authDialog')?.open)$('authMessage').textContent=publicText(authError?.message||'Authentication is temporarily unavailable.');
+        if(!session)return;
+      }
+
+      if(cfg?.recovery){auth('recovery');return;}
+      if(!session)return;
+
+      // Workspace rendering can use UI configuration, but failure falls back to
+      // repository defaults and can never invalidate a Firebase session.
+      await uiReady;
+      await loadFeed();
+    }catch(error){
+      showStatus(error?.message||'The BlinQ workspace could not be opened. Please try again.');
+      if($('appShell').hidden)auth('login');
+    }finally{finishBootSplash();}
   }
   boot();
 })();
