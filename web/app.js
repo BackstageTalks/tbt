@@ -264,12 +264,12 @@
   async function loadUiConfig() {
     let runtimeConfigSnapshot=null;
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=33');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=34');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=33');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=34');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -341,7 +341,7 @@
       const rookiePrime=state.ui?.dashboard?.daily_hub?.tabs?.prime?.plans?.rookie;
       if(rookiePrime)rookiePrime.selection_mode='stable_random';
     }
-    state.ui.ui_patch='736-r33';
+    state.ui.ui_patch='736-r34';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -867,7 +867,7 @@
     $('authSubmit').textContent=publicText({login:'Sign in',signup:'Create account',reset:'Send recovery link',recovery:'Save password'}[mode]);
     $('switchSignup').textContent=publicText(mode==='login'?'Create account':'Back to sign in'); $('switchReset').hidden=mode!=='login';
     $('authSubmit').disabled=!state.authEnabled;
-    if(!state.authEnabled) $('authMessage').textContent=publicText('Authentication is temporarily unavailable.');
+    if(!state.authEnabled)$('authMessage').textContent=publicText('Authentication is temporarily unavailable.');else $('authMessage').textContent='';
     $('appShell').hidden=true; translatePublicDom(document.body);
     if(!$('authDialog').open) $('authDialog').showModal();
   }
@@ -2096,7 +2096,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=33"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=34"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
@@ -3357,14 +3357,24 @@
     setupEvents();window.BlinqUI.init();setupLiveRefresh();
     const hash=location.hash.replace(/^#/,'');if(routeMeta[hash])state.route=hash;
     try{
-      // UI config and auth config are independent network calls; do them in parallel to reduce cold-start time.
-      const [,cfg]=await Promise.all([loadUiConfig(),BlinqAuth.init()]);
+      // Auth and editable UI are independent. A storage/UI problem must never
+      // disable Firebase sign-in. Keep both warm in parallel, but evaluate the
+      // auth result independently.
+      const [uiResult,authResult]=await Promise.allSettled([loadUiConfig(),BlinqAuth.init()]);
+      if(uiResult.status==='rejected')console.warn('BlinQ UI runtime config fallback:',uiResult.reason);
+      if(authResult.status==='rejected')throw authResult.reason;
+      const cfg=authResult.value||{};
+      state.authEnabled=Boolean(cfg.enabled&&String(cfg.provider||'').toLowerCase()==='firebase');
       renderCookieConsent(false);
-      state.authEnabled=Boolean(cfg.enabled);
+      if(!state.authEnabled)throw new Error('Authentication is temporarily unavailable.');
       if(cfg.recovery){auth('recovery');finishBootSplash();return;}
       const session=await BlinqAuth.restore();
       if(session)await loadFeed();else auth('login');
-    }catch(error){showStatus(error.message);auth('login');}
+    }catch(error){
+      state.authEnabled=false;
+      showStatus(error?.message||'Authentication is temporarily unavailable.');
+      auth('login');
+    }
     finally{finishBootSplash();}
   }
   boot();

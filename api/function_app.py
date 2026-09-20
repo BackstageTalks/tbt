@@ -779,9 +779,11 @@ def tournament_logo_proxy(req):
 def runtime_ui_config(req):
     try:
         config = load_runtime_ui_config()
-        return response({"configured": bool(config), "config": config})
+        return response({"configured": bool(config), "config": config, "storage_available": True})
     except AdminStorageUnavailable:
-        return response({"error": "ui_config_storage_unavailable", "configured": False, "config": None, "storage_available": False}, 503)
+        # Public UI has a committed release fallback. Storage availability is
+        # diagnostic metadata, not an application-fatal condition.
+        return response({"configured": False, "config": None, "storage_available": False})
 
 
 @app.route(route="v1/content/news", methods=["GET"])
