@@ -220,3 +220,47 @@ def test_sets_and_games_are_confirmed_and_settled_from_public_feed(match_factory
     assert len(public['results']) == 1
     assert {p['section'] for p in public['results'][0]['market_publications']} == {'sets', 'games'}
     assert public['betting_performance']['projections']['overall']['n'] == 2
+
+
+def test_public_results_keep_all_history_but_strip_private_feature_payload():
+    rows = []
+    for index in range(1005):
+        event = f"hist-{index}"
+        row = _market_row(event_id=event)
+        row["issued_at"] = "2026-09-18T08:00:00+00:00"
+        row["scheduled_at"] = "2026-09-18T15:00:00+00:00"
+        row["result"] = {
+            "winner_id": "A", "correct": True,
+            "settled_at": "2026-09-18T17:00:00+00:00",
+            "scheduled_at": "2026-09-18T15:00:00+00:00",
+        }
+        row["signals"] = [{"huge_private_feature": "x" * 2000}]
+        row["market_publications"] = [{
+            "schema": 1,
+            "publication_key": f"top_daily:match_winner:2026-09-18:{event}:A",
+            "selection_key": f"match_winner:2026-09-18:{event}:A",
+            "section": "top_daily",
+            "market": "match_winner",
+            "selection": "Alpha",
+            "selection_id": "A",
+            "odds": 1.9,
+            "model_probability": .8,
+            "issued_at": "2026-09-18T08:00:00+00:00",
+            "publication_status": "published",
+            "result": {
+                "winner_id": "A", "correct": True, "staked_units": 1.0,
+                "return_units": 1.9, "profit_units": .9,
+                "settled_at": "2026-09-18T17:00:00+00:00",
+                "scheduled_at": "2026-09-18T15:00:00+00:00",
+            },
+        }]
+        rows.append(row)
+
+    feed = serving_feed(
+        rows, SimpleNamespace(version="test"), [], {}, [],
+        datetime(2026, 9, 20, 8, 0, tzinfo=timezone.utc),
+    )
+    assert len(feed["results"]) == 1005
+    assert feed["results_meta"]["settled_total"] == 1005
+    assert all("signals" not in row and "quality" not in row for row in feed["results"])
+    assert all(row["market_publications"] for row in feed["results"])
