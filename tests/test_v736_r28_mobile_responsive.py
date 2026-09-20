@@ -12,16 +12,16 @@ RELEASE = json.loads((WEB / "release.json").read_text(encoding="utf-8"))
 
 
 def test_r28_release_and_cache_identity():
-    assert UI["ui_patch"] == "736-r29"
-    assert RELEASE["patch"] == "736-r29"
-    assert 'content="736-r29"' in INDEX
+    assert UI["ui_patch"] == "736-r28"
+    assert RELEASE["patch"] == "736-r28"
+    assert 'content="736-r28"' in INDEX
     for asset in ("blinq-app.css", "auth.js", "responsive.js", "app.js"):
-        assert f"/{asset}?v=7360&p=29" in INDEX
-    assert "/assets/blinq_loading_animated_v6.svg?v=7360&p=29" in INDEX
+        assert f"/{asset}?v=7360&p=28" in INDEX
+    assert "/assets/blinq_loading_animated_v6.svg?v=7360&p=28" in INDEX
 
 
 def test_r28_final_mobile_contract_is_last_cascade_layer():
-    marker = "BlinQ runtime patch 7.3.6-r29 — mobile-first stability contract"
+    marker = "BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract"
     # r27 still carried a malformed desktop @media/comment pair. It trapped the
     # runtime visual rules inside min-width:1081px, which is why Telegram/header
     # styling vanished on phones. r28 closes that block before shared rules.
@@ -42,7 +42,7 @@ def test_r28_final_mobile_contract_is_last_cascade_layer():
 def test_r28_mobile_cards_use_semantic_labels_not_column_guessing():
     assert "const mobileLabels=dailyHubColumns(tab);" in APP
     assert "cell.dataset.label=mobileLabels[i]||'';" in APP
-    tail = CSS[CSS.index("BlinQ runtime patch 7.3.6-r29 — mobile-first stability contract"):]
+    tail = CSS[CSS.index("BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract"):]
     for cls in ("hub-rank", "hub-time", "hub-tournament-cell", "hub-match-cell", "hub-pick", "hub-odds", "hub-confidence-cell", "hub-action-cell"):
         assert f".{cls}" in tail
 
