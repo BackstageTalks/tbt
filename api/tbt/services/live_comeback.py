@@ -17,8 +17,8 @@ from typing import Any
 from .admin_storage import save_automated_insight, live_alert_levels
 from .market_selection import _walk_market_rows, _outcome_text, _price, _match_side
 
-DEFAULT_MIN_PROBABILITY = .78
-DEFAULT_MAX_ODDS = 1.35
+DEFAULT_MIN_PROBABILITY = .68
+DEFAULT_MAX_ODDS = 1.49
 
 
 def _num(v):
@@ -264,6 +264,25 @@ def scan_comeback_radar(feed, live_events):
     th = radar_thresholds()
     prime = feed.get("prime_picks") if isinstance(feed.get("prime_picks"), list) else []
     live = {_event_id(e): e for e in live_events if isinstance(e, dict) and _event_id(e)}
+    eligible_prime = []
+    rejected_probability = 0
+    rejected_odds = 0
+    rejected_missing_odds = 0
+    for row in prime:
+        if not isinstance(row, dict):
+            continue
+        probability = _probability(row)
+        odds = _odds(row)
+        if probability + 1e-12 < th["min_probability"]:
+            rejected_probability += 1
+            continue
+        if odds is None:
+            rejected_missing_odds += 1
+            continue
+        if odds > th["max_odds"] + 1e-12:
+            rejected_odds += 1
+            continue
+        eligible_prime.append(row)
     candidates = []
     for row in prime:
         if not isinstance(row, dict):
@@ -283,6 +302,12 @@ def scan_comeback_radar(feed, live_events):
         "scanned_at": datetime.now(timezone.utc).isoformat(),
         "live_events": len(live_events),
         "prime_pool": len(prime),
+        "eligible_prime_pool": len(eligible_prime),
+        "rejected_prime": {
+            "probability": rejected_probability,
+            "odds": rejected_odds,
+            "missing_odds": rejected_missing_odds,
+        },
         "candidates": [c.public() for c in candidates],
         "signals": [c.public() for c in signals],
         "thresholds": th,

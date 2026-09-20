@@ -119,9 +119,10 @@ def test_settled_market_publications_produce_real_flat_unit_roi(match_factory):
     assert feed['results_meta']['settled_total'] == 1
 
 
-def test_public_results_reset_hides_pre_reset_publications_but_keeps_new_ones():
+def test_public_results_keep_all_actually_issued_history_without_artificial_reset():
     def settled_row(event_id, issued_at, scheduled_at):
         row = _market_row(event_id=event_id)
+        row['issued_at'] = issued_at
         row['scheduled_at'] = scheduled_at
         row['result'] = {'winner_id': 'A', 'correct': True, 'settled_at': scheduled_at}
         row['market_publications'] = [{
@@ -150,10 +151,11 @@ def test_public_results_reset_hides_pre_reset_publications_but_keeps_new_ones():
         [old, new], SimpleNamespace(version='test'), [], {}, [],
         datetime(2026, 9, 20, 8, 0, tzinfo=timezone.utc),
     )
-    assert [row['event_id'] for row in feed['results']] == ['new']
-    assert feed['results_meta']['history_reset'] is True
-    assert feed['results_meta']['history_cutoff'] == '2026-09-19T00:00:00+00:00'
-    assert feed['betting_performance']['overall']['n'] == 1
+    assert [row['event_id'] for row in feed['results']] == ['new', 'old']
+    assert feed['results_meta']['history_reset'] is False
+    assert feed['results_meta']['history_cutoff'] is None
+    assert feed['results_meta']['history_policy'] == 'all_actually_issued_settled'
+    assert feed['betting_performance']['overall']['n'] == 2
 
 
 def test_sets_and_games_are_confirmed_and_settled_from_public_feed(match_factory):

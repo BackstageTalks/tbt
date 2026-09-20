@@ -39,6 +39,11 @@ _POLICY = {
     "admin": {key: ("ALL", True) for key in ["daily", *SECTION_TO_FEED_KEY]},
 }
 
+# ACES and DOUBLE FAULTS share one physical feed for backward compatibility,
+# but access is enforced independently per public panel.
+for _plan_policy in _POLICY.values():
+    _plan_policy["double_faults"] = _plan_policy.get("ace", (0, False))
+
 # Admin may explicitly configure 0..10 visible picks for every category.  The
 # server remains the authorization boundary: runtime values are capped here.
 _RUNTIME_PICK_CAP = 10
@@ -384,6 +389,47 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
         see_all=(runtime_rule[2] if runtime_rule else hard_see_all) and hard_see_all
         enabled=(runtime_rule[3] if runtime_rule else True)
         sections[section]={"visible_picks":limit,"see_all":bool(see_all),"blur_remaining":bool(blur),"enabled":bool(enabled),"total":len(rows),"returned":returned,"locked_count":max(0,len(rows)-returned),"selection_mode":selection_mode,"display_state":display_state,"slot_states":slot_states,"row_overrides":deepcopy(row_overrides)}
+    # ACES and DOUBLE FAULTS share one provider array (`ace_picks`) but are
+    # independent public panels. This prevents DF rows from being authorized or
+    # counted as ESA merely because they use the same backward-compatible feed.
+    ace_source=payload.get(SECTION_TO_FEED_KEY["ace"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["ace"]),list) else []
+    for section_name, market_name in (("ace", "aces"), ("double_faults", "double_faults")):
+        market_rows=[row for row in ace_source if isinstance(row,dict) and str(row.get("market") or "").strip().lower()==market_name]
+        default_limit, hard_see_all=policy.get(section_name, policy.get("ace", (0,False)))
+        runtime_rule=_admin_hub_rule(ui_config, section_name, plan)
+        # Saved configs before this split have no DOUBLE FAULTS rule. Inherit
+        # the ESA rule until Admin publishes a dedicated setting.
+        if runtime_rule is None and section_name=="double_faults":
+            runtime_rule=_admin_hub_rule(ui_config, "ace", plan)
+        if runtime_rule:
+            hard_cap="ALL" if plan in {"elite","legend","goat","admin"} else _RUNTIME_PICK_CAP
+            limit=_narrow_limit(hard_cap,runtime_rule[0])
+        else:
+            limit=default_limit
+        selection_mode=runtime_rule[4] if runtime_rule else "first"
+        row_overrides=runtime_rule[5] if runtime_rule else {}
+        display_state=runtime_rule[6] if runtime_rule else "active"
+        configured_slots=len(market_rows) if str(limit).upper()=="ALL" else min(len(market_rows),max(0,int(limit)))
+        blur=runtime_rule[1] if runtime_rule else (str(limit).upper()!="ALL" and configured_slots<len(market_rows))
+        if display_state=="active":
+            preview, slot_states=_select_authorized_rows(
+                market_rows, limit, access=access, section=section_name, selection_mode=selection_mode,
+                row_overrides=row_overrides, blur_remaining=bool(blur),
+            )
+        elif display_state=="blurred":
+            preview=[]; slot_states=["blurred"] * len(market_rows)
+        else:
+            preview=[]; slot_states=["hidden"] * len(market_rows)
+        returned=len(preview)
+        see_all=(runtime_rule[2] if runtime_rule else hard_see_all) and hard_see_all
+        enabled=(runtime_rule[3] if runtime_rule else True)
+        sections[section_name]={
+            "visible_picks":limit,"see_all":bool(see_all),"blur_remaining":bool(blur),
+            "enabled":bool(enabled),"total":len(market_rows),"returned":returned,
+            "locked_count":max(0,len(market_rows)-returned),"selection_mode":selection_mode,
+            "display_state":display_state,"slot_states":slot_states,"row_overrides":deepcopy(row_overrides),
+        }
+
     # GAMES and SETS share one provider array (`sg_picks`) but are separate
     # public panels.  Build independent entitlements so Admin can SHOW / BLUR /
     # HIDE and override rows for each panel without leaking the other market.
@@ -472,6 +518,10 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
             result["performance"] = {}
         if "betting_performance" in result:
             result["betting_performance"] = {}
+        if "performance_windows" in result:
+            result["performance_windows"] = {}
+        if "performance_window_summary" in result:
+            result["performance_window_summary"] = {}
 
     board_enabled = bool(manifest.get("sections", {}).get("board", {}).get("enabled"))
     result["board_upcoming"] = _board_rows(payload, "upcoming") if board_enabled else []
@@ -498,7 +548,7 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     result[SECTION_TO_FEED_KEY["top_daily"]]=_select_authorized_rows(rows,top_ent["visible_picks"],access=access,section="top_daily",selection_mode=top_ent.get("selection_mode","first"),row_overrides=top_ent.get("row_overrides"),blur_remaining=bool(top_ent.get("blur_remaining")))[0] if top_ent.get("display_state")=="active" and top_ent.get("enabled") else []
 
     for section,feed_key in SECTION_TO_FEED_KEY.items():
-        if section in {"prime","top_daily","sg"}: continue
+        if section in {"prime","top_daily","ace","sg"}: continue
         rows=payload.get(feed_key)
         if not isinstance(rows,list): continue
         ent=manifest["sections"][section]
@@ -506,6 +556,33 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
             result[feed_key]=[]
             continue
         result[feed_key]=_select_authorized_rows(rows,ent["visible_picks"],access=access,section=section,selection_mode=ent.get("selection_mode","first"),row_overrides=ent.get("row_overrides"),blur_remaining=bool(ent.get("blur_remaining")))[0]
+
+    ace_rows=payload.get(SECTION_TO_FEED_KEY["ace"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["ace"]),list) else []
+    authorized_ace=[]
+    for section_name, market_name in (("ace", "aces"), ("double_faults", "double_faults")):
+        market_rows=[row for row in ace_rows if isinstance(row,dict) and str(row.get("market") or "").strip().lower()==market_name]
+        ent=manifest["sections"].get(section_name) or {}
+        if not ent.get("enabled") or ent.get("display_state")!="active":
+            continue
+        selected,_=_select_authorized_rows(
+            market_rows,ent.get("visible_picks",0),access=access,section=section_name,
+            selection_mode=ent.get("selection_mode","first"),row_overrides=ent.get("row_overrides"),
+            blur_remaining=bool(ent.get("blur_remaining")),
+        )
+        authorized_ace.extend(selected)
+    # Preserve old projection rows without a market tag under the legacy ESA
+    # permission only; never leak them through the new Double Faults panel.
+    unknown_ace=[row for row in ace_rows if isinstance(row,dict) and str(row.get("market") or "").strip().lower() not in {"aces","double_faults"}]
+    if unknown_ace:
+        ent=manifest["sections"].get("ace") or {}
+        if ent.get("enabled") and ent.get("display_state")=="active":
+            selected,_=_select_authorized_rows(
+                unknown_ace,ent.get("visible_picks",0),access=access,section="ace",
+                selection_mode=ent.get("selection_mode","first"),row_overrides=ent.get("row_overrides"),
+                blur_remaining=bool(ent.get("blur_remaining")),
+            )
+            authorized_ace.extend(selected)
+    result[SECTION_TO_FEED_KEY["ace"]]=authorized_ace
 
     sg_rows=payload.get(SECTION_TO_FEED_KEY["sg"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["sg"]),list) else []
     authorized_sg=[]

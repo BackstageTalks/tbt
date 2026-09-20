@@ -1,9 +1,10 @@
 """Offline prediction publication with immutable pre-match records."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 import json
+import math
 import numpy as np
 import pandas as pd
 
@@ -16,9 +17,9 @@ from .publication import confirm_publication
 from .countries import normalize_country_code
 
 
-# Public Results were intentionally reset when the product moved to the unified
-# section publication ledger. Private training/history data remains untouched.
-PUBLIC_RESULTS_RESET_AT = datetime(2026, 9, 19, 0, 0, tzinfo=timezone.utc)
+# Public history is reconstructed from immutable issuance evidence rather than
+# an arbitrary product reset date. Unissued/offline rows stay private; settled
+# selections that were genuinely published remain inspectable for any period.
 
 
 def event_id(match):
@@ -541,7 +542,13 @@ def _projection_metrics(publications):
 
 
 def _betting_metrics(publications):
-    rows = [p for p in publications if isinstance(p, dict) and p.get("price_status") != "projection_only" and isinstance(p.get("result"), dict) and not p.get("excluded_reason")]
+    rows = [
+        p for p in publications
+        if isinstance(p, dict)
+        and p.get("price_status") not in {"projection_only", "model_only"}
+        and isinstance(p.get("result"), dict)
+        and not p.get("excluded_reason")
+    ]
     if not rows:
         return {
             "n": 0, "wins": 0, "losses": 0, "hit_rate": None,
@@ -629,6 +636,85 @@ def betting_performance(results):
             "double_faults": _projection_metrics([p for p in projection_publications if p.get("market") == "double_faults"]),
         },
     }
+
+PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30)
+PERFORMANCE_BEST_MIN_SAMPLE = 30
+
+
+def _serving_row_time(row):
+    raw = str(row.get("scheduled_at") or row.get("date") or "").strip()
+    if not raw:
+        return None
+    try:
+        value = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _model_performance(rows):
+    if not rows:
+        return {}
+    return evaluate_probabilities(
+        [int(r["result"]["winner_id"] == r["player1"]["id"]) for r in rows],
+        [r["player1"]["probability"] for r in rows],
+    )
+
+
+def performance_windows(winner_results, public_results, *, now):
+    """Transparent rolling result windows used by dashboard and Results.
+
+    The dashboard may highlight the strongest window, but every candidate window
+    and its sample size is returned. A minimum sample protects the marketing card
+    from choosing a tiny 1-3 match interval merely because it happens to be 100%.
+    """
+    windows = {}
+    for days in PERFORMANCE_WINDOWS_DAYS:
+        cutoff = now - timedelta(days=days)
+        model_rows = [r for r in winner_results if (_serving_row_time(r) or datetime.min.replace(tzinfo=timezone.utc)) >= cutoff]
+        result_rows = [r for r in public_results if (_serving_row_time(r) or datetime.min.replace(tzinfo=timezone.utc)) >= cutoff]
+        model = _model_performance(model_rows)
+        windows[str(days)] = {
+            "days": days,
+            "from": cutoff.isoformat(),
+            "to": now.isoformat(),
+            "settled_rows": len(result_rows),
+            "model": model,
+            "betting": betting_performance(result_rows),
+        }
+
+    candidates = []
+    for days in PERFORMANCE_WINDOWS_DAYS:
+        model = windows[str(days)]["model"]
+        accuracy = model.get("accuracy") if isinstance(model, dict) else None
+        n = int(model.get("n") or 0) if isinstance(model, dict) else 0
+        if isinstance(accuracy, (int, float)) and math.isfinite(float(accuracy)):
+            candidates.append((days, float(accuracy), n))
+    eligible = [item for item in candidates if item[2] >= PERFORMANCE_BEST_MIN_SAMPLE]
+    if eligible:
+        best_days, best_accuracy, best_n = max(eligible, key=lambda item: (item[1], item[2], -item[0]))
+        mode = "best_accuracy_min_sample"
+    elif candidates:
+        # If history is still young, prefer the most stable available sample
+        # instead of cherry-picking a tiny perfect streak.
+        best_days, best_accuracy, best_n = max(candidates, key=lambda item: (item[2], item[1], item[0]))
+        mode = "largest_available_sample"
+    else:
+        best_days = best_accuracy = best_n = None
+        mode = "no_settled_model_results"
+    summary = {
+        "windows_days": list(PERFORMANCE_WINDOWS_DAYS),
+        "minimum_sample_for_best": PERFORMANCE_BEST_MIN_SAMPLE,
+        "selection_mode": mode,
+        "best_days": best_days,
+        "best_accuracy": best_accuracy,
+        "best_n": best_n,
+        "transparent_all_windows": True,
+    }
+    return windows, summary
+
 
 def reconcile_ledger(ledger, predictions, history, now=None):
     now = now or datetime.now(timezone.utc)
@@ -752,58 +838,101 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
     future = {event_id(m) for m in upcoming if m.scheduled_at > now
               and not m.is_completed and m.status in {"upcoming", "notstarted", "scheduled"}}
 
-    cutoff = PUBLIC_RESULTS_RESET_AT if now >= PUBLIC_RESULTS_RESET_AT else None
+    def _issued_at(value):
+        if not value:
+            return None
+        try:
+            issued = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if issued.tzinfo is None:
+            return None
+        return issued.astimezone(timezone.utc)
 
     def public_publications(row):
         publications = []
         for publication in row.get("market_publications", []) or []:
-            if not isinstance(publication, dict) or not publication.get("issued_at"):
+            if not isinstance(publication, dict) or _issued_at(publication.get("issued_at")) is None:
                 continue
             if publication.get("excluded_reason") or not isinstance(publication.get("result"), dict):
-                continue
-            try:
-                issued = datetime.fromisoformat(str(publication.get("issued_at")).replace("Z", "+00:00"))
-            except ValueError:
-                continue
-            if issued.tzinfo is None:
-                continue
-            if cutoff is not None and issued < cutoff:
                 continue
             publications.append(deepcopy(publication))
         return publications
 
-    # Public Results intentionally start from the reset date. The immutable
-    # private ledger and canonical training history are preserved for audit and
-    # model quality, while the UI receives only publications users actually saw
-    # after the reset. Historical/offline replay before the reset keeps the legacy
-    # behaviour so point-in-time model tests remain reproducible.
-    if cutoff is None:
-        results = [
-            deepcopy(row) for row in ledger
-            if row.get("result") is not None
-            and not row.get("excluded_reason")
-            and not row.get("settlement_quarantine")
-        ]
-    else:
-        results = []
-        for source in ledger:
-            if source.get("excluded_reason") or source.get("settlement_quarantine"):
-                continue
-            publications = public_publications(source)
-            if not publications:
-                continue
-            row = deepcopy(source)
-            row["market_publications"] = publications
-            results.append(row)
+    def legacy_match_winner_publication(source):
+        """Expose older row-level published winner picks in Results transparently.
 
+        Pre market-publication ledgers stored the immutable public commitment on
+        the prediction row itself (issued_at/result) rather than in
+        market_publications.  Those rows are real public history, not backfills.
+        Represent them as ``model_only`` publications so users can inspect the
+        exact result without inventing historical bookmaker odds or ROI.
+        """
+        if not isinstance(source.get("result"), dict) or _issued_at(source.get("issued_at")) is None:
+            return None
+        winner_id = str(source.get("winner_id") or "")
+        p1 = source.get("player1") if isinstance(source.get("player1"), dict) else {}
+        p2 = source.get("player2") if isinstance(source.get("player2"), dict) else {}
+        selected = p1 if str(p1.get("id") or "") == winner_id else p2 if str(p2.get("id") or "") == winner_id else {}
+        if not selected:
+            return None
+        result = deepcopy(source["result"])
+        # A legacy winner pick was not necessarily a wager.  Do not manufacture
+        # stake/profit fields; this keeps betting ROI strictly on priced picks.
+        result.pop("staked_units", None)
+        result.pop("return_units", None)
+        result.pop("profit_units", None)
+        return {
+            "publication_key": f"legacy_match_winner:{source.get('event_id') or source.get('id') or ''}",
+            "section": "model",
+            "market": "match_winner",
+            "selection_id": selected.get("id"),
+            "selection": selected.get("name"),
+            "model_probability": selected.get("probability"),
+            "odds": None,
+            "price_status": "model_only",
+            "issued_at": source.get("issued_at"),
+            "publication_status": "published",
+            "result": result,
+        }
+
+    # Never expose offline/backfilled rows merely because they have an outcome.
+    # A public Results row must have immutable issuance evidence: either the
+    # match-winner commitment itself was issued, or at least one section/market
+    # publication was issued and later settled. Unlike the old 2026-09-19 reset,
+    # there is no artificial date cutoff, so genuine older public history remains
+    # available for transparent 3/7/10/14/30-day and custom-period inspection.
+    results = []
+    for source in ledger:
+        if source.get("excluded_reason") or source.get("settlement_quarantine"):
+            continue
+        publications = public_publications(source)
+        winner_was_issued = (
+            isinstance(source.get("result"), dict)
+            and _issued_at(source.get("issued_at")) is not None
+        )
+        if winner_was_issued and not any(str(p.get("market") or "") == "match_winner" for p in publications):
+            legacy = legacy_match_winner_publication(source)
+            if legacy is not None:
+                publications.append(legacy)
+        if not publications and not winner_was_issued:
+            continue
+        row = deepcopy(source)
+        row["market_publications"] = publications
+        results.append(row)
+
+    # Model-success KPIs count only match-winner predictions that themselves have
+    # immutable issuance evidence. A row published solely for an Aces/DF/S/G
+    # projection must not silently enter winner-model accuracy. Legacy row-level
+    # publications are represented above as model_only match-winner publications.
     winner_results = [
         r for r in results
         if isinstance(r.get("result"), dict)
+        and _issued_at(r.get("issued_at")) is not None
+        and any(str(p.get("market") or "") == "match_winner" for p in r.get("market_publications", []) or [])
         and r.get("prediction_family") != "doubles"
     ]
-    metrics = evaluate_probabilities(
-        [int(r["result"]["winner_id"] == r["player1"]["id"]) for r in winner_results],
-        [r["player1"]["probability"] for r in winner_results]) if winner_results else {}
+    metrics = _model_performance(winner_results)
     quality_frame = pd.DataFrame([{'target': int(r['result']['winner_id'] == r['player1']['id']),
         'tour': r['tour'], 'surface': r['surface'], 'competition': r.get('competition', 'unknown'),
         'tournament': r.get('tournament', 'unknown'),
@@ -811,6 +940,7 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
         'surface_history_band': r.get('quality', {}).get('surface_history_band', 'unknown')} for r in winner_results])
     quality_report = subgroup_report(quality_frame, [r['player1']['probability'] for r in winner_results]) if winner_results else {}
     betting = betting_performance(results)
+    rolling_performance, rolling_summary = performance_windows(winner_results, results, now=now)
     # Do not rely on incidental ledger ordering. Recent settled rows must never
     # disappear from the 1000-row public window after a merge/migration.
     result_rows = sorted(
@@ -825,9 +955,12 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
                          and not r.get("excluded_reason") and not r.get("settlement_quarantine")],
             "results": result_rows, "performance": metrics,
             "betting_performance": betting,
+            "performance_windows": rolling_performance,
+            "performance_window_summary": rolling_summary,
             "results_meta": {"settled_total": len(results), "returned": len(result_rows), "limit": 1000,
-                             "history_cutoff": cutoff.isoformat() if cutoff is not None else None,
-                             "history_reset": cutoff is not None},
+                             "history_cutoff": None,
+                             "history_reset": False,
+                             "history_policy": "all_actually_issued_settled"},
             "performance_subgroups": quality_report,
             "history": {"matches": len(history), "start": min((m.scheduled_at for m in history), default=now).isoformat(),
                         "end": max((m.scheduled_at for m in history), default=now).isoformat()}}

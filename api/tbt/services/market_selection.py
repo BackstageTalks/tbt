@@ -1189,12 +1189,13 @@ def annotate_market_publication_candidates(
             selection_id = str(card.get("selection_id") or "").strip()
             scope = str(card.get("projection_scope") or "player").strip() or "player"
             selection_key = f"projection:{market}:{scope}:{event_id}:{selection_id}"
+            projection_section = "ace" if market == "aces" else "double_faults"
             publications.append({
-                "schema": 2,
-                "publication_key": f"ace:{selection_key}",
+                "schema": 3,
+                "publication_key": f"{projection_section}:{selection_key}",
                 "selection_key": selection_key,
-                "section": "ace",
-                "primary_section": "ace",
+                "section": projection_section,
+                "primary_section": projection_section,
                 "market": market,
                 "selection": card.get("selection") or card.get("pick"),
                 "selection_id": selection_id,

@@ -432,11 +432,23 @@ def select_sg_picks(
         )
         by_market[market] = by_market[market][: max(0, int(per_market_limit))]
 
-    candidates = by_market["sets"] + by_market["games"]
-    candidates.sort(key=lambda row: float(row.get("projection_score") or 0.0), reverse=True)
-    combined, applied_floor, tier_counts = _adaptive_confidence_select(
-        candidates, target_count=target_count, minimum_probability=0.60
-    )
+    # SETS and GAMES must fill independently. A combined adaptive threshold can
+    # let one market satisfy the target before the sibling market reaches its own
+    # honest confidence floor, which made valid SETS/GAMES disappear from the UI.
+    selected_by_market: dict[str, list[dict[str, Any]]] = {}
+    applied_floors: dict[str, float | None] = {}
+    tier_counts_by_market: dict[str, dict[str, int]] = {}
+    per_market_target = max(1, min(int(per_market_limit), int(target_count)))
+    for market in ("sets", "games"):
+        selected, floor, counts = _adaptive_confidence_select(
+            by_market[market], target_count=per_market_target, minimum_probability=0.60
+        )
+        selected_by_market[market] = selected[: max(0, int(per_market_limit))]
+        applied_floors[market] = None if floor is None else float(floor)
+        tier_counts_by_market[market] = counts
+
+    combined = selected_by_market["sets"] + selected_by_market["games"]
+    combined.sort(key=lambda row: float(row.get("projection_score") or 0.0), reverse=True)
     combined = combined[: max(0, int(total_limit))]
     for row in combined:
         row.pop("projection_score", None)
@@ -450,7 +462,7 @@ def select_sg_picks(
         for (tour, best_of), values in sorted(baselines.items())
     }
     return combined, {
-        "schema": 3,
+        "schema": 4,
         "model": "sets-games-projection-v2",
         "cutoff_utc": cutoff.isoformat(),
         "projection_only": True,
@@ -471,8 +483,10 @@ def select_sg_picks(
         "per_market_limit": int(per_market_limit),
         "total_limit": int(total_limit),
         "target_count": int(target_count),
-        "adaptive_confidence_floor": None if applied_floor is None else float(applied_floor),
-        "adaptive_tier_counts": tier_counts,
-        "fill_policy": "evidence_adjusted_confidence_hard_floor_0.60",
+        "target_count_per_market": per_market_target,
+        "candidate_cards": {market: len(by_market[market]) for market in ("sets", "games")},
+        "adaptive_confidence_floor": applied_floors,
+        "adaptive_tier_counts": tier_counts_by_market,
+        "fill_policy": "independent_market_fill_evidence_adjusted_hard_floor_0.60",
         "baselines": baseline_report,
     }

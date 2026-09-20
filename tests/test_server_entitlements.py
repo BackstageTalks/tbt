@@ -128,3 +128,33 @@ def test_blinq_board_results_are_separate_from_official_results():
     assert data["board_results"][0]["event_id"] == "9"
     # The ordinary Results payload stays intact; Board owns only a derived view.
     assert data["results"] == payload["results"]
+
+
+def test_aces_and_double_faults_have_independent_server_entitlements():
+    payload = feed(0)
+    payload["ace_picks"] = [
+        {**row(1), "market": "aces", "selection_id": "a1"},
+        {**row(2), "market": "aces", "selection_id": "a2"},
+        {**row(3), "market": "double_faults", "selection_id": "d1"},
+        {**row(4), "market": "double_faults", "selection_id": "d2"},
+    ]
+    cfg = {
+        "dashboard": {"daily_hub": {"tabs": {
+            "ace": {"enabled": True, "plans": {"pro": {
+                "visible_rows": 1, "blur_remaining": True, "tab_enabled": True,
+                "see_all": False, "selection_mode": "first", "display_state": "active",
+            }}},
+            "double_faults": {"enabled": True, "plans": {"pro": {
+                "visible_rows": 2, "blur_remaining": True, "tab_enabled": True,
+                "see_all": False, "selection_mode": "first", "display_state": "active",
+            }}},
+        }}}
+    }
+
+    data, manifest = filter_feed_for_access(
+        payload, {"status": "active", "plan": "pro", "uid": "u"}, cfg,
+    )
+
+    assert [item["market"] for item in data["ace_picks"]] == ["aces", "double_faults", "double_faults"]
+    assert manifest["sections"]["ace"]["returned"] == 1
+    assert manifest["sections"]["double_faults"]["returned"] == 2

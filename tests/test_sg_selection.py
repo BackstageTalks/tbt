@@ -143,3 +143,23 @@ def test_historical_provider_format_conflict_is_rejected_fail_closed():
     assert cards == []
     assert report["history_matches_with_structured_score"] == 0
     assert report["history_format_facts"]["provider_score_conflicts_rejected"] == 1
+
+
+def test_sets_and_games_fill_independently_when_target_is_one():
+    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    rows = []
+    for i in range(12):
+        when = now - timedelta(days=20 + i * 8)
+        rows.append(historical(f"ia{i}", when, "A", f"IX{i}", 3, 31))
+        rows.append(historical(f"ib{i}", when, "B", f"IY{i}", 3, 30))
+    for i in range(60):
+        when = now - timedelta(days=30 + i * 3)
+        rows.append(historical(f"ibase{i}", when, f"IC{i}", f"ID{i}", 2, 20))
+
+    cards, report = select_sg_picks(
+        rows, [prediction(now + timedelta(hours=5))], now=now, target_count=1,
+    )
+
+    assert {card["market"] for card in cards} == {"sets", "games"}
+    assert report["target_count_per_market"] == 1
+    assert set(report["adaptive_confidence_floor"]) == {"sets", "games"}

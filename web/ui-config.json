@@ -1711,6 +1711,75 @@
             }
           }
         },
+        "double_faults": {
+          "label": "DVOJCHYBY",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "rookie": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "stable_random",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "pro": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            }
+          }
+        },
         "games": {
           "label": "GAMES",
           "enabled": true,
@@ -2353,7 +2422,7 @@
       }
     }
   },
-  "ui_patch": "736-r28",
+  "ui_patch": "736-r29",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,

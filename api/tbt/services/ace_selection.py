@@ -207,19 +207,29 @@ def _card(
     surface_depth = min(int(p1_projection["surface_samples"]), int(p2_projection["surface_samples"]))
     surface_factor = min(1.0, surface_depth / 8.0) if surface_depth else 0.0
 
-    # Evidence-aware superiority confidence. Variance keeps noisy player histories
-    # from receiving 90%+ confidence merely because their means are far apart.
+    # Predictive superiority confidence for the *next match*.
+    #
+    # The old implementation divided historical variance by sample size. That is
+    # appropriate for estimating uncertainty of a historical mean, but it is not
+    # the variance of a future count. With deep history the denominator therefore
+    # collapsed toward zero and Double Fault cards routinely hit the 97% cap.
+    # Future ace/DF counts remain noisy even when the historical mean is known very
+    # precisely, so use predictive count variance instead. A Poisson-like floor is
+    # deliberately conservative and the DF cap is lower because double faults are
+    # especially volatile from match to match.
     v1 = float(p1_projection.get("variance") or 0.0)
     v2 = float(p2_projection.get("variance") or 0.0)
-    n1 = max(1, int(p1_projection["samples"]))
-    n2 = max(1, int(p2_projection["samples"]))
-    variance_floor = 1.0 if market == "aces" else 0.35
-    standard_error = math.sqrt(max(variance_floor ** 2, v1 / n1 + v2 / n2))
-    z = gap / standard_error if standard_error > 0 else 0.0
+    poisson_scale = 0.90 if market == "aces" else 1.10
+    variance_floor = 1.20 ** 2 if market == "aces" else 0.95 ** 2
+    predictive_v1 = max(variance_floor, v1, max(0.0, float(e1)) * poisson_scale)
+    predictive_v2 = max(variance_floor, v2, max(0.0, float(e2)) * poisson_scale)
+    predictive_sd = math.sqrt(predictive_v1 + predictive_v2)
+    z = gap / predictive_sd if predictive_sd > 0 else 0.0
     raw_superiority = 0.5 * (1.0 + math.erf(z / math.sqrt(2.0)))
     evidence = min(1.0, 0.85 * depth + 0.15 * surface_factor)
     confidence = 0.5 + (raw_superiority - 0.5) * evidence
-    confidence = max(0.5, min(0.97, confidence))
+    confidence_cap = 0.93 if market == "aces" else 0.88
+    confidence = max(0.5, min(confidence_cap, confidence))
     if confidence < 0.60:
         return None
 
@@ -244,13 +254,13 @@ def _card(
         "projection_gap": round(float(gap), 2),
         "projection_confidence": round(float(confidence), 4),
         "raw_superiority_confidence": round(float(raw_superiority), 4),
-        "projection_uncertainty": round(float(standard_error), 3),
+        "projection_uncertainty": round(float(predictive_sd), 3),
         "probability": None,
         "odds": None,
         "edge": None,
         "expected_value": None,
         "price_status": "projection_only",
-        "projection_model": "ace-count-projection-v2",
+        "projection_model": "ace-count-projection-v3",
         "projection_source": "historical_event_statistics",
         "projection_samples": {
             "player1": int(p1_projection["samples"]),
@@ -356,18 +366,31 @@ def select_ace_picks(
         )
         by_market[market] = by_market[market][: max(0, int(per_market_limit))]
 
-    candidates = by_market["aces"] + by_market["double_faults"]
-    candidates.sort(key=lambda row: float(row.get("projection_score") or 0.0), reverse=True)
-    combined, applied_floor, tier_counts = _adaptive_confidence_select(
-        candidates, target_count=target_count, minimum_probability=0.60
-    )
+    # Select ACES and DOUBLE FAULTS independently. The previous combined fill
+    # allowed one market (typically high-confidence DF cards) to consume the
+    # entire target before the confidence floor relaxed enough for the sibling
+    # market. That is why valid ace projections could disappear from the feed.
+    selected_by_market: dict[str, list[dict[str, Any]]] = {}
+    applied_floors: dict[str, float | None] = {}
+    tier_counts_by_market: dict[str, dict[str, int]] = {}
+    per_market_target = max(1, min(int(per_market_limit), int(target_count)))
+    for market in ("aces", "double_faults"):
+        selected, floor, counts = _adaptive_confidence_select(
+            by_market[market], target_count=per_market_target, minimum_probability=0.60
+        )
+        selected_by_market[market] = selected[: max(0, int(per_market_limit))]
+        applied_floors[market] = None if floor is None else float(floor)
+        tier_counts_by_market[market] = counts
+
+    combined = selected_by_market["aces"] + selected_by_market["double_faults"]
+    combined.sort(key=lambda row: float(row.get("projection_score") or 0.0), reverse=True)
     combined = combined[: max(0, int(total_limit))]
     for row in combined:
         row.pop("projection_score", None)
 
     return combined, {
-        "schema": 3,
-        "model": "ace-count-projection-v2",
+        "schema": 4,
+        "model": "ace-count-projection-v3",
         "cutoff_utc": cutoff.isoformat(),
         "projection_only": True,
         "odds_backed": False,
@@ -383,7 +406,11 @@ def select_ace_picks(
         "per_market_limit": int(per_market_limit),
         "total_limit": int(total_limit),
         "target_count": int(target_count),
-        "adaptive_confidence_floor": None if applied_floor is None else float(applied_floor),
-        "adaptive_tier_counts": tier_counts,
-        "fill_policy": "evidence_adjusted_confidence_hard_floor_0.60",
+        "target_count_per_market": per_market_target,
+        "candidate_cards": {market: len(by_market[market]) for market in ("aces", "double_faults")},
+        "adaptive_confidence_floor": applied_floors,
+        "adaptive_tier_counts": tier_counts_by_market,
+        "confidence_caps": {"aces": 0.93, "double_faults": 0.88},
+        "uncertainty_model": "future_count_predictive_variance",
+        "fill_policy": "independent_market_fill_evidence_adjusted_hard_floor_0.60",
     }

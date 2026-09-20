@@ -888,6 +888,7 @@ def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
             # Do not spend a provider request when there is no pre-match PRIME
             # candidate that could possibly qualify for Comeback LIVE.
             scan=scan_comeback_radar(feed_payload,[])
+            scan["provider_skipped_reason"]="no_eligible_prime_candidates"
         else:
             client=RapidTennisClient(settings)
             try:

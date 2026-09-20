@@ -6245,3 +6245,62 @@ body#blinqPremium .admin-inactivity-danger>small{font-size:7px!important;line-he
 @media (hover:none) and (pointer:coarse){
   body#blinqPremium button,body#blinqPremium a{-webkit-tap-highlight-color:transparent;touch-action:manipulation}
 }
+
+/* BlinQ runtime patch 7.3.6-r29: supplied animated rally loader + ambient court backdrop. */
+body#blinqPremium .boot-splash.boot-splash-tennis{
+  position:fixed!important;inset:0!important;display:grid!important;place-items:center!important;
+  isolation:isolate!important;padding:24px!important;overflow:hidden!important;
+  background:
+    radial-gradient(ellipse at 50% 48%,rgba(38,235,164,.12) 0,rgba(20,121,91,.055) 30%,transparent 64%),
+    radial-gradient(circle at 18% 18%,rgba(33,126,111,.12),transparent 34%),
+    radial-gradient(circle at 84% 78%,rgba(22,92,82,.10),transparent 38%),
+    linear-gradient(145deg,#01090b 0%,#031615 47%,#010a0d 100%)!important;
+}
+body#blinqPremium .boot-splash.boot-splash-tennis::before{
+  content:""!important;position:absolute!important;inset:-10%!important;display:block!important;pointer-events:none!important;
+  background:
+    linear-gradient(rgba(70,235,177,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(70,235,177,.025) 1px,transparent 1px)!important;
+  background-size:64px 64px!important;
+  -webkit-mask-image:radial-gradient(ellipse at center,#000 12%,rgba(0,0,0,.78) 44%,transparent 76%);
+  mask-image:radial-gradient(ellipse at center,#000 12%,rgba(0,0,0,.78) 44%,transparent 76%);
+  opacity:.75!important;transform:perspective(900px) rotateX(62deg) scale(1.35) translateY(9%)!important;
+  transform-origin:50% 64%!important;animation:blinqLoaderGrid 8s ease-in-out infinite alternate!important;
+}
+body#blinqPremium .boot-splash.boot-splash-tennis::after{
+  content:""!important;position:absolute!important;display:block!important;pointer-events:none!important;
+  width:min(840px,86vw)!important;height:min(540px,62vh)!important;left:50%!important;top:50%!important;
+  transform:translate(-50%,-50%)!important;border:1px solid rgba(60,230,170,.055)!important;border-radius:48%!important;
+  background:radial-gradient(ellipse at center,rgba(40,238,168,.05),transparent 67%)!important;
+  box-shadow:0 0 120px rgba(27,202,142,.045),inset 0 0 100px rgba(31,186,137,.035)!important;
+  opacity:1!important;animation:blinqLoaderAura 3.2s ease-in-out infinite alternate!important;
+}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source{
+  position:relative!important;z-index:2!important;inset:auto!important;
+  width:min(520px,78vw)!important;height:auto!important;aspect-ratio:1/1!important;
+  max-width:520px!important;max-height:520px!important;margin:0!important;padding:0!important;
+  border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;overflow:visible!important;
+}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source::before{
+  content:""!important;display:block!important;position:absolute!important;inset:12%!important;z-index:-1!important;
+  border-radius:50%!important;background:radial-gradient(circle,rgba(47,242,174,.10),rgba(17,105,84,.035) 47%,transparent 72%)!important;
+  filter:blur(12px)!important;animation:blinqLoaderPulse 2.35s ease-in-out infinite!important;
+}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source::after{display:none!important;content:none!important;}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source>img{
+  position:static!important;display:block!important;width:100%!important;height:auto!important;max-width:100%!important;max-height:none!important;
+  object-fit:contain!important;object-position:center!important;border:0!important;border-radius:0!important;background:transparent!important;
+  opacity:1!important;mix-blend-mode:normal!important;filter:drop-shadow(0 28px 70px rgba(0,0,0,.44))!important;
+}
+body#blinqPremium .boot-copy-eyebrow,body#blinqPremium .boot-copy-status{display:none!important;}
+@keyframes blinqLoaderGrid{from{opacity:.48;filter:brightness(.86)}to{opacity:.82;filter:brightness(1.12)}}
+@keyframes blinqLoaderAura{from{opacity:.58;transform:translate(-50%,-50%) scale(.96)}to{opacity:1;transform:translate(-50%,-50%) scale(1.04)}}
+@keyframes blinqLoaderPulse{0%,100%{opacity:.55;transform:scale(.95)}50%{opacity:1;transform:scale(1.08)}}
+@media(max-width:560px){
+  body#blinqPremium .boot-splash.boot-splash-tennis{padding:12px!important;background:radial-gradient(circle at 50% 46%,rgba(38,235,164,.11),transparent 56%),linear-gradient(145deg,#01090b,#031513 52%,#01090c)!important;}
+  body#blinqPremium .boot-tennis-card.boot-tennis-card-source{width:min(390px,90vw)!important;max-width:390px!important;max-height:390px!important;}
+  body#blinqPremium .boot-splash.boot-splash-tennis::before{background-size:46px 46px!important;}
+}
+@media(prefers-reduced-motion:reduce){
+  body#blinqPremium .boot-splash.boot-splash-tennis::before,body#blinqPremium .boot-splash.boot-splash-tennis::after,body#blinqPremium .boot-tennis-card.boot-tennis-card-source::before{animation:none!important;}
+}

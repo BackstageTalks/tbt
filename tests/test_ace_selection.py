@@ -87,3 +87,37 @@ def test_market_sections_accept_projection_cards_without_turning_them_into_bets(
     assert sections["ace_picks"] == [card]
     assert "aces_projection" in sections["market_selection"]["current_outputs"]
     assert "aces_odds" in sections["market_selection"]["pending_outputs"]
+
+
+def test_ace_and_double_fault_targets_fill_independently_when_target_is_one():
+    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    rows = []
+    for i in range(10):
+        when = now - timedelta(days=20 + i * 8)
+        rows.append(historical(f"ia{i}", when, "A", f"IX{i}", 9, 3, 1, 2))
+        rows.append(historical(f"ib{i}", when, "B", f"IY{i}", 3, 8, 4, 2))
+
+    cards, report = select_ace_picks(
+        rows, [prediction(now + timedelta(hours=5))], now=now, target_count=1,
+    )
+
+    assert {card["market"] for card in cards} == {"aces", "double_faults"}
+    assert report["target_count_per_market"] == 1
+    assert set(report["adaptive_confidence_floor"]) == {"aces", "double_faults"}
+
+
+def test_double_fault_confidence_is_predictive_and_capped_below_old_97_percent():
+    now = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    rows = []
+    for i in range(30):
+        when = now - timedelta(days=10 + i * 3)
+        rows.append(historical(f"ca{i}", when, "A", f"CX{i}", 12, 2, 0, 1))
+        rows.append(historical(f"cb{i}", when, "B", f"CY{i}", 2, 11, 12, 1))
+
+    cards, report = select_ace_picks(rows, [prediction(now + timedelta(hours=5))], now=now)
+    df = next(card for card in cards if card["market"] == "double_faults")
+
+    assert df["projection_confidence"] <= .88
+    assert df["projection_uncertainty"] > 1.0
+    assert df["projection_model"] == "ace-count-projection-v3"
+    assert report["uncertainty_model"] == "future_count_predictive_variance"

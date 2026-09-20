@@ -108,7 +108,7 @@ def test_esa_projection_publications_are_frozen_and_settled_without_roi(match_fa
 
 def test_results_ui_calls_esa_a_projection_not_prediction():
     app=(ROOT/'web/app.js').read_text()
-    assert 'esaResultTypeLabel' in app
+    assert 'projectionResultTypeLabel' in app
     assert 'Projekcia pre' in app
     assert 'DATA DEPTH' in app
     assert '✓ HIT' in app and '× MISS' in app

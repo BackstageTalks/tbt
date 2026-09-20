@@ -168,6 +168,7 @@ _MARKET_SECTION_KEYS = {
     # Projection-only markets are frozen at deploy time so Results can later
     # grade the exact projection that users actually saw.
     "ace": "ace_picks",
+    "double_faults": "ace_picks",
     "sets": "sg_picks",
     "games": "sg_picks",
 }
@@ -179,8 +180,13 @@ def _section_feed_rows(feed, section, key):
         return []
     if not isinstance(rows, list):
         raise ValueError(f"Invalid market section: {key}")
-    if section in {"sets", "games"}:
-        return [row for row in rows if isinstance(row, dict) and str(row.get("market") or "").strip().lower() == section]
+    if section in {"ace", "double_faults", "sets", "games"}:
+        expected_market = "aces" if section == "ace" else section
+        return [
+            row for row in rows
+            if isinstance(row, dict)
+            and str(row.get("market") or "").strip().lower() == expected_market
+        ]
     return rows
 
 
@@ -318,7 +324,7 @@ def restore_published_market_snapshots(feed, ledger):
                 same_identity = stored[:4] == commitment[:4] and stored[8] == commitment[8]
                 # Projection scope + metric are part of the semantic identity.
                 # They disambiguate e.g. player aces from any future totals.
-                if section in {"ace", "sets", "games"}:
+                if section in {"ace", "double_faults", "sets", "games"}:
                     same_identity = (
                         same_identity
                         and stored[11] == commitment[11]
@@ -327,7 +333,7 @@ def restore_published_market_snapshots(feed, ledger):
                 if same_identity and publication.get("issued_at") and publication.get("publication_status") == "published":
                     matches.append(publication)
 
-            if section in {"ace", "sets", "games"} and matches:
+            if section in {"ace", "double_faults", "sets", "games"} and matches:
                 # Multiple ledger rows are safe only when they encode exactly the
                 # same immutable projection snapshot. Collapse lifecycle-only
                 # duplicates; never choose between conflicting projections.
@@ -338,7 +344,7 @@ def restore_published_market_snapshots(feed, ledger):
                 matches = list(unique.values())
 
             if len(matches) != 1:
-                if section in {"ace", "sets", "games"}:
+                if section in {"ace", "double_faults", "sets", "games"}:
                     # Fail closed at card granularity for legacy projection
                     # corruption. The rest of the site remains deployable and a
                     # subsequent refresh regenerates a clean publication row.
@@ -363,7 +369,7 @@ def restore_published_market_snapshots(feed, ledger):
                     for player in players:
                         player["probability"] = probability if player is selected[0] else 1 - probability
                     row["confidence"] = max(probability, 1 - probability)
-            if section in {"ace", "sets", "games"}:
+            if section in {"ace", "double_faults", "sets", "games"}:
                 for field in (
                     "projection", "opponent_projection", "reference_projection",
                     "projection_gap", "projection_scope", "projection_metric",
@@ -376,10 +382,12 @@ def restore_published_market_snapshots(feed, ledger):
             restored_rows.append(row)
 
         if key_present:
-            if key == "sg_picks":
+            if key in {"sg_picks", "ace_picks"}:
+                expected_market = "aces" if section == "ace" else section
                 untouched = [
                     item for item in result.get(key, []) or []
-                    if not isinstance(item, dict) or str(item.get("market") or "").strip().lower() != section
+                    if not isinstance(item, dict)
+                    or str(item.get("market") or "").strip().lower() != expected_market
                 ]
                 result[key] = untouched + restored_rows
             else:
