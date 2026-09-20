@@ -542,10 +542,12 @@
       if(resultsLocked){
         node.dataset.upgradePlan=resultsPlan;
         node.dataset.upgradeSection=lcopy('Results','Výsledky','Výsledky');
+        node.dataset.upgradeExplicit='1';
         node.setAttribute('aria-label',`${lcopy('Results','Výsledky','Výsledky')} · ${accessHintDetails(resultsPlan,'').title}`);
       }else{
         delete node.dataset.upgradePlan;
         delete node.dataset.upgradeSection;
+        delete node.dataset.upgradeExplicit;
         node.removeAttribute('aria-label');
       }
     };
