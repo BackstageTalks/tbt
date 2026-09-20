@@ -535,6 +535,7 @@
   }
 
   function renderNavigation(){
+    const referenceNav=document.querySelector('.reference-navigation');
     const predictionRoutes=new Set(['predictions','prime','top_daily','value','doubles','ace','sg']);
     const modelRoutes=new Set(['model_data','methodology','how_blinq_works']);
     const referenceRoute=predictionRoutes.has(state.route)?'predictions':state.route==='results'?'results':modelRoutes.has(state.route)?'model_data':state.route==='account'?'account':'';
