@@ -9,6 +9,7 @@ from __future__ import annotations
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
+import re
 
 
 SECTION_TO_FEED_KEY = {
@@ -259,6 +260,14 @@ def _admin_hub_rule(ui_config: dict | None, tab: str, plan: str) -> tuple[object
     see_all=bool(row.get("see_all", False))
     selection=str(row.get("selection_mode") or "first").lower()
     if selection not in {"first", "stable_random"}: selection="first"
+    # r33 product rule: ROOKIE Short Odds is a stable random daily sample.
+    # Older admin-published runtime configs used "first"; migrate those once
+    # until the r33 config is published, without changing post-r33 admin choices.
+    patch_text=str(ui_config.get("ui_patch") or "")
+    patch_match=re.search(r"r(\d+)$", patch_text)
+    patch_number=int(patch_match.group(1)) if patch_match else 0
+    if tab=="prime" and plan=="rookie" and patch_number<33:
+        selection="stable_random"
     overrides=row.get("row_overrides") if isinstance(row.get("row_overrides"), dict) else {}
     overrides={str(k):str(v).lower() for k,v in overrides.items() if str(v).lower() in {"active","blurred","hidden"}}
     if display == "blurred":
