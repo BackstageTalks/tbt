@@ -696,8 +696,18 @@ def match_intelligence(req):
             return response({**public_cached, "cached": True})
 
         feed_result = _feed_match_intelligence(p1, p2, surface)
+        live_provider_enabled = str(os.getenv("BLINQ_MATCH_INTELLIGENCE_LIVE_PROVIDER", "")).strip().lower() in {"1", "true", "yes", "on"}
+        if not live_provider_enabled:
+            if feed_result is None:
+                return response({"error": "match_intelligence_unavailable"}, 503)
+            _store_match_intelligence(key, feed_result)
+            public_feed_result = redact_match_intelligence(feed_result, detail_access)
+            return response({**public_feed_result, "cached": False, "live_provider": False})
         try:
             client = RapidTennisClient(settings)
+            # Explicit opt-in still has a strict per-request ceiling. The default
+            # production path above consumes zero online Tennis RapidAPI calls.
+            client.request_limit = min(getattr(client, "request_limit", 9) or 9, 9)
         except Exception:
             if feed_result is not None:
                 _store_match_intelligence(key, feed_result)
@@ -818,46 +828,19 @@ def match_intelligence(req):
 
 @app.route(route="v1/player-image/{player_id}", methods=["GET"])
 def player_image_proxy(req):
-    """Serve provider player artwork without exposing the RapidAPI key."""
-    raw = str((req.route_params or {}).get("player_id") or "").strip()
-    if not raw.isdigit() or not (1 <= len(raw) <= 12):
-        return func.HttpResponse(status_code=404)
-    try:
-        result = RapidTennisClient(settings).player_image(raw)
-    except Exception:
-        logging.exception("Player image unavailable for %s", raw)
-        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=300"})
-    if not result:
-        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=3600"})
-    data, content_type = result
-    allowed = {"image/png", "image/jpeg", "image/webp", "image/svg+xml", "image/gif"}
-    if content_type not in allowed:
-        content_type = "image/png"
-    return func.HttpResponse(body=data, status_code=200, mimetype=content_type, headers={"Cache-Control": "public, max-age=86400, stale-while-revalidate=604800"})
+    """Legacy compatibility endpoint.
+
+    Player artwork is deployed from the private presentation release. A public
+    request must never create a paid provider request, so missing assets fail
+    closed and the web client uses its gender-aware local fallback.
+    """
+    return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.route(route="v1/tournament-logo/{tournament_id}", methods=["GET"])
 def tournament_logo_proxy(req):
-    """Serve TennisApi tournament artwork without exposing the RapidAPI key.
-
-    The provider dark logo is preferred by RapidTennisClient.tournament_logo().
-    This is presentation-only data and is intentionally cached by browsers/CDNs.
-    """
-    raw = str((req.route_params or {}).get("tournament_id") or "").strip()
-    if not raw.isdigit() or not (1 <= len(raw) <= 12):
-        return func.HttpResponse(status_code=404)
-    try:
-        result = RapidTennisClient(settings).tournament_logo(raw)
-    except Exception:
-        logging.exception("Tournament logo unavailable for %s", raw)
-        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=300"})
-    if not result:
-        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=3600"})
-    data, content_type = result
-    allowed = {"image/png", "image/jpeg", "image/webp", "image/svg+xml", "image/gif"}
-    if content_type not in allowed:
-        content_type = "image/png"
-    return func.HttpResponse(body=data, status_code=200, mimetype=content_type, headers={"Cache-Control": "public, max-age=86400, stale-while-revalidate=604800"})
+    """Legacy compatibility endpoint; never proxy a paid provider request."""
+    return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=86400"})
 
 @app.route(route="v1/ui-config", methods=["GET"])
 def runtime_ui_config(req):

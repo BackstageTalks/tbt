@@ -33,12 +33,12 @@ def test_provider_probe_captures_actual_stat_item_names():
 def test_environment_force_static_no_longer_adds_complete_static():
     # Force and complete-static are mutually exclusive in the Python CLI. The
     # workflow must add complete-static only in the final non-force branch.
-    assert 'if [[ "${{ inputs.force }}" == "true" ]]; then' in ENV
-    force_pos = ENV.index('if [[ "${{ inputs.force }}" == "true" ]]; then')
-    elif_retry = ENV.index('elif [[ "${{ inputs.retry_unresolved }}" == "true" ]]', force_pos)
+    assert 'if [[ "$BLINQ_INPUT_FORCE" == "true" ]]; then' in ENV
+    force_pos = ENV.index('if [[ "$BLINQ_INPUT_FORCE" == "true" ]]; then')
+    elif_retry = ENV.index('elif [[ "$BLINQ_INPUT_RETRY_UNRESOLVED" == "true" ]]', force_pos)
     complete_pos = ENV.index('ARGS+=(--complete-static)', elif_retry)
     assert force_pos < elif_retry < complete_pos
-    assert '--max-requests "${{ inputs.max_requests }}"' in ENV
+    assert '--max-requests "$BLINQ_INPUT_MAX_REQUESTS"' in ENV
     assert 'default: "12000"' in ENV
     assert 'default: "0"' in ENV
 

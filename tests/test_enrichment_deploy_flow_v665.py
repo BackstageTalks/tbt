@@ -31,11 +31,13 @@ def test_verifier_guards_completely_unenriched_current_feed_but_allows_optional_
     assert 'no tournament_assets merge metadata' not in text
 
 
-def test_player_enrichment_refreshes_current_prediction_presentation_first():
+def test_player_enrichment_is_presentation_only_and_budgeted():
     text = read('.github/workflows/player-enrichment.yml')
-    assert 'scripts/pipeline.py refresh' in text
+    assert 'scripts/pipeline.py refresh' not in text
     assert 'RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}' in text
-    assert 'group: tbt-history-data-writer' in text
+    assert 'group: tbt-history-data-writer' not in text
+    assert 'scripts/plan_player_enrichment_budget.py' in text
+    assert 'max_total_requests' in text
 
 
 def test_presentation_guard_rejects_old_prediction_shape():

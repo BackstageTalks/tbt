@@ -2428,7 +2428,7 @@
       }
     }
   },
-  "ui_patch": "736-r39",
+  "ui_patch": "736-r40",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 90,

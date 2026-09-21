@@ -58,6 +58,9 @@ jobs:
 
       - name: Audit current tbt-data-v1 release
         shell: bash
+        env:
+          BLINQ_INPUT_START: ${{ inputs.start }}
+          BLINQ_INPUT_END: ${{ inputs.end }}
         run: |
           set -euo pipefail
           mkdir -p .cache/tbt
@@ -65,8 +68,8 @@ jobs:
             --data-repository "$TBT_DATA_REPOSITORY"
             --report ".cache/tbt/environment_audit_report.json"
           )
-          if [[ -n "${{ inputs.start }}" ]]; then ARGS+=(--start "${{ inputs.start }}"); fi
-          if [[ -n "${{ inputs.end }}" ]]; then ARGS+=(--end "${{ inputs.end }}"); fi
+          if [[ -n "$BLINQ_INPUT_START" ]]; then ARGS+=(--start "$BLINQ_INPUT_START"); fi
+          if [[ -n "$BLINQ_INPUT_END" ]]; then ARGS+=(--end "$BLINQ_INPUT_END"); fi
           python scripts/audit_environment_release.py "${ARGS[@]}" | tee .cache/tbt/environment_audit.log
 
       - name: Publish readable summary

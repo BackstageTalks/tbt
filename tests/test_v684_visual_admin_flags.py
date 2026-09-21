@@ -27,7 +27,8 @@ def test_player_meta_and_rank_visual_contract():
 
 def test_tournament_logo_resolver_and_fallback_assets():
     assert "function tournamentFallbackBadge" in APP
-    assert "/api/v1/tournament-logo/${tournamentId}" in APP
+    assert "/api/v1/tournament-logo/${tournamentId}" not in APP
+    assert "const logo=explicit" in APP
     assert "team-cup.svg" in APP
     assert "team-event.svg" in APP
     assert "utr.svg" in APP
