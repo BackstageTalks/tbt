@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "generated_at": "2026-09-21T20:00:00+00:00",
+  "offers": [
+    {
+      "bookmaker": "Tipsport",
+      "event_id": "example-1001",
+      "scheduled_at": "2026-09-22T12:00:00+00:00",
+      "player1": "Player A",
+      "player2": "Player B",
+      "market": "match_winner",
+      "selection": "Player A",
+      "odds": 1.87,
+      "captured_at": "2026-09-21T20:00:00+00:00",
+      "url": "https://www.tipsport.sk/"
+    },
+    {
+      "bookmaker": "Niké",
+      "event_id": "example-1002",
+      "scheduled_at": "2026-09-22T13:00:00+00:00",
+      "player1": "Player C",
+      "player2": "Player D",
+      "market": "double_faults",
+      "player": "Player C",
+      "selection": "Over 3.5",
+      "line": 3.5,
+      "odds": 1.91,
+      "captured_at": "2026-09-21T20:00:00+00:00"
+    }
+  ]
+}

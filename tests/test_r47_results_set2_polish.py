@@ -11,11 +11,11 @@ INDEX = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8')
 def test_r47_release_contract():
     release = json.loads((ROOT / 'web' / 'release.json').read_text(encoding='utf-8'))
     ui = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
-    assert release['patch'] == ui['ui_patch'] == '736-r51'
-    assert 'content="736-r51"' in INDEX
-    assert 'BlinQ runtime patch 7.3.6-r51' in CSS
+    assert release['patch'] == ui['ui_patch'] == '736-r53'
+    assert 'content="736-r53"' in INDEX
+    assert 'BlinQ runtime patch 7.3.6-r53' in CSS
     for asset in ('blinq-app.css', 'auth.js', 'responsive.js', 'app.js'):
-        assert f'/{asset}?v=7360&p=51' in INDEX
+        assert f'/{asset}?v=7360&p=53' in INDEX
 
 
 def test_projection_results_are_human_readable_and_projection_only_categories_share_clean_layout():

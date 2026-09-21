@@ -15,7 +15,7 @@ UI = json.loads((ROOT / "web/ui-config.json").read_text())
 
 
 def test_r51_release_and_result_identity_are_id_authoritative():
-    assert RELEASE["patch"] == UI["ui_patch"] == "736-r51"
+    assert RELEASE["patch"] == UI["ui_patch"] == "736-r53"
     assert "function resultPickIdentity(publication,row)" in APP
     assert "const p1Selected=selectable&&pickIdentity.side==='p1';" in APP
     assert "const p2Selected=selectable&&pickIdentity.side==='p2';" in APP
@@ -26,8 +26,8 @@ def test_r51_release_and_result_identity_are_id_authoritative():
 
 def test_results_use_separate_model_odds_actual_columns_and_projection_odds():
     assert "<th>Model / BlinQ %</th><th>Kurz</th><th>Skutočne</th>" in APP
-    assert "projectionOdds=Number(publication?.odds)" in APP
-    assert "Number.isFinite(projectionOdds)?projectionOdds.toFixed(2):'—'" in APP
+    assert "projectionOdds=publication?.odds==null?NaN:Number(publication?.odds)" in APP
+    assert "Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—'" in APP
     assert "if(tab==='games'||tab==='sets')return ['#',time,tournament,match,prediction,odds,projection,confidence]" in APP
     assert "if(tab==='ace'||tab==='double_faults')return ['#',time,tournament,match,prediction,odds,projection,confidence]" in APP
 

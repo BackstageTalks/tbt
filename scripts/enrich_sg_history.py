@@ -367,6 +367,7 @@ def main() -> None:
 
     mutating_statuses = {
         "enriched", "unavailable", "unsupported", "unsupported_format", "format_conflict",
+        "identity_mismatch",
     }
 
     try:
@@ -376,11 +377,22 @@ def main() -> None:
             try:
                 status = enricher.enrich(match)
             except ProviderError as exc:
-                # Fail this sample closed, keep the expensive batch alive, and
-                # expose the rejected identity/score condition in the artifact.
+                # Only genuine provider/transport failures reach this branch.
+                # Identity mismatches are persisted by ScoreEnricher as their own
+                # fail-closed status so they do not masquerade as API errors.
+                message = str(exc)
+                lower = message.lower()
                 report["provider_error"] += 1
+                if "http 429" in lower:
+                    report["provider_error_429"] += 1
+                elif "rapidapi http 4" in lower:
+                    report["provider_error_http_4xx"] += 1
+                elif "rapidapi http 5" in lower or "request failed" in lower:
+                    report["provider_error_transport_or_5xx"] += 1
+                else:
+                    report["provider_error_other"] += 1
                 if len(rejected) < 1000:
-                    rejected.append({"match_id": str(match.match_id), "error": str(exc)[:240]})
+                    rejected.append({"match_id": str(match.match_id), "error": message[:240]})
                 continue
 
             report[status] += 1

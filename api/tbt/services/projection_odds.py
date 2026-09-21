@@ -29,7 +29,7 @@ def _number(value: Any) -> float | None:
 
 
 def _explicit_line(row: dict[str, Any], outcome: str = "") -> float | None:
-    for key in ("line", "handicap", "total", "points", "threshold", "specifier"):
+    for key in ("line", "handicap", "total", "points", "threshold", "specifier", "choiceGroup", "choice_group"):
         value = row.get(key)
         if isinstance(value, str):
             match = re.search(r"[-+]?\d+(?:[.,]\d+)?", value)
@@ -138,15 +138,15 @@ def _card_players(card: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]
     return p1, p2
 
 
-def _attach_sg(card: dict[str, Any], payload: Any, captured_at: str, provider_id: int) -> tuple[dict[str, Any], bool]:
+def _attach_sg(card: dict[str, Any], payload: Any, captured_at: str, provider_id: int) -> tuple[dict[str, Any], bool, str]:
     out = deepcopy(card)
     metric = str(out.get("market") or "").strip().lower()
     markets = extract_match_total_odds(payload, metric)
     if not markets:
-        return out, False
+        return out, False, "no_exact_match_total_market"
     projection = _number(out.get("projection"))
     if projection is None:
-        return out, False
+        return out, False, "missing_projection"
     desired = "over" if projection > (_number(out.get("reference_projection")) or projection) else "under"
     if metric == "sets":
         sid = str(out.get("selection_id") or "").lower().split(":")
@@ -167,14 +167,14 @@ def _attach_sg(card: dict[str, Any], payload: Any, captured_at: str, provider_id
     line = float(market["line"])
     tolerance = 0.55 if metric == "sets" else 2.0
     if reference is not None and abs(line - reference) > tolerance:
-        return out, False
+        return out, False, "provider_line_too_far_from_model_reference"
     # The bookmaker line must agree with the model direction; otherwise it is a
     # different bet and is not silently substituted.
     if (projection > line and desired != "over") or (projection < line and desired != "under") or projection == line:
-        return out, False
+        return out, False, "projection_direction_market_mismatch"
     odds = _number(market.get(desired))
     if odds is None or odds <= 1:
-        return out, False
+        return out, False, "missing_decimal_price"
     unit = "Sets" if metric == "sets" else "Games"
     out.update({
         "market_line": round(line, 2),
@@ -188,23 +188,22 @@ def _attach_sg(card: dict[str, Any], payload: Any, captured_at: str, provider_id
         "captured_at": captured_at,
         "odds_market_name": market.get("market_name"),
     })
-    return out, True
+    return out, True, "priced"
 
-
-def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_id: int) -> tuple[dict[str, Any], bool]:
+def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_id: int) -> tuple[dict[str, Any], bool, str]:
     out = deepcopy(card)
     metric = str(out.get("market") or "").strip().lower()
     p1, p2 = _card_players(out)
     market = extract_player_superiority_odds(payload, metric, str(p1.get("name") or ""), str(p2.get("name") or ""))
     if not market:
-        return out, False
+        return out, False, "no_exact_player_superiority_market"
     selected_id = str(out.get("selection_id") or "")
     if selected_id and selected_id == str(p1.get("id") or ""):
         odds = market["player1_odds"]
     elif selected_id and selected_id == str(p2.get("id") or ""):
         odds = market["player2_odds"]
     else:
-        return out, False
+        return out, False, "selection_not_resolved_to_market_side"
     out.update({
         "odds": round(float(odds), 3),
         "price_status": "priced_projection",
@@ -212,14 +211,15 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
         "captured_at": captured_at,
         "odds_market_name": market.get("market_name"),
     })
-    return out, True
-
+    return out, True, "priced"
 
 def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_picks: list[dict[str, Any]], *, max_events: int = 40, provider_id: int = 1) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Attach exact provider prices to already-selected projection cards.
 
     Cards remain projection-only when no exact market is available.  This is a
     deliberate fail-closed behavior: BlinQ never substitutes confidence for odds.
+    The report intentionally exposes observed provider market names and the exact
+    reason a selected projection remained unpriced.
     """
     ace = [deepcopy(row) for row in (ace_picks or [])]
     sg = [deepcopy(row) for row in (sg_picks or [])]
@@ -241,6 +241,20 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
     captured_at = datetime.now(timezone.utc).isoformat()
     priced = {"aces": 0, "double_faults": 0, "sets": 0, "games": 0}
     eligible = {"aces": 0, "double_faults": 0, "sets": 0, "games": 0}
+    reasons: dict[str, dict[str, int]] = {key: {} for key in eligible}
+    observed_market_names: dict[str, int] = {}
+
+    # Record what the provider actually exposed on the exact projection events.
+    # This makes missing Sets/Aces/DF prices diagnosable without guessing market
+    # availability from a different event or provider.
+    for payload in payloads.values():
+        if payload is None:
+            continue
+        for _row, market_name in _walk_market_rows(payload):
+            name = str(market_name or "").strip()
+            if name:
+                observed_market_names[name] = observed_market_names.get(name, 0) + 1
+
     for event_id, refs in by_event.items():
         payload = payloads.get(event_id)
         for kind, index in refs:
@@ -249,16 +263,22 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
             if metric in eligible:
                 eligible[metric] += 1
             if payload is None:
+                reason = "odds_payload_unavailable_or_request_failed"
+                if metric in reasons:
+                    reasons[metric][reason] = reasons[metric].get(reason, 0) + 1
                 continue
-            updated, ok = (_attach_ace(row, payload, captured_at, provider_id) if kind == "ace" else _attach_sg(row, payload, captured_at, provider_id))
+            updated, ok, reason = (_attach_ace(row, payload, captured_at, provider_id) if kind == "ace" else _attach_sg(row, payload, captured_at, provider_id))
             if kind == "ace":
                 ace[index] = updated
             else:
                 sg[index] = updated
+            if metric in reasons:
+                reasons[metric][reason] = reasons[metric].get(reason, 0) + 1
             if ok and metric in priced:
                 priced[metric] += 1
+    top_markets = dict(sorted(observed_market_names.items(), key=lambda item: (-item[1], item[0]))[:40])
     return ace, sg, {
-        "schema": 1,
+        "schema": 2,
         "provider_id": int(provider_id),
         "events_considered": len(by_event),
         "events_requested": len(event_ids),
@@ -266,5 +286,8 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
         "eligible_cards": eligible,
         "priced_cards": priced,
         "fail_closed_unpriced": {key: max(0, eligible[key] - priced[key]) for key in eligible},
+        "unpriced_reasons": reasons,
+        "observed_market_names_top40": top_markets,
         "policy": "exact_provider_market_only_no_confidence_as_odds",
     }
+

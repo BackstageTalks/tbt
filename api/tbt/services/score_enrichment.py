@@ -81,7 +81,12 @@ class ScoreEnricher:
                 checked = datetime.fromtimestamp(0, tz=timezone.utc)
             if checked.tzinfo is None:
                 checked = checked.replace(tzinfo=timezone.utc)
-            if marker.get("status") == "available" or (now - checked).total_seconds() < 30 * 86400:
+            age_seconds = (now - checked).total_seconds()
+            if marker.get("status") == "available":
+                return "cached_verified"
+            if age_seconds < 30 * 86400:
+                if marker.get("status") == "identity_mismatch":
+                    return "cached_identity_mismatch"
                 return "cached_verified"
 
         detail = self._get(f"/api/tennis/event/{event_id}")
@@ -93,8 +98,34 @@ class ScoreEnricher:
 
         home = str((event.get("homeTeam") or {}).get("id") or "") if isinstance(event.get("homeTeam"), dict) else ""
         away = str((event.get("awayTeam") or {}).get("id") or "") if isinstance(event.get("awayTeam"), dict) else ""
-        if {home, away} != {str(match.player1_id), str(match.player2_id)} or not home or home == away:
-            raise ProviderError("Event player identity mismatch; refusing score attachment")
+        expected = {str(match.player1_id), str(match.player2_id)}
+        observed = {home, away}
+        if observed != expected or not home or home == away:
+            # Persist the mismatch as an auditable fail-closed fact. Previously
+            # this raised ProviderError after a successful/cached detail fetch,
+            # so mega-data repeatedly reported thousands of generic provider
+            # errors without distinguishing identity drift from network faults.
+            updated_raw = dict(raw)
+            updated_raw["_tbt_event_identity"] = {
+                "event_id": event_id,
+                "home": home,
+                "away": away,
+                "expected_player_ids": sorted(expected),
+                "status": "mismatch",
+            }
+            updated_raw["_tbt_score"] = {
+                "schema": SCORE_SCHEMA_VERSION,
+                "event_id": event_id,
+                "source": "tennisapi1_event_detail",
+                "fetched_at": now.isoformat(),
+                "status": "identity_mismatch",
+                "best_of": None,
+                "best_of_source": "identity_mismatch",
+                "identity_verified": False,
+                "format_verified": False,
+            }
+            match.provider_payload = updated_raw
+            return "identity_mismatch"
 
         provider_best_of = explicit_best_of_from_event(event)
         try:

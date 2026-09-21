@@ -94,6 +94,12 @@ jobs:
       SG_LOOKBACK_DAYS: ${{ inputs.sg_lookback_days || 730 }}
       PROMOTE: ${{ inputs.promote }}
       TBT_WEATHER_RESEARCH: ${{ vars.TBT_WEATHER_RESEARCH }}
+      # r53 optional presentation-only SK bookmaker feed. The refresh remains
+      # fail-closed when the URL/secret is not configured.
+      BLINQ_BOOKMAKER_FEED_URL: ${{ vars.BLINQ_BOOKMAKER_FEED_URL }}
+      BLINQ_BOOKMAKER_FEED_TOKEN: ${{ secrets.BLINQ_BOOKMAKER_FEED_TOKEN }}
+      BLINQ_BOOKMAKER_MAX_AGE_MINUTES: ${{ vars.BLINQ_BOOKMAKER_MAX_AGE_MINUTES || '45' }}
+      BLINQ_BOOKMAKER_EVENT_TOLERANCE_SECONDS: ${{ vars.BLINQ_BOOKMAKER_EVENT_TOLERANCE_SECONDS || '10800' }}
       PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4

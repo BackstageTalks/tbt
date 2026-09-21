@@ -12,7 +12,7 @@ def text(path):
 def test_r44_release_and_final_inactivity_defaults():
     release = json.loads((WEB / "release.json").read_text(encoding="utf-8"))
     ui = json.loads((WEB / "ui-config.json").read_text(encoding="utf-8"))
-    assert release["patch"] == ui["ui_patch"] == "736-r51"
+    assert release["patch"] == ui["ui_patch"] == "736-r53"
     assert ui["account_inactivity"] == {
         "enabled": True,
         "inactive_days": 30,
