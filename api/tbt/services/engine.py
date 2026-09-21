@@ -27,6 +27,57 @@ def event_id(match):
     return str(next((raw.get(k) for k in ("_tbt_provider_event_id", "provider_event_id", "event_id", "eventId", "id") if raw.get(k)), match.match_id))
 
 
+_VOID_TERMINATION_ALIASES = (
+    ("retir", "retired"),
+    ("walkover", "walkover"),
+    ("walk over", "walkover"),
+    ("w/o", "walkover"),
+    ("abandon", "abandoned"),
+    ("interrupt", "interrupted"),
+    ("suspend", "suspended"),
+    ("postpon", "postponed"),
+    ("cancel", "cancelled"),
+)
+
+
+def _match_void_reason(match):
+    """Return a canonical non-standard termination reason, if provider proves one.
+
+    Tennis providers often expose ``status.type = finished`` while putting the
+    real termination in ``status.description``/``reason`` (for example Retired).
+    Match-winner settlement must not turn those rows into a normal win/loss.
+    """
+    values = [str(getattr(match, "status", "") or "")]
+    raw = getattr(match, "provider_payload", None)
+    interesting = {
+        "status", "state", "type", "name", "description", "reason",
+        "statusdescription", "status_description", "endreason", "end_reason",
+        "termination", "terminationreason", "termination_reason",
+    }
+
+    def collect(value, depth=0):
+        if depth > 4 or value is None:
+            return
+        if isinstance(value, dict):
+            for key, nested in value.items():
+                key_text = str(key or "").strip().lower().replace("-", "_")
+                if key_text in interesting or any(token in key_text for token in ("status", "reason", "retir", "walkover")):
+                    if isinstance(nested, (str, int, float)):
+                        values.append(str(nested))
+                    else:
+                        collect(nested, depth + 1)
+        elif isinstance(value, (list, tuple)):
+            for nested in value[:30]:
+                collect(nested, depth + 1)
+
+    collect(raw)
+    text = " | ".join(values).lower().replace("_", " ")
+    for token, canonical in _VOID_TERMINATION_ALIASES:
+        if token in text:
+            return canonical
+    return ""
+
+
 def _provider_player_country(payload, *, player1):
     """Best-effort ISO-2 country extraction from TennisApi event payload."""
     if not isinstance(payload, dict):
@@ -304,6 +355,7 @@ def _settle_match_winner_publications(row, match, now):
     publications = row.get("market_publications")
     if not isinstance(publications, list):
         return
+    void_reason = _match_void_reason(match)
     for publication in publications:
         if not isinstance(publication, dict) or publication.get("market") != "match_winner":
             continue
@@ -322,6 +374,28 @@ def _settle_match_winner_publications(row, match, now):
             publication["excluded_reason"] = "issued_after_actual_start"
             continue
         publication.pop("excluded_reason", None)
+        existing = publication.get("result") if isinstance(publication.get("result"), dict) else None
+        if void_reason:
+            settled = {
+                "status": "void",
+                "reason": void_reason,
+                "winner_id": match.winner_id,
+                "correct": None,
+                "staked_units": 0.0,
+                "return_units": 0.0,
+                "profit_units": 0.0,
+                "settled_at": (existing or {}).get("settled_at") or now.isoformat(),
+                "scheduled_at": match.scheduled_at.isoformat(),
+            }
+            if existing is not None and (
+                existing.get("status") != "void"
+                or existing.get("reason") != void_reason
+                or existing.get("correct") is not None
+                or abs(float(existing.get("profit_units") or 0.0)) > 1e-12
+            ):
+                settled["corrected_at"] = now.isoformat()
+            publication["result"] = settled
+            continue
         selection_id = str(publication.get("selection_id") or "")
         correct = selection_id == str(match.winner_id or "")
         try:
@@ -332,7 +406,6 @@ def _settle_match_winner_publications(row, match, now):
             publication["excluded_reason"] = "invalid_odds"
             continue
         profit_units = (odds - 1.0) if correct else -1.0
-        existing = publication.get("result") if isinstance(publication.get("result"), dict) else None
         settled = {
             "winner_id": match.winner_id,
             "correct": correct,
@@ -343,7 +416,8 @@ def _settle_match_winner_publications(row, match, now):
             "scheduled_at": match.scheduled_at.isoformat(),
         }
         if existing is not None and (
-            existing.get("winner_id") != match.winner_id
+            existing.get("status") == "void"
+            or existing.get("winner_id") != match.winner_id
             or existing.get("correct") != correct
             or abs(float(existing.get("profit_units", profit_units)) - profit_units) > 1e-12
         ):
@@ -549,21 +623,28 @@ def _betting_metrics(publications):
         and isinstance(p.get("result"), dict)
         and not p.get("excluded_reason")
     ]
+    graded = [
+        p for p in rows
+        if p["result"].get("correct") in {True, False}
+        and str(p["result"].get("status") or "").strip().lower() != "void"
+    ]
+    voids = len(rows) - len(graded)
     if not rows:
         return {
-            "n": 0, "wins": 0, "losses": 0, "hit_rate": None,
+            "n": 0, "wins": 0, "losses": 0, "voids": 0, "hit_rate": None,
             "avg_odds": None, "staked_units": 0.0, "profit_units": 0.0, "roi": None,
         }
-    wins = sum(1 for p in rows if p["result"].get("correct") is True)
-    losses = sum(1 for p in rows if p["result"].get("correct") is False)
-    odds = [float(p.get("odds")) for p in rows if p.get("odds") is not None]
-    staked = sum(float(p["result"].get("staked_units") or 0.0) for p in rows)
-    profit = sum(float(p["result"].get("profit_units") or 0.0) for p in rows)
+    wins = sum(1 for p in graded if p["result"].get("correct") is True)
+    losses = sum(1 for p in graded if p["result"].get("correct") is False)
+    odds = [float(p.get("odds")) for p in graded if p.get("odds") is not None]
+    staked = sum(float(p["result"].get("staked_units") or 0.0) for p in graded)
+    profit = sum(float(p["result"].get("profit_units") or 0.0) for p in graded)
     return {
-        "n": len(rows),
+        "n": len(graded),
         "wins": wins,
         "losses": losses,
-        "hit_rate": wins / len(rows) if rows else None,
+        "voids": voids,
+        "hit_rate": wins / len(graded) if graded else None,
         "avg_odds": sum(odds) / len(odds) if odds else None,
         "staked_units": staked,
         "profit_units": profit,
@@ -835,20 +916,40 @@ def reconcile_ledger(ledger, predictions, history, now=None):
             continue
 
         existing_result = row.get("result")
+        void_reason = _match_void_reason(match)
         corrected_result = None
         if existing_result is not None:
-            corrected_result = {
-                **existing_result,
-                "winner_id": match.winner_id,
-                "correct": row["winner_id"] == match.winner_id,
-                "scheduled_at": match.scheduled_at.isoformat(),
-            }
-            if (
-                existing_result.get("winner_id") != match.winner_id
-                or existing_result.get("correct")
-                != (row["winner_id"] == match.winner_id)
-            ):
-                corrected_result["corrected_at"] = now.isoformat()
+            if void_reason:
+                corrected_result = {
+                    **existing_result,
+                    "status": "void",
+                    "reason": void_reason,
+                    "winner_id": match.winner_id,
+                    "correct": None,
+                    "scheduled_at": match.scheduled_at.isoformat(),
+                }
+                if (
+                    existing_result.get("status") != "void"
+                    or existing_result.get("reason") != void_reason
+                    or existing_result.get("correct") is not None
+                ):
+                    corrected_result["corrected_at"] = now.isoformat()
+            else:
+                corrected_result = {
+                    **existing_result,
+                    "winner_id": match.winner_id,
+                    "correct": row["winner_id"] == match.winner_id,
+                    "scheduled_at": match.scheduled_at.isoformat(),
+                }
+                corrected_result.pop("status", None)
+                corrected_result.pop("reason", None)
+                if (
+                    existing_result.get("status") == "void"
+                    or existing_result.get("winner_id") != match.winner_id
+                    or existing_result.get("correct")
+                    != (row["winner_id"] == match.winner_id)
+                ):
+                    corrected_result["corrected_at"] = now.isoformat()
 
         if datetime.fromisoformat(issued_at) >= match.scheduled_at:
             row["excluded_reason"] = "issued_after_actual_start"
@@ -865,9 +966,10 @@ def reconcile_ledger(ledger, predictions, history, now=None):
 
         row["result"] = {
             "winner_id": match.winner_id,
-            "correct": row["winner_id"] == match.winner_id,
+            "correct": None if void_reason else row["winner_id"] == match.winner_id,
             "settled_at": now.isoformat(),
             "scheduled_at": match.scheduled_at.isoformat(),
+            **({"status": "void", "reason": void_reason} if void_reason else {}),
         }
     return sorted(stored.values(), key=lambda r: r["scheduled_at"])
 
@@ -985,6 +1087,8 @@ def serving_feed(ledger, model, history, report, upcoming, now=None):
     winner_results = [
         r for r in results
         if isinstance(r.get("result"), dict)
+        and r["result"].get("correct") in {True, False}
+        and str(r["result"].get("status") or "").strip().lower() != "void"
         and _issued_at(r.get("issued_at")) is not None
         and any(str(p.get("market") or "") == "match_winner" for p in r.get("market_publications", []) or [])
         and r.get("prediction_family") != "doubles"

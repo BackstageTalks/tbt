@@ -26,11 +26,11 @@ def _user(meta):
 
 
 def test_r25_release_and_cache_identity():
-    assert RELEASE["patch"] == "736-r49"
-    assert UI["ui_patch"] == "736-r49"
-    assert 'content="736-r49"' in INDEX
+    assert RELEASE["patch"] == "736-r50"
+    assert UI["ui_patch"] == "736-r50"
+    assert 'content="736-r50"' in INDEX
     for asset in ("blinq-app.css", "auth.js", "responsive.js", "app.js"):
-        assert f"/{asset}?v=7360&p=49" in INDEX
+        assert f"/{asset}?v=7360&p=50" in INDEX
 
 
 def test_stale_hero_access_is_migrated_instead_of_blocking_publish():

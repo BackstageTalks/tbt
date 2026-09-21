@@ -12,11 +12,11 @@ UI = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
 
 
 def test_r49_release_identity_and_cache_bust():
-    assert RELEASE['patch'] == UI['ui_patch'] == '736-r49'
-    assert 'content="736-r49"' in INDEX
+    assert RELEASE['patch'] == UI['ui_patch'] == '736-r50'
+    assert 'content="736-r50"' in INDEX
     for asset in ('blinq-app.css', 'auth.js', 'responsive.js', 'app.js'):
-        assert f'/{asset}?v=7360&p=49' in INDEX
-    assert 'BlinQ runtime patch 7.3.6-r49' in CSS
+        assert f'/{asset}?v=7360&p=50' in INDEX
+    assert 'BlinQ runtime patch 7.3.6-r50' in CSS
 
 
 def test_sets_are_total_match_sets_not_direction_probability():

@@ -53,7 +53,8 @@ def test_generic_upgrade_does_not_mark_required_level_but_locked_content_does():
     assert "showUpgradePrompt(plan,section)" in APP
     assert "showUpgradePrompt(accessUpgrade.dataset.upgradePlan||'elite',accessUpgrade.dataset.upgradeSection||'BlinQ',true)" in APP
     assert "required=Boolean(lockedContext&&idx===requiredIndex)" in APP
-    assert "upgrade-account-role" in APP
+    assert "upgrade-account-role" not in APP
+    assert "lockedContext?`<span class=\"upgrade-requires-pill is-required-context\"" in APP
     assert "upgrade-benefit-strip" not in APP.split("host.innerHTML=", 1)[1].split("host.querySelectorAll", 1)[0]
 
 

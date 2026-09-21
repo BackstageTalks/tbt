@@ -34,6 +34,7 @@ def test_live_worker_setup_is_explained_in_system():
     assert 'BLINQ_LIVE_WORKER_TOKEN' in APP
     assert 'TBT_LIVE_RADAR_ENABLED=true' in APP
 
-def test_header_membership_cta_is_subtle():
-    assert "label.textContent=lcopy('Membership','Členstvo','Členství')" in APP
+def test_header_upgrade_cta_is_clear_and_compact():
+    assert "label.textContent=lcopy('Upgrade','Upgrade','Upgrade')" in APP
+    assert 'id="topUpgradeLabel">Upgrade</span></button>' in INDEX
     assert f"runtime patch 7.3.6-r{PATCH_NUM}" in CSS

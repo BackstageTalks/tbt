@@ -6619,3 +6619,64 @@ body#blinqPremium .admin-field-label-with-icon>svg{position:static!important;wid
 body#blinqPremium .admin-user-editor #adminUserTelegram{padding-left:12px!important}
 
 /* BlinQ runtime patch 7.3.6-r49: total Sets projection, Doubles EV analysis-only, result/photo/filter/admin visual cleanup. */
+
+/* ========================================================================
+   BlinQ 7.3.6-r50 — header polish + result identity/retirement clarity
+   ======================================================================== */
+@media(min-width:901px){
+  body#blinqPremium .reference-topbar .header-actions{
+    height:72px!important;min-height:72px!important;gap:11px!important;padding:0!important;
+    border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;
+  }
+  body#blinqPremium .header-upgrade{
+    height:40px!important;min-height:40px!important;padding:0 16px!important;border-radius:10px!important;
+    border:1px solid rgba(69,237,165,.42)!important;background:linear-gradient(180deg,rgba(39,172,116,.18),rgba(20,112,78,.12))!important;
+    color:#58efad!important;font-size:10.5px!important;font-weight:900!important;letter-spacing:.045em!important;
+    box-shadow:0 0 0 1px rgba(69,237,165,.025) inset,0 0 18px rgba(69,237,165,.055)!important;
+  }
+  body#blinqPremium .header-upgrade:hover{
+    border-color:rgba(79,241,178,.68)!important;background:linear-gradient(180deg,rgba(44,190,129,.25),rgba(22,128,88,.18))!important;
+    color:#91f6ce!important;box-shadow:0 0 22px rgba(69,237,165,.08)!important;
+  }
+  body#blinqPremium .header-upgrade svg{display:none!important}
+  body#blinqPremium .insight-shortcut.insight-live-button,
+  body#blinqPremium .insight-info-button{
+    height:40px!important;min-height:40px!important;padding:0 12px!important;border-radius:10px!important;font-size:10px!important;
+  }
+  body#blinqPremium .insight-shortcut-live{font-size:10px!important;font-weight:900!important}
+  body#blinqPremium #insightShortcutLabel,
+  body#blinqPremium .insight-info-label{font-size:9px!important;font-weight:850!important;letter-spacing:.07em!important}
+  body#blinqPremium .insight-info-button .insight-bell-icon,
+  body#blinqPremium .insight-info-button .insight-bell-icon svg{width:19px!important;height:19px!important}
+  body#blinqPremium .reference-topbar .profile-shell{
+    height:42px!important;min-height:42px!important;min-width:194px!important;border-radius:11px!important;
+  }
+  body#blinqPremium .reference-topbar .profile-button{min-height:40px!important;padding:0 10px!important}
+  body#blinqPremium .reference-topbar .profile-button .avatar{width:32px!important;height:32px!important;min-width:32px!important}
+  body#blinqPremium .reference-topbar .profile-copy strong{font-size:10.5px!important}
+  body#blinqPremium .reference-topbar .profile-copy small{font-size:7.5px!important}
+  body#blinqPremium .reference-topbar .profile-toggle{width:34px!important;min-width:34px!important;height:40px!important}
+}
+
+/* Results: the selected match-winner, not player order, is visually primary. */
+body#blinqPremium .results-match-player strong,
+body#blinqPremium .results-opponent b{color:#91a79f!important;font-weight:690!important;transition:color .12s ease,opacity .12s ease!important}
+body#blinqPremium .results-match-player.is-pick strong,
+body#blinqPremium .results-opponent.is-pick b{color:#f3fbf7!important;font-weight:900!important}
+body#blinqPremium .results-match-player.is-opponent strong,
+body#blinqPremium .results-opponent.is-opponent b{color:#678078!important;font-weight:620!important}
+body#blinqPremium .results-match-player.is-pick .hub-avatar,
+body#blinqPremium .results-opponent.is-pick .hub-avatar{border-color:rgba(69,237,165,.65)!important;box-shadow:0 0 0 1px rgba(69,237,165,.12),0 0 12px rgba(69,237,165,.08)!important}
+body#blinqPremium .results-pick-mark{
+  display:inline-grid!important;place-items:center!important;width:14px!important;height:14px!important;min-width:14px!important;
+  margin-left:2px!important;border-radius:50%!important;background:rgba(69,237,165,.11)!important;color:#54edaa!important;
+  font-size:8px!important;font-weight:950!important;font-style:normal!important;line-height:1!important;
+}
+body#blinqPremium .results-table b.void{color:#e7bd72!important}
+
+/* Upgrade modal: remove duplicate helper/badge copy and keep the account summary compact. */
+body#blinqPremium .upgrade-tier-heading{justify-content:flex-start!important;align-items:center!important}
+body#blinqPremium .upgrade-account-copy>b{margin-top:3px!important;color:#4fe9a8!important;font-size:10px!important;font-weight:900!important;letter-spacing:.055em!important}
+body#blinqPremium .upgrade-dialog-copy{max-width:620px!important}
+
+/* BlinQ runtime patch 7.3.6-r50: cleaner header/upgrade modal, selected-pick highlighting and retirement-safe Results. */

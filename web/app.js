@@ -320,8 +320,8 @@
     // optional endpoint must not serialize several timeout windows and hold an
     // authenticated user behind presentation configuration.
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
-      getJSON('/ui-config.json?v=7360&p=49',{timeoutMs:3000}),
-      getJSON('/config/telegram-groups.json?v=7360&p=49',{timeoutMs:3000}),
+      getJSON('/ui-config.json?v=7360&p=50',{timeoutMs:3000}),
+      getJSON('/config/telegram-groups.json?v=7360&p=50',{timeoutMs:3000}),
       getJSON('/api/v1/ui-config',{timeoutMs:3500}),
       getJSON('/membership-links.json',{timeoutMs:3000})
     ]);
@@ -388,7 +388,7 @@
       if(rookiePrime)rookiePrime.selection_mode='stable_random';
     }
     applyAccessContractV1(state.ui);
-    state.ui.ui_patch='736-r49';
+    state.ui.ui_patch='736-r50';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -871,7 +871,7 @@
     const current=membershipHierarchy.indexOf(plan);
     const next=current>=0&&current<membershipHierarchy.length-1?membershipHierarchy[current+1]:'pro';
     button.hidden=false;button.dataset.upgradePlan=next;button.dataset.upgradeSection='BlinQ Membership';
-    label.textContent=lcopy('Membership','Členstvo','Členství');
+    label.textContent=lcopy('Upgrade','Upgrade','Upgrade');
   }
   function updateLanguageLinks(){
     document.querySelectorAll('#footerLanguages [data-lang],#authLanguages [data-lang]').forEach(link=>{const lang=link.dataset.lang||'sk';link.href=link.closest('#authLanguages')?`?lang=${encodeURIComponent(lang)}`:`?lang=${encodeURIComponent(lang)}#${encodeURIComponent(state.route||'predictions')}`;link.classList.toggle('active',lang===locale);});
@@ -2295,7 +2295,7 @@
     // same-origin script instead of an inline <script>. The popup runtime also
     // reinstalls image fallback handling because DOM event listeners are not
     // copied with innerHTML.
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=49"><script defer src="/match-popout.js?v=7360&p=49"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=50"><script defer src="/match-popout.js?v=7360&p=50"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
@@ -2478,11 +2478,20 @@
     const result=publication?.result||{};
     const raw=String(result?.status||result?.outcome||result?.settlement||result?.result||'').trim().toLowerCase();
     const reason=String(result?.reason||result?.void_reason||result?.settlement_reason||'').trim();
-    const isVoid=result?.void===true||result?.is_void===true||['void','push','cancelled','canceled','postponed','walkover','w/o','retired','ret','abandoned','no_action'].includes(raw);
-    if(isVoid)return {kind:'void',reason:reason||raw.toUpperCase()||'VOID'};
+    const isVoid=result?.void===true||result?.is_void===true||['void','push','cancelled','canceled','postponed','walkover','walk over','w/o','retired','ret','abandoned','interrupted','suspended','no_action'].includes(raw);
+    if(isVoid)return {kind:'void',reason:reason||raw||'void'};
     if(result?.correct===true)return {kind:'win',reason:''};
     if(result?.correct===false)return {kind:'loss',reason:''};
     return {kind:'pending',reason:''};
+  }
+  function resultVoidLabel(reason=''){
+    const value=String(reason||'').trim().toLowerCase();
+    if(value.includes('retir')||value==='ret')return lcopy('RETIREMENT','SKREČ','SKREČ');
+    if(value.includes('walkover')||value==='walk over'||value==='w/o')return 'W/O';
+    if(value.includes('cancel'))return lcopy('CANCELLED','ZRUŠENÉ','ZRUŠENO');
+    if(value.includes('postpon'))return lcopy('POSTPONED','ODLOŽENÉ','ODLOŽENO');
+    if(value.includes('abandon')||value.includes('interrupt')||value.includes('suspend'))return lcopy('STOPPED','PRERUŠENÉ','PŘERUŠENO');
+    return 'VOID';
   }
   function filteredResults(){
     const filters=state.resultsFilters||{},now=Date.now(),windowDays=Number(filters.window);
@@ -2601,14 +2610,22 @@
       const projectionMarket=String(publication?.market||publication?.projection_metric||'').toLowerCase();
       const tag=projection?({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'}[projectionMarket]||String(publication?.section||'projection')):String(publication?.section||'');
       const tags=`<span class="result-tag ${escapeHtml(tag)}">${escapeHtml(projection?projectionResultTypeLabel(publication):resultCategoryLabel(tag||'all'))}</span>`;
-      const resultHtml=projection?(outcome.kind==='win'?'<b class="correct">✓ HIT</b>':outcome.kind==='loss'?'<b class="wrong">× MISS</b>':`<b class="void">○ VOID</b>${outcome.reason?`<small class="void-reason">${escapeHtml(outcome.reason)}</small>`:''}`):(outcome.kind==='win'?'<b class="correct">✓ VÝHRA</b>':outcome.kind==='loss'?'<b class="wrong">× PREHRA</b>':`<b class="void">○ VOID</b>${outcome.reason?`<small class="void-reason">${escapeHtml(outcome.reason)}</small>`:''}`);
+      const voidLabel=resultVoidLabel(outcome.reason);
+      const resultHtml=projection?(outcome.kind==='win'?'<b class="correct">✓ HIT</b>':outcome.kind==='loss'?'<b class="wrong">× MISS</b>':`<b class="void">○ ${escapeHtml(voidLabel)}</b>`):(outcome.kind==='win'?'<b class="correct">✓ VÝHRA</b>':outcome.kind==='loss'?'<b class="wrong">× PREHRA</b>':`<b class="void">○ ${escapeHtml(voidLabel)}</b>`);
       const p1Name=p1.name||'Player 1',p2Name=p2.name||'Player 2';
       // Historical result rows frequently do not carry a verified player photo.
       // In that case go directly to the local ATP/WTA fallback instead of first
       // requesting /player-image and flashing initials after a provider 404.
       const p1Photo=playerPhotoSource(r,p1,'player1');
       const p2Photo=playerPhotoSource(r,p2,'player2');
-      const match=`<div class="results-match-player">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong></div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b></span></small>`;
+      const marketName=String(publication?.market||'').toLowerCase();
+      const selectionId=String(publication?.selection_id||'');
+      const normalizedPick=String(pickName||'').trim().toLocaleLowerCase();
+      const p1Selected=!projection&&(marketName==='match_winner'||!marketName)&&(selectionId===String(p1.id||'')||(!selectionId&&normalizedPick===String(p1Name).trim().toLocaleLowerCase()));
+      const p2Selected=!projection&&(marketName==='match_winner'||!marketName)&&(selectionId===String(p2.id||'')||(!selectionId&&normalizedPick===String(p2Name).trim().toLocaleLowerCase()));
+      const p1Class=p1Selected?' is-pick':p2Selected?' is-opponent':'';
+      const p2Class=p2Selected?' is-pick':p1Selected?' is-opponent':'';
+      const match=`<div class="results-match-player${p1Class}">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?'<i class="results-pick-mark" aria-label="Predikovaný hráč">✓</i>':''}</div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b>${p2Selected?'<i class="results-pick-mark" aria-label="Predikovaný hráč">✓</i>':''}</span></small>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
         const depth=Number(publication?.data_depth??publication?.result?.data_depth),displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
@@ -3503,7 +3520,8 @@
     const badge=lockedContext
       ?uiCopyTemplate('upgrade.requires',lcopy(`Requires ${requiredName}`,`Vyžaduje ${requiredName}`,`Vyžaduje ${requiredName}`),{plan:requiredName})
       :uiCopy('upgrade.generic_badge',lcopy('Membership upgrade','Upgrade členstva','Upgrade členství'));
-    host.innerHTML=`<div class="upgrade-dialog-head"><div class="upgrade-dialog-intro"><span class="upgrade-dialog-eyebrow">${escapeHtml(uiCopy('upgrade.eyebrow',lcopy('BLINQ MEMBERSHIP','BLINQ ČLENSTVO','BLINQ ČLENSTVÍ')))}</span><span class="upgrade-requires-pill${lockedContext?' is-required-context':''}">▣ ${escapeHtml(badge)}</span><h2 id="upgradeDialogTitle" class="upgrade-dialog-title">${escapeHtml(lcopy('Unlock higher access','Odomknúť ','Odemknout '))}<span class="accent">${escapeHtml(lcopy('higher access','vyšší prístup','vyšší přístup'))}</span></h2><p class="upgrade-dialog-copy"><strong>${escapeHtml(availability)}</strong><span>${escapeHtml(lcopy('More predictions, more data and premium functions in one BlinQ workspace.','Viac predikcií, viac dát a prémiových funkcií v jednom BlinQ priestore.','Více predikcí, více dat a prémiových funkcí v jednom BlinQ prostoru.'))}</span></p></div><div class="upgrade-account-summary"><span class="upgrade-account-avatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:escapeHtml(accountAvatarFallback(a))}</span><div class="upgrade-account-copy"><small>${escapeHtml(lcopy('Your account','Tvoj účet','Tvůj účet'))}</small><strong>${escapeHtml(accountName)}</strong><span>${escapeHtml(lcopy('Membership','Členstvo','Členství'))}</span><b>${escapeHtml(currentLabel||'ROOKIE')}</b>${isAdmin?`<em class="upgrade-account-role">ADMIN</em>`:''}</div></div></div><div class="upgrade-tier-heading"><div><h3>${escapeHtml(lcopy('Choose your level','Vyber si svoju úroveň','Vyber si svou úroveň'))}</h3></div><p>${escapeHtml(lcopy('Every higher level adds more data, functions and access.','Každá vyššia úroveň prináša viac dát, funkcií a prístupu.','Každá vyšší úroveň přináší více dat, funkcí a přístupu.'))}</p></div><div class="upgrade-plan-grid">${upgradePlans.map(id=>renderUpgradeTierCard(id,state.ui?.plans?.[id]||{},requiredIndex,lockedContext)).join('')}</div>`;
+    const summaryLabel=isAdmin?'ADMIN':(currentLabel||'FREE');
+    host.innerHTML=`<div class="upgrade-dialog-head"><div class="upgrade-dialog-intro"><span class="upgrade-dialog-eyebrow">${escapeHtml(uiCopy('upgrade.eyebrow',lcopy('BLINQ MEMBERSHIP','BLINQ ČLENSTVO','BLINQ ČLENSTVÍ')))}</span>${lockedContext?`<span class="upgrade-requires-pill is-required-context">▣ ${escapeHtml(badge)}</span>`:''}<h2 id="upgradeDialogTitle" class="upgrade-dialog-title">${escapeHtml(lcopy('Unlock higher access','Odomknúť ','Odemknout '))}<span class="accent">${escapeHtml(lcopy('higher access','vyšší prístup','vyšší přístup'))}</span></h2><p class="upgrade-dialog-copy"><strong>${escapeHtml(availability)}</strong></p></div><div class="upgrade-account-summary"><span class="upgrade-account-avatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:escapeHtml(accountAvatarFallback(a))}</span><div class="upgrade-account-copy"><small>${escapeHtml(lcopy('Your account','Tvoj účet','Tvůj účet'))}</small><strong>${escapeHtml(accountName)}</strong><b>${escapeHtml(summaryLabel)}</b></div></div></div><div class="upgrade-tier-heading"><div><h3>${escapeHtml(lcopy('Choose your level','Vyber si svoju úroveň','Vyber si svou úroveň'))}</h3></div></div><div class="upgrade-plan-grid">${upgradePlans.map(id=>renderUpgradeTierCard(id,state.ui?.plans?.[id]||{},requiredIndex,lockedContext)).join('')}</div>`;
     host.querySelectorAll('[data-upgrade-account-route]').forEach(button=>button.onclick=()=>{if(dialog.open)dialog.close();setRoute('account',true);});
     if(locale!=='en')translatePublicDom(dialog);if(!dialog.open)dialog.showModal();
   }
