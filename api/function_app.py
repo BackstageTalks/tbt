@@ -422,6 +422,52 @@ def account(req):
         return response({"error": "auth_unavailable"}, 503)
 
 
+@app.route(route="v1/account/reactivate-free", methods=["POST"])
+def reactivate_free_account(req):
+    """Allow a signed-in EXPIRED user to opt back into the permanent FREE tier.
+
+    This is intentionally narrower than Admin access management: it can only
+    transition the caller from an expired non-admin state to active Rookie/FREE.
+    Paid tiers, suspended users and admin roles cannot be changed here.
+    """
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if is_suspended(user):
+            return response({"error": "account_suspended"}, 403)
+        if is_admin(user):
+            return response({"error": "admin_access_unchanged"}, 409)
+        profile = _profile_for(user, required=False)
+        account_data = public_account(user, cfg=settings, profile=profile)
+        status = str(account_data.get("status") or "expired").strip().lower()
+        if status in {"active", "lifetime", "trial"}:
+            return response(account_data)
+        if status != "expired":
+            return response({"error": "free_reactivation_not_allowed"}, 409)
+        updated = update_user_access(
+            settings,
+            str(user.get("id") or ""),
+            {"role": "user", "plan": "rookie", "status": "active", "expires_at": None},
+            actor_id=str(user.get("id") or ""),
+        )
+        updated_profile = _profile_for(updated, required=False)
+        result = public_account(updated, cfg=settings, profile=updated_profile)
+        sync_push_access(
+            user_id=str(user.get("id") or ""),
+            plan="rookie",
+            status="active",
+            expires_at=None,
+        )
+        return response(result)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "account_storage_unavailable"}, 503)
+
+
 @app.route(route="v1/auth/profile", methods=["PUT"])
 def auth_profile(req):
     try:

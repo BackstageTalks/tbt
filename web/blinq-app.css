@@ -6561,3 +6561,7 @@ body#blinqPremium .hub-avatar.player-fallback-wta img{
   body#blinqPremium .market-card .pick-score .probability,
   body#blinqPremium .detail-pick-card .pick-score .probability{font-size:24px!important}
 }
+
+/* BlinQ r46 — membership copy separation: Admin note is a card-only feature heading. */
+body#blinqPremium .upgrade-feature-heading{margin:12px 0 4px;color:#a8bbb4;font-size:9px;font-weight:750;letter-spacing:.01em}
+body#blinqPremium .membership-card-copy p,body#blinqPremium .account-modal-plan-copy>span{white-space:normal}

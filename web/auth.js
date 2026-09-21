@@ -9,7 +9,7 @@
     projectId: 'blinq-182',
   });
 
-  const AUTH_RUNTIME = '736-r45';
+  const AUTH_RUNTIME = '736-r46';
   const AUTH_CONFIG_URL = '/api/v1/auth/config';
   const AUTH_CONFIG_ATTEMPTS = 3;
   const TRANSIENT_AUTH_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
@@ -479,6 +479,9 @@
     });
     return apiWithSession(`/api/v1/match-intelligence?${params.toString()}`);
   }
+  async function reactivateFree() {
+    return apiWithSession('/api/v1/account/reactivate-free', {method: 'POST'});
+  }
   async function insights() {
     return apiWithSession('/api/v1/insights');
   }
@@ -566,7 +569,7 @@
   window.BlinqAuth = {
     init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
     insights, liveRadar, adminLiveRadar, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
-    adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
+    reactivateFree, adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
     sessionStorageKeys, sessionEpochKey,
