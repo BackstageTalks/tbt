@@ -12,7 +12,7 @@ def text(path):
 def test_r44_release_and_final_inactivity_defaults():
     release = json.loads((WEB / "release.json").read_text(encoding="utf-8"))
     ui = json.loads((WEB / "ui-config.json").read_text(encoding="utf-8"))
-    assert release["patch"] == ui["ui_patch"] == "736-r47"
+    assert release["patch"] == ui["ui_patch"] == "736-r48"
     assert ui["account_inactivity"] == {
         "enabled": True,
         "inactive_days": 30,
@@ -33,6 +33,7 @@ def test_r44_transactional_mail_renderer_is_shared():
     assert "BLINQ MEMBERSHIP" in lifecycle
     assert "Tvoje {plan} predplatné končí o {days} dní" in lifecycle
     assert "Zostaň s BlinQ aktívny" in lifecycle
+    assert "Tvoj FREE účet expiruje" in lifecycle
 
 
 def test_r44_paid_notice_markers_are_tied_to_exact_expiry():
@@ -40,7 +41,9 @@ def test_r44_paid_notice_markers_are_tied_to_exact_expiry():
     lifecycle = text("api/tbt/services/account_inactivity.py")
     assert "subscription_expiry_7_for" in storage
     assert "subscription_expiry_3_for" in storage
-    assert "marker != exact_expiry" in lifecycle
+    assert "subscription_expiry_7_status" in storage
+    assert 'status="pending"' in lifecycle
+    assert "already_claimed = marker == exact_expiry" in lifecycle
     assert "save_subscription_notice_state" in lifecycle
 
 

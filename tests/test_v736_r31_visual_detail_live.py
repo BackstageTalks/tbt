@@ -12,8 +12,8 @@ UI = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
 
 
 def test_r31_release_and_footer_live_heartbeat_contract():
-    assert UI["ui_patch"] == "736-r47"
-    assert 'content="736-r47"' in INDEX
+    assert UI["ui_patch"] == "736-r48"
+    assert 'content="736-r48"' in INDEX
     assert 'id="footerSystemStatus"' in INDEX
     assert "Všetky systémy funkčné" in INDEX
     assert 'id="footerLastUpdate">Aktualizácia modelu: —' in INDEX

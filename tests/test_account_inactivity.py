@@ -91,16 +91,18 @@ def test_inactivity_warning_is_branded_and_persisted_immediately(monkeypatch):
     sent, markers, _, updates = setup(monkeypatch, [user])
     result = lifecycle.run_inactivity_review(cfg(), {"account_inactivity": {}}, now=NOW)
     user_mail = next(kwargs for recipient, kwargs in sent if recipient == user["email"])
-    assert "o 7 dní" in user_mail["subject"]
+    assert "28. 9. 2026" in user_mail["subject"]
     assert user_mail["eyebrow"] == "BLINQ ACCOUNT"
     assert "EXPIRED" in user_mail["body_sk"]
     assert result["warnings"] == 1
     assert result["expired"] == 0
-    assert markers and markers[0][1]["deactivation_warning_sent_at"] == NOW.isoformat()
+    assert markers[0][1]["warning_status"] == "pending"
+    assert markers[1][1]["warning_status"] == "sent"
+    assert markers[1][1]["deactivation_warning_sent_at"] == NOW.isoformat()
     assert updates == []
 
 
-def test_inactivity_expiry_waits_full_7_days_and_rechecks_activity(monkeypatch):
+def test_inactivity_expiry_uses_fixed_last_activity_deadline_and_rechecks_activity(monkeypatch):
     user = rookie(31)
     warning = NOW - timedelta(days=8)
     metas = {user["id"]: {
@@ -114,6 +116,20 @@ def test_inactivity_expiry_waits_full_7_days_and_rechecks_activity(monkeypatch):
     assert updates[0][1]["status"] == "expired"
     assert any(item[1].get("expired_at") for item in markers)
     assert any(recipient == user["email"] and "EXPIRED" in kwargs["subject"] for recipient, kwargs in sent)
+
+
+def test_late_warning_preserves_minimum_three_day_notice(monkeypatch):
+    user = rookie(31)
+    warning = NOW - timedelta(days=2)
+    metas = {user["id"]: {
+        "inactivity_warning_sent_at": warning.isoformat(),
+        "inactivity_user_warning_sent_at": warning.isoformat(),
+        "inactivity_deactivation_warning_sent_at": warning.isoformat(),
+    }}
+    _, _, _, updates = setup(monkeypatch, [user], metas)
+    result = lifecycle.run_inactivity_review(cfg(), {"account_inactivity": {}}, now=NOW)
+    assert result["expired"] == 0
+    assert updates == []
 
 
 def test_recent_server_activity_blocks_expiry_even_if_firebase_login_is_old(monkeypatch):
@@ -142,7 +158,22 @@ def test_paid_subscription_sends_7_day_notice_once_per_exact_expiry(monkeypatch)
     assert "ELITE" in mail["title_sk"]
     assert result["subscription_7"] == 1
     assert result["subscription_3"] == 0
-    assert saved_paid[0][1]["days"] == 7
+    assert saved_paid[0][1]["status"] == "pending"
+    assert saved_paid[1][1]["status"] == "sent"
+    assert saved_paid[1][1]["days"] == 7
+
+
+def test_paid_pending_notice_is_not_blindly_resent(monkeypatch):
+    user = paid(7, "elite")
+    expiry = user["app_metadata"]["blinq_expires_at"]
+    sent, _, saved_paid, _ = setup(monkeypatch, [user], {user["id"]: {
+        "subscription_expiry_7_for": expiry,
+        "subscription_expiry_7_status": "pending",
+    }})
+    result = lifecycle.run_inactivity_review(cfg(), {"account_inactivity": {}}, now=NOW)
+    assert result["subscription_7"] == 0
+    assert saved_paid == []
+    assert not any(recipient == user["email"] for recipient, _ in sent)
 
 
 def test_paid_subscription_sends_3_day_notice_and_skips_existing_marker(monkeypatch):

@@ -16,8 +16,8 @@ RELEASE = json.loads((WEB / "release.json").read_text(encoding="utf-8"))
 
 def test_r36_release_identity():
     assert RELEASE["release"] == "7.3.6"
-    assert RELEASE["patch"] == "736-r47"
-    assert UI["ui_patch"] == "736-r47"
+    assert RELEASE["patch"] == "736-r48"
+    assert UI["ui_patch"] == "736-r48"
 
 
 def test_real_rookie_has_ui_and_server_admin_guards():
@@ -59,9 +59,10 @@ def test_player_photo_fallback_chain_is_not_short_circuited():
     assert (WEB / "assets" / "missing_foto_w.webp").is_file()
 
 
-def test_inactivity_deactivation_waits_full_warning_window_after_delivery():
+def test_inactivity_deactivation_uses_fixed_deadline_with_late_mail_safety_floor():
     assert 'warning_days = int(raw.get("warning_days", 7))' in INACTIVITY
     assert 'notify_user = raw.get("notify_user", True) is not False' in INACTIVITY
     assert 'inactivity_deactivation_warning_sent_at' in INACTIVITY
-    assert 'now >= warning_sent_at + timedelta(days=policy["warning_days"])' in INACTIVITY
+    assert 'last_seen + timedelta(days=int(policy["inactive_days"]))' in INACTIVITY
+    assert 'warning_sent_at + timedelta(days=3)' in INACTIVITY
     assert 'and warning_already_sent' in INACTIVITY

@@ -144,23 +144,43 @@ def _format_expiry(value: datetime) -> tuple[str, str]:
     return sk, en
 
 
-def _send_inactivity_warning(cfg, user: dict, *, days_inactive: int, warning_days: int) -> bool:
+def _format_expiry_date(value: datetime) -> tuple[str, str]:
+    local = value.astimezone(_BRATISLAVA)
+    return f"{local.day}. {local.month}. {local.year}", local.strftime("%d %b %Y")
+
+
+def _planned_inactivity_expiry(last_seen: datetime, policy: dict, *, warning_sent_at: datetime | None = None) -> datetime:
+    """Return the exact FREE expiry moment for the current inactivity cycle.
+
+    Normal operation keeps the fixed `last activity + inactive_days` date.
+    If SMTP was unavailable until very late, preserve at least three full days
+    between the successful warning and automatic expiry instead of expiring a
+    member immediately after a delayed notice.
+    """
+    fixed = last_seen + timedelta(days=int(policy["inactive_days"]))
+    if warning_sent_at:
+        fixed = max(fixed, warning_sent_at + timedelta(days=3))
+    return fixed
+
+
+def _send_inactivity_warning(cfg, user: dict, *, days_inactive: int, expiry: datetime) -> bool:
     url = _public_url(cfg)
+    sk_expiry, en_expiry = _format_expiry_date(expiry)
     return send_blinq_transactional_email(
         cfg,
         str(user.get("email") or ""),
-        subject=f"BlinQ · Tvoj účet bude o {warning_days} dní označený ako neaktívny",
+        subject=f"BlinQ · Tvoj FREE účet expiruje {sk_expiry}",
         eyebrow="BLINQ ACCOUNT",
         title_sk="Zostaň s BlinQ aktívny",
         body_sk=(
             f"Tvoj BlinQ účet je už približne {days_inactive} dní bez aktivity. "
-            f"Stačí sa do {warning_days} dní prihlásiť a účet zostane aktívny.\n\n"
+            f"Ak sa do {sk_expiry} prihlásiš, FREE účet zostane aktívny.\n\n"
             "Ak sa neprihlásiš, účet označíme ako EXPIRED. Firebase účet ani tvoje údaje tým automaticky nemažeme."
         ),
         title_en="Keep your BlinQ account active",
         body_en=(
             f"Your BlinQ account has been inactive for about {days_inactive} days. "
-            f"Sign in within {warning_days} days to keep it active.\n\n"
+            f"Sign in by {en_expiry} to keep your FREE account active.\n\n"
             "If you do not sign in, the account will be marked EXPIRED. This does not automatically delete your Firebase account or data."
         ),
         button_label="Prihlásiť sa do BlinQ / Sign in to BlinQ" if url else "",
@@ -225,7 +245,7 @@ def _admin_summary_body(policy: dict, warnings: list[dict], expired: list[dict],
     lines = [
         "Denný account lifecycle prebehol.",
         "",
-        f"ROOKIE: EXPIRED po {policy['inactive_days']} dňoch neaktivity · warning {policy['warning_days']} dní vopred",
+        f"FREE/ROOKIE: EXPIRED po {policy['inactive_days']} dňoch neaktivity · warning okno sa otvára {policy['warning_days']} dní vopred (min. 3 dni pri oneskorenom SMTP)",
         f"Nové inactivity warningy: {len(warnings)}",
         f"Novo označené EXPIRED: {len(expired)}",
         f"Paid expiry 7-day maily: {len(paid7)}",
@@ -347,15 +367,39 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
             due = _subscription_notice_due(expiry, now)
             if due:
                 marker = str(meta.get(f"subscription_expiry_{due}_for") or "")
+                marker_status = str(meta.get(f"subscription_expiry_{due}_status") or "").lower()
                 exact_expiry = expiry.isoformat()
-                if marker != exact_expiry and meta_available:
+                already_claimed = marker == exact_expiry and marker_status in {"pending", "sent"}
+                legacy_sent = marker == exact_expiry and not marker_status
+                if not already_claimed and not legacy_sent and meta_available:
+                    delivered = False
                     try:
+                        save_subscription_notice_state(
+                            uid, days=due, expires_for=exact_expiry,
+                            status="pending", pending_at=now.isoformat(),
+                        )
                         if _send_subscription_expiry(cfg, user, access, days=due, expiry=expiry):
+                            delivered = True
                             summary["user_emails"] += 1
-                            save_subscription_notice_state(uid, days=due, expires_for=exact_expiry, sent_at=now.isoformat())
+                            save_subscription_notice_state(
+                                uid, days=due, expires_for=exact_expiry,
+                                sent_at=now.isoformat(), status="sent", pending_at=now.isoformat(),
+                            )
                             row = {"id": uid, "email": email, "plan": plan.upper(), "expires_at": exact_expiry}
                             (paid3 if due == 3 else paid7).append(row)
                     except Exception as exc:
+                        # If SMTP already accepted the message, preserve the
+                        # durable pending claim rather than risk a duplicate on
+                        # the next worker run. Only pre-delivery failures become
+                        # retryable `failed` states.
+                        if not delivered:
+                            try:
+                                save_subscription_notice_state(
+                                    uid, days=due, expires_for=exact_expiry,
+                                    status="failed", pending_at=now.isoformat(),
+                                )
+                            except Exception:
+                                pass
                         summary["mail_failures"] += 1
                         failures.append(f"{email or uid} · paid {due}d · {exc.__class__.__name__}")
 
@@ -375,6 +419,10 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
 
         warning_sent_at = _parse_utc(meta.get("inactivity_deactivation_warning_sent_at"))
         warning_already_sent = _marker_is_for_current_inactivity(meta.get("inactivity_deactivation_warning_sent_at"), last_seen)
+        cycle_key = last_seen.isoformat()
+        warning_state_for_cycle = str(meta.get("inactivity_warning_for") or "") == cycle_key
+        warning_state = str(meta.get("inactivity_warning_status") or "").lower() if warning_state_for_cycle else ""
+        warning_pending = warning_state == "pending"
         row = {
             "id": uid,
             "email": email,
@@ -383,9 +431,18 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
             "last_seen": last_seen.isoformat(),
         }
 
-        if policy["notify_user"] and email and mail["configured"] and meta_available and not warning_already_sent:
+        if policy["notify_user"] and email and mail["configured"] and meta_available and not warning_already_sent and not warning_pending:
+            delivered = False
             try:
-                if _send_inactivity_warning(cfg, user, days_inactive=days_inactive, warning_days=policy["warning_days"]):
+                planned_expiry = _planned_inactivity_expiry(last_seen, policy, warning_sent_at=now)
+                save_inactivity_state(
+                    uid,
+                    warning_for=cycle_key,
+                    warning_status="pending",
+                    warning_pending_at=now.isoformat(),
+                )
+                if _send_inactivity_warning(cfg, user, days_inactive=days_inactive, expiry=planned_expiry):
+                    delivered = True
                     summary["user_emails"] += 1
                     # Persist immediately after this irreversible side effect;
                     # one later user's SMTP failure cannot erase this marker.
@@ -394,23 +451,33 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                         warning_sent_at=now.isoformat(),
                         user_warning_sent_at=now.isoformat(),
                         deactivation_warning_sent_at=now.isoformat(),
+                        warning_for=cycle_key,
+                        warning_status="sent",
+                        warning_pending_at=now.isoformat(),
                     )
                     warning_sent_at = now
                     warning_already_sent = True
                     new_warnings.append(row)
             except Exception as exc:
+                if not delivered:
+                    try:
+                        save_inactivity_state(
+                            uid,
+                            warning_for=cycle_key,
+                            warning_status="failed",
+                            warning_pending_at=now.isoformat(),
+                        )
+                    except Exception:
+                        pass
                 summary["mail_failures"] += 1
                 failures.append(f"{email or uid} · inactivity warning · {exc.__class__.__name__}")
 
-        # Never expire on the same run as the warning: a full warning window must
-        # elapse from actual successful send. Re-read identity + activity just
-        # before the state transition to close the login-during-review race.
+        # Normal expiry is fixed at last activity + inactive_days.  A late SMTP
+        # recovery may move it only enough to preserve a minimum three-day lead.
+        # Re-read identity + activity immediately before the transition.
         expire_due = days_inactive >= policy["inactive_days"]
-        warning_lead_elapsed = bool(
-            warning_sent_at
-            and warning_sent_at >= last_seen
-            and now >= warning_sent_at + timedelta(days=policy["warning_days"])
-        )
+        planned_expiry = _planned_inactivity_expiry(last_seen, policy, warning_sent_at=warning_sent_at)
+        warning_lead_elapsed = bool(warning_sent_at and warning_sent_at >= last_seen and now >= planned_expiry)
         already_expired_for_cycle = _marker_is_for_current_inactivity(meta.get("inactivity_expired_at"), last_seen)
         if expire_due and policy["auto_expire_rookie"] and meta_available and warning_already_sent and warning_lead_elapsed and not already_expired_for_cycle:
             try:
@@ -427,7 +494,8 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
             latest_warning = _parse_utc(latest_meta.get("inactivity_deactivation_warning_sent_at"))
             if latest_days < policy["inactive_days"] or not latest_warning or latest_warning < latest_seen:
                 continue
-            if now < latest_warning + timedelta(days=policy["warning_days"]):
+            latest_expiry = _planned_inactivity_expiry(latest_seen, policy, warning_sent_at=latest_warning)
+            if now < latest_expiry:
                 continue
             update_user_access(
                 cfg,

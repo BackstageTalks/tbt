@@ -8,7 +8,7 @@ available.  CONFIRMED still requires an on-court second-set confirmation.
 from __future__ import annotations
 
 from dataclasses import dataclass, asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import math
 import os
 import re
@@ -396,9 +396,23 @@ def attach_second_set_odds(scan: dict[str, Any], odds_payloads: dict[str, Any], 
     return result
 
 
+def _live_active_until(scan: dict[str, Any], minutes: int) -> str:
+    raw = str((scan or {}).get("scanned_at") or "").strip()
+    try:
+        base = datetime.fromisoformat(raw.replace("Z", "+00:00")) if raw else datetime.now(timezone.utc)
+    except ValueError:
+        base = datetime.now(timezone.utc)
+    if base.tzinfo is None:
+        base = base.replace(tzinfo=timezone.utc)
+    return (base.astimezone(timezone.utc) + timedelta(minutes=max(5, int(minutes)))).isoformat()
+
+
 def publish_radar_signals(scan, *, actor_id="live-radar"):
     """Publish comeback alerts plus a separate high-quality Set-2 signal."""
     published = []
+    set2_until = _live_active_until(scan, 20)
+    watch_until = _live_active_until(scan, 20)
+    confirmed_until = _live_active_until(scan, 30)
     # SET 2 is a distinct signal. It gets a durable LIVE item (and therefore a
     # browser push) only when evidence depth is sufficient, a real provider
     # price exists and both edge and EV are positive. Otherwise it stays panel-only.
@@ -424,6 +438,7 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
             "title": f"2. set LIVE · {fav}", "body": body, "type": "set2",
             "priority": "important", "levels": live_alert_levels(), "match_id": eid,
             "link_label": "Otvoriť LIVE Radar", "active": True, "pinned": False,
+            "active_until": set2_until,
         }, actor_id=actor_id, insight_id=f"live-set2-{eid}"[:96])
         published.append({"id": item.get("id"), "event_id": eid, "stage": "set2", "created": created})
     signal_ids = {str(x.get("event_id") or "").strip() for x in scan.get("signals", []) if isinstance(x, dict)}
@@ -460,6 +475,7 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
             "title": f"Potential Comeback · {fav}", "body": body, "type": "live_watch",
             "priority": "normal", "levels": live_alert_levels(), "match_id": eid,
             "link_label": "Sledovať zápas", "active": True, "pinned": False,
+            "active_until": watch_until,
         }, actor_id=actor_id, insight_id=f"live-watch-{eid}"[:96])
         published.append({"id": item.get("id"), "event_id": eid, "stage": "watch", "created": created})
     for s in scan.get("signals", []):
@@ -480,6 +496,7 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
             "title": f"Comeback LIVE · {fav}", "body": body, "type": "alert",
             "priority": "important", "levels": live_alert_levels(), "match_id": eid,
             "link_label": "Otvoriť zápas", "active": True, "pinned": False,
+            "active_until": confirmed_until,
         }, actor_id=actor_id, insight_id=f"live-comeback-{eid}"[:96])
         published.append({"id": item.get("id"), "event_id": eid, "stage": "confirmed", "created": created})
     return {

@@ -33,6 +33,7 @@ from tbt.services.doubles_selection import (
     select_picks as select_doubles_picks,
     merge_history as merge_doubles_history,
     history_report as doubles_history_report,
+    walk_forward_validation as validate_doubles_history,
 )
 from tbt.services.comeback_projection import annotate_live_second_set_projections
 from tbt.services.market_selection import (
@@ -257,6 +258,7 @@ def _load_doubles_history(store):
 def _save_doubles_history(store, rows, *, extra_report=None):
     report = {
         **doubles_history_report(rows),
+        "validation": validate_doubles_history(rows),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         **(extra_report or {}),
     }

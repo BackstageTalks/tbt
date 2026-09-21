@@ -110,12 +110,19 @@ def _public_entity(entity: dict | None) -> dict:
         "inactivity_warning_sent_at": row.get("inactivity_warning_sent_at"),
         "inactivity_user_warning_sent_at": row.get("inactivity_user_warning_sent_at"),
         "inactivity_deactivation_warning_sent_at": row.get("inactivity_deactivation_warning_sent_at"),
+        "inactivity_warning_for": row.get("inactivity_warning_for"),
+        "inactivity_warning_status": row.get("inactivity_warning_status"),
+        "inactivity_warning_pending_at": row.get("inactivity_warning_pending_at"),
         "inactivity_expired_at": row.get("inactivity_expired_at"),
         "last_activity_at": row.get("last_activity_at"),
         "subscription_expiry_7_for": row.get("subscription_expiry_7_for"),
         "subscription_expiry_7_sent_at": row.get("subscription_expiry_7_sent_at"),
+        "subscription_expiry_7_status": row.get("subscription_expiry_7_status"),
+        "subscription_expiry_7_pending_at": row.get("subscription_expiry_7_pending_at"),
         "subscription_expiry_3_for": row.get("subscription_expiry_3_for"),
         "subscription_expiry_3_sent_at": row.get("subscription_expiry_3_sent_at"),
+        "subscription_expiry_3_status": row.get("subscription_expiry_3_status"),
+        "subscription_expiry_3_pending_at": row.get("subscription_expiry_3_pending_at"),
         # Durable per-user/day entitlement allocation. Stored as JSON in Azure
         # Table so refreshes/reorders cannot reveal a different random pick.
         "daily_access_day": str(row.get("daily_access_day") or "")[:16],
@@ -337,22 +344,36 @@ def touch_account_activity(user_id: object, *, at: object = None) -> None:
         raise AdminStorageUnavailable("Unable to record account activity") from exc
 
 
-def save_subscription_notice_state(user_id: object, *, days: int, expires_for: object, sent_at: object) -> dict:
-    """Persist one paid-expiry notice marker tied to the exact expiry timestamp."""
+def save_subscription_notice_state(user_id: object, *, days: int, expires_for: object, sent_at: object = None, status: str = "sent", pending_at: object = None) -> dict:
+    """Persist the pending/sent state of one paid-expiry notice.
+
+    The state is tied to the exact membership expiry timestamp.  `pending` is
+    written before SMTP; `sent` is written immediately after confirmed SMTP
+    delivery.  A leftover pending state is deliberately not resent blindly on
+    the next worker run because SMTP may already have accepted the message.
+    """
     uid = str(user_id or "").strip()
     if int(days) not in {3, 7}:
         raise ValueError("Unsupported subscription notice window")
     expiry = str(expires_for or "").strip()[:64]
+    state = str(status or "").strip().lower()
+    if state not in {"pending", "sent", "failed"}:
+        raise ValueError("Invalid subscription notice status")
     stamp = str(sent_at or "").strip()[:64]
-    if not expiry or not stamp:
-        raise ValueError("Subscription notice state requires expiry and sent_at")
+    pending = str(pending_at or "").strip()[:64]
+    if not expiry or (state == "sent" and not stamp):
+        raise ValueError("Subscription notice state requires expiry and sent_at for sent status")
     entity = {
         "PartitionKey": "account",
         "RowKey": _key(uid),
         "user_id": uid,
         f"subscription_expiry_{int(days)}_for": expiry,
-        f"subscription_expiry_{int(days)}_sent_at": stamp,
+        f"subscription_expiry_{int(days)}_status": state,
     }
+    if pending:
+        entity[f"subscription_expiry_{int(days)}_pending_at"] = pending
+    if stamp:
+        entity[f"subscription_expiry_{int(days)}_sent_at"] = stamp
     try:
         _table(ACCOUNT_TABLE).upsert_entity(entity, mode="merge")
     except Exception as exc:
@@ -360,7 +381,7 @@ def save_subscription_notice_state(user_id: object, *, days: int, expires_for: o
     return load_account_metadata(uid)
 
 
-def save_inactivity_state(user_id: object, *, warning_sent_at: object = None, user_warning_sent_at: object = None, deactivation_warning_sent_at: object = None, expired_at: object = None) -> dict:
+def save_inactivity_state(user_id: object, *, warning_sent_at: object = None, user_warning_sent_at: object = None, deactivation_warning_sent_at: object = None, warning_for: object = None, warning_status: object = None, warning_pending_at: object = None, expired_at: object = None) -> dict:
     """Persist worker-only inactivity markers used to de-duplicate e-mail notices."""
     uid = str(user_id or "").strip()
     key = _key(uid)
@@ -371,6 +392,15 @@ def save_inactivity_state(user_id: object, *, warning_sent_at: object = None, us
         entity["inactivity_user_warning_sent_at"] = str(user_warning_sent_at or "")[:64]
     if deactivation_warning_sent_at is not None:
         entity["inactivity_deactivation_warning_sent_at"] = str(deactivation_warning_sent_at or "")[:64]
+    if warning_for is not None:
+        entity["inactivity_warning_for"] = str(warning_for or "")[:64]
+    if warning_status is not None:
+        state = str(warning_status or "").strip().lower()
+        if state not in {"pending", "sent", "failed"}:
+            raise ValueError("Invalid inactivity warning status")
+        entity["inactivity_warning_status"] = state
+    if warning_pending_at is not None:
+        entity["inactivity_warning_pending_at"] = str(warning_pending_at or "")[:64]
     if expired_at is not None:
         entity["inactivity_expired_at"] = str(expired_at or "")[:64]
     if len(entity) == 3:

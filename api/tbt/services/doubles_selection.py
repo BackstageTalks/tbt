@@ -29,6 +29,7 @@ MIN_ODDS = 1.35
 MAX_ODDS = 3.50
 MIN_EXPECTED_VALUE = 0.02
 MAX_PICKS = 10
+MIN_VALIDATION_SAMPLES = 200
 
 
 def _surface(value: Any) -> str:
@@ -154,6 +155,114 @@ def history_report(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
         "member_identity_coverage": (with_members / len(valid)) if valid else 0.0,
         "activation_min_history": MIN_HISTORY_MATCHES,
         "ready": len(valid) >= MIN_HISTORY_MATCHES and (with_members / len(valid) if valid else 0.0) >= 0.90,
+    }
+
+
+def walk_forward_validation(rows: Iterable[dict[str, Any]]) -> dict[str, Any]:
+    """Evaluate DOUBLES-ELO-v1 strictly point-in-time on completed history.
+
+    The match being scored is never used to build its own ratings.  This does
+    not prove a betting edge because historical bookmaker prices are not part of
+    the doubles-history asset, but it does provide an honest out-of-sample
+    calibration/accuracy check for the probability model itself.
+    """
+    ordered = []
+    for row in rows or []:
+        if not isinstance(row, dict):
+            continue
+        try:
+            when = datetime.fromisoformat(str(row.get("scheduled_at") or "").replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if when.tzinfo is None:
+            when = when.replace(tzinfo=timezone.utc)
+        p1_id, p2_id = str(row.get("player1_id") or ""), str(row.get("player2_id") or "")
+        winner = str(row.get("winner_id") or "")
+        if not p1_id or not p2_id or winner not in {p1_id, p2_id}:
+            continue
+        ordered.append((when.astimezone(timezone.utc), row))
+    ordered.sort(key=lambda item: item[0])
+
+    state = _RatingState()
+    scored: list[tuple[float, int]] = []
+    rejected = defaultdict(int)
+    history_seen = 0
+    bands: dict[str, list[tuple[float, int]]] = defaultdict(list)
+
+    for _, row in ordered:
+        p1_id, p2_id = str(row.get("player1_id") or ""), str(row.get("player2_id") or "")
+        winner = str(row.get("winner_id") or "")
+        m1, m2 = _history_members(row, 1), _history_members(row, 2)
+        k1 = _pair_key(p1_id, m1, row.get("player1_name"))
+        k2 = _pair_key(p2_id, m2, row.get("player2_name"))
+        surface = _surface(row.get("surface"))
+
+        can_score = history_seen >= MIN_HISTORY_MATCHES and bool(k1 and k2 and k1 != k2)
+        if can_score:
+            pair1, pair2 = state.pair_matches[k1], state.pair_matches[k2]
+            member1, member2 = state.member_min_matches(m1), state.member_min_matches(m2)
+            surface1, surface2 = state.surface_matches[(k1, surface)], state.surface_matches[(k2, surface)]
+            identity_ok = len(m1) >= 2 and len(m2) >= 2
+            history_ok = (
+                (pair1 >= MIN_PAIR_MATCHES or member1 >= MIN_MEMBER_MATCHES)
+                and (pair2 >= MIN_PAIR_MATCHES or member2 >= MIN_MEMBER_MATCHES)
+            )
+            pair_depth = min(1.0, min(pair1, pair2) / 10.0)
+            member_depth = min(1.0, min(member1, member2) / 12.0)
+            surface_depth = min(1.0, min(surface1, surface2) / 8.0)
+            data_depth = 0.50 * pair_depth + 0.35 * member_depth + 0.15 * surface_depth
+            if not identity_ok:
+                rejected["members"] += 1
+            elif not history_ok:
+                rejected["history"] += 1
+            elif data_depth < MIN_DATA_DEPTH:
+                rejected["depth"] += 1
+            else:
+                p1 = state.expected(state.side_rating(k1, m1, surface) - state.side_rating(k2, m2, surface))
+                actual = 1 if winner == p1_id else 0
+                scored.append((p1, actual))
+                bands[_confidence_band(max(p1, 1.0 - p1))].append((p1, actual))
+        elif history_seen >= MIN_HISTORY_MATCHES:
+            rejected["identity"] += 1
+
+        state.update(row)
+        history_seen += 1
+
+    def metrics(items: list[tuple[float, int]]) -> dict[str, Any]:
+        if not items:
+            return {"samples": 0, "accuracy": None, "mean_confidence": None, "brier": None, "log_loss": None, "calibration_gap": None}
+        n = len(items)
+        accuracy = sum(int((p >= 0.5) == bool(y)) for p, y in items) / n
+        mean_confidence = sum(max(p, 1.0 - p) for p, _ in items) / n
+        brier = sum((p - y) ** 2 for p, y in items) / n
+        eps = 1e-12
+        log_loss = -sum(y * math.log(max(eps, min(1.0 - eps, p))) + (1 - y) * math.log(max(eps, min(1.0 - eps, 1.0 - p))) for p, y in items) / n
+        return {
+            "samples": n,
+            "accuracy": accuracy,
+            "mean_confidence": mean_confidence,
+            "brier": brier,
+            "log_loss": log_loss,
+            "calibration_gap": accuracy - mean_confidence,
+        }
+
+    overall = metrics(scored)
+    # `validation_ready` means only that the sample is large enough to inspect.
+    # It deliberately does not claim a profitable betting edge without archived
+    # bookmaker prices and an odds-aware backtest.
+    return {
+        "schema": 1,
+        "model": MODEL_VERSION,
+        "method": "strict_walk_forward_pre_match_ratings",
+        "history_rows": len(ordered),
+        "warmup_matches": MIN_HISTORY_MATCHES,
+        "minimum_validation_samples": MIN_VALIDATION_SAMPLES,
+        **overall,
+        "validation_ready": int(overall.get("samples") or 0) >= MIN_VALIDATION_SAMPLES,
+        "betting_edge_proven": False,
+        "betting_edge_note": "Historical bookmaker prices are required before profitability can be claimed.",
+        "rejected": dict(rejected),
+        "by_confidence_band": {name: metrics(items) for name, items in sorted(bands.items())},
     }
 
 

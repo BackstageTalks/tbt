@@ -1237,7 +1237,12 @@ def save_insight(payload: object, *, actor_id: str = "", insight_id: str = "") -
 
 
 def save_automated_insight(payload: object, *, actor_id: str = "automation", insight_id: str) -> tuple[dict, bool]:
-    """Create one deterministic system insight idempotently."""
+    """Create or refresh one deterministic system insight idempotently.
+
+    LIVE automation uses stable IDs per event/stage. Repeated scans therefore
+    refresh the body and short expiry window without emitting another push.
+    Only the first durable create dispatches a browser push.
+    """
     insight_id=str(insight_id or '').strip()
     if not _VALID_ID.fullmatch(insight_id): raise ValueError("Invalid automated insight id")
     client=_table(INSIGHTS_TABLE)
@@ -1245,7 +1250,13 @@ def save_automated_insight(payload: object, *, actor_id: str = "automation", ins
     except Exception as exc:
         status=getattr(exc,"status_code",None); name=exc.__class__.__name__.lower()
         if not (status==404 or "notfound" in name or isinstance(exc,KeyError)): raise AdminStorageUnavailable("Unable to load automated insight") from exc
-    else: return _insight_from_entity(existing_entity),False
+    else:
+        existing=_insight_from_entity(existing_entity)
+        clean=normalize_insight(payload,existing=existing); now=datetime.now(timezone.utc).isoformat()
+        entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k!="levels"},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"created_at":existing_entity.get("created_at") or now,"updated_at":now,"created_by":existing_entity.get("created_by") or str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":int(existing_entity.get("read_count") or 0)}
+        try: client.upsert_entity(entity,mode="replace")
+        except Exception as exc: raise AdminStorageUnavailable("Unable to refresh automated insight") from exc
+        return _insight_from_entity(entity),False
     clean=normalize_insight(payload); now=datetime.now(timezone.utc).isoformat()
     entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k!="levels"},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"created_at":now,"updated_at":now,"created_by":str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":0}
     try: client.create_entity(entity)

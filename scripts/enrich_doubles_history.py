@@ -17,7 +17,7 @@ from history_download_budget import LocalRequestBudget
 from release_store import ReleaseStore
 from tbt.config import settings
 from tbt.providers.rapidapi import RapidTennisClient, RequestBudgetExceeded
-from tbt.services.doubles_selection import compact_history_row, history_report, merge_history
+from tbt.services.doubles_selection import compact_history_row, history_report, merge_history, walk_forward_validation
 
 HISTORY_ASSET = "doubles_history.json"
 REPORT_ASSET = "doubles_history_report.json"
@@ -110,6 +110,7 @@ def main() -> None:
     merged = merge_history(existing, collected)
     report = {
         **history_report(merged),
+        "validation": walk_forward_validation(merged),
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "window": {"requested_start": requested_start.isoformat(), "requested_end": requested_end.isoformat(), "effective_start": start.isoformat(), "effective_end": end.isoformat()},
         "requests_used": client.request_count,
