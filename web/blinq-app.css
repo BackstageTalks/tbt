@@ -6482,3 +6482,5 @@ body#blinqPremium .hub-detail.is-locked>span{display:inline!important;overflow:v
 body#blinqPremium .hub-detail.is-locked>i{display:inline!important;margin:0!important;font-size:8px!important;line-height:1!important;font-style:normal!important;opacity:.72!important}
 body#blinqPremium .hub-detail.is-locked>small{display:none!important}
 body#blinqPremium .hub-detail.is-locked:hover{background:rgba(213,174,88,.09)!important;border-color:rgba(213,174,88,.36)!important;transform:none!important}
+
+/* BlinQ runtime patch 7.3.6-r39: durable daily access, pre-match clock filter and stable slot identity. */

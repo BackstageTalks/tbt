@@ -264,12 +264,12 @@
   async function loadUiConfig() {
     let runtimeConfigSnapshot=null;
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=38');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=39');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=38');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=39');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -342,7 +342,7 @@
       if(rookiePrime)rookiePrime.selection_mode='stable_random';
     }
     applyAccessContractV1(state.ui);
-    state.ui.ui_patch='736-r38';
+    state.ui.ui_patch='736-r39';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -1321,6 +1321,13 @@
   function dailyHubConfig(){
     return state.ui?.dashboard?.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};
   }
+  function previewStableRandomSlots(tab,total,count){
+    const pool=Math.min(Math.max(0,total),10),wanted=Math.min(Math.max(0,count),pool);
+    const dateKey=new Intl.DateTimeFormat('en-CA',{timeZone:'Europe/Bratislava',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date(Date.now()-6*3600*1000));
+    const seed=`${state.previewPlan||accountPlan()}|${dateKey}|${tab}`;
+    const hash=text=>{let h=2166136261;for(let i=0;i<text.length;i++){h^=text.charCodeAt(i);h=Math.imul(h,16777619);}return h>>>0;};
+    return new Set(Array.from({length:pool},(_,i)=>[hash(`${seed}|${i}`),i]).sort((a,b)=>a[0]-b[0]).slice(0,wanted).map(item=>item[1]));
+  }
   function previewDailyHubEntitlement(tab){
     const plan=accountPlan(),cfg=dailyHubConfig(),tabCfg=cfg?.tabs?.[tab]||{};
     const normalized=plan==='trial'?'rookie':plan;
@@ -1334,7 +1341,8 @@
     const visibleCount=all?total:Math.max(0,Math.min(total,Number(visible)||0));
     const blur=display==='blurred'||rule.blur_remaining!==false;
     const overrides=rule.row_overrides&&typeof rule.row_overrides==='object'?rule.row_overrides:{};
-    const slot_states=rows.map((_,i)=>{const pos=String(i+1);let state=all||i<visibleCount?'active':(blur?'blurred':'hidden');const override=String(overrides[pos]||'').toLowerCase();if(['active','blurred','hidden'].includes(override))state=override;return state;});
+    const randomSlots=String(rule.selection_mode||'first')==='stable_random'&&!all?previewStableRandomSlots(tab,total,visibleCount):null;
+    const slot_states=rows.map((_,i)=>{const pos=String(i+1);let state=all||(randomSlots?randomSlots.has(i):i<visibleCount)?'active':(blur?'blurred':'hidden');const override=String(overrides[pos]||'').toLowerCase();if(['active','blurred','hidden'].includes(override))state=override;return state;});
     const returned=slot_states.filter(v=>v==='active').length;
     return {visible_picks:visible,blur_remaining:blur,enabled,see_all:Boolean(rule.see_all),total,returned,locked_count:Math.max(0,total-returned),selection_mode:String(rule.selection_mode||'first'),display_state:display,slot_states,row_overrides:overrides};
   }
@@ -1406,7 +1414,7 @@
   }
   function dailyHubRows(tab){
     if(tab==='daily'){
-      // `daily_picks` is already server-authorized: ROOKIE=2 stable/day, PRO=3, ELITE+=ALL.
+      // `daily_picks` is already server-authorized; never re-merge legacy arrays client-side.
       // Do not re-merge the legacy prime/top arrays here or a low tier could receive extra rows.
       return (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible);
     }
@@ -1937,10 +1945,21 @@
     {
       const slotStates=Array.isArray(ent.slot_states)?ent.slot_states:[];let dataIndex=0;
       if(slotStates.length){
+        // Server-authorized rows carry their original source slot. Search,
+        // surface and tournament filters must never compact slot 7 into slot 2.
+        const bySlot=new Map(),unmapped=[];
+        rows.forEach(row=>{
+          const raw=Number(row?._access_slot);
+          if(Number.isInteger(raw)&&raw>=0&&!bySlot.has(raw))bySlot.set(raw,row);
+          else unmapped.push(row);
+        });
         slotStates.slice(0,limit).forEach((slotState,slotIndex)=>{
           if(slotState==='hidden')return;
           if(slotState==='blurred')out.push(dailyHubLockedRow(tab,slotIndex,firstDailyHubUnlockPlan(tab,slotIndex,false)));
-          else if(dataIndex<rows.length)out.push(dailyHubRow(rows[dataIndex++],tab,false,slotIndex));
+          else {
+            const row=bySlot.get(slotIndex)??unmapped[dataIndex++];
+            if(row)out.push(dailyHubRow(row,tab,false,slotIndex));
+          }
         });
       }else for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
       const nextIndex=Math.max(slotStates.length,rows.length);
@@ -2144,7 +2163,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=38"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=39"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}

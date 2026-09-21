@@ -33,6 +33,60 @@ def _not_found(exc: Exception) -> bool:
     return status == 404 or "resourcenotfound" in name or isinstance(exc, KeyError)
 
 
+
+
+def _decode_daily_access_allocations(value: object) -> dict[str, list[str]]:
+    if not value:
+        return {}
+    try:
+        raw = json.loads(str(value))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for section, items in raw.items():
+        if not isinstance(items, list):
+            continue
+        clean = []
+        for item in items[:20]:
+            text = str(item or "").strip()
+            if text and len(text) <= 96 and text not in clean:
+                clean.append(text)
+        name = str(section or "")[:32]
+        if name:
+            out[name] = clean
+    return out
+
+
+def save_daily_access_allocations(user_id: object, *, day: str, allocations: dict[str, list[str]]) -> dict:
+    """Persist the current betting-day random entitlement allocation.
+
+    One compact row per account is enough because only the current BlinQ betting
+    day matters. Replacing yesterday's allocation is intentional.
+    """
+    uid = str(user_id or "").strip()
+    key = _key(uid)
+    day = str(day or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        raise ValueError("Invalid daily access day")
+    clean = _decode_daily_access_allocations(json.dumps(allocations or {}, ensure_ascii=False))
+    now = datetime.now(timezone.utc).isoformat()
+    entity = {
+        "PartitionKey": "account",
+        "RowKey": key,
+        "user_id": uid,
+        "daily_access_day": day,
+        "daily_access_allocations_json": json.dumps(clean, ensure_ascii=False, separators=(",", ":")),
+        "daily_access_updated_at": now,
+    }
+    try:
+        _table(ACCOUNT_TABLE).upsert_entity(entity, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save daily access allocation") from exc
+    return load_account_metadata(uid)
+
+
 def _public_entity(entity: dict | None) -> dict:
     row = entity or {}
     avatar = str(row.get("avatar_variant") or "").strip().lower()
@@ -57,6 +111,11 @@ def _public_entity(entity: dict | None) -> dict:
         "inactivity_user_warning_sent_at": row.get("inactivity_user_warning_sent_at"),
         "inactivity_deactivation_warning_sent_at": row.get("inactivity_deactivation_warning_sent_at"),
         "inactivity_expired_at": row.get("inactivity_expired_at"),
+        # Durable per-user/day entitlement allocation. Stored as JSON in Azure
+        # Table so refreshes/reorders cannot reveal a different random pick.
+        "daily_access_day": str(row.get("daily_access_day") or "")[:16],
+        "daily_access_allocations": _decode_daily_access_allocations(row.get("daily_access_allocations_json")),
+        "daily_access_updated_at": row.get("daily_access_updated_at"),
     }
 
 

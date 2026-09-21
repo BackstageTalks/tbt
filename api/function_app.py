@@ -47,6 +47,7 @@ from tbt.services.account_storage import (
     list_manual_payments,
     list_account_audit,
     delete_account_metadata,
+    save_daily_access_allocations,
 )
 from tbt.services.admin_storage import (
     AdminStorageUnavailable,
@@ -82,6 +83,7 @@ from tbt.services.entitlements import (
     match_detail_entitlements,
     match_intelligence_row_authorized,
     redact_match_intelligence,
+    build_daily_access_state,
 )
 from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnostics, inactivity_policy
 from tbt.services.live_comeback import (
@@ -167,6 +169,8 @@ def _profile_for(user, *, required=False):
         if required:
             raise
         logging.warning("Account metadata storage unavailable; using Firebase claim mirror")
+        fallback = dict(fallback)
+        fallback["storage_fallback"] = True
         return fallback
 
     # Durable storage is authoritative once a field has actually been written.
@@ -182,11 +186,38 @@ def _profile_for(user, *, required=False):
         "access_metadata_updated_at", "admin_metadata_updated_at",
         "admin_metadata_updated_by",
         "legal_consent_version", "legal_consent_locale", "legal_consent_at",
+        "daily_access_day", "daily_access_allocations", "daily_access_updated_at",
     ):
         if stored.get(key) not in (None, ""):
             merged[key] = stored.get(key)
     merged["storage_fallback"] = False
     return merged
+
+
+def _access_context_with_daily_allocation(user, account_data: dict, profile: dict, feed_data: dict, runtime_ui):
+    """Attach the durable betting-day allocation without exposing it publicly."""
+    context = dict(account_data or {})
+    if bool((profile or {}).get("storage_fallback")):
+        context["_daily_allocations_fail_closed"] = True
+        return context
+    state, changed = build_daily_access_state(
+        context,
+        feed_data,
+        runtime_ui,
+        existing_day=str((profile or {}).get("daily_access_day") or ""),
+        existing_allocations=(profile or {}).get("daily_access_allocations") if isinstance((profile or {}).get("daily_access_allocations"), dict) else {},
+    )
+    if changed:
+        try:
+            save_daily_access_allocations(user.get("id"), day=state["day"], allocations=state["sections"])
+        except AdminStorageUnavailable:
+            # Fail closed for stable-random rows rather than revealing a second
+            # pick if allocation persistence becomes unavailable mid-request.
+            context["_daily_allocations_fail_closed"] = True
+            return context
+    context["_daily_allocations"] = state["sections"]
+    context["_access_day"] = state["day"]
+    return context
 
 
 def _admin_user(req):
@@ -638,7 +669,8 @@ def match_intelligence(req):
         # endpoint. Resolve the exact same runtime access contract as /v1/feed
         # before touching the provider or shared cache. Fail closed if the
         # runtime access configuration cannot be loaded.
-        account_data = public_account(user, cfg=settings, profile=_profile_for(user))
+        profile = _profile_for(user)
+        account_data = public_account(user, cfg=settings, profile=profile)
         try:
             runtime_ui = load_runtime_ui_config()
         except AdminStorageUnavailable:
@@ -647,7 +679,9 @@ def match_intelligence(req):
         if not detail_access.get("allowed"):
             return response({"error": "match_detail_forbidden"}, 403)
         try:
-            authorized_feed, _ = filter_feed_for_access(visible_feed(read_feed(FEED)), account_data, runtime_ui)
+            visible = visible_feed(read_feed(FEED))
+            access_context = _access_context_with_daily_allocation(user, account_data, profile, visible, runtime_ui)
+            authorized_feed, _ = filter_feed_for_access(visible, access_context, runtime_ui)
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
         if not match_intelligence_row_authorized(
@@ -879,15 +913,16 @@ def feed(req):
             return response({"error": "unauthorized"}, 401)
         if not bool(user.get("email_verified", False)):
             return response({"error": "email_not_verified"}, 403)
-        account_data = public_account(user, cfg=settings, profile=_profile_for(user))
+        profile = _profile_for(user)
+        account_data = public_account(user, cfg=settings, profile=profile)
         data = visible_feed(read_feed(FEED))
         try:
-            
             try:
                 runtime_ui = load_runtime_ui_config()
             except AdminStorageUnavailable:
                 runtime_ui = None
-            data, entitlements = filter_feed_for_access(data, account_data, runtime_ui)
+            access_context = _access_context_with_daily_allocation(user, account_data, profile, data, runtime_ui)
+            data, entitlements = filter_feed_for_access(data, access_context, runtime_ui)
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
         data["account"] = account_data
