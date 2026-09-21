@@ -3,6 +3,43 @@ from __future__ import annotations
 from typing import Any
 
 
+_TERMINATION_ALIASES = (
+    ("retir", "retired"), ("walkover", "walkover"), ("walk over", "walkover"), ("w/o", "walkover"),
+    ("abandon", "abandoned"), ("interrupt", "interrupted"), ("suspend", "suspended"),
+    ("postpon", "postponed"), ("cancel", "cancelled"),
+)
+
+def _compact_termination(payload: Any) -> dict[str, Any] | None:
+    """Preserve only non-standard match termination evidence from provider payloads."""
+    if not isinstance(payload, dict):
+        return None
+    values: list[str] = []
+    status = payload.get("status")
+    if isinstance(status, dict):
+        for key in ("type", "name", "description", "reason", "status", "state"):
+            if status.get(key) not in (None, ""):
+                values.append(str(status.get(key)))
+    elif status not in (None, ""):
+        values.append(str(status))
+    for key in ("state", "reason", "statusDescription", "status_description", "endReason", "end_reason", "termination", "terminationReason", "termination_reason"):
+        if payload.get(key) not in (None, ""):
+            values.append(str(payload.get(key)))
+    marker = payload.get("_tbt_termination")
+    if isinstance(marker, dict):
+        for key in ("reason", "raw"):
+            if marker.get(key) not in (None, ""):
+                values.append(str(marker.get(key)))
+    text = " | ".join(values).lower().replace("_", " ")
+    reason = ""
+    for token, canonical in _TERMINATION_ALIASES:
+        if token in text:
+            reason = canonical
+            break
+    if not reason:
+        return None
+    return {"schema": 1, "reason": reason, "raw": " | ".join(values)[:240]}
+
+
 def _compact_country(value: Any) -> dict[str, Any] | None:
     if isinstance(value, dict):
         compact = {
@@ -72,6 +109,9 @@ def minimize_provider_payload(
     if isinstance(format_marker, dict):
         out["_tbt_match_format"] = {k: format_marker[k] for k in
             ("schema", "status", "best_of", "source", "provider_best_of", "score_best_of") if k in format_marker}
+    termination = _compact_termination(raw)
+    if termination is not None:
+        out["_tbt_termination"] = termination
 
     for key in (
         "_tbt_canonical_match_id",

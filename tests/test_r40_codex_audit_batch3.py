@@ -20,8 +20,8 @@ def _planner():
 def test_release_is_r40():
     release = json.loads(_text("web/release.json"))
     ui = json.loads(_text("web/ui-config.json"))
-    assert release["patch"] == ui["ui_patch"] == "736-r50"
-    assert 'content="736-r50"' in _text("web/index.html")
+    assert release["patch"] == ui["ui_patch"] == "736-r51"
+    assert 'content="736-r51"' in _text("web/index.html")
 
 
 def test_b05_data_deploy_has_shared_production_critical_section():

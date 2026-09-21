@@ -28,6 +28,7 @@ from tbt.services.publication import (
 )
 from tbt.services.ace_selection import select_ace_picks
 from tbt.services.sg_selection import select_sg_picks
+from tbt.services.projection_odds import enrich_projection_odds
 from tbt.services.doubles_selection import (
     build_predictions as build_doubles_predictions,
     select_picks as select_doubles_picks,
@@ -557,14 +558,21 @@ def main():
                 timezone_name="Europe/Bratislava",
                 start_hour=args.betting_day_start_hour,
             )
-        # Aces / Double Faults use only already-stored historical post-match
-        # counts. This consumes no additional provider requests and remains
-        # projection-only until a real pre-match price/line source is verified.
+        # Projection models are selected from history first. A separate strict
+        # provider-odds pass may attach a real price only when the exact market
+        # can be identified; confidence is never displayed as a synthetic odd.
         ace_picks, ace_report = select_ace_picks(matches, predictions, now=now)
-        # Sets / Games are derived from stored structured historical scores.
-        # They remain projection-only until a calibrated price/line layer is
-        # separately validated and backtested.
         sg_picks, sg_report = select_sg_picks(matches, predictions, now=now)
+        projection_odds_report = {}
+        projection_odds_cap = min(40, max(0, int(args.market_odds_max_events or 0)))
+        if projection_odds_cap and (ace_picks or sg_picks):
+            ace_picks, sg_picks, projection_odds_report = enrich_projection_odds(
+                provider, ace_picks, sg_picks, max_events=projection_odds_cap, provider_id=1
+            )
+        if isinstance(ace_report, dict):
+            ace_report = {**ace_report, "odds_attachment": projection_odds_report}
+        if isinstance(sg_report, dict):
+            sg_report = {**sg_report, "odds_attachment": projection_odds_report}
     except Exception as exc:
         refresh_error = exc
     finally:

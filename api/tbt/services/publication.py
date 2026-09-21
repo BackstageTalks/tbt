@@ -371,11 +371,12 @@ def restore_published_market_snapshots(feed, ledger):
                     row["confidence"] = max(probability, 1 - probability)
             if section in {"ace", "double_faults", "sets", "games"}:
                 for field in (
-                    "projection", "opponent_projection", "reference_projection",
+                    "projection", "opponent_projection", "reference_projection", "market_line",
                     "projection_gap", "projection_scope", "projection_metric",
                     "projection_direction", "projection_confidence", "projection_label",
                     "projection_kind", "projection_subject", "projection_samples",
                     "projection_unit", "best_of", "data_depth", "price_status",
+                    "provider_id", "captured_at", "odds_market_name",
                 ):
                     if field in snapshot:
                         row[field] = deepcopy(snapshot.get(field))

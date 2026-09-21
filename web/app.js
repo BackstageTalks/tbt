@@ -320,8 +320,8 @@
     // optional endpoint must not serialize several timeout windows and hold an
     // authenticated user behind presentation configuration.
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
-      getJSON('/ui-config.json?v=7360&p=50',{timeoutMs:3000}),
-      getJSON('/config/telegram-groups.json?v=7360&p=50',{timeoutMs:3000}),
+      getJSON('/ui-config.json?v=7360&p=51',{timeoutMs:3000}),
+      getJSON('/config/telegram-groups.json?v=7360&p=51',{timeoutMs:3000}),
       getJSON('/api/v1/ui-config',{timeoutMs:3500}),
       getJSON('/membership-links.json',{timeoutMs:3000})
     ]);
@@ -388,7 +388,7 @@
       if(rookiePrime)rookiePrime.selection_mode='stable_random';
     }
     applyAccessContractV1(state.ui);
-    state.ui.ui_patch='736-r50';
+    state.ui.ui_patch='736-r51';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -1407,7 +1407,7 @@
     if(Number.isFinite(projection)&&unit==='probability'&&projection>=0&&projection<=1){
       const selection=String(row?.selection||row?.pick||'').trim().toLowerCase();
       const line=selectionLineFromText(row),bestOf=Number(row?.best_of)||(Number.isFinite(line)&&Math.abs(line-2.5)<0.01?3:Number.isFinite(line)&&Math.abs(line-3.5)<0.01?5:NaN);
-      const over=/over/.test(selection),under=/under/.test(selection);
+      const over=/\bover\b/.test(selection),under=/\bunder\b/.test(selection);
       if(bestOf===3&&(over||under)){
         const longProbability=over?projection:1-projection;
         return Math.max(2,Math.min(3,2+longProbability));
@@ -1577,14 +1577,14 @@
     if(dailyHubIsComingSoon(tab))return [''];
     const time=lcopy('TIME','ČAS','ČAS'),tournament=lcopy('TOURNAMENT','TURNAJ','TURNAJ'),match=lcopy('MATCH','ZÁPAS','ZÁPAS'),prediction=lcopy('PREDICTION','PREDIKCIA','PREDIKCE'),odds=lcopy('ODDS','KURZ','KURZ'),projection=lcopy('PROJECTION','PROJEKCIA','PROJEKCE'),confidence=lcopy('CONFIDENCE','ISTOTA','JISTOTA');
     if(tab==='value')return ['#',time,tournament,match,prediction,odds,'BLINQ %','EDGE',''];
-    if(tab==='ace'||tab==='double_faults')return ['#',time,tournament,match,prediction,projection,confidence];
+    if(tab==='ace'||tab==='double_faults')return ['#',time,tournament,match,prediction,odds,projection,confidence];
     if(tab==='doubles')return ['#',time,tournament,match,prediction,odds,'BLINQ %',''];
-    if(tab==='games'||tab==='sets')return ['#',time,tournament,match,prediction,projection,confidence];
+    if(tab==='games'||tab==='sets')return ['#',time,tournament,match,prediction,odds,projection,confidence];
     return ['#',time,tournament,match,prediction,odds,'BLINQ %',''];
   }
   function dailyHubColumnKeys(tab){
     if(tab==='value')return ['rank','time','tournament','match','pick','number','confidence','edge','action'];
-    if(tab==='ace'||tab==='double_faults'||tab==='games'||tab==='sets')return ['rank','time','tournament','match','pick','number','confidence'];
+    if(tab==='ace'||tab==='double_faults'||tab==='games'||tab==='sets')return ['rank','time','tournament','match','pick','number','number','confidence'];
     if(tab==='doubles')return ['rank','time','tournament','match','pick','number','confidence','action'];
     return ['rank','time','tournament','match','pick','number','confidence','action'];
   }
@@ -2000,13 +2000,15 @@
       const projectionText=Number.isFinite(projection)?(sourceTab==='sets'?projection.toFixed(2):projection.toFixed(1)):'—';
       const projectionUnit=sourceTab==='sets'?lcopy('projected sets','projekcia setov','projekce setů'):lcopy('projected games','projekcia gemov','projekce gemů');
       const actionCell=tab==='see_all'?'<td class="hub-action-cell hub-optional-action"><span class="hub-projection-badge">MODEL</span></td>':'';
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
+      const odds=Number(row?.odds);
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
     }
     if(sourceTab==='ace'||sourceTab==='double_faults'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=projectionPickText(row,sourceTab),market=aceMarketName(row);
       const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia Aces','Projekce Aces'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button>`:'';
       const actionCell=tab==='see_all'?`<td class="hub-action-cell hub-optional-action">${action}</td>`:'';
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(projection)?projection.toFixed(2):'—',lcopy('projection','projekcia','projekce'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
+      const odds=Number(row?.odds);
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(projection)?projection.toFixed(2):'—',lcopy('projection','projekcia','projekce'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
     }
     const probability=marketProbability(row),odds=Number(row?.odds??row?.betting?.odds),pick=modelPickName(row);
     const base=`${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick)}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(probability,row)}</td>`;
@@ -2295,7 +2297,7 @@
     // same-origin script instead of an inline <script>. The popup runtime also
     // reinstalls image fallback handling because DOM event listeners are not
     // copied with innerHTML.
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=50"><script defer src="/match-popout.js?v=7360&p=50"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=51"><script defer src="/match-popout.js?v=7360&p=51"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
@@ -2405,13 +2407,30 @@
     });
     return tags;
   }
-  function isProjectionPublication(publication){return publication?.price_status==='projection_only'||['aces','double_faults'].includes(String(publication?.market||''));}
+  function isProjectionPublication(publication){return ['aces','double_faults','sets','games'].includes(String(publication?.market||publication?.projection_metric||'').toLowerCase())||['projection_only','priced_projection'].includes(String(publication?.price_status||'').toLowerCase());}
   function publicationMatchesResultCategory(publication,category='all'){
     if(category==='all')return true;
     if(category==='sg')return ['sets','games'].includes(String(publication?.section||''));
     if(category==='ace')return String(publication?.market||'')==='aces';
     if(category==='double_faults')return String(publication?.market||'')==='double_faults';
     return String(publication?.section||'')===category;
+  }
+  function normalizeResultPlayerName(value){
+    return String(value||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-zA-Z0-9]+/g,' ').trim().toLowerCase();
+  }
+  function resultPickIdentity(publication,row){
+    const p1=row?.player1||{},p2=row?.player2||{};
+    const p1Id=String(p1?.id||''),p2Id=String(p2?.id||'');
+    const ids=[publication?.selection_id,publication?.pick_id,publication?.winner_id].map(v=>String(v||'')).filter(Boolean);
+    let sideById='';
+    for(const id of ids){if(p1Id&&id===p1Id){sideById='p1';break;}if(p2Id&&id===p2Id){sideById='p2';break;}}
+    const text=String(publication?.selection||publication?.pick||publication?.prediction||'').trim();
+    const nt=normalizeResultPlayerName(text),n1=normalizeResultPlayerName(p1?.name),n2=normalizeResultPlayerName(p2?.name);
+    const sideByText=nt&&n1&&nt===n1?'p1':nt&&n2&&nt===n2?'p2':'';
+    const side=sideById||sideByText||'';
+    const conflict=Boolean(sideById&&sideByText&&sideById!==sideByText);
+    const name=side==='p1'?String(p1?.name||text||'—'):side==='p2'?String(p2?.name||text||'—'):(text||'—');
+    return {side,name,conflict,selectionId:ids[0]||'',rawText:text};
   }
   function projectionResultTypeLabel(publication){
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
@@ -2486,7 +2505,7 @@
   }
   function resultVoidLabel(reason=''){
     const value=String(reason||'').trim().toLowerCase();
-    if(value.includes('retir')||value==='ret')return lcopy('RETIREMENT','SKREČ','SKREČ');
+    if(value.includes('retir')||value.includes('incomplete')||value==='ret')return lcopy('RETIREMENT','SKREČ','SKREČ');
     if(value.includes('walkover')||value==='walk over'||value==='w/o')return 'W/O';
     if(value.includes('cancel'))return lcopy('CANCELLED','ZRUŠENÉ','ZRUŠENO');
     if(value.includes('postpon'))return lcopy('POSTPONED','ODLOŽENÉ','ODLOŽENO');
@@ -2589,7 +2608,7 @@
     const voids=pubs.filter(p=>publicationOutcome(p).kind==='void').length;
     const profit=graded.reduce((sum,p)=>sum+Number(p.result?.profit_units||0),0);
     const stake=graded.reduce((sum,p)=>sum+Number(p.result?.staked_units||0),0);
-    const odds=graded.filter(p=>p.odds!=null&&!isProjectionPublication(p)).map(p=>Number(p.odds)).filter(v=>Number.isFinite(v)&&v>1);
+    const odds=graded.filter(p=>p.odds!=null).map(p=>Number(p.odds)).filter(v=>Number.isFinite(v)&&v>1);
     const sample=graded.length;
     return {wins,losses:Math.max(0,sample-wins),voids,sample,hit:sample?wins/sample:null,avgOdds:odds.length?odds.reduce((a,b)=>a+b,0)/odds.length:null,roi:stake?profit/stake:null,profit,oddsSample:odds.length};
   }
@@ -2604,7 +2623,8 @@
     const projectionOnly=['ace','double_faults','sg','sets','games'].includes(category);
     const body=entries.slice(startIndex,endIndex).map(({row:r,publication})=>{
       const p1=r.player1||{},p2=r.player2||{},outcome=publicationOutcome(publication),projection=isProjectionPublication(publication);
-      const pickId=publication?.selection_id,pickName=publication?.selection||(pickId===p1.id?p1.name:pickId===p2.id?p2.name:'—');
+      const pickIdentity=resultPickIdentity(publication,r);
+      const pickName=projection?(publication?.selection||pickIdentity.name||'—'):pickIdentity.name;
       const probability=publication?.model_probability==null?NaN:Number(publication?.model_probability);
       const odds=publication?.odds==null?NaN:Number(publication?.odds),rawUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units),units=outcome.kind==='void'?0:rawUnits;
       const projectionMarket=String(publication?.market||publication?.projection_metric||'').toLowerCase();
@@ -2619,22 +2639,26 @@
       const p1Photo=playerPhotoSource(r,p1,'player1');
       const p2Photo=playerPhotoSource(r,p2,'player2');
       const marketName=String(publication?.market||'').toLowerCase();
-      const selectionId=String(publication?.selection_id||'');
-      const normalizedPick=String(pickName||'').trim().toLocaleLowerCase();
-      const p1Selected=!projection&&(marketName==='match_winner'||!marketName)&&(selectionId===String(p1.id||'')||(!selectionId&&normalizedPick===String(p1Name).trim().toLocaleLowerCase()));
-      const p2Selected=!projection&&(marketName==='match_winner'||!marketName)&&(selectionId===String(p2.id||'')||(!selectionId&&normalizedPick===String(p2Name).trim().toLocaleLowerCase()));
+      const selectable=!projection&&(marketName==='match_winner'||!marketName);
+      const p1Selected=selectable&&pickIdentity.side==='p1';
+      const p2Selected=selectable&&pickIdentity.side==='p2';
       const p1Class=p1Selected?' is-pick':p2Selected?' is-opponent':'';
       const p2Class=p2Selected?' is-pick':p1Selected?' is-opponent':'';
-      const match=`<div class="results-match-player${p1Class}">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?'<i class="results-pick-mark" aria-label="Predikovaný hráč">✓</i>':''}</div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b>${p2Selected?'<i class="results-pick-mark" aria-label="Predikovaný hráč">✓</i>':''}</span></small>`;
+      const integrityClass='';
+      const tipBadge='<i class="results-pick-mark" aria-label="Predikovaný hráč">TIP</i>';
+      const match=`<div class="results-match-player${p1Class}${integrityClass}">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?tipBadge:''}</div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}${integrityClass}">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b>${p2Selected?tipBadge:''}</span></small>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
         const depth=Number(publication?.data_depth??publication?.result?.data_depth),displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
-        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${escapeHtml(projectionText)}</td><td>${escapeHtml(actualText)}</td><td>${resultHtml}</td><td>${Number.isFinite(depth)?pct(depth):'—'}</td></tr>`;
+        const projectionOdds=Number(publication?.odds),projectionUnits=Number(publication?.result?.profit_units);
+        const depthText=Number.isFinite(depth)?pct(depth):'—';
+        const unitsText=outcome.kind==='void'?'0.00u':Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0?`${projectionUnits>0?'+':''}${projectionUnits.toFixed(2)}u`:'—';
+        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${escapeHtml(projectionText)}</td><td>${Number.isFinite(projectionOdds)?projectionOdds.toFixed(2):'—'}</td><td>${escapeHtml(actualText)}</td><td>${resultHtml}</td><td><span class="results-units-depth"><b class="${Number.isFinite(projectionUnits)&&projectionUnits>0?'correct':Number.isFinite(projectionUnits)&&projectionUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b><small>${escapeHtml(depthText)}</small></span></td></tr>`;
       }
-      return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td>${escapeHtml(pickName)}</td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>${resultHtml}</td><td class="${outcome.kind==='void'?'void':Number.isFinite(units)&&units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
+      return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(pickName)}</strong></td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>—</td><td>${resultHtml}</td><td class="${outcome.kind==='void'?'void':Number.isFinite(units)&&units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
     const pager=`<div class="results-pagination"><div class="results-pagination-meta"><strong>${startIndex+1}–${endIndex}</strong><span>z ${entries.length}</span></div><label><span>Riadkov</span><select id="resultsPageSize">${allowedSizes.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><div class="results-pagination-nav"><button type="button" id="resultsPrevPage" ${state.resultsPage<=0?'disabled':''}>←</button><span>Strana <strong>${state.resultsPage+1}</strong> / ${pages}</span><button type="button" id="resultsNextPage" ${state.resultsPage>=pages-1?'disabled':''}>→</button></div></div>`;
-    const head=projectionOnly?'<tr><th>Dátum</th><th>Typ</th><th>Turnaj</th><th>Zápas</th><th>Projekcia pre</th><th>Projekcia</th><th>Skutočne</th><th>Výsledok</th><th>DATA DEPTH</th></tr>':'<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia / projekcia</th><th>BlinQ % / projekcia</th><th>Kurz / skutočne</th><th>Výsledok</th><th>Jednotky / DATA DEPTH</th></tr>';
+    const head='<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia</th><th>Model / BlinQ %</th><th>Kurz</th><th>Skutočne</th><th>Výsledok</th><th>Jednotky / DATA DEPTH</th></tr>';
     return `<div class="admin-table-wrap results-table-wrap"><table class="admin-analytics-table results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>${pager}`;
   }
   function wireResultsFilters(){

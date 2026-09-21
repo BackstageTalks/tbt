@@ -49,6 +49,10 @@ def _match_void_reason(match):
     """
     values = [str(getattr(match, "status", "") or "")]
     raw = getattr(match, "provider_payload", None)
+    if isinstance(raw, dict):
+        marker = raw.get("_tbt_termination")
+        if isinstance(marker, dict) and str(marker.get("reason") or "").strip():
+            return str(marker.get("reason")).strip().lower()
     interesting = {
         "status", "state", "type", "name", "description", "reason",
         "statusdescription", "status_description", "endreason", "end_reason",
@@ -75,6 +79,26 @@ def _match_void_reason(match):
     for token, canonical in _VOID_TERMINATION_ALIASES:
         if token in text:
             return canonical
+
+    # Fail closed when a supposedly completed match has structured set totals
+    # proving that neither player reached the number of sets required to win.
+    # This catches provider rows whose status.type is merely "finished" while
+    # the retirement description was unavailable in an older compact snapshot.
+    best_of = getattr(match, "best_of", None)
+    stats = getattr(match, "stats", None)
+    if isinstance(stats, dict) and getattr(match, "winner_id", None):
+        try:
+            p1_sets = float(stats.get("p1_sets_won"))
+            p2_sets = float(stats.get("p2_sets_won"))
+        except (TypeError, ValueError):
+            p1_sets = p2_sets = float("nan")
+        # Any normally completed tennis match requires at least two won sets on
+        # one side. BO5 requires three when the format is known. This catches
+        # legacy compact rows where the provider's explicit "Retired" text was
+        # discarded but the structured final score is necessarily incomplete.
+        required = 3 if best_of == 5 else 2
+        if np.isfinite(p1_sets) and np.isfinite(p2_sets) and max(p1_sets, p2_sets) < required:
+            return "retired_or_incomplete"
     return ""
 
 
@@ -425,6 +449,43 @@ def _settle_match_winner_publications(row, match, now):
         publication["result"] = settled
 
 
+
+
+def _projection_price_units(publication, correct):
+    """Return flat-1u settlement only when a real provider price was frozen."""
+    try:
+        odds = float(publication.get("odds"))
+    except (TypeError, ValueError):
+        odds = float("nan")
+    priced = str(publication.get("price_status") or "").strip().lower() == "priced_projection"
+    if not priced or not np.isfinite(odds) or odds <= 1 or correct is None:
+        return None
+    stake = 1.0
+    returned = odds if correct else 0.0
+    return {"staked_units": stake, "return_units": returned, "profit_units": returned - stake}
+
+def _void_projection_publication(publication, match, now, reason):
+    existing = publication.get("result") if isinstance(publication.get("result"), dict) else None
+    settled = {
+        "status": "void",
+        "reason": reason,
+        "correct": None,
+        "staked_units": 0.0,
+        "return_units": 0.0,
+        "profit_units": 0.0,
+        "settled_at": (existing or {}).get("settled_at") or now.isoformat(),
+        "scheduled_at": match.scheduled_at.isoformat(),
+    }
+    if existing is not None and (
+        existing.get("status") != "void"
+        or existing.get("reason") != reason
+        or existing.get("correct") is not None
+    ):
+        settled["corrected_at"] = now.isoformat()
+    publication["result"] = settled
+    publication.pop("excluded_reason", None)
+
+
 def _settle_projection_publications(row, match, now):
     """Grade projection-only ESA publications without inventing betting ROI.
 
@@ -437,6 +498,7 @@ def _settle_projection_publications(row, match, now):
         return
     stats = match.stats if isinstance(match.stats, dict) else {}
     sides = {str(match.player1_id): "p1", str(match.player2_id): "p2"}
+    void_reason = _match_void_reason(match)
     for publication in publications:
         if not isinstance(publication, dict):
             continue
@@ -453,6 +515,9 @@ def _settle_projection_publications(row, match, now):
             continue
         if issued.tzinfo is None or issued >= match.scheduled_at:
             publication["excluded_reason"] = "invalid_issued_at" if issued.tzinfo is None else "issued_after_actual_start"
+            continue
+        if void_reason:
+            _void_projection_publication(publication, match, now, void_reason)
             continue
         selection_id = str(publication.get("selection_id") or "")
         selected_side = sides.get(selection_id)
@@ -478,6 +543,7 @@ def _settle_projection_publications(row, match, now):
             correct = actual > opponent_actual
             status = "hit" if correct else "miss"
         existing = publication.get("result") if isinstance(publication.get("result"), dict) else None
+        price_units = _projection_price_units(publication, correct)
         settled = {
             "status": status,
             "correct": correct,
@@ -491,6 +557,8 @@ def _settle_projection_publications(row, match, now):
             "settled_at": (existing or {}).get("settled_at") or now.isoformat(),
             "scheduled_at": match.scheduled_at.isoformat(),
         }
+        if price_units:
+            settled.update(price_units)
         if existing is not None and (
             existing.get("status") != status
             or existing.get("actual_count") != actual
@@ -506,6 +574,7 @@ def _settle_sg_projection_publications(row, match, now):
     if not isinstance(publications, list):
         return
     stats = match.stats if isinstance(match.stats, dict) else {}
+    void_reason = _match_void_reason(match)
     for publication in publications:
         if not isinstance(publication, dict):
             continue
@@ -522,6 +591,9 @@ def _settle_sg_projection_publications(row, match, now):
             continue
         if issued.tzinfo is None or issued >= match.scheduled_at:
             publication["excluded_reason"] = "invalid_issued_at" if issued.tzinfo is None else "issued_after_actual_start"
+            continue
+        if void_reason:
+            _void_projection_publication(publication, match, now, void_reason)
             continue
 
         key = "total_sets" if market == "sets" else "total_games"
@@ -574,6 +646,7 @@ def _settle_sg_projection_publications(row, match, now):
 
         publication.pop("excluded_reason", None)
         existing = publication.get("result") if isinstance(publication.get("result"), dict) else None
+        price_units = _projection_price_units(publication, correct)
         settled = {
             "status": status,
             "correct": correct,
@@ -586,6 +659,8 @@ def _settle_sg_projection_publications(row, match, now):
             "settled_at": (existing or {}).get("settled_at") or now.isoformat(),
             "scheduled_at": match.scheduled_at.isoformat(),
         }
+        if price_units:
+            settled.update(price_units)
         if existing is not None and (
             existing.get("status") != status
             or existing.get("actual_count") != actual
@@ -599,7 +674,7 @@ def _projection_metrics(publications):
     rows = [
         p for p in publications
         if isinstance(p, dict)
-        and p.get("price_status") == "projection_only"
+        and str(p.get("market") or "").strip().lower() in {"aces", "double_faults", "sets", "games"}
         and isinstance(p.get("result"), dict)
         and not p.get("excluded_reason")
         and p["result"].get("status") in {"hit", "miss", "void"}
@@ -703,7 +778,7 @@ def betting_performance(results):
     for market in sorted({str(p.get("market") or "") for _, p in entries if p.get("market")}):
         market_entries = _dedupe_result_publications([(row, p) for row, p in entries if p.get("market") == market])
         markets[market] = _betting_metrics([p for _, p in market_entries])
-    projection_entries = _dedupe_result_publications([(row, p) for row, p in entries if p.get("price_status") == "projection_only"])
+    projection_entries = _dedupe_result_publications([(row, p) for row, p in entries if str(p.get("market") or "").strip().lower() in {"aces", "double_faults", "sets", "games"}])
     projection_publications = [p for _, p in projection_entries]
     return {
         "schema": 2,

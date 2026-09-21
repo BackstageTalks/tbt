@@ -14,11 +14,11 @@ UI = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
 
 
 def test_r50_release_and_header_upgrade_cleanup():
-    assert RELEASE["patch"] == UI["ui_patch"] == "736-r50"
-    assert 'content="736-r50"' in INDEX
+    assert RELEASE["patch"] == UI["ui_patch"] == "736-r51"
+    assert 'content="736-r51"' in INDEX
     assert 'id="topUpgradeLabel">Upgrade</span></button>' in INDEX
     assert 'label.textContent=lcopy(\'Upgrade\',\'Upgrade\',\'Upgrade\')' in APP
-    assert "BlinQ runtime patch 7.3.6-r50" in CSS
+    assert "BlinQ runtime patch 7.3.6-r51" in CSS
     assert "border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important" in CSS
 
 
@@ -32,10 +32,11 @@ def test_upgrade_modal_removes_generic_duplicate_badges_and_copy():
 
 
 def test_results_match_winner_highlights_selected_player_not_row_order():
-    assert "const p1Selected=!projection" in APP
-    assert "const p2Selected=!projection" in APP
-    assert "results-match-player${p1Class}" in APP
-    assert "results-opponent${p2Class}" in APP
+    assert "function resultPickIdentity(publication,row)" in APP
+    assert "const p1Selected=selectable&&pickIdentity.side==='p1';" in APP
+    assert "const p2Selected=selectable&&pickIdentity.side==='p2';" in APP
+    assert "results-match-player${p1Class}${integrityClass}" in APP
+    assert "results-opponent${p2Class}${integrityClass}" in APP
     assert "results-pick-mark" in APP
     assert ".results-match-player.is-pick strong" in CSS
     assert ".results-opponent.is-pick b" in CSS

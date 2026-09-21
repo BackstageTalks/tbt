@@ -1159,6 +1159,13 @@ def annotate_market_publication_candidates(
             event_id = str(row.get("event_id") or "").strip()
             selection_id = str(betting.get("selection_id") or "").strip()
             betting_day = str(betting.get("betting_day") or "").strip()
+            p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+            p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+            canonical_selection = (
+                p1.get("name") if selection_id and selection_id == str(p1.get("id") or "")
+                else p2.get("name") if selection_id and selection_id == str(p2.get("id") or "")
+                else betting.get("selection")
+            )
             if event_id and selection_id:
                 selection_key = f"match_winner:{betting_day}:{event_id}:{selection_id}"
                 publications.append({
@@ -1168,7 +1175,7 @@ def annotate_market_publication_candidates(
                     "section": section_name,
                     "primary_section": section_name,
                     "market": "match_winner",
-                    "selection": betting.get("selection"),
+                    "selection": canonical_selection,
                     "selection_id": selection_id,
                     "odds": betting.get("odds"),
                     "fair_implied_probability": betting.get("fair_implied_probability"),
@@ -1198,12 +1205,15 @@ def annotate_market_publication_candidates(
                 "market": market,
                 "selection": card.get("selection") or card.get("pick"),
                 "selection_id": selection_id,
-                "odds": None,
+                "odds": card.get("odds"),
                 "model_probability": None,
                 "edge": None,
                 "expected_value": None,
+                "provider_id": card.get("provider_id"),
+                "captured_at": card.get("captured_at"),
+                "odds_market_name": card.get("odds_market_name"),
                 "betting_day": None,
-                "price_status": "projection_only",
+                "price_status": card.get("price_status") or "projection_only",
                 "projection": card.get("projection"),
                 "opponent_projection": card.get("opponent_projection"),
                 "projection_gap": card.get("projection_gap"),
@@ -1233,14 +1243,18 @@ def annotate_market_publication_candidates(
                 "market": market,
                 "selection": card.get("selection") or card.get("pick"),
                 "selection_id": selection_id,
-                "odds": None,
+                "odds": card.get("odds"),
                 "model_probability": None,
                 "edge": None,
                 "expected_value": None,
+                "provider_id": card.get("provider_id"),
+                "captured_at": card.get("captured_at"),
+                "odds_market_name": card.get("odds_market_name"),
                 "betting_day": None,
-                "price_status": "projection_only",
+                "price_status": card.get("price_status") or "projection_only",
                 "projection": card.get("projection"),
                 "reference_projection": card.get("reference_projection") or card.get("baseline_projection"),
+                "market_line": card.get("market_line"),
                 "projection_gap": card.get("projection_gap"),
                 "projection_scope": scope,
                 "projection_metric": card.get("projection_metric") or market,

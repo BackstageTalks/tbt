@@ -6680,3 +6680,110 @@ body#blinqPremium .upgrade-account-copy>b{margin-top:3px!important;color:#4fe9a8
 body#blinqPremium .upgrade-dialog-copy{max-width:620px!important}
 
 /* BlinQ runtime patch 7.3.6-r50: cleaner header/upgrade modal, selected-pick highlighting and retirement-safe Results. */
+
+/* ========================================================================
+   BlinQ 7.3.6-r51 — result pick clarity + INFO highlight + typography pass
+   ======================================================================== */
+/* Result identity: TIP is neutral selection metadata, never a success icon. */
+body#blinqPremium .results-match-player.is-pick,
+body#blinqPremium .results-opponent.is-pick{
+  opacity:1!important;
+}
+body#blinqPremium .results-match-player.is-opponent,
+body#blinqPremium .results-opponent.is-opponent{
+  opacity:.42!important;
+}
+body#blinqPremium .results-match-player.is-pick strong,
+body#blinqPremium .results-opponent.is-pick b{
+  color:#f5fcf9!important;font-weight:920!important;
+}
+body#blinqPremium .results-match-player.is-opponent strong,
+body#blinqPremium .results-opponent.is-opponent b{
+  color:#60776f!important;font-weight:600!important;
+}
+body#blinqPremium .results-pick-mark{
+  width:auto!important;height:16px!important;min-width:0!important;padding:0 5px!important;margin-left:4px!important;
+  border:1px solid rgba(69,237,165,.26)!important;border-radius:999px!important;
+  background:rgba(69,237,165,.065)!important;color:#68eeb2!important;
+  font-size:6.5px!important;font-weight:950!important;letter-spacing:.08em!important;line-height:14px!important;
+}
+body#blinqPremium .results-match-player.has-pick-conflict,
+body#blinqPremium .results-opponent.has-pick-conflict{
+  outline:1px dashed rgba(255,183,77,.18)!important;outline-offset:2px!important;
+}
+
+/* Header INFO: one coherent state instead of a glowing icon inside a different box. */
+@media(min-width:901px){
+  body#blinqPremium .insight-info-button{
+    border:1px solid rgba(91,178,146,.13)!important;
+    background:rgba(9,35,29,.34)!important;
+    color:#a9bdb6!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium .insight-info-button .insight-bell-icon{color:#7fc5aa!important}
+  body#blinqPremium .insight-info-button.has-unread,
+  body#blinqPremium .insight-info-button[aria-expanded="true"]{
+    border-color:rgba(69,237,165,.36)!important;
+    background:linear-gradient(180deg,rgba(34,126,91,.16),rgba(16,71,52,.11))!important;
+    color:#70efb4!important;
+    box-shadow:0 0 16px rgba(69,237,165,.04)!important;
+  }
+  body#blinqPremium .insight-info-button.has-unread .insight-bell-icon,
+  body#blinqPremium .insight-info-button[aria-expanded="true"] .insight-bell-icon{color:#64efad!important}
+
+  /* +1 visual step on the two data-heavy public screens. */
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table th{font-size:10px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table td{font-size:13px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player-copy>b{font-size:10px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-pick-stack strong{font-size:10px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-number-stack strong{font-size:11px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-confidence strong{font-size:13.5px!important}
+
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table{font-size:9px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table th{font-size:7px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td{font-size:9px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td strong,
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td b{font-size:9.2px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td small{font-size:7px!important}
+}
+
+/* BlinQ runtime patch 7.3.6-r51: authoritative result pick identity, retirement-safe settlement and projection-odds readiness. */
+
+/* r51 final clarity: one unmistakable predicted player, quiet INFO state, larger data type. */
+body#blinqPremium .results-match-player.is-opponent,
+body#blinqPremium .results-opponent.is-opponent{opacity:.34!important}
+body#blinqPremium .results-match-player.is-pick .hub-avatar,
+body#blinqPremium .results-opponent.is-pick .hub-avatar{border-color:rgba(79,239,174,.74)!important;box-shadow:0 0 0 2px rgba(79,239,174,.09)!important}
+body#blinqPremium .results-match-player.has-pick-conflict,
+body#blinqPremium .results-opponent.has-pick-conflict{outline:0!important}
+body#blinqPremium .results-pick-mark{background:rgba(63,220,157,.10)!important;border-color:rgba(63,220,157,.30)!important;color:#61eeb0!important}
+body#blinqPremium .results-units-depth{display:grid!important;gap:2px!important;align-items:start!important}
+body#blinqPremium .results-units-depth small{color:#789087!important;font-size:7.5px!important}
+
+@media(min-width:901px){
+  /* INFO follows the LIVE language: no standalone glowing card. */
+  body#blinqPremium .insight-info-button,
+  body#blinqPremium .insight-info-button.has-unread,
+  body#blinqPremium .insight-info-button[aria-expanded="true"]{
+    border-color:transparent!important;background:transparent!important;box-shadow:none!important;color:#a9bdb6!important;
+  }
+  body#blinqPremium .insight-info-button:hover{background:rgba(69,237,165,.045)!important;color:#d6eee4!important}
+  body#blinqPremium .insight-info-button.has-unread{color:#67efb1!important}
+  body#blinqPremium .insight-info-button.has-unread::before{
+    content:"";display:block;width:5px;height:5px;border-radius:50%;background:#4ce7a5;box-shadow:0 0 8px rgba(76,231,165,.45);margin-right:1px;
+  }
+  body#blinqPremium .insight-info-button[aria-expanded="true"]{color:#79f0b8!important;box-shadow:inset 0 -2px 0 rgba(69,237,165,.48)!important;border-radius:0!important}
+  body#blinqPremium .insight-info-button .insight-bell-icon{color:currentColor!important}
+
+  /* One more readable step without changing row density. */
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table td{font-size:13.5px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player-copy>b,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-pick-stack strong{font-size:10.5px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-number-stack strong{font-size:11.5px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table{font-size:9.8px!important;min-width:1220px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table th{font-size:7.6px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td{font-size:9.8px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td strong,
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td b{font-size:10px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td small{font-size:7.5px!important}
+}
