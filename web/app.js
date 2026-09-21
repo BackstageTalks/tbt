@@ -320,8 +320,8 @@
     // optional endpoint must not serialize several timeout windows and hold an
     // authenticated user behind presentation configuration.
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
-      getJSON('/ui-config.json?v=7360&p=46',{timeoutMs:3000}),
-      getJSON('/config/telegram-groups.json?v=7360&p=46',{timeoutMs:3000}),
+      getJSON('/ui-config.json?v=7360&p=47',{timeoutMs:3000}),
+      getJSON('/config/telegram-groups.json?v=7360&p=47',{timeoutMs:3000}),
       getJSON('/api/v1/ui-config',{timeoutMs:3500}),
       getJSON('/membership-links.json',{timeoutMs:3000})
     ]);
@@ -388,7 +388,7 @@
       if(rookiePrime)rookiePrime.selection_mode='stable_random';
     }
     applyAccessContractV1(state.ui);
-    state.ui.ui_patch='736-r46';
+    state.ui.ui_patch='736-r47';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -1206,6 +1206,17 @@
     return list.map(v=>publicPlanLabel(v,state.ui?.plans?.[v]?.label||v).toUpperCase()).join(' · ')||'—';
   }
   function isLiveInsight(item){return ['alert','live_watch','set2'].includes(String(item?.type||'').toLowerCase());}
+  function liveRadarSet2Stats(radar={}){
+    const rows=Array.isArray(radar?.candidates)?radar.candidates:(Array.isArray(radar?.candidate_items)?radar.candidate_items:[]);
+    const priced=Number.isFinite(Number(radar?.set2_priced))?Number(radar.set2_priced):rows.filter(row=>Number(row?.second_set_odds)>1).length;
+    const candidates=Number.isFinite(Number(radar?.set2_candidates))?Number(radar.set2_candidates):rows.length;
+    let eligible=Number(radar?.set2_eligible);
+    if(!Number.isFinite(eligible)){
+      const th=radar?.set2_push_thresholds||{},minSamples=Math.max(1,Number(th.min_samples)||10),minEdge=Math.max(0,Number(th.min_edge)||0),minEv=Math.max(0,Number(th.min_ev)||0),qualities=new Set(Array.isArray(th.accepted_quality)?th.accepted_quality.map(x=>String(x).toLowerCase()):['medium','high']);
+      eligible=rows.filter(row=>qualities.has(String(row?.second_set_quality||'').toLowerCase())&&Number(row?.second_set_samples)>=minSamples&&Number(row?.second_set_odds)>1&&Number(row?.second_set_edge)>minEdge&&Number(row?.second_set_ev)>minEv).length;
+    }
+    return {candidates,priced,eligible:Math.max(0,eligible)};
+  }
   function renderInsightBell(){
     const bell=$('insightBell'),badge=$('insightUnread'),shortcut=$('insightShortcut'),shortcutLabel=$('insightShortcutLabel'),shortcutCount=$('insightShortcutCount');if(!bell||!badge)return;
     const plan=accountPlan(),notificationCfg=notificationAudienceConfig(),liveMin=notificationCfg.live_min_level;
@@ -1261,6 +1272,7 @@
     const candidateNames=Array.isArray(radar.candidate_items)?radar.candidate_items.map(x=>x?.favorite).filter(Boolean).slice(0,2):[];
     const radarMode=Number(radar.signals)>0?'is-confirmed':Number(radar.candidates)>0?'is-watching':'';
     const radarStrip=channel==='live'&&liveEligible?`<div class="insight-live-strip ${radar.error?'is-error':radar.ok?'is-ok':''} ${radarMode}"><span class="insight-live-dot"></span><div><strong>Comeback LIVE Radar</strong><small>${escapeHtml(state.userLiveRadarLoading?lcopy('Checking live matches…','Kontrolujem live zápasy…','Kontroluji live zápasy…'):radar.error?lcopy('LIVE status is temporarily unavailable.','LIVE stav je dočasne nedostupný.','LIVE stav je dočasně nedostupný.'):radar.scanned_at?`${Number(radar.live_events)||0} live · ${Number(radar.candidates)||0} WATCH · ${Number(radar.signals)||0} potvrdené${candidateNames.length?' · '+candidateNames.join(', '):''}`:lcopy('Automatic monitoring is active.','Automatické sledovanie je aktívne.','Automatické sledování je aktivní.'))}</small></div></div>`:'';
+    const set2Stats=liveRadarSet2Stats(radar);
     const radarCandidateCards=channel==='live'&&liveEligible&&Array.isArray(radar.candidate_items)?radar.candidate_items.slice(0,3).map(item=>{
       const stage=String(item?.stage||'watch'),p=Number(item?.second_set_probability),odds=Number(item?.second_set_odds),edge=Number(item?.second_set_edge),ev=Number(item?.second_set_ev),samples=Number(item?.second_set_samples);
       const quality=String(item?.second_set_quality||'').toUpperCase();
@@ -1273,7 +1285,8 @@
       return `<article class="live-radar-candidate"><header><div><small>${escapeHtml(status)}</small><strong>${escapeHtml(String(item?.favorite||'—'))} <span>vs</span> ${escapeHtml(String(item?.opponent||'—'))}</strong></div><b>${escapeHtml(String(item?.second_set||'—'))}</b></header><div class="live-radar-status-grid"><span><small>${escapeHtml(lcopy('Comeback status','Comeback stav','Comeback stav'))}</small><strong>${escapeHtml(String(item?.first_set||'—'))} → ${escapeHtml(String(item?.second_set||'—'))}</strong></span><span><small>${escapeHtml(lcopy('Signal','Signál','Signál'))}</small><strong>${escapeHtml(stage==='second_set_won'?lcopy('Won set 2','Vyhral 2. set','Vyhrál 2. set'):stage==='break_lead'?lcopy('Break lead in set 2','Break náskok v 2. sete','Break náskok ve 2. setu'):lcopy('Watching after lost set 1','Sledujeme po prehratom 1. sete','Sledujeme po prohraném 1. setu'))}</strong></span></div></article>`;
     }).join(''):'';
     const radarTabs=channel==='live'&&liveEligible?`<div class="live-radar-tabs"><button type="button" data-live-radar-tab="comeback" class="${state.liveRadarTab!=='set2'?'is-active':''}">Comeback</button><button type="button" data-live-radar-tab="set2" class="${state.liveRadarTab==='set2'?'is-active':''}">2. set</button></div>`:'';
-    const radarPanel=radarTabs+(state.liveRadarTab==='set2'?radarCandidateCards:radarStrip+radarCandidateCards);
+    const set2Strip=channel==='live'&&liveEligible&&state.liveRadarTab==='set2'?`<div class="insight-live-strip set2-summary ${set2Stats.eligible>0?'is-confirmed':set2Stats.priced>0?'is-watching':''}"><span class="insight-live-dot"></span><div><strong>${escapeHtml(lcopy('Set 2 model','Model 2. setu','Model 2. setu'))}</strong><small>${escapeHtml(`${set2Stats.candidates} ${lcopy('candidates','kandidátov','kandidátů')} · ${set2Stats.priced} ${lcopy('with live price','s LIVE kurzom','s LIVE kurzem')} · ${set2Stats.eligible} ${lcopy('value signals','value signálov','value signálů')}`)}</small></div></div>`:'';
+    const radarPanel=radarTabs+(state.liveRadarTab==='set2'?set2Strip+radarCandidateCards:radarStrip+radarCandidateCards);
     if(state.insightsLoading){list.innerHTML=radarPanel+'<div class="insight-feed-empty insight-feed-loading"><span></span><strong>Načítavam…</strong></div>';return;}
     if(state.insightsStorageUnavailable){
       const liveCopy=uiCopy('private_feed.history_unavailable',lcopy('Alert history is temporarily unavailable. LIVE radar continues to work.','História upozornení je dočasne nedostupná. LIVE radar ďalej funguje.','Historie upozornění je dočasně nedostupná. LIVE radar dále funguje.'));
@@ -2259,7 +2272,7 @@
     // same-origin script instead of an inline <script>. The popup runtime also
     // reinstalls image fallback handling because DOM event listeners are not
     // copied with innerHTML.
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=46"><script defer src="/match-popout.js?v=7360&p=46"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=47"><script defer src="/match-popout.js?v=7360&p=47"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
@@ -2405,6 +2418,28 @@
     }
     return selection;
   }
+  function projectionResultUnitLabel(publication){
+    const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
+    return ({aces:'Aces',double_faults:lcopy('Double Faults','Dvojchyby','Dvojchyby'),sets:lcopy('Sets','Sety','Sety'),games:lcopy('Games','Games','Gemy')})[metric]||'';
+  }
+  function projectionResultNumber(value,publication,digits=1){
+    const numberValue=Number(value);if(!Number.isFinite(numberValue))return '—';
+    const unit=projectionResultUnitLabel(publication);const rendered=numberValue.toFixed(Number.isInteger(numberValue)?0:digits);
+    return unit?`${rendered} ${unit}`:rendered;
+  }
+  function projectionResultProjectionText(publication){
+    return projectionResultNumber(publication?.projection,publication,1);
+  }
+  function projectionResultActualText(publication){
+    const result=publication?.result||{},actual=Number(result?.actual_count),opponent=Number(result?.opponent_actual_count);
+    if(!Number.isFinite(actual))return '—';
+    const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
+    const primary=projectionResultNumber(actual,publication,1);
+    if(['aces','double_faults'].includes(metric)&&Number.isFinite(opponent)){
+      return `${primary} · ${lcopy('opponent','súper','soupeř')} ${projectionResultNumber(opponent,publication,1)}`;
+    }
+    return primary;
+  }
   function resultCategoryLabel(value){const en=({all:'All published',prime:'Short Odds',top_daily:'TOP Prediction',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP Prediction':'TOP predikcie','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP Prediction':'TOP predikce','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
   function resultPublication(row,category='all'){
     const pubs=publicResultPublications(row);
@@ -2529,7 +2564,7 @@
     const pages=Math.max(1,Math.ceil(entries.length/pageSize));
     state.resultsPage=Math.max(0,Math.min(Number(state.resultsPage)||0,pages-1));
     const startIndex=state.resultsPage*pageSize,endIndex=Math.min(entries.length,startIndex+pageSize);
-    const projectionOnly=category==='ace'||category==='double_faults';
+    const projectionOnly=['ace','double_faults','sg','sets','games'].includes(category);
     const body=entries.slice(startIndex,endIndex).map(({row:r,publication})=>{
       const p1=r.player1||{},p2=r.player2||{},outcome=publicationOutcome(publication),projection=isProjectionPublication(publication);
       const pickId=publication?.selection_id,pickName=publication?.selection||(pickId===p1.id?p1.name:pickId===p2.id?p2.name:'—');
@@ -2548,9 +2583,8 @@
       const match=`<div class="results-match-player">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong></div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b></span></small>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
-        const projected=Number(publication?.projection),actual=Number(publication?.result?.actual_count),oppActual=Number(publication?.result?.opponent_actual_count),depth=Number(publication?.data_depth??publication?.result?.data_depth),actualText=Number.isFinite(actual)?`${actual.toFixed(actual%1?1:0)}${Number.isFinite(oppActual)?` · súper ${oppActual.toFixed(oppActual%1?1:0)}`:''}`:'—';
-        const displayPick=projectionResultSelectionText(publication,pickName);
-        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${Number.isFinite(projected)?projected.toFixed(2):'—'}</td><td>${escapeHtml(actualText)}</td><td>${resultHtml}</td><td>${Number.isFinite(depth)?pct(depth):'—'}</td></tr>`;
+        const depth=Number(publication?.data_depth??publication?.result?.data_depth),displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
+        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${escapeHtml(projectionText)}</td><td>${escapeHtml(actualText)}</td><td>${resultHtml}</td><td>${Number.isFinite(depth)?pct(depth):'—'}</td></tr>`;
       }
       return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td>${escapeHtml(pickName)}</td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>${resultHtml}</td><td class="${outcome.kind==='void'?'void':Number.isFinite(units)&&units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
@@ -2828,8 +2862,9 @@
     const selectedLevels=new Set(levels.length?levels:(itemIsLive?liveLevels:notificationCfg.info_default_levels));
     const levelChecks=allLevels.map(level=>{const disabled=itemIsLive&&!liveLevels.includes(level);return `<label class="admin-insight-level${disabled?' is-disabled':''}"><input type="checkbox" name="insight_level" value="${level}" ${selectedLevels.has(level)&&!disabled?'checked':''} ${disabled?'disabled':''}><span>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,''))}</span></label>`;}).join('');
     const rows=list.map(row=>`<article class="admin-insight-row ${row.active===false?'is-inactive':''} priority-${escapeHtml(row.priority||'normal')}"><div><span>${escapeHtml(insightTypeLabel(row.type))}${row.pinned?' · PIN':''}</span><strong>${escapeHtml(row.title)}</strong><p>${escapeHtml(row.body)}</p><small>${escapeHtml(insightAudienceText(row.levels))} · ${escapeHtml(row.created_at?fmtDate(row.created_at)+' '+fmtTime(row.created_at):'')} · ${Number(row.read_count)||0} prečítaní</small></div><div class="admin-insight-row-actions"><button type="button" class="btn btn-ghost" data-admin-action="insight-edit" data-insight-id="${escapeHtml(row.id)}">Upraviť</button><button type="button" class="btn btn-ghost danger" data-admin-action="insight-delete" data-insight-id="${escapeHtml(row.id)}">Zmazať</button></div></article>`).join('');
-    const radar=state.adminLiveRadarStatus||{};const radarTone=radar.error?' is-error':radar.ok?' is-ok':'';
-    const radarText=state.adminLiveRadarLoading?'Kontrolujem live zápasy…':radar.error?String(radar.error):radar.scanned_at?`Posledný scan ${fmtTime(radar.scanned_at)} · PRIME ${Number(radar.eligible_prime_pool)||0}/${Number(radar.prime_pool)||0} · live ${Number(radar.live_events)||0} · kandidáti ${Array.isArray(radar.candidates)?radar.candidates.length:Number(radar.candidates)||0} · signály ${Array.isArray(radar.signals)?radar.signals.length:Number(radar.signals)||0}${radar.provider_skipped_reason?' · provider preskočený: bez vhodného PRIME':''} · nové ${Number(radar.new_alerts??radar.created)||0}`:'Automatický radar beží na serveri. Tu ho vieš kedykoľvek otestovať ručne.';
+    const radar=state.adminLiveRadarStatus||{},radarTone=radar.error?' is-error':radar.ok?' is-ok':'',adminSet2=liveRadarSet2Stats(radar);
+    const primeEligible=Number(radar.prime_eligible??radar.eligible_prime_pool)||0,primeTotal=Number(radar.prime_total??radar.prime_pool)||0;
+    const radarText=state.adminLiveRadarLoading?'Kontrolujem live zápasy…':radar.error?String(radar.error):radar.scanned_at?`Posledný scan ${fmtTime(radar.scanned_at)} · PRIME ${primeEligible}/${primeTotal} · live ${Number(radar.live_events)||0} · kandidáti ${Array.isArray(radar.candidates)?radar.candidates.length:Number(radar.candidates)||0} · signály ${Array.isArray(radar.signals)?radar.signals.length:Number(radar.signals)||0} · 2. set LIVE kurz ${adminSet2.priced} · value ${adminSet2.eligible}${radar.provider_skipped_reason?' · provider preskočený: bez vhodného PRIME':''} · nové ${Number(radar.new_alerts??radar.created)||0}`:'Automatický radar beží na serveri. Tu ho vieš kedykoľvek otestovať ručne.';
     const liveOptions=membershipHierarchy.map(level=>`<option value="${level}"${level===liveMin?' selected':''}>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,'').toUpperCase())}+</option>`).join('');
     const infoOptions=membershipHierarchy.map(level=>`<option value="${level}"${level===infoMin?' selected':''}>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,'').toUpperCase())}+</option>`).join('');
     const audiencePresets=[['all','VŠETCI'],['pro+','PRO+'],['elite+','ELITE+'],['legend+','LEGEND+'],['goat','GOAT']].map(([value,label])=>`<button type="button" class="btn btn-ghost" data-admin-action="insight-audience-preset" data-audience-preset="${value}">${label}</button>`).join('');
@@ -3254,9 +3289,10 @@
   }
 
   function resultsSummary(){
-    const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category);
-    if(category==='ace'||category==='double_faults'){
-      return metricCards([[lcopy('Result','Výsledok','Výsledek'),`${m.wins}-${m.losses}`,lcopy('HIT - MISS','HIT - MISS','HIT - MISS')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('settled Aces projection sample','vyhodnotená vzorka Aces projekcií','vyhodnocený vzorek Aces projekcí')],[lcopy('Projection type','Typ projekcie','Typ projekce'),category==='ace'?lcopy('ACES','ESÁ','ESA'):lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),lcopy('No invented odds or ROI','Bez vymysleného kurzu a ROI','Bez vymyšleného kurzu a ROI')],[publicText('Sample'),String(m.sample),lcopy('published projections','publikované projekcie','publikované projekce')]]);
+    const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category),projectionCategory=['ace','double_faults','sg','sets','games'].includes(category);
+    if(projectionCategory){
+      const typeLabel=category==='ace'?lcopy('ACES','ESÁ','ESA'):category==='double_faults'?lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'):category==='sets'?lcopy('SETS','SETY','SETY'):category==='games'?lcopy('GAMES','GAMY','GEMY'):lcopy('SETS & GAMES','SETY & GAMY','SETY & GEMY');
+      return metricCards([[lcopy('Result','Výsledok','Výsledek'),`${m.wins}-${m.losses}`,lcopy('HIT - MISS','HIT - MISS','HIT - MISS')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('settled projection sample','vyhodnotená vzorka projekcií','vyhodnocený vzorek projekcí')],[lcopy('Projection type','Typ projekcie','Typ projekce'),typeLabel,lcopy('Projection only · no invented odds or ROI','Iba projekcia · bez vymysleného kurzu a ROI','Pouze projekce · bez vymyšleného kurzu a ROI')],[publicText('Sample'),String(m.sample),lcopy('published projections','publikované projekcie','publikované projekce')]]);
     }
     return metricCards([[publicText('Record'),`${m.wins}-${m.losses}`,lcopy('wins - losses','výhry - prehry','výhry - prohry')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],[publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} odds-backed picks`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no issued odds')],['ROI',m.roi==null?'—':pct(m.roi),publicText('flat 1u on issued odds')],[publicText('Units'),m.oddsSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',publicText('profit · flat 1u stake')],[publicText('Sample'),String(m.sample),publicText('settled published rows')]]);
   }

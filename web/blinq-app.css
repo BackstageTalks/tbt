@@ -6594,3 +6594,5 @@ body#blinqPremium .account-plan-free{border-color:rgba(49,226,156,.34)!important
 }
 
 /* BlinQ runtime patch 7.3.6-r46: FREE recovery, account copy, INFO audience, shared background, anti-share watermarks, results polish. */
+
+/* BlinQ runtime patch 7.3.6-r47: results readability + Set-2 diagnostics hardening. */

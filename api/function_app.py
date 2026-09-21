@@ -89,7 +89,7 @@ from tbt.services.entitlements import (
 from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnostics, inactivity_policy
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
-    attach_second_set_odds,
+    attach_second_set_odds, set2_push_eligible, set2_push_thresholds,
 )
 from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_slot
 
@@ -1049,6 +1049,11 @@ def _push_allowed(account: dict) -> bool:
 def _public_live_radar_payload(result: dict) -> dict:
     candidates=result.get("candidates") or []
     signals=result.get("signals") or []
+    candidate_rows=[x for x in candidates if isinstance(x,dict)] if isinstance(candidates,list) else list(result.get("candidate_items") or [])
+    set2_candidates=int(result.get("set2_candidates") or len(candidate_rows))
+    set2_priced=int(result.get("set2_priced") or sum(1 for row in candidate_rows if isinstance(row.get("second_set_odds"),(int,float)) and float(row.get("second_set_odds"))>1.0))
+    raw_set2_eligible=result.get("set2_eligible")
+    set2_eligible=int(raw_set2_eligible) if isinstance(raw_set2_eligible,(int,float)) else sum(1 for row in candidate_rows if set2_push_eligible(row))
     public_candidate=lambda x:{k:x.get(k) for k in ("event_id","favorite","opponent","first_set","second_set","stage","reason","tournament","second_set_probability","second_set_model","second_set_quality","second_set_samples","second_set_odds","second_set_fair_probability","second_set_edge","second_set_ev","second_set_market") if k in x}
     return {
         "ok": True,
@@ -1056,8 +1061,12 @@ def _public_live_radar_payload(result: dict) -> dict:
         "live_events": int(result.get("live_events") or 0),
         "candidates": len(candidates) if isinstance(candidates,list) else int(result.get("candidates") or 0),
         "signals": len(signals) if isinstance(signals,list) else int(result.get("signals") or 0),
-        "candidate_items": [public_candidate(x) for x in candidates[:3] if isinstance(x,dict)] if isinstance(candidates,list) else list(result.get("candidate_items") or [])[:3],
+        "candidate_items": [public_candidate(x) for x in candidate_rows[:3]],
         "signal_items": [public_candidate(x) for x in signals[:3] if isinstance(x,dict)] if isinstance(signals,list) else list(result.get("signal_items") or [])[:3],
+        "set2_candidates": set2_candidates,
+        "set2_priced": set2_priced,
+        "set2_eligible": set2_eligible,
+        "set2_push_thresholds": {k: (sorted(v) if isinstance(v,set) else v) for k,v in set2_push_thresholds().items()},
         "new_alerts": int(result.get("created") or result.get("new_alerts") or 0),
         "prime_total": int(result.get("prime_total") or 0),
         "prime_eligible": int(result.get("prime_eligible") or 0),
