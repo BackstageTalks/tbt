@@ -1071,7 +1071,9 @@ def info_min_level(config: dict | None = None) -> str:
     return level if level in _INSIGHT_LEVELS else "rookie"
 
 def info_alert_levels(config: dict | None = None) -> list[str]:
-    return membership_levels_from(info_min_level(config))
+    # INFO is audience-driven per message. The legacy info_min_level value is
+    # retained only as the Admin composer default; it is not an authorization gate.
+    return list(_INSIGHT_LEVELS)
 
 _INSIGHT_PRIORITIES = {"normal", "important", "critical"}
 

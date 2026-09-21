@@ -3,10 +3,10 @@
   "tiers": {
     "rookie": {
       "label": "BlinQ ROOKIE",
-      "card_title": "BlinQ ROOKIE",
+      "card_title": "FREE",
       "short_description": "Bezplatná ochutnávka BlinQ s tromi dennými predikciami.",
       "description": "Bezplatná úroveň BlinQ bez časového obmedzenia. Denne sprístupní 1 TOP, 1 Short Odds a 1 Value predikciu.",
-      "cta_label": "Vybrať ROOKIE",
+      "cta_label": "Prejsť na FREE",
       "url": "",
       "invite_only": false,
       "features": [

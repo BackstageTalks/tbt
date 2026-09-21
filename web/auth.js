@@ -453,6 +453,20 @@
     return updateFirebase(fields);
   }
 
+  async function forceRefreshFirebaseSession() {
+    const s = session();
+    if (!s?.refresh_token) return s;
+    const refreshEpoch = epoch();
+    return restoreFirebase(s, refreshEpoch);
+  }
+
+  async function reactivateFree() {
+    await ensureReady();
+    const data = await apiWithSession('/api/v1/auth/free', {method: 'POST'});
+    await forceRefreshFirebaseSession();
+    return data;
+  }
+
   async function signOut() {
     clear();
   }
@@ -478,9 +492,6 @@
       event_id: String(eventId || ''),
     });
     return apiWithSession(`/api/v1/match-intelligence?${params.toString()}`);
-  }
-  async function reactivateFree() {
-    return apiWithSession('/api/v1/account/reactivate-free', {method: 'POST'});
   }
   async function insights() {
     return apiWithSession('/api/v1/insights');
@@ -567,9 +578,9 @@
   }
 
   window.BlinqAuth = {
-    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
+    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, matchIntelligence,
     insights, liveRadar, adminLiveRadar, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
-    reactivateFree, adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
+    adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
     sessionStorageKeys, sessionEpochKey,

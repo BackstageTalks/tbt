@@ -6562,6 +6562,35 @@ body#blinqPremium .hub-avatar.player-fallback-wta img{
   body#blinqPremium .detail-pick-card .pick-score .probability{font-size:24px!important}
 }
 
-/* BlinQ r46 — membership copy separation: Admin note is a card-only feature heading. */
-body#blinqPremium .upgrade-feature-heading{margin:12px 0 4px;color:#a8bbb4;font-size:9px;font-weight:750;letter-spacing:.01em}
-body#blinqPremium .membership-card-copy p,body#blinqPremium .account-modal-plan-copy>span{white-space:normal}
+
+/* ========================================================================
+   BlinQ 7.3.6-r46 — shared visual background + quiet screenshot watermarking
+   ======================================================================== */
+body#blinqPremium:not(.blinq-admin){
+  background:
+    linear-gradient(90deg,rgba(1,11,12,.86),rgba(2,22,20,.70),rgba(1,10,12,.88)),
+    url("/assets/blinq_page_background.webp") center top/cover fixed no-repeat!important;
+}
+body#blinqPremium .boot-splash.boot-splash-tennis{
+  background:
+    linear-gradient(90deg,rgba(1,11,12,.78),rgba(2,22,20,.60),rgba(1,10,12,.80)),
+    url("/assets/blinq_page_background.webp") center/cover fixed no-repeat!important;
+}
+body#blinqPremium .anti-share-watermarks{position:fixed!important;inset:0!important;z-index:58!important;pointer-events:none!important;overflow:hidden!important;user-select:none!important}
+body#blinqPremium .anti-share-watermarks .wm{position:absolute!important;display:block!important;width:180px!important;height:72px!important;background:url("/assets/blinq_logo.svg") center/contain no-repeat!important;filter:grayscale(1) brightness(1.8)!important;opacity:.038!important;mix-blend-mode:screen!important}
+body#blinqPremium .anti-share-watermarks .wm-a{left:3.5%!important;top:31%!important;transform:rotate(-12deg)!important}
+body#blinqPremium .anti-share-watermarks .wm-b{right:3.5%!important;top:52%!important;transform:rotate(11deg)!important}
+body#blinqPremium .anti-share-watermarks .wm-c{left:50%!important;bottom:3.5%!important;transform:translateX(-50%) rotate(-5deg)!important;opacity:.03!important}
+body#blinqPremium.blinq-admin .anti-share-watermarks{display:none!important}
+body#blinqPremium .upgrade-feature-heading{margin:0 0 7px!important;color:#90a9a0!important;font-size:9px!important;line-height:1.25!important}
+body#blinqPremium .account-plan-free{border-color:rgba(49,226,156,.34)!important;background:rgba(49,226,156,.08)!important;color:#8cf2c5!important}
+@media(max-width:900px){
+  body#blinqPremium:not(.blinq-admin){background-attachment:scroll!important}
+  body#blinqPremium .boot-splash.boot-splash-tennis{background-attachment:scroll!important}
+  body#blinqPremium .anti-share-watermarks .wm{width:112px!important;height:44px!important;opacity:.03!important}
+  body#blinqPremium .anti-share-watermarks .wm-a{left:-18px!important;top:28%!important}
+  body#blinqPremium .anti-share-watermarks .wm-b{right:-18px!important;top:62%!important}
+  body#blinqPremium .anti-share-watermarks .wm-c{display:none!important}
+}
+
+/* BlinQ runtime patch 7.3.6-r46: FREE recovery, account copy, INFO audience, shared background, anti-share watermarks, results polish. */

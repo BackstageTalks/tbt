@@ -422,13 +422,13 @@ def account(req):
         return response({"error": "auth_unavailable"}, 503)
 
 
-@app.route(route="v1/account/reactivate-free", methods=["POST"])
-def reactivate_free_account(req):
-    """Allow a signed-in EXPIRED user to opt back into the permanent FREE tier.
+@app.route(route="v1/auth/free", methods=["POST"])
+def auth_reactivate_free(req):
+    """Allow an authenticated expired member to return to the permanent FREE tier.
 
-    This is intentionally narrower than Admin access management: it can only
-    transition the caller from an expired non-admin state to active Rookie/FREE.
-    Paid tiers, suspended users and admin roles cannot be changed here.
+    This is deliberately a one-way, self-service recovery path: it can only
+    replace expired non-admin membership with active ROOKIE/FREE. Active paid
+    access, lifetime access and suspended/admin accounts are never downgraded.
     """
     try:
         user = _verified_user(req)
@@ -436,30 +436,18 @@ def reactivate_free_account(req):
             return response({"error": "unauthorized"}, 401)
         if is_suspended(user):
             return response({"error": "account_suspended"}, 403)
-        if is_admin(user):
-            return response({"error": "admin_access_unchanged"}, 409)
-        profile = _profile_for(user, required=False)
-        account_data = public_account(user, cfg=settings, profile=profile)
-        status = str(account_data.get("status") or "expired").strip().lower()
-        if status in {"active", "lifetime", "trial"}:
-            return response(account_data)
-        if status != "expired":
-            return response({"error": "free_reactivation_not_allowed"}, 409)
+        current = public_account(user, cfg=settings, profile=_profile_for(user, required=False))
+        if current.get("is_admin") or str(current.get("role") or "").lower() == "admin":
+            return response({"error": "admin_access_cannot_be_downgraded"}, 409)
+        if str(current.get("status") or "").lower() != "expired":
+            return response({"error": "free_reactivation_requires_expired_account"}, 409)
         updated = update_user_access(
-            settings,
-            str(user.get("id") or ""),
+            settings, str(user.get("id") or ""),
             {"role": "user", "plan": "rookie", "status": "active", "expires_at": None},
             actor_id=str(user.get("id") or ""),
         )
-        updated_profile = _profile_for(updated, required=False)
-        result = public_account(updated, cfg=settings, profile=updated_profile)
-        sync_push_access(
-            user_id=str(user.get("id") or ""),
-            plan="rookie",
-            status="active",
-            expires_at=None,
-        )
-        return response(result)
+        sync_push_access(user_id=str(user.get("id") or ""), plan="rookie", status="active", expires_at=None)
+        return response(public_account(updated, cfg=settings, profile=_profile_for(updated, required=False)))
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AuthUnavailable:

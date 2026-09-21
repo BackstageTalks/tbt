@@ -115,14 +115,14 @@ def test_results_ui_calls_esa_a_projection_not_prediction():
     assert 'MODEL 2. SETU · samostatný podporný signál' in app
 
 
-def test_info_minimum_is_dynamic_and_cannot_be_widened(monkeypatch):
+def test_info_audience_is_per_message_while_live_keeps_global_minimum(monkeypatch):
     from tbt.services import admin_storage
     monkeypatch.setattr(admin_storage, 'load_runtime_ui_config', lambda: {'notifications': {'info_min_level': 'pro', 'live_min_level': 'elite'}})
-    info=admin_storage.normalize_insight({'title':'Info','body':'Body','type':'vip','levels':['pro','elite','legend','goat']})
-    assert info['levels'][0]=='pro'
+    info=admin_storage.normalize_insight({'title':'Info','body':'Body','type':'vip','levels':['rookie']})
+    assert info['levels'] == ['rookie']
     try:
-        admin_storage.normalize_insight({'title':'Info','body':'Body','type':'vip','levels':['rookie']})
+        admin_storage.normalize_insight({'title':'Live','body':'Body','type':'alert','levels':['rookie']})
     except ValueError as exc:
-        assert 'PRO' in str(exc)
+        assert 'ELITE' in str(exc)
     else:
-        raise AssertionError('INFO must respect the published INFO minimum')
+        raise AssertionError('LIVE must respect the published LIVE minimum')
