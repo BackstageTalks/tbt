@@ -29,10 +29,6 @@ from tbt.services.publication import (
 from tbt.services.ace_selection import select_ace_picks
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import enrich_projection_odds
-from tbt.services.bookmaker_availability import (
-    attach_bookmaker_availability,
-    load_bookmaker_snapshot,
-)
 from tbt.services.doubles_selection import (
     build_predictions as build_doubles_predictions,
     select_picks as select_doubles_picks,
@@ -306,7 +302,6 @@ def _publish_predictions(
     *, odds_report=None, ace_picks=None, ace_report=None,
     sg_picks=None, sg_report=None, doubles_picks=None, doubles_report=None,
     doubles_matches=None, doubles_upcoming=None,
-    bookmaker_offers=None, bookmaker_snapshot_generated_at=None, bookmaker_source_report=None,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -340,24 +335,6 @@ def _publish_predictions(
     }
     feed = clean(feed)
     feed = restore_published_market_snapshots(feed, records)
-    # Apply bookmaker availability only after publication snapshot restoration.
-    # That guarantees every badge is checked against the exact selection/line
-    # that will actually be served to the user, never a pre-restore candidate.
-    feed, bookmaker_attach_report = attach_bookmaker_availability(
-        feed, bookmaker_offers or [],
-        snapshot_generated_at=bookmaker_snapshot_generated_at,
-        now=now,
-        max_age_minutes=max(1, int(os.getenv("BLINQ_BOOKMAKER_MAX_AGE_MINUTES", "45") or 45)),
-        time_tolerance_seconds=max(60, int(os.getenv("BLINQ_BOOKMAKER_EVENT_TOLERANCE_SECONDS", "10800") or 10800)),
-    )
-    feed["market_selection"] = {
-        **(feed.get("market_selection") or {}),
-        "bookmaker_availability": {
-            **(bookmaker_source_report or {"enabled": False, "source": "none", "offers": 0, "error": None}),
-            **bookmaker_attach_report,
-        },
-    }
-    feed = clean(feed)
     integrity = _projection_presentation_integrity(feed, ace_picks=ace_picks, sg_picks=sg_picks)
     feed["market_selection"] = {**(feed.get("market_selection") or {}), "presentation_integrity": integrity}
     validate_publication_candidate(feed, records)
@@ -608,7 +585,6 @@ def main():
         # Partial completed history is checkpointed, but no new prediction
         # feed is published from an incomplete refresh.
         raise refresh_error
-    bookmaker_offers, bookmaker_snapshot_generated_at, bookmaker_source_report = load_bookmaker_snapshot(ROOT)
     feed = _publish_predictions(
         prediction_store, prediction_ledger,
         predictions, matches, model, report, upcoming,
@@ -616,9 +592,6 @@ def main():
         sg_picks=sg_picks, sg_report=sg_report,
         doubles_picks=doubles_picks, doubles_report=doubles_report,
         doubles_matches=doubles_completed, doubles_upcoming=doubles_upcoming,
-        bookmaker_offers=bookmaker_offers,
-        bookmaker_snapshot_generated_at=bookmaker_snapshot_generated_at,
-        bookmaker_source_report=bookmaker_source_report,
     )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -636,7 +609,6 @@ def main():
         "doubles": len(feed.get("doubles_picks", [])),
         "doubles_model": doubles_report or {},
         "odds": odds_report or {},
-        "bookmaker_availability": (feed.get("market_selection") or {}).get("bookmaker_availability") or {},
         "settled": len(feed["results"]),
         "model": model.version,
     }

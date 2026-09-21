@@ -15,11 +15,11 @@ WORKFLOW = (ROOT / '.github' / 'workflows' / 'data.yml').read_text(encoding='utf
 def test_r46_release_and_cache_contract():
     release = json.loads((ROOT / 'web' / 'release.json').read_text(encoding='utf-8'))
     ui = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
-    assert release['patch'] == ui['ui_patch'] == '736-r53'
-    assert 'content="736-r53"' in INDEX
+    assert release['patch'] == ui['ui_patch'] == '736-r52'
+    assert 'content="736-r52"' in INDEX
     for asset in ('blinq-app.css', 'auth.js', 'responsive.js', 'app.js'):
-        assert f'/{asset}?v=7360&p=53' in INDEX
-    assert "const AUTH_RUNTIME = '736-r53'" in AUTH
+        assert f'/{asset}?v=7360&p=52' in INDEX
+    assert "const AUTH_RUNTIME = '736-r52'" in AUTH
 
 
 def test_rookie_stays_internal_but_public_membership_is_free():

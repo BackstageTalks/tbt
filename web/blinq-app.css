@@ -6682,7 +6682,7 @@ body#blinqPremium .upgrade-dialog-copy{max-width:620px!important}
 /* BlinQ runtime patch 7.3.6-r50: cleaner header/upgrade modal, selected-pick highlighting and retirement-safe Results. */
 
 /* ========================================================================
-   BlinQ 7.3.6-r53 — result pick clarity + INFO highlight + typography pass
+   BlinQ 7.3.6-r52 — result pick clarity + INFO highlight + typography pass
    ======================================================================== */
 /* Result identity: TIP is neutral selection metadata, never a success icon. */
 body#blinqPremium .results-match-player.is-pick,
@@ -6747,7 +6747,7 @@ body#blinqPremium .results-opponent.has-pick-conflict{
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td small{font-size:7px!important}
 }
 
-/* BlinQ runtime patch 7.3.6-r53: authoritative result pick identity, retirement-safe settlement and projection-odds readiness. */
+/* BlinQ runtime patch 7.3.6-r52: authoritative result pick identity, retirement-safe settlement and projection-odds readiness. */
 
 /* r51 final clarity: one unmistakable predicted player, quiet INFO state, larger data type. */
 body#blinqPremium .results-match-player.is-opponent,
@@ -6786,82 +6786,4 @@ body#blinqPremium .results-units-depth small{color:#789087!important;font-size:7
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td strong,
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td b{font-size:10px!important}
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td small{font-size:7.5px!important}
-}
-
-/* BlinQ 7.3.6-r53 — verified Slovak bookmaker availability.
-   Presentation-only: a badge exists only for an exact externally verified offer. */
-body#blinqPremium .hub-odds-with-books{
-  display:inline-flex!important;
-  flex-direction:column!important;
-  align-items:center!important;
-  justify-content:center!important;
-  gap:3px!important;
-  min-width:42px!important;
-}
-body#blinqPremium .hub-bookmaker-strip{
-  display:flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  flex-wrap:wrap!important;
-  gap:3px!important;
-  max-width:98px!important;
-  min-height:16px!important;
-}
-body#blinqPremium .hub-bookmaker-badge{
-  display:inline-flex!important;
-  align-items:center!important;
-  justify-content:center!important;
-  width:17px!important;
-  height:17px!important;
-  min-width:17px!important;
-  border:1px solid rgba(100,239,178,.24)!important;
-  border-radius:5px!important;
-  background:rgba(21,72,54,.32)!important;
-  color:#9cf4c8!important;
-  box-shadow:inset 0 0 0 1px rgba(255,255,255,.015)!important;
-  cursor:help!important;
-  user-select:none!important;
-}
-body#blinqPremium .hub-bookmaker-badge b{
-  font-size:6.7px!important;
-  line-height:1!important;
-  font-weight:900!important;
-  letter-spacing:-.15px!important;
-  color:inherit!important;
-}
-body#blinqPremium .hub-bookmaker-badge:hover{
-  border-color:rgba(100,239,178,.52)!important;
-  background:rgba(33,112,81,.42)!important;
-  color:#d8ffeb!important;
-}
-body#blinqPremium .hub-bookmaker-badge.bookmaker-tipos b{font-size:5.8px!important}
-
-@media(max-width:700px){
-  body#blinqPremium .hub-odds-with-books{gap:2px!important;min-width:34px!important}
-  body#blinqPremium .hub-bookmaker-strip{gap:2px!important;max-width:72px!important;min-height:14px!important}
-  body#blinqPremium .hub-bookmaker-badge{width:14px!important;height:14px!important;min-width:14px!important;border-radius:4px!important}
-  body#blinqPremium .hub-bookmaker-badge b{font-size:5.6px!important}
-  body#blinqPremium .hub-bookmaker-badge.bookmaker-tipos b{font-size:4.8px!important}
-}
-
-/* BlinQ runtime patch 7.3.6-r53: exact-match SK bookmaker availability badges. */
-body#blinqPremium .market-card-bookmakers{
-  display:flex!important;
-  align-items:center!important;
-  justify-content:flex-end!important;
-  gap:7px!important;
-  min-height:20px!important;
-  margin:-2px 0 6px!important;
-}
-body#blinqPremium .market-card-bookmakers>small{
-  color:#6f8c82!important;
-  font-size:7px!important;
-  font-weight:800!important;
-  letter-spacing:.55px!important;
-  text-transform:uppercase!important;
-}
-body#blinqPremium .market-card-bookmakers .hub-bookmaker-strip{max-width:none!important;justify-content:flex-end!important}
-@media(max-width:700px){
-  body#blinqPremium .market-card-bookmakers{gap:5px!important;margin:0 0 5px!important}
-  body#blinqPremium .market-card-bookmakers>small{font-size:6px!important}
 }

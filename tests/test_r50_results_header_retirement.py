@@ -14,11 +14,11 @@ UI = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
 
 
 def test_r50_release_and_header_upgrade_cleanup():
-    assert RELEASE["patch"] == UI["ui_patch"] == "736-r53"
-    assert 'content="736-r53"' in INDEX
+    assert RELEASE["patch"] == UI["ui_patch"] == "736-r52"
+    assert 'content="736-r52"' in INDEX
     assert 'id="topUpgradeLabel">Upgrade</span></button>' in INDEX
     assert 'label.textContent=lcopy(\'Upgrade\',\'Upgrade\',\'Upgrade\')' in APP
-    assert "BlinQ runtime patch 7.3.6-r53" in CSS
+    assert "BlinQ runtime patch 7.3.6-r52" in CSS
     assert "border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important" in CSS
 
 

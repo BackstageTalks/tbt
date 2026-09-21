@@ -15,7 +15,7 @@ UI = json.loads((ROOT / "web/ui-config.json").read_text())
 
 
 def test_r51_release_and_result_identity_are_id_authoritative():
-    assert RELEASE["patch"] == UI["ui_patch"] == "736-r53"
+    assert RELEASE["patch"] == UI["ui_patch"] == "736-r52"
     assert "function resultPickIdentity(publication,row)" in APP
     assert "const p1Selected=selectable&&pickIdentity.side==='p1';" in APP
     assert "const p2Selected=selectable&&pickIdentity.side==='p2';" in APP
