@@ -1,0 +1,1 @@
+Run with Node.js 22 or newer: `pnpm install --frozen-lockfile`, then `pnpm test` in this directory. These are DOM-based functional checks with local fixtures. No browser, production requests, real credentials or published demo data. CSS media widths are represented by the shared capacity variable; this does not replace device visual QA.
