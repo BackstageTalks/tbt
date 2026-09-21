@@ -55,18 +55,19 @@ def tg_private_state(account: dict, profile: dict | None = None) -> dict:
 
 
 def mirror_admin_metadata_claims(cfg, user_id, payload):
-    """Mirror TG Private membership into Firebase claims as a storage fallback."""
+    """Legacy compatibility shim; operational metadata no longer mutates claims.
+
+    TG-private membership/admin metadata is not an authorization claim. Keeping
+    it in the same Firebase custom-claims object as role/plan/status created a
+    read-modify-write race that could restore stale access. Durable account
+    metadata is authoritative; this helper only refreshes the identity record.
+    """
     uid = str(user_id or "").strip()
     if not uid:
         raise ValueError("Invalid user id")
     _, firebase_auth, _ = _firebase_modules()
     app = firebase_app(cfg)
     try:
-        record = firebase_auth.get_user(uid, app=app)
-        claims = dict(record.custom_claims or {})
-        if "tg_private_member" in payload:
-            claims["blinq_tg_private_member"] = bool(payload.get("tg_private_member"))
-        firebase_auth.set_custom_user_claims(uid, claims, app=app)
         return firebase_user_to_dict(firebase_auth.get_user(uid, app=app))
     except ValueError:
         raise

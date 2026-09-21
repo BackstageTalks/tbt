@@ -264,12 +264,12 @@
   async function loadUiConfig() {
     let runtimeConfigSnapshot=null;
     try {
-      state.uiSource = await getJSON('/ui-config.json?v=7360&p=36');
+      state.uiSource = await getJSON('/ui-config.json?v=7360&p=38');
     } catch {
       state.uiSource = {schema:2,navigation:{learn:[]},plans:{},elements:{},admin:{draft_storage_key:'blinq_admin_ui_config_v1'}};
     }
     try {
-      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=36');
+      const telegramConfig = await getJSON('/config/telegram-groups.json?v=7360&p=38');
       if(telegramConfig&&typeof telegramConfig==='object')state.uiSource.telegram_groups=telegramConfig;
     } catch {}
     state.ui = clone(state.uiSource);
@@ -342,7 +342,7 @@
       if(rookiePrime)rookiePrime.selection_mode='stable_random';
     }
     applyAccessContractV1(state.ui);
-    state.ui.ui_patch='736-r36';
+    state.ui.ui_patch='736-r38';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -1236,25 +1236,37 @@
     list.innerHTML=radarPanel+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon type-${escapeHtml(item.type||'insight')}">${escapeHtml(insightTypeIcon(item.type))}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p><footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
   }
   async function loadInsights(force=false){
+    const generation=feedGeneration;
     const plan=accountPlan();
     if(!['rookie','pro','elite','legend','goat','admin'].includes(plan)){state.insights=[];state.insightsUnread=0;state.insightsStorageUnavailable=false;renderInsightBell();return;}
     if(state.insightsLoading||(!force&&state.insights.length))return;
     const previousUnread=Math.max(0,Number(state.insightsUnread)||0);state.insightsLoading=true;renderInsightDrawer();
-    try{const data=await BlinqAuth.insights();state.insights=Array.isArray(data?.items)?data.items:[];state.insightsUnread=Number(data?.unread)||0;state.insightsStorageUnavailable=Boolean(data?.storage_unavailable);state.liveRadarHeartbeat=data?.live_radar_status&&typeof data.live_radar_status==='object'?data.live_radar_status:state.liveRadarHeartbeat;if(force&&state.insightsUnread>previousUnread){const newest=state.insights.find(item=>!item.read);showStatus(newest?`${insightTypeLabel(newest.type)} · ${newest.title}`:'Nová BlinQ správa');}}
-    catch{state.insights=[];state.insightsUnread=0;state.insightsStorageUnavailable=true;}
-    finally{state.insightsLoading=false;renderInsightBell();renderInsightDrawer();renderSystemFooterStatus();}
+    try{
+      const data=await BlinqAuth.insights();
+      if(generation!==feedGeneration)return;
+      state.insights=Array.isArray(data?.items)?data.items:[];state.insightsUnread=Number(data?.unread)||0;state.insightsStorageUnavailable=Boolean(data?.storage_unavailable);state.liveRadarHeartbeat=data?.live_radar_status&&typeof data.live_radar_status==='object'?data.live_radar_status:state.liveRadarHeartbeat;if(force&&state.insightsUnread>previousUnread){const newest=state.insights.find(item=>!item.read);showStatus(newest?`${insightTypeLabel(newest.type)} · ${newest.title}`:'Nová BlinQ správa');}
+    }catch{
+      if(generation!==feedGeneration)return;
+      state.insights=[];state.insightsUnread=0;state.insightsStorageUnavailable=true;
+    }finally{
+      if(generation===feedGeneration){state.insightsLoading=false;renderInsightBell();renderInsightDrawer();renderSystemFooterStatus();}
+    }
   }
   async function refreshPrivateUpdates(force=false){
-    if(state.privateUpdatesBusy||document.hidden||$('appShell')?.hidden)return;const plan=accountPlan();if(!['rookie','pro','elite','legend','goat','admin'].includes(plan))return;const now=Date.now();if(!force&&now-Number(state.privateUpdatesLastPoll||0)<25000)return;state.privateUpdatesBusy=true;state.privateUpdatesLastPoll=now;try{await loadInsights(true);if(membershipAtLeast(plan,notificationAudienceConfig().live_min_level))await loadUserLiveRadarStatus(false);}finally{state.privateUpdatesBusy=false;}
+    const generation=feedGeneration;
+    if(state.privateUpdatesBusy||document.hidden||$('appShell')?.hidden)return;const plan=accountPlan();if(!['rookie','pro','elite','legend','goat','admin'].includes(plan))return;const now=Date.now();if(!force&&now-Number(state.privateUpdatesLastPoll||0)<25000)return;state.privateUpdatesBusy=true;state.privateUpdatesLastPoll=now;
+    try{await loadInsights(true);if(generation!==feedGeneration)return;if(membershipAtLeast(plan,notificationAudienceConfig().live_min_level))await loadUserLiveRadarStatus(false);}
+    finally{if(generation===feedGeneration)state.privateUpdatesBusy=false;}
   }
   async function loadUserLiveRadarStatus(force=false){
+    const generation=feedGeneration;
     const plan=accountPlan();if(!membershipAtLeast(plan,notificationAudienceConfig().live_min_level)||state.userLiveRadarLoading)return;
     const scanned=Date.parse(state.userLiveRadarStatus?.scanned_at||'');
     if(!force&&Number.isFinite(scanned)&&Date.now()-scanned<55000)return;
     state.userLiveRadarLoading=true;renderInsightDrawer();
-    try{state.userLiveRadarStatus={...(await BlinqAuth.liveRadar()),ok:true};if(state.userLiveRadarStatus?.scanned_at)state.liveRadarHeartbeat={...(state.liveRadarHeartbeat||{}),scanned_at:state.userLiveRadarStatus.scanned_at,fresh:true};}
-    catch(error){state.userLiveRadarStatus={error:error.message||'live_unavailable'};}
-    finally{state.userLiveRadarLoading=false;renderInsightBell();renderInsightDrawer();renderSystemFooterStatus();}
+    try{const data=await BlinqAuth.liveRadar();if(generation!==feedGeneration)return;state.userLiveRadarStatus={...data,ok:true};if(state.userLiveRadarStatus?.scanned_at)state.liveRadarHeartbeat={...(state.liveRadarHeartbeat||{}),scanned_at:state.userLiveRadarStatus.scanned_at,fresh:true};}
+    catch(error){if(generation!==feedGeneration)return;state.userLiveRadarStatus={error:error.message||'live_unavailable'};}
+    finally{if(generation===feedGeneration){state.userLiveRadarLoading=false;renderInsightBell();renderInsightDrawer();renderSystemFooterStatus();}}
   }
   function setInsightDrawer(open,channel=null){
     const drawer=$('insightDrawer'),backdrop=$('insightBackdrop');if(!drawer||!backdrop)return;
@@ -1267,9 +1279,11 @@
     const same=state.insightDrawerOpen&&state.insightChannel===channel;setInsightDrawer(!same,channel);
   }
   async function markInsightRead(id){
+    const generation=feedGeneration;
     const item=state.insights.find(row=>String(row.id)===String(id));if(!item||item.read)return;
     item.read=true;state.insightsUnread=Math.max(0,state.insightsUnread-1);renderInsightBell();renderInsightDrawer();
-    try{await BlinqAuth.markInsightRead(id);}catch{item.read=false;state.insightsUnread+=1;renderInsightBell();renderInsightDrawer();}
+    try{await BlinqAuth.markInsightRead(id);}
+    catch{if(generation!==feedGeneration)return;item.read=false;state.insightsUnread+=1;renderInsightBell();renderInsightDrawer();}
   }
   function publicFormLabel(row,pickId=''){
     const signals=Array.isArray(row?.signals)?row.signals:[];let support=0,counter=0,seen=0;const target=String(pickId||row?.betting?.selection_id||row?.selection_id||'');
@@ -1923,7 +1937,7 @@
     {
       const slotStates=Array.isArray(ent.slot_states)?ent.slot_states:[];let dataIndex=0;
       if(slotStates.length){
-        slotStates.slice(0,preview).forEach((slotState,slotIndex)=>{
+        slotStates.slice(0,limit).forEach((slotState,slotIndex)=>{
           if(slotState==='hidden')return;
           if(slotState==='blurred')out.push(dailyHubLockedRow(tab,slotIndex,firstDailyHubUnlockPlan(tab,slotIndex,false)));
           else if(dataIndex<rows.length)out.push(dailyHubRow(rows[dataIndex++],tab,false,slotIndex));
@@ -2092,7 +2106,7 @@
     const p1=String(row?.player1?.id||''),p2=String(row?.player2?.id||'');
     if(!/^\d{1,12}$/.test(p1)||!/^\d{1,12}$/.test(p2))return;
     row.__liveIntelligenceLoading=true;
-    BlinqAuth.matchIntelligence(p1,p2,row?.surface||'',row?.custom_id||row?.customId||'').then(payload=>{
+    BlinqAuth.matchIntelligence(p1,p2,row?.surface||'',row?.custom_id||row?.customId||'',row?.event_id||row?.id||'').then(payload=>{
       mergeLiveMatchIntelligence(row,payload);
       row.__liveIntelligenceLoading=false;
       const dialog=$('matchDialog');
@@ -2130,7 +2144,7 @@
     const source=$('dialogContent');if(!source)return;
     const w=window.open('','blinq_match_detail','popup=yes,width=980,height=900,resizable=yes,scrollbars=yes');if(!w){showStatus(lcopy('Popup was blocked by the browser.','Prehliadač zablokoval nové okno.','Prohlížeč zablokoval nové okno.'));return;}
     const base=`${location.origin}/`;
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=36"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · Detail zápasu</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=38"></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main><script>document.addEventListener('click',function(e){var b=e.target.closest('[data-match-tab]');if(!b)return;var id=b.getAttribute('data-match-tab');document.querySelectorAll('[data-match-tab]').forEach(function(x){x.classList.toggle('active',x===b)});document.querySelectorAll('[data-match-panel]').forEach(function(p){var on=p.getAttribute('data-match-panel')===id;p.hidden=!on;p.classList.toggle('active',on)});});document.querySelectorAll('[data-match-popout]').forEach(function(x){x.remove()});<\/script></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
@@ -2646,11 +2660,12 @@
   }
 
   async function loadAdminInsights(force=false){
+    const generation=feedGeneration;
     if(state.adminInsightsLoading||(!force&&Array.isArray(state.adminInsights)))return;
     state.adminInsightsLoading=true;state.adminInsightsError='';rerenderAdmin();
-    try{const data=await BlinqAuth.adminInsights();state.adminInsights=Array.isArray(data?.items)?data.items:[];}
-    catch(error){state.adminInsights=[];state.adminInsightsError=error.status===503?'INFO/LIVE história nemá trvalé úložisko. Nastav BLINQ_STORAGE_CONNECTION_STRING na existujúci Azure Storage účet (alebo zapni Firestore).':error.message;}
-    finally{state.adminInsightsLoading=false;rerenderAdmin();}
+    try{const data=await BlinqAuth.adminInsights();if(generation!==feedGeneration)return;state.adminInsights=Array.isArray(data?.items)?data.items:[];}
+    catch(error){if(generation!==feedGeneration)return;state.adminInsights=[];state.adminInsightsError=error.status===503?'INFO/LIVE história nemá trvalé úložisko. Nastav BLINQ_STORAGE_CONNECTION_STRING na existujúci Azure Storage účet (alebo zapni Firestore).':error.message;}
+    finally{if(generation===feedGeneration){state.adminInsightsLoading=false;rerenderAdmin();}}
   }
   function adminInsightDraft(){
     const editing=(state.adminInsights||[]).find(row=>String(row.id)===String(state.adminInsightEditingId));
@@ -2782,24 +2797,27 @@
   }
   function exportUiConfig(){ const blob=new Blob([JSON.stringify(state.ui,null,2)+'\n'],{type:'application/json'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');a.href=url;a.download='ui-config.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),0); }
   async function loadAdminDiagnostics(force=false){
+    const generation=feedGeneration;
     if(state.adminDiagnosticsLoading||(!force&&state.adminDiagnostics))return;
     state.adminDiagnosticsLoading=true;rerenderAdmin();
-    try{state.adminDiagnostics=await BlinqAuth.adminDiagnostics();}
-    catch(error){state.adminDiagnostics={ok:false,error:error.message,status:error.status||0};}
-    finally{state.adminDiagnosticsLoading=false;rerenderAdmin();}
+    try{const data=await BlinqAuth.adminDiagnostics();if(generation!==feedGeneration)return;state.adminDiagnostics=data;}
+    catch(error){if(generation!==feedGeneration)return;state.adminDiagnostics={ok:false,error:error.message,status:error.status||0};}
+    finally{if(generation===feedGeneration){state.adminDiagnosticsLoading=false;rerenderAdmin();}}
   }
   async function loadAdminUsers(force=false){
+    const generation=feedGeneration;
     if(state.adminUsersLoading||(!force&&Array.isArray(state.adminUsers)))return;
     state.adminUsersLoading=true;rerenderAdmin();
     try{
       const all=[];const perPage=200;let page=1;
       let storageWarning='';
-      while(page<=25){const data=await BlinqAuth.adminUsers(page,perPage);const batch=Array.isArray(data?.users)?data.users:[];all.push(...batch);if(data?.storage_warning)storageWarning=data.storage_warning;if(batch.length<perPage)break;page+=1;}
+      while(page<=25){const data=await BlinqAuth.adminUsers(page,perPage);if(generation!==feedGeneration)return;const batch=Array.isArray(data?.users)?data.users:[];all.push(...batch);if(data?.storage_warning)storageWarning=data.storage_warning;if(batch.length<perPage)break;page+=1;}
+      if(generation!==feedGeneration)return;
       state.adminUsersWarning=storageWarning?'Levely, platnosť a prístup fungujú cez Firebase. Doplnkové profilové údaje a audit čakajú na trvalé úložisko; nastav BLINQ_STORAGE_CONNECTION_STRING.':'';
       state.adminUsersError=all.length>=5000?'Zobrazených prvých 5000 účtov. Pre väčší zoznam treba serverové cursor filtrovanie.':'';state.adminUsers=all;
       if(state.adminSelectedUser)state.adminSelectedUser=state.adminUsers.find(x=>x.id===state.adminSelectedUser.id)||null;
-    }catch(error){state.adminUsers=[];state.adminUsersWarning='';state.adminUsersError=error.status===503?'Admin API pre účty nie je dostupné. Otvor Diagnostiku pre presný stav Firebase Admin konfigurácie.':error.message;}
-    finally{state.adminUsersLoading=false;rerenderAdmin();adminApplyUserFilters();}
+    }catch(error){if(generation!==feedGeneration)return;state.adminUsers=[];state.adminUsersWarning='';state.adminUsersError=error.status===503?'Admin API pre účty nie je dostupné. Otvor Diagnostiku pre presný stav Firebase Admin konfigurácie.':error.message;}
+    finally{if(generation===feedGeneration){state.adminUsersLoading=false;rerenderAdmin();adminApplyUserFilters();}}
   }
 
   function setSelectedElement(id){ if(!elements()?.[id])return;state.selectedElement=id;rerenderAdmin(); }
@@ -3279,10 +3297,42 @@
     host.querySelectorAll('[data-upgrade-account-route]').forEach(button=>button.onclick=()=>{if(dialog.open)dialog.close();setRoute('account',true);});
     if(locale!=='en')translatePublicDom(dialog);if(!dialog.open)dialog.showModal();
   }
-  async function signOutCurrentSession(){feedGeneration++;await BlinqAuth.signOut();state.feed={upcoming:[],results:[],performance:{},history:{},model:null};state.insights=[];state.insightsUnread=0;state.railMatch=null;setInsightDrawer(false);auth('login');}
+  function clearPrivateWorkspaceState(){
+    state.feed={upcoming:[],results:[],performance:{},history:{},model:null};
+    state.insights=[];state.insightsUnread=0;state.insightsLoading=false;state.insightsStorageUnavailable=false;
+    state.userLiveRadarStatus=null;state.userLiveRadarLoading=false;state.liveRadarHeartbeat=null;state.privateUpdatesBusy=false;state.privateUpdatesLastPoll=0;
+    state.adminUsers=null;state.adminUsersLoading=false;state.adminUsersError='';state.adminUsersWarning='';state.adminSelectedUser=null;
+    state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
+    state.railMatch=null;state.previewPlan=null;state.demoFeedBackup=null;state.demoMode=false;state.dashboardVisibility=null;state.pushConfig=null;state.pushBusy=false;
+    state.route='predictions';state.page=0;state.resultsPage=0;state.dailyHubExpanded=false;state.dashboardSearch='';
+    Object.keys(state.marketPage||{}).forEach(key=>{state.marketPage[key]=0;});
+    setInsightDrawer(false);closeProfileMenu();
+    ['matchDialog','accountDialog','upgradeDialog'].forEach(id=>{const dialog=$(id);if(dialog?.open)dialog.close();});
+    const shell=$('appShell');if(shell)shell.hidden=true;
+  }
+  async function signOutCurrentSession(){
+    feedGeneration++;clearPrivateWorkspaceState();feedLoading=false;
+    try{await BlinqAuth.signOut();}finally{auth('login');}
+  }
   function closeProfileMenu(){const menu=$('profileMenu'),toggle=$('profileMenuToggle');if(menu)menu.hidden=true;if(toggle)toggle.setAttribute('aria-expanded','false');}
 
-  let feedLoading=false,feedGeneration=0;
+  let feedLoading=false,feedGeneration=0,externalSessionTimer=null;
+  async function syncExternalSession(){
+    feedGeneration++;clearPrivateWorkspaceState();feedLoading=false;
+    const generation=feedGeneration;
+    let session=null;
+    try{session=await BlinqAuth.restore();}catch(error){console.warn('[BlinQ auth] cross-tab session restore failed.',error);}
+    if(generation!==feedGeneration)return;
+    if(!session){auth('login');return;}
+    try{await loadUiConfig();}catch(error){console.warn('[BlinQ UI] cross-tab config refresh failed; using last known config.',error);}
+    if(generation!==feedGeneration)return;
+    await loadFeed(false).catch(()=>{});
+  }
+  function handleSessionStorageEvent(event){
+    const epochKey=typeof BlinqAuth.sessionEpochKey==='function'?BlinqAuth.sessionEpochKey():'blinq_v4_session_epoch';
+    if(event.storageArea!==localStorage||event.key!==epochKey)return;
+    clearTimeout(externalSessionTimer);externalSessionTimer=setTimeout(()=>{syncExternalSession().catch(error=>console.warn('[BlinQ auth] cross-tab session sync failed.',error));},40);
+  }
   async function loadFeed(showLoading=true){
     if(feedLoading)return;feedLoading=true;const generation=feedGeneration;window.BlinqUI.sync('loading');
     if(showLoading&&state.route==='predictions') $('predictionGrid').innerHTML=`<div class="state-card">${escapeHtml(publicText('Loading current model predictions…'))}</div>`;
@@ -3316,7 +3366,7 @@
       const fullModelVersion=String(feed?.model?.version||'').trim(),compactModelVersion=shortModelVersion(fullModelVersion);
       const staleNotice=$('staleNotice'); if(staleNotice){staleNotice.hidden=true;staleNotice.textContent='';} $('appShell').hidden=false; if($('authDialog').open)$('authDialog').close();
       if(state.route==='admin'&&!isAdminAccount())state.route='predictions'; setRoute(state.route,false); applyAccessStates();renderDashboardKpis();loadInsights(true);window.BlinqUI.sync(feed.stale?'stale':'ready',feed.generated_at);
-    }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact us via the official BlinQ Telegram channel if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{feedLoading=false;window.BlinqUI.refreshFinished();}
+    }catch(error){if(generation!==feedGeneration)return;if(error.status===401){BlinqAuth.clear();clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Your session could not be authorized. Sign in again.');return;}if(error.status===403&&String(error.code||'').toLowerCase()==='email_not_verified'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('Verify your email before opening BlinQ. You can resend the verification email below.');$('resendVerification').hidden=false;return;}if(error.status===403&&String(error.code||'').toLowerCase()==='account_suspended'){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText('This BlinQ account is suspended. Contact us via the official BlinQ Telegram channel if you believe this is a mistake.');return;}window.BlinqUI.sync(navigator.onLine?'error':'offline');if(showLoading)showStatus(publicText('Data could not be refreshed. Please try again.'));if($('appShell').hidden){clearPrivateWorkspaceState();auth('login');$('authMessage').textContent=publicText(error.message||'The BlinQ workspace could not be opened. Please try again.');return;}if(state.route==='predictions')renderPredictions();throw error;}finally{if(generation===feedGeneration){feedLoading=false;window.BlinqUI.refreshFinished();}}
   }
   async function refreshWorkspace(showLoading=false){
     try{await loadUiConfig();}
@@ -3387,6 +3437,7 @@
     document.addEventListener('visibilitychange',()=>{refresh();if(!document.hidden)refreshPrivateUpdates(true).catch(()=>{});});
     window.addEventListener('online',()=>{lastAttempt=0;refresh();refreshPrivateUpdates(true).catch(()=>{});});
     window.addEventListener('offline',()=>window.BlinqUI.sync('offline'));
+    window.addEventListener('storage',handleSessionStorageEvent);
     window.addEventListener('popstate',()=>{if(!$('appShell').hidden)setRoute(location.hash.slice(1)||'predictions',false);});
     window.addEventListener('hashchange',()=>{const route=location.hash.slice(1)||'predictions';if(!$('appShell').hidden&&route!==state.route)setRoute(route,false);});
   }

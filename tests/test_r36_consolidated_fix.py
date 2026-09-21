@@ -16,8 +16,8 @@ RELEASE = json.loads((WEB / "release.json").read_text(encoding="utf-8"))
 
 def test_r36_release_identity():
     assert RELEASE["release"] == "7.3.6"
-    assert RELEASE["patch"] == "736-r36"
-    assert UI["ui_patch"] == "736-r36"
+    assert RELEASE["patch"] == "736-r38"
+    assert UI["ui_patch"] == "736-r38"
 
 
 def test_real_rookie_has_ui_and_server_admin_guards():

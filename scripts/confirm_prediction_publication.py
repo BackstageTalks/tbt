@@ -32,6 +32,8 @@ _PLAYER_PRESENTATION_KEYS = {
     "country_name",
     "photo_url",
     "date_of_birth",
+    "birth_date",
+    "birth_timestamp",
     "height",
     "height_cm",
     "hand",

@@ -6434,7 +6434,7 @@ body#blinqPremium .results-table .hub-avatar img[data-fallback-applied="1"]{
 }
 
 /* BlinQ runtime patch 7.3.6-r35: resilient authentication bootstrap, readiness and cache contract. */
-/* BlinQ runtime patch 7.3.6-r36: consolidated access, copy, fallback and inactivity fixes. */
+/* BlinQ runtime patch 7.3.6-r38: Codex audit batch 1 security/runtime fixes. */
 
 /* r35 account dropdown polish: keep the compact BlinQ glass/green language. */
 body#blinqPremium .profile-menu{

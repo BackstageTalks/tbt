@@ -21,6 +21,7 @@ def _row(i, market="match_winner"):
         "market": market,
         "scheduled_at": f"2026-09-20T{10+i%10:02d}:00:00Z",
         "pick": f"A{i}",
+        "betting": {"odds": 1.80},
         "player1": {"id": f"a{i}", "name": f"A{i}", "probability": .72},
         "player2": {"id": f"b{i}", "name": f"B{i}", "probability": .28},
     }

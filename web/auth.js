@@ -9,7 +9,7 @@
     projectId: 'blinq-182',
   });
 
-  const AUTH_RUNTIME = '736-r36';
+  const AUTH_RUNTIME = '736-r38';
   const AUTH_CONFIG_URL = '/api/v1/auth/config';
   const AUTH_CONFIG_ATTEMPTS = 3;
   const TRANSIENT_AUTH_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
@@ -37,6 +37,8 @@
     sessionStorage.removeItem(KEY);
   }
   function clearLegacy() { LEGACY_KEYS.forEach(key => localStorage.removeItem(key)); }
+  function sessionStorageKeys() { return [KEY, EPOCH_KEY]; }
+  function sessionEpochKey() { return EPOCH_KEY; }
 
   function normalizeSession(value, provider = config?.provider || 'firebase') {
     const s = value?.session || value || {};
@@ -413,12 +415,13 @@
     const s = await restore();
     return json('/api/v1/feed', {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
   }
-  async function matchIntelligence(player1Id, player2Id, surface = '', customId = '') {
+  async function matchIntelligence(player1Id, player2Id, surface = '', customId = '', eventId = '') {
     const params = new URLSearchParams({
       player1_id: String(player1Id || ''),
       player2_id: String(player2Id || ''),
       surface: String(surface || ''),
       custom_id: String(customId || ''),
+      event_id: String(eventId || ''),
     });
     return apiWithSession(`/api/v1/match-intelligence?${params.toString()}`);
   }
@@ -512,5 +515,6 @@
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
+    sessionStorageKeys, sessionEpochKey,
   };
 })();

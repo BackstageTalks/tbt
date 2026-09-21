@@ -21,7 +21,6 @@ from tbt.services.auth import (
     is_suspended,
     public_account,
     profile_claims,
-    mirror_profile_claims,
     request_authorization,
     update_firebase_profile,
     verify_user,
@@ -32,7 +31,6 @@ from tbt.services.admin_accounts import (
     delete_user_account,
     get_user,
     list_users,
-    mirror_admin_metadata_claims,
     tg_private_state,
     update_user_access,
     update_user_identity,
@@ -79,7 +77,12 @@ from tbt.services.push_notifications import (
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
 from tbt.providers.rapidapi import RapidTennisClient
-from tbt.services.entitlements import filter_feed_for_access
+from tbt.services.entitlements import (
+    filter_feed_for_access,
+    match_detail_entitlements,
+    match_intelligence_row_authorized,
+    redact_match_intelligence,
+)
 from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnostics, inactivity_policy
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
@@ -361,19 +364,11 @@ def auth_profile(req):
         if verified and isinstance(payload, dict) and "display_name" in payload:
             firebase_payload["display_name"] = normalized["display_name"]
         updated = update_firebase_profile(settings, user.get("id"), firebase_payload)
-        # Mirror the small non-sensitive profile fields into Firebase claims so
-        # Telegram/avatar identity survives a temporary admin-storage outage.
-        updated = mirror_profile_claims(settings, user.get("id"), payload)
-        try:
-            profile = save_profile_metadata(user.get("id"), payload)
-            storage_warning = None
-        except AdminStorageUnavailable:
-            profile = profile_claims(updated)
-            storage_warning = "profile_storage_fallback"
-        result = public_account(updated, cfg=settings, profile=profile)
-        if storage_warning:
-            result["storage_warning"] = storage_warning
-        return response(result)
+        # Profile/Telegram/avatar data deliberately stay out of Firebase custom
+        # claims. Claims are authorization-only; durable metadata failure is
+        # therefore a failed profile write instead of a stale-claims fallback.
+        profile = save_profile_metadata(user.get("id"), payload)
+        return response(public_account(updated, cfg=settings, profile=profile))
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AuthUnavailable:
@@ -635,12 +630,36 @@ def match_intelligence(req):
         p2 = str(req.params.get("player2_id") or "").strip()
         surface = str(req.params.get("surface") or "").strip()[:48]
         custom_id = str(req.params.get("custom_id") or "").strip()[:64]
+        event_id = str(req.params.get("event_id") or "").strip()[:64]
         if not p1.isdigit() or not p2.isdigit() or len(p1) > 12 or len(p2) > 12:
             return response({"error": "invalid_player_ids"}, 400)
-        key = f"{p1}:{p2}:{_surface_family(surface)}:{custom_id}"
+
+        # Match intelligence is a paid/detail capability, not an identity-only
+        # endpoint. Resolve the exact same runtime access contract as /v1/feed
+        # before touching the provider or shared cache. Fail closed if the
+        # runtime access configuration cannot be loaded.
+        account_data = public_account(user, cfg=settings, profile=_profile_for(user))
+        try:
+            runtime_ui = load_runtime_ui_config()
+        except AdminStorageUnavailable:
+            return response({"error": "access_config_unavailable"}, 503)
+        detail_access = match_detail_entitlements(account_data, runtime_ui)
+        if not detail_access.get("allowed"):
+            return response({"error": "match_detail_forbidden"}, 403)
+        try:
+            authorized_feed, _ = filter_feed_for_access(visible_feed(read_feed(FEED)), account_data, runtime_ui)
+        except PermissionError:
+            return response({"error": "account_suspended"}, 403)
+        if not match_intelligence_row_authorized(
+            authorized_feed, p1, p2, event_id=event_id, custom_id=custom_id
+        ):
+            return response({"error": "match_not_authorized"}, 403)
+
+        key = f"{p1}:{p2}:{_surface_family(surface)}:{custom_id}:{event_id}"
         cached = _cached_match_intelligence(key)
         if cached is not None:
-            return response({**cached, "cached": True})
+            public_cached = redact_match_intelligence(cached, detail_access)
+            return response({**public_cached, "cached": True})
 
         feed_result = _feed_match_intelligence(p1, p2, surface)
         try:
@@ -648,7 +667,8 @@ def match_intelligence(req):
         except Exception:
             if feed_result is not None:
                 _store_match_intelligence(key, feed_result)
-                return response({**feed_result, "cached": False, "live_provider": False})
+                public_feed_result = redact_match_intelligence(feed_result, detail_access)
+                return response({**public_feed_result, "cached": False, "live_provider": False})
             raise
         histories = {}
         rankings = {}
@@ -733,7 +753,8 @@ def match_intelligence(req):
             result[label] = base
         result["live_provider"] = True
         _store_match_intelligence(key, result)
-        return response({**result, "cached": False})
+        public_result = redact_match_intelligence(result, detail_access)
+        return response({**public_result, "cached": False})
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
     except Exception:
@@ -755,7 +776,9 @@ def match_intelligence(req):
             cache_key = locals().get("key")
             if cache_key:
                 _store_match_intelligence(cache_key, fallback)
-            return response({**fallback, "cached": False, "live_provider": False})
+            detail = locals().get("detail_access") or {"sections": {}}
+            public_fallback = redact_match_intelligence(fallback, detail)
+            return response({**public_fallback, "cached": False, "live_provider": False})
         return response({"error": "match_intelligence_unavailable"}, 503)
 
 
@@ -1610,16 +1633,9 @@ def admin_user_profile(req):
         profile = _profile_for(target, required=False)
         storage_warning = None
         if profile_payload:
-            normalized = normalize_profile_update(profile_payload)
-            target = mirror_profile_claims(settings, user_id, profile_payload)
-            try:
-                profile = save_profile_metadata(user_id, profile_payload)
-            except AdminStorageUnavailable:
-                profile = {**profile_claims(target), **{k: normalized.get(k) for k in ("telegram_nick", "display_name") if k in normalized}}
-                storage_warning = "profile_storage_fallback"
+            normalize_profile_update(profile_payload)
+            profile = save_profile_metadata(user_id, profile_payload)
         row = _admin_account_row(target, profile)
-        if storage_warning:
-            row["storage_warning"] = storage_warning
         return response(row)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
@@ -1673,29 +1689,18 @@ def admin_user_metadata(req):
             return response({"error": "invalid_json"}, 400)
         normalized = normalize_admin_metadata_update(payload)
         target = get_user(settings, user_id)
-        # TG Private is mirrored in a tiny Firebase claim so manual group
-        # operations continue even if the optional metadata store is down.
-        target = mirror_admin_metadata_claims(settings, user_id, normalized)
-        storage_warning = None
+        before = load_account_metadata(user_id)
+        after = save_admin_metadata(user_id, normalized, actor_id=str(actor.get("id") or ""))
         try:
-            before = load_account_metadata(user_id)
-            after = save_admin_metadata(user_id, normalized, actor_id=str(actor.get("id") or ""))
-            try:
-                record_admin_metadata_audit(
-                    actor_id=str(actor.get("id") or ""),
-                    target_id=user_id,
-                    before=before,
-                    after=after,
-                )
-            except AdminStorageUnavailable:
-                logging.warning("Admin account metadata audit unavailable")
+            record_admin_metadata_audit(
+                actor_id=str(actor.get("id") or ""),
+                target_id=user_id,
+                before=before,
+                after=after,
+            )
         except AdminStorageUnavailable:
-            after = profile_claims(target)
-            storage_warning = "admin_note_not_persisted" if "admin_note" in normalized else "operational_metadata_fallback"
-        row = _admin_account_row(target, after)
-        if storage_warning:
-            row["storage_warning"] = storage_warning
-        return response(row)
+            logging.warning("Admin account metadata audit unavailable")
+        return response(_admin_account_row(target, after))
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AuthUnavailable:

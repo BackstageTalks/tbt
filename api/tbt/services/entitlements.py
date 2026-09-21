@@ -176,6 +176,143 @@ def effective_plan(access: dict) -> str:
     return "expired"
 
 
+MEMBERSHIP_LEVELS = ("rookie", "pro", "elite", "legend", "goat")
+_MATCH_DETAIL_DEFAULT_PLANS = {
+    "trial": True, "expired": False, "rookie": True, "pro": True,
+    "elite": True, "legend": True, "goat": True,
+}
+_MATCH_DETAIL_DEFAULT_SECTIONS = {
+    "overview": "rookie", "statistics": "pro", "radar": "elite", "history": "legend",
+}
+
+
+def _membership_at_least(plan: str, minimum: str) -> bool:
+    if plan == "admin":
+        return True
+    try:
+        return MEMBERSHIP_LEVELS.index(plan) >= MEMBERSHIP_LEVELS.index(minimum)
+    except ValueError:
+        return False
+
+
+def match_detail_entitlements(access: dict, ui_config: dict | None = None) -> dict:
+    """Resolve server-side match-detail access from the same runtime config as the UI.
+
+    The browser may render locks, but this manifest is the authorization boundary
+    used by the match-intelligence endpoint. Suspended/expired accounts fail
+    closed; admins retain operational access.
+    """
+    plan = effective_plan(access)
+    if plan == "admin":
+        return {
+            "plan": plan, "allowed": True,
+            "sections": {key: True for key in _MATCH_DETAIL_DEFAULT_SECTIONS},
+            "minimums": dict(_MATCH_DETAIL_DEFAULT_SECTIONS),
+        }
+    if plan in {"expired", "suspended"}:
+        return {
+            "plan": plan, "allowed": False,
+            "sections": {key: False for key in _MATCH_DETAIL_DEFAULT_SECTIONS},
+            "minimums": dict(_MATCH_DETAIL_DEFAULT_SECTIONS),
+        }
+
+    detail = (((ui_config or {}).get("dashboard") or {}).get("match_detail") or {}) if isinstance(ui_config, dict) else {}
+    configured_plans = detail.get("plans") if isinstance(detail.get("plans"), dict) else {}
+    configured_sections = detail.get("sections") if isinstance(detail.get("sections"), dict) else {}
+    plans = dict(_MATCH_DETAIL_DEFAULT_PLANS)
+    for key, value in configured_plans.items():
+        if key in plans and isinstance(value, bool):
+            plans[key] = value
+    minimums = dict(_MATCH_DETAIL_DEFAULT_SECTIONS)
+    for key, value in configured_sections.items():
+        normalized = str(value or "").strip().lower()
+        if key in minimums and normalized in MEMBERSHIP_LEVELS:
+            minimums[key] = normalized
+
+    allowed = bool(plans.get(plan, False))
+    return {
+        "plan": plan,
+        "allowed": allowed,
+        "sections": {key: bool(allowed and _membership_at_least(plan, minimum)) for key, minimum in minimums.items()},
+        "minimums": minimums,
+    }
+
+
+def _match_row_player_ids(row: dict) -> tuple[str, str]:
+    p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+    p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+    return str(p1.get("id") or row.get("player1_id") or ""), str(p2.get("id") or row.get("player2_id") or "")
+
+
+def match_intelligence_row_authorized(
+    filtered_feed: dict, player1_id: str, player2_id: str, *, event_id: str = "", custom_id: str = ""
+) -> bool:
+    """Return whether the requested match is present in an authorized pick array.
+
+    This prevents a member from calling the enrichment endpoint for arbitrary
+    provider player IDs that were never part of their server-filtered offer.
+    """
+    if not isinstance(filtered_feed, dict):
+        return False
+    p1, p2 = str(player1_id or ""), str(player2_id or "")
+    event_id, custom_id = str(event_id or ""), str(custom_id or "")
+    keys = (
+        "daily_picks", "prime_picks", "top_daily_picks", "value_picks",
+        "doubles_picks", "ace_picks", "sg_picks", "board_upcoming",
+    )
+    for key in keys:
+        rows = filtered_feed.get(key) if isinstance(filtered_feed.get(key), list) else []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            rp1, rp2 = _match_row_player_ids(row)
+            if {rp1, rp2} != {p1, p2}:
+                continue
+            row_event = str(row.get("event_id") or row.get("id") or "")
+            row_custom = str(row.get("custom_id") or row.get("customId") or "")
+            if event_id and row_event != event_id:
+                continue
+            if custom_id and row_custom and row_custom != custom_id:
+                continue
+            return True
+    return False
+
+
+def redact_match_intelligence(payload: dict, detail_access: dict) -> dict:
+    """Redact live enrichment fields that belong to locked detail sections.
+
+    The provider/cache payload may be shared internally, but every response is
+    filtered for the caller. This makes cache hits obey the same membership
+    rules as fresh provider responses.
+    """
+    out = deepcopy(payload) if isinstance(payload, dict) else {}
+    sections = detail_access.get("sections") if isinstance(detail_access, dict) else {}
+    statistics_allowed = bool((sections or {}).get("statistics"))
+    history_allowed = bool((sections or {}).get("history"))
+
+    statistic_keys = {
+        "recent_form", "surface_form", "history_matches", "surface_history_matches",
+        "serve_win_pct", "return_win_pct", "serve_quality", "return_quality",
+        "aces_per_match", "ace_rate",
+    }
+    history_keys = {"h2h_wins", "h2h_losses", "h2h_matches"}
+    for label in ("player1", "player2"):
+        player = out.get(label)
+        if not isinstance(player, dict):
+            continue
+        presentation = player.get("presentation")
+        if isinstance(presentation, dict):
+            if not statistics_allowed:
+                for key in statistic_keys:
+                    presentation.pop(key, None)
+            if not history_allowed:
+                for key in history_keys:
+                    presentation.pop(key, None)
+    if not history_allowed:
+        out.pop("h2h", None)
+    return out
+
+
 def _row_id(row: dict) -> tuple[str, str]:
     return (str(row.get("event_id") or row.get("id") or ""), str(row.get("pick") or row.get("selection") or row.get("prediction") or ""))
 
@@ -442,7 +579,12 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
     policy = _POLICY.get(plan, _POLICY["expired"])
     payload = payload or {}
     sections = {}
-    source_map={"daily":_daily_rows(payload), **{section:(payload.get(feed_key) if isinstance(payload.get(feed_key),list) else []) for section,feed_key in SECTION_TO_FEED_KEY.items()}}
+    canonical_daily = _daily_rows(payload)
+    source_map={"daily":canonical_daily, **{section:(payload.get(feed_key) if isinstance(payload.get(feed_key),list) else []) for section,feed_key in SECTION_TO_FEED_KEY.items()}}
+    # `top_daily_picks` is a legacy representation of the same public TOP offer.
+    # Authorize it from the exact same canonical rows so one daily limit cannot
+    # yield two different unlocked TOP picks in a single API response.
+    source_map["top_daily"] = canonical_daily
     tab_map={"daily":"daily","prime":"prime","top_daily":"daily","value":"value","doubles":"doubles","ace":"ace","sg":"games"}
     for section, rows in source_map.items():
         default_limit, hard_see_all = policy.get(section, (0,False))
@@ -460,7 +602,7 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
         blur=runtime_rule[1] if runtime_rule else (str(limit).upper()!="ALL" and configured_slots<len(rows))
         if display_state=="active":
             preview, slot_states=_select_authorized_rows(
-                rows, limit, access=access, section=section, selection_mode=selection_mode,
+                rows, limit, access=access, section=("daily" if section == "top_daily" else section), selection_mode=selection_mode,
                 row_overrides=row_overrides, blur_remaining=bool(blur),
             )
         elif display_state=="blurred":
@@ -607,6 +749,8 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
             result["performance_windows"] = {}
         if "performance_window_summary" in result:
             result["performance_window_summary"] = {}
+        if "performance_subgroups" in result:
+            result["performance_subgroups"] = {}
 
     board_enabled = bool(manifest.get("sections", {}).get("board", {}).get("enabled"))
     result["board_upcoming"] = _board_rows(payload, "upcoming") if board_enabled else []
@@ -628,9 +772,9 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     prime_rows=payload.get(SECTION_TO_FEED_KEY["prime"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["prime"]),list) else []
     prime_ent=manifest["sections"]["prime"]
     result[SECTION_TO_FEED_KEY["prime"]]=_select_authorized_rows(prime_rows,prime_ent["visible_picks"],access=access,section="prime",selection_mode=prime_ent.get("selection_mode","first"),row_overrides=prime_ent.get("row_overrides"),blur_remaining=bool(prime_ent.get("blur_remaining")))[0] if prime_ent.get("display_state")=="active" and prime_ent.get("enabled") else []
-    rows=payload.get(SECTION_TO_FEED_KEY["top_daily"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["top_daily"]),list) else []
-    top_ent=manifest["sections"]["top_daily"]
-    result[SECTION_TO_FEED_KEY["top_daily"]]=_select_authorized_rows(rows,top_ent["visible_picks"],access=access,section="top_daily",selection_mode=top_ent.get("selection_mode","first"),row_overrides=top_ent.get("row_overrides"),blur_remaining=bool(top_ent.get("blur_remaining")))[0] if top_ent.get("display_state")=="active" and top_ent.get("enabled") else []
+    # Legacy `top_daily_picks` must be an alias of the already-authorized TOP
+    # selection, never a second independently sampled entitlement surface.
+    result[SECTION_TO_FEED_KEY["top_daily"]] = deepcopy(daily_allowed)
 
     for section,feed_key in SECTION_TO_FEED_KEY.items():
         if section in {"prime","top_daily","ace","sg"}: continue
