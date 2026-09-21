@@ -66,6 +66,14 @@ concurrency:
 jobs:
   pipeline:
     if: github.event_name == 'workflow_dispatch' || (github.event.schedule == '40 22 * * *' && vars.TBT_AUTO_HISTORY == 'true') || (github.event.schedule == '20 1,7,13,19 * * *' && vars.TBT_AUTO_REFRESH == 'true')
+    # Refresh/results publication mutates tbt-predictions-v1, so it must also
+    # share the exact production publication lock used by CI/player deploys.
+    # History/statistics modes receive a run-unique job group and therefore do
+    # not block ordinary application deploys. The workflow-level history lock
+    # still serializes all shared history writers.
+    concurrency:
+      group: ${{ ((inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || github.event.schedule == '20 1,7,13,19 * * *') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 210
     env:
@@ -380,8 +388,22 @@ jobs:
             .cache/tbt/production/readiness_report.md
           if-no-files-found: error
 
-      - name: Refresh presentation metadata for current feed
+      - name: Plan remaining presentation-enrichment budget
         if: env.MODE == 'refresh'
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/plan_player_enrichment_budget.py \
+            --total-cap "$MAX_REQUESTS" \
+            --refresh-report .cache/tbt/predictions/refresh_report.json \
+            --photo 250 \
+            --fallback-ranking 120 \
+            --player-detail 250 \
+            --tournament-logo 120 \
+            --github-env "$GITHUB_ENV"
+
+      - name: Refresh presentation metadata for current feed
+        if: env.MODE == 'refresh' && env.BLINQ_ENRICH_PLANNED_MAX != '0'
         shell: bash
         run: |
           set -euo pipefail
@@ -392,10 +414,10 @@ jobs:
           python scripts/enrich_player_cards.py \
             --data-repository "$TBT_DATA_REPOSITORY" \
             --max-players 0 \
-            --max-photo-requests 250 \
-            --max-fallback-ranking-requests 120 \
-            --max-player-detail-requests 250 \
-            --max-tournament-logo-requests 120
+            --max-photo-requests "$BLINQ_ENRICH_PHOTO_CAP" \
+            --max-fallback-ranking-requests "$BLINQ_ENRICH_FALLBACK_RANK_CAP" \
+            --max-player-detail-requests "$BLINQ_ENRICH_DETAIL_CAP" \
+            --max-tournament-logo-requests "$BLINQ_ENRICH_LOGO_CAP"
 
       - name: Prepare refreshed serving feed and cached player assets
         if: env.MODE == 'refresh' || env.MODE == 'results-rebuild'
@@ -406,8 +428,34 @@ jobs:
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
 
+  deploy:
+    name: Deploy current prediction generation
+    needs: pipeline
+    if: >-
+      needs.pipeline.result == 'success' &&
+      (inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' ||
+       (github.event.schedule == '20 1,7,13,19 * * *' && vars.TBT_AUTO_REFRESH == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # Only the short public publication window shares the production lock.
+    # The long history/model work above never holds tbt-production-deploy.
+    concurrency:
+      group: tbt-production-deploy
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+
+    steps:
+      - name: Checkout exact workflow revision
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
       - name: Guard against stale application deployment
-        if: env.MODE == 'refresh' || env.MODE == 'results-rebuild'
         shell: bash
         run: |
           set -euo pipefail
@@ -415,17 +463,28 @@ jobs:
           current="$(git rev-parse HEAD)"
           latest="$(git rev-parse origin/main)"
           if [[ "$current" != "$latest" ]]; then
+            echo "::notice::Skipping deployment: this data workflow started on $current but main is now $latest. The next application deploy will consume the latest private prediction generation."
             echo "BLINQ_SKIP_STALE_DEPLOY=true" >> "$GITHUB_ENV"
-            echo "::warning::Skipping Static Web Apps deployment: this data run started on $current but main is now $latest. This prevents an older workflow from rolling back the frontend."
           else
             echo "BLINQ_SKIP_STALE_DEPLOY=false" >> "$GITHUB_ENV"
           fi
 
+      - name: Prepare immutable serving snapshot
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          python scripts/prepare_feed.py
+          test -s api/data/feed.json
+          python scripts/verify_presentation_feed.py api/data/feed.json --summary
+
       - name: Sanitize generated artifacts before deploy
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         run: python scripts/clean_generated_artifacts.py
 
       - name: Deploy refreshed feed and application
-        if: (env.MODE == 'refresh' || env.MODE == 'results-rebuild') && env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         uses: Azure/static-web-apps-deploy@v1
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_AGREEABLE_SKY_011A7FE10 }}
@@ -434,8 +493,9 @@ jobs:
           api_location: api
           output_location: ''
           skip_app_build: true
-      - name: Confirm deployed prediction publication
-        if: (env.MODE == 'refresh' || env.MODE == 'results-rebuild') && env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+
+      - name: Confirm exactly deployed prediction publication
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         shell: bash
         run: |
           set -euo pipefail

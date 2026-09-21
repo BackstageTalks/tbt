@@ -247,8 +247,8 @@ for tier in ('rookie', 'pro', 'elite', 'legend', 'goat'):
     if not isinstance((plans.get(tier) or {}).get('eyebrow', ''), str):
         fail(f'membership eyebrow must remain editable text: {tier}')
 inactivity = ui.get('account_inactivity') or {}
-if inactivity.get('auto_expire_rookie') is not False:
-    fail('ROOKIE inactivity auto-expiry must default OFF')
+if inactivity.get('auto_expire_rookie') is not True:
+    fail('ROOKIE inactivity housekeeping must mark dormant accounts EXPIRED by default')
 if 'data-admin-level-field="eyebrow"' not in app or 'data-admin-inactivity-field="enabled"' not in app:
     fail('r24 membership/inactivity Admin controls missing')
 hub = ((ui.get('dashboard') or {}).get('daily_hub') or {})

@@ -239,14 +239,14 @@ def predict(model, history, upcoming, now=None):
                 "id": match.player1_id, "name": match.player1_name,
                 "probability": p, "rank": match.player1_rank,
                 "country_code": _provider_player_country(match.provider_payload, player1=True),
-                "photo_url": f"/api/v1/player-image/{match.player1_id}" if str(match.player1_id or "").isdigit() else "",
+                "photo_url": "",  # r40: presentation release attaches cached artwork; public API never spends provider quota
                 "presentation": profile1,
             },
             "player2": {
                 "id": match.player2_id, "name": match.player2_name,
                 "probability": 1 - p, "rank": match.player2_rank,
                 "country_code": _provider_player_country(match.provider_payload, player1=False),
-                "photo_url": f"/api/v1/player-image/{match.player2_id}" if str(match.player2_id or "").isdigit() else "",
+                "photo_url": "",  # r40: presentation release attaches cached artwork; public API never spends provider quota
                 "presentation": profile2,
             },
             "winner_id": winner, "confidence": max(p, 1 - p),

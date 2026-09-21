@@ -6434,7 +6434,7 @@ body#blinqPremium .results-table .hub-avatar img[data-fallback-applied="1"]{
 }
 
 /* BlinQ runtime patch 7.3.6-r35: resilient authentication bootstrap, readiness and cache contract. */
-/* BlinQ runtime patch 7.3.6-r36: consolidated access, copy, fallback and inactivity fixes. */
+/* BlinQ runtime patch 7.3.6-r38: Codex audit batch 1 security/runtime fixes. */
 
 /* r35 account dropdown polish: keep the compact BlinQ glass/green language. */
 body#blinqPremium .profile-menu{
@@ -6482,3 +6482,115 @@ body#blinqPremium .hub-detail.is-locked>span{display:inline!important;overflow:v
 body#blinqPremium .hub-detail.is-locked>i{display:inline!important;margin:0!important;font-size:8px!important;line-height:1!important;font-style:normal!important;opacity:.72!important}
 body#blinqPremium .hub-detail.is-locked>small{display:none!important}
 body#blinqPremium .hub-detail.is-locked:hover{background:rgba(213,174,88,.09)!important;border-color:rgba(213,174,88,.36)!important;transform:none!important}
+
+/* BlinQ runtime patch 7.3.6-r39: durable daily access, pre-match clock filter and stable slot identity. */
+
+/* BlinQ runtime patch 7.3.6-r40: production publication lock + provider budget hardening. */
+
+/* BlinQ runtime patch 7.3.6-r44: auth/runtime resilience + CSP-safe match popout. */
+
+/* BlinQ runtime patch 7.3.6-r45: prediction-card visual/data clarity batch. */
+body#blinqPremium .hub-time-stack,
+body#blinqPremium .card-time-stack{
+  display:grid!important;
+  gap:3px!important;
+  align-content:center!important;
+  min-width:0!important;
+  font-variant-numeric:tabular-nums!important;
+  line-height:1!important;
+}
+body#blinqPremium .hub-time-stack strong,
+body#blinqPremium .card-time-stack strong{
+  color:#dce9e5!important;
+  font-size:11px!important;
+  font-weight:850!important;
+  letter-spacing:.01em!important;
+  white-space:nowrap!important;
+}
+body#blinqPremium .hub-time-stack small,
+body#blinqPremium .card-time-stack small{
+  color:#6f8980!important;
+  font-size:7.2px!important;
+  font-weight:760!important;
+  letter-spacing:.045em!important;
+  white-space:nowrap!important;
+}
+body#blinqPremium .daily-hub-table .hub-confidence strong{
+  font-size:13.5px!important;
+  line-height:1!important;
+  letter-spacing:-.015em!important;
+}
+body#blinqPremium .market-card .pick-score .probability,
+body#blinqPremium .detail-pick-card .pick-score .probability{
+  font-size:clamp(22px,1.55vw,29px)!important;
+  line-height:.95!important;
+  font-weight:900!important;
+  letter-spacing:-.035em!important;
+}
+body#blinqPremium .market-card .pick-score .probability small,
+body#blinqPremium .detail-pick-card .pick-score .probability small{
+  margin-left:4px!important;
+  font-size:8px!important;
+  font-weight:800!important;
+  letter-spacing:.03em!important;
+}
+body#blinqPremium .daily-hub-table .hub-pick-stack strong{
+  line-height:1.28!important;
+}
+body#blinqPremium #dailyHub[data-tab="ace"] .daily-hub-table .hub-pick-stack strong,
+body#blinqPremium #dailyHub[data-tab="double_faults"] .daily-hub-table .hub-pick-stack strong,
+body#blinqPremium #dailyHub[data-tab="games"] .daily-hub-table .hub-pick-stack strong,
+body#blinqPremium #dailyHub[data-tab="sets"] .daily-hub-table .hub-pick-stack strong{
+  white-space:normal!important;
+}
+body#blinqPremium .player-avatar.player-fallback-atp img,
+body#blinqPremium .player-avatar.player-fallback-wta img,
+body#blinqPremium .hub-avatar.player-fallback-atp img,
+body#blinqPremium .hub-avatar.player-fallback-wta img{
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  object-position:center!important;
+}
+@media(max-width:900px){
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-time{padding-top:0!important}
+  body#blinqPremium .hub-time-stack{gap:2px!important}
+  body#blinqPremium .hub-time-stack strong{font-size:10.5px!important}
+  body#blinqPremium .hub-time-stack small{font-size:6.8px!important}
+  body#blinqPremium .daily-hub-table .hub-confidence strong{font-size:12.5px!important}
+  body#blinqPremium .market-card .pick-score .probability,
+  body#blinqPremium .detail-pick-card .pick-score .probability{font-size:24px!important}
+}
+
+
+/* ========================================================================
+   BlinQ 7.3.6-r46 — shared visual background + quiet screenshot watermarking
+   ======================================================================== */
+body#blinqPremium:not(.blinq-admin){
+  background:
+    linear-gradient(90deg,rgba(1,11,12,.86),rgba(2,22,20,.70),rgba(1,10,12,.88)),
+    url("/assets/blinq_page_background.webp") center top/cover fixed no-repeat!important;
+}
+body#blinqPremium .boot-splash.boot-splash-tennis{
+  background:
+    linear-gradient(90deg,rgba(1,11,12,.78),rgba(2,22,20,.60),rgba(1,10,12,.80)),
+    url("/assets/blinq_page_background.webp") center/cover fixed no-repeat!important;
+}
+body#blinqPremium .anti-share-watermarks{position:fixed!important;inset:0!important;z-index:58!important;pointer-events:none!important;overflow:hidden!important;user-select:none!important}
+body#blinqPremium .anti-share-watermarks .wm{position:absolute!important;display:block!important;width:180px!important;height:72px!important;background:url("/assets/blinq_logo.svg") center/contain no-repeat!important;filter:grayscale(1) brightness(1.8)!important;opacity:.038!important;mix-blend-mode:screen!important}
+body#blinqPremium .anti-share-watermarks .wm-a{left:3.5%!important;top:31%!important;transform:rotate(-12deg)!important}
+body#blinqPremium .anti-share-watermarks .wm-b{right:3.5%!important;top:52%!important;transform:rotate(11deg)!important}
+body#blinqPremium .anti-share-watermarks .wm-c{left:50%!important;bottom:3.5%!important;transform:translateX(-50%) rotate(-5deg)!important;opacity:.03!important}
+body#blinqPremium.blinq-admin .anti-share-watermarks{display:none!important}
+body#blinqPremium .upgrade-feature-heading{margin:0 0 7px!important;color:#90a9a0!important;font-size:9px!important;line-height:1.25!important}
+body#blinqPremium .account-plan-free{border-color:rgba(49,226,156,.34)!important;background:rgba(49,226,156,.08)!important;color:#8cf2c5!important}
+@media(max-width:900px){
+  body#blinqPremium:not(.blinq-admin){background-attachment:scroll!important}
+  body#blinqPremium .boot-splash.boot-splash-tennis{background-attachment:scroll!important}
+  body#blinqPremium .anti-share-watermarks .wm{width:112px!important;height:44px!important;opacity:.03!important}
+  body#blinqPremium .anti-share-watermarks .wm-a{left:-18px!important;top:28%!important}
+  body#blinqPremium .anti-share-watermarks .wm-b{right:-18px!important;top:62%!important}
+  body#blinqPremium .anti-share-watermarks .wm-c{display:none!important}
+}
+
+/* BlinQ runtime patch 7.3.6-r46: FREE recovery, account copy, INFO audience, shared background, anti-share watermarks, results polish. */

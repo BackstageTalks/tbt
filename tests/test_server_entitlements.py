@@ -8,8 +8,16 @@ def row(i):
 
 
 def feed(n=8):
-    keys = ["prime_picks", "top_daily_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"]
-    payload = {key: [row(i) for i in range(n)] for key in keys}
+    # Public market-selection output is disjoint across Value/TOP. Keep the
+    # entitlement fixture realistic so the canonical TOP alias is exercised.
+    payload = {
+        "prime_picks": [row(100 + i) for i in range(n)],
+        "top_daily_picks": [row(i) for i in range(n)],
+        "value_picks": [row(200 + i) for i in range(n)],
+        "doubles_picks": [row(300 + i) for i in range(n)],
+        "ace_picks": [row(400 + i) for i in range(n)],
+        "sg_picks": [row(500 + i) for i in range(n)],
+    }
     payload["upcoming"] = [row(i) for i in range(n)]
     payload["results"] = []
     return payload
@@ -195,7 +203,7 @@ def test_stable_random_unlocks_positions_in_place_instead_of_moving_picks_to_top
 
     data, manifest, active_index, access = found
     assert manifest["sections"]["prime"]["returned"] == 1
-    assert data["prime_picks"][0]["event_id"] == str(active_index)
+    assert data["prime_picks"][0]["event_id"] == payload["prime_picks"][active_index]["event_id"]
     assert manifest["sections"]["prime"]["slot_states"][0] == "blurred"
 
     # Refreshing the same account on the same day must keep the same unlocked slot.

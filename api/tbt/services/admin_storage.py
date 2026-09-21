@@ -15,7 +15,9 @@ import hashlib
 import json
 import os
 import re
+import threading
 import uuid
+from pathlib import Path
 from urllib.parse import urlparse
 
 
@@ -142,6 +144,70 @@ class _FirestoreTableAdapter:
         return [dict(snap.to_dict() or {}) for snap in query.stream()]
 
 
+
+def _storage_not_found(exc: Exception) -> bool:
+    """Normalize Azure/Firestore missing-row semantics."""
+    if isinstance(exc, KeyError):
+        return True
+    status = getattr(exc, "status_code", None)
+    if status == 404:
+        return True
+    name = exc.__class__.__name__.lower()
+    return "resourcenotfound" in name or name in {"notfound", "notfounderror"}
+
+
+def _storage_backend_policy() -> str:
+    """Choose one durable admin backend; never silently split writes across stores."""
+    configured = str(os.getenv("BLINQ_ADMIN_STORAGE_BACKEND") or "auto").strip().lower()
+    if configured not in {"auto", "azure", "firestore"}:
+        raise AdminStorageUnavailable("Invalid BLINQ_ADMIN_STORAGE_BACKEND")
+    if configured == "auto":
+        return "azure" if _connection_string() else "firestore"
+    return configured
+
+
+_AZURE_TABLE_CACHE: dict[tuple[str, str], object] = {}
+_AZURE_TABLE_CACHE_LOCK = threading.Lock()
+
+def _azure_table(name: str):
+    """Return a provisioned Azure table client without provisioning on every read.
+
+    Azure Functions reuses worker processes for many requests.  Creating/checking
+    the table and performing a health read on every `_table()` call added network
+    I/O to the hottest config/insight/account paths.  Cache only the SDK client;
+    every real operation still performs its own storage request and surfaces
+    transport/permission failures normally.
+    """
+    connection = _connection_string()
+    if not connection:
+        raise AdminStorageUnavailable("Azure admin storage is not configured")
+    cache_key = (connection, str(name))
+    cached = _AZURE_TABLE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+    try:
+        from azure.data.tables import TableServiceClient
+        with _AZURE_TABLE_CACHE_LOCK:
+            cached = _AZURE_TABLE_CACHE.get(cache_key)
+            if cached is not None:
+                return cached
+            service = TableServiceClient.from_connection_string(connection)
+            try:
+                service.create_table_if_not_exists(table_name=name)
+            except TypeError:  # SDK compatibility
+                service.create_table_if_not_exists(name)
+            client = service.get_table_client(name)
+            # Validate the client once when it enters the process-local cache.
+            pager = client.query_entities("PartitionKey eq '__blinq_health__'", results_per_page=1).by_page()
+            try:
+                next(iter(pager))
+            except StopIteration:
+                pass
+            _AZURE_TABLE_CACHE[cache_key] = client
+            return client
+    except Exception as exc:
+        raise AdminStorageUnavailable("Azure admin storage is unavailable") from exc
+
 def _firestore_health() -> bool:
     try:
         adapter = _FirestoreTableAdapter("Health")
@@ -176,21 +242,26 @@ def _azure_table_health() -> bool:
 
 
 def admin_storage_diagnostics() -> dict:
-    """Return safe admin-storage health without exposing connection details."""
+    """Return safe admin-storage health using the same backend policy as reads/writes."""
     connection, connection_source = _connection_string_source()
     azure_configured = bool(connection)
-    azure_available = _azure_table_health() if azure_configured else False
-    firestore_available = False if azure_available else _firestore_health()
-    backend = "azure_table" if azure_available else "firestore" if firestore_available else "unavailable"
+    policy = "unavailable"
+    try:
+        policy = _storage_backend_policy()
+    except AdminStorageUnavailable:
+        pass
+    azure_available = _azure_table_health() if policy == "azure" else False
+    firestore_available = _firestore_health() if policy == "firestore" else False
+    backend = policy if ((policy == "azure" and azure_available) or (policy == "firestore" and firestore_available)) else "unavailable"
     return {
         "backend": backend,
+        "backend_policy": policy,
         "azure_configured": azure_configured,
         "azure_available": azure_available,
         "azure_connection_source": connection_source,
         "firestore_available": firestore_available,
         "requires_persistent_store": backend == "unavailable",
-        # Safe operational hint only; never expose the connection string itself.
-        "recommended_setting": "BLINQ_STORAGE_CONNECTION_STRING" if backend == "unavailable" else "",
+        "recommended_setting": "BLINQ_STORAGE_CONNECTION_STRING" if backend == "unavailable" and policy == "azure" else "",
         "services": {
             "premium_info": backend != "unavailable",
             "live_alert_history": backend != "unavailable",
@@ -205,34 +276,12 @@ def admin_storage_backend() -> str:
 
 
 def _table(name: str):
-    connection = _connection_string()
-    if not connection:
+    policy = _storage_backend_policy()
+    if policy == "azure":
+        return _azure_table(name)
+    if policy == "firestore":
         return _FirestoreTableAdapter(name)
-    try:
-        from azure.data.tables import TableServiceClient
-    except ImportError as exc:
-        # Firebase is a valid fallback even if the optional Azure SDK is absent.
-        try:
-            return _FirestoreTableAdapter(name)
-        except AdminStorageUnavailable:
-            raise AdminStorageUnavailable("azure-data-tables is unavailable") from exc
-    try:
-        service = TableServiceClient.from_connection_string(connection)
-        client = service.get_table_client(name)
-        client.create_table()
-        return client
-    except Exception as exc:  # SDK-specific errors vary by transport/version.
-        try:
-            service = TableServiceClient.from_connection_string(connection)
-            return service.get_table_client(name)
-        except Exception:
-            # If Azure storage credentials are broken during a deployment, keep
-            # the admin usable via the same Firebase project instead of silently
-            # losing all account controls.
-            try:
-                return _FirestoreTableAdapter(name)
-            except AdminStorageUnavailable as inner:
-                raise AdminStorageUnavailable("Admin storage is unavailable") from inner
+    raise AdminStorageUnavailable("Admin storage is unavailable")
 
 
 def _encode_runtime_ui_payload(config: dict) -> str:
@@ -275,31 +324,35 @@ def _normalize_membership_invariants(payload: object) -> object:
     """
     if not isinstance(payload, dict):
         return payload
-    plans = payload.get("plans")
-    if not isinstance(plans, dict):
+    try:
+        schema = int(payload.get("schema") or 0)
+    except (TypeError, ValueError):
+        schema = 0
+    if schema != 2:
         return payload
+    plans = payload.get("plans")
+    if isinstance(plans, dict):
+        trial = plans.get("trial")
+        if isinstance(trial, dict):
+            trial["enabled"] = False
+            trial["trial_hours"] = 0
+            trial["duration_days"] = None
+            trial["inherits"] = "rookie"
 
-    trial = plans.get("trial")
-    if isinstance(trial, dict):
-        trial["enabled"] = False
-        trial["trial_hours"] = 0
-        trial["duration_days"] = None
-        trial["inherits"] = "rookie"
+        rookie = plans.get("rookie")
+        if isinstance(rookie, dict):
+            rookie["enabled"] = True
+            rookie["duration_days"] = None
+            rookie["unlimited"] = True
+            rookie["lifetime"] = False
 
-    rookie = plans.get("rookie")
-    if isinstance(rookie, dict):
-        rookie["enabled"] = True
-        rookie["duration_days"] = None
-        rookie["unlimited"] = True
-        rookie["lifetime"] = False
-
-    goat = plans.get("goat")
-    if isinstance(goat, dict):
-        goat["lifetime"] = False
-        goat["unlimited"] = False
-        days = goat.get("duration_days")
-        if not isinstance(days, int) or isinstance(days, bool) or days <= 0:
-            goat["duration_days"] = 365
+        goat = plans.get("goat")
+        if isinstance(goat, dict):
+            goat["lifetime"] = False
+            goat["unlimited"] = False
+            days = goat.get("duration_days")
+            if not isinstance(days, int) or isinstance(days, bool) or days <= 0:
+                goat["duration_days"] = 365
 
     # Access contract v1 aligns legacy runtime rows with the approved product
     # matrix once. After Admin republishes the migrated config, the marker
@@ -353,6 +406,22 @@ def _normalize_membership_invariants(payload: object) -> object:
             notifications["default_levels"] = ["elite", "legend", "goat"]
         payload["access_contract_revision"] = 1
 
+    # Keep backend and frontend legacy migrations identical. Runtime rows may
+    # intentionally be older than the current release, but missing access fields
+    # must resolve to the same effective contract on both sides.
+    patch_text = str(payload.get("ui_patch") or "")
+    match = re.search(r"r(\d+)$", patch_text)
+    patch_number = int(match.group(1)) if match else 0
+    tabs = ((((payload.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}))
+    if patch_number < 27:
+        prime = tabs.get("prime")
+        if isinstance(prime, dict):
+            prime["enabled"] = True
+    if patch_number < 33:
+        rookie_prime = ((((tabs.get("prime") or {}).get("plans") or {}).get("rookie")))
+        if isinstance(rookie_prime, dict):
+            rookie_prime["selection_mode"] = "stable_random"
+
     inactivity = payload.get("account_inactivity")
     if isinstance(inactivity, dict) and inactivity.get("auto_expire_rookie") is True:
         # A user-facing warning is a hard prerequisite for automated account
@@ -361,15 +430,56 @@ def _normalize_membership_invariants(payload: object) -> object:
     return payload
 
 
+
+_UI_ACCESS_DEFAULTS_PATH = Path(__file__).resolve().parents[1] / "assets" / "ui_access_defaults.json"
+
+
+def _deep_merge_dict(base: dict, override: dict) -> dict:
+    result = json.loads(json.dumps(base))
+    for key, value in (override or {}).items():
+        if isinstance(value, dict) and isinstance(result.get(key), dict):
+            result[key] = _deep_merge_dict(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def _release_access_defaults() -> dict:
+    try:
+        value = json.loads(_UI_ACCESS_DEFAULTS_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise AdminStorageUnavailable("Release access defaults are unavailable") from exc
+    if not isinstance(value, dict) or int(value.get("schema") or 0) != 2:
+        raise AdminStorageUnavailable("Release access defaults are invalid")
+    return value
+
+
+def resolve_ui_access_config(runtime: dict | None) -> dict:
+    """Return one server-owned effective entitlement config for FE and BE."""
+    merged = _deep_merge_dict(_release_access_defaults(), runtime or {})
+    normalized = _normalize_membership_invariants(merged)
+    return normalized if isinstance(normalized, dict) else merged
+
+
+def load_effective_ui_config() -> tuple[dict, bool, bool]:
+    """Return (effective_config, runtime_configured, storage_available).
+
+    Storage outages fall back to the committed release access contract instead
+    of switching the server to a second set of hard-coded entitlement defaults.
+    """
+    try:
+        runtime = load_runtime_ui_config()
+        return resolve_ui_access_config(runtime), bool(runtime), True
+    except AdminStorageUnavailable:
+        return resolve_ui_access_config(None), False, False
+
 def load_runtime_ui_config() -> dict | None:
     client = _table(UI_TABLE)
     try:
         entity = client.get_entity(partition_key="runtime", row_key="ui-config")
     except Exception as exc:
         # Missing config is normal; transport/auth/storage failures are not.
-        status = getattr(exc, "status_code", None)
-        name = exc.__class__.__name__.lower()
-        if status == 404 or "resourcenotfound" in name or "resourcenotfounderror" in name:
+        if _storage_not_found(exc):
             return None
         raise AdminStorageUnavailable("Unable to load runtime UI configuration") from exc
     decoded = _decode_runtime_ui_payload(entity.get("payload"))
@@ -445,8 +555,12 @@ def save_account_worker_status(payload: object) -> dict:
         "inactive": max(0, int(data.get("inactive") or 0)),
         "warnings": max(0, int(data.get("warnings") or 0)),
         "expired": max(0, int(data.get("expired") or 0)),
+        "subscription_7": max(0, int(data.get("subscription_7") or 0)),
+        "subscription_3": max(0, int(data.get("subscription_3") or 0)),
         "user_emails": max(0, int(data.get("user_emails") or 0)),
+        "mail_failures": max(0, int(data.get("mail_failures") or 0)),
         "admin_email": bool(data.get("admin_email", False)),
+        "admin_emails": max(0, int(data.get("admin_emails") or 0)),
         "smtp_configured": bool(data.get("smtp_configured", False)),
         "enabled": bool(data.get("enabled", False)),
         "last_error": str(data.get("last_error") or "")[:160],
@@ -525,7 +639,7 @@ def validate_ui_config(payload: object) -> dict:
     for key in ("enabled", "notify_admin", "notify_user", "auto_expire_rookie"):
         if key in inactivity and not isinstance(inactivity.get(key), bool):
             raise ValueError(f"Account inactivity {key} must be boolean")
-    inactive_days = inactivity.get("inactive_days", 90)
+    inactive_days = inactivity.get("inactive_days", 30)
     warning_days = inactivity.get("warning_days", 7)
     if not isinstance(inactive_days, int) or not 14 <= inactive_days <= 3650:
         raise ValueError("Account inactivity threshold must be 14..3650 days")
@@ -941,10 +1055,7 @@ def membership_levels_from(min_level: str = "rookie") -> list[str]:
 def live_min_level(config: dict | None = None) -> str:
     runtime = config if isinstance(config, dict) else None
     if runtime is None:
-        try:
-            runtime = load_runtime_ui_config() or {}
-        except AdminStorageUnavailable:
-            runtime = {}
+        runtime, _, _ = load_effective_ui_config()
     notifications = (runtime.get("notifications") or {}) if isinstance(runtime, dict) else {}
     level = str(notifications.get("live_min_level") or notifications.get("default_min_level") or "elite").strip().lower()
     return level if level in _INSIGHT_LEVELS else "elite"
@@ -954,16 +1065,15 @@ def live_alert_levels(config: dict | None = None) -> list[str]:
 def info_min_level(config: dict | None = None) -> str:
     runtime = config if isinstance(config, dict) else None
     if runtime is None:
-        try:
-            runtime = load_runtime_ui_config() or {}
-        except AdminStorageUnavailable:
-            runtime = {}
+        runtime, _, _ = load_effective_ui_config()
     notifications = (runtime.get("notifications") or {}) if isinstance(runtime, dict) else {}
     level = str(notifications.get("info_min_level") or "rookie").strip().lower()
     return level if level in _INSIGHT_LEVELS else "rookie"
 
 def info_alert_levels(config: dict | None = None) -> list[str]:
-    return membership_levels_from(info_min_level(config))
+    # INFO is audience-driven per message. The legacy info_min_level value is
+    # retained only as the Admin composer default; it is not an authorization gate.
+    return list(_INSIGHT_LEVELS)
 
 _INSIGHT_PRIORITIES = {"normal", "important", "critical"}
 
@@ -1179,6 +1289,10 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
             read_ids = {str(row.get("RowKey") or "") for row in reads}
         except Exception as exc:
             raise AdminStorageUnavailable("Unable to load insight read state") from exc
+    # Resolve runtime notification minima once per request, not once per insight.
+    # With a large history this used to multiply UI-config storage reads by N.
+    live_levels = set(live_alert_levels()) if plan and not include_inactive else set()
+    info_levels = set(info_alert_levels()) if plan and not include_inactive else set()
     items = []
     for entity in rows:
         item = _insight_from_entity(entity)
@@ -1186,9 +1300,9 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
             if not item["active"] or (plan and plan not in item["levels"]):
                 continue
             item_type = str(item.get("type") or "").lower()
-            if plan and item_type in {"alert", "live_watch", "set2"} and plan not in set(live_alert_levels()):
+            if plan and item_type in {"alert", "live_watch", "set2"} and plan not in live_levels:
                 continue
-            if plan and item_type not in {"alert", "live_watch", "set2"} and plan not in set(info_alert_levels()):
+            if plan and item_type not in {"alert", "live_watch", "set2"} and plan not in info_levels:
                 continue
             try:
                 starts = datetime.fromisoformat(item["active_from"]) if item["active_from"] else None

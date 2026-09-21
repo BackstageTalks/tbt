@@ -15,4 +15,5 @@ def test_esa_detail_is_projection_specific_and_hides_missing_stats():
     assert '.ace-detail-grid' in CSS
 
 def test_esa_tab_has_no_forced_detail_column():
-    assert "if(tab==='ace'||tab==='double_faults')return ['#','ČAS','TURNAJ','ZÁPAS','PREDIKCIA','PROJEKCIA','ISTOTA'];" in APP
+    assert "if(tab==='ace'||tab==='double_faults')return ['#',time,tournament,match,prediction,projection,confidence];" in APP
+    assert "prediction=lcopy('PREDICTION','PREDIKCIA','PREDIKCE')" in APP

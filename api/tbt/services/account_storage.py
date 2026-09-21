@@ -33,6 +33,60 @@ def _not_found(exc: Exception) -> bool:
     return status == 404 or "resourcenotfound" in name or isinstance(exc, KeyError)
 
 
+
+
+def _decode_daily_access_allocations(value: object) -> dict[str, list[str]]:
+    if not value:
+        return {}
+    try:
+        raw = json.loads(str(value))
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, list[str]] = {}
+    for section, items in raw.items():
+        if not isinstance(items, list):
+            continue
+        clean = []
+        for item in items[:20]:
+            text = str(item or "").strip()
+            if text and len(text) <= 96 and text not in clean:
+                clean.append(text)
+        name = str(section or "")[:32]
+        if name:
+            out[name] = clean
+    return out
+
+
+def save_daily_access_allocations(user_id: object, *, day: str, allocations: dict[str, list[str]]) -> dict:
+    """Persist the current betting-day random entitlement allocation.
+
+    One compact row per account is enough because only the current BlinQ betting
+    day matters. Replacing yesterday's allocation is intentional.
+    """
+    uid = str(user_id or "").strip()
+    key = _key(uid)
+    day = str(day or "").strip()
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", day):
+        raise ValueError("Invalid daily access day")
+    clean = _decode_daily_access_allocations(json.dumps(allocations or {}, ensure_ascii=False))
+    now = datetime.now(timezone.utc).isoformat()
+    entity = {
+        "PartitionKey": "account",
+        "RowKey": key,
+        "user_id": uid,
+        "daily_access_day": day,
+        "daily_access_allocations_json": json.dumps(clean, ensure_ascii=False, separators=(",", ":")),
+        "daily_access_updated_at": now,
+    }
+    try:
+        _table(ACCOUNT_TABLE).upsert_entity(entity, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save daily access allocation") from exc
+    return load_account_metadata(uid)
+
+
 def _public_entity(entity: dict | None) -> dict:
     row = entity or {}
     avatar = str(row.get("avatar_variant") or "").strip().lower()
@@ -57,6 +111,16 @@ def _public_entity(entity: dict | None) -> dict:
         "inactivity_user_warning_sent_at": row.get("inactivity_user_warning_sent_at"),
         "inactivity_deactivation_warning_sent_at": row.get("inactivity_deactivation_warning_sent_at"),
         "inactivity_expired_at": row.get("inactivity_expired_at"),
+        "last_activity_at": row.get("last_activity_at"),
+        "subscription_expiry_7_for": row.get("subscription_expiry_7_for"),
+        "subscription_expiry_7_sent_at": row.get("subscription_expiry_7_sent_at"),
+        "subscription_expiry_3_for": row.get("subscription_expiry_3_for"),
+        "subscription_expiry_3_sent_at": row.get("subscription_expiry_3_sent_at"),
+        # Durable per-user/day entitlement allocation. Stored as JSON in Azure
+        # Table so refreshes/reorders cannot reveal a different random pick.
+        "daily_access_day": str(row.get("daily_access_day") or "")[:16],
+        "daily_access_allocations": _decode_daily_access_allocations(row.get("daily_access_allocations_json")),
+        "daily_access_updated_at": row.get("daily_access_updated_at"),
     }
 
 
@@ -78,19 +142,41 @@ def load_account_metadata(user_id: object) -> dict:
 
 
 def load_account_metadata_many(user_ids: list[object]) -> dict[str, dict]:
+    """Load only requested account rows; never scan the full account partition.
+
+    Azure Table queries exact hashed RowKeys in bounded OR chunks. Firestore uses
+    point reads because its compatibility adapter intentionally supports only the
+    small query subset BlinQ needs. This keeps Admin pagination proportional to
+    the current page rather than the total number of accounts.
+    """
     wanted = {str(value or "").strip() for value in user_ids if str(value or "").strip()}
     if not wanted:
         return {}
     if len(wanted) > 500:
         raise ValueError("Too many account metadata rows requested")
     client = _table(ACCOUNT_TABLE)
+    found: dict[str, dict] = {}
     try:
-        rows = client.query_entities(query_filter="PartitionKey eq 'account'")
-        found = {}
-        for entity in rows:
-            uid = str(entity.get("user_id") or "")
-            if uid in wanted:
-                found[uid] = _public_entity(entity)
+        if client.__class__.__name__ == "_FirestoreTableAdapter":
+            for uid in wanted:
+                try:
+                    entity = client.get_entity(partition_key="account", row_key=_key(uid))
+                except Exception as exc:
+                    if _not_found(exc):
+                        continue
+                    raise
+                if str(entity.get("user_id") or "") == uid:
+                    found[uid] = _public_entity(entity)
+        else:
+            keyed = [(_key(uid), uid) for uid in wanted]
+            for offset in range(0, len(keyed), 12):
+                chunk = keyed[offset:offset + 12]
+                row_filter = " or ".join(f"RowKey eq '{row_key}'" for row_key, _ in chunk)
+                query = f"PartitionKey eq 'account' and ({row_filter})"
+                for entity in client.query_entities(query_filter=query):
+                    uid = str(entity.get("user_id") or "")
+                    if uid in wanted:
+                        found[uid] = _public_entity(entity)
         return {uid: found.get(uid, _public_entity(None)) for uid in wanted}
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to load account metadata") from exc
@@ -232,6 +318,45 @@ def save_admin_metadata(user_id: object, payload: object, *, actor_id: object = 
         client.upsert_entity(entity, mode="merge")
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to save account admin metadata") from exc
+    return load_account_metadata(uid)
+
+
+def touch_account_activity(user_id: object, *, at: object = None) -> None:
+    """Record server-observed account activity without reading the row first."""
+    uid = str(user_id or "").strip()
+    stamp = str(at or datetime.now(timezone.utc).isoformat())[:64]
+    entity = {
+        "PartitionKey": "account",
+        "RowKey": _key(uid),
+        "user_id": uid,
+        "last_activity_at": stamp,
+    }
+    try:
+        _table(ACCOUNT_TABLE).upsert_entity(entity, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to record account activity") from exc
+
+
+def save_subscription_notice_state(user_id: object, *, days: int, expires_for: object, sent_at: object) -> dict:
+    """Persist one paid-expiry notice marker tied to the exact expiry timestamp."""
+    uid = str(user_id or "").strip()
+    if int(days) not in {3, 7}:
+        raise ValueError("Unsupported subscription notice window")
+    expiry = str(expires_for or "").strip()[:64]
+    stamp = str(sent_at or "").strip()[:64]
+    if not expiry or not stamp:
+        raise ValueError("Subscription notice state requires expiry and sent_at")
+    entity = {
+        "PartitionKey": "account",
+        "RowKey": _key(uid),
+        "user_id": uid,
+        f"subscription_expiry_{int(days)}_for": expiry,
+        f"subscription_expiry_{int(days)}_sent_at": stamp,
+    }
+    try:
+        _table(ACCOUNT_TABLE).upsert_entity(entity, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save subscription notice state") from exc
     return load_account_metadata(uid)
 
 

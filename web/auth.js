@@ -9,7 +9,7 @@
     projectId: 'blinq-182',
   });
 
-  const AUTH_RUNTIME = '736-r36';
+  const AUTH_RUNTIME = '736-r46';
   const AUTH_CONFIG_URL = '/api/v1/auth/config';
   const AUTH_CONFIG_ATTEMPTS = 3;
   const TRANSIENT_AUTH_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);
@@ -17,6 +17,7 @@
   const KEY = 'blinq_v4_session';
   const EPOCH_KEY = 'blinq_v4_session_epoch';
   const LEGACY_KEYS = ['blinq_v3_session', 'blinq_v3_session_epoch'];
+  const PENDING_PROFILE_KEY = 'blinq_v4_pending_registration_profile';
   let config = null;
   let initPromise = null;
   let refreshing = null;
@@ -37,6 +38,8 @@
     sessionStorage.removeItem(KEY);
   }
   function clearLegacy() { LEGACY_KEYS.forEach(key => localStorage.removeItem(key)); }
+  function sessionStorageKeys() { return [KEY, EPOCH_KEY]; }
+  function sessionEpochKey() { return EPOCH_KEY; }
 
   function normalizeSession(value, provider = config?.provider || 'firebase') {
     const s = value?.session || value || {};
@@ -142,6 +145,41 @@
       throw error;
     }
     return data;
+  }
+
+  function pendingRegistrationProfile() {
+    try {
+      const value=JSON.parse(localStorage.getItem(PENDING_PROFILE_KEY)||'null');
+      if(!value||typeof value!=='object'||!value.email||!value.payload)return null;
+      return value;
+    } catch { return null; }
+  }
+  function savePendingRegistrationProfile(email,payload) {
+    const normalized=String(email||'').trim().toLowerCase();
+    if(!normalized||!payload||typeof payload!=='object'||!Object.keys(payload).length){
+      localStorage.removeItem(PENDING_PROFILE_KEY);
+      return;
+    }
+    localStorage.setItem(PENDING_PROFILE_KEY,JSON.stringify({email:normalized,payload,created_at:Date.now()}));
+  }
+  function clearPendingRegistrationProfile(email='') {
+    const pending=pendingRegistrationProfile();
+    const normalized=String(email||'').trim().toLowerCase();
+    if(!pending||!normalized||pending.email===normalized)localStorage.removeItem(PENDING_PROFILE_KEY);
+  }
+  async function syncPendingRegistrationProfile(accessToken,email='') {
+    const pending=pendingRegistrationProfile();
+    if(!pending)return true;
+    const normalized=String(email||pending.email||'').trim().toLowerCase();
+    if(normalized&&pending.email!==normalized)return true;
+    await json('/api/v1/auth/profile',{
+      method:'PUT',
+      headers:{'X-Blinq-Access-Token':accessToken},
+      body:JSON.stringify(pending.payload||{}),
+      timeoutMs:12000,
+    });
+    clearPendingRegistrationProfile(pending.email);
+    return true;
   }
 
   function provider() {
@@ -294,14 +332,23 @@
       method: 'POST',
       body: JSON.stringify({email, password, returnSecureToken: true}),
     });
-    // Persist the Firebase session first so an unverified user can request a
-    // fresh verification email without entering the password a second time.
+    // Persist the Firebase session before every downstream side effect. This is
+    // the durable recovery anchor if profile storage or verification SMTP fails.
     replaceSession(data, 'firebase');
     const verified = await firebaseEmailVerified(data.idToken);
     if (!verified) {
       const error = new Error('Verify your email before opening the BlinQ workspace.');
       error.code = 'EMAIL_NOT_VERIFIED';
       error.status = 403;
+      throw error;
+    }
+    try {
+      await syncPendingRegistrationProfile(data.idToken,email);
+    } catch (cause) {
+      const error=new Error('Your account exists, but profile setup is temporarily unavailable. Please try signing in again.');
+      error.code='PROFILE_SETUP_PENDING';
+      error.status=503;
+      error.cause=cause;
       throw error;
     }
     return session();
@@ -312,10 +359,16 @@
   }
 
   async function signUpFirebase(email, password, telegramNick, legalConsent = {}) {
+    const normalizedEmail=String(email||'').trim().toLowerCase();
     const data = await json(firebaseEndpoint('signUp'), {
       method: 'POST',
-      body: JSON.stringify({email, password, returnSecureToken: true}),
+      body: JSON.stringify({email: normalizedEmail, password, returnSecureToken: true}),
     });
+    // The Firebase account is already durable at this point, so persist the new
+    // identity immediately. No later profile/SMTP failure may make the client
+    // forget which account it just created.
+    replaceSession(data, 'firebase');
+
     const nick = String(telegramNick || '').trim();
     const legalVersion = String(legalConsent?.version || '').trim();
     const legalLocale = String(legalConsent?.locale || 'sk').trim().toLowerCase();
@@ -325,25 +378,27 @@
       profilePayload.legal_consent_version = legalVersion;
       profilePayload.legal_consent_locale = ['sk','cz','en'].includes(legalLocale) ? legalLocale : 'sk';
     }
+    if (Object.keys(profilePayload).length) savePendingRegistrationProfile(normalizedEmail,profilePayload);
+
+    let profileSynced=true;
     if (Object.keys(profilePayload).length) {
-      await json('/api/v1/auth/profile', {
-        method: 'PUT',
-        headers: {'X-Blinq-Access-Token': data.idToken},
-        body: JSON.stringify(profilePayload),
-      });
+      try { await syncPendingRegistrationProfile(data.idToken,normalizedEmail); }
+      catch { profileSynced=false; }
     }
-    // Keep the just-created Firebase session until our branded verification
-    // e-mail is accepted. If SMTP is temporarily unavailable the user can retry
-    // via "Resend verification" without creating the account again.
-    replaceSession(data, 'firebase');
+
+    // Verification delivery is independent from profile persistence. If SMTP
+    // fails, the saved Firebase session remains available for Resend. If only
+    // profile persistence failed, keep the session so the pending safe payload
+    // can be retried after reload/sign-in without creating the account twice.
     await json('/api/v1/auth/email', {
       method: 'POST',
       headers: {'X-Blinq-Access-Token': data.idToken},
-      body: JSON.stringify({type: 'verify', email: String(email || '').trim().toLowerCase()}),
+      body: JSON.stringify({type: 'verify', email: normalizedEmail}),
     });
-    clear();
-    return {verification_required: true, email: String(email || '').trim()};
+    if(profileSynced) clear();
+    return {verification_required: true, email: normalizedEmail, profile_pending: !profileSynced};
   }
+
   async function signUp(email, password, telegramNick, legalConsent = {}) {
     await ensureReady();
     return signUpFirebase(String(email || '').trim().toLowerCase(), password, telegramNick, legalConsent);
@@ -353,6 +408,7 @@
     await ensureReady();
     const s = await restore();
     if (!s) throw new Error('Sign in once more, then resend the verification email.');
+    try { await syncPendingRegistrationProfile(s.access_token); } catch {}
     await json('/api/v1/auth/email', {
       method: 'POST',
       headers: {'X-Blinq-Access-Token': s.access_token},
@@ -397,6 +453,20 @@
     return updateFirebase(fields);
   }
 
+  async function forceRefreshFirebaseSession() {
+    const s = session();
+    if (!s?.refresh_token) return s;
+    const refreshEpoch = epoch();
+    return restoreFirebase(s, refreshEpoch);
+  }
+
+  async function reactivateFree() {
+    await ensureReady();
+    const data = await apiWithSession('/api/v1/account/reactivate-free', {method: 'POST'});
+    await forceRefreshFirebaseSession();
+    return data;
+  }
+
   async function signOut() {
     clear();
   }
@@ -413,12 +483,13 @@
     const s = await restore();
     return json('/api/v1/feed', {headers: s ? {'X-Blinq-Access-Token': s.access_token} : {}});
   }
-  async function matchIntelligence(player1Id, player2Id, surface = '', customId = '') {
+  async function matchIntelligence(player1Id, player2Id, surface = '', customId = '', eventId = '') {
     const params = new URLSearchParams({
       player1_id: String(player1Id || ''),
       player2_id: String(player2Id || ''),
       surface: String(surface || ''),
       custom_id: String(customId || ''),
+      event_id: String(eventId || ''),
     });
     return apiWithSession(`/api/v1/match-intelligence?${params.toString()}`);
   }
@@ -469,7 +540,7 @@
     return apiWithSession(`/api/v1/admin/users/${encodeURIComponent(userId)}`, {method: 'DELETE'});
   }
   async function runtimeUiConfig() { return json('/api/v1/ui-config'); }
-  async function contentNews() { return json('/api/v1/content/news'); }
+  async function contentNews() { return json('/api/v1/content/news',{timeoutMs:5000}); }
   async function bannerEvent(payload, keepalive = false) {
     return json('/api/v1/banner-events', {method: 'POST', keepalive, body: JSON.stringify(payload || {})});
   }
@@ -507,10 +578,11 @@
   }
 
   window.BlinqAuth = {
-    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, signOut, feed, matchIntelligence,
+    init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, matchIntelligence,
     insights, liveRadar, adminLiveRadar, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
+    sessionStorageKeys, sessionEpochKey,
   };
 })();

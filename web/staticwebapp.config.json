@@ -43,6 +43,12 @@
       }
     },
     {
+      "route": "/match-popout.js",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
       "route": "/follow-the-data",
       "redirect": "/follow-the-data/",
       "statusCode": 301

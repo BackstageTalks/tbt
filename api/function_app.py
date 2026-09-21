@@ -21,7 +21,6 @@ from tbt.services.auth import (
     is_suspended,
     public_account,
     profile_claims,
-    mirror_profile_claims,
     request_authorization,
     update_firebase_profile,
     verify_user,
@@ -32,7 +31,6 @@ from tbt.services.admin_accounts import (
     delete_user_account,
     get_user,
     list_users,
-    mirror_admin_metadata_claims,
     tg_private_state,
     update_user_access,
     update_user_identity,
@@ -49,6 +47,7 @@ from tbt.services.account_storage import (
     list_manual_payments,
     list_account_audit,
     delete_account_metadata,
+    save_daily_access_allocations,
 )
 from tbt.services.admin_storage import (
     AdminStorageUnavailable,
@@ -56,6 +55,7 @@ from tbt.services.admin_storage import (
     admin_storage_diagnostics,
     banner_analytics_summary,
     load_runtime_ui_config,
+    load_effective_ui_config,
     record_banner_event,
     save_runtime_ui_config,
     list_insights,
@@ -79,13 +79,19 @@ from tbt.services.push_notifications import (
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
 from tbt.providers.rapidapi import RapidTennisClient
-from tbt.services.entitlements import filter_feed_for_access
+from tbt.services.entitlements import (
+    filter_feed_for_access,
+    match_detail_entitlements,
+    match_intelligence_row_authorized,
+    redact_match_intelligence,
+    build_daily_access_state,
+)
 from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnostics, inactivity_policy
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
     attach_second_set_odds,
 )
-from tbt.services.auth_email import send_blinq_action_email
+from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_slot
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
@@ -101,6 +107,17 @@ _BANNER_RATE_GLOBAL_MAX_EVENTS = 600
 _BANNER_RATE_BUCKETS = defaultdict(deque)
 _BANNER_RATE_GLOBAL = deque()
 _BANNER_RATE_LOCK = Lock()
+
+# Anonymous password-reset requests also get a best-effort instance-local
+# client guard in front of the durable per-address SMTP cooldown. The public
+# response remains identical when a request is throttled so this guard cannot
+# be used as an account-existence oracle.
+_AUTH_EMAIL_RATE_WINDOW_SECONDS = 5 * 60.0
+_AUTH_EMAIL_RATE_MAX_REQUESTS = 20
+_AUTH_EMAIL_RATE_GLOBAL_MAX_REQUESTS = 300
+_AUTH_EMAIL_RATE_BUCKETS = defaultdict(deque)
+_AUTH_EMAIL_RATE_GLOBAL = deque()
+_AUTH_EMAIL_RATE_LOCK = Lock()
 
 
 # Short-lived in-process cache for presentation-only match intelligence.  The
@@ -141,6 +158,32 @@ def _banner_event_allowed(payload):
     return True
 
 
+def _auth_email_request_allowed(req) -> bool:
+    headers = getattr(req, "headers", {}) or {}
+    forwarded = str(headers.get("X-Azure-ClientIP") or headers.get("X-Forwarded-For") or headers.get("X-Client-IP") or "anonymous")
+    client = forwarded.split(",", 1)[0].strip()[:128] or "anonymous"
+    key = hashlib.sha256(client.encode("utf-8")).hexdigest()[:24]
+    now = time.monotonic()
+    cutoff = now - _AUTH_EMAIL_RATE_WINDOW_SECONDS
+    with _AUTH_EMAIL_RATE_LOCK:
+        while _AUTH_EMAIL_RATE_GLOBAL and _AUTH_EMAIL_RATE_GLOBAL[0] < cutoff:
+            _AUTH_EMAIL_RATE_GLOBAL.popleft()
+        if len(_AUTH_EMAIL_RATE_GLOBAL) >= _AUTH_EMAIL_RATE_GLOBAL_MAX_REQUESTS:
+            return False
+        bucket = _AUTH_EMAIL_RATE_BUCKETS[key]
+        while bucket and bucket[0] < cutoff:
+            bucket.popleft()
+        if len(bucket) >= _AUTH_EMAIL_RATE_MAX_REQUESTS:
+            return False
+        bucket.append(now)
+        _AUTH_EMAIL_RATE_GLOBAL.append(now)
+        if len(_AUTH_EMAIL_RATE_BUCKETS) > 10000:
+            stale = [k for k, values in list(_AUTH_EMAIL_RATE_BUCKETS.items())[:2000] if not values or values[-1] < cutoff]
+            for stale_key in stale:
+                _AUTH_EMAIL_RATE_BUCKETS.pop(stale_key, None)
+    return True
+
+
 def response(payload, status=200):
     return func.HttpResponse(
         json.dumps(payload, ensure_ascii=False, allow_nan=False),
@@ -164,6 +207,8 @@ def _profile_for(user, *, required=False):
         if required:
             raise
         logging.warning("Account metadata storage unavailable; using Firebase claim mirror")
+        fallback = dict(fallback)
+        fallback["storage_fallback"] = True
         return fallback
 
     # Durable storage is authoritative once a field has actually been written.
@@ -179,11 +224,38 @@ def _profile_for(user, *, required=False):
         "access_metadata_updated_at", "admin_metadata_updated_at",
         "admin_metadata_updated_by",
         "legal_consent_version", "legal_consent_locale", "legal_consent_at",
+        "daily_access_day", "daily_access_allocations", "daily_access_updated_at",
     ):
         if stored.get(key) not in (None, ""):
             merged[key] = stored.get(key)
     merged["storage_fallback"] = False
     return merged
+
+
+def _access_context_with_daily_allocation(user, account_data: dict, profile: dict, feed_data: dict, runtime_ui):
+    """Attach the durable betting-day allocation without exposing it publicly."""
+    context = dict(account_data or {})
+    if bool((profile or {}).get("storage_fallback")):
+        context["_daily_allocations_fail_closed"] = True
+        return context
+    state, changed = build_daily_access_state(
+        context,
+        feed_data,
+        runtime_ui,
+        existing_day=str((profile or {}).get("daily_access_day") or ""),
+        existing_allocations=(profile or {}).get("daily_access_allocations") if isinstance((profile or {}).get("daily_access_allocations"), dict) else {},
+    )
+    if changed:
+        try:
+            save_daily_access_allocations(user.get("id"), day=state["day"], allocations=state["sections"])
+        except AdminStorageUnavailable:
+            # Fail closed for stable-random rows rather than revealing a second
+            # pick if allocation persistence becomes unavailable mid-request.
+            context["_daily_allocations_fail_closed"] = True
+            return context
+    context["_daily_allocations"] = state["sections"]
+    context["_access_day"] = state["day"]
+    return context
 
 
 def _admin_user(req):
@@ -282,7 +354,7 @@ def auth_config(req):
 
 @app.route(route="v1/auth/email", methods=["POST"])
 def auth_email(req):
-    """Send BlinQ-branded Firebase verification or password-reset e-mail."""
+    """Send BlinQ-branded verification/reset e-mail with abuse-safe reset semantics."""
     try:
         try:
             payload = req.get_json()
@@ -306,21 +378,34 @@ def auth_email(req):
                 return response({"error": "email_mismatch"}, 403)
             if bool(user.get("email_verified", False)):
                 return response({"ok": True, "accepted": True, "already_verified": True})
+            if not claim_auth_email_slot(recipient, "verify", window_seconds=60):
+                return response({"error": "rate_limited"}, 429)
             send_blinq_action_email(settings, recipient, "verify")
             return response({"ok": True, "accepted": True})
 
         recipient = str(payload.get("email") or "").strip().lower()
         if not recipient or "@" not in recipient or len(recipient) > 320:
             return response({"error": "invalid_email"}, 400)
-        # Password reset must not reveal whether an address exists.  We still
-        # use Firebase Admin for the lookup so no reset e-mail is sent to an
-        # unknown account, but the public response is identical either way.
-        existing = firebase_get_user_by_email(settings, recipient)
-        if existing is not None:
-            send_blinq_action_email(settings, recipient, "reset")
+
+        # Password-reset is deliberately enumeration-safe. All syntactically
+        # valid addresses receive the same public response whether the account
+        # exists, Firebase is transiently unavailable, SMTP fails, or abuse
+        # protection suppresses delivery. Operational failures remain in logs.
+        if not _auth_email_request_allowed(req):
+            return response({"ok": True, "accepted": True})
+        try:
+            if not claim_auth_email_slot(recipient, "reset", window_seconds=90):
+                return response({"ok": True, "accepted": True})
+            existing = firebase_get_user_by_email(settings, recipient)
+            if existing is not None:
+                send_blinq_action_email(settings, recipient, "reset")
+        except (AuthUnavailable, AdminStorageUnavailable, RuntimeError, OSError, smtplib.SMTPException):
+            logging.exception("BlinQ password-reset delivery suppressed after internal failure")
         return response({"ok": True, "accepted": True})
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "auth_email_throttle_unavailable"}, 503)
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
     except (RuntimeError, OSError, smtplib.SMTPException):
@@ -335,6 +420,50 @@ def account(req):
         return response(public_account(user, cfg=settings, profile=_profile_for(user))) if user else response({"error": "unauthorized"}, 401)
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/auth/free", methods=["POST"])
+def auth_reactivate_free(req):
+    """Allow an authenticated expired member to return to the permanent FREE tier.
+
+    This is deliberately a one-way, self-service recovery path: it can only
+    replace expired non-admin membership with active ROOKIE/FREE. Active paid
+    access, lifetime access and suspended/admin accounts are never downgraded.
+    """
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if is_suspended(user):
+            return response({"error": "account_suspended"}, 403)
+        current = public_account(user, cfg=settings, profile=_profile_for(user, required=False))
+        if current.get("is_admin") or str(current.get("role") or "").lower() == "admin":
+            return response({"error": "admin_access_cannot_be_downgraded"}, 409)
+        if str(current.get("status") or "").lower() != "expired":
+            return response({"error": "free_reactivation_requires_expired_account"}, 409)
+        updated = update_user_access(
+            settings, str(user.get("id") or ""),
+            {"role": "user", "plan": "rookie", "status": "active", "expires_at": None},
+            actor_id=str(user.get("id") or ""),
+        )
+        sync_push_access(user_id=str(user.get("id") or ""), plan="rookie", status="active", expires_at=None)
+        return response(public_account(updated, cfg=settings, profile=_profile_for(updated, required=False)))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "account_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/account/reactivate-free", methods=["POST"])
+def account_reactivate_free(req):
+    """Canonical public route for returning an EXPIRED member to FREE.
+
+    Keep ``v1/auth/free`` above as a backwards-compatible alias while the web
+    client and release contract use the account-scoped endpoint.
+    """
+    return auth_reactivate_free(req)
 
 
 @app.route(route="v1/auth/profile", methods=["PUT"])
@@ -361,19 +490,11 @@ def auth_profile(req):
         if verified and isinstance(payload, dict) and "display_name" in payload:
             firebase_payload["display_name"] = normalized["display_name"]
         updated = update_firebase_profile(settings, user.get("id"), firebase_payload)
-        # Mirror the small non-sensitive profile fields into Firebase claims so
-        # Telegram/avatar identity survives a temporary admin-storage outage.
-        updated = mirror_profile_claims(settings, user.get("id"), payload)
-        try:
-            profile = save_profile_metadata(user.get("id"), payload)
-            storage_warning = None
-        except AdminStorageUnavailable:
-            profile = profile_claims(updated)
-            storage_warning = "profile_storage_fallback"
-        result = public_account(updated, cfg=settings, profile=profile)
-        if storage_warning:
-            result["storage_warning"] = storage_warning
-        return response(result)
+        # Profile/Telegram/avatar data deliberately stay out of Firebase custom
+        # claims. Claims are authorization-only; durable metadata failure is
+        # therefore a failed profile write instead of a stale-claims fallback.
+        profile = save_profile_metadata(user.get("id"), payload)
+        return response(public_account(updated, cfg=settings, profile=profile))
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AuthUnavailable:
@@ -635,20 +756,55 @@ def match_intelligence(req):
         p2 = str(req.params.get("player2_id") or "").strip()
         surface = str(req.params.get("surface") or "").strip()[:48]
         custom_id = str(req.params.get("custom_id") or "").strip()[:64]
+        event_id = str(req.params.get("event_id") or "").strip()[:64]
         if not p1.isdigit() or not p2.isdigit() or len(p1) > 12 or len(p2) > 12:
             return response({"error": "invalid_player_ids"}, 400)
-        key = f"{p1}:{p2}:{_surface_family(surface)}:{custom_id}"
+
+        # Match intelligence is a paid/detail capability, not an identity-only
+        # endpoint. Resolve the exact same runtime access contract as /v1/feed
+        # before touching the provider or shared cache. Fail closed if the
+        # runtime access configuration cannot be loaded.
+        profile = _profile_for(user)
+        account_data = public_account(user, cfg=settings, profile=profile)
+        runtime_ui, _, _ = load_effective_ui_config()
+        detail_access = match_detail_entitlements(account_data, runtime_ui)
+        if not detail_access.get("allowed"):
+            return response({"error": "match_detail_forbidden"}, 403)
+        try:
+            visible = visible_feed(read_feed(FEED))
+            access_context = _access_context_with_daily_allocation(user, account_data, profile, visible, runtime_ui)
+            authorized_feed, _ = filter_feed_for_access(visible, access_context, runtime_ui)
+        except PermissionError:
+            return response({"error": "account_suspended"}, 403)
+        if not match_intelligence_row_authorized(
+            authorized_feed, p1, p2, event_id=event_id, custom_id=custom_id
+        ):
+            return response({"error": "match_not_authorized"}, 403)
+
+        key = f"{p1}:{p2}:{_surface_family(surface)}:{custom_id}:{event_id}"
         cached = _cached_match_intelligence(key)
         if cached is not None:
-            return response({**cached, "cached": True})
+            public_cached = redact_match_intelligence(cached, detail_access)
+            return response({**public_cached, "cached": True})
 
         feed_result = _feed_match_intelligence(p1, p2, surface)
+        live_provider_enabled = str(os.getenv("BLINQ_MATCH_INTELLIGENCE_LIVE_PROVIDER", "")).strip().lower() in {"1", "true", "yes", "on"}
+        if not live_provider_enabled:
+            if feed_result is None:
+                return response({"error": "match_intelligence_unavailable"}, 503)
+            _store_match_intelligence(key, feed_result)
+            public_feed_result = redact_match_intelligence(feed_result, detail_access)
+            return response({**public_feed_result, "cached": False, "live_provider": False})
         try:
             client = RapidTennisClient(settings)
+            # Explicit opt-in still has a strict per-request ceiling. The default
+            # production path above consumes zero online Tennis RapidAPI calls.
+            client.request_limit = min(getattr(client, "request_limit", 9) or 9, 9)
         except Exception:
             if feed_result is not None:
                 _store_match_intelligence(key, feed_result)
-                return response({**feed_result, "cached": False, "live_provider": False})
+                public_feed_result = redact_match_intelligence(feed_result, detail_access)
+                return response({**public_feed_result, "cached": False, "live_provider": False})
             raise
         histories = {}
         rankings = {}
@@ -733,10 +889,27 @@ def match_intelligence(req):
             result[label] = base
         result["live_provider"] = True
         _store_match_intelligence(key, result)
-        return response({**result, "cached": False})
+        public_result = redact_match_intelligence(result, detail_access)
+        try:
+            client.close()
+        except Exception:
+            pass
+        return response({**public_result, "cached": False})
     except AuthUnavailable:
+        client = locals().get("client")
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
         return response({"error": "auth_unavailable"}, 503)
     except Exception:
+        client = locals().get("client")
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
         logging.exception("Match intelligence live enrichment failed")
         # Azure Static Web Apps runtime does not inherit GitHub Actions
         # secrets. The deployed serving feed is therefore the authoritative
@@ -755,62 +928,40 @@ def match_intelligence(req):
             cache_key = locals().get("key")
             if cache_key:
                 _store_match_intelligence(cache_key, fallback)
-            return response({**fallback, "cached": False, "live_provider": False})
+            detail = locals().get("detail_access") or {"sections": {}}
+            public_fallback = redact_match_intelligence(fallback, detail)
+            return response({**public_fallback, "cached": False, "live_provider": False})
         return response({"error": "match_intelligence_unavailable"}, 503)
 
 
 @app.route(route="v1/player-image/{player_id}", methods=["GET"])
 def player_image_proxy(req):
-    """Serve provider player artwork without exposing the RapidAPI key."""
-    raw = str((req.route_params or {}).get("player_id") or "").strip()
-    if not raw.isdigit() or not (1 <= len(raw) <= 12):
-        return func.HttpResponse(status_code=404)
-    try:
-        result = RapidTennisClient(settings).player_image(raw)
-    except Exception:
-        logging.exception("Player image unavailable for %s", raw)
-        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=300"})
-    if not result:
-        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=3600"})
-    data, content_type = result
-    allowed = {"image/png", "image/jpeg", "image/webp", "image/svg+xml", "image/gif"}
-    if content_type not in allowed:
-        content_type = "image/png"
-    return func.HttpResponse(body=data, status_code=200, mimetype=content_type, headers={"Cache-Control": "public, max-age=86400, stale-while-revalidate=604800"})
+    """Legacy compatibility endpoint.
+
+    Player artwork is deployed from the private presentation release. A public
+    request must never create a paid provider request, so missing assets fail
+    closed and the web client uses its gender-aware local fallback.
+    """
+    return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=86400"})
 
 
 @app.route(route="v1/tournament-logo/{tournament_id}", methods=["GET"])
 def tournament_logo_proxy(req):
-    """Serve TennisApi tournament artwork without exposing the RapidAPI key.
-
-    The provider dark logo is preferred by RapidTennisClient.tournament_logo().
-    This is presentation-only data and is intentionally cached by browsers/CDNs.
-    """
-    raw = str((req.route_params or {}).get("tournament_id") or "").strip()
-    if not raw.isdigit() or not (1 <= len(raw) <= 12):
-        return func.HttpResponse(status_code=404)
-    try:
-        result = RapidTennisClient(settings).tournament_logo(raw)
-    except Exception:
-        logging.exception("Tournament logo unavailable for %s", raw)
-        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=300"})
-    if not result:
-        return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=3600"})
-    data, content_type = result
-    allowed = {"image/png", "image/jpeg", "image/webp", "image/svg+xml", "image/gif"}
-    if content_type not in allowed:
-        content_type = "image/png"
-    return func.HttpResponse(body=data, status_code=200, mimetype=content_type, headers={"Cache-Control": "public, max-age=86400, stale-while-revalidate=604800"})
+    """Legacy compatibility endpoint; never proxy a paid provider request."""
+    return func.HttpResponse(status_code=404, headers={"Cache-Control": "public, max-age=86400"})
 
 @app.route(route="v1/ui-config", methods=["GET"])
 def runtime_ui_config(req):
-    try:
-        config = load_runtime_ui_config()
-        return response({"configured": bool(config), "config": config, "storage_available": True})
-    except AdminStorageUnavailable:
-        # Public UI has a committed release fallback. Storage availability is
-        # diagnostic metadata, not an application-fatal condition.
-        return response({"configured": False, "config": None, "storage_available": False})
+    config, runtime_configured, storage_available = load_effective_ui_config()
+    payload = {
+        "configured": True,
+        "runtime_configured": runtime_configured,
+        "config": config,
+        "source": "runtime" if runtime_configured else "release_access_defaults",
+    }
+    if not storage_available:
+        return response({**payload, "storage_available": False})
+    return response({**payload, "storage_available": True})
 
 
 @app.route(route="v1/content/news", methods=["GET"])
@@ -856,15 +1007,13 @@ def feed(req):
             return response({"error": "unauthorized"}, 401)
         if not bool(user.get("email_verified", False)):
             return response({"error": "email_not_verified"}, 403)
-        account_data = public_account(user, cfg=settings, profile=_profile_for(user))
+        profile = _profile_for(user)
+        account_data = public_account(user, cfg=settings, profile=profile)
         data = visible_feed(read_feed(FEED))
         try:
-            
-            try:
-                runtime_ui = load_runtime_ui_config()
-            except AdminStorageUnavailable:
-                runtime_ui = None
-            data, entitlements = filter_feed_for_access(data, account_data, runtime_ui)
+            runtime_ui, _, _ = load_effective_ui_config()
+            access_context = _access_context_with_daily_allocation(user, account_data, profile, data, runtime_ui)
+            data, entitlements = filter_feed_for_access(data, access_context, runtime_ui)
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
         data["account"] = account_data
@@ -1482,6 +1631,10 @@ def admin_diagnostics(req):
                     "inactive": int(account_worker_status.get("inactive") or 0),
                     "warnings": int(account_worker_status.get("warnings") or 0),
                     "expired": int(account_worker_status.get("expired") or 0),
+                    "subscription_7": int(account_worker_status.get("subscription_7") or 0),
+                    "subscription_3": int(account_worker_status.get("subscription_3") or 0),
+                    "mail_failures": int(account_worker_status.get("mail_failures") or 0),
+                    "admin_emails": int(account_worker_status.get("admin_emails") or 0),
                     "last_error": str(account_worker_status.get("last_error") or "")[:160],
                 },
                 "smtp": smtp,
@@ -1610,16 +1763,9 @@ def admin_user_profile(req):
         profile = _profile_for(target, required=False)
         storage_warning = None
         if profile_payload:
-            normalized = normalize_profile_update(profile_payload)
-            target = mirror_profile_claims(settings, user_id, profile_payload)
-            try:
-                profile = save_profile_metadata(user_id, profile_payload)
-            except AdminStorageUnavailable:
-                profile = {**profile_claims(target), **{k: normalized.get(k) for k in ("telegram_nick", "display_name") if k in normalized}}
-                storage_warning = "profile_storage_fallback"
+            normalize_profile_update(profile_payload)
+            profile = save_profile_metadata(user_id, profile_payload)
         row = _admin_account_row(target, profile)
-        if storage_warning:
-            row["storage_warning"] = storage_warning
         return response(row)
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
@@ -1645,9 +1791,13 @@ def admin_user_delete(req):
         delete_user_account(settings, user_id)
         storage_warning = None
         try:
+            delete_subscription(user_id=user_id)
+        except AdminStorageUnavailable:
+            storage_warning = "push_cleanup_pending"
+        try:
             delete_account_metadata(user_id)
         except AdminStorageUnavailable:
-            storage_warning = "profile_metadata_cleanup_pending"
+            storage_warning = (storage_warning + ",profile_metadata_cleanup_pending").strip(",")
         payload = {"ok": True, "deleted_user_id": user_id}
         if storage_warning:
             payload["storage_warning"] = storage_warning
@@ -1673,29 +1823,18 @@ def admin_user_metadata(req):
             return response({"error": "invalid_json"}, 400)
         normalized = normalize_admin_metadata_update(payload)
         target = get_user(settings, user_id)
-        # TG Private is mirrored in a tiny Firebase claim so manual group
-        # operations continue even if the optional metadata store is down.
-        target = mirror_admin_metadata_claims(settings, user_id, normalized)
-        storage_warning = None
+        before = load_account_metadata(user_id)
+        after = save_admin_metadata(user_id, normalized, actor_id=str(actor.get("id") or ""))
         try:
-            before = load_account_metadata(user_id)
-            after = save_admin_metadata(user_id, normalized, actor_id=str(actor.get("id") or ""))
-            try:
-                record_admin_metadata_audit(
-                    actor_id=str(actor.get("id") or ""),
-                    target_id=user_id,
-                    before=before,
-                    after=after,
-                )
-            except AdminStorageUnavailable:
-                logging.warning("Admin account metadata audit unavailable")
+            record_admin_metadata_audit(
+                actor_id=str(actor.get("id") or ""),
+                target_id=user_id,
+                before=before,
+                after=after,
+            )
         except AdminStorageUnavailable:
-            after = profile_claims(target)
-            storage_warning = "admin_note_not_persisted" if "admin_note" in normalized else "operational_metadata_fallback"
-        row = _admin_account_row(target, after)
-        if storage_warning:
-            row["storage_warning"] = storage_warning
-        return response(row)
+            logging.warning("Admin account metadata audit unavailable")
+        return response(_admin_account_row(target, after))
     except ValueError as exc:
         return response({"error": str(exc)}, 400)
     except AuthUnavailable:

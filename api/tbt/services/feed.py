@@ -112,19 +112,34 @@ def visible_feed(payload, now=None):
     now = now.astimezone(timezone.utc)
 
     result = dict(payload)
-    upcoming = payload.get("upcoming", [])
-    if not isinstance(upcoming, list):
-        raise ValueError("Invalid serving feed: upcoming")
 
-    result["upcoming"] = [
-        row
-        for row in upcoming
-        if _parse_utc_timestamp(
-            row.get("scheduled_at") if isinstance(row, dict) else None,
-            "scheduled_at",
-        )
-        > now
-    ]
+    # Every public pre-match representation must obey the same runtime clock.
+    # Historically only `upcoming` was filtered, leaving already-started rows in
+    # TOP/PRIME/VALUE/ACES/SG arrays until the next data publication.
+    prematch_keys = (
+        "upcoming", "top_daily_picks", "prime_picks", "value_picks",
+        "doubles_picks", "ace_picks", "sg_picks",
+    )
+    for key in prematch_keys:
+        rows = payload.get(key, [])
+        if not isinstance(rows, list):
+            if key == "upcoming":
+                raise ValueError("Invalid serving feed: upcoming")
+            continue
+        visible = []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
+            try:
+                starts_at = _parse_utc_timestamp(raw, "scheduled_at")
+            except ValueError:
+                # A pre-match pick with no trustworthy start time is unsafe to
+                # present as current. Hide it rather than serving stale content.
+                continue
+            if starts_at > now:
+                visible.append(row)
+        result[key] = visible
 
     stamp = payload.get("generated_at")
     if not stamp:

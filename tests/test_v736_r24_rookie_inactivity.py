@@ -45,15 +45,15 @@ def test_membership_green_eyebrow_is_independently_editable_and_can_be_blank():
     assert "return value?`<small>${escapeHtml(value)}</small>`:'';" in APP
 
 
-def test_inactivity_policy_is_configurable_but_does_not_expire_rookie_by_default():
+def test_inactivity_policy_uses_final_30_day_expired_housekeeping():
     policy = inactivity_policy(UI)
     assert policy == {
         "enabled": True,
-        "inactive_days": 90,
+        "inactive_days": 30,
         "warning_days": 7,
         "notify_admin": True,
         "notify_user": True,
-        "auto_expire_rookie": False,
+        "auto_expire_rookie": True,
     }
     assert 'data-admin-inactivity-field="enabled"' in APP
     assert 'data-admin-inactivity-field="notify_admin"' in APP
@@ -68,7 +68,7 @@ def test_daily_account_worker_and_smtp_diagnostics_are_wired():
     assert "smtp_diagnostics" in API
     assert "BLINQ_ACCOUNT_WORKER_TOKEN" in CONFIG
     assert "BLINQ_SMTP_HOST" in CONFIG
-    assert "BLINQ_ADMIN_EMAIL" in CONFIG
+    assert "BLINQ_ADMIN_EMAILS" in CONFIG
     assert "TBT_ACCOUNT_INACTIVITY_ENABLED" in WORKFLOW
     assert "BLINQ_ACCOUNT_WORKER_TOKEN" in WORKFLOW
     assert "/api/v1/internal/account-inactivity-worker" in WORKFLOW

@@ -10,6 +10,7 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import hashlib
 import re
+from zoneinfo import ZoneInfo
 
 
 SECTION_TO_FEED_KEY = {
@@ -176,6 +177,143 @@ def effective_plan(access: dict) -> str:
     return "expired"
 
 
+MEMBERSHIP_LEVELS = ("rookie", "pro", "elite", "legend", "goat")
+_MATCH_DETAIL_DEFAULT_PLANS = {
+    "trial": True, "expired": False, "rookie": True, "pro": True,
+    "elite": True, "legend": True, "goat": True,
+}
+_MATCH_DETAIL_DEFAULT_SECTIONS = {
+    "overview": "rookie", "statistics": "pro", "radar": "elite", "history": "legend",
+}
+
+
+def _membership_at_least(plan: str, minimum: str) -> bool:
+    if plan == "admin":
+        return True
+    try:
+        return MEMBERSHIP_LEVELS.index(plan) >= MEMBERSHIP_LEVELS.index(minimum)
+    except ValueError:
+        return False
+
+
+def match_detail_entitlements(access: dict, ui_config: dict | None = None) -> dict:
+    """Resolve server-side match-detail access from the same runtime config as the UI.
+
+    The browser may render locks, but this manifest is the authorization boundary
+    used by the match-intelligence endpoint. Suspended/expired accounts fail
+    closed; admins retain operational access.
+    """
+    plan = effective_plan(access)
+    if plan == "admin":
+        return {
+            "plan": plan, "allowed": True,
+            "sections": {key: True for key in _MATCH_DETAIL_DEFAULT_SECTIONS},
+            "minimums": dict(_MATCH_DETAIL_DEFAULT_SECTIONS),
+        }
+    if plan in {"expired", "suspended"}:
+        return {
+            "plan": plan, "allowed": False,
+            "sections": {key: False for key in _MATCH_DETAIL_DEFAULT_SECTIONS},
+            "minimums": dict(_MATCH_DETAIL_DEFAULT_SECTIONS),
+        }
+
+    detail = (((ui_config or {}).get("dashboard") or {}).get("match_detail") or {}) if isinstance(ui_config, dict) else {}
+    configured_plans = detail.get("plans") if isinstance(detail.get("plans"), dict) else {}
+    configured_sections = detail.get("sections") if isinstance(detail.get("sections"), dict) else {}
+    plans = dict(_MATCH_DETAIL_DEFAULT_PLANS)
+    for key, value in configured_plans.items():
+        if key in plans and isinstance(value, bool):
+            plans[key] = value
+    minimums = dict(_MATCH_DETAIL_DEFAULT_SECTIONS)
+    for key, value in configured_sections.items():
+        normalized = str(value or "").strip().lower()
+        if key in minimums and normalized in MEMBERSHIP_LEVELS:
+            minimums[key] = normalized
+
+    allowed = bool(plans.get(plan, False))
+    return {
+        "plan": plan,
+        "allowed": allowed,
+        "sections": {key: bool(allowed and _membership_at_least(plan, minimum)) for key, minimum in minimums.items()},
+        "minimums": minimums,
+    }
+
+
+def _match_row_player_ids(row: dict) -> tuple[str, str]:
+    p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+    p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+    return str(p1.get("id") or row.get("player1_id") or ""), str(p2.get("id") or row.get("player2_id") or "")
+
+
+def match_intelligence_row_authorized(
+    filtered_feed: dict, player1_id: str, player2_id: str, *, event_id: str = "", custom_id: str = ""
+) -> bool:
+    """Return whether the requested match is present in an authorized pick array.
+
+    This prevents a member from calling the enrichment endpoint for arbitrary
+    provider player IDs that were never part of their server-filtered offer.
+    """
+    if not isinstance(filtered_feed, dict):
+        return False
+    p1, p2 = str(player1_id or ""), str(player2_id or "")
+    event_id, custom_id = str(event_id or ""), str(custom_id or "")
+    keys = (
+        "daily_picks", "prime_picks", "top_daily_picks", "value_picks",
+        "doubles_picks", "ace_picks", "sg_picks", "board_upcoming",
+    )
+    for key in keys:
+        rows = filtered_feed.get(key) if isinstance(filtered_feed.get(key), list) else []
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            rp1, rp2 = _match_row_player_ids(row)
+            if {rp1, rp2} != {p1, p2}:
+                continue
+            row_event = str(row.get("event_id") or row.get("id") or "")
+            row_custom = str(row.get("custom_id") or row.get("customId") or "")
+            if event_id and row_event != event_id:
+                continue
+            if custom_id and row_custom and row_custom != custom_id:
+                continue
+            return True
+    return False
+
+
+def redact_match_intelligence(payload: dict, detail_access: dict) -> dict:
+    """Redact live enrichment fields that belong to locked detail sections.
+
+    The provider/cache payload may be shared internally, but every response is
+    filtered for the caller. This makes cache hits obey the same membership
+    rules as fresh provider responses.
+    """
+    out = deepcopy(payload) if isinstance(payload, dict) else {}
+    sections = detail_access.get("sections") if isinstance(detail_access, dict) else {}
+    statistics_allowed = bool((sections or {}).get("statistics"))
+    history_allowed = bool((sections or {}).get("history"))
+
+    statistic_keys = {
+        "recent_form", "surface_form", "history_matches", "surface_history_matches",
+        "serve_win_pct", "return_win_pct", "serve_quality", "return_quality",
+        "aces_per_match", "ace_rate",
+    }
+    history_keys = {"h2h_wins", "h2h_losses", "h2h_matches"}
+    for label in ("player1", "player2"):
+        player = out.get(label)
+        if not isinstance(player, dict):
+            continue
+        presentation = player.get("presentation")
+        if isinstance(presentation, dict):
+            if not statistics_allowed:
+                for key in statistic_keys:
+                    presentation.pop(key, None)
+            if not history_allowed:
+                for key in history_keys:
+                    presentation.pop(key, None)
+    if not history_allowed:
+        out.pop("h2h", None)
+    return out
+
+
 def _row_id(row: dict) -> tuple[str, str]:
     return (str(row.get("event_id") or row.get("id") or ""), str(row.get("pick") or row.get("selection") or row.get("prediction") or ""))
 
@@ -294,15 +432,61 @@ def _access_identity(access: dict) -> str:
     return str(access.get("id") or access.get("user_id") or access.get("uid") or access.get("email") or "anonymous")
 
 
+def blinq_access_day(now: datetime | None = None, *, start_hour: int = 6) -> str:
+    """Return the product betting-day key (Europe/Bratislava, 06:00 boundary)."""
+    moment = now or datetime.now(timezone.utc)
+    if moment.tzinfo is None:
+        raise ValueError("blinq_access_day requires timezone-aware now")
+    local = moment.astimezone(ZoneInfo("Europe/Bratislava"))
+    boundary = local.replace(hour=int(start_hour), minute=0, second=0, microsecond=0)
+    if local < boundary:
+        boundary -= timedelta(days=1)
+    return boundary.date().isoformat()
+
+
+def _row_access_key(row: dict) -> str:
+    """Stable, non-sensitive identity for one public prediction row."""
+    if not isinstance(row, dict):
+        return ""
+    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+    p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+    parts = [
+        row.get("event_id") or row.get("id") or row.get("match_id") or row.get("custom_id"),
+        row.get("market") or row.get("projection_metric") or betting.get("market") or "match_winner",
+        row.get("selection_id") or row.get("pick_id") or betting.get("selection_id") or row.get("pick") or row.get("selection") or row.get("prediction"),
+        row.get("betting_day") or betting.get("betting_day"),
+        p1.get("id") or row.get("player1_id"),
+        p2.get("id") or row.get("player2_id"),
+        row.get("scheduled_at") or row.get("date") or row.get("start_time") or row.get("start_at"),
+    ]
+    raw = "|".join(str(value or "").strip() for value in parts)
+    if not raw.strip("|"):
+        return ""
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+
+
 def _stable_order(rows: list, *, access: dict, section: str, day: str | None = None) -> list:
-    """Deterministic per-account/per-day order; refreshes cannot reveal more picks."""
-    stamp=day or datetime.now(timezone.utc).date().isoformat()
+    """Deterministic identity-based fallback order. Durable state is preferred."""
+    stamp=day or blinq_access_day()
     seed=f"{_access_identity(access)}|{stamp}|{section}"
-    def score(item):
-        row=item[1] if isinstance(item[1],dict) else {}
-        ident=f"{_row_id(row)}|{item[0]}"
+    def score(row):
+        ident=_row_access_key(row if isinstance(row,dict) else {})
         return hashlib.sha256(f"{seed}|{ident}".encode("utf-8")).hexdigest()
-    return [row for _,row in sorted(enumerate(rows), key=score)]
+    return sorted(list(rows or []), key=score)
+
+
+def _section_allocation(access: dict, section: str):
+    allocations=access.get("_daily_allocations") if isinstance(access,dict) else None
+    if not isinstance(allocations,dict):
+        return None
+    key="daily" if section=="top_daily" else str(section or "")
+    if key not in allocations:
+        return None
+    value=allocations.get(key)
+    if not isinstance(value,list):
+        return []
+    return [str(item) for item in value if str(item)]
 
 
 def _select_authorized_rows(
@@ -341,24 +525,30 @@ def _select_authorized_rows(
     # selection pool to the Daily Hub preview (10 rows) so every daily sample is
     # actually visible without requiring SEE ALL.
     random_positions=None
-    if selection_mode == "stable_random" and not all_visible and visible_count > 0 and source:
-        pool_count=min(len(source), 10)
-        # _stable_order expects row-like values, so enumerate pairs are not useful
-        # row ids. Build the deterministic score explicitly while retaining the
-        # original slot numbers.
-        stamp=datetime.now(timezone.utc).date().isoformat()
-        seed=f"{_access_identity(access)}|{stamp}|{section}:positions"
-        scored=[]
-        for idx,row in enumerate(source[:pool_count]):
-            ident=f"{_row_id(row if isinstance(row,dict) else {})}|{idx}"
-            scored.append((hashlib.sha256(f"{seed}|{ident}".encode("utf-8")).hexdigest(), idx))
-        random_positions={idx for _,idx in sorted(scored)[:min(visible_count,pool_count)]}
+    allocated_keys=None
+    if selection_mode == "stable_random" and not all_visible:
+        allocated=_section_allocation(access, section)
+        if allocated is not None:
+            # Durable per-user/day allocation is authoritative. If a selected
+            # event later starts/disappears, do not replace it with another pick.
+            allocated_keys=set(allocated[:visible_count])
+        elif bool(access.get("_daily_allocations_fail_closed")):
+            # Storage outage must not expand a low-tier entitlement surface.
+            allocated_keys=set()
+        elif visible_count > 0 and source:
+            # Pure-function fallback for tests/legacy callers. Production feed
+            # requests persist the allocation in account metadata first.
+            pool=source[:min(len(source),10)]
+            ordered=_stable_order(pool,access=access,section=section)
+            allocated_keys={_row_access_key(row) for row in ordered[:min(visible_count,len(pool))]}
 
     overrides=row_overrides if isinstance(row_overrides,dict) else {}
     allowed=[]; slot_states=[]
     for index,row in enumerate(source, start=1):
         if all_visible:
             base_state="active"
+        elif allocated_keys is not None:
+            base_state="active" if _row_access_key(row) in allocated_keys else ("blurred" if blur_remaining else "hidden")
         elif random_positions is not None:
             base_state="active" if (index-1) in random_positions else ("blurred" if blur_remaining else "hidden")
         else:
@@ -367,7 +557,11 @@ def _select_authorized_rows(
         if state not in {"active","blurred","hidden"}: state=base_state
         slot_states.append(state)
         if state == "active":
-            allowed.append(deepcopy(row))
+            copy=deepcopy(row)
+            if isinstance(copy,dict):
+                copy["_access_slot"]=index-1
+                copy["_access_section"]="daily" if section=="top_daily" else section
+            allowed.append(copy)
     return allowed, slot_states
 
 
@@ -435,6 +629,30 @@ def _board_rows(payload: dict, key: str) -> list[dict]:
     )
 
 
+def _source_rows_for_section(payload: dict, section: str) -> list[dict]:
+    section=str(section or "")
+    if section in {"daily","top_daily"}:
+        return _daily_rows(payload)
+    if section=="prime":
+        rows=payload.get("prime_picks")
+    elif section=="value":
+        rows=payload.get("value_picks")
+    elif section=="doubles":
+        rows=payload.get("doubles_picks")
+    elif section in {"ace","double_faults"}:
+        rows=payload.get("ace_picks")
+        market="aces" if section=="ace" else "double_faults"
+        return [row for row in (rows if isinstance(rows,list) else []) if isinstance(row,dict) and str(row.get("market") or "").strip().lower()==market]
+    elif section in {"games","sets"}:
+        rows=payload.get("sg_picks")
+        return [row for row in (rows if isinstance(rows,list) else []) if isinstance(row,dict) and str(row.get("market") or "").strip().lower()==section]
+    elif section=="sg":
+        rows=payload.get("sg_picks")
+    else:
+        rows=[]
+    return [row for row in (rows if isinstance(rows,list) else []) if isinstance(row,dict)]
+
+
 def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: dict | None = None) -> dict:
     plan = effective_plan(access)
     if plan == "suspended":
@@ -442,7 +660,12 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
     policy = _POLICY.get(plan, _POLICY["expired"])
     payload = payload or {}
     sections = {}
-    source_map={"daily":_daily_rows(payload), **{section:(payload.get(feed_key) if isinstance(payload.get(feed_key),list) else []) for section,feed_key in SECTION_TO_FEED_KEY.items()}}
+    canonical_daily = _daily_rows(payload)
+    source_map={"daily":canonical_daily, **{section:(payload.get(feed_key) if isinstance(payload.get(feed_key),list) else []) for section,feed_key in SECTION_TO_FEED_KEY.items()}}
+    # `top_daily_picks` is a legacy representation of the same public TOP offer.
+    # Authorize it from the exact same canonical rows so one daily limit cannot
+    # yield two different unlocked TOP picks in a single API response.
+    source_map["top_daily"] = canonical_daily
     tab_map={"daily":"daily","prime":"prime","top_daily":"daily","value":"value","doubles":"doubles","ace":"ace","sg":"games"}
     for section, rows in source_map.items():
         default_limit, hard_see_all = policy.get(section, (0,False))
@@ -460,7 +683,7 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
         blur=runtime_rule[1] if runtime_rule else (str(limit).upper()!="ALL" and configured_slots<len(rows))
         if display_state=="active":
             preview, slot_states=_select_authorized_rows(
-                rows, limit, access=access, section=section, selection_mode=selection_mode,
+                rows, limit, access=access, section=("daily" if section == "top_daily" else section), selection_mode=selection_mode,
                 row_overrides=row_overrides, blur_remaining=bool(blur),
             )
         elif display_state=="blurred":
@@ -584,6 +807,75 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
     }
 
 
+def build_daily_access_state(
+    access: dict,
+    payload: dict,
+    ui_config: dict | None = None,
+    *,
+    existing_day: str = "",
+    existing_allocations: dict | None = None,
+    now: datetime | None = None,
+) -> tuple[dict, bool]:
+    """Resolve durable stable-random allocations for the current betting day.
+
+    Existing allocations for the same day are never refilled when a row starts,
+    disappears, or the feed is reordered. That guarantees a user cannot reveal
+    more than the configured random picks by repeatedly refreshing during a day.
+    """
+    day=blinq_access_day(now)
+    same_day=str(existing_day or "")==day and isinstance(existing_allocations,dict)
+    sections={}
+    if same_day:
+        for name,items in existing_allocations.items():
+            if isinstance(items,list):
+                sections[str(name)] = [str(item) for item in items if str(item)][:20]
+
+    # Compute the published section rules without depending on any prior random
+    # allocation. We only use its metadata (mode/limit/display state).
+    clean_access={key:value for key,value in (access or {}).items() if not str(key).startswith("_daily_")}
+    manifest=entitlement_manifest(clean_access,payload,ui_config)
+    changed=False
+
+    for section,meta in (manifest.get("sections") or {}).items():
+        canonical="daily" if section=="top_daily" else str(section)
+        if canonical in sections:
+            continue
+        if not isinstance(meta,dict) or str(meta.get("selection_mode") or "")!="stable_random":
+            continue
+        if not meta.get("enabled") or str(meta.get("display_state") or "active")!="active":
+            continue
+        raw_limit=meta.get("visible_picks",0)
+        if str(raw_limit).upper()=="ALL":
+            continue
+        try:
+            limit=max(0,int(raw_limit))
+        except (TypeError,ValueError):
+            limit=0
+        rows=_source_rows_for_section(payload,canonical)
+        pool=rows[:min(len(rows),10)]
+        seed=f"{_access_identity(access)}|{day}|{canonical}"
+        scored=[]
+        for row in pool:
+            key=_row_access_key(row)
+            if not key:
+                continue
+            score=hashlib.sha256(f"{seed}|{key}".encode("utf-8")).hexdigest()
+            scored.append((score,key))
+        selected=[]
+        for _,key in sorted(scored):
+            if key not in selected:
+                selected.append(key)
+            if len(selected)>=min(limit,len(pool)):
+                break
+        # Persist even an empty list. If there were no eligible rows at first
+        # access, later refreshes must not silently grant newly arrived picks.
+        sections[canonical]=selected
+        changed=True
+
+    state={"day":day,"sections":sections}
+    return state,changed
+
+
 def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None = None) -> tuple[dict, dict]:
     if not isinstance(payload, dict): raise ValueError("Invalid serving feed root")
     manifest=entitlement_manifest(access,payload,ui_config)
@@ -607,6 +899,8 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
             result["performance_windows"] = {}
         if "performance_window_summary" in result:
             result["performance_window_summary"] = {}
+        if "performance_subgroups" in result:
+            result["performance_subgroups"] = {}
 
     board_enabled = bool(manifest.get("sections", {}).get("board", {}).get("enabled"))
     result["board_upcoming"] = _board_rows(payload, "upcoming") if board_enabled else []
@@ -628,9 +922,9 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     prime_rows=payload.get(SECTION_TO_FEED_KEY["prime"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["prime"]),list) else []
     prime_ent=manifest["sections"]["prime"]
     result[SECTION_TO_FEED_KEY["prime"]]=_select_authorized_rows(prime_rows,prime_ent["visible_picks"],access=access,section="prime",selection_mode=prime_ent.get("selection_mode","first"),row_overrides=prime_ent.get("row_overrides"),blur_remaining=bool(prime_ent.get("blur_remaining")))[0] if prime_ent.get("display_state")=="active" and prime_ent.get("enabled") else []
-    rows=payload.get(SECTION_TO_FEED_KEY["top_daily"]) if isinstance(payload.get(SECTION_TO_FEED_KEY["top_daily"]),list) else []
-    top_ent=manifest["sections"]["top_daily"]
-    result[SECTION_TO_FEED_KEY["top_daily"]]=_select_authorized_rows(rows,top_ent["visible_picks"],access=access,section="top_daily",selection_mode=top_ent.get("selection_mode","first"),row_overrides=top_ent.get("row_overrides"),blur_remaining=bool(top_ent.get("blur_remaining")))[0] if top_ent.get("display_state")=="active" and top_ent.get("enabled") else []
+    # Legacy `top_daily_picks` must be an alias of the already-authorized TOP
+    # selection, never a second independently sampled entitlement surface.
+    result[SECTION_TO_FEED_KEY["top_daily"]] = deepcopy(daily_allowed)
 
     for section,feed_key in SECTION_TO_FEED_KEY.items():
         if section in {"prime","top_daily","ace","sg"}: continue

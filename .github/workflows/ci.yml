@@ -114,6 +114,12 @@ jobs:
           node tests/test_auth_init_resilience_r35.js
           node tests/test_v736_ui_regression_contract.js
 
+      - name: Run real-browser runtime contract
+        run: |
+          python -m pip install playwright==1.57.0
+          python -m playwright install chromium
+          python tests/browser_runtime_r43.py
+
       - name: Check production web artifact
         run: |
           set -euo pipefail

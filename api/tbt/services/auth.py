@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from threading import Lock
+import time
 
 
 
@@ -28,6 +29,8 @@ PLAN_LABELS = {
 
 _FIREBASE_APP = None
 _FIREBASE_APP_LOCK = Lock()
+_ACTIVITY_TOUCH_LOCK = Lock()
+_ACTIVITY_TOUCHES: dict[str, float] = {}
 
 
 def request_authorization(headers):
@@ -199,6 +202,32 @@ def _verify_firebase_user(token, cfg):
         raise AuthUnavailable("Identity service temporarily unavailable") from exc
 
 
+def _touch_verified_activity(user_id: str) -> None:
+    """Best-effort, throttled server activity marker for inactivity policy.
+
+    One write per process/user/6h is enough to distinguish a genuinely active
+    restored session from a dormant account without turning every API request
+    into a storage write. Storage failures must never make authentication fail.
+    """
+    uid = str(user_id or "").strip()
+    if not uid:
+        return
+    now_mono = time.monotonic()
+    with _ACTIVITY_TOUCH_LOCK:
+        previous = _ACTIVITY_TOUCHES.get(uid, 0.0)
+        if now_mono - previous < 21600:
+            return
+        _ACTIVITY_TOUCHES[uid] = now_mono
+    try:
+        from .account_storage import touch_account_activity
+        touch_account_activity(uid)
+    except Exception:
+        # Activity is an operational signal, not an auth dependency. A failed
+        # write merely keeps the older timestamp and is retried later.
+        with _ACTIVITY_TOUCH_LOCK:
+            _ACTIVITY_TOUCHES.pop(uid, None)
+
+
 def verify_user(authorization, cfg, client=None):
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
@@ -207,7 +236,10 @@ def verify_user(authorization, cfg, client=None):
         return None
     if auth_provider(cfg) != "firebase":
         raise AuthUnavailable("Authentication is not configured")
-    return _verify_firebase_user(token, cfg)
+    user = _verify_firebase_user(token, cfg)
+    if user:
+        _touch_verified_activity(user.get("id"))
+    return user
 
 
 def update_firebase_profile(cfg, user_id, payload):
@@ -268,10 +300,14 @@ def profile_claims(user) -> dict:
 
 
 def mirror_profile_claims(cfg, user_id, payload):
-    """Mirror Telegram/avatar fields into Firebase custom claims.
+    """Legacy compatibility shim; profile metadata is no longer written to claims.
 
-    This is intentionally limited to small, non-sensitive fields. Admin notes and
-    payment references never enter ID tokens.
+    Firebase custom claims are the authorization boundary and are replaced as a
+    whole object by the Admin SDK.  Mixing profile fields with role/plan/status
+    writers can therefore roll back a concurrent access revocation.  Profile
+    data now lives only in durable account metadata.  Existing legacy profile
+    claims may still be read by :func:`profile_claims` during migration, but
+    this helper deliberately performs no custom-claim write.
     """
     if not isinstance(payload, dict):
         raise ValueError("Invalid profile update")
@@ -281,24 +317,7 @@ def mirror_profile_claims(cfg, user_id, payload):
     _, firebase_auth, _ = _firebase_modules()
     app = firebase_app(cfg)
     try:
-        record = firebase_auth.get_user(uid, app=app)
-        claims = dict(record.custom_claims or {})
-        if "telegram_nick" in payload:
-            value = str(payload.get("telegram_nick") or "").strip()[:33]
-            if value:
-                claims["blinq_telegram_nick"] = value
-            else:
-                claims.pop("blinq_telegram_nick", None)
-        avatar_key = "blinq_avatar_variant" if "blinq_avatar_variant" in payload else "avatar_variant"
-        if avatar_key in payload:
-            value = str(payload.get(avatar_key) or "").strip().lower()
-            if value in {"m", "w"}:
-                claims["blinq_avatar_variant"] = value
-            else:
-                claims.pop("blinq_avatar_variant", None)
-        firebase_auth.set_custom_user_claims(uid, claims, app=app)
-        updated = firebase_auth.get_user(uid, app=app)
-        return firebase_user_to_dict(updated)
+        return firebase_user_to_dict(firebase_auth.get_user(uid, app=app))
     except ValueError:
         raise
     except Exception as exc:

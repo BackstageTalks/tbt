@@ -15,12 +15,12 @@ def test_r32_identity_background_and_loader_contract():
     release = json.loads((WEB / "release.json").read_text(encoding="utf-8"))
     theme = json.loads((WEB / "config" / "site-theme.json").read_text(encoding="utf-8"))
     banners = json.loads((WEB / "config" / "banners.json").read_text(encoding="utf-8"))
-    assert release["patch"] == UI["ui_patch"] == "736-r36"
-    assert 'content="736-r36"' in INDEX
+    assert release["patch"] == UI["ui_patch"] == "736-r46"
+    assert 'content="736-r46"' in INDEX
     assert (WEB / "assets" / "blinq_page_background.webp").is_file()
     assert theme["background"]["image"] == "/assets/blinq_page_background.webp"
     assert banners["main_banner"]["slides"][0]["site_background_url"] == "/assets/blinq_page_background.webp"
-    assert "/assets/blinq_loading_r29.svg?v=7360&p=36" in INDEX
+    assert "/assets/blinq_loading_r29.svg?v=7360&p=46" in INDEX
     assert (WEB / "assets" / "blinq_loading_r29.svg").is_file()
     # Loader background stays untouched even though the page/auth background changed.
     assert 'boot-splash.boot-splash-tennis' in CSS
@@ -90,6 +90,6 @@ def test_r32_custom_email_uses_real_blinq_logo_and_csp_safe_action_page():
     assert "/api/v1/auth/email" in auth_js
     assert "sendOobCode" not in auth_js
     assert '<img class="logo" src="/assets/blinq_logo.svg" alt="BlinQ">' in action_html
-    assert '<script src="/auth/action/action.js?v=7360&p=36"></script>' in action_html
+    assert '<script src="/auth/action/action.js?v=7360&p=46"></script>' in action_html
     assert '<script>' not in action_html
     assert any(route.get("route") == "/auth/action" and route.get("rewrite") == "/auth/action/index.html" for route in swa["routes"])

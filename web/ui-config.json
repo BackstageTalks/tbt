@@ -30,11 +30,11 @@
       "lifetime": false,
       "hide_ads_allowed": false,
       "description": "Entry access to the BlinQ workspace.",
-      "cta_label": "Choose Rookie",
+      "cta_label": "Prejsť na FREE",
       "url": "",
       "avatar": "rookie",
       "order": 1,
-      "card_title": "Start with BlinQ",
+      "card_title": "FREE",
       "show_price": false,
       "eyebrow": "",
       "unlimited": true
@@ -1623,7 +1623,7 @@
           }
         },
         "ace": {
-          "label": "ESA",
+          "label": "ACES",
           "enabled": true,
           "plans": {
             "trial": {
@@ -2428,14 +2428,14 @@
       }
     }
   },
-  "ui_patch": "736-r36",
+  "ui_patch": "736-r46",
   "account_inactivity": {
     "enabled": true,
-    "inactive_days": 90,
+    "inactive_days": 30,
     "warning_days": 7,
     "notify_admin": true,
     "notify_user": true,
-    "auto_expire_rookie": false
+    "auto_expire_rookie": true
   },
   "access_contract_revision": 1
 }

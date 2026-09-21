@@ -20,7 +20,9 @@ def test_leakage_audit_is_in_production_preflight_and_fails_closed():
 
 def test_leakage_policy_reuses_rank_provenance_and_point_in_time_feature_builder():
     script = read('scripts/audit_training_leakage.py')
-    feature = read('api/tbt/services/feature_builder.py')
+    feature = read('api/tbt/models/feature_builder.py')
+    shim = read('api/tbt/services/feature_builder.py')
     assert '_enforce_rank_provenance' in script
     assert 'Snapshot every match before applying any result from this' in feature
     assert 'current_match_statistics_update_state_only_after_snapshot' in script
+    assert 'from ..models.feature_builder import *' in shim

@@ -79,10 +79,12 @@ jobs:
 
       - name: Preflight
         shell: bash
+        env:
+          BLINQ_INPUT_STATIC_ONLY: ${{ inputs.static_only }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
-          if [[ "${{ inputs.static_only }}" != "true" ]]; then
+          if [[ "$BLINQ_INPUT_STATIC_ONLY" != "true" ]]; then
             test "$TBT_WEATHER_RESEARCH" = "true" || { echo 'TBT_WEATHER_RESEARCH must be true for historical weather research'; exit 1; }
           fi
           visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q '.visibility')"
@@ -90,28 +92,37 @@ jobs:
 
       - name: Enrich GitHub history
         shell: bash
+        env:
+          BLINQ_INPUT_START: ${{ inputs.start }}
+          BLINQ_INPUT_END: ${{ inputs.end }}
+          BLINQ_INPUT_LIMIT: ${{ inputs.limit }}
+          BLINQ_INPUT_MAX_REQUESTS: ${{ inputs.max_requests }}
+          BLINQ_INPUT_MODE: ${{ inputs.mode }}
+          BLINQ_INPUT_STATIC_ONLY: ${{ inputs.static_only }}
+          BLINQ_INPUT_FORCE: ${{ inputs.force }}
+          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ inputs.retry_unresolved }}
         run: |
           set -euo pipefail
-          END_VALUE="${{ inputs.end }}"
+          END_VALUE="$BLINQ_INPUT_END"
           if [[ -z "$END_VALUE" ]]; then END_VALUE="$(date -u +%F)"; fi
           ARGS=(
-            --start "${{ inputs.start }}"
+            --start "$BLINQ_INPUT_START"
             --end "$END_VALUE"
-            --limit "${{ inputs.limit }}"
-            --max-requests "${{ inputs.max_requests }}"
+            --limit "$BLINQ_INPUT_LIMIT"
+            --max-requests "$BLINQ_INPUT_MAX_REQUESTS"
             --data-repository "$TBT_DATA_REPOSITORY"
           )
-          if [[ "${{ inputs.mode }}" == "dry-run" ]]; then ARGS+=(--dry-run); fi
-          if [[ "${{ inputs.static_only }}" == "true" ]]; then ARGS+=(--static-only); fi
+          if [[ "$BLINQ_INPUT_MODE" == "dry-run" ]]; then ARGS+=(--dry-run); fi
+          if [[ "$BLINQ_INPUT_STATIC_ONLY" == "true" ]]; then ARGS+=(--static-only); fi
 
           # Force means exactly that: overwrite/re-resolve every row in range.
           # Do NOT combine --force with --complete-static; the Python CLI rejects
           # that combination by design. This used to make force+static-only fail.
-          if [[ "${{ inputs.force }}" == "true" ]]; then
+          if [[ "$BLINQ_INPUT_FORCE" == "true" ]]; then
             ARGS+=(--force)
-          elif [[ "${{ inputs.retry_unresolved }}" == "true" ]]; then
+          elif [[ "$BLINQ_INPUT_RETRY_UNRESOLVED" == "true" ]]; then
             ARGS+=(--retry-unresolved)
-          elif [[ "${{ inputs.static_only }}" == "true" ]]; then
+          elif [[ "$BLINQ_INPUT_STATIC_ONLY" == "true" ]]; then
             ARGS+=(--complete-static)
           fi
           python scripts/enrich_environment_snapshot.py "${ARGS[@]}"
