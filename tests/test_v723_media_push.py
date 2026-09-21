@@ -63,6 +63,7 @@ def test_webpush_config_requires_complete_vapid(monkeypatch):
 def test_push_subscription_accepts_any_active_membership_and_persists(monkeypatch):
     from tbt.services import push_notifications as push
 
+    monkeypatch.setenv("BLINQ_WEBPUSH_ALLOWED_HOSTS", "push.example.test")
     rows = {}
 
     class Table:

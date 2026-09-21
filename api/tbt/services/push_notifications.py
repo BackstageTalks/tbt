@@ -13,6 +13,13 @@ from .admin_storage import AdminStorageUnavailable, _table
 
 PUSH_TABLE = "BlinQPushSubscriptions"
 _MEMBERSHIP_LEVELS = {"rookie", "pro", "elite", "legend", "goat"}
+_DEFAULT_PUSH_EXACT_HOSTS = {
+    "fcm.googleapis.com",
+    "updates.push.services.mozilla.com",
+    "push.services.mozilla.com",
+    "web.push.apple.com",
+}
+_DEFAULT_PUSH_SUFFIXES = {"notify.windows.com"}
 
 
 def webpush_config() -> dict:
@@ -31,6 +38,23 @@ def webpush_config() -> dict:
 def _subscription_row_key(endpoint: str) -> str:
     return hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
 
+
+
+def _push_host_allowed(host: str) -> bool:
+    host = str(host or "").strip().lower().rstrip(".")
+    exact = set(_DEFAULT_PUSH_EXACT_HOSTS)
+    suffixes = set(_DEFAULT_PUSH_SUFFIXES)
+    for raw in str(os.getenv("BLINQ_WEBPUSH_ALLOWED_HOSTS") or "").split(","):
+        item = raw.strip().lower().rstrip(".")
+        if not item:
+            continue
+        if item.startswith("*."):
+            suffixes.add(item[2:])
+        else:
+            exact.add(item)
+    if host in exact:
+        return True
+    return any(host.endswith("." + suffix) for suffix in suffixes)
 
 def _clean_subscription(payload: object) -> dict:
     if not isinstance(payload, dict):
@@ -51,6 +75,8 @@ def _clean_subscription(payload: object) -> dict:
         or address.is_multicast or address.is_reserved or address.is_unspecified
     ):
         raise ValueError("Invalid push endpoint")
+    if not _push_host_allowed(host):
+        raise ValueError("Unsupported push endpoint host")
     keys = payload.get("keys") or {}
     p256dh = str(keys.get("p256dh") or "").strip()
     auth = str(keys.get("auth") or "").strip()
@@ -111,21 +137,30 @@ def delete_subscription(*, user_id: str, endpoint: str = "") -> dict:
 
 
 def sync_push_access(*, user_id: str, plan: str, status: str, expires_at: object = None) -> None:
-    """Keep stored subscription entitlements in sync with admin access changes."""
+    """Synchronize the cached push audience after an account access change.
+
+    Revoked/expired/suspended users lose subscriptions immediately. Active users
+    keep the endpoint but its cached tier is updated; dispatch still re-checks
+    Firebase before sending.
+    """
     user_id = str(user_id or "").strip()
     if not user_id:
         return
+    next_plan = str(plan or "").strip().lower()
+    next_status = str(status or "").strip().lower()
+    if next_status == "trial":
+        next_plan, next_status = "rookie", "active"
     try:
         client = _table(PUSH_TABLE)
         rows = list(client.query_entities(query_filter="PartitionKey eq 'push'"))
         for row in rows:
             if str(row.get("user_id") or "") != user_id:
                 continue
+            row_key = str(row.get("RowKey") or "")
+            if next_plan not in _MEMBERSHIP_LEVELS or next_status not in {"active", "lifetime"}:
+                client.delete_entity(partition_key="push", row_key=row_key)
+                continue
             row = dict(row)
-            next_plan = str(plan or "").strip().lower()
-            next_status = str(status or "").strip().lower()
-            if next_status == "trial":
-                next_plan, next_status = "rookie", "active"
             row["plan"] = next_plan
             row["status"] = next_status
             row["expires_at"] = str(expires_at or "")[:64]
@@ -134,6 +169,28 @@ def sync_push_access(*, user_id: str, plan: str, status: str, expires_at: object
     except Exception:
         logging.exception("Unable to sync browser-push access for user %s", user_id)
 
+
+def _current_push_access(user_id: str) -> tuple[dict | None, bool]:
+    """Resolve live Firebase access. Returns (access, identity_missing)."""
+    try:
+        from ..config import settings
+        from .auth import AuthUnavailable, firebase_get_user, public_account
+        user = firebase_get_user(settings, user_id)
+        if user is None:
+            return None, True
+        account = public_account(user, cfg=settings, profile={})
+        if account.get("is_admin") or str(account.get("role") or "").lower() == "admin":
+            return {"plan": "goat", "status": "lifetime", "expires_at": None}, False
+        status = str(account.get("status") or "").lower()
+        plan = "rookie" if status == "trial" else str(account.get("plan") or "").lower()
+        return {"plan": plan, "status": "active" if status == "trial" else status, "expires_at": account.get("expires_at")}, False
+    except AuthUnavailable:
+        # Identity outage is fail-closed for delivery, but not a reason to delete
+        # a potentially valid endpoint.
+        return None, False
+    except Exception:
+        logging.exception("Unable to resolve current push access for user %s", user_id)
+        return None, False
 
 def _row_entitled(row: dict, levels: set[str]) -> bool:
     plan = str(row.get("plan") or "").lower()
@@ -216,8 +273,22 @@ def dispatch_insight_push(insight: dict) -> dict:
     }, ensure_ascii=False, separators=(",", ":"))
     ttl = 600 if str(insight.get("type") or "") in {"live_watch", "alert", "set2"} else 6 * 3600
     sent = failed = removed = 0
+    access_cache = {}
     for row in rows:
-        if not _row_entitled(row, levels):
+        user_id = str(row.get("user_id") or "").strip()
+        if not user_id:
+            continue
+        if user_id not in access_cache:
+            access_cache[user_id] = _current_push_access(user_id)
+        current_access, identity_missing = access_cache[user_id]
+        if identity_missing:
+            try:
+                client.delete_entity(partition_key="push", row_key=str(row.get("RowKey") or ""))
+                removed += 1
+            except Exception:
+                pass
+            continue
+        if not current_access or not _row_entitled(current_access, levels):
             continue
         subscription = _subscription_from_row(row)
         if not subscription:

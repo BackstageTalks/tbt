@@ -8,7 +8,7 @@ const tiers = JSON.parse(fs.readFileSync('web/config/membership-tiers.json','utf
 const loader = fs.readFileSync('web/assets/blinq_loading_r29.svg','utf8');
 
 // Loading: animated rally remains present and both loader + normal app have watermark contracts.
-assert.match(html,/blinq_loading_r29\.svg\?v=7360\&p=41/);
+assert.match(html,/blinq_loading_r29\.svg\?v=7360\&p=42/);
 assert.match(loader,/<animateTransform/);
 assert.equal(loader.includes('data:image/webp;base64,'),false);
 assert.ok(fs.existsSync('web/assets/blinq_background.webp'));

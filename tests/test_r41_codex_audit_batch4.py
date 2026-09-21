@@ -11,9 +11,9 @@ def _text(path: str) -> str:
 def test_release_is_r41():
     release = json.loads(_text("web/release.json"))
     ui = json.loads(_text("web/ui-config.json"))
-    assert release["patch"] == ui["ui_patch"] == "736-r41"
-    assert 'content="736-r41"' in _text("web/index.html")
-    assert "const AUTH_RUNTIME = '736-r41'" in _text("web/auth.js")
+    assert release["patch"] == ui["ui_patch"] == "736-r42"
+    assert 'content="736-r42"' in _text("web/index.html")
+    assert "const AUTH_RUNTIME = '736-r42'" in _text("web/auth.js")
 
 
 def test_b12_password_reset_public_response_is_enumeration_safe():
@@ -81,7 +81,7 @@ def test_b19_pending_profile_has_reload_and_signin_recovery():
 def test_b20_popout_uses_external_csp_safe_runtime_and_asset_fallbacks():
     app = _text("web/app.js")
     popout = app.split("function openMatchPopout()", 1)[1].split("function openMatch(", 1)[0]
-    assert 'src="/match-popout.js?v=7360&p=41"' in popout
+    assert 'src="/match-popout.js?v=7360&p=42"' in popout
     assert "document.addEventListener('click',function" not in popout
     runtime = _text("web/match-popout.js")
     assert "[data-match-tab]" in runtime

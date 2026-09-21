@@ -55,6 +55,7 @@ from tbt.services.admin_storage import (
     admin_storage_diagnostics,
     banner_analytics_summary,
     load_runtime_ui_config,
+    load_effective_ui_config,
     record_banner_event,
     save_runtime_ui_config,
     list_insights,
@@ -721,10 +722,7 @@ def match_intelligence(req):
         # runtime access configuration cannot be loaded.
         profile = _profile_for(user)
         account_data = public_account(user, cfg=settings, profile=profile)
-        try:
-            runtime_ui = load_runtime_ui_config()
-        except AdminStorageUnavailable:
-            return response({"error": "access_config_unavailable"}, 503)
+        runtime_ui, _, _ = load_effective_ui_config()
         detail_access = match_detail_entitlements(account_data, runtime_ui)
         if not detail_access.get("allowed"):
             return response({"error": "match_detail_forbidden"}, 403)
@@ -894,13 +892,16 @@ def tournament_logo_proxy(req):
 
 @app.route(route="v1/ui-config", methods=["GET"])
 def runtime_ui_config(req):
-    try:
-        config = load_runtime_ui_config()
-        return response({"configured": bool(config), "config": config, "storage_available": True})
-    except AdminStorageUnavailable:
-        # Public UI has a committed release fallback. Storage availability is
-        # diagnostic metadata, not an application-fatal condition.
-        return response({"configured": False, "config": None, "storage_available": False})
+    config, runtime_configured, storage_available = load_effective_ui_config()
+    payload = {
+        "configured": True,
+        "runtime_configured": runtime_configured,
+        "config": config,
+        "source": "runtime" if runtime_configured else "release_access_defaults",
+    }
+    if not storage_available:
+        return response({**payload, "storage_available": False})
+    return response({**payload, "storage_available": True})
 
 
 @app.route(route="v1/content/news", methods=["GET"])
@@ -950,10 +951,7 @@ def feed(req):
         account_data = public_account(user, cfg=settings, profile=profile)
         data = visible_feed(read_feed(FEED))
         try:
-            try:
-                runtime_ui = load_runtime_ui_config()
-            except AdminStorageUnavailable:
-                runtime_ui = None
+            runtime_ui, _, _ = load_effective_ui_config()
             access_context = _access_context_with_daily_allocation(user, account_data, profile, data, runtime_ui)
             data, entitlements = filter_feed_for_access(data, access_context, runtime_ui)
         except PermissionError:
@@ -1729,9 +1727,13 @@ def admin_user_delete(req):
         delete_user_account(settings, user_id)
         storage_warning = None
         try:
+            delete_subscription(user_id=user_id)
+        except AdminStorageUnavailable:
+            storage_warning = "push_cleanup_pending"
+        try:
             delete_account_metadata(user_id)
         except AdminStorageUnavailable:
-            storage_warning = "profile_metadata_cleanup_pending"
+            storage_warning = (storage_warning + ",profile_metadata_cleanup_pending").strip(",")
         payload = {"ok": True, "deleted_user_id": user_id}
         if storage_warning:
             payload["storage_warning"] = storage_warning
