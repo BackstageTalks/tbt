@@ -1,0 +1,86 @@
+{
+  "schema": 1,
+  "tiers": {
+    "rookie": {
+      "label": "BlinQ ROOKIE",
+      "card_title": "BlinQ ROOKIE",
+      "short_description": "Bezplatná ochutnávka BlinQ s tromi dennými predikciami.",
+      "description": "Bezplatná úroveň BlinQ bez časového obmedzenia. Denne sprístupní 1 TOP, 1 Short Odds a 1 Value predikciu.",
+      "cta_label": "Vybrať ROOKIE",
+      "url": "",
+      "invite_only": false,
+      "features": [
+        "1 TOP pick denne",
+        "1 Short Odds pick denne",
+        "1 Value pick denne",
+        "Základný dashboard"
+      ],
+      "eyebrow": ""
+    },
+    "pro": {
+      "label": "BlinQ PRO",
+      "card_title": "BlinQ PRO",
+      "short_description": "Plný dashboard a denný prístup k hlavným predikciám BlinQ.",
+      "description": "Plný dashboard a denný prístup k hlavným predikciám BlinQ.",
+      "cta_label": "Upgrade na PRO",
+      "url": "https://backstagetalks.tipsterpage.com/sk0y2du0/sk",
+      "invite_only": false,
+      "features": [
+        "3 TOP picky denne",
+        "3 Short Odds picky denne",
+        "3 Value picky denne",
+        "Plný dashboard"
+      ],
+      "eyebrow": ""
+    },
+    "elite": {
+      "label": "BlinQ ELITE",
+      "card_title": "BlinQ ELITE",
+      "short_description": "VIP skupina, celá ponuka a rozšírený prehľad. Tu začína premium úroveň BlinQ.",
+      "description": "VIP skupina, See All, Overview a premium analytický prístup.",
+      "cta_label": "Upgrade na ELITE",
+      "url": "https://backstagetalks.tipsterpage.com/qYBLx1L0/sk",
+      "invite_only": false,
+      "features": [
+        "Všetko z PRO",
+        "VIP skupina",
+        "Kompletná ponuka pickov na dashboarde",
+        "See All",
+        "Overview + pokročilé analýzy"
+      ],
+      "eyebrow": ""
+    },
+    "legend": {
+      "label": "BlinQ LEGEND",
+      "card_title": "BlinQ LEGEND",
+      "short_description": "Rozšírený ELITE prístup s výsledkami a pokročilými štatistikami výkonu.",
+      "description": "ELITE plus výsledky a pokročilé štatistiky výkonu.",
+      "cta_label": "Upgrade na LEGEND",
+      "url": "https://t.me/+5ANwTY1STQExOTY0",
+      "invite_only": false,
+      "features": [
+        "Všetko z ELITE",
+        "Výsledky",
+        "Pokročilé štatistiky výkonu",
+        "Dlhodobý analytický prehľad"
+      ],
+      "eyebrow": ""
+    },
+    "goat": {
+      "label": "BlinQ GOAT",
+      "card_title": "BlinQ GOAT",
+      "short_description": "Najvyššia úroveň BlinQ s kompletným prístupom a nastaviteľnou platnosťou.",
+      "description": "Najvyššia úroveň BlinQ s kompletným prístupom; platnosť nastavuješ v Admin → Členstvá.",
+      "cta_label": "Upgrade na GOAT",
+      "url": "",
+      "invite_only": false,
+      "features": [
+        "Všetko z LEGEND",
+        "Maximum BlinQ",
+        "Partner / reklamné privilégiá",
+        "Výhoda na reklamný banner"
+      ],
+      "eyebrow": ""
+    }
+  }
+}

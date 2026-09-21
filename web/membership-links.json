@@ -1,0 +1,48 @@
+{
+  "schema": 3,
+  "currency": "EUR",
+  "plans": {
+    "rookie": {
+      "enabled": true,
+      "label": "BlinQ ROOKIE",
+      "card_title": "Základný vstup",
+      "description": "Bezplatná ochutnávka: 1 TOP, 1 Short Odds a 1 Value predikcia denne.",
+      "cta_label": "Vybrať ROOKIE",
+      "payment_url": ""
+    },
+    "pro": {
+      "enabled": true,
+      "label": "BlinQ PRO",
+      "card_title": "Plný denný prehľad",
+      "description": "Plný dashboard a denný prístup k hlavným predikciám BlinQ.",
+      "cta_label": "Upgrade na PRO",
+      "payment_url": "https://backstagetalks.tipsterpage.com/sk0y2du0/sk"
+    },
+    "elite": {
+      "enabled": true,
+      "label": "BlinQ ELITE",
+      "card_title": "Premium prístup",
+      "description": "VIP skupina, celá ponuka a rozšírený prehľad. Tu začína premium úroveň BlinQ.",
+      "cta_label": "Upgrade na ELITE",
+      "payment_url": "https://backstagetalks.tipsterpage.com/qYBLx1L0/sk"
+    },
+    "legend": {
+      "enabled": true,
+      "label": "BlinQ LEGEND",
+      "card_title": "Dlhodobý premium prístup",
+      "description": "Rozšírený ELITE prístup s výsledkami a pokročilými štatistikami výkonu.",
+      "cta_label": "Upgrade na LEGEND",
+      "payment_url": "https://t.me/+5ANwTY1STQExOTY0"
+    },
+    "goat": {
+      "enabled": true,
+      "label": "BlinQ GOAT",
+      "card_title": "Najvyššia úroveň BlinQ",
+      "description": "Najvyššia úroveň BlinQ so všetkými funkciami a partner/reklamnými výhodami pre vybraných členov.",
+      "cta_label": "Požiadať o GOAT",
+      "invite_only": true,
+      "invite_url": "",
+      "payment_url": ""
+    }
+  }
+}

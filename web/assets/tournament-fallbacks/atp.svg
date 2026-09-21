@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-label="ATP Tour">
+<title>ATP Tour</title>
+<rect x="24" y="24" width="464" height="464" rx="92" fill="#081F4A"/>
+<text x="256" y="225" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="120" font-weight="900" letter-spacing="-5" fill="#FFFFFF" style="">ATP</text><path d="M112 250 C188 307, 312 307, 400 246" fill="none" stroke="#4ED7FF" stroke-width="16" stroke-linecap="round"/><text x="256" y="355" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="54" font-weight="800" letter-spacing="6" fill="#6BE6FF" style="">TOUR</text>
+</svg>

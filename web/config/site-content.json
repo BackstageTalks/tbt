@@ -1,0 +1,841 @@
+{
+  "schema": 2,
+  "updated_at": "2026-09-18T20:00:00Z",
+  "operator": {
+    "display_name": "BlinQ",
+    "legal_name": "DOPLNIŤ PREVÁDZKOVATEĽA",
+    "company_id": "DOPLNIŤ IČO",
+    "registered_address": "DOPLNIŤ SÍDLO",
+    "privacy_email": "privacy@blinq.sk"
+  },
+  "pages": {
+    "sk": {
+      "how_blinq_works": {
+        "eyebrow": "BLINQ INTELLIGENCE",
+        "title": "Ako funguje BlinQ",
+        "subtitle": "Od časovo konzistentných tenisových dát po publikovanú predikciu",
+        "sections": [
+          {
+            "title": "1. Zber dát",
+            "body": "BlinQ pracuje s tenisovými dátami dostupnými pred začiatkom zápasu. Podľa dostupnosti zahŕňajú rebríček, povrch, formu, históriu zápasov, štatistiky podania a returnu, turnajový kontext a ďalšie relevantné signály."
+          },
+          {
+            "title": "2. Modelové spracovanie",
+            "body": "Modelové príznaky sa vytvárajú bez použitia budúcich výsledkov. Cieľom je odhadnúť pravdepodobnosť výsledku alebo vybraného trhu iba z informácií, ktoré boli dostupné v čase predikcie."
+          },
+          {
+            "title": "3. Publikovanie",
+            "body": "Publikovaná predikcia uchováva pôvodný modelový výstup a dostupný záznam kurzu. Po odohraní zápasu sa ten istý záznam vyhodnotí proti skutočnému výsledku."
+          },
+          {
+            "title": "4. Vyhodnocovanie",
+            "body": "Výkon sa posudzuje na väčšej vzorke a v kontexte pokrytia dát. Jednotlivý úspešný alebo neúspešný výsledok sám osebe nehovorí o kvalite modelu."
+          }
+        ]
+      },
+      "methodology": {
+        "eyebrow": "TRANSPARENTNOSŤ",
+        "title": "Metodika",
+        "subtitle": "Pravidlá, ktoré udržujú predikcie chronologické, auditovateľné a porovnateľné",
+        "sections": [
+          {
+            "title": "Point-in-time princíp",
+            "body": "Predikcia má informačnú hodnotu iba vtedy, ak vznikla pred zápasom. BlinQ preto oddeľuje tréningové, publikačné a výsledkové dáta a nepoužíva budúce informácie pri historickom vyhodnocovaní."
+          },
+          {
+            "title": "BlinQ %",
+            "body": "BlinQ % je modelový odhad pravdepodobnosti, nie garancia výsledku. Napríklad 78 % znamená, že model pri danom dátovom kontexte odhaduje daný výsledok približne na úrovni 78 %."
+          },
+          {
+            "title": "Kurzy a Value",
+            "body": "Ak je dostupný overený kurz, systém môže porovnať trhovú cenu s modelovým odhadom. Rozdiel medzi nimi je analytický signál; vyšší rozdiel automaticky neznamená bezpečnejší výsledok."
+          },
+          {
+            "title": "Chýbajúce dáta",
+            "body": "Ak kvalitné dáta alebo overený kurz nie sú dostupné, BlinQ ich nevymýšľa. Niektoré metriky preto môžu zostať prázdne alebo sa predikcia nemusí publikovať."
+          },
+          {
+            "title": "Vyhodnotenie modelu",
+            "body": "Kvalitu modelu treba čítať cez dostatočne veľkú vzorku, kalibráciu a chronologické testovanie. Krátkodobá séria výsledkov nie je spoľahlivým ukazovateľom budúcej výkonnosti."
+          }
+        ]
+      },
+      "model_data": {
+        "eyebrow": "MODEL & DATA",
+        "title": "Model a dáta",
+        "subtitle": "Čo BlinQ zobrazuje, čo nezobrazuje a prečo",
+        "sections": [
+          {
+            "title": "Dátové zdroje",
+            "body": "BlinQ kombinuje interné spracovanie s externými tenisovými dátovými zdrojmi. Dostupnosť jednotlivých údajov sa môže líšiť podľa turnaja, hráča a súťaže."
+          },
+          {
+            "title": "Aktuálnosť",
+            "body": "Predikcie a súvisiace údaje sa aktualizujú podľa dostupnosti nových dát. Pri výpadku alebo oneskorení externého poskytovateľa dát môže byť časť obsahu dočasne neúplná."
+          },
+          {
+            "title": "Modelové verzie",
+            "body": "Produkčný model môže byť priebežne aktualizovaný. Verzia modelu a stav publikovaného dátového výstupu sa zobrazujú v rozhraní, aby bolo možné spätne rozlíšiť, ktorý model vytvoril konkrétny výstup."
+          },
+          {
+            "title": "Žiadne dopĺňanie falošných dát",
+            "body": "Ak údaj nie je k dispozícii, aplikácia ho neodhadne iba kvôli vizuálnemu vyplneniu. Pri rebríčkoch, kurzoch, fotografiách, logách alebo štatistikách sa používa definované náhradné zobrazenie alebo prázdny stav."
+          }
+        ]
+      },
+      "faq": {
+        "eyebrow": "POMOC",
+        "title": "Najčastejšie otázky",
+        "subtitle": "Krátke odpovede k predikciám, účtom a dátam",
+        "faq": [
+          {
+            "q": "Čo je BlinQ?",
+            "a": "BlinQ je tenisová analytická platforma, ktorá kombinuje športové dáta, štatistiky a predikčné modely."
+          },
+          {
+            "q": "Je BlinQ stávková kancelária?",
+            "a": "Nie. BlinQ neprijíma stávky ani nespravuje finančné prostriedky používateľov."
+          },
+          {
+            "q": "Čo znamená BlinQ %?",
+            "a": "Ide o modelový odhad pravdepodobnosti konkrétneho výsledku na základe dostupných dát."
+          },
+          {
+            "q": "Znamená 90 % takmer istý výsledok?",
+            "a": "Nie. Ani veľmi vysoká modelová pravdepodobnosť neznamená istotu športového výsledku."
+          },
+          {
+            "q": "Prečo niekedy chýba kurz alebo štatistika?",
+            "a": "Údaj nemusí byť dostupný od poskytovateľa dát alebo nemusí spĺňať požiadavky systému na aktuálnosť a kvalitu. BlinQ chýbajúcu hodnotu nevymýšľa."
+          },
+          {
+            "q": "Ako sa aktivuje platený účet?",
+            "a": "Po potvrdení platby administrátor manuálne priradí príslušnú úroveň BlinQ účtu a dobu platnosti."
+          },
+          {
+            "q": "Kde vidím platnosť členstva?",
+            "a": "Aktuálnu úroveň a platnosť prístupu nájdete vo svojom BlinQ účte."
+          },
+          {
+            "q": "Ako kontaktujem podporu?",
+            "a": "Použite oficiálny BlinQ Telegram kanál. Je to hlavný kontaktný kanál pre podporu používateľov."
+          }
+        ]
+      },
+      "responsible_use": {
+        "eyebrow": "RESPONSIBLE USE",
+        "title": "Zodpovedné používanie",
+        "subtitle": "Predikcia je informácia, nie istota",
+        "sections": [
+          {
+            "title": "Analytický charakter služby",
+            "body": "BlinQ poskytuje dátové analýzy a modelové predikcie športových udalostí. Žiadna predikcia nie je istota a športový výsledok môže ovplyvniť množstvo faktorov, ktoré nie je možné spoľahlivo predvídať."
+          },
+          {
+            "title": "Finančné rozhodnutia",
+            "body": "Ak používate informácie z BlinQ v súvislosti so stávkovaním, rozhodujete sa samostatne a na vlastnú zodpovednosť. Nepoužívajte prostriedky, ktorých stratu si nemôžete dovoliť, a nesnažte sa naháňať predchádzajúce straty."
+          },
+          {
+            "title": "Vek a miestne pravidlá",
+            "body": "Používanie služieb súvisiacich so stávkovaním musí byť v súlade s právnymi predpismi krajiny používateľa a príslušnými vekovými obmedzeniami."
+          },
+          {
+            "title": "BlinQ neprijíma stávky",
+            "body": "BlinQ nie je stávková kancelária, neprijíma vklady ani stávky a neurčuje používateľovi, akú finančnú sumu má riskovať."
+          }
+        ]
+      },
+      "terms": {
+        "eyebrow": "LEGAL",
+        "title": "Podmienky používania",
+        "subtitle": "Pravidlá používania služby BlinQ",
+        "sections": [
+          {
+            "title": "1. Charakter služby",
+            "body": "BlinQ je analytická platforma zameraná na tenisové dáta, štatistiky, modelové pravdepodobnosti a predikcie. Informácie majú informačný a analytický charakter. BlinQ nie je stávková kancelária, neprijíma stávky a neposkytuje garanciu budúcich športových výsledkov."
+          },
+          {
+            "title": "2. Používateľský účet",
+            "body": "Používateľ zodpovedá za správnosť údajov uvedených pri registrácii a za ochranu svojich prihlasovacích údajov. Účet je určený pre jednu osobu, pokiaľ nie je výslovne dohodnuté inak."
+          },
+          {
+            "title": "3. Členstvo a manuálna aktivácia",
+            "body": "Rozsah obsahu závisí od úrovne členstva. Platený prístup je aktivovaný administrátorom po potvrdení platby a nemusí byť okamžitý. História členstva a manuálnych zmien môže byť evidovaná pre prevádzkové a zákaznícke účely."
+          },
+          {
+            "title": "4. Dostupnosť služby",
+            "body": "BlinQ sa snaží zabezpečiť vysokú dostupnosť, nemôže však garantovať nepretržitú prevádzku ani úplnú dostupnosť externých dátových zdrojov. Údržba, výpadky poskytovateľov dát a oneskorené športové dáta môžu dočasne ovplyvniť službu."
+          },
+          {
+            "title": "5. Zakázané používanie",
+            "body": "Nie je dovolené neoprávnene zdieľať platený prístup, obchádzať prístupové pravidlá, automatizovane preťažovať službu, narúšať bezpečnosť alebo získavať dáta spôsobom, ktorý nie je určený používateľským rozhraním."
+          },
+          {
+            "title": "6. Zodpovednosť",
+            "body": "Používateľ robí rozhodnutia na základe informácií BlinQ samostatne a na vlastnú zodpovednosť. Modelové pravdepodobnosti ani štatistiky nie sú zárukou výsledku a BlinQ nezodpovedá za finančnú stratu vzniknutú rozhodnutím používateľa."
+          },
+          {
+            "title": "7. Zmeny služby a podmienok",
+            "body": "Funkcie, úrovne členstva a tieto podmienky môžu byť primerane aktualizované spolu s vývojom služby. Dátum poslednej aktualizácie je uvedený na tejto stránke."
+          }
+        ]
+      },
+      "privacy": {
+        "eyebrow": "LEGAL",
+        "title": "Ochrana súkromia",
+        "subtitle": "Ako BlinQ pracuje s údajmi používateľov",
+        "sections": [
+          {
+            "title": "Aké údaje spracúvame",
+            "body": "Podľa používaných funkcií môžeme spracúvať e-mail, používateľský identifikátor, Telegram prezývku, zvolený avatar, úroveň a platnosť členstva, manuálne platobné referencie, interné servisné poznámky a technické údaje potrebné na bezpečnú prevádzku služby."
+          },
+          {
+            "title": "Na čo údaje používame",
+            "body": "Údaje používame na autentifikáciu, správu účtu a členstva, manuálne potvrdenie platieb, zákaznícku podporu, bezpečnosť, prevádzkovú diagnostiku a zlepšovanie fungovania BlinQ. Osobné údaje nepredávame inzerentom."
+          },
+          {
+            "title": "Externí poskytovatelia",
+            "body": "Niektoré funkcie zabezpečujú technologickí poskytovatelia, napríklad autentifikácia, hosting, databáza, e-mail alebo poskytovatelia dát. Spracovanie je obmedzené na rozsah potrebný na poskytovanie príslušnej služby."
+          },
+          {
+            "title": "Uchovávanie",
+            "body": "Údaje uchovávame počas obdobia potrebného na prevádzku účtu, podporu, bezpečnosť, evidenciu členstva a plnenie zákonných povinností. Prevádzkovú históriu môžeme uchovávať aj po skončení členstva, ak je to potrebné na audit alebo riešenie reklamácie."
+          },
+          {
+            "title": "Práva používateľa",
+            "body": "Používateľ môže požiadať o prístup k svojim údajom, opravu, obmedzenie alebo vymazanie v rozsahu, ktorý umožňujú platné právne predpisy. Požiadavku je možné odoslať cez oficiálny BlinQ Telegram kanál alebo na kontaktný e-mail prevádzkovateľa."
+          },
+          {
+            "title": "Bezpečnosť",
+            "body": "BlinQ používa oddelenú autentifikáciu, serverové prístupové kontroly a prevádzkové logovanie. Napriek primeraným opatreniam nie je možné garantovať absolútnu bezpečnosť žiadnej internetovej služby."
+          }
+        ]
+      },
+      "cookies": {
+        "eyebrow": "LEGAL",
+        "title": "Cookies a lokálne úložisko",
+        "subtitle": "Čo si aplikácia ukladá v prehliadači a prečo",
+        "sections": [
+          {
+            "title": "Nevyhnutné úložisko",
+            "body": "BlinQ používa nevyhnutné cookies alebo lokálne úložisko na prihlásenie, bezpečnosť relácie, jazyk, používateľské nastavenia a technické fungovanie aplikácie. Bez týchto položiek nemusia niektoré funkcie fungovať správne."
+          },
+          {
+            "title": "Preferencie",
+            "body": "Aplikácia si môže lokálne zapamätať preferencie rozhrania, napríklad jazyk, zobrazenie alebo cookie voľbu, aby ich nebolo potrebné nastavovať pri každej návšteve."
+          },
+          {
+            "title": "Analytika",
+            "body": "Ak bude aktivovaná nepovinná produktová analytika, použije sa iba podľa zvolenej cookie preferencie. BlinQ môže aj bez marketingových cookies evidovať agregované serverové prevádzkové udalosti potrebné na bezpečnosť a diagnostiku služby."
+          },
+          {
+            "title": "Zmena nastavení",
+            "body": "Cookie preferencie môžete kedykoľvek zmeniť priamo na tejto stránke. Nevyhnutné technické úložisko nie je možné vypnúť bez obmedzenia fungovania účtu."
+          }
+        ]
+      }
+    },
+    "cz": {
+      "how_blinq_works": {
+        "eyebrow": "BLINQ",
+        "title": "Jak funguje BlinQ",
+        "subtitle": "Od point-in-time tenisových dat k publikované predikci",
+        "sections": [
+          {
+            "title": "1. Sběr dat",
+            "body": "BlinQ pracuje s tenisovými daty dostupnými před začátkem zápasu. Podle dostupnosti mohou zahrnovat ranking, povrch, aktuální formu, historii zápasů, statistiky podání a returnu, turnajový kontext a další relevantní signály."
+          },
+          {
+            "title": "2. Modelové zpracování",
+            "body": "Modelové příznaky vznikají bez použití budoucích výsledků. Cílem je odhadnout pravděpodobnost výsledku nebo vybraného trhu pouze z informací dostupných v okamžiku predikce."
+          },
+          {
+            "title": "3. Publikování",
+            "body": "Publikovaná predikce uchovává původní modelový výstup a při dostupnosti i kurzový snapshot použitý při publikaci. Po odehrání zápasu se stejný záznam vyhodnotí podle skutečného výsledku."
+          },
+          {
+            "title": "4. Vyhodnocování",
+            "body": "Výkon se hodnotí na dostatečně velkém vzorku a v kontextu pokrytí dat. Jediná výhra nebo prohra sama o sobě neurčuje kvalitu modelu."
+          }
+        ]
+      },
+      "methodology": {
+        "eyebrow": "BLINQ",
+        "title": "Metodika",
+        "subtitle": "Pravidla, která udržují predikce chronologické, auditovatelné a porovnatelné",
+        "sections": [
+          {
+            "title": "Point-in-time princip",
+            "body": "Predikce má informační hodnotu pouze tehdy, pokud vznikla před zápasem. BlinQ odděluje tréninková, publikační a výsledková data a při historickém hodnocení nepoužívá budoucí informace."
+          },
+          {
+            "title": "BlinQ %",
+            "body": "BlinQ % je modelový odhad pravděpodobnosti, nikoli záruka. Například 78 % znamená, že model v daném datovém kontextu odhaduje vybraný výsledek přibližně na 78 %."
+          },
+          {
+            "title": "Kurzy a Value",
+            "body": "Pokud je dostupný ověřený kurz, systém může porovnat tržní cenu s modelovým odhadem. Rozdíl je analytický signál; větší rozdíl automaticky neznamená bezpečnější výsledek."
+          },
+          {
+            "title": "Chybějící data",
+            "body": "Pokud kvalitní data nebo ověřený kurz nejsou dostupné, BlinQ je nevymýšlí. Některé metriky proto mohou zůstat prázdné nebo se predikce nemusí publikovat."
+          },
+          {
+            "title": "Vyhodnocení modelu",
+            "body": "Kvalitu modelu je potřeba číst přes dostatečný vzorek, kalibraci a chronologické testování. Krátkodobá série výsledků není spolehlivým ukazatelem budoucí výkonnosti."
+          }
+        ]
+      },
+      "model_data": {
+        "eyebrow": "BLINQ",
+        "title": "Model a data",
+        "subtitle": "Co BlinQ zobrazuje, co nezobrazuje a proč",
+        "sections": [
+          {
+            "title": "Datové zdroje",
+            "body": "BlinQ kombinuje interní zpracování s externími tenisovými datovými zdroji. Dostupnost údajů se může lišit podle turnaje, hráče a soutěže."
+          },
+          {
+            "title": "Aktuálnost",
+            "body": "Predikce a související údaje se aktualizují podle dostupnosti nových dat. Výpadek nebo zpoždění providera může dočasně způsobit neúplnost části obsahu."
+          },
+          {
+            "title": "Verze modelu",
+            "body": "Produkční model může být průběžně aktualizován. Verze modelu a stav feedu se zobrazují tak, aby bylo možné zpětně určit, který model vytvořil konkrétní publikovanou predikci."
+          },
+          {
+            "title": "Žádné falešné doplňování",
+            "body": "Pokud údaj není dostupný, aplikace ho nevymýšlí kvůli vizuálnímu vyplnění. Rankingy, kurzy, fotografie, loga a statistiky používají definovaný fallback nebo zůstanou nedostupné."
+          }
+        ]
+      },
+      "faq": {
+        "eyebrow": "BLINQ",
+        "title": "Nejčastější otázky",
+        "subtitle": "Krátké odpovědi k predikcím, účtům a datům",
+        "faq": [
+          {
+            "q": "Co je BlinQ?",
+            "a": "BlinQ je tenisová analytická platforma kombinující sportovní data, statistiky a predikční modely."
+          },
+          {
+            "q": "Je BlinQ sázková kancelář?",
+            "a": "Ne. BlinQ nepřijímá sázky ani nespravuje finanční prostředky uživatelů."
+          },
+          {
+            "q": "Co znamená BlinQ %?",
+            "a": "Jde o modelový odhad pravděpodobnosti konkrétního výsledku na základě dostupných dat."
+          },
+          {
+            "q": "Znamená 90 % téměř jistý výsledek?",
+            "a": "Ne. Ani velmi vysoká modelová pravděpodobnost není zárukou sportovního výsledku."
+          },
+          {
+            "q": "Proč někdy chybí kurz nebo statistika?",
+            "a": "Údaj nemusí být dostupný od providera nebo nemusí splnit požadavky na aktuálnost a kvalitu. BlinQ chybějící hodnoty nevymýšlí."
+          },
+          {
+            "q": "Jak se aktivuje placený účet?",
+            "a": "Po potvrzení platby administrátor ručně přiřadí příslušný BlinQ level a dobu platnosti."
+          },
+          {
+            "q": "Kde vidím platnost členství?",
+            "a": "Aktuální level a platnost přístupu najdete ve svém BlinQ účtu."
+          },
+          {
+            "q": "Jak kontaktuji podporu?",
+            "a": "Použijte oficiální BlinQ Telegram kanál. Je to hlavní kontaktní kanál pro uživatelskou podporu."
+          }
+        ]
+      },
+      "responsible_use": {
+        "eyebrow": "BLINQ",
+        "title": "Zodpovědné používání",
+        "subtitle": "Predikce je informace, ne jistota",
+        "sections": [
+          {
+            "title": "Analytický charakter služby",
+            "body": "BlinQ poskytuje datové analýzy a modelové predikce sportovních událostí. Žádná predikce není jistá a výsledek může ovlivnit řada faktorů, které nelze spolehlivě předvídat."
+          },
+          {
+            "title": "Finanční rozhodnutí",
+            "body": "Pokud používáte informace z BlinQ v souvislosti se sázením, rozhodujete se samostatně a na vlastní odpovědnost. Nepoužívejte prostředky, jejichž ztrátu si nemůžete dovolit, a nedohánějte předchozí ztráty."
+          },
+          {
+            "title": "Věk a místní pravidla",
+            "body": "Používání služeb souvisejících se sázením musí být v souladu s právními předpisy země uživatele a příslušnými věkovými omezeními."
+          },
+          {
+            "title": "BlinQ nepřijímá sázky",
+            "body": "BlinQ není sázková kancelář, nepřijímá vklady ani sázky a neurčuje uživateli, jakou finanční částku má riskovat."
+          }
+        ]
+      },
+      "terms": {
+        "eyebrow": "LEGAL",
+        "title": "Podmínky používání",
+        "subtitle": "Pravidla používání služby BlinQ",
+        "sections": [
+          {
+            "title": "1. Charakter služby",
+            "body": "BlinQ je analytická platforma zaměřená na tenisová data, statistiky, modelové pravděpodobnosti a predikce. Informace mají informační a analytický charakter. BlinQ není sázková kancelář a negarantuje budoucí sportovní výsledky."
+          },
+          {
+            "title": "2. Uživatelský účet",
+            "body": "Uživatel odpovídá za správnost údajů uvedených při registraci a za ochranu přihlašovacích údajů. Účet je určen pro jednu osobu, pokud není výslovně dohodnuto jinak."
+          },
+          {
+            "title": "3. Členství a manuální aktivace",
+            "body": "Rozsah obsahu závisí na úrovni členství. Placený přístup aktivuje administrátor po potvrzení platby a aktivace nemusí být okamžitá. Historie členství a manuálních změn může být evidována pro provozní a podpůrné účely."
+          },
+          {
+            "title": "4. Dostupnost služby",
+            "body": "BlinQ se snaží zajistit vysokou dostupnost, nemůže však garantovat nepřetržitý provoz ani úplnou dostupnost externích datových zdrojů. Údržba, výpadky providerů a zpožděná sportovní data mohou službu dočasně ovlivnit."
+          },
+          {
+            "title": "5. Zakázané používání",
+            "body": "Není dovoleno neoprávněně sdílet placený přístup, obcházet pravidla přístupu, automatizovaně přetěžovat službu, narušovat bezpečnost nebo získávat data způsobem, který služba nepředpokládá."
+          },
+          {
+            "title": "6. Odpovědnost",
+            "body": "Uživatel činí rozhodnutí na základě informací BlinQ samostatně a na vlastní odpovědnost. Modelové pravděpodobnosti ani statistiky nejsou zárukou výsledku a BlinQ neodpovídá za finanční ztráty vzniklé rozhodnutím uživatele."
+          },
+          {
+            "title": "7. Změny",
+            "body": "Funkce, úrovně členství a tyto podmínky mohou být přiměřeně aktualizovány spolu s vývojem služby. Datum poslední aktualizace je uvedeno na této stránce."
+          }
+        ]
+      },
+      "privacy": {
+        "eyebrow": "LEGAL",
+        "title": "Ochrana soukromí",
+        "subtitle": "Jak BlinQ pracuje s údaji uživatelů",
+        "sections": [
+          {
+            "title": "Jaké údaje můžeme zpracovávat",
+            "body": "Podle používaných funkcí můžeme zpracovávat e-mail, uživatelský identifikátor, Telegram nickname, zvolený avatar, úroveň a platnost členství, manuální platební reference, interní servisní poznámky a technickou diagnostiku."
+          },
+          {
+            "title": "K čemu údaje používáme",
+            "body": "Údaje používáme k autentifikaci, správě účtu a členství, manuálnímu potvrzení plateb, zákaznické podpoře, bezpečnosti, provozní diagnostice a zlepšování BlinQ. Osobní údaje neprodáváme inzerentům."
+          },
+          {
+            "title": "Externí poskytovatelé",
+            "body": "Některé funkce zajišťují technologičtí poskytovatelé, například autentifikace, hosting, databáze, e-mail nebo sportovní datoví provideři. Zpracování je omezeno na rozsah potřebný k poskytnutí dané služby."
+          },
+          {
+            "title": "Uchovávání",
+            "body": "Údaje uchováváme po dobu potřebnou k provozu účtu, podpoře, bezpečnosti, evidenci členství a plnění zákonných povinností. Odůvodněná provozní historie může zůstat uchována i po skončení přístupu."
+          },
+          {
+            "title": "Práva uživatele",
+            "body": "Uživatel může požádat o přístup, opravu, omezení nebo vymazání údajů v rozsahu, který umožňují platné právní předpisy. Požadavek lze odeslat přes oficiální BlinQ Telegram kanál."
+          },
+          {
+            "title": "Bezpečnost",
+            "body": "BlinQ používá oddělenou autentifikaci, serverové kontroly přístupu a provozní logování. Ani při přiměřených opatřeních nelze u internetové služby garantovat absolutní bezpečnost."
+          }
+        ]
+      },
+      "cookies": {
+        "eyebrow": "LEGAL",
+        "title": "Cookies a lokální úložiště",
+        "subtitle": "Co si aplikace ukládá v prohlížeči a proč",
+        "sections": [
+          {
+            "title": "Nezbytné úložiště",
+            "body": "BlinQ používá nezbytné cookies nebo lokální úložiště pro přihlášení, bezpečnost relace, jazyk, uživatelská nastavení a technické fungování aplikace. Bez těchto položek nemusí některé části služby fungovat."
+          },
+          {
+            "title": "Preference",
+            "body": "Aplikace si může zapamatovat preference rozhraní, například jazyk, způsob zobrazení nebo cookie volbu, aby je nebylo nutné nastavovat při každé návštěvě."
+          },
+          {
+            "title": "Analytika",
+            "body": "Pokud je aktivována nepovinná produktová analytika, použije se podle zvolené cookie preference. BlinQ může i bez marketingových cookies evidovat agregované serverové provozní logy potřebné pro bezpečnost a spolehlivost služby."
+          },
+          {
+            "title": "Změna nastavení",
+            "body": "Cookie preference můžete kdykoli změnit přímo na této stránce. Nezbytné technické úložiště nelze vypnout bez omezení fungování účtu."
+          }
+        ]
+      }
+    },
+    "en": {
+      "how_blinq_works": {
+        "eyebrow": "BLINQ",
+        "title": "How BlinQ works",
+        "subtitle": "From point-in-time tennis data to a published prediction",
+        "sections": [
+          {
+            "title": "1. Data collection",
+            "body": "BlinQ works with tennis data available before a match begins. Depending on availability, this can include ranking, surface, recent form, match history, serve and return statistics, tournament context and other relevant signals."
+          },
+          {
+            "title": "2. Model processing",
+            "body": "Model features are created without using future results. The goal is to estimate the probability of an outcome or selected market only from information that was available at prediction time."
+          },
+          {
+            "title": "3. Publication",
+            "body": "A published prediction keeps the original model output and, when available, the price snapshot used at publication. After the match, the same record is evaluated against the actual result."
+          },
+          {
+            "title": "4. Evaluation",
+            "body": "Performance is assessed over a meaningful sample and in the context of data coverage. A single win or loss does not by itself establish model quality."
+          }
+        ]
+      },
+      "methodology": {
+        "eyebrow": "BLINQ",
+        "title": "Methodology",
+        "subtitle": "Rules that keep predictions chronological, auditable and comparable",
+        "sections": [
+          {
+            "title": "Point-in-time principle",
+            "body": "A prediction is informative only if it was created before the match. BlinQ separates training, publication and result data and avoids future information in historical evaluation."
+          },
+          {
+            "title": "BlinQ %",
+            "body": "BlinQ % is a model estimate of probability, not a guarantee. For example, 78% means that in the available data context the model estimates the selected outcome at approximately 78%."
+          },
+          {
+            "title": "Odds and Value",
+            "body": "When a verified price is available, the system can compare market price with the model estimate. The difference is an analytical signal; a larger difference does not automatically mean a safer outcome."
+          },
+          {
+            "title": "Missing data",
+            "body": "If reliable data or a verified price is unavailable, BlinQ does not invent it. Some metrics can therefore remain empty or a prediction may not be published."
+          },
+          {
+            "title": "Model evaluation",
+            "body": "Model quality should be read through sufficient sample size, calibration and chronological testing. A short winning or losing streak is not a reliable measure of future performance."
+          }
+        ]
+      },
+      "model_data": {
+        "eyebrow": "BLINQ",
+        "title": "Model & data",
+        "subtitle": "What BlinQ displays, what it does not, and why",
+        "sections": [
+          {
+            "title": "Data sources",
+            "body": "BlinQ combines internal processing with external tennis data sources. Availability can differ by tournament, player and competition."
+          },
+          {
+            "title": "Freshness",
+            "body": "Predictions and related data update according to availability of new information. Provider outages or delays can temporarily make parts of the service incomplete."
+          },
+          {
+            "title": "Model versions",
+            "body": "The production model can be updated over time. Model version and feed state are displayed so a published prediction can be linked back to the model that produced it."
+          },
+          {
+            "title": "No fake fill-in data",
+            "body": "If a field is unavailable, the application does not fabricate it for visual completeness. Rankings, odds, photos, logos and statistics use defined fallbacks or remain unavailable."
+          }
+        ]
+      },
+      "faq": {
+        "eyebrow": "BLINQ",
+        "title": "Frequently asked questions",
+        "subtitle": "Short answers about predictions, accounts and data",
+        "faq": [
+          {
+            "q": "What is BlinQ?",
+            "a": "BlinQ is a tennis analytics platform combining sports data, statistics and predictive models."
+          },
+          {
+            "q": "Is BlinQ a bookmaker?",
+            "a": "No. BlinQ does not accept bets or manage user funds."
+          },
+          {
+            "q": "What does BlinQ % mean?",
+            "a": "It is a model estimate of the probability of a specific outcome based on available data."
+          },
+          {
+            "q": "Does 90% mean the result is almost certain?",
+            "a": "No. Even a very high model probability is not a guarantee of a sports result."
+          },
+          {
+            "q": "Why can an odd or statistic be missing?",
+            "a": "The value may not be available from a provider or may not meet freshness and quality requirements. BlinQ does not fabricate missing values."
+          },
+          {
+            "q": "How is a paid account activated?",
+            "a": "After payment is confirmed, an administrator manually assigns the corresponding BlinQ level and validity period."
+          },
+          {
+            "q": "Where can I see membership validity?",
+            "a": "Your current level and access validity are shown in your BlinQ account."
+          },
+          {
+            "q": "How do I contact BlinQ?",
+            "a": "Use the official BlinQ Telegram channel. It is the primary user-support contact channel."
+          }
+        ]
+      },
+      "responsible_use": {
+        "eyebrow": "BLINQ",
+        "title": "Responsible use",
+        "subtitle": "A prediction is information, not certainty",
+        "sections": [
+          {
+            "title": "Analytical nature of the service",
+            "body": "BlinQ provides data analysis and model-based predictions for sports events. No prediction is certain, and sports outcomes can be affected by factors that cannot be reliably predicted in advance."
+          },
+          {
+            "title": "Financial decisions",
+            "body": "If you use BlinQ information in connection with betting, you make decisions independently and at your own risk. Do not use money you cannot afford to lose and do not chase previous losses."
+          },
+          {
+            "title": "Age and local rules",
+            "body": "Use of betting-related services must comply with the laws and age restrictions applicable in the user’s country."
+          },
+          {
+            "title": "BlinQ does not accept bets",
+            "body": "BlinQ is not a bookmaker, does not accept deposits or bets, and does not tell users how much money to risk."
+          }
+        ]
+      },
+      "terms": {
+        "eyebrow": "LEGAL",
+        "title": "Terms of use",
+        "subtitle": "Rules for using the BlinQ service",
+        "sections": [
+          {
+            "title": "1. Nature of the service",
+            "body": "BlinQ is an analytics platform focused on tennis data, statistics, model probabilities and predictions. Information is provided for analytical and informational purposes. BlinQ is not a bookmaker and does not guarantee future sports results."
+          },
+          {
+            "title": "2. User account",
+            "body": "Users are responsible for information supplied during registration and for protecting their sign-in credentials. An account is intended for one person unless otherwise agreed."
+          },
+          {
+            "title": "3. Membership and manual activation",
+            "body": "Available content depends on membership level. Paid access is activated manually by an administrator after payment confirmation and may not be immediate. Membership and manual changes may be recorded for operational purposes."
+          },
+          {
+            "title": "4. Service availability",
+            "body": "BlinQ aims for high availability but cannot guarantee uninterrupted operation or complete availability of external data sources. Maintenance, provider outages and delayed sports data can temporarily affect the service."
+          },
+          {
+            "title": "5. Prohibited use",
+            "body": "Users must not share paid access without permission, bypass access controls, overload the service through unauthorized automation, interfere with security, or obtain data by methods not intended by the service."
+          },
+          {
+            "title": "6. Responsibility",
+            "body": "Users make decisions based on BlinQ information independently and at their own risk. Model probabilities and statistics are not guarantees, and BlinQ is not responsible for financial losses arising from user decisions based on the service."
+          },
+          {
+            "title": "7. Changes",
+            "body": "Features, membership levels and these terms may be reasonably updated as the service develops. The latest update date is shown on this page."
+          }
+        ]
+      },
+      "privacy": {
+        "eyebrow": "LEGAL",
+        "title": "Privacy",
+        "subtitle": "How BlinQ handles user data",
+        "sections": [
+          {
+            "title": "Data we may process",
+            "body": "Depending on the features used, we may process email address, user identifier, Telegram nickname, selected avatar, membership level and validity, manual payment references, internal service notes and technical diagnostics."
+          },
+          {
+            "title": "Why we use data",
+            "body": "Data is used for authentication, account and membership management, manual payment confirmation, user communication, security, operational diagnostics and improvement of BlinQ. We do not sell personal data to advertisers."
+          },
+          {
+            "title": "External providers",
+            "body": "Some functionality is provided by technology vendors such as authentication, hosting, databases, email services or sports-data providers. Processing is limited to what is necessary to provide the relevant service."
+          },
+          {
+            "title": "Retention",
+            "body": "Data is retained for as long as needed to operate accounts, handle user communication, maintain security, keep membership records and meet legal obligations. Operational history may be retained after access ends where justified."
+          },
+          {
+            "title": "User rights",
+            "body": "Users may request access, correction, restriction or deletion of their personal data to the extent allowed by applicable law. Requests can be submitted through the official BlinQ Telegram channel."
+          },
+          {
+            "title": "Security",
+            "body": "BlinQ uses separated authentication, server-side access controls and operational logging. No internet service can guarantee absolute security despite reasonable safeguards."
+          }
+        ]
+      },
+      "cookies": {
+        "eyebrow": "LEGAL",
+        "title": "Cookies & local storage",
+        "subtitle": "What the application stores in the browser and why",
+        "sections": [
+          {
+            "title": "Essential storage",
+            "body": "BlinQ uses essential cookies or local storage for sign-in, session security, language, user settings and core application functionality. Some parts of the service may not work without these items."
+          },
+          {
+            "title": "Preferences",
+            "body": "The application may remember interface preferences such as language, display choices or the cookie preference so they do not need to be set on every visit."
+          },
+          {
+            "title": "Analytics",
+            "body": "If optional product analytics is enabled, it is used according to the user’s selected cookie preference. BlinQ may still keep aggregated server-side operational logs necessary for security and service reliability without marketing cookies."
+          },
+          {
+            "title": "Changing settings",
+            "body": "Cookie preferences can be changed at any time directly on this page. Essential technical storage cannot be disabled without limiting account functionality."
+          }
+        ]
+      }
+    }
+  },
+  "cookie_banner": {
+    "sk": {
+      "title": "Súkromie a cookies",
+      "text": "BlinQ používa nevyhnutné úložisko pre prihlásenie a fungovanie aplikácie. Nepovinnú analytiku môžete povoliť alebo odmietnuť.",
+      "essential": "Iba nevyhnutné",
+      "accept": "Povoliť analytiku",
+      "settings": "Nastavenia cookies"
+    },
+    "cz": {
+      "title": "Soukromí a cookies",
+      "text": "BlinQ používá nezbytné úložiště pro přihlášení a fungování aplikace. Nepovinnou analytiku můžete povolit nebo odmítnout.",
+      "essential": "Pouze nezbytné",
+      "accept": "Povolit analytiku",
+      "settings": "Nastavení cookies"
+    },
+    "en": {
+      "title": "Privacy & cookies",
+      "text": "BlinQ uses essential browser storage for sign-in and core app functionality. Optional analytics can be accepted or declined.",
+      "essential": "Essential only",
+      "accept": "Allow analytics",
+      "settings": "Cookie settings"
+    }
+  },
+  "ui_copy": {
+    "loading": {
+      "eyebrow": {
+        "sk": "BLINQ INTELLIGENCE",
+        "cz": "BLINQ INTELLIGENCE",
+        "en": "BLINQ INTELLIGENCE"
+      },
+      "status": {
+        "sk": "Pripravujeme analytický priestor",
+        "cz": "Připravujeme analytický prostor",
+        "en": "Preparing your analytics workspace"
+      },
+      "substatus": {
+        "sk": "Synchronizujeme dáta a dnešné predikcie",
+        "cz": "Synchronizujeme data a dnešní predikce",
+        "en": "Synchronizing data and today’s predictions"
+      }
+    },
+    "auth": {
+      "login_title": {
+        "sk": "Prihlásenie do BlinQ",
+        "cz": "Přihlášení do BlinQ",
+        "en": "Sign in to BlinQ"
+      },
+      "login_subtitle": {
+        "sk": "Prihlás sa do svojho analytického priestoru",
+        "cz": "Přihlas se do svého analytického prostoru",
+        "en": "Sign in to your analytics workspace"
+      }
+    },
+    "private_feed": {
+      "history_unavailable": {
+        "sk": "História upozornení je dočasne nedostupná. LIVE radar ďalej funguje.",
+        "cz": "Historie upozornění je dočasně nedostupná. LIVE radar dále funguje.",
+        "en": "Alert history is temporarily unavailable. LIVE radar continues to work."
+      },
+      "info_unavailable": {
+        "sk": "Premium Info potrebuje trvalé úložisko. Po obnovení sa správy zobrazia automaticky.",
+        "cz": "Premium Info potřebuje trvalé úložiště. Po obnovení se zprávy zobrazí automaticky.",
+        "en": "Premium Info needs persistent storage. Messages return automatically after storage recovers."
+      },
+      "info_title_offline": {
+        "sk": "Premium Info je dočasne nedostupné",
+        "cz": "Premium Info je dočasně nedostupné",
+        "en": "Premium Info is temporarily unavailable"
+      }
+    },
+    "upgrade": {
+      "eyebrow": {
+        "sk": "BLINQ ČLENSTVO",
+        "cz": "BLINQ ČLENSTVÍ",
+        "en": "BLINQ MEMBERSHIP"
+      },
+      "title": {
+        "sk": "Odomknúť {plan} prístup",
+        "cz": "Odemknout {plan} přístup",
+        "en": "Unlock {plan} access"
+      },
+      "requires": {
+        "sk": "Vyžaduje {plan}",
+        "cz": "Vyžaduje {plan}",
+        "en": "Requires {plan}"
+      },
+      "availability": {
+        "sk": "Táto sekcia je dostupná od úrovne {plan} a vyššie.",
+        "cz": "Tato sekce je dostupná od úrovně {plan} a výše.",
+        "en": "This section is available from {plan} and above."
+      },
+      "body": {
+        "sk": "Získaj prístup k hlavným predikciám, dennej ponuke a detailom pickov.",
+        "cz": "Získej přístup k hlavním predikcím, denní nabídce a detailům tipů.",
+        "en": "Get access to core predictions, the daily offer and pick details."
+      },
+      "current_plan": {
+        "sk": "Tvoj plán",
+        "cz": "Tvůj plán",
+        "en": "Your plan"
+      },
+      "recommended_plan": {
+        "sk": "Odporúčaný plán",
+        "cz": "Doporučený plán",
+        "en": "Recommended plan"
+      },
+      "validity": {
+        "sk": "Platnosť",
+        "cz": "Platnost",
+        "en": "Validity"
+      },
+      "compare": {
+        "sk": "Porovnať plány",
+        "cz": "Porovnat plány",
+        "en": "Compare plans"
+      },
+      "cta": {
+        "sk": "Prejsť na {plan}",
+        "cz": "Přejít na {plan}",
+        "en": "Upgrade to {plan}"
+      },
+      "generic_badge": {
+        "sk": "Upgrade členstva",
+        "cz": "Upgrade členství",
+        "en": "Membership upgrade"
+      },
+      "generic_availability": {
+        "sk": "Vyber si úroveň, ktorá ti najviac vyhovuje.",
+        "cz": "Vyber si úroveň, která ti nejvíc vyhovuje.",
+        "en": "Choose the membership level that fits you best."
+      }
+    },
+    "access": {
+      "requires": {
+        "sk": "Vyžaduje {plan}",
+        "cz": "Vyžaduje {plan}",
+        "en": "Requires {plan}"
+      },
+      "locked_row": {
+        "sk": "Ďalší pick je zamknutý",
+        "cz": "Další tip je zamčený",
+        "en": "Next pick is locked"
+      },
+      "locked_row_body": {
+        "sk": "Vyššia úroveň odomkne ďalšie riadky a detail predikcie.",
+        "cz": "Vyšší úroveň odemkne další řádky a detail predikce.",
+        "en": "A higher tier unlocks more rows and prediction detail."
+      }
+    }
+  }
+}
