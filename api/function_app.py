@@ -846,10 +846,26 @@ def match_intelligence(req):
         result["live_provider"] = True
         _store_match_intelligence(key, result)
         public_result = redact_match_intelligence(result, detail_access)
+        try:
+            client.close()
+        except Exception:
+            pass
         return response({**public_result, "cached": False})
     except AuthUnavailable:
+        client = locals().get("client")
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
         return response({"error": "auth_unavailable"}, 503)
     except Exception:
+        client = locals().get("client")
+        if client is not None:
+            try:
+                client.close()
+            except Exception:
+                pass
         logging.exception("Match intelligence live enrichment failed")
         # Azure Static Web Apps runtime does not inherit GitHub Actions
         # secrets. The deployed serving feed is therefore the authoritative

@@ -6487,4 +6487,4 @@ body#blinqPremium .hub-detail.is-locked:hover{background:rgba(213,174,88,.09)!im
 
 /* BlinQ runtime patch 7.3.6-r40: production publication lock + provider budget hardening. */
 
-/* BlinQ runtime patch 7.3.6-r42: auth/runtime resilience + CSP-safe match popout. */
+/* BlinQ runtime patch 7.3.6-r43: auth/runtime resilience + CSP-safe match popout. */

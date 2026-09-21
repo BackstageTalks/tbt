@@ -15,6 +15,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 import uuid
 from pathlib import Path
 from urllib.parse import urlparse
@@ -165,26 +166,45 @@ def _storage_backend_policy() -> str:
     return configured
 
 
+_AZURE_TABLE_CACHE: dict[tuple[str, str], object] = {}
+_AZURE_TABLE_CACHE_LOCK = threading.Lock()
+
 def _azure_table(name: str):
+    """Return a provisioned Azure table client without provisioning on every read.
+
+    Azure Functions reuses worker processes for many requests.  Creating/checking
+    the table and performing a health read on every `_table()` call added network
+    I/O to the hottest config/insight/account paths.  Cache only the SDK client;
+    every real operation still performs its own storage request and surfaces
+    transport/permission failures normally.
+    """
     connection = _connection_string()
     if not connection:
         raise AdminStorageUnavailable("Azure admin storage is not configured")
+    cache_key = (connection, str(name))
+    cached = _AZURE_TABLE_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     try:
         from azure.data.tables import TableServiceClient
-        service = TableServiceClient.from_connection_string(connection)
-        try:
-            service.create_table_if_not_exists(table_name=name)
-        except TypeError:  # SDK compatibility
-            service.create_table_if_not_exists(name)
-        client = service.get_table_client(name)
-        # Force one harmless read so a syntactically valid but unreachable
-        # connection is never treated as a usable backend.
-        pager = client.query_entities("PartitionKey eq '__blinq_health__'", results_per_page=1).by_page()
-        try:
-            next(iter(pager))
-        except StopIteration:
-            pass
-        return client
+        with _AZURE_TABLE_CACHE_LOCK:
+            cached = _AZURE_TABLE_CACHE.get(cache_key)
+            if cached is not None:
+                return cached
+            service = TableServiceClient.from_connection_string(connection)
+            try:
+                service.create_table_if_not_exists(table_name=name)
+            except TypeError:  # SDK compatibility
+                service.create_table_if_not_exists(name)
+            client = service.get_table_client(name)
+            # Validate the client once when it enters the process-local cache.
+            pager = client.query_entities("PartitionKey eq '__blinq_health__'", results_per_page=1).by_page()
+            try:
+                next(iter(pager))
+            except StopIteration:
+                pass
+            _AZURE_TABLE_CACHE[cache_key] = client
+            return client
     except Exception as exc:
         raise AdminStorageUnavailable("Azure admin storage is unavailable") from exc
 
@@ -1263,6 +1283,10 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
             read_ids = {str(row.get("RowKey") or "") for row in reads}
         except Exception as exc:
             raise AdminStorageUnavailable("Unable to load insight read state") from exc
+    # Resolve runtime notification minima once per request, not once per insight.
+    # With a large history this used to multiply UI-config storage reads by N.
+    live_levels = set(live_alert_levels()) if plan and not include_inactive else set()
+    info_levels = set(info_alert_levels()) if plan and not include_inactive else set()
     items = []
     for entity in rows:
         item = _insight_from_entity(entity)
@@ -1270,9 +1294,9 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
             if not item["active"] or (plan and plan not in item["levels"]):
                 continue
             item_type = str(item.get("type") or "").lower()
-            if plan and item_type in {"alert", "live_watch", "set2"} and plan not in set(live_alert_levels()):
+            if plan and item_type in {"alert", "live_watch", "set2"} and plan not in live_levels:
                 continue
-            if plan and item_type not in {"alert", "live_watch", "set2"} and plan not in set(info_alert_levels()):
+            if plan and item_type not in {"alert", "live_watch", "set2"} and plan not in info_levels:
                 continue
             try:
                 starts = datetime.fromisoformat(item["active_from"]) if item["active_from"] else None

@@ -9,7 +9,7 @@
     projectId: 'blinq-182',
   });
 
-  const AUTH_RUNTIME = '736-r42';
+  const AUTH_RUNTIME = '736-r43';
   const AUTH_CONFIG_URL = '/api/v1/auth/config';
   const AUTH_CONFIG_ATTEMPTS = 3;
   const TRANSIENT_AUTH_STATUSES = new Set([0, 408, 425, 429, 500, 502, 503, 504]);

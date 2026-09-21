@@ -137,19 +137,41 @@ def load_account_metadata(user_id: object) -> dict:
 
 
 def load_account_metadata_many(user_ids: list[object]) -> dict[str, dict]:
+    """Load only requested account rows; never scan the full account partition.
+
+    Azure Table queries exact hashed RowKeys in bounded OR chunks. Firestore uses
+    point reads because its compatibility adapter intentionally supports only the
+    small query subset BlinQ needs. This keeps Admin pagination proportional to
+    the current page rather than the total number of accounts.
+    """
     wanted = {str(value or "").strip() for value in user_ids if str(value or "").strip()}
     if not wanted:
         return {}
     if len(wanted) > 500:
         raise ValueError("Too many account metadata rows requested")
     client = _table(ACCOUNT_TABLE)
+    found: dict[str, dict] = {}
     try:
-        rows = client.query_entities(query_filter="PartitionKey eq 'account'")
-        found = {}
-        for entity in rows:
-            uid = str(entity.get("user_id") or "")
-            if uid in wanted:
-                found[uid] = _public_entity(entity)
+        if client.__class__.__name__ == "_FirestoreTableAdapter":
+            for uid in wanted:
+                try:
+                    entity = client.get_entity(partition_key="account", row_key=_key(uid))
+                except Exception as exc:
+                    if _not_found(exc):
+                        continue
+                    raise
+                if str(entity.get("user_id") or "") == uid:
+                    found[uid] = _public_entity(entity)
+        else:
+            keyed = [(_key(uid), uid) for uid in wanted]
+            for offset in range(0, len(keyed), 12):
+                chunk = keyed[offset:offset + 12]
+                row_filter = " or ".join(f"RowKey eq '{row_key}'" for row_key, _ in chunk)
+                query = f"PartitionKey eq 'account' and ({row_filter})"
+                for entity in client.query_entities(query_filter=query):
+                    uid = str(entity.get("user_id") or "")
+                    if uid in wanted:
+                        found[uid] = _public_entity(entity)
         return {uid: found.get(uid, _public_entity(None)) for uid in wanted}
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to load account metadata") from exc

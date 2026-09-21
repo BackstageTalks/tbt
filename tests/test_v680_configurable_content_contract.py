@@ -27,5 +27,5 @@ def test_loader_is_compact_svg_rally_without_progress_track():
     assert 'aria-label="BlinQ animated loading screen"' in loader
 
 def test_indoor_hard_uses_hard_stats_bucket():
-    text=(ROOT/"api"/"tbt"/"services"/"feature_builder.py").read_text(encoding="utf-8")
+    text=(ROOT/"api"/"tbt"/"models"/"feature_builder.py").read_text(encoding="utf-8")
     assert 'return "hard" if value == "indoor_hard" else value' in text

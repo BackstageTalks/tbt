@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "ui_revision": "7.3.6",
-  "ui_patch": "736-r42",
+  "ui_patch": "736-r43",
   "access_contract_revision": 1,
   "elements": {
     "SIDEBAR_RESULTS": {

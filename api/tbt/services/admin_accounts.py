@@ -5,6 +5,8 @@ This module manages identity/account metadata only and never tennis data.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import threading
+import time
 
 
 from .auth import (
@@ -74,18 +76,99 @@ def mirror_admin_metadata_claims(cfg, user_id, payload):
     except Exception as exc:
         raise AuthUnavailable("Firebase admin service temporarily unavailable") from exc
 
+_USER_PAGE_TOKEN_CACHE: dict[tuple[int, int], tuple[float, str | None]] = {}
+_USER_PAGE_TOKEN_LOCK = threading.Lock()
+_USER_PAGE_TOKEN_TTL = 600.0
+
+def _cache_page_token(per_page: int, page: int, token: str | None) -> None:
+    with _USER_PAGE_TOKEN_LOCK:
+        _USER_PAGE_TOKEN_CACHE[(per_page, page)] = (time.monotonic(), token)
+
+def _cached_page_token(per_page: int, page: int):
+    with _USER_PAGE_TOKEN_LOCK:
+        row = _USER_PAGE_TOKEN_CACHE.get((per_page, page))
+        if not row:
+            return False, None
+        created, token = row
+        if time.monotonic() - created > _USER_PAGE_TOKEN_TTL:
+            _USER_PAGE_TOKEN_CACHE.pop((per_page, page), None)
+            return False, None
+        return True, token
+
 def _firebase_list_users(cfg, *, page=1, per_page=100):
+    """List one Firebase page without rescanning page 1 for every request.
+
+    The Admin UI and account worker use numeric pages for compatibility. Firebase
+    itself is cursor based, so cache page-start tokens for a short period and walk
+    only from the nearest known cursor. On older/mocked SDKs that do not accept a
+    page_token argument, fall back to the legacy get_next_page traversal.
+    """
     _, firebase_auth, _ = _firebase_modules()
     app = firebase_app(cfg)
+    page = max(1, int(page))
     try:
-        result = firebase_auth.list_users(max_results=per_page, app=app)
-        current_page = 1
-        while result is not None and current_page < page:
-            result = result.get_next_page()
-            current_page += 1
-        if result is None:
-            return []
-        return [firebase_user_to_dict(record) for record in result.users]
+        # Page 1 always starts without a token. Later pages can reuse the token
+        # learned by the immediately preceding page/request.
+        start_page = 1
+        token = None
+        if page > 1:
+            for candidate in range(page, 1, -1):
+                found, cached = _cached_page_token(per_page, candidate)
+                if found:
+                    if cached is None:
+                        return []
+                    start_page, token = candidate, cached
+                    break
+        current = start_page
+        while current <= page:
+            kwargs = {"max_results": per_page, "app": app}
+            if token:
+                kwargs["page_token"] = token
+            try:
+                result = firebase_auth.list_users(**kwargs)
+            except TypeError:
+                # Compatibility path for test doubles/older SDK facades.
+                result = firebase_auth.list_users(max_results=per_page, app=app)
+                current = 1
+                while result is not None and current < page:
+                    result = result.get_next_page()
+                    current += 1
+                if result is None:
+                    return []
+                return [firebase_user_to_dict(record) for record in result.users]
+            if result is None:
+                _cache_page_token(per_page, current + 1, None)
+                return []
+            has_token_attr = hasattr(result, "next_page_token")
+            next_token = getattr(result, "next_page_token", None)
+            # Some SDK versions expose only get_next_page(). Numeric page callers
+            # still work; token caching simply remains unavailable in that case.
+            if current == page:
+                if has_token_attr:
+                    _cache_page_token(per_page, current + 1, str(next_token) if next_token else None)
+                return [firebase_user_to_dict(record) for record in result.users]
+            if has_token_attr and not next_token:
+                _cache_page_token(per_page, current + 1, None)
+                return []
+            if not has_token_attr:
+                nxt = result.get_next_page()
+                if nxt is None:
+                    _cache_page_token(per_page, current + 1, None)
+                    return []
+                result = nxt
+                token = getattr(result, "next_page_token", None)
+                current += 1
+                if current == page:
+                    return [firebase_user_to_dict(record) for record in result.users]
+                # No reusable token exposed: continue legacy traversal from here.
+                while result is not None and current < page:
+                    result = result.get_next_page()
+                    current += 1
+                return [] if result is None else [firebase_user_to_dict(record) for record in result.users]
+            token = str(next_token)
+            _cache_page_token(per_page, current + 1, token)
+            current += 1
+        return []
     except Exception as exc:
         raise AuthUnavailable("Firebase admin service temporarily unavailable") from exc
 
