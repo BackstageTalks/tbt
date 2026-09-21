@@ -15,11 +15,11 @@ WORKFLOW = (ROOT / '.github' / 'workflows' / 'data.yml').read_text(encoding='utf
 def test_r46_release_and_cache_contract():
     release = json.loads((ROOT / 'web' / 'release.json').read_text(encoding='utf-8'))
     ui = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
-    assert release['patch'] == ui['ui_patch'] == '736-r48'
-    assert 'content="736-r48"' in INDEX
+    assert release['patch'] == ui['ui_patch'] == '736-r49'
+    assert 'content="736-r49"' in INDEX
     for asset in ('blinq-app.css', 'auth.js', 'responsive.js', 'app.js'):
-        assert f'/{asset}?v=7360&p=48' in INDEX
-    assert "const AUTH_RUNTIME = '736-r48'" in AUTH
+        assert f'/{asset}?v=7360&p=49' in INDEX
+    assert "const AUTH_RUNTIME = '736-r49'" in AUTH
 
 
 def test_rookie_stays_internal_but_public_membership_is_free():
@@ -60,10 +60,11 @@ def test_results_projection_copy_is_not_duplicated():
     assert 'SPOLU ZÁPAS' not in formatter
 
 
-def test_login_family_background_and_three_subtle_watermarks_are_shared():
+def test_login_family_background_and_single_corner_watermark_are_shared():
     assert '/assets/blinq_page_background.webp' in CSS
     assert 'anti-share-watermarks' in INDEX
-    assert all(f'wm-{x}' in INDEX for x in ('a', 'b', 'c'))
+    assert 'wm-b' in INDEX
+    assert 'wm-a' not in INDEX and 'wm-c' not in INDEX
     assert '.boot-splash.boot-splash-tennis' in CSS
     assert '.blinq-admin .anti-share-watermarks' in CSS
 
@@ -84,11 +85,12 @@ def test_doubles_pipeline_has_activation_and_fail_closed_gates():
         'MIN_MEMBER_MATCHES = 4',
         'MIN_DATA_DEPTH = 0.35',
         'MIN_PUBLIC_PROBABILITY = 0.58',
-        'MIN_EXPECTED_VALUE = 0.02',
     ):
         assert literal in DOUBLES
     assert 'member_identity_coverage' in DOUBLES and '>= 0.90' in DOUBLES
     assert 'no_match_winner_odds' in DOUBLES
+    assert 'expected_value_filter' in DOUBLES and 'analysis_only' in DOUBLES
+    assert 'rejected["ev"]' not in DOUBLES
     assert 'doubles-data' in WORKFLOW
     assert 'enrich_doubles_history.py' in WORKFLOW
     assert '--doubles-odds-max-events' in WORKFLOW

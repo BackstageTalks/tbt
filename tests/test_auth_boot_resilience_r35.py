@@ -17,7 +17,7 @@ def test_auth_boot_is_not_coupled_to_ui_config():
 
 
 def test_auth_runtime_has_bounded_retry_and_client_degraded_mode():
-    assert "const AUTH_RUNTIME = '736-r48'" in AUTH
+    assert "const AUTH_RUNTIME = '736-r49'" in AUTH
     assert "AUTH_CONFIG_ATTEMPTS = 3" in AUTH
     assert "degradedClientConfig" in AUTH
     assert "async function ensureReady()" in AUTH

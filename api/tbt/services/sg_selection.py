@@ -72,7 +72,7 @@ def _long_match(total_sets: float, best_of: int) -> float:
 def _history_index(history, cutoff: datetime):
     by_player: dict[str, list[dict[str, Any]]] = defaultdict(list)
     baselines: dict[tuple[str, int], dict[str, list[float]]] = defaultdict(
-        lambda: {"games": [], "long": []}
+        lambda: {"games": [], "sets": [], "long": []}
     )
     score_matches = 0
     exact_from_score = 0
@@ -114,6 +114,7 @@ def _history_index(history, cutoff: datetime):
         long_value = _long_match(total_sets, best_of)
         key = (str(match.tour or "").lower(), best_of)
         baselines[key]["games"].append(total_games)
+        baselines[key]["sets"].append(total_sets)
         baselines[key]["long"].append(long_value)
         score_matches += 1
         common = {
@@ -122,6 +123,7 @@ def _history_index(history, cutoff: datetime):
             "best_of": best_of,
             "tour": str(match.tour or "").lower(),
             "total_games": total_games,
+            "total_sets": total_sets,
             "long_match": long_value,
         }
         by_player[str(match.player1_id)].append(common)
@@ -130,10 +132,12 @@ def _history_index(history, cutoff: datetime):
     baseline_values: dict[tuple[str, int], dict[str, float]] = {}
     for key, values in baselines.items():
         games = values["games"]
+        sets = values["sets"]
         long = values["long"]
-        if games and long:
+        if games and sets and long:
             baseline_values[key] = {
                 "games": sum(games) / len(games),
+                "sets": sum(sets) / len(sets),
                 "long": sum(long) / len(long),
                 "n": float(len(games)),
             }
@@ -179,31 +183,50 @@ def _player_estimate(
 
 def _sets_card(
     row: dict[str, Any],
-    p1: dict[str, Any],
-    p2: dict[str, Any],
+    p1_total: dict[str, Any],
+    p2_total: dict[str, Any],
+    p1_long: dict[str, Any],
+    p2_long: dict[str, Any],
     *,
     best_of: int,
-    baseline: float,
+    baseline_sets: float,
+    baseline_long: float,
 ) -> dict[str, Any] | None:
-    raw_probability = max(0.02, min(0.98, (p1["estimate"] + p2["estimate"]) / 2.0))
-    depth_n = min(int(p1["samples"]), int(p2["samples"]))
+    # Selection confidence remains a probability of the O/U direction, while
+    # `projection` is now the expected TOTAL number of sets in the match.  The
+    # previous v3 payload exposed direction confidence (for example 0.90) as if
+    # it were "0.9 sets", which was semantically wrong in Results.
+    raw_probability = max(0.02, min(0.98, (p1_long["estimate"] + p2_long["estimate"]) / 2.0))
+    depth_n = min(int(p1_long["samples"]), int(p2_long["samples"]), int(p1_total["samples"]), int(p2_total["samples"]))
     depth = min(1.0, depth_n / 24.0)
-    surface_depth = min(int(p1["surface_samples"]), int(p2["surface_samples"]))
+    surface_depth = min(
+        int(p1_long["surface_samples"]), int(p2_long["surface_samples"]),
+        int(p1_total["surface_samples"]), int(p2_total["surface_samples"]),
+    )
     surface_factor = min(1.0, surface_depth / 8.0) if surface_depth else 0.0
     evidence = min(1.0, 0.85 * math.sqrt(depth) + 0.15 * surface_factor)
 
-    # Shrink the historical long-match probability toward 50% when evidence is
-    # incomplete; this prevents a sparse 90% estimate from being displayed as 90%.
     adjusted_probability = 0.5 + (raw_probability - 0.5) * evidence
     is_over = adjusted_probability > 0.5
     selected_probability = adjusted_probability if is_over else 1.0 - adjusted_probability
     selected_probability = min(0.90, selected_probability)
-    distance = abs(adjusted_probability - 0.5)
+    probability_distance = abs(adjusted_probability - 0.5)
     if selected_probability < 0.60:
         return None
 
     line = 2.5 if best_of == 3 else 3.5
     selection = f"{'Over' if is_over else 'Under'} {line:.1f} Sets"
+    expected_sets = (float(p1_total["estimate"]) + float(p2_total["estimate"])) / 2.0
+    # Keep the public projection physically possible for the match format.
+    expected_sets = max(2.0 if best_of == 3 else 3.0, min(float(best_of), expected_sets))
+    # The displayed total and the selected O/U direction must never contradict
+    # each other. This is mathematically exact for BO3; for BO5 it also gives us
+    # a conservative fail-closed guard when mean total sets and long-match rate
+    # disagree because 4- and 5-set matches share the same >3.5 indicator.
+    if (expected_sets > line) != is_over:
+        return None
+    projection_gap = abs(expected_sets - line)
+
     card = deepcopy(row)
     card.pop("market_publication_candidates", None)
     card.pop("betting", None)
@@ -218,31 +241,31 @@ def _sets_card(
         "pick": selection,
         "selection": selection,
         "selection_id": f"sets:{'over' if is_over else 'under'}:{line:.1f}",
-        "projection": round(selected_probability, 4),
-        "projection_unit": "probability",
+        "projection": round(expected_sets, 2),
+        "projection_unit": "sets",
         "raw_long_match_probability": round(raw_probability, 4),
         "evidence_adjusted_probability": round(adjusted_probability, 4),
-        "reference_projection": 0.5,
-        "projection_gap": round(distance, 4),
+        "reference_projection": round(line, 2),
+        "projection_gap": round(projection_gap, 2),
         "projection_confidence": round(selected_probability, 4),
         "probability": None,
         "odds": None,
         "edge": None,
         "expected_value": None,
         "price_status": "projection_only",
-        "projection_model": "sets-games-projection-v3",
+        "projection_model": "sets-games-projection-v4",
         "projection_source": "historical_structured_scores",
         "projection_samples": {
-            "player1": int(p1["samples"]), "player2": int(p2["samples"]),
-            "player1_surface": int(p1["surface_samples"]), "player2_surface": int(p2["surface_samples"]),
+            "player1": int(p1_total["samples"]), "player2": int(p2_total["samples"]),
+            "player1_surface": int(p1_total["surface_samples"]), "player2_surface": int(p2_total["surface_samples"]),
         },
-        "baseline_projection": round(float(baseline), 4),
+        "baseline_projection": round(float(baseline_sets), 3),
+        "baseline_long_match_probability": round(float(baseline_long), 4),
         "best_of": best_of,
         "data_depth": round(depth, 4),
-        "projection_score": selected_probability * (1.0 + distance * 2.0),
+        "projection_score": selected_probability * (1.0 + probability_distance * 2.0),
     })
     return card
-
 
 def _games_card(
     row: dict[str, Any],
@@ -298,7 +321,7 @@ def _games_card(
         "projection_uncertainty": round(se, 3),
         "probability": None, "odds": None, "edge": None, "expected_value": None,
         "price_status": "projection_only",
-        "projection_model": "sets-games-projection-v3",
+        "projection_model": "sets-games-projection-v4",
         "projection_source": "historical_structured_scores",
         "projection_samples": {
             "player1": int(p1["samples"]), "player2": int(p2["samples"]),
@@ -397,20 +420,31 @@ def select_sg_picks(
             continue
         eligible += 1
 
-        p1_sets = _player_estimate(
+        p1_sets_total = _player_estimate(
+            p1_id, histories, "total_sets", now,
+            tour=tour, surface=surface, best_of=best_of,
+            baseline=float(baseline["sets"]),
+        )
+        p2_sets_total = _player_estimate(
+            p2_id, histories, "total_sets", now,
+            tour=tour, surface=surface, best_of=best_of,
+            baseline=float(baseline["sets"]),
+        )
+        p1_sets_long = _player_estimate(
             p1_id, histories, "long_match", now,
             tour=tour, surface=surface, best_of=best_of,
             baseline=float(baseline["long"]),
         )
-        p2_sets = _player_estimate(
+        p2_sets_long = _player_estimate(
             p2_id, histories, "long_match", now,
             tour=tour, surface=surface, best_of=best_of,
             baseline=float(baseline["long"]),
         )
-        if p1_sets and p2_sets:
+        if p1_sets_total and p2_sets_total and p1_sets_long and p2_sets_long:
             card = _sets_card(
-                effective_row, p1_sets, p2_sets, best_of=best_of,
-                baseline=float(baseline["long"]),
+                effective_row, p1_sets_total, p2_sets_total, p1_sets_long, p2_sets_long,
+                best_of=best_of, baseline_sets=float(baseline["sets"]),
+                baseline_long=float(baseline["long"]),
             )
             if card:
                 by_market["sets"].append(card)
@@ -468,14 +502,15 @@ def select_sg_picks(
     baseline_report = {
         f"{tour}_bo{best_of}": {
             "games": round(float(values["games"]), 3),
+            "sets": round(float(values["sets"]), 3),
             "long_match_probability": round(float(values["long"]), 4),
             "n": int(values["n"]),
         }
         for (tour, best_of), values in sorted(baselines.items())
     }
     return combined, {
-        "schema": 4,
-        "model": "sets-games-projection-v3",
+        "schema": 5,
+        "model": "sets-games-projection-v4",
         "cutoff_utc": cutoff.isoformat(),
         "projection_only": True,
         "odds_backed": False,

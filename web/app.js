@@ -320,8 +320,8 @@
     // optional endpoint must not serialize several timeout windows and hold an
     // authenticated user behind presentation configuration.
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
-      getJSON('/ui-config.json?v=7360&p=48',{timeoutMs:3000}),
-      getJSON('/config/telegram-groups.json?v=7360&p=48',{timeoutMs:3000}),
+      getJSON('/ui-config.json?v=7360&p=49',{timeoutMs:3000}),
+      getJSON('/config/telegram-groups.json?v=7360&p=49',{timeoutMs:3000}),
       getJSON('/api/v1/ui-config',{timeoutMs:3500}),
       getJSON('/membership-links.json',{timeoutMs:3000})
     ]);
@@ -388,7 +388,7 @@
       if(rookiePrime)rookiePrime.selection_mode='stable_random';
     }
     applyAccessContractV1(state.ui);
-    state.ui.ui_patch='736-r48';
+    state.ui.ui_patch='736-r49';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -1398,6 +1398,23 @@
     if(sourceTab==='games'){const ref=Number(row?.reference_projection??row?.baseline_projection);if(Number.isFinite(ref))return ref;}
     return null;
   }
+  function setsTotalProjectionValue(row){
+    const projection=Number(row?.projection),unit=String(row?.projection_unit||'').trim().toLowerCase();
+    if(Number.isFinite(projection)&&unit==='sets')return projection;
+    // Legacy SG v3 stored direction confidence (0–1) in `projection`. For BO3
+    // results/picks, convert that confidence into an expected TOTAL set count so
+    // old rows do not render as nonsensical "0.9 Sets".
+    if(Number.isFinite(projection)&&unit==='probability'&&projection>=0&&projection<=1){
+      const selection=String(row?.selection||row?.pick||'').trim().toLowerCase();
+      const line=selectionLineFromText(row),bestOf=Number(row?.best_of)||(Number.isFinite(line)&&Math.abs(line-2.5)<0.01?3:Number.isFinite(line)&&Math.abs(line-3.5)<0.01?5:NaN);
+      const over=/over/.test(selection),under=/under/.test(selection);
+      if(bestOf===3&&(over||under)){
+        const longProbability=over?projection:1-projection;
+        return Math.max(2,Math.min(3,2+longProbability));
+      }
+    }
+    return null;
+  }
   function projectionPickText(row,sourceTab=''){
     const market=sourceTab||String(row?.market||row?.projection_metric||'').toLowerCase();
     if(market==='sets')return String(row?.selection||row?.pick||'—');
@@ -1947,21 +1964,24 @@
   function sgProjectionDetailData(row,sourceTab=''){
     const match=normalize(row),samples=row?.projection_samples&&typeof row.projection_samples==='object'?row.projection_samples:{};
     const market=String(sourceTab||row?.market||'').toLowerCase()==='sets'?'sets':'games';
-    const projection=Number(row?.projection),baseline=Number(row?.reference_projection??row?.baseline_projection),gap=Number(row?.projection_gap),confidence=Number(row?.projection_confidence),depth=Number(row?.data_depth);
+    const rawProjection=Number(row?.projection),projection=market==='sets'?setsTotalProjectionValue(row):rawProjection;
+    const parsedLine=selectionLineFromText(row),baseline=market==='sets'&&Number.isFinite(parsedLine)?parsedLine:Number(row?.reference_projection??row?.baseline_projection);
+    const storedGap=Number(row?.projection_gap),gap=market==='sets'&&Number.isFinite(projection)&&Number.isFinite(baseline)?Math.abs(projection-baseline):storedGap;
+    const confidence=Number(row?.projection_confidence),depth=Number(row?.data_depth);
     return {match,market,projection,baseline,gap,confidence,depth,bestOf:Number(row?.best_of),samples,selection:projectionPickText(row,market),source:String(row?.projection_source||'historical_structured_scores')};
   }
   function sgProjectionDetailHtml(row,sourceTab=''){
     const d=sgProjectionDetailData(row,sourceTab),isSets=d.market==='sets';
-    const projectionText=Number.isFinite(d.projection)?(isSets?pct(d.projection):d.projection.toFixed(1)):'—';
-    const baselineText=Number.isFinite(d.baseline)?(isSets?pct(d.baseline):d.baseline.toFixed(1)):'—';
-    const gapText=Number.isFinite(d.gap)?(isSets?`${(d.gap*100).toFixed(1)} p.b.`:`${d.gap.toFixed(1)} gemu`):'—';
+    const projectionText=Number.isFinite(d.projection)?(isSets?`${d.projection.toFixed(2)} Sets`:`${d.projection.toFixed(1)} Games`):'—';
+    const baselineText=Number.isFinite(d.baseline)?(isSets?`${d.baseline.toFixed(1)} Sets`:`${d.baseline.toFixed(1)} Games`):'—';
+    const gapText=Number.isFinite(d.gap)?(isSets?`${d.gap.toFixed(2)} Sets`:`${d.gap.toFixed(1)} Games`):'—';
     const depthText=Number.isFinite(d.depth)?`${Math.round(Math.max(0,Math.min(1,d.depth))*100)}%`:'—';
     const p1=Number(d.samples.player1),p2=Number(d.samples.player2),s1=Number(d.samples.player1_surface),s2=Number(d.samples.player2_surface);
     const sample=(a,b)=>Number.isFinite(a)&&Number.isFinite(b)?`${Math.trunc(a)} / ${Math.trunc(b)}`:'—';
     const why=isSets
       ?lcopy(`The model compares how often both players' historical matches extend beyond the reference set length and shrinks sparse evidence toward neutral.`,`Model porovnáva, ako často sa historické zápasy oboch hráčov predĺžia nad referenčnú dĺžku setov a pri malej vzorke výsledok konzervatívne približuje k neutrálu.`,`Model porovnává, jak často se historické zápasy obou hráčů prodlužují nad referenční délku setů a při malém vzorku výsledek konzervativně přibližuje k neutrálu.`)
       :lcopy(`The projection is built from structured historical total-games scores for both players, adjusted by sample depth and surface evidence.`,`Projekcia vychádza zo štruktúrovaných historických počtov gemov oboch hráčov a zohľadňuje hĺbku vzorky aj dáta na povrchu.`,`Projekce vychází ze strukturovaných historických počtů gemů obou hráčů a zohledňuje hloubku vzorku i data na povrchu.`);
-    return `<div class="match-detail-shell sg-detail-shell" data-detail-market="${escapeHtml(d.market)}"><header class="match-detail-head"><div><div class="dialog-eyebrow">${isSets?'SETS':'GAMES'} · ${escapeHtml(d.match.tour)} · ${escapeHtml(d.match.tournament)}</div><h2>${escapeHtml(d.match.p1)} <span>vs</span> ${escapeHtml(d.match.p2)}</h2></div></header><div class="sg-detail-hero"><div><small>${escapeHtml(lcopy('Model projection','Modelová projekcia','Modelová projekce'))}</small><strong>${escapeHtml(d.selection)}</strong></div><div><b>${escapeHtml(projectionText)}</b><small>${escapeHtml(isSets?lcopy('direction probability','pravdepodobnosť smeru','pravděpodobnost směru'):lcopy('projected total games','projekcia gemov','projekce gemů'))}</small></div></div><div class="sg-detail-grid"><article><small>${escapeHtml(lcopy('Reference','Referencia','Reference'))}</small><strong>${escapeHtml(baselineText)}</strong></article><article><small>${escapeHtml(lcopy('Projection gap','Rozdiel projekcie','Rozdíl projekce'))}</small><strong>${escapeHtml(gapText)}</strong></article><article><small>${escapeHtml(lcopy('Model confidence','Istota modelu','Jistota modelu'))}</small><strong>${Number.isFinite(d.confidence)?escapeHtml(pct(d.confidence)):'—'}</strong></article><article class="data-depth"><small>DATA DEPTH</small><strong>${escapeHtml(depthText)}</strong></article><article><small>${escapeHtml(lcopy('History samples P1 / P2','Historická vzorka P1 / P2','Historický vzorek P1 / P2'))}</small><strong>${escapeHtml(sample(p1,p2))}</strong></article><article><small>${escapeHtml(lcopy('Surface samples P1 / P2','Vzorka na povrchu P1 / P2','Vzorek na povrchu P1 / P2'))}</small><strong>${escapeHtml(sample(s1,s2))}</strong></article></div><p class="ace-detail-note">${escapeHtml(lcopy('This is a model projection, not an odds-backed betting market. Odds, edge and EV are shown only when a real provider market exists.','Ide o modelovú projekciu, nie o predikciu podloženú kurzovým marketom. Kurz, edge a EV zobrazujeme iba vtedy, keď existuje reálny market od providera.','Jde o modelovou projekci, ne o predikci podloženou kurzovým marketem. Kurz, edge a EV zobrazujeme pouze tehdy, když existuje reálný market od providera.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(d.match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(d.match.date)} · ${fmtTime(d.match.date)}</span>${Number.isFinite(d.bestOf)?`<span>BO${Math.trunc(d.bestOf)}</span>`:''}<span>${escapeHtml(d.source.replaceAll('_',' '))}</span></div></div>`;
+    return `<div class="match-detail-shell sg-detail-shell" data-detail-market="${escapeHtml(d.market)}"><header class="match-detail-head"><div><div class="dialog-eyebrow">${isSets?'SETS':'GAMES'} · ${escapeHtml(d.match.tour)} · ${escapeHtml(d.match.tournament)}</div><h2>${escapeHtml(d.match.p1)} <span>vs</span> ${escapeHtml(d.match.p2)}</h2></div></header><div class="sg-detail-hero"><div><small>${escapeHtml(lcopy('Model projection','Modelová projekcia','Modelová projekce'))}</small><strong>${escapeHtml(d.selection)}</strong></div><div><b>${escapeHtml(projectionText)}</b><small>${escapeHtml(isSets?lcopy('projected total sets','projekcia setov','projekce setů'):lcopy('projected total games','projekcia gemov','projekce gemů'))}</small></div></div><div class="sg-detail-grid"><article><small>${escapeHtml(lcopy('Reference','Referencia','Reference'))}</small><strong>${escapeHtml(baselineText)}</strong></article><article><small>${escapeHtml(lcopy('Projection gap','Rozdiel projekcie','Rozdíl projekce'))}</small><strong>${escapeHtml(gapText)}</strong></article><article><small>${escapeHtml(lcopy('Model confidence','Istota modelu','Jistota modelu'))}</small><strong>${Number.isFinite(d.confidence)?escapeHtml(pct(d.confidence)):'—'}</strong></article><article class="data-depth"><small>DATA DEPTH</small><strong>${escapeHtml(depthText)}</strong></article><article><small>${escapeHtml(lcopy('History samples P1 / P2','Historická vzorka P1 / P2','Historický vzorek P1 / P2'))}</small><strong>${escapeHtml(sample(p1,p2))}</strong></article><article><small>${escapeHtml(lcopy('Surface samples P1 / P2','Vzorka na povrchu P1 / P2','Vzorek na povrchu P1 / P2'))}</small><strong>${escapeHtml(sample(s1,s2))}</strong></article></div><p class="ace-detail-note">${escapeHtml(lcopy('This is a model projection, not an odds-backed betting market. Odds, edge and EV are shown only when a real provider market exists.','Ide o modelovú projekciu, nie o predikciu podloženú kurzovým marketom. Kurz, edge a EV zobrazujeme iba vtedy, keď existuje reálny market od providera.','Jde o modelovou projekci, ne o predikci podloženou kurzovým marketem. Kurz, edge a EV zobrazujeme pouze tehdy, když existuje reálný market od providera.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(d.match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(d.match.date)} · ${fmtTime(d.match.date)}</span>${Number.isFinite(d.bestOf)?`<span>BO${Math.trunc(d.bestOf)}</span>`:''}<span>${escapeHtml(d.source.replaceAll('_',' '))}</span></div></div>`;
   }
   function openSgProjection(row,sourceTab=''){
     const dialog=$('matchDialog'),content=$('dialogContent');if(!dialog||!content)return;
@@ -1976,10 +1996,9 @@
     const rowClass=active?' class="hub-row-active"':'';
     const leading=`<td class="hub-rank">${index+1}</td><td class="hub-time">${timeDateHtml(scheduled)}</td><td class="hub-tournament-cell">${tournament}</td><td class="hub-match-cell">${dailyHubMatch(row)}</td>`;
     if(sourceTab==='games'||sourceTab==='sets'){
-      const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=projectionPickText(row,sourceTab);
-      const unit=String(row?.projection_unit||'');
-      const projectionText=Number.isFinite(projection)?(unit==='probability'?pct(projection):projection.toFixed(1)):'—';
-      const projectionUnit=sourceTab==='sets'?lcopy('direction','smer','směr'):lcopy('projected games','projekcia gemov','projekce gemů');
+      const confidence=Number(row?.projection_confidence),rawProjection=Number(row?.projection),projection=sourceTab==='sets'?setsTotalProjectionValue(row):rawProjection,pick=projectionPickText(row,sourceTab);
+      const projectionText=Number.isFinite(projection)?(sourceTab==='sets'?projection.toFixed(2):projection.toFixed(1)):'—';
+      const projectionUnit=sourceTab==='sets'?lcopy('projected sets','projekcia setov','projekce setů'):lcopy('projected games','projekcia gemov','projekce gemů');
       const actionCell=tab==='see_all'?'<td class="hub-action-cell hub-optional-action"><span class="hub-projection-badge">MODEL</span></td>':'';
       return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
     }
@@ -2096,8 +2115,12 @@
       const projectionTab=projectionMarket==='aces'?'ace':projectionMarket;
       if(['ace','double_faults','games','sets'].includes(projectionTab))pick=projectionPickText(row,projectionTab);
       const marketLabel=row?.market_type||String(row?.market||'Projection').replaceAll('_',' ');const sampleText=Number.isFinite(Number(samples.player1))&&Number.isFinite(Number(samples.player2))?`${publicText('Data')} ${samples.player1}/${samples.player2}`:'';const unit=String(row?.projection_unit||'count');const reference=Number(row?.reference_projection??row?.baseline_projection);
-      if(key==='sg'&&unit==='probability'){mainValue=`${pct(projection)}<small> proj.</small>`;metrics=[[lcopy('Baseline','Základ','Základ'),Number.isFinite(reference)?pct(reference):'—'],[lcopy('Gap','Rozdiel','Rozdíl'),Number.isFinite(projectionGap)?`${(projectionGap*100).toFixed(1)} pp`:'—'],[lcopy('Score','Skóre','Skóre'),Number.isFinite(projectionConfidence)?`${Math.round(projectionConfidence*100)}/100`:'—']];pickLabel=lcopy('Sets projection','Projekcia setov','Projekce setů');}
-      else if(key==='sg'&&unit==='games'){mainValue=`${projection.toFixed(1)}<small> games</small>`;metrics=[[lcopy('Baseline','Základ','Základ'),Number.isFinite(reference)?reference.toFixed(1):'—'],[lcopy('Gap','Rozdiel','Rozdíl'),Number.isFinite(projectionGap)?`${projectionGap.toFixed(1)}`:'—'],[lcopy('Score','Skóre','Skóre'),Number.isFinite(projectionConfidence)?`${Math.round(projectionConfidence*100)}/100`:'—']];pickLabel=lcopy('Games projection','Projekcia hier','Projekce her');}
+      if(key==='sg'&&projectionTab==='sets'){
+        const totalSets=setsTotalProjectionValue(row),line=selectionLineFromText(row),setGap=Number.isFinite(totalSets)&&Number.isFinite(line)?Math.abs(totalSets-line):NaN;
+        mainValue=Number.isFinite(totalSets)?`${totalSets.toFixed(2)}<small> Sets</small>`:'—';
+        metrics=[[lcopy('Line','Hranica','Hranice'),Number.isFinite(line)?`${line.toFixed(1)} Sets`:'—'],[lcopy('Gap','Rozdiel','Rozdíl'),Number.isFinite(setGap)?`${setGap.toFixed(2)} Sets`:'—'],[lcopy('Confidence','Istota','Jistota'),Number.isFinite(projectionConfidence)?pct(projectionConfidence):'—']];pickLabel=lcopy('Sets projection','Projekcia setov','Projekce setů');
+      }
+      else if(key==='sg'&&unit==='games'){mainValue=`${projection.toFixed(1)}<small> Games</small>`;metrics=[[lcopy('Baseline','Základ','Základ'),Number.isFinite(reference)?reference.toFixed(1):'—'],[lcopy('Gap','Rozdiel','Rozdíl'),Number.isFinite(projectionGap)?`${projectionGap.toFixed(1)}`:'—'],[lcopy('Confidence','Istota','Jistota'),Number.isFinite(projectionConfidence)?pct(projectionConfidence):'—']];pickLabel=lcopy('Games projection','Projekcia hier','Projekce her');}
       else{
         const line=apiMarketLine(row),side=aceLineSide(row),marketName=aceMarketName(row);
         const unit=marketName;
@@ -2272,7 +2295,7 @@
     // same-origin script instead of an inline <script>. The popup runtime also
     // reinstalls image fallback handling because DOM event listeners are not
     // copied with innerHTML.
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=48"><script defer src="/match-popout.js?v=7360&p=48"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=49"><script defer src="/match-popout.js?v=7360&p=49"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
@@ -2428,6 +2451,11 @@
     return unit?`${rendered} ${unit}`:rendered;
   }
   function projectionResultProjectionText(publication){
+    const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
+    if(metric==='sets'){
+      const totalSets=setsTotalProjectionValue(publication);
+      if(Number.isFinite(totalSets))return `${totalSets.toFixed(2)} ${lcopy('Sets','Sety','Sety')}`;
+    }
     return projectionResultNumber(publication?.projection,publication,1);
   }
   function projectionResultActualText(publication){
@@ -2507,7 +2535,7 @@
     const fixedLabel=hours?(hours===24?lcopy('Last 24 hours','Posledných 24 hodín','Posledních 24 hodin'):hours===48?lcopy('Last 48 hours','Posledných 48 hodín','Posledních 48 hodin'):lcopy(`Last ${fixedDays} days`,`Posledných ${fixedDays} dní`,`Posledních ${fixedDays} dní`)):'';
     const periodOptions=hours?[[String(fixedDays),fixedLabel]]:[['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
     return `<div class="results-filter-bar results-filter-bar-v683">
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top_daily','prime','value','ace','double_faults','sets','games','sg','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
+      <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow" ${hours?'disabled':''}>${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
@@ -2578,8 +2606,8 @@
       // Historical result rows frequently do not carry a verified player photo.
       // In that case go directly to the local ATP/WTA fallback instead of first
       // requesting /player-image and flashing initials after a provider 404.
-      const p1Photo=p1.photo_url||p1.image_url||p1.photo||'';
-      const p2Photo=p2.photo_url||p2.image_url||p2.photo||'';
+      const p1Photo=playerPhotoSource(r,p1,'player1');
+      const p2Photo=playerPhotoSource(r,p2,'player2');
       const match=`<div class="results-match-player">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong></div><small class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<b>${escapeHtml(p2Name)}</b></span></small>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
@@ -2785,7 +2813,7 @@
       <div class="admin-user-simple-head"><div><small>UPRAVIŤ ÚČET</small><h3>${escapeHtml(user.telegram_nick||user.email||'Používateľ')}</h3><p>${escapeHtml(user.email||'')}</p></div><span class="admin-current-access">${escapeHtml(user.plan_label||user.plan||'Bez plánu')} · ${escapeHtml(status)}</span></div>
       <section class="admin-simple-card"><header><div><span>01</span><div><strong>Údaje</strong><small>E-mail a Telegram</small></div></div></header><div class="admin-simple-fields">
         <label>E-mail<input id="adminUserEmail" type="email" required maxlength="254" value="${escapeHtml(user.email||'')}"></label>
-        <label>Telegram nickname<div class="admin-input-with-icon">${adminTelegramIcon()}<input id="adminUserTelegram" maxlength="33" value="${escapeHtml(user.telegram_nick||'')}" placeholder="@nickname"></div></label>
+        <label><span class="admin-field-label-with-icon">${adminTelegramIcon()} Telegram nickname</span><input id="adminUserTelegram" maxlength="33" value="${escapeHtml(user.telegram_nick||'')}" placeholder="@nickname"></label>
       </div><div class="admin-user-meta-line"><span>E-mail ${user.email_verified?'overený':'neoverený'}</span><span>Vytvorený ${escapeHtml(fmtDate(user.created_at))}</span><span>Posledné prihlásenie ${escapeHtml(fmtDate(user.last_sign_in_at))}</span></div>
       <div class="admin-password-reset-row"><div><strong>Obnova hesla</strong><small>Pošle sa e-mail s linkom</small></div><button class="btn btn-ghost" type="button" data-admin-action="reset-user-password">Poslať link na obnovu hesla</button></div></section>
       ${isAdmin?`<section class="admin-simple-card admin-admin-account-note"><header><div><span>02</span><div><strong>Admin účet</strong><small>Tento interný účet zostáva ADMIN a nepoužíva členský level ani expiráciu</small></div></div></header></section>`:`<section class="admin-simple-card"><header><div><span>02</span><div><strong>Level</strong><small>Prístup a platnosť</small></div></div><b>Teraz: ${escapeHtml(currentExpiry)}</b></header>

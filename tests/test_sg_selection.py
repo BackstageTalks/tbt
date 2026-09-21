@@ -57,8 +57,11 @@ def test_sg_projection_publishes_sets_and_games_when_history_signal_is_deep():
     sets = next(card for card in cards if card["market"] == "sets")
     games = next(card for card in cards if card["market"] == "games")
     assert sets["pick"] == "Over 2.5 Sets"
-    assert sets["projection_unit"] == "probability"
-    assert sets["projection"] >= .60
+    assert sets["projection_unit"] == "sets"
+    assert 2.0 <= sets["projection"] <= 3.0
+    assert sets["reference_projection"] == 2.5
+    assert sets["projection"] > sets["reference_projection"]
+    assert sets["projection_confidence"] >= .60
     assert games["pick"] == "High Total Games"
     assert games["projection_unit"] == "games"
     assert games["projection"] > games["reference_projection"]

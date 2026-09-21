@@ -27,7 +27,6 @@ MIN_DATA_DEPTH = 0.35
 MIN_PUBLIC_PROBABILITY = 0.58
 MIN_ODDS = 1.35
 MAX_ODDS = 3.50
-MIN_EXPECTED_VALUE = 0.02
 MAX_PICKS = 10
 MIN_VALIDATION_SAMPLES = 200
 
@@ -484,20 +483,21 @@ def select_picks(enriched_predictions: list[dict[str, Any]], *, limit: int = MAX
             continue
         probability = betting.get("blinq_probability")
         odds = betting.get("odds")
-        ev = betting.get("expected_value")
+        ev_raw = betting.get("expected_value")
         try:
-            probability, odds, ev = float(probability), float(odds), float(ev)
+            probability, odds = float(probability), float(odds)
         except (TypeError, ValueError):
             rejected["invalid_price"] += 1
             continue
+        try:
+            ev = float(ev_raw)
+        except (TypeError, ValueError):
+            ev = None
         if probability < MIN_PUBLIC_PROBABILITY:
             rejected["probability"] += 1
             continue
         if not MIN_ODDS <= odds <= MAX_ODDS:
             rejected["odds"] += 1
-            continue
-        if ev < MIN_EXPECTED_VALUE:
-            rejected["ev"] += 1
             continue
         row = deepcopy(source)
         row["market"] = "match_winner"
@@ -526,7 +526,8 @@ def select_picks(enriched_predictions: list[dict[str, Any]], *, limit: int = MAX
             "min_data_depth": MIN_DATA_DEPTH,
             "min_odds": MIN_ODDS,
             "max_odds": MAX_ODDS,
-            "min_expected_value": MIN_EXPECTED_VALUE,
+            "expected_value_filter": False,
+            "expected_value_usage": "analysis_only",
             "limit": int(limit),
         },
     }

@@ -41,6 +41,6 @@ def test_r30_projection_models_and_publication_identity_are_current():
     pipeline = read('scripts/pipeline.py')
     assert 'ace-count-projection-v4' in ace
     assert 'walk_forward_isotonic_conservative' in ace
-    assert 'sets-games-projection-v3' in sg
+    assert 'sets-games-projection-v4' in sg
     assert '"projection_scope": "match_total"' in sg
     assert '_projection_presentation_integrity' in pipeline

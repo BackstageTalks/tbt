@@ -6598,3 +6598,24 @@ body#blinqPremium .account-plan-free{border-color:rgba(49,226,156,.34)!important
 /* BlinQ runtime patch 7.3.6-r48: results readability + Set-2 diagnostics hardening. */
 
 /* BlinQ runtime patch 7.3.6-r48: lifecycle mail hardening + LIVE TTL refresh; no visual layout change. */
+
+
+/* ========================================================================
+   BlinQ 7.3.6-r49 — SG total projections + visual cleanup
+   ======================================================================== */
+/* One quiet anti-share mark only: bottom-right. The old left/center marks and
+   footer pseudo-watermark competed with the page artwork. */
+body#blinqPremium .anti-share-watermarks{position:fixed!important;inset:0!important;z-index:58!important;pointer-events:none!important;overflow:hidden!important;user-select:none!important}
+body#blinqPremium .anti-share-watermarks .wm{display:none!important}
+body#blinqPremium .anti-share-watermarks .wm-b{display:block!important;position:absolute!important;right:24px!important;bottom:20px!important;top:auto!important;left:auto!important;width:154px!important;height:60px!important;background:url("/assets/blinq_logo.svg") center/contain no-repeat!important;filter:grayscale(1) brightness(1.65)!important;opacity:.075!important;mix-blend-mode:screen!important;transform:none!important}
+body#blinqPremium.blinq-admin .anti-share-watermarks{display:none!important}
+body#blinqPremium .site-footer:before{display:none!important;content:none!important}
+@media(max-width:900px){body#blinqPremium .anti-share-watermarks .wm-b{right:10px!important;bottom:70px!important;width:104px!important;height:42px!important;opacity:.055!important}}
+
+/* Admin account editor: Telegram glyph lives in the label, never inside the
+   editable input where it can cover @username. */
+body#blinqPremium .admin-field-label-with-icon{display:flex!important;align-items:center!important;gap:6px!important;min-height:16px!important}
+body#blinqPremium .admin-field-label-with-icon>svg{position:static!important;width:14px!important;height:14px!important;flex:0 0 14px!important;fill:#36aeea!important;stroke:none!important;opacity:.95!important;transform:none!important}
+body#blinqPremium .admin-user-editor #adminUserTelegram{padding-left:12px!important}
+
+/* BlinQ runtime patch 7.3.6-r49: total Sets projection, Doubles EV analysis-only, result/photo/filter/admin visual cleanup. */

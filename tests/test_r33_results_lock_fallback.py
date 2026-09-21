@@ -14,10 +14,10 @@ INDEX = (WEB / "index.html").read_text(encoding="utf-8")
 
 
 def test_r33_identity_and_cache_revision():
-    assert RELEASE["patch"] == UI["ui_patch"] == "736-r48"
-    assert 'content="736-r48"' in INDEX
-    assert '/app.js?v=7360&p=48' in INDEX
-    assert '/blinq-app.css?v=7360&p=48' in INDEX
+    assert RELEASE["patch"] == UI["ui_patch"] == "736-r49"
+    assert 'content="736-r49"' in INDEX
+    assert '/app.js?v=7360&p=49' in INDEX
+    assert '/blinq-app.css?v=7360&p=49' in INDEX
 
 
 def test_results_are_filtered_to_real_blinq_public_categories_client_and_server():
@@ -33,8 +33,8 @@ def test_results_player_photo_falls_directly_to_repo_fallback_when_history_has_n
     assert "/assets/missing_foto_m.webp" in APP
     assert "/assets/missing_foto_w.webp" in APP
     assert "Historical result rows frequently do not carry a verified player photo." in APP
-    assert "const p1Photo=p1.photo_url||p1.image_url||p1.photo||'';" in APP
-    assert "const p2Photo=p2.photo_url||p2.image_url||p2.photo||'';" in APP
+    assert "const p1Photo=playerPhotoSource(r,p1,'player1');" in APP
+    assert "const p2Photo=playerPhotoSource(r,p2,'player2');" in APP
 
 
 def test_locked_results_navigation_has_lock_and_click_stable_minimum_level_hint():
