@@ -62,16 +62,20 @@ def _over_under(outcome: str, row: dict[str, Any]) -> str:
 def _is_match_total_market(name: str, metric: str) -> bool:
     text = _normal(name)
     # Player-specific totals are not interchangeable with match totals.
-    if any(token in text for token in ("player 1", "player 2", "home", "away", "team 1", "team 2")):
+    if any(token in text for token in ("player 1", "player 2", "home", "away", "team 1", "team 2", "player total")):
         return False
     if metric == "games":
-        return (
-            "total games" in text
-            or "games total" in text
-            or text in {"total games won", "total games"}
-        ) and "set" not in text
+        aliases = (
+            "total games", "games total", "total number of games", "number of games",
+            "total games won", "match games", "games in match",
+        )
+        return any(token in text for token in aliases) and "set" not in text
     if metric == "sets":
-        return "total sets" in text or "sets total" in text
+        aliases = (
+            "total sets", "sets total", "total number of sets", "number of sets",
+            "sets in match", "match sets",
+        )
+        return any(token in text for token in aliases) and "set winner" not in text
     return False
 
 
@@ -103,19 +107,22 @@ def extract_player_superiority_odds(payload: Any, metric: str, player1: str, pla
 
     Player O/U totals are intentionally rejected: the current Ace/DF model predicts
     which player records more, not whether a player clears an arbitrary bookmaker line.
+    Provider labels vary, so superiority aliases are intentionally broader while the
+    two-player/two-price requirement remains strict.
     """
     metric = str(metric or "").strip().lower()
     prices: dict[int, float] = {}
     market_used = ""
+    superiority_tokens = ("most", "winner", "more", "higher", "who", "to record more", "to serve more", "to make more")
     for row, market_name in _walk_market_rows(payload):
         text = _normal(market_name)
         if metric == "aces":
-            exact = "ace" in text and any(token in text for token in ("most", "winner", "more"))
+            exact = "ace" in text and any(token in text for token in superiority_tokens)
         elif metric == "double_faults":
-            exact = ("double fault" in text or "doublefault" in text) and any(token in text for token in ("most", "winner", "more"))
+            exact = ("double fault" in text or "doublefault" in text) and any(token in text for token in superiority_tokens)
         else:
             exact = False
-        if not exact or any(token in text for token in ("total", "over", "under")):
+        if not exact or any(token in text for token in ("total", "over", "under", "handicap")):
             continue
         price = _price(row)
         if price is None:

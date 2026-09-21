@@ -5,8 +5,9 @@ post-deploy confirmation step does not require the training/scientific stack.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from copy import deepcopy
+from zoneinfo import ZoneInfo
 
 
 def _prediction_commitment(row):
@@ -396,6 +397,158 @@ def restore_published_market_snapshots(feed, ledger):
     validate_market_publication_candidate(result, ledger)
     return result
 
+
+
+def _row_betting_day(row, *, timezone_name="Europe/Bratislava", start_hour=6):
+    """Resolve one public row to the BlinQ betting day (06:00 local boundary)."""
+    if not isinstance(row, dict):
+        return ""
+    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    explicit = str(row.get("betting_day") or betting.get("betting_day") or "").strip()
+    if explicit:
+        return explicit
+    raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
+    if not raw:
+        return ""
+    try:
+        moment = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return ""
+    if moment.tzinfo is None:
+        return ""
+    zone = ZoneInfo(timezone_name)
+    local = moment.astimezone(zone)
+    boundary = local.replace(hour=int(start_hour), minute=0, second=0, microsecond=0)
+    if local < boundary:
+        boundary -= timedelta(days=1)
+    return boundary.date().isoformat()
+
+
+def _current_betting_day(now, *, timezone_name="Europe/Bratislava", start_hour=6):
+    if now.tzinfo is None:
+        raise ValueError("carry-forward now must be timezone-aware")
+    zone = ZoneInfo(timezone_name)
+    local = now.astimezone(zone)
+    boundary = local.replace(hour=int(start_hour), minute=0, second=0, microsecond=0)
+    if local < boundary:
+        boundary -= timedelta(days=1)
+    return boundary.date().isoformat()
+
+
+def carry_forward_betting_day_market_rows(
+    feed, prior_feed, ledger, *, now=None, timezone_name="Europe/Bratislava", start_hour=6
+):
+    """Keep already-issued daily market rows visible for the whole betting day.
+
+    The live refresh may stop returning an event as soon as it starts.  That is
+    correct for provider discovery but wrong for the product's daily published
+    offer: users must still be able to see what BlinQ published earlier that
+    morning.  This helper therefore carries only rows with *issued* publication
+    evidence from the previous deployed candidate, preserves their original
+    order/snapshot, and appends genuinely new current-day candidates afterwards.
+
+    Pending/unconfirmed rows are never carried after they disappear, so a failed
+    deployment cannot accidentally publish a pick for the first time after start.
+    """
+    if not isinstance(feed, dict) or not isinstance(prior_feed, dict) or not isinstance(ledger, list):
+        raise ValueError("Invalid daily snapshot artifacts")
+    now = now or datetime.now(timezone.utc)
+    day = _current_betting_day(now, timezone_name=timezone_name, start_hour=start_hour)
+    result = deepcopy(feed)
+
+    ledger_index = {}
+    for source in ledger:
+        if not isinstance(source, dict):
+            continue
+        event_id = str(source.get("event_id") or "").strip()
+        if event_id:
+            ledger_index[event_id] = source
+
+    report = {"betting_day": day, "carried": {}, "new": {}, "total": {}}
+    processed_keys = set()
+    for section, key in _MARKET_SECTION_KEYS.items():
+        # ace/double_faults and games/sets share one physical feed list. Process
+        # each list once, while still checking each row against its own section.
+        if key in processed_keys:
+            continue
+        processed_keys.add(key)
+        current_rows = result.get(key) if isinstance(result.get(key), list) else []
+        prior_rows = prior_feed.get(key) if isinstance(prior_feed.get(key), list) else []
+
+        def row_section(row):
+            market = str((row.get("betting") or {}).get("market") if isinstance(row.get("betting"), dict) else row.get("market") or "").strip().lower()
+            market = market or str(row.get("market") or row.get("projection_metric") or "").strip().lower()
+            if key == "ace_picks":
+                return "double_faults" if market == "double_faults" else "ace" if market == "aces" else ""
+            if key == "sg_picks":
+                return market if market in {"games", "sets"} else ""
+            return {"top_daily_picks":"top_daily","prime_picks":"prime","value_picks":"value","doubles_picks":"doubles"}.get(key, "")
+
+        def issued_exact(row):
+            sec = row_section(row)
+            if not sec:
+                return False
+            try:
+                commitment = _market_commitment_from_feed_row(row, sec)
+            except ValueError:
+                return False
+            source = ledger_index.get(commitment[0]) or {}
+            for publication in source.get("market_publications", []) or []:
+                if not isinstance(publication, dict):
+                    continue
+                if not publication.get("issued_at") or str(publication.get("publication_status") or "") != "published":
+                    continue
+                try:
+                    if _market_commitment_from_publication(commitment[0], publication) == commitment:
+                        return True
+                except ValueError:
+                    continue
+            return False
+
+        def identity(row):
+            sec = row_section(row)
+            if not sec:
+                return None
+            event_id = str(row.get("event_id") or "").strip()
+            # Freeze one public choice per event+section+betting-day. If the
+            # model/provider later changes selection/line, yesterday's public
+            # commitment must not silently mutate during the same day.
+            return (event_id, sec, _row_betting_day(row, timezone_name=timezone_name, start_hour=start_hour))
+
+        kept=[]; seen=set(); carried=0
+        for row in prior_rows:
+            if not isinstance(row, dict):
+                continue
+            if _row_betting_day(row, timezone_name=timezone_name, start_hour=start_hour) != day:
+                continue
+            if not issued_exact(row):
+                continue
+            ident=identity(row)
+            if not ident or ident in seen:
+                continue
+            kept.append(deepcopy(row)); seen.add(ident); carried += 1
+
+        new_count=0
+        for row in current_rows:
+            if not isinstance(row, dict):
+                continue
+            if _row_betting_day(row, timezone_name=timezone_name, start_hour=start_hour) != day:
+                continue
+            ident=identity(row)
+            if not ident or ident in seen:
+                continue
+            kept.append(deepcopy(row)); seen.add(ident); new_count += 1
+
+        result[key] = kept
+        report["carried"][key] = carried
+        report["new"][key] = new_count
+        report["total"][key] = len(kept)
+
+    result["market_selection"] = {
+        **(result.get("market_selection") or {}),
+        "daily_offer_snapshot": report,
+    }
+    return result, report
 
 def confirm_market_publications(ledger, deployed_feed, now=None):
     """Confirm section-specific betting publications after deployment."""

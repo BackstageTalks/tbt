@@ -2,9 +2,35 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+
+
+def _betting_day_key(moment, *, timezone_name="Europe/Bratislava", start_hour=6):
+    if moment.tzinfo is None:
+        raise ValueError("betting day requires timezone-aware datetime")
+    local = moment.astimezone(ZoneInfo(timezone_name))
+    boundary = local.replace(hour=int(start_hour), minute=0, second=0, microsecond=0)
+    if local < boundary:
+        boundary -= timedelta(days=1)
+    return boundary.date().isoformat()
+
+
+def _row_betting_day(row, *, timezone_name="Europe/Bratislava", start_hour=6):
+    if not isinstance(row, dict):
+        return ""
+    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    explicit = str(row.get("betting_day") or betting.get("betting_day") or "").strip()
+    if explicit:
+        return explicit
+    raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
+    try:
+        starts_at = _parse_utc_timestamp(raw, "scheduled_at")
+    except ValueError:
+        return ""
+    return _betting_day_key(starts_at, timezone_name=timezone_name, start_hour=start_hour)
 
 def empty_feed():
     return {
@@ -102,7 +128,13 @@ def read_feed(path):
 
 
 def visible_feed(payload, now=None):
-    """Never present started matches or an old feed as fresh upcoming picks."""
+    """Serve future event discovery plus the complete current-day published offer.
+
+    `upcoming` remains strictly pre-match because it is used for discovery and
+    match lists. Named BlinQ market sections are different: once published they
+    are a daily record of what users were shown, so started rows remain visible
+    until the 06:00 Europe/Bratislava betting-day boundary.
+    """
     if not isinstance(payload, dict):
         raise ValueError("Invalid serving feed root")
 
@@ -110,44 +142,43 @@ def visible_feed(payload, now=None):
     if now.tzinfo is None:
         raise ValueError("visible_feed requires timezone-aware now")
     now = now.astimezone(timezone.utc)
+    day = _betting_day_key(now)
 
     result = dict(payload)
 
-    # Every public pre-match representation must obey the same runtime clock.
-    # Historically only `upcoming` was filtered, leaving already-started rows in
-    # TOP/PRIME/VALUE/ACES/SG arrays until the next data publication.
-    prematch_keys = (
-        "upcoming", "top_daily_picks", "prime_picks", "value_picks",
-        "doubles_picks", "ace_picks", "sg_picks",
-    )
-    for key in prematch_keys:
+    upcoming = payload.get("upcoming", [])
+    if not isinstance(upcoming, list):
+        raise ValueError("Invalid serving feed: upcoming")
+    future=[]
+    for row in upcoming:
+        if not isinstance(row, dict):
+            continue
+        raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
+        try:
+            starts_at = _parse_utc_timestamp(raw, "scheduled_at")
+        except ValueError:
+            continue
+        if starts_at > now:
+            future.append(row)
+    result["upcoming"] = future
+
+    # Daily offer sections are betting-day snapshots, not a second upcoming list.
+    # Hide an old day's rows after the boundary even when the last published feed
+    # is stale, but do not remove a row merely because its scheduled time passed.
+    for key in ("top_daily_picks", "prime_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"):
         rows = payload.get(key, [])
         if not isinstance(rows, list):
-            if key == "upcoming":
-                raise ValueError("Invalid serving feed: upcoming")
             continue
-        visible = []
-        for row in rows:
-            if not isinstance(row, dict):
-                continue
-            raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time") or row.get("date")
-            try:
-                starts_at = _parse_utc_timestamp(raw, "scheduled_at")
-            except ValueError:
-                # A pre-match pick with no trustworthy start time is unsafe to
-                # present as current. Hide it rather than serving stale content.
-                continue
-            if starts_at > now:
-                visible.append(row)
-        result[key] = visible
+        result[key] = [
+            row for row in rows
+            if isinstance(row, dict) and _row_betting_day(row) == day
+        ]
 
     stamp = payload.get("generated_at")
     if not stamp:
         result["stale"] = True
     else:
         generated_at = _parse_utc_timestamp(stamp, "generated_at")
-        result["stale"] = (
-            now - generated_at
-        ).total_seconds() > 12 * 3600
-
+        result["stale"] = (now - generated_at).total_seconds() > 12 * 3600
+    result["daily_offer_day"] = day
     return result

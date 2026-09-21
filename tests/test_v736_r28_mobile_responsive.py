@@ -12,12 +12,12 @@ RELEASE = json.loads((WEB / "release.json").read_text(encoding="utf-8"))
 
 
 def test_r28_release_and_cache_identity():
-    assert UI["ui_patch"] == "736-r52"
-    assert RELEASE["patch"] == "736-r52"
-    assert 'content="736-r52"' in INDEX
+    assert UI["ui_patch"] == "736-r55"
+    assert RELEASE["patch"] == "736-r55"
+    assert 'content="736-r55"' in INDEX
     for asset in ("blinq-app.css", "auth.js", "responsive.js", "app.js"):
-        assert f"/{asset}?v=7360&p=52" in INDEX
-    assert "/assets/blinq_loading_r29.svg?v=7360&p=52" in INDEX
+        assert f"/{asset}?v=7360&p=55" in INDEX
+    assert "/assets/blinq_loading_r29.svg?v=7360&p=55" in INDEX
 
 
 def test_r28_final_mobile_contract_is_last_cascade_layer():

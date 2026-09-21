@@ -64,15 +64,17 @@ def rookie_cfg():
     }
 
 
-def test_b09_visible_feed_removes_started_rows_from_every_prematch_array():
+def test_b09_visible_feed_keeps_current_day_offer_but_upcoming_stays_future_only():
     now = datetime(2026, 9, 21, 10, 0, tzinfo=timezone.utc)
     data = payload([
         "2026-09-21T09:59:00+00:00",
         "2026-09-21T10:01:00+00:00",
     ])
     out = visible_feed(data, now=now)
-    for key in ("upcoming", "top_daily_picks", "prime_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"):
-        assert [r["event_id"] for r in out[key]] == ["e1"], key
+    assert [r["event_id"] for r in out["upcoming"]] == ["e1"]
+    for key in ("top_daily_picks", "prime_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"):
+        assert [r["event_id"] for r in out[key]] == ["e0", "e1"], key
+    assert out["daily_offer_day"] == "2026-09-21"
 
 
 def test_b11_blinq_access_day_uses_six_am_bratislava_boundary():
@@ -134,7 +136,7 @@ def test_b11_durable_allocation_survives_reorder_append_and_remove_without_new_u
     assert third["daily_picks"] == []
 
 
-def test_b11_started_assigned_pick_disappears_without_replacement():
+def test_b11_started_assigned_pick_remains_visible_without_replacement():
     now = datetime(2026, 9, 21, 8, 0, tzinfo=timezone.utc)
     times = [f"2026-09-21T{12 + (i % 8):02d}:00:00+00:00" for i in range(10)]
     raw = payload(times)
@@ -155,8 +157,7 @@ def test_b11_started_assigned_pick_disappears_without_replacement():
         existing_day=state["day"], existing_allocations=state["sections"], now=later,
     )
     after, _ = filter_feed_for_access(after_visible, {**access, "_daily_allocations": state2["sections"]}, cfg)
-    assert assigned not in {r["event_id"] for r in after["daily_picks"]}
-    assert after["daily_picks"] == []
+    assert [r["event_id"] for r in after["daily_picks"]] == [assigned]
 
 
 def test_b24_authorized_rows_keep_original_server_slot_identity():

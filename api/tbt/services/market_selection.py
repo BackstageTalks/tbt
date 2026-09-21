@@ -130,13 +130,16 @@ def _walk_market_rows(value: Any, inherited_market: str = "") -> Iterable[tuple[
     if not isinstance(value, dict):
         return
 
-    market = str(
-        value.get("marketName")
-        or value.get("market_name")
-        or value.get("market")
-        or inherited_market
-        or ""
-    ).strip()
+    explicit_market = value.get("marketName") or value.get("market_name") or value.get("market")
+    if not explicit_market and not inherited_market and not any(
+        key in value for key in ("fractionalValue", "currentFractionalValue", "odds", "price", "decimalOdds", "decimal_odds", "value")
+    ):
+        # Some provider envelopes call the market container simply `name` and
+        # put priced choices one level below it. Never reinterpret a priced
+        # outcome's own `name` as a market name.
+        if any(isinstance(value.get(key), (dict, list)) for key in ("choices", "outcomes", "options", "selections", "items", "rows")):
+            explicit_market = value.get("name") or value.get("label")
+    market = str(explicit_market or inherited_market or "").strip()
 
     # Yield dicts that can plausibly be a priced outcome.
     if any(

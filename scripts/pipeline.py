@@ -24,6 +24,7 @@ from tbt.services.engine import predict, reconcile_ledger, serving_feed
 from tbt.services.publication import (
     validate_market_publication_candidate,
     restore_published_market_snapshots,
+    carry_forward_betting_day_market_rows,
     validate_publication_candidate,
 )
 from tbt.services.ace_selection import select_ace_picks
@@ -301,7 +302,7 @@ def _publish_predictions(
     store, ledger, predictions, matches, model, report, upcoming,
     *, odds_report=None, ace_picks=None, ace_report=None,
     sg_picks=None, sg_report=None, doubles_picks=None, doubles_report=None,
-    doubles_matches=None, doubles_upcoming=None,
+    doubles_matches=None, doubles_upcoming=None, prior_feed=None, betting_day_start_hour=6,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -333,6 +334,19 @@ def _publish_predictions(
         **(feed.get("market_selection") or {}),
         "live_second_set_projection_report": comeback_report,
     }
+    # r55 daily offer snapshot: once an exact market row has been successfully
+    # deployed/issued during the current BlinQ betting day, keep that immutable
+    # row in the public offer even after its event starts. Newly qualifying rows
+    # may append, but the morning offer never shrinks or reorders underneath a
+    # ROOKIE/PRO user.
+    if isinstance(prior_feed, dict) and prior_feed:
+        feed, daily_snapshot_report = carry_forward_betting_day_market_rows(
+            feed, prior_feed, records, now=now, start_hour=betting_day_start_hour
+        )
+        feed["market_selection"] = {
+            **(feed.get("market_selection") or {}),
+            "daily_offer_snapshot": daily_snapshot_report,
+        }
     feed = clean(feed)
     feed = restore_published_market_snapshots(feed, records)
     integrity = _projection_presentation_integrity(feed, ace_picks=ace_picks, sg_picks=sg_picks)
@@ -477,6 +491,12 @@ def main():
         prediction_dir,
     )
     prediction_ledger = _load_prediction_ledger(prediction_store)
+    # _load_prediction_ledger downloads the complete prior release when one
+    # exists. Keep the previously deployed candidate as the source of truth for
+    # today's already-issued offer rows.
+    prior_feed = read_json(prediction_dir / "feed.json", {})
+    if not isinstance(prior_feed, dict):
+        prior_feed = {}
     doubles_dir = cache / "doubles"
     doubles_store = ReleaseStore(args.data_repository, "tbt-doubles-data-v1", doubles_dir)
     doubles_history = _load_doubles_history(doubles_store)
@@ -564,7 +584,11 @@ def main():
         ace_picks, ace_report = select_ace_picks(matches, predictions, now=now)
         sg_picks, sg_report = select_sg_picks(matches, predictions, now=now)
         projection_odds_report = {}
-        projection_odds_cap = min(40, max(0, int(args.market_odds_max_events or 0)))
+        # Projection prices are part of the public ACES/DF/GAMES/SETS rows.
+        # Reuse the configured market-odds budget instead of silently truncating
+        # projection lookup to the first 40 events (which disproportionately
+        # starved Sets/Games after Aces/DF were inserted first).
+        projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
         if projection_odds_cap and (ace_picks or sg_picks):
             ace_picks, sg_picks, projection_odds_report = enrich_projection_odds(
                 provider, ace_picks, sg_picks, max_events=projection_odds_cap, provider_id=1
@@ -592,6 +616,7 @@ def main():
         sg_picks=sg_picks, sg_report=sg_report,
         doubles_picks=doubles_picks, doubles_report=doubles_report,
         doubles_matches=doubles_completed, doubles_upcoming=doubles_upcoming,
+        prior_feed=prior_feed, betting_day_start_hour=args.betting_day_start_hour,
     )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
