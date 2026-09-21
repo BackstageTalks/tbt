@@ -10,6 +10,16 @@
   const number = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
   const fmtTime = value => value ? new Intl.DateTimeFormat(localeTag,{hour:'2-digit',minute:'2-digit'}).format(new Date(value)) : publicText('TBA');
   const fmtDate = value => value ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'short',year:'numeric'}).format(new Date(value)) : '—';
+  const fmtCompactDate = value => {
+    if(!value)return '—';
+    const d=new Date(value);if(Number.isNaN(d.getTime()))return '—';
+    const parts=new Intl.DateTimeFormat('en-GB',{day:'2-digit',month:'2-digit',year:'2-digit'}).formatToParts(d);
+    const get=type=>parts.find(part=>part.type===type)?.value||'';
+    return `${get('day')}.${get('month')}.${get('year')}`;
+  };
+  function timeDateHtml(value,wrapperClass='hub-time-stack'){
+    return `<span class="${escapeHtml(wrapperClass)}"><strong>${escapeHtml(fmtTime(value))}</strong><small>${escapeHtml(fmtCompactDate(value))}</small></span>`;
+  }
   const fmtToday = () => new Intl.DateTimeFormat(localeTag,{weekday:'short',day:'2-digit',month:'short',year:'numeric'}).format(new Date());
   const fmtClock = () => new Intl.DateTimeFormat(localeTag,{hour:'2-digit',minute:'2-digit',hour12:false}).format(new Date());
   const initials = name => String(name || 'B').trim().split(/\s+/).slice(0,2).map(x=>x[0]||'').join('').toUpperCase();
@@ -38,6 +48,15 @@
     const men=safeUiAsset(map.atp)||'/assets/missing_foto_m.webp';
     if(g.startsWith('f')||g.startsWith('w')||key.startsWith('wta'))return women;
     return men;
+  }
+  function playerPhotoSource(row,player,side=''){
+    const key=String(side||'').trim();
+    const candidates=[
+      player?.photo_url,player?.image_url,player?.photo,player?.headshot_url,player?.avatar_url,
+      key&&row?.[`${key}_photo_url`],key&&row?.[`${key}_image_url`],key&&row?.[`${key}_photo`],key&&row?.[`${key}_headshot_url`]
+    ];
+    for(const candidate of candidates){const safe=safePhotoUrl(candidate);if(safe)return safe;}
+    return '';
   }
   function playerAvatarHtml(photo,name,tour,gender='',wrapperClass='player-avatar'){
     const safe=safePhotoUrl(photo),fallback=playerFallbackUrl(tour,gender),src=safe||fallback,initial=initials(name);
@@ -301,8 +320,8 @@
     // optional endpoint must not serialize several timeout windows and hold an
     // authenticated user behind presentation configuration.
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
-      getJSON('/ui-config.json?v=7360&p=44',{timeoutMs:3000}),
-      getJSON('/config/telegram-groups.json?v=7360&p=44',{timeoutMs:3000}),
+      getJSON('/ui-config.json?v=7360&p=45',{timeoutMs:3000}),
+      getJSON('/config/telegram-groups.json?v=7360&p=45',{timeoutMs:3000}),
       getJSON('/api/v1/ui-config',{timeoutMs:3500}),
       getJSON('/membership-links.json',{timeoutMs:3000})
     ]);
@@ -369,7 +388,7 @@
       if(rookiePrime)rookiePrime.selection_mode='stable_random';
     }
     applyAccessContractV1(state.ui);
-    state.ui.ui_patch='736-r44';
+    state.ui.ui_patch='736-r45';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -988,7 +1007,7 @@
     const winner=winnerId===String(player1?.id)?player1:winnerId===String(player2?.id)?player2:null;
     const probability=p1Known&&p2Known?Math.max(p1,p2):p1Known?p1:p2Known?p2:null;
     const betting=row?.betting&&typeof row.betting==='object'?row.betting:{};
-    return {id:row?.event_id||row?.id,date:row?.scheduled_at,tour:String(row?.tour||'').toUpperCase(),tournament:row?.tournament||'Tournament',surface:row?.surface||'unknown',round:row?.round||'',p1:player1?.name||'Player 1',p2:player2?.name||'Player 2',p1Id:player1?.id,p2Id:player2?.id,p1Prob:p1,p2Prob:p2,p1Rank:player1?.rank??null,p2Rank:player2?.rank??null,p1PrevRank:player1?.previous_rank??null,p2PrevRank:player2?.previous_rank??null,p1BestRank:player1?.best_rank??null,p2BestRank:player2?.best_rank??null,p1RankingPoints:player1?.ranking_points??null,p2RankingPoints:player2?.ranking_points??null,p1Country:player1?.country_code||'',p2Country:player2?.country_code||'',p1Photo:safePhotoUrl(player1?.photo_url),p2Photo:safePhotoUrl(player2?.photo_url),pick:winner?.name||'—',pickId:winnerId,probability,confidence:Number.isFinite(probability)?confidenceBand(probability):'unknown',signals:Array.isArray(row?.signals)?row.signals:[],quality:row?.quality&&typeof row.quality==='object'?row.quality:{},dataDepth:Number(row?.data_depth),odds:Number(betting.odds),edge:Number(betting.edge),expectedValue:Number(betting.expected_value),bettingDay:betting.betting_day||'',model:row?.model_version||state.feed?.model?.version||'',raw:row};
+    return {id:row?.event_id||row?.id,date:row?.scheduled_at,tour:String(row?.tour||'').toUpperCase(),tournament:row?.tournament||'Tournament',surface:row?.surface||'unknown',round:row?.round||'',p1:player1?.name||'Player 1',p2:player2?.name||'Player 2',p1Id:player1?.id,p2Id:player2?.id,p1Prob:p1,p2Prob:p2,p1Rank:player1?.rank??null,p2Rank:player2?.rank??null,p1PrevRank:player1?.previous_rank??null,p2PrevRank:player2?.previous_rank??null,p1BestRank:player1?.best_rank??null,p2BestRank:player2?.best_rank??null,p1RankingPoints:player1?.ranking_points??null,p2RankingPoints:player2?.ranking_points??null,p1Country:player1?.country_code||'',p2Country:player2?.country_code||'',p1Photo:playerPhotoSource(row,player1,'player1'),p2Photo:playerPhotoSource(row,player2,'player2'),pick:winner?.name||'—',pickId:winnerId,probability,confidence:Number.isFinite(probability)?confidenceBand(probability):'unknown',signals:Array.isArray(row?.signals)?row.signals:[],quality:row?.quality&&typeof row.quality==='object'?row.quality:{},dataDepth:Number(row?.data_depth),odds:Number(betting.odds),edge:Number(betting.edge),expectedValue:Number(betting.expected_value),bettingDay:betting.betting_day||'',model:row?.model_version||state.feed?.model?.version||'',raw:row};
   }
 
   function populateSelect(id,values,label){ const select=$(id),selected=select.value; select.innerHTML=`<option value="">${label}</option>`; [...values].filter(Boolean).sort().forEach(value=>{const opt=document.createElement('option');opt.value=value;opt.textContent=String(value).replaceAll('_',' ');select.appendChild(opt)}); if([...select.options].some(o=>o.value===selected)) select.value=selected; }
@@ -1327,7 +1346,7 @@
   }
   function aceMarketName(row){
     const raw=String(row?.market||row?.market_type||'').toLowerCase();
-    return raw.includes('double')||raw.includes('fault')?lcopy('Double faults','Dvojchyby','Dvojchyby'):lcopy('Aces','Esá','Esa');
+    return raw.includes('double')||raw.includes('fault')?lcopy('Double Faults','Dvojchyby','Dvojchyby'):'Aces';
   }
   function aceProjectionScopeLabel(row){
     const scope=String(row?.projection_scope||'player').toLowerCase();
@@ -1338,11 +1357,48 @@
   }
   function aceLineSide(row){
     const raw=String(row?.side||row?.prediction_side||row?.betting?.side||row?.selection_side||'').trim().toLowerCase();
-    if(raw==='over'||raw==='o')return lcopy('Over','Nad','Nad');
-    if(raw==='under'||raw==='u')return lcopy('Under','Pod','Pod');
+    if(raw==='over'||raw==='o')return 'Over';
+    if(raw==='under'||raw==='u')return 'Under';
     return '';
   }
   function aceHasApiLine(row){return Number.isFinite(apiMarketLine(row));}
+  function projectionDirectionLabel(row){
+    const raw=String(row?.side||row?.prediction_side||row?.betting?.side||row?.selection_side||row?.projection_direction||'').trim().toLowerCase();
+    if(['over','o','high','higher','above'].includes(raw))return 'Over';
+    if(['under','u','low','lower','below'].includes(raw))return 'Under';
+    const line=apiMarketLine(row),projection=Number(row?.projection);
+    if(Number.isFinite(line)&&Number.isFinite(projection)&&projection!==line)return projection>line?'Over':'Under';
+    return '';
+  }
+  function selectionLineFromText(row){
+    const text=String(row?.selection||row?.pick||'');
+    const match=text.match(/(?:over|under|nad|pod|o|u)\s*([0-9]+(?:[.,][0-9]+)?)/i);
+    if(!match)return null;const value=Number(match[1].replace(',','.'));return Number.isFinite(value)?value:null;
+  }
+  function projectionReferenceLine(row,sourceTab=''){
+    const direct=apiMarketLine(row);if(Number.isFinite(direct))return direct;
+    const parsed=selectionLineFromText(row);if(Number.isFinite(parsed))return parsed;
+    if(sourceTab==='games'){const ref=Number(row?.reference_projection??row?.baseline_projection);if(Number.isFinite(ref))return ref;}
+    return null;
+  }
+  function projectionPickText(row,sourceTab=''){
+    const market=sourceTab||String(row?.market||row?.projection_metric||'').toLowerCase();
+    if(market==='sets')return String(row?.selection||row?.pick||'—');
+    if(market==='games'){
+      const side=projectionDirectionLabel(row),line=projectionReferenceLine(row,'games');
+      if(side&&Number.isFinite(line))return `${side} ${line.toFixed(1)} Games`;
+      return String(row?.selection||row?.pick||'—').replace(/^High\s+Total\s+Games$/i,'Over total games').replace(/^Low\s+Total\s+Games$/i,'Under total games');
+    }
+    if(market==='ace'||market==='double_faults'||market==='aces'){
+      const subject=String(row?.projection_subject||modelPickName(row)||'').trim();
+      const side=projectionDirectionLabel(row),line=projectionReferenceLine(row,market);
+      const unit=market==='double_faults'||String(row?.market||'').toLowerCase()==='double_faults'?lcopy('Double Faults','Dvojchyby','Dvojchyby'):lcopy('Aces','Aces','Aces');
+      if(side&&Number.isFinite(line))return `${subject?subject+' · ':''}${side} ${line.toFixed(1)} ${unit}`;
+      if(Number.isFinite(line))return `${subject?subject+' · ':''}${line.toFixed(1)} ${unit}`;
+      return subject||String(row?.selection||row?.pick||'—');
+    }
+    return modelPickName(row);
+  }
 
 
   function dailyHubConfig(){
@@ -1480,7 +1536,7 @@
     });
   }
   function dailyHubTabLabel(tab){
-    return {daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ESA',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
+    return {daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ACES',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
   }
   function dailyHubIsComingSoon(tab){return false;}
   function dailyHubColumns(tab){
@@ -1515,7 +1571,7 @@
     return `<span class="hub-confidence"><strong>${escapeHtml(pct(n))}</strong><i aria-hidden="true"><b style="width:${p.toFixed(1)}%"></b></i>${depth?`<small class="hub-data-depth" title="${escapeHtml(lcopy('Usable historical sample behind this prediction','Použiteľná historická vzorka za touto predikciou','Použitelný historický vzorek za touto predikcí'))}">${escapeHtml(depth)}</small>`:''}</span>`;
   }
   function hubPredictionHtml(sourceTab,text,subLabel=''){
-    const label=subLabel||({daily:'TOP',value:'VALUE',ace:'ESA',double_faults:'DVOJCHYBY',games:'GAMES',sets:'SETS'}[sourceTab]||String(sourceTab||'').toUpperCase());
+    const label=subLabel||({daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ACES',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS'}[sourceTab]||String(sourceTab||'').toUpperCase());
     return `<span class="hub-pick-stack"><small>${escapeHtml(label)}</small><strong title="${escapeHtml(text)}">${escapeHtml(text)}</strong></span>`;
   }
   function hubNumberHtml(value,label=''){
@@ -1619,7 +1675,7 @@
     const name=player?.name||'—';
     const rank=firstFinite(player?.rank,player?.ranking,player?.current_rank);
     const country=player?.country_code||player?.country_code2||player?.country_code3||player?.country?.alpha2||player?.country?.alpha3||'';
-    const photo=player?.photo_url||player?.image_url||player?.photo||'';
+    const photo=playerPhotoSource(null,player,'');
     const rankText=rank!=null&&rank>0?'#'+Math.trunc(rank):'—';
     const tourText=String(tour||'').toUpperCase();
     return '<span class="hub-player">'+smallAvatar(photo,name,tour,player?.gender||player?.sex||'')+'<span class="hub-player-copy"><b>'+escapeHtml(name)+'</b><small class="hub-player-meta">'+flagIconHtml(country,true)+'<span class="hub-rank">'+escapeHtml(rankText)+'</span><span class="hub-tour">'+escapeHtml(tourText)+'</span></small></span></span>';
@@ -1640,7 +1696,7 @@
     const c1=p1.country_code||p1.country_code2||p1.country_code3||row?.player1_country_code||row?.p1_country_code||'';
     const c2=p2.country_code||p2.country_code2||p2.country_code3||row?.player2_country_code||row?.p2_country_code||'';
     const r1=firstFinite(p1.rank,p1.ranking,p1.current_rank,row?.player1_rank,row?.p1_rank),r2=firstFinite(p2.rank,p2.ranking,p2.current_rank,row?.player2_rank,row?.p2_rank);
-    const photoFor=(player,side)=>player?.photo_url||player?.image_url||player?.photo||row?.[`${side}_photo_url`]||row?.[`${side}_image_url`]||'';
+    const photoFor=(player,side)=>playerPhotoSource(row,player,side);
     const selected=String(row?.pick||row?.selection||row?.prediction||'').trim().toLocaleLowerCase();
     const line=(player,side,name,country,rank)=>`<span class="hub-match-player${selected&&selected===String(name).toLocaleLowerCase()?' is-pick':''}"><span class="hub-match-player-main">${smallAvatar(photoFor(player,side),name,row?.tour,player?.gender||player?.sex||'')}${flagIconHtml(country,true)}<b title="${escapeHtml(name)}">${escapeHtml(name)}</b></span>${Number.isFinite(Number(rank))&&Number(rank)>0?`<small>#${Math.trunc(Number(rank))}</small>`:''}</span>`;
     return `<span class="hub-match hub-match-pro">${line(p1,'player1',n1,c1,r1)}<i class="hub-match-divider" aria-hidden="true"></i>${line(p2,'player2',n2,c2,r2)}</span>`;
@@ -1843,7 +1899,7 @@
     const selectedIsP2=selectedId&&String(p2?.id||'')===selectedId || (!selectedId&&selectedName&&selectedName.toLowerCase()===p2Name.toLowerCase());
     const opponentName=selectedIsP1?p2Name:selectedIsP2?p1Name:'';
     const useful=Number.isFinite(projection)&&projection>0 && Number.isFinite(confidence)&&confidence>0;
-    return {useful,p1Name,p2Name,selectedName:selectedName||'—',opponentName,projection,opponentProjection,gap,confidence,p1Samples,p2Samples,p1Surface,p2Surface,market,line,side};
+    return {useful,p1Name,p2Name,selectedName:projectionPickText(row,String(row?.market||'').toLowerCase())||selectedName||'—',opponentName,projection,opponentProjection,gap,confidence,p1Samples,p2Samples,p1Surface,p2Surface,market,line,side};
   }
   function aceProjectionDetailAvailable(row){return aceProjectionDetailData(row).useful;}
   function aceProjectionDetailHtml(row){
@@ -1862,7 +1918,7 @@
     if(Number.isFinite(d.p1Surface)&&d.p1Surface>0)surfaceParts.push(`${d.p1Name} ${Math.trunc(d.p1Surface)}`);
     if(Number.isFinite(d.p2Surface)&&d.p2Surface>0)surfaceParts.push(`${d.p2Name} ${Math.trunc(d.p2Surface)}`);
     if(surfaceParts.length)metrics.push(metric(lcopy('Surface samples','Vzorka na povrchu','Vzorek na povrchu'),surfaceParts.join(' · '),true));
-    return `<div class="match-detail-shell ace-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">ESA · ${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div></header><div class="ace-detail-pick"><div><small>${escapeHtml(d.market)}</small><strong>${escapeHtml(d.selectedName)}</strong></div><div class="ace-detail-main"><b>${escapeHtml(d.projection.toFixed(2))}</b><small>${escapeHtml(lcopy('projection','projekcia','projekce'))}</small></div></div><div class="ace-detail-grid">${metrics.filter(Boolean).join('')}</div><p class="ace-detail-note">${escapeHtml(lcopy('Only verified Aces / Double Faults projection data are shown here. Missing serve or return statistics are intentionally hidden.','Zobrazujeme iba overené projekčné dáta pre esá a dvojchyby. Chýbajúce štatistiky podania alebo returnu zámerne nezobrazujeme.','Zobrazujeme pouze ověřená projekční data pro esa a dvojchyby. Chybějící statistiky podání nebo returnu záměrně nezobrazujeme.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>${escapeHtml(String(row?.projection_source||'historical_event_statistics').replaceAll('_',' '))}</span></div></div>`;
+    return `<div class="match-detail-shell ace-detail-shell"><header class="match-detail-head"><div><div class="dialog-eyebrow">${escapeHtml(d.market.toUpperCase())} · ${escapeHtml(match.tour)} · ${escapeHtml(match.tournament)}</div><h2>${escapeHtml(match.p1)} <span>vs</span> ${escapeHtml(match.p2)}</h2></div></header><div class="ace-detail-pick"><div><small>${escapeHtml(d.market)}</small><strong>${escapeHtml(d.selectedName)}</strong></div><div class="ace-detail-main"><b>${escapeHtml(d.projection.toFixed(2))}</b><small>${escapeHtml(lcopy('projection','projekcia','projekce'))}</small></div></div><div class="ace-detail-grid">${metrics.filter(Boolean).join('')}</div><p class="ace-detail-note">${escapeHtml(lcopy('Only verified Aces / Double Faults projection data are shown here. Missing serve or return statistics are intentionally hidden.','Zobrazujeme iba overené projekčné dáta pre esá a dvojchyby. Chýbajúce štatistiky podania alebo returnu zámerne nezobrazujeme.','Zobrazujeme pouze ověřená projekční data pro esa a dvojchyby. Chybějící statistiky podání nebo returnu záměrně nezobrazujeme.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(match.date)} · ${fmtTime(match.date)}</span><span>${escapeHtml(String(row?.projection_source||'historical_event_statistics').replaceAll('_',' '))}</span></div></div>`;
   }
   function openAceProjection(row){
     if(!aceProjectionDetailAvailable(row))return;
@@ -1875,7 +1931,7 @@
     const match=normalize(row),samples=row?.projection_samples&&typeof row.projection_samples==='object'?row.projection_samples:{};
     const market=String(sourceTab||row?.market||'').toLowerCase()==='sets'?'sets':'games';
     const projection=Number(row?.projection),baseline=Number(row?.reference_projection??row?.baseline_projection),gap=Number(row?.projection_gap),confidence=Number(row?.projection_confidence),depth=Number(row?.data_depth);
-    return {match,market,projection,baseline,gap,confidence,depth,bestOf:Number(row?.best_of),samples,selection:String(row?.pick||row?.selection||'—'),source:String(row?.projection_source||'historical_structured_scores')};
+    return {match,market,projection,baseline,gap,confidence,depth,bestOf:Number(row?.best_of),samples,selection:projectionPickText(row,market),source:String(row?.projection_source||'historical_structured_scores')};
   }
   function sgProjectionDetailHtml(row,sourceTab=''){
     const d=sgProjectionDetailData(row,sourceTab),isSets=d.market==='sets';
@@ -1898,22 +1954,23 @@
   }
   function dailyHubRow(row,tab,active=false,index=0){
     const sourceTab=tab==='see_all'?String(row?._hub_source||''):tab;
-    const time=fmtTime(row?.scheduled_at||row?.date),tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
+    const scheduled=row?.scheduled_at||row?.date;
+    const tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
     const rowClass=active?' class="hub-row-active"':'';
-    const leading=`<td class="hub-rank">${index+1}</td><td class="hub-time">${escapeHtml(time)}</td><td class="hub-tournament-cell">${tournament}</td><td class="hub-match-cell">${dailyHubMatch(row)}</td>`;
+    const leading=`<td class="hub-rank">${index+1}</td><td class="hub-time">${timeDateHtml(scheduled)}</td><td class="hub-tournament-cell">${tournament}</td><td class="hub-match-cell">${dailyHubMatch(row)}</td>`;
     if(sourceTab==='games'||sourceTab==='sets'){
-      const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=String(row?.pick||row?.selection||'—');
+      const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=projectionPickText(row,sourceTab);
       const unit=String(row?.projection_unit||'');
       const projectionText=Number.isFinite(projection)?(unit==='probability'?pct(projection):projection.toFixed(1)):'—';
-      const projectionUnit=unit==='probability'?lcopy('model','model','model'):lcopy('games','gemov','gemů');
+      const projectionUnit=sourceTab==='sets'?lcopy('direction','smer','směr'):lcopy('projected games','projekcia gemov','projekce gemů');
       const actionCell=tab==='see_all'?'<td class="hub-action-cell hub-optional-action"><span class="hub-projection-badge">MODEL</span></td>':'';
       return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
     }
     if(sourceTab==='ace'||sourceTab==='double_faults'){
-      const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=modelPickName(row),market=aceMarketName(row);
-      const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia ESA','Projekce ESA'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button>`:'';
+      const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=projectionPickText(row,sourceTab),market=aceMarketName(row);
+      const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia Aces','Projekce Aces'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button>`:'';
       const actionCell=tab==='see_all'?`<td class="hub-action-cell hub-optional-action">${action}</td>`:'';
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ESA'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(projection)?projection.toFixed(2):'—',lcopy('projection','projekcia','projekce'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(projection)?projection.toFixed(2):'—',lcopy('projection','projekcia','projekce'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td>${actionCell}</tr>`;
     }
     const probability=marketProbability(row),odds=Number(row?.odds??row?.betting?.odds),pick=modelPickName(row);
     const base=`${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick)}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(probability,row)}</td>`;
@@ -2014,10 +2071,13 @@
 
   function marketPreviewCard(row,key,index=0,locked=false,compact=false){
     if(locked)return lockedPickCard(key,index);
-    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);const pick=row?.pick||row?.selection||row?.prediction||'—';const odds=Number(row?.odds),edge=Number(row?.edge),ev=Number(row?.expected_value);
+    const p1=row?.player1||{},p2=row?.player2||{};const probability=marketProbability(row);let pick=row?.pick||row?.selection||row?.prediction||'—';const odds=Number(row?.odds),edge=Number(row?.edge),ev=Number(row?.expected_value);
     const projection=Number(row?.projection),opponentProjection=Number(row?.opponent_projection),projectionGap=Number(row?.projection_gap),projectionConfidence=Number(row?.projection_confidence);const samples=row?.projection_samples||{};const projectionOnly=row?.price_status==='projection_only'&&Number.isFinite(projection);
     let badge='',mainValue='—',confidenceClass='low',pickLabel=publicText(key==='prime'?'Short Odds Prediction':key==='value'?'Value Prediction':key==='ace'?'Ace / DF Prediction':key==='sg'?'Set / Game Prediction':'TOP Prediction'),note='',metrics=[];
     if(projectionOnly){
+      const projectionMarket=String(row?.market||row?.projection_metric||'').toLowerCase();
+      const projectionTab=projectionMarket==='aces'?'ace':projectionMarket;
+      if(['ace','double_faults','games','sets'].includes(projectionTab))pick=projectionPickText(row,projectionTab);
       const marketLabel=row?.market_type||String(row?.market||'Projection').replaceAll('_',' ');const sampleText=Number.isFinite(Number(samples.player1))&&Number.isFinite(Number(samples.player2))?`${publicText('Data')} ${samples.player1}/${samples.player2}`:'';const unit=String(row?.projection_unit||'count');const reference=Number(row?.reference_projection??row?.baseline_projection);
       if(key==='sg'&&unit==='probability'){mainValue=`${pct(projection)}<small> proj.</small>`;metrics=[[lcopy('Baseline','Základ','Základ'),Number.isFinite(reference)?pct(reference):'—'],[lcopy('Gap','Rozdiel','Rozdíl'),Number.isFinite(projectionGap)?`${(projectionGap*100).toFixed(1)} pp`:'—'],[lcopy('Score','Skóre','Skóre'),Number.isFinite(projectionConfidence)?`${Math.round(projectionConfidence*100)}/100`:'—']];pickLabel=lcopy('Sets projection','Projekcia setov','Projekce setů');}
       else if(key==='sg'&&unit==='games'){mainValue=`${projection.toFixed(1)}<small> games</small>`;metrics=[[lcopy('Baseline','Základ','Základ'),Number.isFinite(reference)?reference.toFixed(1):'—'],[lcopy('Gap','Rozdiel','Rozdíl'),Number.isFinite(projectionGap)?`${projectionGap.toFixed(1)}`:'—'],[lcopy('Score','Skóre','Skóre'),Number.isFinite(projectionConfidence)?`${Math.round(projectionConfidence*100)}/100`:'—']];pickLabel=lcopy('Games projection','Projekcia hier','Projekce her');}
@@ -2036,12 +2096,12 @@
       else{metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(row)],[publicText('Surface'),surfaceSampleLabel(row)]];}
       badge=probability==null?publicText('MODEL'):confidenceLabel(confidenceBand(probability));mainValue=probability==null?'—':pct(probability);confidenceClass=probability==null?'low':confidenceBand(probability);
     }
-    const p1Photo=safePhotoUrl(p1.photo_url),p2Photo=safePhotoUrl(p2.photo_url);const avatar=(photo,name,gender='')=>playerAvatarHtml(photo,name,row?.tour,gender,'player-avatar');const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
+    const p1Photo=playerPhotoSource(row,p1,'player1'),p2Photo=playerPhotoSource(row,p2,'player2');const avatar=(photo,name,gender='')=>playerAvatarHtml(photo,name,row?.tour,gender,'player-avatar');const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
     const metricHtml=metrics.map(([label,value])=>{const raw=String(value??'');const tone=raw.trim().startsWith('+')?' metric-positive':raw.trim().startsWith('-')?' metric-negative':'';return `<span class="card-metric${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(raw)}</strong></span>`}).join('');
     const footer=`<div class="card-metrics-bar match-kpi-bar">${metricHtml}</div><div class="card-link-row"><button class="card-more-link" type="button" data-route="${escapeHtml(key)}">${escapeHtml(publicText('See more →'))}</button></div>`;
     const optionalNote=note&&!compact?`<div class="market-card-note">${escapeHtml(note)}</div>`:'';
     const tournamentMeta=tournamentDisplayMeta(row);
-    return `<article class="prediction-card featured market-card match-card-v3${projectionOnly?' projection-card':''}${compact?' dashboard-preview-card':''}"><div class="card-meta match-card-meta"><span class="tour match-card-tournament">${tournamentVisual(row)}<span class="match-card-tournament-copy"><b>${escapeHtml(tournamentMeta.name)}</b>${tournamentMeta.location?`<small>${escapeHtml(tournamentMeta.location)}</small>`:''}</span></span><span class="time">${escapeHtml(fmtTime(row?.scheduled_at||row?.date))}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(p1Photo,p1Name,p1?.gender||p1?.sex||'')}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${playerMetaHtml(p1.rank,p1.country_code,row?.tour)}</small></div><div class="vs match-vs">VS</div><div class="player">${avatar(p2Photo,p2Name,p2?.gender||p2?.sex||'')}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${playerMetaHtml(p2.rank,p2.country_code,row?.tour)}</small></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="pick-score"><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div></div>${optionalNote}${footer}</article>`;
+    return `<article class="prediction-card featured market-card match-card-v3${projectionOnly?' projection-card':''}${compact?' dashboard-preview-card':''}"><div class="card-meta match-card-meta"><span class="tour match-card-tournament">${tournamentVisual(row)}<span class="match-card-tournament-copy"><b>${escapeHtml(tournamentMeta.name)}</b>${tournamentMeta.location?`<small>${escapeHtml(tournamentMeta.location)}</small>`:''}</span></span><span class="time">${timeDateHtml(row?.scheduled_at||row?.date,'card-time-stack')}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(p1Photo,p1Name,p1?.gender||p1?.sex||'')}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${playerMetaHtml(p1.rank,p1.country_code,row?.tour)}</small></div><div class="vs match-vs">VS</div><div class="player">${avatar(p2Photo,p2Name,p2?.gender||p2?.sex||'')}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${playerMetaHtml(p2.rank,p2.country_code,row?.tour)}</small></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="pick-score"><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div></div>${optionalNote}${footer}</article>`;
   }
 
   function renderMarketSection(key,hostId,emptyText){
@@ -2080,7 +2140,7 @@
   function renderCard(m, slotIndex=0){
     const template=$('predictionTemplate').content.cloneNode(true),card=template.querySelector('.prediction-card');
     card.dataset.id=m.id;card.dataset.uiElement=slotIndex<8?`TOP_PICK_${slotIndex+1}`:'TOP_PICK_MORE';card.classList.add('featured','dashboard-preview-card');
-    card.querySelector('.tour').textContent=`${m.tour} ${m.tournament}${m.round?` · ${m.round}`:''}`;card.querySelector('.time').textContent=fmtTime(m.date);card.querySelector('.surface').textContent=String(m.surface).replaceAll('_',' ').toUpperCase();
+    card.querySelector('.tour').textContent=`${m.tour} ${m.tournament}${m.round?` · ${m.round}`:''}`;card.querySelector('.time').innerHTML=timeDateHtml(m.date,'card-time-stack');card.querySelector('.surface').textContent=String(m.surface).replaceAll('_',' ').toUpperCase();
     setPlayerIdentity(card.querySelector('.player-a'),m.p1,m.p1Rank,m.p1Country,m.p1Photo,m.tour);setPlayerIdentity(card.querySelector('.player-b'),m.p2,m.p2Rank,m.p2Country,m.p2Photo,m.tour);
     const depth=card.querySelector('.data-depth-row');if(depth){const label=dataDepthLabel(m);depth.textContent=label;depth.hidden=!label;}
     card.querySelector('.pick-name').textContent=m.pick;card.querySelector('.probability').textContent=pct(m.probability);
@@ -2195,7 +2255,7 @@
     // same-origin script instead of an inline <script>. The popup runtime also
     // reinstalls image fallback handling because DOM event listeners are not
     // copied with innerHTML.
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=44"><script defer src="/match-popout.js?v=7360&p=44"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=45"><script defer src="/match-popout.js?v=7360&p=45"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
@@ -2318,7 +2378,7 @@
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
     const scopeLabel=['total','match_total'].includes(scope)?lcopy('MATCH TOTAL','SPOLU ZÁPAS','SPOLU ZÁPAS'):lcopy('PLAYER','HRÁČ','HRÁČ');
     const metricLabel=({
-      aces:lcopy('ACES','ESÁ','ESA'),
+      aces:lcopy('ACES','ACES','ACES'),
       double_faults:lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),
       sets:lcopy('SETS','SETY','SETY'),
       games:lcopy('GAMES','GAMY','GEMY'),
@@ -3162,17 +3222,17 @@
   function resultsSummary(){
     const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category);
     if(category==='ace'||category==='double_faults'){
-      return metricCards([[lcopy('Result','Výsledok','Výsledek'),`${m.wins}-${m.losses}`,lcopy('HIT - MISS','HIT - MISS','HIT - MISS')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('settled ESA projection sample','vyhodnotená vzorka ESA projekcií','vyhodnocený vzorek ESA projekcí')],[lcopy('Projection type','Typ projekcie','Typ projekce'),category==='ace'?lcopy('ACES','ESÁ','ESA'):lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),lcopy('No invented odds or ROI','Bez vymysleného kurzu a ROI','Bez vymyšleného kurzu a ROI')],[publicText('Sample'),String(m.sample),lcopy('published projections','publikované projekcie','publikované projekce')]]);
+      return metricCards([[lcopy('Result','Výsledok','Výsledek'),`${m.wins}-${m.losses}`,lcopy('HIT - MISS','HIT - MISS','HIT - MISS')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('settled Aces projection sample','vyhodnotená vzorka Aces projekcií','vyhodnocený vzorek Aces projekcí')],[lcopy('Projection type','Typ projekcie','Typ projekce'),category==='ace'?lcopy('ACES','ESÁ','ESA'):lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),lcopy('No invented odds or ROI','Bez vymysleného kurzu a ROI','Bez vymyšleného kurzu a ROI')],[publicText('Sample'),String(m.sample),lcopy('published projections','publikované projekcie','publikované projekce')]]);
     }
     return metricCards([[publicText('Record'),`${m.wins}-${m.losses}`,lcopy('wins - losses','výhry - prehry','výhry - prohry')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],[publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} odds-backed picks`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no issued odds')],['ROI',m.roi==null?'—':pct(m.roi),publicText('flat 1u on issued odds')],[publicText('Units'),m.oddsSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',publicText('profit · flat 1u stake')],[publicText('Sample'),String(m.sample),publicText('settled published rows')]]);
   }
 
   function primeDetailCard(m,index=0){
-    const photo1=safePhotoUrl(m.p1Photo),photo2=safePhotoUrl(m.p2Photo);
+    const photo1=playerPhotoSource(m.raw||{},m.raw?.player1||{},'player1')||safePhotoUrl(m.p1Photo),photo2=playerPhotoSource(m.raw||{},m.raw?.player2||{},'player2')||safePhotoUrl(m.p2Photo);
     const avatar=(src,name)=>playerAvatarHtml(src,name,m.tour,'','player-avatar');
     const metrics=[[publicText('Odds'),Number.isFinite(m.odds)?m.odds.toFixed(2):'—'],[lcopy('Edge','Výhoda','Výhoda'),Number.isFinite(m.edge)?`${m.edge>=0?'+':''}${(m.edge*100).toFixed(1)} pp`:'—'],['EV',Number.isFinite(m.expectedValue)?`${m.expectedValue>=0?'+':''}${(m.expectedValue*100).toFixed(1)}%`:'—']];
     const metricHtml=metrics.map(([label,value])=>{const raw=String(value);const tone=raw.trim().startsWith('+')?' metric-positive':raw.trim().startsWith('-')?' metric-negative':'';return `<span class="card-metric${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(raw)}</strong></span>`}).join('');
-    return `<article class="prediction-card featured detail-pick-card match-card-v3"><div class="card-meta match-card-meta"><span class="tour">${escapeHtml(m.tour)} ${escapeHtml(m.tournament)}</span><span class="time">${escapeHtml(fmtTime(m.date))}</span><span class="surface">${escapeHtml(String(m.surface||'').replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(photo1,m.p1)}<strong class="player-name">${escapeHtml(m.p1)}</strong></div><div class="vs match-vs">VS</div><div class="player">${avatar(photo2,m.p2)}<strong class="player-name">${escapeHtml(m.p2)}</strong></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(lcopy('BlinQ prediction','Naša predikcia','Naše predikce'))}</small><strong class="pick-name">${escapeHtml(m.pick)}</strong></div><div class="pick-score"><div class="probability">${pct(m.probability)}</div><span class="confidence ${escapeHtml(m.confidence)}">${escapeHtml(confidenceLabel(m.confidence))}</span></div></div><div class="card-metrics-bar match-kpi-bar">${metricHtml}</div></article>`;
+    return `<article class="prediction-card featured detail-pick-card match-card-v3"><div class="card-meta match-card-meta"><span class="tour">${escapeHtml(m.tour)} ${escapeHtml(m.tournament)}</span><span class="time">${timeDateHtml(m.date,'card-time-stack')}</span><span class="surface">${escapeHtml(String(m.surface||'').replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(photo1,m.p1)}<strong class="player-name">${escapeHtml(m.p1)}</strong></div><div class="vs match-vs">VS</div><div class="player">${avatar(photo2,m.p2)}<strong class="player-name">${escapeHtml(m.p2)}</strong></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(lcopy('BlinQ prediction','Naša predikcia','Naše predikce'))}</small><strong class="pick-name">${escapeHtml(m.pick)}</strong></div><div class="pick-score"><div class="probability">${pct(m.probability)}</div><span class="confidence ${escapeHtml(m.confidence)}">${escapeHtml(confidenceLabel(m.confidence))}</span></div></div><div class="card-metrics-bar match-kpi-bar">${metricHtml}</div></article>`;
   }
   function detailCards(rows,key){
     const cap=Math.max(3,Math.min(5,Number(state.ui?.dashboard?.detail_pick_limit)||5));

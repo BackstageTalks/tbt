@@ -1623,7 +1623,7 @@
           }
         },
         "ace": {
-          "label": "ESA",
+          "label": "ACES",
           "enabled": true,
           "plans": {
             "trial": {
@@ -2428,7 +2428,7 @@
       }
     }
   },
-  "ui_patch": "736-r44",
+  "ui_patch": "736-r45",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 30,

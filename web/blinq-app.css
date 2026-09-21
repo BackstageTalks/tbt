@@ -6488,3 +6488,76 @@ body#blinqPremium .hub-detail.is-locked:hover{background:rgba(213,174,88,.09)!im
 /* BlinQ runtime patch 7.3.6-r40: production publication lock + provider budget hardening. */
 
 /* BlinQ runtime patch 7.3.6-r44: auth/runtime resilience + CSP-safe match popout. */
+
+/* BlinQ runtime patch 7.3.6-r45: prediction-card visual/data clarity batch. */
+body#blinqPremium .hub-time-stack,
+body#blinqPremium .card-time-stack{
+  display:grid!important;
+  gap:3px!important;
+  align-content:center!important;
+  min-width:0!important;
+  font-variant-numeric:tabular-nums!important;
+  line-height:1!important;
+}
+body#blinqPremium .hub-time-stack strong,
+body#blinqPremium .card-time-stack strong{
+  color:#dce9e5!important;
+  font-size:11px!important;
+  font-weight:850!important;
+  letter-spacing:.01em!important;
+  white-space:nowrap!important;
+}
+body#blinqPremium .hub-time-stack small,
+body#blinqPremium .card-time-stack small{
+  color:#6f8980!important;
+  font-size:7.2px!important;
+  font-weight:760!important;
+  letter-spacing:.045em!important;
+  white-space:nowrap!important;
+}
+body#blinqPremium .daily-hub-table .hub-confidence strong{
+  font-size:13.5px!important;
+  line-height:1!important;
+  letter-spacing:-.015em!important;
+}
+body#blinqPremium .market-card .pick-score .probability,
+body#blinqPremium .detail-pick-card .pick-score .probability{
+  font-size:clamp(22px,1.55vw,29px)!important;
+  line-height:.95!important;
+  font-weight:900!important;
+  letter-spacing:-.035em!important;
+}
+body#blinqPremium .market-card .pick-score .probability small,
+body#blinqPremium .detail-pick-card .pick-score .probability small{
+  margin-left:4px!important;
+  font-size:8px!important;
+  font-weight:800!important;
+  letter-spacing:.03em!important;
+}
+body#blinqPremium .daily-hub-table .hub-pick-stack strong{
+  line-height:1.28!important;
+}
+body#blinqPremium #dailyHub[data-tab="ace"] .daily-hub-table .hub-pick-stack strong,
+body#blinqPremium #dailyHub[data-tab="double_faults"] .daily-hub-table .hub-pick-stack strong,
+body#blinqPremium #dailyHub[data-tab="games"] .daily-hub-table .hub-pick-stack strong,
+body#blinqPremium #dailyHub[data-tab="sets"] .daily-hub-table .hub-pick-stack strong{
+  white-space:normal!important;
+}
+body#blinqPremium .player-avatar.player-fallback-atp img,
+body#blinqPremium .player-avatar.player-fallback-wta img,
+body#blinqPremium .hub-avatar.player-fallback-atp img,
+body#blinqPremium .hub-avatar.player-fallback-wta img{
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  object-position:center!important;
+}
+@media(max-width:900px){
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-time{padding-top:0!important}
+  body#blinqPremium .hub-time-stack{gap:2px!important}
+  body#blinqPremium .hub-time-stack strong{font-size:10.5px!important}
+  body#blinqPremium .hub-time-stack small{font-size:6.8px!important}
+  body#blinqPremium .daily-hub-table .hub-confidence strong{font-size:12.5px!important}
+  body#blinqPremium .market-card .pick-score .probability,
+  body#blinqPremium .detail-pick-card .pick-score .probability{font-size:24px!important}
+}
