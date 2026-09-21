@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from threading import Lock
+import time
 
 
 
@@ -28,6 +29,8 @@ PLAN_LABELS = {
 
 _FIREBASE_APP = None
 _FIREBASE_APP_LOCK = Lock()
+_ACTIVITY_TOUCH_LOCK = Lock()
+_ACTIVITY_TOUCHES: dict[str, float] = {}
 
 
 def request_authorization(headers):
@@ -199,6 +202,32 @@ def _verify_firebase_user(token, cfg):
         raise AuthUnavailable("Identity service temporarily unavailable") from exc
 
 
+def _touch_verified_activity(user_id: str) -> None:
+    """Best-effort, throttled server activity marker for inactivity policy.
+
+    One write per process/user/6h is enough to distinguish a genuinely active
+    restored session from a dormant account without turning every API request
+    into a storage write. Storage failures must never make authentication fail.
+    """
+    uid = str(user_id or "").strip()
+    if not uid:
+        return
+    now_mono = time.monotonic()
+    with _ACTIVITY_TOUCH_LOCK:
+        previous = _ACTIVITY_TOUCHES.get(uid, 0.0)
+        if now_mono - previous < 21600:
+            return
+        _ACTIVITY_TOUCHES[uid] = now_mono
+    try:
+        from .account_storage import touch_account_activity
+        touch_account_activity(uid)
+    except Exception:
+        # Activity is an operational signal, not an auth dependency. A failed
+        # write merely keeps the older timestamp and is retried later.
+        with _ACTIVITY_TOUCH_LOCK:
+            _ACTIVITY_TOUCHES.pop(uid, None)
+
+
 def verify_user(authorization, cfg, client=None):
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
@@ -207,7 +236,10 @@ def verify_user(authorization, cfg, client=None):
         return None
     if auth_provider(cfg) != "firebase":
         raise AuthUnavailable("Authentication is not configured")
-    return _verify_firebase_user(token, cfg)
+    user = _verify_firebase_user(token, cfg)
+    if user:
+        _touch_verified_activity(user.get("id"))
+    return user
 
 
 def update_firebase_profile(cfg, user_id, payload):

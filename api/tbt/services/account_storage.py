@@ -111,6 +111,11 @@ def _public_entity(entity: dict | None) -> dict:
         "inactivity_user_warning_sent_at": row.get("inactivity_user_warning_sent_at"),
         "inactivity_deactivation_warning_sent_at": row.get("inactivity_deactivation_warning_sent_at"),
         "inactivity_expired_at": row.get("inactivity_expired_at"),
+        "last_activity_at": row.get("last_activity_at"),
+        "subscription_expiry_7_for": row.get("subscription_expiry_7_for"),
+        "subscription_expiry_7_sent_at": row.get("subscription_expiry_7_sent_at"),
+        "subscription_expiry_3_for": row.get("subscription_expiry_3_for"),
+        "subscription_expiry_3_sent_at": row.get("subscription_expiry_3_sent_at"),
         # Durable per-user/day entitlement allocation. Stored as JSON in Azure
         # Table so refreshes/reorders cannot reveal a different random pick.
         "daily_access_day": str(row.get("daily_access_day") or "")[:16],
@@ -313,6 +318,45 @@ def save_admin_metadata(user_id: object, payload: object, *, actor_id: object = 
         client.upsert_entity(entity, mode="merge")
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to save account admin metadata") from exc
+    return load_account_metadata(uid)
+
+
+def touch_account_activity(user_id: object, *, at: object = None) -> None:
+    """Record server-observed account activity without reading the row first."""
+    uid = str(user_id or "").strip()
+    stamp = str(at or datetime.now(timezone.utc).isoformat())[:64]
+    entity = {
+        "PartitionKey": "account",
+        "RowKey": _key(uid),
+        "user_id": uid,
+        "last_activity_at": stamp,
+    }
+    try:
+        _table(ACCOUNT_TABLE).upsert_entity(entity, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to record account activity") from exc
+
+
+def save_subscription_notice_state(user_id: object, *, days: int, expires_for: object, sent_at: object) -> dict:
+    """Persist one paid-expiry notice marker tied to the exact expiry timestamp."""
+    uid = str(user_id or "").strip()
+    if int(days) not in {3, 7}:
+        raise ValueError("Unsupported subscription notice window")
+    expiry = str(expires_for or "").strip()[:64]
+    stamp = str(sent_at or "").strip()[:64]
+    if not expiry or not stamp:
+        raise ValueError("Subscription notice state requires expiry and sent_at")
+    entity = {
+        "PartitionKey": "account",
+        "RowKey": _key(uid),
+        "user_id": uid,
+        f"subscription_expiry_{int(days)}_for": expiry,
+        f"subscription_expiry_{int(days)}_sent_at": stamp,
+    }
+    try:
+        _table(ACCOUNT_TABLE).upsert_entity(entity, mode="merge")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save subscription notice state") from exc
     return load_account_metadata(uid)
 
 

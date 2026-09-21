@@ -1,4 +1,4 @@
-name: Daily account inactivity review
+name: Daily account lifecycle review
 
 on:
   schedule:
@@ -13,12 +13,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  account-inactivity:
+  account-lifecycle:
     if: github.event_name == 'workflow_dispatch' || vars.TBT_ACCOUNT_INACTIVITY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Review inactive BlinQ accounts
+      - name: Review BlinQ account lifecycle
         env:
           BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
           BLINQ_ACCOUNT_WORKER_TOKEN: ${{ secrets.BLINQ_ACCOUNT_WORKER_TOKEN }}
@@ -28,7 +28,7 @@ jobs:
           test -n "$BLINQ_ACCOUNT_WORKER_TOKEN" || { echo 'Missing BLINQ_ACCOUNT_WORKER_TOKEN GitHub secret'; exit 1; }
           base="${BLINQ_BASE_URL%/}"
           curl --fail-with-body --silent --show-error \
-            --retry 2 --retry-delay 2 --retry-all-errors --max-time 90 \
+            --retry 2 --retry-delay 2 --retry-all-errors --max-time 240 \
             -X POST \
             -H "X-Blinq-Worker-Token: $BLINQ_ACCOUNT_WORKER_TOKEN" \
             "$base/api/v1/internal/account-inactivity-worker"

@@ -13,9 +13,9 @@ def _text(rel):
 def test_r42_release_identity():
     release = json.loads(_text("web/release.json"))
     ui = json.loads(_text("web/ui-config.json"))
-    assert release["patch"] == ui["ui_patch"] == "736-r43"
-    assert 'content="736-r43"' in _text("web/index.html")
-    assert "const AUTH_RUNTIME = '736-r43'" in _text("web/auth.js")
+    assert release["patch"] == ui["ui_patch"] == "736-r44"
+    assert 'content="736-r44"' in _text("web/index.html")
+    assert "const AUTH_RUNTIME = '736-r44'" in _text("web/auth.js")
 
 
 def test_b27_push_endpoint_is_allowlisted(monkeypatch):

@@ -24,13 +24,14 @@ def _user(**overrides):
 
 
 def test_no_runtime_email_admin_backdoor_remains():
-    runtime = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in (
-        "api/tbt/config.py",
+    # Admin e-mail addresses may exist as operational notification recipients,
+    # but authorization itself must never consult them.
+    auth_runtime = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in (
         "api/tbt/services/auth.py",
         "api/function_app.py",
     ))
-    assert "BLINQ_ADMIN_EMAILS" not in runtime
-    assert "blinq_admin_emails" not in runtime
+    assert "BLINQ_ADMIN_EMAILS" not in auth_runtime
+    assert "blinq_admin_emails" not in auth_runtime
 
 
 def test_suspended_admin_is_not_admin():

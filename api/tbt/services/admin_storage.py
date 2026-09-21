@@ -555,8 +555,12 @@ def save_account_worker_status(payload: object) -> dict:
         "inactive": max(0, int(data.get("inactive") or 0)),
         "warnings": max(0, int(data.get("warnings") or 0)),
         "expired": max(0, int(data.get("expired") or 0)),
+        "subscription_7": max(0, int(data.get("subscription_7") or 0)),
+        "subscription_3": max(0, int(data.get("subscription_3") or 0)),
         "user_emails": max(0, int(data.get("user_emails") or 0)),
+        "mail_failures": max(0, int(data.get("mail_failures") or 0)),
         "admin_email": bool(data.get("admin_email", False)),
+        "admin_emails": max(0, int(data.get("admin_emails") or 0)),
         "smtp_configured": bool(data.get("smtp_configured", False)),
         "enabled": bool(data.get("enabled", False)),
         "last_error": str(data.get("last_error") or "")[:160],
@@ -635,7 +639,7 @@ def validate_ui_config(payload: object) -> dict:
     for key in ("enabled", "notify_admin", "notify_user", "auto_expire_rookie"):
         if key in inactivity and not isinstance(inactivity.get(key), bool):
             raise ValueError(f"Account inactivity {key} must be boolean")
-    inactive_days = inactivity.get("inactive_days", 90)
+    inactive_days = inactivity.get("inactive_days", 30)
     warning_days = inactivity.get("warning_days", 7)
     if not isinstance(inactive_days, int) or not 14 <= inactive_days <= 3650:
         raise ValueError("Account inactivity threshold must be 14..3650 days")
