@@ -134,7 +134,7 @@
       // app.js owns the complete layered player-avatar fallback contract:
       // real photo -> local gender-aware fallback -> initials. Never let this
       // compatibility handler remove either managed image layer.
-      if (img.matches('[data-player-photo],[data-player-fallback]')) return;
+      if (img.matches('[data-player-photo],[data-player-fallback],[data-player-local-fallback]')) return;
       const avatar = img.parentElement, name = avatar.parentElement.querySelector('.player-name')?.textContent || '?';
       avatar.classList.remove('has-photo');
       avatar.textContent = name.split(/\s+/).slice(0,2).map(s => s[0]).join('').toUpperCase();
