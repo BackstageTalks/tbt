@@ -24,10 +24,13 @@ def test_r51_release_and_result_identity_are_id_authoritative():
     assert "opacity:.34!important" in CSS
 
 
-def test_results_use_separate_model_odds_actual_columns_and_projection_odds():
-    assert "<th>Model / BlinQ %</th><th>Kurz</th><th>Skutočne</th>" in APP
+def test_results_use_compact_model_odds_result_columns_and_projection_odds():
+    assert "<th>Model / BlinQ %</th><th>Kurz</th><th>Výsledok</th>" in APP
+    assert "<th>Skutočne</th>" not in APP
     assert "projectionOdds=publication?.odds==null?NaN:Number(publication?.odds)" in APP
     assert "Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—'" in APP
+    assert 'class="results-actual"' in APP
+    assert 'class="results-outcome-stack"' in APP
     assert "if(tab==='games'||tab==='sets')return ['#',time,tournament,match,prediction,odds,projection,confidence]" in APP
     assert "if(tab==='ace'||tab==='double_faults')return ['#',time,tournament,match,prediction,odds,projection,confidence]" in APP
 
