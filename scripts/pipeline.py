@@ -358,10 +358,18 @@ def _publish_predictions(
     # ROOKIE/PRO user. Do this only after current-selector integrity succeeds;
     # carried rows are expected to make final section counts larger than the
     # current selector counts.
-    snapshot_source = prior_snapshot if isinstance(prior_snapshot, dict) and prior_snapshot else prior_feed
-    if isinstance(snapshot_source, dict) and snapshot_source:
+    snapshot_sources = []
+    if isinstance(prior_snapshot, dict) and prior_snapshot:
+        snapshot_sources.append(prior_snapshot)
+    if isinstance(prior_feed, dict) and prior_feed:
+        snapshot_sources.append(prior_feed)
+    if snapshot_sources:
         feed, daily_snapshot_report = carry_forward_betting_day_market_rows(
-            feed, snapshot_source, records, now=now, start_hour=betting_day_start_hour
+            feed,
+            snapshot_sources,
+            records,
+            now=now,
+            start_hour=betting_day_start_hour,
         )
         feed["market_selection"] = {
             **(feed.get("market_selection") or {}),
