@@ -11,7 +11,7 @@ from _bootstrap import ROOT
 from release_store import ReleaseStore
 from tbt.services.feed import empty_feed
 from tbt.services.publication import (
-    build_daily_offer_snapshot,
+    build_confirmed_daily_offer_snapshot,
     confirm_market_publications,
     confirm_publication,
     validate_market_publication_candidate,
@@ -177,7 +177,11 @@ def main(argv=None):
         confirmed, market_new = confirm_market_publications(confirmed, deployed_feed, now)
     after = sum(1 for row in confirmed if isinstance(row, dict) and row.get("issued_at"))
     write_json(directory / "ledger.json", confirmed)
-    daily_snapshot = build_daily_offer_snapshot(feed, now=now)
+    daily_snapshot = build_confirmed_daily_offer_snapshot(
+        feed,
+        confirmed,
+        now=now,
+    )
     write_json(directory / "daily_offer_snapshot.json", daily_snapshot)
     store.upload_bundle([
         directory / "ledger.json",
