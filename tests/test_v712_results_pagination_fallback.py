@@ -15,7 +15,7 @@ def test_results_are_paginated_50_or_100_rows():
 
 def test_broken_tournament_logo_reveals_local_fallback():
     assert "data-tournament-logo" in APP
-    assert "classList.add(\\'logo-failed\\')" in APP
+    assert "host.classList.add('logo-failed')" in APP
     assert '.hub-tournament-logo.logo-failed>.hub-logo-fallback' in CSS
 
 def test_provider_probe_has_api_import_path():
