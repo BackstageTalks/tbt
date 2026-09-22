@@ -201,6 +201,8 @@ jobs:
           elif [[ "$MODE" == results-rebuild ]]; then
             python scripts/rebuild_results_history.py \
               --data-repository "$TBT_DATA_REPOSITORY"
+          elif [[ "$MODE" == deploy-current ]]; then
+            echo "Reusing current private prediction candidate; no Tennis RapidAPI calls."
           elif [[ "$MODE" == production-preflight ]]; then
             python scripts/download_production_preflight_inputs.py
             profiles=()
