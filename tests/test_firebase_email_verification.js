@@ -19,6 +19,7 @@ function response(status, payload) {
 (async () => {
   const calls = [];
   let verified = false;
+  let verificationDeliveryFails = false;
   const context = {
     console,
     localStorage: storage(),
@@ -38,7 +39,12 @@ function response(status, payload) {
       if (target.includes('accounts:signUp')) return response(200, {idToken:'signup-token',refreshToken:'signup-refresh',expiresIn:'3600'});
       if (target.includes('accounts:update')) return response(200, {idToken:'signup-token'});
       if (url === '/api/v1/auth/profile') return response(200, {telegram_nick:'@member_test'});
-      if (url === '/api/v1/auth/email') return response(200, {ok:true,accepted:true});
+      if (url === '/api/v1/auth/email') {
+        if (body.type === 'verify' && verificationDeliveryFails) {
+          return response(503, {error:'email_delivery_unavailable'});
+        }
+        return response(200, {ok:true,accepted:true});
+      }
       if (target.includes('accounts:signInWithPassword')) return response(200, {idToken:'login-token',refreshToken:'login-refresh',expiresIn:'3600'});
       if (target.includes('accounts:lookup')) return response(200, {users:[{email:'member@example.com',emailVerified:verified}]});
       throw new Error(`Unexpected fetch: ${target}`);
@@ -58,6 +64,16 @@ function response(status, payload) {
   assert(verifyMail, 'signup must request a BlinQ-branded Firebase verification mail');
   assert.strictEqual(verifyMail.options.headers['X-Blinq-Access-Token'], 'signup-token');
   assert.strictEqual(context.localStorage.getItem('blinq_v4_session'), null, 'signup must not leave an active app session before verification');
+
+  verificationDeliveryFails = true;
+  const deliveryFailure = await context.BlinqAuth.signUp('mailfail@example.com', 'password123', '@member_test');
+  assert.strictEqual(deliveryFailure.verification_required, true);
+  assert.strictEqual(deliveryFailure.email_delivery_failed, true,
+    'SMTP failure after Firebase signup must be returned as a recoverable delivery state');
+  const recoverySession = JSON.parse(context.localStorage.getItem('blinq_v4_session'));
+  assert.strictEqual(recoverySession.access_token, 'signup-token',
+    'failed verification delivery must keep the unverified session so Resend can work');
+  verificationDeliveryFails = false;
 
   let verificationError = null;
   try {
