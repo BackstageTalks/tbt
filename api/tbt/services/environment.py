@@ -16,7 +16,7 @@ GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 ENVIRONMENT_SCHEMA_VERSION = 2
-ENVIRONMENT_RESOLVER_VERSION = 4
+ENVIRONMENT_RESOLVER_VERSION = 5
 
 
 class OpenMeteoBudgetExceeded(RuntimeError):
@@ -599,6 +599,134 @@ def _location_from_tournament_name(name: Any) -> list[str]:
     return list(dict.fromkeys(out))
 
 
+def explicit_country_hints(
+    provider_payload: dict[str, Any],
+    tournament: str = "",
+) -> set[str]:
+    """Return only explicit/provider-backed country hints for a match."""
+    raw = _as_dict(provider_payload)
+    tournament_obj = _as_dict(raw.get("tournament"))
+    unique = _as_dict(tournament_obj.get("uniqueTournament"))
+    venue = _as_dict(raw.get("venue"))
+    country = _as_dict(tournament_obj.get("country"))
+    unique_country = _as_dict(unique.get("country"))
+    raw_country = _as_dict(raw.get("country"))
+    venue_country = _as_dict(venue.get("country"))
+
+    hints: set[str] = set()
+
+    def add(value: Any) -> None:
+        code = normalize_country_code(value)
+        if code:
+            hints.add(code)
+
+    for value in (
+        venue_country.get("alpha2"),
+        venue_country.get("name"),
+        venue.get("countryName"),
+        country.get("alpha2"),
+        country.get("name"),
+        unique_country.get("alpha2"),
+        unique_country.get("name"),
+        raw_country.get("alpha2"),
+        raw_country.get("name"),
+        raw.get("countryName"),
+    ):
+        add(value)
+
+    for source_name in (
+        tournament_obj.get("name"),
+        tournament,
+        unique.get("name"),
+    ):
+        add(_country_from_tournament_label(source_name))
+        alias = _tournament_alias(source_name)
+        if alias:
+            alias_parts = [part.strip() for part in alias.split(",") if part.strip()]
+            if alias_parts:
+                add(alias_parts[-1])
+    return hints
+
+
+def strong_location_name_hints(
+    provider_payload: dict[str, Any],
+    tournament: str = "",
+) -> set[str]:
+    """Return conservative city/location names that a cached venue must respect.
+
+    Direct provider city fields are authoritative.  Tournament labels are used
+    only when they carry an explicit ITF country code or map through a curated
+    tennis-location alias; this avoids treating arbitrary tournament names as
+    geography.
+    """
+    raw = _as_dict(provider_payload)
+    tournament_obj = _as_dict(raw.get("tournament"))
+    unique = _as_dict(tournament_obj.get("uniqueTournament"))
+    venue = _as_dict(raw.get("venue"))
+    hints: set[str] = set()
+
+    def add(value: Any) -> None:
+        text = _normal(value)
+        if text:
+            hints.add(text)
+
+    for value in (
+        venue.get("city"),
+        tournament_obj.get("city"),
+        unique.get("city"),
+        raw.get("city"),
+        raw.get("venueCity"),
+    ):
+        add(value)
+
+    for source_name in (
+        tournament_obj.get("name"),
+        tournament,
+        unique.get("name"),
+    ):
+        alias = _tournament_alias(source_name)
+        if alias:
+            add(alias.split(",", 1)[0])
+            continue
+        explicit_country = _country_from_tournament_label(source_name)
+        if not explicit_country:
+            continue
+        for parsed in _location_from_tournament_name(source_name):
+            parts = [part.strip() for part in parsed.split(",") if part.strip()]
+            if len(parts) >= 2 and normalize_country_code(parts[-1]) == explicit_country:
+                add(parts[0])
+                break
+    return hints
+
+
+def venue_context_compatible(
+    provider_payload: dict[str, Any],
+    tournament: str,
+    venue: dict[str, Any],
+) -> tuple[bool, str]:
+    """Validate a resolved/cached venue against explicit match geography.
+
+    A history-cache hit is rejected when it conflicts with an explicit country
+    or with a strong provider-derived city hint.  Missing hints fail open; known
+    contradictions fail closed.
+    """
+    venue_country = normalize_country_code(venue.get("country"))
+    country_hints = explicit_country_hints(provider_payload, tournament)
+    if country_hints and venue_country not in country_hints:
+        return False, "country_mismatch"
+
+    city_hints = strong_location_name_hints(provider_payload, tournament)
+    if city_hints:
+        venue_names = {
+            _normal(venue.get("name")),
+            _normal(str(venue.get("query") or "").split(",", 1)[0]),
+        }
+        venue_names.discard("")
+        if not venue_names.intersection(city_hints):
+            return False, "city_mismatch"
+    return True, "compatible"
+
+
 def _query_variants(query: str) -> list[str]:
     variants = [query]
     alias = _tournament_alias(query) or _LOCATION_ALIASES.get(_normal(query))
@@ -737,7 +865,14 @@ def resolve_match_venue(
     for raw_query in location_candidates(provider_payload, tournament):
         for query in _query_variants(raw_query):
             venue = client.geocode(query)
-            if venue is not None:
+            if venue is None:
+                continue
+            compatible, _ = venue_context_compatible(
+                provider_payload,
+                tournament,
+                asdict(venue),
+            )
+            if compatible:
                 return venue, query
     return None, None
 
