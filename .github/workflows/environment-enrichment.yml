@@ -30,7 +30,7 @@ on:
         default: false
         type: boolean
       retry_unresolved:
-        description: "Second pass: retry only rows with venue_resolved=false"
+        description: "Second pass: retry unresolved + repair incompatible cached venue rows"
         required: true
         default: false
         type: boolean
