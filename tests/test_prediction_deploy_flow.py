@@ -111,7 +111,7 @@ def test_prepare_and_confirm_restore_same_issued_market_snapshot(monkeypatch, tm
     confirm.main(['--data-repository', 'test/private', '--deployed-feed', str(deployed)])
     confirmed = json.loads((tmp_path / '.cache/tbt/predictions-confirm/ledger.json').read_text())
     assert json.dumps(confirmed[0]['market_publications'], sort_keys=True) == original_publications
-    assert uploaded == ['ledger.json']
+    assert uploaded == ['ledger.json', 'daily_offer_snapshot.json']
     # Do not silently normalize an actually deployed, inconsistent snapshot.
     deployed.write_text(json.dumps(feed))
     with pytest.raises(RuntimeError, match='does not match'):
@@ -195,7 +195,7 @@ def test_confirm_complete_candidate_requires_exact_non_presentation_feed(monkeyp
     deployed = tmp_path / "deployed.json"
     deployed.write_text(json.dumps(feed))
     confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed)])
-    assert uploaded == ["ledger.json"]
+    assert uploaded == ["ledger.json", "daily_offer_snapshot.json"]
     confirmed = json.loads((tmp_path / ".cache/tbt/predictions-confirm/ledger.json").read_text())
     assert confirmed[0]["issued_at"] is not None
 
@@ -257,7 +257,7 @@ def test_confirm_allows_player_presentation_enrichment_only(monkeypatch, tmp_pat
     deployed_path = tmp_path / "deployed-enriched.json"
     deployed_path.write_text(json.dumps(deployed))
     confirm.main(["--data-repository", "test/private", "--deployed-feed", str(deployed_path)])
-    assert uploaded == ["ledger.json"]
+    assert uploaded == ["ledger.json", "daily_offer_snapshot.json"]
 
 
 def test_confirm_still_rejects_non_presentation_change(monkeypatch, tmp_path):
