@@ -9,6 +9,7 @@ from tbt.services.publication import (
     build_confirmed_daily_offer_snapshot,
     build_daily_offer_snapshot,
     carry_forward_betting_day_market_rows,
+    confirm_market_publications,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -226,3 +227,21 @@ def test_r55_confirmed_snapshot_excludes_pending_rows():
     assert [row["event_id"] for row in snapshot["top_daily_picks"]] == ["issued"]
     assert snapshot["confirmed_only"] is True
     assert snapshot["totals"]["top_daily_picks"] == 1
+
+
+def test_r55_confirmation_refuses_new_market_inside_cutoff():
+    now = datetime(2026, 9, 21, 18, 0, tzinfo=timezone.utc)
+    row = winner_row("late-confirm", "2026-09-21T18:04:00+00:00", selection="Alpha", odds=1.80)
+    feed = {"top_daily_picks": [row]}
+    ledger = [{
+        "event_id": "late-confirm",
+        "scheduled_at": row["scheduled_at"],
+        "market_publications": [publication_for(row, "top_daily", issued=False)],
+    }]
+
+    confirmed, newly_confirmed = confirm_market_publications(ledger, feed, now=now)
+    publication = confirmed[0]["market_publications"][0]
+    assert newly_confirmed == 0
+    assert publication["publication_status"] == "expired_unpublished"
+    assert publication["excluded_reason"] == "inside_publication_cutoff"
+    assert publication["issued_at"] is None
