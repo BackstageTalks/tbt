@@ -25,7 +25,8 @@ def test_player_photos_are_in_daily_board_and_results():
 
 
 def test_tournament_logo_has_deterministic_fallback():
-    assert "classList.add(\\'logo-failed\\');this.remove()" in APP
+    assert "host.classList.add('logo-failed')" in APP
+    assert "img.remove()" in APP
     assert '.hub-tournament-logo.logo-failed>img' in CSS
     assert '.hub-tournament-logo.logo-failed .hub-logo-fallback' in CSS
     assert '/assets/tournament-fallbacks/tennis.svg' in APP
