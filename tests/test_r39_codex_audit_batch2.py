@@ -114,8 +114,14 @@ def test_b11_durable_allocation_survives_reorder_append_and_remove_without_new_u
         existing_allocations=state["sections"],
         now=now,
     )
-    assert changed2 is False
-    assert state2 == state
+    # Same-day allocations are append-only per section. Daily/Prime were
+    # already full and must remain unchanged; Value was empty on first access,
+    # so the newly published row is allowed to fill its still-open Rookie slot.
+    assert changed2 is True
+    assert state2["sections"]["daily"] == state["sections"]["daily"]
+    assert state2["sections"]["prime"] == state["sections"]["prime"]
+    assert len(state["sections"]["value"]) == 0
+    assert len(state2["sections"]["value"]) == 1
 
     context2 = {**access, "_daily_allocations": state2["sections"], "_access_day": state2["day"]}
     second, _ = filter_feed_for_access(changed_feed, context2, cfg)
