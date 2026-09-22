@@ -249,10 +249,13 @@ def _needs_work(
             except (TypeError, ValueError):
                 resolver_version = 0
             if resolver_version >= ENVIRONMENT_RESOLVER_VERSION:
-                # A current-version negative result is a durable negative cache.
-                # However, newly learned positive history is allowed to override it.
+                # A current-version negative result is normally a durable negative
+                # cache. In an explicit retry pass we revisit it, while still
+                # allowing newly learned positive history to resolve it locally.
                 learned, _ = knowledge.lookup(match, payload)
                 if learned is None:
+                    if retry_unresolved:
+                        return True, "retry_unresolved"
                     return False, "unresolved_current_resolver"
         return True, "complete_static"
 
