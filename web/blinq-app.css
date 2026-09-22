@@ -6808,3 +6808,66 @@ body#blinqPremium .daily-hub-table tbody tr.hub-row-started .hub-match-cell,
 body#blinqPremium .daily-hub-table tbody tr.hub-row-started .hub-pick{opacity:.82}
 body#blinqPremium .hub-offer-status{display:inline-flex!important;align-items:center!important;width:max-content!important;margin-top:2px!important;padding:2px 5px!important;border:1px solid rgba(215,190,91,.34)!important;border-radius:999px!important;color:#d9c56c!important;font-size:6.5px!important;font-style:normal!important;font-weight:900!important;letter-spacing:.07em!important;line-height:1!important}
 @media(max-width:760px){body#blinqPremium .hub-offer-status{font-size:6px!important;padding:2px 4px!important}}
+
+
+/* ========================================================================
+   R55 final polish — deterministic player fallbacks + calm Results typography
+   ======================================================================== */
+/* Every player avatar carries three layers at once:
+   real cached photo -> local ATP/WTA fallback -> initials. */
+body#blinqPremium .layered-player-avatar{position:relative!important;isolation:isolate!important;overflow:hidden!important}
+body#blinqPremium .layered-player-avatar .player-avatar-initials{
+  position:absolute!important;inset:0!important;z-index:0!important;
+  display:grid!important;place-items:center!important;
+  color:#d7e5df!important;background:#263934!important;
+  font-size:10px!important;font-weight:760!important;line-height:1!important;
+}
+body#blinqPremium .layered-player-avatar>img{
+  position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+  margin:0!important;padding:0!important;border:0!important;border-radius:inherit!important;
+  object-fit:cover!important;
+}
+body#blinqPremium .layered-player-avatar .player-avatar-fallback{z-index:1!important}
+body#blinqPremium .layered-player-avatar .player-avatar-photo{z-index:2!important}
+body#blinqPremium .layered-player-avatar>img[hidden]{display:none!important}
+body#blinqPremium .layered-player-avatar.using-fallback .player-avatar-fallback{display:block!important}
+body#blinqPremium .layered-player-avatar.using-initials .player-avatar-initials{z-index:3!important}
+
+/* Results: one visual rhythm. Selection is communicated by colour/TIP, not type size. */
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-table{min-width:980px!important}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-table th{
+  font-size:9px!important;line-height:1.15!important;font-weight:820!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td strong,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td b,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td small,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-player strong,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-opponent strong{
+  font-size:11px!important;line-height:1.25!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td{padding-top:12px!important;padding-bottom:12px!important}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td small{margin-top:2px!important}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-player strong,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-opponent strong,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-player.is-pick strong,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-opponent.is-pick strong,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-player.is-opponent strong,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-opponent.is-opponent strong{
+  font-weight:760!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-player.is-opponent,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-opponent.is-opponent{opacity:.52!important}
+body#blinqPremium.blinq-route:not(.blinq-admin) .result-tag{
+  font-size:9px!important;line-height:1!important;padding:5px 8px!important;font-weight:800!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-outcome-stack,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-units-depth{
+  display:grid!important;gap:3px!important;align-items:start!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-actual{
+  color:#789087!important;font-size:11px!important;font-weight:650!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-sub{
+  margin-top:5px!important;
+}
