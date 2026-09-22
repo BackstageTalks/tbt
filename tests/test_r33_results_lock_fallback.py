@@ -29,10 +29,11 @@ def test_results_are_filtered_to_real_blinq_public_categories_client_and_server(
     assert 'copy["market_publications"] = publications' in ENTITLEMENTS
 
 
-def test_results_player_photo_falls_directly_to_repo_fallback_when_history_has_no_photo():
+def test_results_player_photo_has_repo_fallback_under_real_photo():
     assert "/assets/missing_foto_m.webp" in APP
     assert "/assets/missing_foto_w.webp" in APP
-    assert "Historical result rows frequently do not carry a verified player photo." in APP
+    assert "function playerAvatarParts" in APP
+    assert "data-player-fallback" in APP
     assert "const p1Photo=playerPhotoSource(r,p1,'player1');" in APP
     assert "const p2Photo=playerPhotoSource(r,p2,'player2');" in APP
 
