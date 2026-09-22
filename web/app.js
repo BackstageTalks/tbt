@@ -62,11 +62,30 @@
     for(const candidate of candidates){const safe=safePhotoUrl(candidate);if(safe)return safe;}
     return '';
   }
+  function playerAvatarParts(photo,name,tour,gender=''){
+    const safeBase=safePhotoUrl(photo);
+    const fallbackBase=playerFallbackUrl(tour,gender);
+    const actual=safeBase&&safeBase!==fallbackBase?versionedPlayerAsset(safeBase):'';
+    const fallback=versionedPlayerAsset(fallbackBase);
+    const initial=initials(name);
+    const fallbackClass=fallbackBase.includes('missing_foto_w.webp')?'player-fallback-wta':'player-fallback-atp';
+    return {actual,fallback,initial,fallbackClass};
+  }
+  function playerAvatarInnerHtml(parts){
+    return `<span class="player-avatar-initials" aria-hidden="true">${escapeHtml(parts.initial)}</span>${parts.fallback?`<img class="player-avatar-fallback" data-player-fallback src="${escapeHtml(parts.fallback)}" alt="" loading="lazy">`:''}${parts.actual?`<img class="player-avatar-photo" data-player-photo src="${escapeHtml(parts.actual)}" alt="" loading="lazy">`:''}`;
+  }
   function playerAvatarHtml(photo,name,tour,gender='',wrapperClass='player-avatar'){
-    const safeBase=safePhotoUrl(photo),fallbackBase=playerFallbackUrl(tour,gender),src=versionedPlayerAsset(safeBase||fallbackBase),initial=initials(name);
-    const fallbackClass=fallbackBase.includes('missing_foto_w.webp')?' player-fallback-wta':' player-fallback-atp';
-    if(!src)return `<span class="${escapeHtml(wrapperClass)}${fallbackClass}">${escapeHtml(initial)}</span>`;
-    return `<span class="${escapeHtml(wrapperClass)} has-photo${fallbackClass}"><img data-player-photo data-fallback-src="${escapeHtml(fallbackBase)}" data-fallback-text="${escapeHtml(initial)}" src="${escapeHtml(src)}" alt="" loading="lazy"></span>`;
+    const parts=playerAvatarParts(photo,name,tour,gender);
+    const hasImage=Boolean(parts.fallback||parts.actual);
+    return `<span class="${escapeHtml(wrapperClass)} layered-player-avatar ${parts.fallbackClass}${hasImage?' has-photo':''}">${playerAvatarInnerHtml(parts)}</span>`;
+  }
+  function applyPlayerAvatarHost(host,photo,name,tour,gender=''){
+    if(!host)return;
+    const parts=playerAvatarParts(photo,name,tour,gender);
+    host.classList.remove('has-photo','player-fallback-wta','player-fallback-atp','using-fallback','using-initials');
+    host.classList.add('layered-player-avatar',parts.fallbackClass);
+    if(parts.fallback||parts.actual)host.classList.add('has-photo');
+    host.innerHTML=playerAvatarInnerHtml(parts);
   }
   function handleAssetImageError(event){
     const img=event?.target;
@@ -84,20 +103,24 @@
       return;
     }
     if(img.matches('[data-player-photo]')){
-      const fallbackBase=safeUiAsset(img.dataset.fallbackSrc||'');
-      const fallback=versionedPlayerAsset(fallbackBase);
-      if(fallback&&img.dataset.fallbackApplied!=='1'&&img.getAttribute('src')!==fallback){
-        img.dataset.fallbackApplied='1';
-        img.src=fallback;
-        return;
-      }
+      img.hidden=true;
       const host=img.parentElement;
-      if(host){host.classList.remove('has-photo');host.textContent=img.dataset.fallbackText||'B';}
+      if(host)host.classList.add('using-fallback');
+      return;
+    }
+    if(img.matches('[data-player-fallback]')){
+      img.hidden=true;
+      const host=img.parentElement;
+      if(host){
+        host.classList.remove('has-photo','using-fallback');
+        host.classList.add('using-initials');
+      }
     }
   }
   document.addEventListener('error',handleAssetImageError,true);
-  // Legacy deterministic-fallback contract marker retained for regression checks:
-  // classList.add(\'logo-failed\');this.remove()
+  // Layered avatar contract: real photo -> local ATP/WTA fallback -> initials.
+  // The fallback stays mounted underneath the real photo, so a cached/late 404
+  // can never leave the avatar blank or require a second asynchronous src swap.
   function accountAvatarUrl(account){
     const admin=Boolean(account?.is_admin||String(account?.role||'').toLowerCase()==='admin');
     const configuredPlan=String(state.ui?.assets?.admin_avatar_plan||'goat').trim().toLowerCase();
@@ -2192,10 +2215,8 @@
   function signalMeta(signal,m){ const id=String(signal?.player_id ?? signal?.favours_player_id ?? ''); const favours=id===String(m.pickId); const label=translateSignalLabel(signal?.label||signal?.factor||'Model signal'); return {label,favours}; }
   function renderSignal(signal,m){ const s=signalMeta(signal,m); return `<div class="signal-row"><span>${escapeHtml(s.label)}</span><div class="signal-meter"><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i class="${s.favours?'positive':'counter'}"></i><i></i><i></i></div></div>`; }
   function setPlayerIdentity(box,name,rank,country,photo,tour){
-    const avatar=box.querySelector('.player-avatar'),fallbackText=initials(name),fallback=playerFallbackUrl(tour),safe=safePhotoUrl(photo);
-    avatar.textContent=fallbackText;avatar.classList.remove('has-photo');
-    const install=src=>{if(!src)return;const img=document.createElement('img');img.src=src;img.alt='';img.loading='lazy';img.addEventListener('error',()=>{if(src!==fallback&&fallback){install(fallback);return;}avatar.classList.remove('has-photo');avatar.textContent=fallbackText},{once:true});avatar.textContent='';avatar.classList.add('has-photo');avatar.replaceChildren(img);};
-    install(safe||fallback);
+    const avatar=box.querySelector('.player-avatar');
+    applyPlayerAvatarHost(avatar,photo,name,tour);
     box.querySelector('.player-name').textContent=name;box.querySelector('.player-rank').innerHTML=playerMetaHtml(rank,country,tour);
   }
   function dataDepthLabel(m){const q=m.quality||{},a=q.player1||{},b=q.player2||{};const values=[a.matches,b.matches,a.surface_matches,b.surface_matches].map(Number);if(values.every(Number.isFinite))return `${publicText('History')} ${values[0]} / ${values[1]} · ${publicText('Surface')} ${values[2]} / ${values[3]}`;if(Number.isFinite(m.dataDepth))return `${publicText('Data depth')} ${Math.round(m.dataDepth*100)}%`;return '';}
