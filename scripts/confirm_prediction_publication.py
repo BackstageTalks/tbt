@@ -42,7 +42,41 @@ _PLAYER_PRESENTATION_KEYS = {
 }
 
 
-def _publication_candidate_view(value, *, player_context: bool = False):\n    """Return a comparison-safe view of a deployed/private feed.\n\n    prepare_feed.py may attach presentation-only player/tournament metadata\n    after the private prediction candidate has already been validated against the\n    ledger. Those fields must not make post-deploy issuance confirmation fail,\n    while all prediction/market/model content remains exact-match protected.\n\n    Doubles/team rows can contain player members nested below player1/player2.\n    Presentation enrichment is applied to those member dictionaries too, so\n    player context must propagate recursively instead of stripping fields only\n    from the top-level player object.\n    """\n    if isinstance(value, list):\n        return [\n            _publication_candidate_view(item, player_context=player_context)\n            for item in value\n        ]\n    if not isinstance(value, dict):\n        return value\n\n    result = {}\n    for key, item in value.items():\n        if key in {"player_assets", "tournament_assets", "tournament_logo_url"}:\n            continue\n        if player_context and key in _PLAYER_PRESENTATION_KEYS:\n            continue\n\n        child_player_context = player_context or key in {"player1", "player2"}\n        result[key] = _publication_candidate_view(\n            item,\n            player_context=child_player_context,\n        )\n    return result\n
+def _publication_candidate_view(value, *, player_context: bool = False):
+    """Return a comparison-safe view of a deployed/private feed.
+
+    prepare_feed.py may attach presentation-only player/tournament metadata
+    after the private prediction candidate has already been validated against the
+    ledger. Those fields must not make post-deploy issuance confirmation fail,
+    while all prediction/market/model content remains exact-match protected.
+
+    Doubles/team rows can contain player members nested below player1/player2.
+    Presentation enrichment is applied to those member dictionaries too, so
+    player context must propagate recursively instead of stripping fields only
+    from the top-level player object.
+    """
+    if isinstance(value, list):
+        return [
+            _publication_candidate_view(item, player_context=player_context)
+            for item in value
+        ]
+    if not isinstance(value, dict):
+        return value
+
+    result = {}
+    for key, item in value.items():
+        if key in {"player_assets", "tournament_assets", "tournament_logo_url"}:
+            continue
+        if player_context and key in _PLAYER_PRESENTATION_KEYS:
+            continue
+
+        child_player_context = player_context or key in {"player1", "player2"}
+        result[key] = _publication_candidate_view(
+            item,
+            player_context=child_player_context,
+        )
+    return result
+
 def read_json(path: Path, default):
     return json.loads(path.read_text(encoding="utf-8")) if path.is_file() else default
 
