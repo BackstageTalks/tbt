@@ -22,7 +22,7 @@ def test_projection_results_are_human_readable_and_projection_only_categories_sh
     assert 'function projectionResultSelectionText' in APP
     assert 'function projectionResultProjectionText' in APP
     assert 'function projectionResultActualText' in APP
-    assert "const projectionOnly=['ace','double_faults','sg','sets','games'].includes(category)" in APP
+    assert 'class="results-outcome-stack"' in APP
     assert "projectionCategory=['ace','double_faults','sg','sets','games'].includes(category)" in APP
     assert "High\\s+Total\\s+Games" in APP
     assert "projectionResultNumber(opponent,publication,1)" in APP
