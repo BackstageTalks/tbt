@@ -84,6 +84,8 @@ jobs:
   enrich-environment-1:
     needs: plan-window
     runs-on: ubuntu-latest
+    outputs:
+      requests_used: ${{ steps.pass1-summary.outputs.requests_used }}
     timeout-minutes: 350
     env:
       PYTHONPATH: api
@@ -127,15 +129,21 @@ jobs:
           BLINQ_INPUT_FORCE: ${{ inputs.force }}
           BLINQ_INPUT_RETRY_UNRESOLVED: ${{ inputs.retry_unresolved }}
           BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
+          BLINQ_REQUESTS_USED: ${{ needs.enrich-environment-1.outputs.requests_used || '0' }}
         run: |
           set -euo pipefail
+          REMAINING_REQUESTS=$((BLINQ_INPUT_MAX_REQUESTS - BLINQ_REQUESTS_USED))
+          if (( REMAINING_REQUESTS <= 0 )); then
+            echo "Open-Meteo/geocoder request budget already exhausted by pass 1; nothing to continue."
+            exit 0
+          fi
           END_VALUE="$BLINQ_INPUT_END"
           if [[ -z "$END_VALUE" ]]; then END_VALUE="$(date -u +%F)"; fi
           ARGS=(
             --start "$BLINQ_INPUT_START"
             --end "$END_VALUE"
             --limit "$BLINQ_INPUT_LIMIT"
-            --max-requests "$BLINQ_INPUT_MAX_REQUESTS"
+            --max-requests "$REMAINING_REQUESTS"
             --max-runtime-minutes "325"
             --stop-at "$BLINQ_STOP_AT"
             --data-repository "$TBT_DATA_REPOSITORY"
@@ -151,6 +159,15 @@ jobs:
             ARGS+=(--retry-unresolved)
           fi
           python scripts/enrich_environment_snapshot.py "${ARGS[@]}"
+      - id: pass1-summary
+        name: Capture pass 1 request usage
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          requests_used="$(python -c 'import json; print(int(json.load(open(".cache/tbt/history/environment_enrichment_report.json", encoding="utf-8")).get("open_meteo_requests", 0)))')"
+          echo "requests_used=$requests_used" >> "$GITHUB_OUTPUT"
+          echo "Pass 1 used $requests_used Open-Meteo/geocoder requests."
       - name: Upload environment run report - pass 1
         if: always()
         uses: actions/upload-artifact@v4
