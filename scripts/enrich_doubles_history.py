@@ -32,6 +32,42 @@ def _load(path: Path, default):
         return default
 
 
+def _resume_window(existing, start, end, *, explicit_start: bool, explicit_end: bool, lookback_days: int):
+    """Choose the next backward doubles backfill window without producing a no-op.
+
+    With no explicit dates, finish any partially covered requested window first.
+    Once the requested window is fully covered, step one full lookback block
+    backward from the oldest stored doubles day.
+    """
+    if not existing or explicit_start or explicit_end:
+        return start, end
+
+    existing_days = []
+    for row in existing:
+        try:
+            existing_days.append(
+                datetime.fromisoformat(
+                    str(row.get("scheduled_at") or "").replace("Z", "+00:00")
+                ).date()
+            )
+        except (ValueError, TypeError, AttributeError):
+            pass
+    if not existing_days:
+        return start, end
+
+    oldest = min(existing_days)
+    if oldest > start:
+        # Finish the currently requested window up to the day before the oldest
+        # stored row.
+        return start, min(end, oldest - timedelta(days=1))
+
+    # The requested window is already completely covered. Continue farther back
+    # instead of returning an empty effective window.
+    next_end = oldest - timedelta(days=1)
+    next_start = next_end - timedelta(days=max(1, lookback_days) - 1)
+    return next_start, next_end
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Collect isolated historical doubles data")
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"))
@@ -66,21 +102,17 @@ def main() -> None:
 
     # Resume historical backfill from the oldest stored day instead of spending
     # every quota window re-downloading the newest dates. Normal refresh keeps the
-    # last seven days current, so the manual doubles-data run can progress backward.
+    # recent edge current, so manual doubles-data runs progress backward forever
+    # unless the operator pins an explicit date range.
     requested_start, requested_end = start, end
-    if existing and not args.start and not args.end:
-        existing_days = []
-        for row in existing:
-            try:
-                existing_days.append(datetime.fromisoformat(str(row.get("scheduled_at") or "").replace("Z", "+00:00")).date())
-            except (ValueError, TypeError):
-                pass
-        if existing_days:
-            oldest = min(existing_days)
-            if oldest > requested_start:
-                end = min(end, oldest - timedelta(days=1))
-            else:
-                end = requested_start - timedelta(days=1)
+    start, end = _resume_window(
+        existing,
+        start,
+        end,
+        explicit_start=bool(args.start),
+        explicit_end=bool(args.end),
+        lookback_days=args.lookback_days,
+    )
 
     budget = LocalRequestBudget(directory / "local_request_budget.sqlite", duration_seconds=7200)
     client = RapidTennisClient(request_budget=budget)
