@@ -83,11 +83,13 @@ def test_legacy_runtime_access_matrix_is_migrated_once():
     assert out["notifications"]["live_min_level"] == "elite"
 
 
-def test_player_photo_responsive_handler_no_longer_short_circuits_gender_fallback():
+def test_player_photo_responsive_handler_uses_layered_gender_fallback():
     assert "if (img.matches('[data-player-photo]')) return;" in RESPONSIVE
     assert "/assets/missing_foto_m.webp" in APP
     assert "/assets/missing_foto_w.webp" in APP
-    assert "img.dataset.fallbackApplied='1'" in APP
+    assert "data-player-fallback" in APP
+    assert "img.hidden=true" in APP
+    assert "host.classList.add('using-fallback')" in APP
 
 
 def test_locked_live_header_does_not_show_cryptic_required_tier_as_status():
