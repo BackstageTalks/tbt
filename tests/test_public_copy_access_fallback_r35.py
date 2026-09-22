@@ -84,7 +84,7 @@ def test_legacy_runtime_access_matrix_is_migrated_once():
 
 
 def test_player_photo_responsive_handler_uses_layered_gender_fallback():
-    assert "if (img.matches('[data-player-photo]')) return;" in RESPONSIVE
+    assert "if (img.matches('[data-player-photo],[data-player-fallback]')) return;" in RESPONSIVE
     assert "/assets/missing_foto_m.webp" in APP
     assert "/assets/missing_foto_w.webp" in APP
     assert "data-player-fallback" in APP
