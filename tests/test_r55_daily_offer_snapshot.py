@@ -5,7 +5,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tbt.services.feed import visible_feed
-from tbt.services.publication import build_daily_offer_snapshot, carry_forward_betting_day_market_rows
+from tbt.services.publication import (
+    build_confirmed_daily_offer_snapshot,
+    build_daily_offer_snapshot,
+    carry_forward_betting_day_market_rows,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
@@ -149,6 +153,76 @@ def test_r55_pipeline_persists_and_reloads_daily_offer_snapshot_asset():
     pipeline = (ROOT / "scripts" / "pipeline.py").read_text(encoding="utf-8")
     assert '"daily_offer_snapshot.json" if "daily_offer_snapshot.json" in assets else None' in pipeline
     assert 'prior_snapshot = read_json(prediction_dir / "daily_offer_snapshot.json", {})' in pipeline
-    assert 'snapshot_source = prior_snapshot if isinstance(prior_snapshot, dict) and prior_snapshot else prior_feed' in pipeline
+    assert 'snapshot_sources = []' in pipeline
+    assert 'snapshot_sources.append(prior_snapshot)' in pipeline
+    assert 'snapshot_sources.append(prior_feed)' in pipeline
     assert 'write_json(store.directory / "daily_offer_snapshot.json", snapshot)' in pipeline
     assert 'store.directory / "daily_offer_snapshot.json",' in pipeline
+
+
+def test_r55_empty_snapshot_cannot_hide_published_rows_from_prior_feed():
+    now = datetime(2026, 9, 21, 18, 0, tzinfo=timezone.utc)
+    old = winner_row("old", "2026-09-21T08:00:00+00:00", selection="Alpha", odds=1.70)
+    fresh = winner_row("fresh", "2026-09-21T21:00:00+00:00", selection="Alpha", odds=1.80)
+    empty_snapshot = {
+        "schema": 1,
+        "betting_day": "2026-09-21",
+        "top_daily_picks": [],
+    }
+    prior_feed = {"top_daily_picks": [old]}
+    current = {"top_daily_picks": [fresh], "market_selection": {}}
+    ledger = [
+        {"event_id": "old", "market_publications": [publication_for(old, "top_daily", issued=True)]},
+        {"event_id": "fresh", "market_publications": [publication_for(fresh, "top_daily", issued=False)]},
+    ]
+
+    merged, report = carry_forward_betting_day_market_rows(
+        current,
+        [empty_snapshot, prior_feed],
+        ledger,
+        now=now,
+    )
+    assert [row["event_id"] for row in merged["top_daily_picks"]] == ["old", "fresh"]
+    assert report["carried"]["top_daily_picks"] == 1
+    assert report["new"]["top_daily_picks"] == 1
+
+
+def test_r55_new_pick_inside_five_minute_cutoff_is_not_added():
+    now = datetime(2026, 9, 21, 18, 0, tzinfo=timezone.utc)
+    too_late = winner_row("late", "2026-09-21T18:04:00+00:00", selection="Alpha", odds=1.80)
+    current = {"top_daily_picks": [too_late], "market_selection": {}}
+    ledger = [
+        {"event_id": "late", "market_publications": [publication_for(too_late, "top_daily", issued=False)]},
+    ]
+
+    merged, report = carry_forward_betting_day_market_rows(
+        current,
+        {},
+        ledger,
+        now=now,
+    )
+    assert merged["top_daily_picks"] == []
+    assert report["skipped_cutoff"]["top_daily_picks"] == 1
+
+
+def test_r55_confirmed_snapshot_excludes_pending_rows():
+    now = datetime(2026, 9, 21, 18, 0, tzinfo=timezone.utc)
+    issued = winner_row("issued", "2026-09-21T21:00:00+00:00", selection="Alpha", odds=1.70)
+    pending = winner_row("pending", "2026-09-21T22:00:00+00:00", selection="Alpha", odds=1.80)
+    feed = {
+        "top_daily_picks": [issued, pending],
+        "prime_picks": [],
+        "value_picks": [],
+        "doubles_picks": [],
+        "ace_picks": [],
+        "sg_picks": [],
+    }
+    ledger = [
+        {"event_id": "issued", "market_publications": [publication_for(issued, "top_daily", issued=True)]},
+        {"event_id": "pending", "market_publications": [publication_for(pending, "top_daily", issued=False)]},
+    ]
+
+    snapshot = build_confirmed_daily_offer_snapshot(feed, ledger, now=now)
+    assert [row["event_id"] for row in snapshot["top_daily_picks"]] == ["issued"]
+    assert snapshot["confirmed_only"] is True
+    assert snapshot["totals"]["top_daily_picks"] == 1
