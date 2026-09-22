@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, results-rebuild, train, backtest, refresh]
+        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, results-rebuild, deploy-current, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -72,7 +72,7 @@ jobs:
     # not block ordinary application deploys. The workflow-level history lock
     # still serializes all shared history writers.
     concurrency:
-      group: ${{ ((inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || github.event.schedule == '20 1,7,13,19 * * *') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
+      group: ${{ ((inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current' || github.event.schedule == '20 1,7,13,19 * * *') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 210
@@ -420,7 +420,7 @@ jobs:
             --max-tournament-logo-requests "$BLINQ_ENRICH_LOGO_CAP"
 
       - name: Prepare refreshed serving feed and cached player assets
-        if: env.MODE == 'refresh' || env.MODE == 'results-rebuild'
+        if: env.MODE == 'refresh' || env.MODE == 'results-rebuild' || env.MODE == 'deploy-current'
         shell: bash
         run: |
           set -euo pipefail
@@ -433,7 +433,7 @@ jobs:
     needs: pipeline
     if: >-
       needs.pipeline.result == 'success' &&
-      (inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' ||
+      (inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current' ||
        (github.event.schedule == '20 1,7,13,19 * * *' && vars.TBT_AUTO_REFRESH == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 45
