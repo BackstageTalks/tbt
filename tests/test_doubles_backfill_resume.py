@@ -1,33 +1,19 @@
 from datetime import date, timedelta
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
+import sys
 
 
-def _resume_window(existing, start, end, *, explicit_start, explicit_end, lookback_days):
-    # Mirror the pure window contract from scripts/enrich_doubles_history.py.
-    if not existing or explicit_start or explicit_end:
-        return start, end
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "scripts"
+if str(SCRIPTS) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS))
 
-    from datetime import datetime
-
-    existing_days = []
-    for row in existing:
-        try:
-            existing_days.append(
-                datetime.fromisoformat(
-                    str(row.get("scheduled_at") or "").replace("Z", "+00:00")
-                ).date()
-            )
-        except (ValueError, TypeError, AttributeError):
-            pass
-    if not existing_days:
-        return start, end
-
-    oldest = min(existing_days)
-    if oldest > start:
-        return start, min(end, oldest - timedelta(days=1))
-
-    next_end = oldest - timedelta(days=1)
-    next_start = next_end - timedelta(days=max(1, lookback_days) - 1)
-    return next_start, next_end
+spec = spec_from_file_location("enrich_doubles_history_test_module", SCRIPTS / "enrich_doubles_history.py")
+module = module_from_spec(spec)
+assert spec and spec.loader
+spec.loader.exec_module(module)
+_resume_window = module._resume_window
 
 
 def test_completed_default_window_steps_one_full_block_back():
