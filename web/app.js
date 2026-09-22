@@ -42,14 +42,20 @@
   const webPatch = () => String(document.querySelector('meta[name="blinq-web-patch"]')?.content||'736').trim();
   const versionedPlayerAsset = value => { const url=String(value||'').trim(); return /^\/assets\/(?:players\/|missing_foto_)/.test(url)?`${url}?p=${encodeURIComponent(webPatch())}`:url; };
   const avatarAssetSrc = value => { const url=safeUiAsset(value); return url ? `${url}?v=v6544` : ''; };
-  function playerFallbackUrl(tour,gender=''){
+  function playerFallbackAssets(tour,gender='',context=''){
     const key=String(tour||'').trim().toLowerCase();
     const g=String(gender||'').trim().toLowerCase();
-    const map=state.ui?.assets?.player_fallback||{};
-    const women=safeUiAsset(map.wta)||'/assets/missing_foto_w.webp';
-    const men=safeUiAsset(map.atp)||'/assets/missing_foto_m.webp';
-    if(g.startsWith('f')||g.startsWith('w')||key.startsWith('wta'))return women;
-    return men;
+    const competition=String(context||'').trim().toLowerCase();
+    // ITF women's events often arrive with tour="ITF" and no player gender.
+    // Infer W15/W25/W35/W50/W75/W100 only from the tournament, never a name.
+    const women=g.startsWith('f')||g.startsWith('w')||key.startsWith('wta')||
+      /\b(?:women|woman|girls|wta|itf\s*w(?:15|25|35|50|75|100))\b/i.test(competition)||
+      /\bw(?:15|25|35|50|75|100)\b/i.test(competition);
+    const local=women?'/assets/missing_foto_w.webp':'/assets/missing_foto_m.webp';
+    const configured=safeUiAsset((state.ui?.assets?.player_fallback||{})[women?'wta':'atp']);
+    // Admin-configured assets may disappear or be replaced. The committed local
+    // asset remains mounted under them as a second, independent fallback.
+    return {local,configured:configured&&configured!==local?configured:'',women};
   }
   function playerPhotoSource(row,player,side=''){
     const key=String(side||'').trim();
@@ -62,29 +68,28 @@
     for(const candidate of candidates){const safe=safePhotoUrl(candidate);if(safe)return safe;}
     return '';
   }
-  function playerAvatarParts(photo,name,tour,gender=''){
+  function playerAvatarParts(photo,name,tour,gender='',context=''){
     const safeBase=safePhotoUrl(photo);
-    const fallbackBase=playerFallbackUrl(tour,gender);
-    const actual=safeBase&&safeBase!==fallbackBase?versionedPlayerAsset(safeBase):'';
-    const fallback=versionedPlayerAsset(fallbackBase);
+    const assets=playerFallbackAssets(tour,gender,context);
+    const local=versionedPlayerAsset(assets.local);
+    const fallback=assets.configured?versionedPlayerAsset(assets.configured):'';
+    const actual=safeBase&&safeBase!==assets.local&&safeBase!==assets.configured?versionedPlayerAsset(safeBase):'';
     const initial=initials(name);
-    const fallbackClass=fallbackBase.includes('missing_foto_w.webp')?'player-fallback-wta':'player-fallback-atp';
-    return {actual,fallback,initial,fallbackClass};
+    const fallbackClass=assets.women?'player-fallback-wta':'player-fallback-atp';
+    return {actual,fallback,local,initial,fallbackClass};
   }
   function playerAvatarInnerHtml(parts){
-    return `<span class="player-avatar-initials" aria-hidden="true">${escapeHtml(parts.initial)}</span>${parts.fallback?`<img class="player-avatar-fallback" data-player-fallback src="${escapeHtml(parts.fallback)}" alt="" loading="lazy">`:''}${parts.actual?`<img class="player-avatar-photo" data-player-photo src="${escapeHtml(parts.actual)}" alt="" loading="lazy">`:''}`;
+    return `<span class="player-avatar-initials" aria-hidden="true">${escapeHtml(parts.initial)}</span><img class="player-avatar-local-fallback" data-player-local-fallback src="${escapeHtml(parts.local)}" alt="" loading="lazy">${parts.fallback?`<img class="player-avatar-fallback" data-player-fallback src="${escapeHtml(parts.fallback)}" alt="" loading="lazy">`:''}${parts.actual?`<img class="player-avatar-photo" data-player-photo src="${escapeHtml(parts.actual)}" alt="" loading="lazy">`:''}`;
   }
-  function playerAvatarHtml(photo,name,tour,gender='',wrapperClass='player-avatar'){
-    const parts=playerAvatarParts(photo,name,tour,gender);
-    const hasImage=Boolean(parts.fallback||parts.actual);
-    return `<span class="${escapeHtml(wrapperClass)} layered-player-avatar ${parts.fallbackClass}${hasImage?' has-photo':''}">${playerAvatarInnerHtml(parts)}</span>`;
+  function playerAvatarHtml(photo,name,tour,gender='',wrapperClass='player-avatar',context=''){
+    const parts=playerAvatarParts(photo,name,tour,gender,context);
+    return `<span class="${escapeHtml(wrapperClass)} layered-player-avatar ${parts.fallbackClass} has-photo">${playerAvatarInnerHtml(parts)}</span>`;
   }
-  function applyPlayerAvatarHost(host,photo,name,tour,gender=''){
+  function applyPlayerAvatarHost(host,photo,name,tour,gender='',context=''){
     if(!host)return;
-    const parts=playerAvatarParts(photo,name,tour,gender);
+    const parts=playerAvatarParts(photo,name,tour,gender,context);
     host.classList.remove('has-photo','player-fallback-wta','player-fallback-atp','using-fallback','using-initials');
-    host.classList.add('layered-player-avatar',parts.fallbackClass);
-    if(parts.fallback||parts.actual)host.classList.add('has-photo');
+    host.classList.add('layered-player-avatar',parts.fallbackClass,'has-photo');
     host.innerHTML=playerAvatarInnerHtml(parts);
   }
   function handleAssetImageError(event){
@@ -102,25 +107,28 @@
       img.remove();
       return;
     }
-    if(img.matches('[data-player-photo]')){
-      img.hidden=true;
-      const host=img.parentElement;
-      if(host)host.classList.add('using-fallback');
-      return;
-    }
-    if(img.matches('[data-player-fallback]')){
+    if(img.matches('[data-player-photo],[data-player-fallback],[data-player-local-fallback]')){
       img.hidden=true;
       const host=img.parentElement;
       if(host){
-        host.classList.remove('has-photo','using-fallback');
-        host.classList.add('using-initials');
+        const available=[...host.querySelectorAll('[data-player-photo],[data-player-fallback],[data-player-local-fallback]')]
+          .some(candidate=>!candidate.hidden&&candidate.complete&&candidate.naturalWidth>0);
+        host.classList.toggle('using-initials',!available);
+        if(img.matches('[data-player-photo]'))host.classList.add('using-fallback');
       }
     }
   }
   document.addEventListener('error',handleAssetImageError,true);
-  // Layered avatar contract: real photo -> local ATP/WTA fallback -> initials.
-  // The fallback stays mounted underneath the real photo, so a cached/late 404
-  // can never leave the avatar blank or require a second asynchronous src swap.
+  document.addEventListener('load',event=>{
+    const img=event.target;
+    if(!(img instanceof HTMLImageElement)||
+       !img.matches('[data-player-photo],[data-player-fallback],[data-player-local-fallback]')||
+       !img.naturalWidth)return;
+    const host=img.parentElement;
+    if(host)host.classList.remove('using-initials');
+  },true);
+  // Real photo -> configured gender fallback -> committed local gender fallback
+  // -> initials. Each lower layer stays mounted if upper ones fail.
   function accountAvatarUrl(account){
     const admin=Boolean(account?.is_admin||String(account?.role||'').toLowerCase()==='admin');
     const configuredPlan=String(state.ui?.assets?.admin_avatar_plan||'goat').trim().toLowerCase();
@@ -1735,8 +1743,8 @@
     if(logo) return '<span class="hub-tournament-logo has-image"><img data-tournament-logo src="'+escapeHtml(logo)+'" alt="" loading="lazy"><span class="hub-logo-fallback">'+fallback+'</span></span>';
     return '<span class="hub-tournament-logo hub-tournament-badge logo-failed">'+fallback+'</span>';
   }
-  function smallAvatar(photo,name,tour,gender=''){
-    return playerAvatarHtml(photo,name,tour,gender,'hub-avatar');
+  function smallAvatar(photo,name,tour,gender='',context=''){
+    return playerAvatarHtml(photo,name,tour,gender,'hub-avatar',context);
   }
   function hubPlayerMeta(player,tour){
     const name=player?.name||'—';
@@ -1765,7 +1773,7 @@
     const r1=firstFinite(p1.rank,p1.ranking,p1.current_rank,row?.player1_rank,row?.p1_rank),r2=firstFinite(p2.rank,p2.ranking,p2.current_rank,row?.player2_rank,row?.p2_rank);
     const photoFor=(player,side)=>playerPhotoSource(row,player,side);
     const selected=String(row?.pick||row?.selection||row?.prediction||'').trim().toLocaleLowerCase();
-    const line=(player,side,name,country,rank)=>`<span class="hub-match-player${selected&&selected===String(name).toLocaleLowerCase()?' is-pick':''}"><span class="hub-match-player-main">${smallAvatar(photoFor(player,side),name,row?.tour,player?.gender||player?.sex||'')}${flagIconHtml(country,true)}<b title="${escapeHtml(name)}">${escapeHtml(name)}</b></span>${Number.isFinite(Number(rank))&&Number(rank)>0?`<small>#${Math.trunc(Number(rank))}</small>`:''}</span>`;
+    const line=(player,side,name,country,rank)=>`<span class="hub-match-player${selected&&selected===String(name).toLocaleLowerCase()?' is-pick':''}"><span class="hub-match-player-main">${smallAvatar(photoFor(player,side),name,row?.tour,player?.gender||player?.sex||'',row?.tournament)}${flagIconHtml(country,true)}<b title="${escapeHtml(name)}">${escapeHtml(name)}</b></span>${Number.isFinite(Number(rank))&&Number(rank)>0?`<small>#${Math.trunc(Number(rank))}</small>`:''}</span>`;
     return `<span class="hub-match hub-match-pro">${line(p1,'player1',n1,c1,r1)}<i class="hub-match-divider" aria-hidden="true"></i>${line(p2,'player2',n2,c2,r2)}</span>`;
   }
   function recentFormData(source,key){
@@ -2181,7 +2189,7 @@
       else{metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(row)],[publicText('Surface'),surfaceSampleLabel(row)]];}
       badge=probability==null?publicText('MODEL'):confidenceLabel(confidenceBand(probability));mainValue=probability==null?'—':pct(probability);confidenceClass=probability==null?'low':confidenceBand(probability);
     }
-    const p1Photo=playerPhotoSource(row,p1,'player1'),p2Photo=playerPhotoSource(row,p2,'player2');const avatar=(photo,name,gender='')=>playerAvatarHtml(photo,name,row?.tour,gender,'player-avatar');const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
+    const p1Photo=playerPhotoSource(row,p1,'player1'),p2Photo=playerPhotoSource(row,p2,'player2');const avatar=(photo,name,gender='')=>playerAvatarHtml(photo,name,row?.tour,gender,'player-avatar',row?.tournament);const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
     const metricHtml=metrics.map(([label,value])=>{const raw=String(value??'');const tone=raw.trim().startsWith('+')?' metric-positive':raw.trim().startsWith('-')?' metric-negative':'';return `<span class="card-metric${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(raw)}</strong></span>`}).join('');
     const footer=`<div class="card-metrics-bar match-kpi-bar">${metricHtml}</div><div class="card-link-row"><button class="card-more-link" type="button" data-route="${escapeHtml(key)}">${escapeHtml(publicText('See more →'))}</button></div>`;
     const optionalNote=note&&!compact?`<div class="market-card-note">${escapeHtml(note)}</div>`:'';
@@ -2682,7 +2690,7 @@
       const p1Class=p1Selected?' is-pick':p2Selected?' is-opponent':'';
       const p2Class=p2Selected?' is-pick':p1Selected?' is-opponent':'';
       const tipBadge='<i class="results-pick-mark" aria-label="Predikovaný hráč">TIP</i>';
-      const match=`<div class="results-match-player${p1Class}">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${p2Selected?tipBadge:''}</span></div>`;
+      const match=`<div class="results-match-player${p1Class}">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'',r?.tournament)}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'',r?.tournament)}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${p2Selected?tipBadge:''}</span></div>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
         const depth=Number(publication?.data_depth??publication?.result?.data_depth),displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
@@ -3406,7 +3414,7 @@
 
   function primeDetailCard(m,index=0){
     const photo1=playerPhotoSource(m.raw||{},m.raw?.player1||{},'player1')||safePhotoUrl(m.p1Photo),photo2=playerPhotoSource(m.raw||{},m.raw?.player2||{},'player2')||safePhotoUrl(m.p2Photo);
-    const avatar=(src,name)=>playerAvatarHtml(src,name,m.tour,'','player-avatar');
+    const avatar=(src,name)=>playerAvatarHtml(src,name,m.tour,'','player-avatar',m.raw?.tournament);
     const metrics=[[publicText('Odds'),Number.isFinite(m.odds)?m.odds.toFixed(2):'—'],[lcopy('Edge','Výhoda','Výhoda'),Number.isFinite(m.edge)?`${m.edge>=0?'+':''}${(m.edge*100).toFixed(1)} pp`:'—'],['EV',Number.isFinite(m.expectedValue)?`${m.expectedValue>=0?'+':''}${(m.expectedValue*100).toFixed(1)}%`:'—']];
     const metricHtml=metrics.map(([label,value])=>{const raw=String(value);const tone=raw.trim().startsWith('+')?' metric-positive':raw.trim().startsWith('-')?' metric-negative':'';return `<span class="card-metric${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(raw)}</strong></span>`}).join('');
     return `<article class="prediction-card featured detail-pick-card match-card-v3"><div class="card-meta match-card-meta"><span class="tour">${escapeHtml(m.tour)} ${escapeHtml(m.tournament)}</span><span class="time">${timeDateHtml(m.date,'card-time-stack')}</span><span class="surface">${escapeHtml(String(m.surface||'').replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(photo1,m.p1)}<strong class="player-name">${escapeHtml(m.p1)}</strong></div><div class="vs match-vs">VS</div><div class="player">${avatar(photo2,m.p2)}<strong class="player-name">${escapeHtml(m.p2)}</strong></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(lcopy('BlinQ prediction','Naša predikcia','Naše predikce'))}</small><strong class="pick-name">${escapeHtml(m.pick)}</strong></div><div class="pick-score"><div class="probability">${pct(m.probability)}</div><span class="confidence ${escapeHtml(m.confidence)}">${escapeHtml(confidenceLabel(m.confidence))}</span></div></div><div class="card-metrics-bar match-kpi-bar">${metricHtml}</div></article>`;
