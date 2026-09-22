@@ -6747,7 +6747,7 @@ body#blinqPremium .results-opponent.has-pick-conflict{
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td small{font-size:7px!important}
 }
 
-/* BlinQ runtime patch 7.3.6-r55: authoritative result pick identity, retirement-safe settlement and projection-odds readiness. */
+/* BlinQ runtime patch 7.3.6-r56: authoritative result pick identity, retirement-safe settlement and projection-odds readiness. */
 
 /* r51 final clarity: one unmistakable predicted player, quiet INFO state, larger data type. */
 body#blinqPremium .results-match-player.is-opponent,
@@ -6788,7 +6788,7 @@ body#blinqPremium .results-units-depth small{color:#789087!important;font-size:7
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td small{font-size:7.5px!important}
 }
 
-/* BlinQ runtime patch 7.3.6-r55 — projection odds / See All / player-photo consistency */
+/* BlinQ runtime patch 7.3.6-r56 — projection odds / See All / player-photo consistency */
 body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-model-cell{min-width:150px!important}
 body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-model{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:12px!important;min-width:0!important}
 body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-model .hub-number-stack{align-items:flex-start!important;min-width:0!important}
@@ -6798,7 +6798,7 @@ body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-confidence strong{fo
 body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-confidence small{font-size:10px!important;line-height:1.05!important;color:#9eb0aa!important;white-space:nowrap!important}
 @media(max-width:900px){body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-model{justify-content:flex-start!important;gap:18px!important}body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-confidence{align-items:flex-start!important}}
 
-/* BlinQ runtime patch 7.3.6-r55 — daily offer snapshot */
+/* BlinQ runtime patch 7.3.6-r56 — daily offer snapshot */
 body#blinqPremium .daily-hub-table tbody tr.hub-row-started td{background:rgba(5,20,17,.34)!important}
 body#blinqPremium .daily-hub-table tbody tr.hub-row-started .hub-match-cell,
 body#blinqPremium .daily-hub-table tbody tr.hub-row-started .hub-pick{opacity:.82}
