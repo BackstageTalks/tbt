@@ -35,11 +35,11 @@ def test_results_match_winner_highlights_selected_player_not_row_order():
     assert "function resultPickIdentity(publication,row)" in APP
     assert "const p1Selected=selectable&&pickIdentity.side==='p1';" in APP
     assert "const p2Selected=selectable&&pickIdentity.side==='p2';" in APP
-    assert "results-match-player${p1Class}${integrityClass}" in APP
-    assert "results-opponent${p2Class}${integrityClass}" in APP
+    assert "results-match-player${p1Class}" in APP
+    assert "results-opponent${p2Class}" in APP
     assert "results-pick-mark" in APP
     assert ".results-match-player.is-pick strong" in CSS
-    assert ".results-opponent.is-pick b" in CSS
+    assert ".results-opponent.is-pick strong" in CSS
 
 
 def _retired_match():
