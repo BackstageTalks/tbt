@@ -25,6 +25,7 @@ from tbt.services.publication import (
     validate_market_publication_candidate,
     restore_published_market_snapshots,
     carry_forward_betting_day_market_rows,
+    build_daily_offer_snapshot,
     validate_publication_candidate,
 )
 from tbt.services.ace_selection import select_ace_picks
@@ -229,8 +230,12 @@ def _load_prediction_ledger(store):
         raise FileNotFoundError(
             "Prediction release is incomplete; missing assets: " + ", ".join(missing)
         )
+    optional_snapshot = "daily_offer_snapshot.json" if "daily_offer_snapshot.json" in assets else None
+    extra_names = ["feed.json", "ledger.json"]
+    if optional_snapshot:
+        extra_names.append(optional_snapshot)
     store.download(
-        extra_names=("feed.json", "ledger.json"),
+        extra_names=tuple(extra_names),
         required_names=("feed.json", "ledger.json"),
     )
     ledger = read_json(store.directory / "ledger.json", None)
@@ -302,7 +307,7 @@ def _publish_predictions(
     store, ledger, predictions, matches, model, report, upcoming,
     *, odds_report=None, ace_picks=None, ace_report=None,
     sg_picks=None, sg_report=None, doubles_picks=None, doubles_report=None,
-    doubles_matches=None, doubles_upcoming=None, prior_feed=None, betting_day_start_hour=6,
+    doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None, betting_day_start_hour=6,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -353,9 +358,10 @@ def _publish_predictions(
     # ROOKIE/PRO user. Do this only after current-selector integrity succeeds;
     # carried rows are expected to make final section counts larger than the
     # current selector counts.
-    if isinstance(prior_feed, dict) and prior_feed:
+    snapshot_source = prior_snapshot if isinstance(prior_snapshot, dict) and prior_snapshot else prior_feed
+    if isinstance(snapshot_source, dict) and snapshot_source:
         feed, daily_snapshot_report = carry_forward_betting_day_market_rows(
-            feed, prior_feed, records, now=now, start_hour=betting_day_start_hour
+            feed, snapshot_source, records, now=now, start_hour=betting_day_start_hour
         )
         feed["market_selection"] = {
             **(feed.get("market_selection") or {}),
@@ -365,9 +371,19 @@ def _publish_predictions(
     feed = clean(feed)
     validate_publication_candidate(feed, records)
     validate_market_publication_candidate(feed, records)
+    snapshot = build_daily_offer_snapshot(
+        feed,
+        now=now,
+        start_hour=betting_day_start_hour,
+    )
     write_json(store.directory / "ledger.json", records)
     write_json(store.directory / "feed.json", feed)
-    store.upload_bundle([store.directory / "ledger.json", store.directory / "feed.json"])
+    write_json(store.directory / "daily_offer_snapshot.json", snapshot)
+    store.upload_bundle([
+        store.directory / "ledger.json",
+        store.directory / "feed.json",
+        store.directory / "daily_offer_snapshot.json",
+    ])
     return feed
 
 
@@ -509,6 +525,9 @@ def main():
     prior_feed = read_json(prediction_dir / "feed.json", {})
     if not isinstance(prior_feed, dict):
         prior_feed = {}
+    prior_snapshot = read_json(prediction_dir / "daily_offer_snapshot.json", {})
+    if not isinstance(prior_snapshot, dict):
+        prior_snapshot = {}
     doubles_dir = cache / "doubles"
     doubles_store = ReleaseStore(args.data_repository, "tbt-doubles-data-v1", doubles_dir)
     doubles_history = _load_doubles_history(doubles_store)
@@ -628,7 +647,8 @@ def main():
         sg_picks=sg_picks, sg_report=sg_report,
         doubles_picks=doubles_picks, doubles_report=doubles_report,
         doubles_matches=doubles_completed, doubles_upcoming=doubles_upcoming,
-        prior_feed=prior_feed, betting_day_start_hour=args.betting_day_start_hour,
+        prior_feed=prior_feed, prior_snapshot=prior_snapshot,
+        betting_day_start_hour=args.betting_day_start_hour,
     )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
