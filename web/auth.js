@@ -92,6 +92,8 @@
       ADMIN_STORAGE_UNAVAILABLE: 'Persistent service storage is temporarily unavailable.',
       LIVE_RADAR_STORAGE_UNAVAILABLE: 'LIVE alert storage is temporarily unavailable.',
       UI_CONFIG_STORAGE_UNAVAILABLE: 'Content storage is temporarily unavailable.',
+      EMAIL_DELIVERY_UNAVAILABLE: 'Your account was created, but the verification email could not be sent. Please try sending it again.',
+      AUTH_EMAIL_THROTTLE_UNAVAILABLE: 'Your account was created, but verification email delivery is temporarily unavailable.',
     };
     return friendly[code] || raw.replaceAll('_', ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
   }
@@ -386,17 +388,31 @@
       catch { profileSynced=false; }
     }
 
-    // Verification delivery is independent from profile persistence. If SMTP
-    // fails, the saved Firebase session remains available for Resend. If only
-    // profile persistence failed, keep the session so the pending safe payload
-    // can be retried after reload/sign-in without creating the account twice.
-    await json('/api/v1/auth/email', {
-      method: 'POST',
-      headers: {'X-Blinq-Access-Token': data.idToken},
-      body: JSON.stringify({type: 'verify', email: normalizedEmail}),
-    });
-    if(profileSynced) clear();
-    return {verification_required: true, email: normalizedEmail, profile_pending: !profileSynced};
+    // Firebase has already created the identity at this point. Verification
+    // delivery is therefore a recoverable post-create step: SMTP failure must
+    // never make the UI claim that account creation itself failed or encourage
+    // the user to create the same Firebase identity again.
+    let emailDeliveryError=null;
+    try {
+      await json('/api/v1/auth/email', {
+        method: 'POST',
+        headers: {'X-Blinq-Access-Token': data.idToken},
+        body: JSON.stringify({type: 'verify', email: normalizedEmail}),
+      });
+    } catch (error) {
+      emailDeliveryError=error;
+    }
+    // Keep the unverified Firebase session when either profile sync or mail
+    // delivery needs recovery. The protected feed still rejects unverified
+    // identities, while Resend can reuse this session without another signup.
+    if(profileSynced&&!emailDeliveryError) clear();
+    return {
+      verification_required: true,
+      email: normalizedEmail,
+      profile_pending: !profileSynced,
+      email_delivery_failed: Boolean(emailDeliveryError),
+      email_delivery_error: String(emailDeliveryError?.code||''),
+    };
   }
 
   async function signUp(email, password, telegramNick, legalConsent = {}) {
