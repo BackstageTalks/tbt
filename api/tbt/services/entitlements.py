@@ -818,9 +818,10 @@ def build_daily_access_state(
 ) -> tuple[dict, bool]:
     """Resolve durable stable-random allocations for the current betting day.
 
-    Existing allocations for the same day are never refilled when a row starts,
-    disappears, or the feed is reordered. That guarantees a user cannot reveal
-    more than the configured random picks by repeatedly refreshing during a day.
+    Same-day allocations are monotonic: already selected rows never change, while
+    newly published rows may fill still-empty entitlement slots. This keeps a
+    ROOKIE/PRO sample stable without permanently locking a user to zero/one picks
+    merely because they opened BlinQ before the daily offer finished filling.
     """
     day=blinq_access_day(now)
     same_day=str(existing_day or "")==day and isinstance(existing_allocations,dict)
@@ -838,8 +839,6 @@ def build_daily_access_state(
 
     for section,meta in (manifest.get("sections") or {}).items():
         canonical="daily" if section=="top_daily" else str(section)
-        if canonical in sections:
-            continue
         if not isinstance(meta,dict) or str(meta.get("selection_mode") or "")!="stable_random":
             continue
         if not meta.get("enabled") or str(meta.get("display_state") or "active")!="active":
@@ -851,26 +850,36 @@ def build_daily_access_state(
             limit=max(0,int(raw_limit))
         except (TypeError,ValueError):
             limit=0
+
+        selected=list(sections.get(canonical) or [])
+        if len(selected)>=limit:
+            continue
+
         rows=_source_rows_for_section(payload,canonical)
         pool=rows[:min(len(rows),10)]
         seed=f"{_access_identity(access)}|{day}|{canonical}"
         scored=[]
+        selected_set=set(selected)
         for row in pool:
             key=_row_access_key(row)
-            if not key:
+            if not key or key in selected_set:
                 continue
             score=hashlib.sha256(f"{seed}|{key}".encode("utf-8")).hexdigest()
             scored.append((score,key))
-        selected=[]
+
+        before=list(selected)
         for _,key in sorted(scored):
-            if key not in selected:
+            if key not in selected_set:
                 selected.append(key)
-            if len(selected)>=min(limit,len(pool)):
+                selected_set.add(key)
+            if len(selected)>=limit:
                 break
-        # Persist even an empty list. If there were no eligible rows at first
-        # access, later refreshes must not silently grant newly arrived picks.
-        sections[canonical]=selected
-        changed=True
+
+        # Persist the section even when still empty so account state remains
+        # explicit, but allow future refreshes to fill any remaining slots.
+        if canonical not in sections or selected != before:
+            sections[canonical]=selected
+            changed=True
 
     state={"day":day,"sections":sections}
     return state,changed
