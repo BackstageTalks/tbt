@@ -1,4 +1,6 @@
-from tbt.services.entitlements import filter_feed_for_access, effective_plan
+from datetime import datetime, timezone
+
+from tbt.services.entitlements import build_daily_access_state, filter_feed_for_access, effective_plan
 
 
 def row(i):
@@ -210,3 +212,83 @@ def test_stable_random_unlocks_positions_in_place_instead_of_moving_picks_to_top
     data2, manifest2 = filter_feed_for_access(payload, access, cfg)
     assert data2["prime_picks"][0]["event_id"] == data["prime_picks"][0]["event_id"]
     assert manifest2["sections"]["prime"]["slot_states"] == manifest["sections"]["prime"]["slot_states"]
+
+
+def _stable_random_cfg(plan: str, visible_rows: int) -> dict:
+    return {
+        "dashboard": {"daily_hub": {"enabled": True, "tabs": {
+            "prime": {"enabled": True, "plans": {plan: {
+                "visible_rows": visible_rows,
+                "blur_remaining": True,
+                "tab_enabled": True,
+                "see_all": False,
+                "selection_mode": "stable_random",
+                "display_state": "active",
+            }}},
+        }}}
+    }
+
+
+def test_rookie_empty_daily_allocation_can_fill_later_without_rerolling():
+    now = datetime(2026, 9, 22, 8, 0, tzinfo=timezone.utc)
+    access = {"status": "active", "plan": "rookie", "id": "rookie-fill"}
+    cfg = _stable_random_cfg("rookie", 1)
+
+    empty_state, changed = build_daily_access_state(
+        access,
+        feed(0),
+        cfg,
+        now=now,
+    )
+    assert changed is True
+    assert empty_state["sections"]["prime"] == []
+
+    filled_state, changed2 = build_daily_access_state(
+        access,
+        feed(5),
+        cfg,
+        existing_day=empty_state["day"],
+        existing_allocations=empty_state["sections"],
+        now=now,
+    )
+    assert changed2 is True
+    assert len(filled_state["sections"]["prime"]) == 1
+
+    stable_state, changed3 = build_daily_access_state(
+        access,
+        feed(8),
+        cfg,
+        existing_day=filled_state["day"],
+        existing_allocations=filled_state["sections"],
+        now=now,
+    )
+    assert changed3 is False
+    assert stable_state["sections"]["prime"] == filled_state["sections"]["prime"]
+
+
+def test_pro_daily_allocation_only_fills_missing_slots_and_keeps_existing_pick():
+    now = datetime(2026, 9, 22, 8, 0, tzinfo=timezone.utc)
+    access = {"status": "active", "plan": "pro", "id": "pro-fill"}
+    cfg = _stable_random_cfg("pro", 3)
+
+    first_state, changed = build_daily_access_state(
+        access,
+        feed(1),
+        cfg,
+        now=now,
+    )
+    assert changed is True
+    assert len(first_state["sections"]["prime"]) == 1
+    original = list(first_state["sections"]["prime"])
+
+    full_state, changed2 = build_daily_access_state(
+        access,
+        feed(6),
+        cfg,
+        existing_day=first_state["day"],
+        existing_allocations=first_state["sections"],
+        now=now,
+    )
+    assert changed2 is True
+    assert len(full_state["sections"]["prime"]) == 3
+    assert full_state["sections"]["prime"][:1] == original
