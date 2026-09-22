@@ -1006,7 +1006,16 @@
         const result=await BlinqAuth.signUp(email,password,$('authName').value.trim(),{version:String(state.siteContent?.updated_at||'2026-09-16'),locale:contentLocale()});
         if(result?.verification_required){
           auth('login');$('authEmail').value=email;$('authPassword').value='';
-          $('authMessage').textContent=publicText('Verification email sent. Open the link in your inbox, then sign in.');
+          if(result.email_delivery_failed){
+            $('authMessage').textContent=lcopy(
+              'Your account was created, but the verification email could not be sent. Use “Send verification email again”.',
+              'Účet bol vytvorený, ale overovací e-mail sa nepodarilo odoslať. Použi „Poslať overovací e-mail znova“.',
+              'Účet byl vytvořen, ale ověřovací e-mail se nepodařilo odeslat. Použij „Poslat ověřovací e-mail znovu“.'
+            );
+            if($('resendVerification'))$('resendVerification').hidden=false;
+          }else{
+            $('authMessage').textContent=publicText('Verification email sent. Open the link in your inbox, then sign in.');
+          }
           return;
         }
       } else await BlinqAuth.signIn(email,password);
