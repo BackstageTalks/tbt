@@ -36,14 +36,17 @@ def test_see_all_projection_rows_share_one_eight_column_contract():
     assert "hub-seeall-model" in CSS
 
 
-def test_player_photos_use_versioned_local_assets_and_shared_fallback_in_predictions_and_results():
+def test_player_photos_use_layered_local_fallback_in_predictions_and_results():
     assert "const versionedPlayerAsset =" in APP
     assert "meta[name=\"blinq-web-patch\"]" in APP
-    assert "versionedPlayerAsset(safeBase||fallbackBase)" in APP
-    assert "const fallback=versionedPlayerAsset(fallbackBase);" in APP
+    assert "function playerAvatarParts" in APP
+    assert "data-player-fallback" in APP
+    assert "class=\"player-avatar-photo\" data-player-photo" in APP
+    assert "function applyPlayerAvatarHost" in APP
     assert "const p1Photo=playerPhotoSource(r,p1,'player1');" in APP
     assert "const p1Photo=playerPhotoSource(row,p1,'player1')" in APP
-    assert ".hub-avatar.player-fallback-atp" in CSS
+    assert ".layered-player-avatar .player-avatar-fallback" in CSS
+    assert ".layered-player-avatar .player-avatar-initials" in CSS
 
 
 def test_total_sets_alias_and_nested_market_name_are_supported():
