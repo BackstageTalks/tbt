@@ -65,7 +65,8 @@ def test_b19_signup_persists_new_identity_before_profile_side_effect():
     assert block.index("replaceSession(data, 'firebase')") < block.index("syncPendingRegistrationProfile")
     assert "savePendingRegistrationProfile(normalizedEmail,profilePayload)" in block
     assert "profile_pending: !profileSynced" in block
-    assert "if(profileSynced) clear();" in block
+    assert "if(profileSynced&&!emailDeliveryError) clear();" in block
+    assert "email_delivery_failed: Boolean(emailDeliveryError)" in block
 
 
 def test_b19_pending_profile_has_reload_and_signin_recovery():
