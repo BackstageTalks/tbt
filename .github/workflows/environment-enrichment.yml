@@ -129,21 +129,15 @@ jobs:
           BLINQ_INPUT_FORCE: ${{ inputs.force }}
           BLINQ_INPUT_RETRY_UNRESOLVED: ${{ inputs.retry_unresolved }}
           BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
-          BLINQ_REQUESTS_USED: ${{ needs.enrich-environment-1.outputs.requests_used || '0' }}
         run: |
           set -euo pipefail
-          REMAINING_REQUESTS=$((BLINQ_INPUT_MAX_REQUESTS - BLINQ_REQUESTS_USED))
-          if (( REMAINING_REQUESTS <= 0 )); then
-            echo "Open-Meteo/geocoder request budget already exhausted by pass 1; nothing to continue."
-            exit 0
-          fi
           END_VALUE="$BLINQ_INPUT_END"
           if [[ -z "$END_VALUE" ]]; then END_VALUE="$(date -u +%F)"; fi
           ARGS=(
             --start "$BLINQ_INPUT_START"
             --end "$END_VALUE"
             --limit "$BLINQ_INPUT_LIMIT"
-            --max-requests "$REMAINING_REQUESTS"
+            --max-requests "$BLINQ_INPUT_MAX_REQUESTS"
             --max-runtime-minutes "325"
             --stop-at "$BLINQ_STOP_AT"
             --data-repository "$TBT_DATA_REPOSITORY"
@@ -211,15 +205,21 @@ jobs:
           BLINQ_INPUT_FORCE: ${{ inputs.force }}
           BLINQ_INPUT_RETRY_UNRESOLVED: ${{ inputs.retry_unresolved }}
           BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
+          BLINQ_REQUESTS_USED: ${{ needs.enrich-environment-1.outputs.requests_used || '0' }}
         run: |
           set -euo pipefail
+          REMAINING_REQUESTS=$((BLINQ_INPUT_MAX_REQUESTS - BLINQ_REQUESTS_USED))
+          if (( REMAINING_REQUESTS <= 0 )); then
+            echo "Open-Meteo/geocoder request budget already exhausted by pass 1; nothing to continue."
+            exit 0
+          fi
           END_VALUE="$BLINQ_INPUT_END"
           if [[ -z "$END_VALUE" ]]; then END_VALUE="$(date -u +%F)"; fi
           ARGS=(
             --start "$BLINQ_INPUT_START"
             --end "$END_VALUE"
             --limit "$BLINQ_INPUT_LIMIT"
-            --max-requests "$BLINQ_INPUT_MAX_REQUESTS"
+            --max-requests "$REMAINING_REQUESTS"
             --max-runtime-minutes "325"
             --stop-at "$BLINQ_STOP_AT"
             --data-repository "$TBT_DATA_REPOSITORY"
