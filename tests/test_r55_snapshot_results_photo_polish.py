@@ -35,5 +35,7 @@ def test_player_avatar_fallback_is_layered_not_async_src_replacement():
 
 def test_daily_offer_snapshot_is_a_dedicated_release_asset():
     assert 'daily_offer_snapshot.json' in PIPELINE
-    assert 'snapshot_source = prior_snapshot if isinstance(prior_snapshot, dict) and prior_snapshot else prior_feed' in PIPELINE
+    assert 'snapshot_sources = []' in PIPELINE
+    assert 'snapshot_sources.append(prior_snapshot)' in PIPELINE
+    assert 'snapshot_sources.append(prior_feed)' in PIPELINE
     assert 'build_daily_offer_snapshot(' in PIPELINE
