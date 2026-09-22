@@ -59,7 +59,7 @@ def main() -> int:
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True, executable_path=executable) if executable else pw.chromium.launch(headless=True)
         try:
-            for width in (390, 1440):
+            for width in (320, 375, 390, 430, 768, 1440):
                 for locale in ("sk", "cz", "en"):
                     context = browser.new_context(viewport={"width": width, "height": 900})
                     context.route(f"{ORIGIN}/**", static_route)
@@ -76,6 +76,50 @@ def main() -> int:
                     assert lang == expected_lang, (locale, width, lang)
                     overflow = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
                     assert overflow <= 1, (locale, width, overflow)
+
+                    # Layout audit independent of auth/feed fixtures: exercise the committed
+                    # Results CSS and dialog constraints in a real Chromium viewport.
+                    page.evaluate("""() => {
+                      document.body.classList.add('blinq-route');
+                      const host=document.querySelector('#routePanel');
+                      host.hidden=false;
+                      host.innerHTML='<div class="results-table-wrap"><table class="results-table"><thead><tr><th>Turnaj</th><th>Zápas</th><th>Predikcia</th></tr></thead><tbody><tr><td data-label="Turnaj">ATP Test</td><td data-label="Zápas">Player Alpha vs Player Beta</td><td data-label="Predikcia">Player Alpha</td></tr></tbody></table></div>';
+                    }""")
+                    page.wait_for_timeout(30)
+                    overflow = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
+                    assert overflow <= 1, ("results", locale, width, overflow)
+                    if width <= 900:
+                        assert page.locator(".results-table").evaluate("el => getComputedStyle(el).minWidth") == "0px"
+                        label_size = page.locator(".results-table td").first.evaluate("el => parseFloat(getComputedStyle(el,'::before').fontSize)")
+                        assert label_size >= 9.5, (locale, width, label_size)
+
+                    # Dialogs must stay inside the viewport.
+                    for dialog_id in ("accountDialog", "matchDialog"):
+                        page.evaluate("""id => {
+                          const d=document.getElementById(id);
+                          const content=d.querySelector('div[id$="Content"]') || d.querySelector('#dialogContent');
+                          if(content) content.innerHTML='<div style="width:1400px;height:80px">layout probe</div>';
+                          if(!d.open)d.showModal();
+                        }""", dialog_id)
+                        box=page.locator(f"#{dialog_id}").bounding_box()
+                        assert box and box["width"] <= width + 1, (dialog_id, locale, width, box)
+                        page.evaluate("id => document.getElementById(id).close()", dialog_id)
+
+                    # Player image chain: failed primary URL retries a second local source,
+                    # while a failed last source can still expose the mounted fallback.
+                    page.evaluate("""() => {
+                      const probe=document.createElement('span');
+                      probe.id='avatarAuditProbe';
+                      probe.className='player-avatar layered-player-avatar player-fallback-wta has-photo';
+                      probe.innerHTML='<span class="player-avatar-initials">AA</span><img class="player-avatar-fallback" data-player-fallback src="/assets/missing_foto_w.webp"><img class="player-avatar-photo" data-player-photo data-photo-next="[&quot;/assets/missing_foto_w.webp&quot;]" src="/__avatar_missing__.webp">';
+                      document.body.appendChild(probe);
+                    }""")
+                    page.wait_for_timeout(100)
+                    probe=page.locator("#avatarAuditProbe [data-player-photo]")
+                    assert probe.get_attribute("src").startswith("/assets/missing_foto_w.webp"), (locale, width, probe.get_attribute("src"))
+                    assert not probe.is_hidden(), (locale, width)
+                    page.locator("#avatarAuditProbe").evaluate("el => el.remove()")
+
                     telegram = page.locator("#telegramGroupsPanel").inner_text()
                     cookies = page.locator("#cookieConsent").inner_text()
                     headers = page.locator("#dailyHubHead").inner_text()

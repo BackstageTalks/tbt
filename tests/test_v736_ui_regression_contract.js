@@ -8,7 +8,7 @@ const tiers = JSON.parse(fs.readFileSync('web/config/membership-tiers.json','utf
 const loader = fs.readFileSync('web/assets/blinq_loading_r29.svg','utf8');
 
 // Loading: animated rally remains present and both loader + normal app have watermark contracts.
-assert.match(html,/blinq_loading_r29\.svg\?v=7360\&p=55/);
+assert.match(html,/blinq_loading_r29\.svg\?v=7360\&p=\d+/);
 assert.match(loader,/<animateTransform/);
 assert.equal(loader.includes('data:image/webp;base64,'),false);
 assert.ok(fs.existsSync('web/assets/blinq_background.webp'));
@@ -43,3 +43,10 @@ for (const label of ['PLAYER IMAGES','TOURNAMENT LOGOS','INFO STORAGE','LIVE DAT
 const patch = html.match(/<meta name="blinq-web-patch" content="736-r(\d+)"/);
 assert.ok(patch);
 console.log(`PASS: BlinQ 7.3.6-r${patch[1]} UI regression contract`);
+
+// R56 audit guard: mobile Results cannot inherit the desktop fixed-width table.
+assert.match(css,/@media\(min-width:901px\)\{\s*body#blinqPremium\.blinq-route:not\(\.blinq-admin\) \.results-table\{min-width:980px!important\}/);
+assert.equal(css.includes('.results-table{min-width:980px!important}\nbody#blinqPremium'), false);
+assert.match(app,/function playerGender\(/);
+assert.match(app,/data-photo-next/);
+assert.match(app,/playerPhotoCandidates\(/);

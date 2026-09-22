@@ -6166,7 +6166,7 @@ body#blinqPremium .admin-inactivity-danger>small{font-size:7px!important;line-he
   /* Bottom navigation: safe-area aware, vector icons are explicitly stroke-only
      so browser/default SVG fill can never create giant black silhouettes. */
   body#blinqPremium:not(.blinq-admin) .mobile-tabs{position:fixed!important;display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;left:8px!important;right:8px!important;bottom:calc(8px + env(safe-area-inset-bottom,0px))!important;z-index:150!important;height:62px!important;min-height:62px!important;padding:4px!important;border:1px solid rgba(87,151,130,.32)!important;border-radius:15px!important;background:rgba(3,18,20,.94)!important;box-shadow:0 14px 40px rgba(0,0,0,.34)!important;backdrop-filter:blur(12px)!important;-webkit-backdrop-filter:blur(12px)!important;overflow:hidden!important}
-  body#blinqPremium:not(.blinq-admin) .mobile-tabs a{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:3px!important;min-width:0!important;height:52px!important;padding:4px!important;border-radius:10px!important;color:#879b95!important;text-decoration:none!important;font-size:8px!important;font-weight:720!important;line-height:1!important;overflow:hidden!important}
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs a{display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;gap:3px!important;min-width:0!important;height:52px!important;padding:4px!important;border-radius:10px!important;color:#879b95!important;text-decoration:none!important;font-size:11px!important;font-weight:720!important;line-height:1.12!important;overflow:hidden!important}
   body#blinqPremium:not(.blinq-admin) .mobile-tabs a.active{color:#45eaa3!important;background:rgba(59,232,157,.065)!important}
   body#blinqPremium:not(.blinq-admin) .mobile-tabs a>svg{display:block!important;width:19px!important;height:19px!important;min-width:19px!important;max-width:19px!important;min-height:19px!important;max-height:19px!important;fill:none!important;stroke:currentColor!important;stroke-width:1.55!important;stroke-linecap:round!important;stroke-linejoin:round!important;transform:none!important;overflow:visible!important}
   body#blinqPremium:not(.blinq-admin) .mobile-tabs a>svg path{fill:none!important;stroke:currentColor!important;stroke-width:1.55!important;vector-effect:non-scaling-stroke!important;transform:none!important}
@@ -6181,7 +6181,7 @@ body#blinqPremium .admin-inactivity-danger>small{font-size:7px!important;line-he
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table tbody{display:grid!important;gap:8px!important}
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table tr{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px 10px!important;width:100%!important;min-width:0!important;padding:10px!important;border:1px solid rgba(77,139,121,.22)!important;border-radius:10px!important;background:linear-gradient(145deg,#071a16,#051410)!important;overflow:hidden!important}
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td{display:block!important;width:auto!important;min-width:0!important;max-width:none!important;padding:0!important;border:0!important;font-size:9px!important;overflow:visible!important}
-  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td:before{content:attr(data-label)!important;display:block!important;margin-bottom:3px!important;color:#668178!important;font-size:5.5px!important;font-weight:850!important;letter-spacing:.09em!important;text-transform:uppercase!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td:before{content:attr(data-label)!important;display:block!important;margin-bottom:3px!important;color:#668178!important;font-size:10px!important;font-weight:850!important;letter-spacing:.06em!important;text-transform:uppercase!important}
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td:nth-child(3),
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td:nth-child(4),
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td:nth-child(5){grid-column:1/-1!important;width:auto!important;min-width:0!important}
@@ -6780,7 +6780,7 @@ body#blinqPremium .results-units-depth small{color:#789087!important;font-size:7
   body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-player-copy>b,
   body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-pick-stack strong{font-size:10.5px!important}
   body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-number-stack strong{font-size:11.5px!important}
-  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table{font-size:9.8px!important;min-width:1220px!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table{font-size:9.8px!important}
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table th{font-size:7.6px!important}
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td{font-size:9.8px!important}
   body#blinqPremium.blinq-route:not(.blinq-admin) .results-table td strong,
@@ -6795,23 +6795,19 @@ body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-model .hub-number-st
 body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-model .hub-number-stack strong{font-size:12px!important;white-space:nowrap!important}
 body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-confidence{display:flex!important;flex-direction:column!important;align-items:flex-end!important;gap:2px!important;min-width:58px!important}
 body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-confidence strong{font-size:12px!important;color:#55efad!important;white-space:nowrap!important}
-body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-confidence small{font-size:6.5px!important;line-height:1.05!important;color:#9eb0aa!important;white-space:nowrap!important}
-body#blinqPremium .hub-avatar.player-fallback-atp,
-body#blinqPremium .hub-avatar.player-fallback-wta,
-body#blinqPremium .player-avatar.player-fallback-atp,
-body#blinqPremium .player-avatar.player-fallback-wta{color:transparent!important;font-size:0!important}
+body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-confidence small{font-size:10px!important;line-height:1.05!important;color:#9eb0aa!important;white-space:nowrap!important}
 @media(max-width:900px){body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-model{justify-content:flex-start!important;gap:18px!important}body#blinqPremium #dailyHub[data-tab="see_all"] .hub-seeall-confidence{align-items:flex-start!important}}
 
 /* BlinQ runtime patch 7.3.6-r55 — daily offer snapshot */
 body#blinqPremium .daily-hub-table tbody tr.hub-row-started td{background:rgba(5,20,17,.34)!important}
 body#blinqPremium .daily-hub-table tbody tr.hub-row-started .hub-match-cell,
 body#blinqPremium .daily-hub-table tbody tr.hub-row-started .hub-pick{opacity:.82}
-body#blinqPremium .hub-offer-status{display:inline-flex!important;align-items:center!important;width:max-content!important;margin-top:2px!important;padding:2px 5px!important;border:1px solid rgba(215,190,91,.34)!important;border-radius:999px!important;color:#d9c56c!important;font-size:6.5px!important;font-style:normal!important;font-weight:900!important;letter-spacing:.07em!important;line-height:1!important}
-@media(max-width:760px){body#blinqPremium .hub-offer-status{font-size:6px!important;padding:2px 4px!important}}
+body#blinqPremium .hub-offer-status{display:inline-flex!important;align-items:center!important;width:max-content!important;margin-top:2px!important;padding:2px 5px!important;border:1px solid rgba(215,190,91,.34)!important;border-radius:999px!important;color:#d9c56c!important;font-size:10px!important;font-style:normal!important;font-weight:900!important;letter-spacing:.07em!important;line-height:1!important}
+@media(max-width:760px){body#blinqPremium .hub-offer-status{font-size:9.5px!important;padding:2px 4px!important}}
 
 
 /* ========================================================================
-   R55 final polish — deterministic player fallbacks + calm Results typography
+   R56 final polish — deterministic player fallbacks + calm Results typography
    ======================================================================== */
 /* Every player avatar carries three layers at once:
    real cached photo -> local ATP/WTA fallback -> initials. */
@@ -6834,7 +6830,9 @@ body#blinqPremium .layered-player-avatar.using-fallback .player-avatar-fallback{
 body#blinqPremium .layered-player-avatar.using-initials .player-avatar-initials{z-index:3!important}
 
 /* Results: one visual rhythm. Selection is communicated by colour/TIP, not type size. */
-body#blinqPremium.blinq-route:not(.blinq-admin) .results-table{min-width:980px!important}
+@media(min-width:901px){
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table{min-width:980px!important}
+}
 body#blinqPremium.blinq-route:not(.blinq-admin) .results-table th{
   font-size:9px!important;line-height:1.15!important;font-weight:820!important;
 }
