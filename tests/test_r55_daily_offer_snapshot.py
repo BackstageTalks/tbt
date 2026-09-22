@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from tbt.services.feed import visible_feed
-from tbt.services.publication import carry_forward_betting_day_market_rows
+from tbt.services.publication import build_daily_offer_snapshot, carry_forward_betting_day_market_rows
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB = ROOT / "web"
@@ -125,3 +125,30 @@ def test_r55_visible_feed_keeps_started_offer_until_day_rollover():
 
     next_day = visible_feed(deepcopy(raw), now=datetime(2026, 9, 22, 5, 0, tzinfo=timezone.utc))
     assert next_day["top_daily_picks"] == []
+
+
+def test_r55_persistent_snapshot_keeps_current_day_offer_independent_of_future_discovery():
+    now = datetime(2026, 9, 21, 18, 0, tzinfo=timezone.utc)
+    morning = winner_row("morning", "2026-09-21T08:00:00+00:00", selection="Alpha", odds=1.70)
+    later = winner_row("later", "2026-09-21T21:00:00+00:00", selection="Alpha", odds=1.80)
+    feed = {
+        "top_daily_picks": [morning, later],
+        "prime_picks": [],
+        "value_picks": [],
+        "doubles_picks": [],
+        "ace_picks": [],
+        "sg_picks": [],
+    }
+    snapshot = build_daily_offer_snapshot(feed, now=now)
+    assert snapshot["betting_day"] == "2026-09-21"
+    assert [row["event_id"] for row in snapshot["top_daily_picks"]] == ["morning", "later"]
+    assert snapshot["totals"]["top_daily_picks"] == 2
+
+
+def test_r55_pipeline_persists_and_reloads_daily_offer_snapshot_asset():
+    pipeline = (ROOT / "scripts" / "pipeline.py").read_text(encoding="utf-8")
+    assert '"daily_offer_snapshot.json" if "daily_offer_snapshot.json" in assets else None' in pipeline
+    assert 'prior_snapshot = read_json(prediction_dir / "daily_offer_snapshot.json", {})' in pipeline
+    assert 'snapshot_source = prior_snapshot if isinstance(prior_snapshot, dict) and prior_snapshot else prior_feed' in pipeline
+    assert 'write_json(store.directory / "daily_offer_snapshot.json", snapshot)' in pipeline
+    assert 'store.directory / "daily_offer_snapshot.json",' in pipeline
