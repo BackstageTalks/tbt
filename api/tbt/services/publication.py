@@ -9,6 +9,8 @@ from datetime import datetime, timedelta, timezone
 from copy import deepcopy
 from zoneinfo import ZoneInfo
 
+PUBLICATION_CUTOFF_MINUTES = 5
+
 
 def _prediction_commitment(row):
     """Return the immutable prediction identity that a public feed commits to.
@@ -151,9 +153,14 @@ def confirm_publication(ledger, published_rows, now=None):
             )
 
         scheduled_at = datetime.fromisoformat(row["scheduled_at"])
-        if scheduled_at <= now:
+        cutoff = scheduled_at - timedelta(minutes=PUBLICATION_CUTOFF_MINUTES)
+        if now >= cutoff:
             row["publication_status"] = "expired_unpublished"
-            row["excluded_reason"] = "not_confirmed_before_start"
+            row["excluded_reason"] = (
+                "not_confirmed_before_start"
+                if now >= scheduled_at
+                else "inside_publication_cutoff"
+            )
         else:
             row["issued_at"] = now.isoformat()
             row["publication_status"] = "published"
@@ -435,113 +442,210 @@ def _current_betting_day(now, *, timezone_name="Europe/Bratislava", start_hour=6
     return boundary.date().isoformat()
 
 
-def carry_forward_betting_day_market_rows(
-    feed, prior_feed, ledger, *, now=None, timezone_name="Europe/Bratislava", start_hour=6
-):
-    """Keep already-issued daily market rows visible for the whole betting day.
+def _market_row_section(key, row):
+    market = str(
+        (row.get("betting") or {}).get("market")
+        if isinstance(row.get("betting"), dict)
+        else row.get("market") or ""
+    ).strip().lower()
+    market = market or str(
+        row.get("market") or row.get("projection_metric") or ""
+    ).strip().lower()
+    if key == "ace_picks":
+        return "double_faults" if market == "double_faults" else "ace" if market == "aces" else ""
+    if key == "sg_picks":
+        return market if market in {"games", "sets"} else ""
+    return {
+        "top_daily_picks": "top_daily",
+        "prime_picks": "prime",
+        "value_picks": "value",
+        "doubles_picks": "doubles",
+    }.get(key, "")
 
-    The live refresh may stop returning an event as soon as it starts.  That is
-    correct for provider discovery but wrong for the product's daily published
-    offer: users must still be able to see what BlinQ published earlier that
-    morning.  This helper therefore carries only rows with *issued* publication
-    evidence from the previous deployed candidate, preserves their original
-    order/snapshot, and appends genuinely new current-day candidates afterwards.
 
-    Pending/unconfirmed rows are never carried after they disappear, so a failed
-    deployment cannot accidentally publish a pick for the first time after start.
-    """
-    if not isinstance(feed, dict) or not isinstance(prior_feed, dict) or not isinstance(ledger, list):
-        raise ValueError("Invalid daily snapshot artifacts")
-    now = now or datetime.now(timezone.utc)
-    day = _current_betting_day(now, timezone_name=timezone_name, start_hour=start_hour)
-    result = deepcopy(feed)
-
-    ledger_index = {}
+def _market_ledger_index(ledger):
+    index = {}
     for source in ledger:
         if not isinstance(source, dict):
             continue
         event_id = str(source.get("event_id") or "").strip()
         if event_id:
-            ledger_index[event_id] = source
+            index[event_id] = source
+    return index
 
-    report = {"betting_day": day, "carried": {}, "new": {}, "total": {}}
+
+def _issued_exact_market_row(row, key, ledger_index):
+    section = _market_row_section(key, row)
+    if not section:
+        return False
+    try:
+        commitment = _market_commitment_from_feed_row(row, section)
+    except ValueError:
+        return False
+    source = ledger_index.get(commitment[0]) or {}
+    for publication in source.get("market_publications", []) or []:
+        if not isinstance(publication, dict):
+            continue
+        if not publication.get("issued_at"):
+            continue
+        if str(publication.get("publication_status") or "") != "published":
+            continue
+        try:
+            if _market_commitment_from_publication(commitment[0], publication) == commitment:
+                return True
+        except ValueError:
+            continue
+    return False
+
+
+def _market_row_identity(row, key, *, timezone_name="Europe/Bratislava", start_hour=6):
+    section = _market_row_section(key, row)
+    if not section:
+        return None
+    event_id = str(row.get("event_id") or "").strip()
+    # One immutable public choice per event + section + day.
+    # A later model/price flip must not replace or duplicate an issued pick.
+    return (
+        event_id,
+        section,
+        _row_betting_day(
+            row,
+            timezone_name=timezone_name,
+            start_hour=start_hour,
+        ),
+    )
+
+
+def _market_row_before_cutoff(row, now, cutoff_minutes=PUBLICATION_CUTOFF_MINUTES):
+    raw = row.get("scheduled_at") or row.get("start_at") or row.get("start_time")
+    if not raw:
+        return False
+    try:
+        scheduled = datetime.fromisoformat(str(raw).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if scheduled.tzinfo is None:
+        return False
+    return now < scheduled - timedelta(minutes=max(0, int(cutoff_minutes)))
+
+
+def carry_forward_betting_day_market_rows(
+    feed,
+    prior_feed,
+    ledger,
+    *,
+    now=None,
+    timezone_name="Europe/Bratislava",
+    start_hour=6,
+    publication_cutoff_minutes=PUBLICATION_CUTOFF_MINUTES,
+):
+    """Keep the public offer monotonic for one BlinQ betting day.
+
+    prior_feed may be one dict or an ordered list of sources. Passing both the
+    daily snapshot and previous feed makes recovery resilient even when one
+    source is accidentally empty or incomplete.
+
+    Old rows are carried only when immutable ledger evidence proves they were
+    already published. New rows append only while they are safely before the
+    publish cutoff. Existing rows never disappear merely because an event starts.
+    """
+    if not isinstance(feed, dict) or not isinstance(ledger, list):
+        raise ValueError("Invalid daily snapshot artifacts")
+    if isinstance(prior_feed, dict):
+        prior_sources = [prior_feed]
+    elif isinstance(prior_feed, (list, tuple)) and all(isinstance(item, dict) for item in prior_feed):
+        prior_sources = list(prior_feed)
+    else:
+        raise ValueError("Invalid daily snapshot prior sources")
+
+    now = now or datetime.now(timezone.utc)
+    day = _current_betting_day(now, timezone_name=timezone_name, start_hour=start_hour)
+    result = deepcopy(feed)
+    ledger_index = _market_ledger_index(ledger)
+
+    report = {
+        "betting_day": day,
+        "carried": {},
+        "new": {},
+        "skipped_cutoff": {},
+        "total": {},
+    }
     processed_keys = set()
     for section, key in _MARKET_SECTION_KEYS.items():
-        # ace/double_faults and games/sets share one physical feed list. Process
-        # each list once, while still checking each row against its own section.
         if key in processed_keys:
             continue
         processed_keys.add(key)
+
         current_rows = result.get(key) if isinstance(result.get(key), list) else []
-        prior_rows = prior_feed.get(key) if isinstance(prior_feed.get(key), list) else []
+        prior_rows = []
+        for source in prior_sources:
+            rows = source.get(key) if isinstance(source.get(key), list) else []
+            prior_rows.extend(rows)
 
-        def row_section(row):
-            market = str((row.get("betting") or {}).get("market") if isinstance(row.get("betting"), dict) else row.get("market") or "").strip().lower()
-            market = market or str(row.get("market") or row.get("projection_metric") or "").strip().lower()
-            if key == "ace_picks":
-                return "double_faults" if market == "double_faults" else "ace" if market == "aces" else ""
-            if key == "sg_picks":
-                return market if market in {"games", "sets"} else ""
-            return {"top_daily_picks":"top_daily","prime_picks":"prime","value_picks":"value","doubles_picks":"doubles"}.get(key, "")
+        kept = []
+        seen = set()
+        carried = 0
 
-        def issued_exact(row):
-            sec = row_section(row)
-            if not sec:
-                return False
-            try:
-                commitment = _market_commitment_from_feed_row(row, sec)
-            except ValueError:
-                return False
-            source = ledger_index.get(commitment[0]) or {}
-            for publication in source.get("market_publications", []) or []:
-                if not isinstance(publication, dict):
-                    continue
-                if not publication.get("issued_at") or str(publication.get("publication_status") or "") != "published":
-                    continue
-                try:
-                    if _market_commitment_from_publication(commitment[0], publication) == commitment:
-                        return True
-                except ValueError:
-                    continue
-            return False
-
-        def identity(row):
-            sec = row_section(row)
-            if not sec:
-                return None
-            event_id = str(row.get("event_id") or "").strip()
-            # Freeze one public choice per event+section+betting-day. If the
-            # model/provider later changes selection/line, yesterday's public
-            # commitment must not silently mutate during the same day.
-            return (event_id, sec, _row_betting_day(row, timezone_name=timezone_name, start_hour=start_hour))
-
-        kept=[]; seen=set(); carried=0
         for row in prior_rows:
             if not isinstance(row, dict):
                 continue
-            if _row_betting_day(row, timezone_name=timezone_name, start_hour=start_hour) != day:
+            if _row_betting_day(
+                row,
+                timezone_name=timezone_name,
+                start_hour=start_hour,
+            ) != day:
                 continue
-            if not issued_exact(row):
+            if not _issued_exact_market_row(row, key, ledger_index):
                 continue
-            ident=identity(row)
+            ident = _market_row_identity(
+                row,
+                key,
+                timezone_name=timezone_name,
+                start_hour=start_hour,
+            )
             if not ident or ident in seen:
                 continue
-            kept.append(deepcopy(row)); seen.add(ident); carried += 1
+            kept.append(deepcopy(row))
+            seen.add(ident)
+            carried += 1
 
-        new_count=0
+        new_count = 0
+        skipped_cutoff = 0
         for row in current_rows:
             if not isinstance(row, dict):
                 continue
-            if _row_betting_day(row, timezone_name=timezone_name, start_hour=start_hour) != day:
+            if _row_betting_day(
+                row,
+                timezone_name=timezone_name,
+                start_hour=start_hour,
+            ) != day:
                 continue
-            ident=identity(row)
+            ident = _market_row_identity(
+                row,
+                key,
+                timezone_name=timezone_name,
+                start_hour=start_hour,
+            )
             if not ident or ident in seen:
                 continue
-            kept.append(deepcopy(row)); seen.add(ident); new_count += 1
+
+            already_published = _issued_exact_market_row(row, key, ledger_index)
+            if not already_published and not _market_row_before_cutoff(
+                row,
+                now,
+                publication_cutoff_minutes,
+            ):
+                skipped_cutoff += 1
+                continue
+
+            kept.append(deepcopy(row))
+            seen.add(ident)
+            new_count += 1
 
         result[key] = kept
         report["carried"][key] = carried
         report["new"][key] = new_count
+        report["skipped_cutoff"][key] = skipped_cutoff
         report["total"][key] = len(kept)
 
     result["market_selection"] = {
@@ -549,7 +653,6 @@ def carry_forward_betting_day_market_rows(
         "daily_offer_snapshot": report,
     }
     return result, report
-
 
 def build_daily_offer_snapshot(
     feed, *, now=None, timezone_name="Europe/Bratislava", start_hour=6
@@ -590,6 +693,40 @@ def build_daily_offer_snapshot(
     return snapshot
 
 
+
+def build_confirmed_daily_offer_snapshot(
+    feed,
+    ledger,
+    *,
+    now=None,
+    timezone_name="Europe/Bratislava",
+    start_hour=6,
+):
+    """Persist only rows that the ledger proves were actually published."""
+    if not isinstance(feed, dict) or not isinstance(ledger, list):
+        raise ValueError("Invalid confirmed daily offer artifacts")
+    snapshot = build_daily_offer_snapshot(
+        feed,
+        now=now,
+        timezone_name=timezone_name,
+        start_hour=start_hour,
+    )
+    ledger_index = _market_ledger_index(ledger)
+    totals = {}
+    for key in dict.fromkeys(_MARKET_SECTION_KEYS.values()):
+        rows = snapshot.get(key) if isinstance(snapshot.get(key), list) else []
+        kept = [
+            deepcopy(row)
+            for row in rows
+            if isinstance(row, dict)
+            and _issued_exact_market_row(row, key, ledger_index)
+        ]
+        snapshot[key] = kept
+        totals[key] = len(kept)
+    snapshot["totals"] = totals
+    snapshot["confirmed_only"] = True
+    return snapshot
+
 def confirm_market_publications(ledger, deployed_feed, now=None):
     """Confirm section-specific betting publications after deployment."""
     now = now or datetime.now(timezone.utc)
@@ -616,9 +753,14 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
             scheduled_at = datetime.fromisoformat(str(row.get("scheduled_at") or "").replace("Z", "+00:00"))
             if scheduled_at.tzinfo is None:
                 raise ValueError("Naive market publication schedule")
-            if now >= scheduled_at:
+            cutoff = scheduled_at - timedelta(minutes=PUBLICATION_CUTOFF_MINUTES)
+            if now >= cutoff:
                 publication["publication_status"] = "expired_unpublished"
-                publication["excluded_reason"] = "not_confirmed_before_start"
+                publication["excluded_reason"] = (
+                    "not_confirmed_before_start"
+                    if now >= scheduled_at
+                    else "inside_publication_cutoff"
+                )
                 continue
             publication["issued_at"] = now.isoformat()
             publication["publication_status"] = "published"
