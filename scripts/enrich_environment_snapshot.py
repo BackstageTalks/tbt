@@ -24,6 +24,7 @@ from tbt.services.environment import (
     environment_payload,
     location_candidates,
     venue_learning_keys,
+    venue_context_compatible,
 )
 
 logger = logging.getLogger("tbt.enrich_environment_snapshot")
@@ -99,10 +100,21 @@ class VenueKnowledge:
         self._counts: dict[str, Counter[tuple[float, float]]] = defaultdict(Counter)
         self._representatives: dict[tuple[str, tuple[float, float]], dict[str, Any]] = {}
         self.observations = 0
+        self.rejected_observations = 0
+        self.rejected_reasons: Counter[str] = Counter()
 
     def add(self, match: Any, payload: dict[str, Any], venue: dict[str, Any]) -> None:
         signature = _venue_signature(venue)
         if signature is None:
+            return
+        compatible, reason = venue_context_compatible(
+            payload,
+            str(getattr(match, "tournament", "") or ""),
+            venue,
+        )
+        if not compatible:
+            self.rejected_observations += 1
+            self.rejected_reasons[reason] += 1
             return
         keys = venue_learning_keys(
             payload,
@@ -136,7 +148,13 @@ class VenueKnowledge:
             if len(counts) == 1 or (top_count >= 3 and top_count / max(1, total) >= 0.95):
                 venue = self._representatives.get((key, top_signature))
                 if venue:
-                    return deepcopy(venue), key
+                    compatible, _ = venue_context_compatible(
+                        payload,
+                        str(getattr(match, "tournament", "") or ""),
+                        venue,
+                    )
+                    if compatible:
+                        return deepcopy(venue), key
         return None, None
 
     @property
@@ -207,6 +225,19 @@ def _needs_work(
 
     if force:
         return True, "force"
+
+    if existing.get("venue_resolved") is True:
+        stored_venue = _as_dict(existing.get("venue"))
+        compatible, _ = venue_context_compatible(
+            payload,
+            str(getattr(match, "tournament", "") or ""),
+            stored_venue,
+        )
+        if not compatible:
+            # A previously "resolved" row that contradicts explicit country/city
+            # evidence is unsafe training data. Re-run it even in ordinary resume
+            # modes so a poisoned history-cache result can be repaired or cleared.
+            return True, "incompatible_resolved"
 
     if complete_static:
         if existing.get("venue_resolved") is True:
@@ -344,7 +375,12 @@ def main() -> None:
         "max_requests": int(args.max_requests),
         "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
         "venue_cache_observations": knowledge.observations,
+        "venue_cache_rejected_observations": knowledge.rejected_observations,
+        "venue_cache_rejected_reasons": dict(knowledge.rejected_reasons),
         "venue_cache_reusable_keys": knowledge.reusable_keys,
+        "incompatible_existing_resolved": 0,
+        "repaired_incompatible_resolved": 0,
+        "invalidated_incompatible_resolved": 0,
         "weather_policy": "not_requested_static_only" if args.static_only else "historical_archive_posthoc_research_only",
         "training_eligible_weather": False,
         "budget_exhausted": False,
@@ -354,6 +390,7 @@ def main() -> None:
     }
 
     pending: list[Any] = []
+    pending_reasons: dict[str, str] = {}
     for match in in_scope:
         payload = dict(match.provider_payload or {})
         needs_work, reason = _needs_work(
@@ -366,6 +403,9 @@ def main() -> None:
         )
         if needs_work:
             pending.append(match)
+            pending_reasons[str(match.match_id)] = reason
+            if reason == "incompatible_resolved":
+                report["incompatible_existing_resolved"] += 1
         else:
             report["already_enriched"] += 1
             if reason == "unresolved_current_resolver":
@@ -417,6 +457,7 @@ def main() -> None:
     try:
         for match in pending:
             report["inspected"] += 1
+            selection_reason = pending_reasons.get(str(match.match_id), "")
             payload = dict(match.provider_payload or {})
             detail = {
                 "match_id": match.match_id,
@@ -465,6 +506,8 @@ def main() -> None:
             payload["_tbt_environment"] = env
             if env.get("venue_resolved") is True:
                 report["resolved"] += 1
+                if selection_reason == "incompatible_resolved":
+                    report["repaired_incompatible_resolved"] += 1
                 detail["resolved_query"] = env.get("location_query")
                 detail["resolved_venue"] = env.get("venue")
                 if len(report["resolved_details"]) < args.diagnostics_limit:
@@ -473,6 +516,8 @@ def main() -> None:
                 knowledge.add(match, payload, _as_dict(env.get("venue")))
             else:
                 report["unresolved"] += 1
+                if selection_reason == "incompatible_resolved":
+                    report["invalidated_incompatible_resolved"] += 1
                 if len(report["unresolved_details"]) < args.diagnostics_limit:
                     report["unresolved_details"].append(detail)
 
@@ -491,6 +536,8 @@ def main() -> None:
     report["open_meteo_requests"] = client.request_count
     report["changed_years"] = sorted(published_years | changed_years)
     report["venue_cache_reusable_keys_after_run"] = knowledge.reusable_keys
+    report["venue_cache_rejected_observations_after_run"] = knowledge.rejected_observations
+    report["venue_cache_rejected_reasons_after_run"] = dict(knowledge.rejected_reasons)
     report_path = history_dir / "environment_enrichment_report.json"
     _write_report(report_path, report)
     if not args.dry_run:
