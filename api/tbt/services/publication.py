@@ -550,6 +550,46 @@ def carry_forward_betting_day_market_rows(
     }
     return result, report
 
+
+def build_daily_offer_snapshot(
+    feed, *, now=None, timezone_name="Europe/Bratislava", start_hour=6
+):
+    """Persist only the current betting-day public offer rows.
+
+    This is deliberately separate from feed.json. A later refresh may legitimately
+    have zero future fixtures, but that must never erase rows users already saw
+    earlier in the same BlinQ day. Pending rows may be present in this snapshot;
+    carry_forward_betting_day_market_rows still requires issued ledger evidence
+    before it carries a row after it disappears from current discovery.
+    """
+    if not isinstance(feed, dict):
+        raise ValueError("Invalid daily offer feed")
+    now = now or datetime.now(timezone.utc)
+    day = _current_betting_day(now, timezone_name=timezone_name, start_hour=start_hour)
+    snapshot = {
+        "schema": 1,
+        "betting_day": day,
+        "generated_at": now.astimezone(timezone.utc).isoformat(),
+    }
+    totals = {}
+    for key in dict.fromkeys(_MARKET_SECTION_KEYS.values()):
+        rows = feed.get(key) if isinstance(feed.get(key), list) else []
+        kept = [
+            deepcopy(row)
+            for row in rows
+            if isinstance(row, dict)
+            and _row_betting_day(
+                row,
+                timezone_name=timezone_name,
+                start_hour=start_hour,
+            ) == day
+        ]
+        snapshot[key] = kept
+        totals[key] = len(kept)
+    snapshot["totals"] = totals
+    return snapshot
+
+
 def confirm_market_publications(ledger, deployed_feed, now=None):
     """Confirm section-specific betting publications after deployment."""
     now = now or datetime.now(timezone.utc)
