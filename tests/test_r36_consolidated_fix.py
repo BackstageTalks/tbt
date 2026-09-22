@@ -55,7 +55,7 @@ def test_player_photo_fallback_chain_is_layered_and_not_short_circuited():
     assert "/assets/missing_foto_w.webp" in APP
     assert "data-player-fallback" in APP
     assert "class=\"player-avatar-photo\" data-player-photo" in APP
-    assert "if (img.matches('[data-player-photo]')) return;" in RESPONSIVE
+    assert "if (img.matches('[data-player-photo],[data-player-fallback]')) return;" in RESPONSIVE
     assert (WEB / "assets" / "missing_foto_m.webp").is_file()
     assert (WEB / "assets" / "missing_foto_w.webp").is_file()
 
