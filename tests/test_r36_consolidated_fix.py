@@ -50,10 +50,11 @@ def test_live_and_locked_detail_copy_are_unambiguous():
     assert ".hub-detail.is-locked>small{display:none!important}" in CSS
 
 
-def test_player_photo_fallback_chain_is_not_short_circuited():
+def test_player_photo_fallback_chain_is_layered_and_not_short_circuited():
     assert "/assets/missing_foto_m.webp" in APP
     assert "/assets/missing_foto_w.webp" in APP
-    assert "img.dataset.fallbackApplied='1'" in APP
+    assert "data-player-fallback" in APP
+    assert "class=\"player-avatar-photo\" data-player-photo" in APP
     assert "if (img.matches('[data-player-photo]')) return;" in RESPONSIVE
     assert (WEB / "assets" / "missing_foto_m.webp").is_file()
     assert (WEB / "assets" / "missing_foto_w.webp").is_file()
