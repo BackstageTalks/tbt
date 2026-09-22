@@ -6871,3 +6871,18 @@ body#blinqPremium.blinq-route:not(.blinq-admin) .results-actual{
 body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-sub{
   margin-top:5px!important;
 }
+
+
+/* Results do not need a second winner hierarchy inside the match cell:
+   the Predikcia column already states the published pick. */
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-player.is-pick,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-player.is-opponent,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-opponent.is-pick,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-opponent.is-opponent{opacity:1!important}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-player.is-pick strong,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-match-player.is-opponent strong,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-opponent.is-pick strong,
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-opponent.is-opponent strong{
+  color:#dce9e4!important;font-size:11px!important;font-weight:760!important;
+}
+body#blinqPremium.blinq-route:not(.blinq-admin) .results-pick-mark{display:none!important}
