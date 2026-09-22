@@ -60,7 +60,7 @@ jobs:
       stop_at_local: ${{ steps.deadline.outputs.stop_at_local }}
     steps:
       - id: deadline
-        name: Plan nightly stop time
+        name: Plan 10-hour enrichment window
         shell: bash
         run: |
           set -euo pipefail
@@ -69,16 +69,16 @@ jobs:
           from datetime import datetime, timedelta, timezone
           from zoneinfo import ZoneInfo
 
-          zone = ZoneInfo("Europe/Bratislava")
-          now = datetime.now(zone)
-          stop = now.replace(hour=3, minute=0, second=0, microsecond=0)
-          if stop <= now:
-              stop += timedelta(days=1)
-          stop_utc = stop.astimezone(timezone.utc)
+          started_at = datetime.now(timezone.utc)
+          stop_utc = started_at + timedelta(hours=10)
+          stop_local = stop_utc.astimezone(ZoneInfo("Europe/Bratislava"))
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
               fh.write(f"stop_at={stop_utc.isoformat()}\n")
-              fh.write(f"stop_at_local={stop.isoformat()}\n")
-          print(f"Environment window will stop cleanly at {stop.isoformat()} ({stop_utc.isoformat()} UTC)")
+              fh.write(f"stop_at_local={stop_local.isoformat()}\n")
+          print(
+              f"Environment may run for 10 hours, through "
+              f"{stop_local.isoformat()} Bratislava time ({stop_utc.isoformat()} UTC)."
+          )
           PY
 
   enrich-environment-1:
