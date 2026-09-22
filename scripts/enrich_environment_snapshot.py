@@ -4,6 +4,7 @@ import argparse
 import json
 import logging
 import os
+import time
 from collections import Counter, defaultdict
 from copy import deepcopy
 from dataclasses import asdict
@@ -300,6 +301,23 @@ def main() -> None:
     parser.add_argument("--diagnostics-limit", type=int, default=100)
     parser.add_argument("--checkpoint-every", type=int, default=250)
     parser.add_argument(
+        "--max-runtime-minutes",
+        type=int,
+        default=0,
+        help=(
+            "Graceful per-job runtime guard. 0 = unlimited. "
+            "Use below the GitHub-hosted 6h hard limit so progress can checkpoint cleanly."
+        ),
+    )
+    parser.add_argument(
+        "--stop-at",
+        default="",
+        help=(
+            "Optional absolute UTC/ISO deadline. The run checkpoints and exits cleanly "
+            "when this instant is reached."
+        ),
+    )
+    parser.add_argument(
         "--data-repository",
         default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"),
     )
@@ -317,11 +335,15 @@ def main() -> None:
         parser.error("--max-requests must be 1..12000")
     if args.limit < 0:
         parser.error("limit must be >= 0")
+    if args.max_runtime_minutes < 0:
+        parser.error("--max-runtime-minutes must be >= 0")
     if args.force and (args.retry_unresolved or args.complete_static):
         parser.error("--force cannot be combined with --retry-unresolved/--complete-static")
 
     start = parse_utc(args.start)
     end = parse_utc(args.end)
+    stop_at = parse_utc(args.stop_at) if args.stop_at.strip() else None
+    run_started_monotonic = time.monotonic()
     if end <= start:
         parser.error("--end must be later than --start")
     if end > datetime.now(timezone.utc):
@@ -384,6 +406,11 @@ def main() -> None:
         "weather_policy": "not_requested_static_only" if args.static_only else "historical_archive_posthoc_research_only",
         "training_eligible_weather": False,
         "budget_exhausted": False,
+        "runtime_guard_minutes": int(args.max_runtime_minutes),
+        "stop_at": stop_at.isoformat() if stop_at else None,
+        "runtime_guard_exhausted": False,
+        "stop_at_reached": False,
+        "stopped_reason": None,
         "resolved_details": [],
         "unresolved_details": [],
         "error_details": [],
@@ -456,6 +483,18 @@ def main() -> None:
 
     try:
         for match in pending:
+            elapsed_seconds = time.monotonic() - run_started_monotonic
+            if args.max_runtime_minutes and elapsed_seconds >= args.max_runtime_minutes * 60:
+                report["runtime_guard_exhausted"] = True
+                report["stopped_reason"] = "runtime_guard"
+                checkpoint()
+                break
+            if stop_at is not None and datetime.now(timezone.utc) >= stop_at:
+                report["stop_at_reached"] = True
+                report["stopped_reason"] = "deadline"
+                checkpoint()
+                break
+
             report["inspected"] += 1
             selection_reason = pending_reasons.get(str(match.match_id), "")
             payload = dict(match.provider_payload or {})
@@ -534,6 +573,7 @@ def main() -> None:
         client.close()
 
     report["open_meteo_requests"] = client.request_count
+    report["elapsed_runtime_seconds"] = round(time.monotonic() - run_started_monotonic, 3)
     report["changed_years"] = sorted(published_years | changed_years)
     report["venue_cache_reusable_keys_after_run"] = knowledge.reusable_keys
     report["venue_cache_rejected_observations_after_run"] = knowledge.rejected_observations
