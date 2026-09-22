@@ -334,11 +334,25 @@ def _publish_predictions(
         **(feed.get("market_selection") or {}),
         "live_second_set_projection_report": comeback_report,
     }
+    # First validate/restore the *current selector output* before daily carry-forward.
+    # The selector integrity contract is exact only at this stage: after the
+    # betting-day snapshot is merged, the final public feed is intentionally a
+    # superset because already-issued morning rows remain visible after start.
+    feed = clean(feed)
+    feed = restore_published_market_snapshots(feed, records)
+    integrity = _projection_presentation_integrity(feed, ace_picks=ace_picks, sg_picks=sg_picks)
+    feed["market_selection"] = {
+        **(feed.get("market_selection") or {}),
+        "presentation_integrity": integrity,
+    }
+
     # r55 daily offer snapshot: once an exact market row has been successfully
     # deployed/issued during the current BlinQ betting day, keep that immutable
     # row in the public offer even after its event starts. Newly qualifying rows
     # may append, but the morning offer never shrinks or reorders underneath a
-    # ROOKIE/PRO user.
+    # ROOKIE/PRO user. Do this only after current-selector integrity succeeds;
+    # carried rows are expected to make final section counts larger than the
+    # current selector counts.
     if isinstance(prior_feed, dict) and prior_feed:
         feed, daily_snapshot_report = carry_forward_betting_day_market_rows(
             feed, prior_feed, records, now=now, start_hour=betting_day_start_hour
@@ -347,10 +361,8 @@ def _publish_predictions(
             **(feed.get("market_selection") or {}),
             "daily_offer_snapshot": daily_snapshot_report,
         }
+
     feed = clean(feed)
-    feed = restore_published_market_snapshots(feed, records)
-    integrity = _projection_presentation_integrity(feed, ace_picks=ace_picks, sg_picks=sg_picks)
-    feed["market_selection"] = {**(feed.get("market_selection") or {}), "presentation_integrity": integrity}
     validate_publication_candidate(feed, records)
     validate_market_publication_candidate(feed, records)
     write_json(store.directory / "ledger.json", records)
