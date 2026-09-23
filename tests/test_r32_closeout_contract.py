@@ -74,17 +74,18 @@ def test_r32_detail_info_live_and_visual_cleanup_contract():
     assert "@keyframes blinqStatusBreath" in CSS
 
 
-def test_r32_custom_email_uses_real_blinq_logo_and_csp_safe_action_page():
+def test_r32_custom_email_is_gmail_safe_and_action_page_csp_safe():
     email = (ROOT / "api" / "tbt" / "services" / "auth_email.py").read_text(encoding="utf-8")
     function_app = (ROOT / "api" / "function_app.py").read_text(encoding="utf-8")
     auth_js = (WEB / "auth.js").read_text(encoding="utf-8")
     action_html = (WEB / "auth" / "action" / "index.html").read_text(encoding="utf-8")
     swa = json.loads((WEB / "staticwebapp.config.json").read_text(encoding="utf-8"))
-    logo = ROOT / "api" / "tbt" / "assets" / "blinq_logo_email.png"
-    assert logo.is_file() and logo.stat().st_size > 10_000
-    assert 'src="cid:blinq-logo"' in email
-    assert 'blinq_logo_email.png' in email
-    assert 'cid="<blinq-logo>"' in email
+    # Gmail often blocks CID images on first delivery and displays inline PNGs
+    # as separate attachments. BlinQ's identity must remain legible without
+    # loading any external or embedded images.
+    assert 'Blin<span style="color:#43e6a0">Q</span>' in email
+    assert 'src="cid:blinq-logo"' not in email
+    assert 'filename="blinq.png"' not in email
     assert '@app.route(route="v1/auth/email", methods=["POST"])' in function_app
     assert "send_blinq_action_email" in function_app
     assert "/api/v1/auth/email" in auth_js
