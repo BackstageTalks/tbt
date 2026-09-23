@@ -1137,7 +1137,6 @@
         ['daily','prime','value','ace','double_faults','doubles','games','sets']
           .reduce((sum,tab)=>sum+Math.max(0,Number(dailyHubEntitlement(tab)?.total)||0),0));
     const odds=rows.map(r=>Number(r?.odds??r?.betting?.odds)).filter(Number.isFinite);
-    const depths=rows.map(r=>Number(r?.data_depth)).filter(Number.isFinite);
     const perf=state.feed?.performance||{};
     const dashboardBest=state.feed?.dashboard_model_success||{};
     const performanceWindows=state.feed?.performance_windows||{};
@@ -1147,18 +1146,15 @@
     const bestModel=bestWindow?.model||{};
     const accuracy=Number(dashboardBest?.accuracy??bestModel?.accuracy??perf?.accuracy);
     const avgOdds=odds.length?odds.reduce((a,b)=>a+b,0)/odds.length:null;
-    const avgDepth=depths.length?depths.reduce((a,b)=>a+b,0)/depths.length:null;
     const icons={
       board:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M10 20V6M15 20v-8M20 20V3"/></svg>',
       target:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/><path d="M17 7l3-3M17 4h3v3"/></svg>',
-      chart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l5-5 4 3 7-9"/><path d="M15 7h5v5"/></svg>',
-      coins:'<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>'
+      chart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l5-5 4 3 7-9"/><path d="M15 7h5v5"/></svg>'
     };
     const cards=[
       [icons.board,lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(totalToday),'',''],
       [icons.target,lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—','',''],
-      [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'',''],
-      [icons.coins,lcopy('AVG DATA DEPTH','PRIEMERNÁ HĹBKA DÁT','PRŮMĚRNÁ HLOUBKA DAT'),avgDepth==null?'—':pct(avgDepth),'','']
+      [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'','']
     ];
     host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
   }
