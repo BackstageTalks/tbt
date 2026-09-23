@@ -19,8 +19,12 @@ def test_current_or_insufficient_membership_never_offers_misleading_upgrade():
     assert "else if(lockedContext&&below)" in card
     assert "Neodomkne túto sekciu" in card
     assert "Predĺžiť členstvo ${id.toUpperCase()}" in card
-    assert 'if(isCurrent) action=`<button class="upgrade-tier-cta"' in card
-    assert 'data-upgrade-account-route="1"' in card
+    assert 'if(isCurrent&&url) action=`<a class="upgrade-tier-cta"' in card
+    assert 'href="${escapeHtml(url)}"' in card
+    assert 'target="_blank" rel="noopener noreferrer"' in card
+    assert 'else if(isCurrent) action=`<span class="upgrade-tier-cta is-disabled"' in card
+    assert "Platobný odkaz nie je nastavený" in card
+    assert 'data-upgrade-account-route="1"' in card  # unchanged fallback for other levels
     assert "data-upgrade-account-route" in card
     assert "membershipHierarchy.indexOf(currentPlan)" in prompt
 
