@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from email.message import EmailMessage
+from email.utils import format_datetime, make_msgid, parseaddr
 from html import escape as html_escape
 import hashlib
 import smtplib
@@ -172,6 +173,31 @@ def render_blinq_email(
     return plain, html
 
 
+def _build_transactional_message(cfg, recipient: str, subject: str, plain: str, html: str) -> EmailMessage:
+    """Create RFC 5322-compliant auth/lifecycle mail without image attachments.
+
+    The configured SMTP provider, not the application, must DKIM-sign outbound
+    messages for the verified sending domain. Date/Message-ID alone cannot
+    repair SPF, DKIM, DMARC or a sending domain's reputation.
+    """
+    sender = str(getattr(cfg, "blinq_smtp_from", "") or "").strip()
+    mailbox = parseaddr(sender)[1]
+    domain = mailbox.rpartition("@")[2].strip().lower()
+    if not mailbox or not domain or "." not in domain:
+        raise ValueError("BLINQ_SMTP_FROM must contain a valid sender mailbox")
+
+    msg = EmailMessage()
+    msg["Subject"] = str(subject or "BlinQ")[:180]
+    msg["From"] = sender
+    msg["To"] = str(recipient or "").strip()
+    msg["Date"] = format_datetime(datetime.now(timezone.utc))
+    msg["Message-ID"] = make_msgid(idstring="blinq", domain=domain)
+    msg["Auto-Submitted"] = "auto-generated"
+    msg.set_content(plain)
+    msg.add_alternative(html, subtype="html")
+    return msg
+
+
 def send_blinq_transactional_email(
     cfg,
     recipient: str,
@@ -204,12 +230,7 @@ def send_blinq_transactional_email(
         footer_sk=footer_sk,
         footer_en=footer_en,
     )
-    msg = EmailMessage()
-    msg["Subject"] = str(subject or "BlinQ")[:180]
-    msg["From"] = str(getattr(cfg, "blinq_smtp_from", "") or "").strip()
-    msg["To"] = recipient
-    msg.set_content(plain)
-    msg.add_alternative(html, subtype="html")
+    msg = _build_transactional_message(cfg, recipient, subject, plain, html)
 
     host = str(getattr(cfg, "blinq_smtp_host", "") or "").strip()
     port = int(getattr(cfg, "blinq_smtp_port", 587) or 587)
@@ -266,12 +287,7 @@ def send_blinq_action_email(cfg, recipient: str, kind: str) -> bool:
     subject, plain, html = _content(kind, action_url)
     if not _smtp_ready(cfg):
         raise RuntimeError("SMTP is not configured")
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = str(getattr(cfg, "blinq_smtp_from", "") or "").strip()
-    msg["To"] = str(recipient or "").strip()
-    msg.set_content(plain)
-    msg.add_alternative(html, subtype="html")
+    msg = _build_transactional_message(cfg, recipient, subject, plain, html)
 
     host = str(getattr(cfg, "blinq_smtp_host", "") or "").strip()
     port = int(getattr(cfg, "blinq_smtp_port", 587) or 587)
