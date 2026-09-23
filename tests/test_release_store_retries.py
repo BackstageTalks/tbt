@@ -84,7 +84,7 @@ def test_stale_tag_manifest_404_recovers_from_fresh_release_asset_id(
             (tmp_path / name).write_bytes({"feed.json": feed, "ledger.json": ledger}[name])
             return ""
         if args[0] == "api" and "--jq" in args:
-            return "383532078\\n"
+            return "383532078\n"
         if args[0] == "api" and "--paginate" in args:
             return json.dumps([[{
                 "id": 583341449, "name": store.BUNDLE_MANIFEST,
