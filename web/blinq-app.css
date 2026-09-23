@@ -7043,3 +7043,32 @@ body#blinqPremium.blinq-detail-popout .match-detail-head{padding-right:0!importa
     width:16px!important;height:16px!important;flex:none!important;
   }
 }
+
+
+/* R58: offer cards use one stable column flow. Never reserve a phantom grid
+   row for a missing description or force the benefit lists to the bottom. */
+body#blinqPremium .upgrade-plan-grid{align-items:stretch!important}
+body#blinqPremium .upgrade-plan-grid .upgrade-tier-card{
+  display:flex!important;flex-direction:column!important;justify-content:flex-start!important;
+  gap:12px!important;min-height:0!important;height:100%!important;
+}
+body#blinqPremium .upgrade-plan-grid .upgrade-tier-note{flex:none!important;align-self:flex-start!important}
+body#blinqPremium .upgrade-plan-grid .upgrade-tier-top{flex:none!important}
+body#blinqPremium .upgrade-plan-grid .upgrade-tier-description{
+  flex:none!important;min-height:0!important;margin:0!important;
+}
+body#blinqPremium .upgrade-plan-grid .upgrade-feature-heading{flex:none!important;margin:0!important}
+body#blinqPremium .upgrade-plan-grid .upgrade-feature-list{
+  display:flex!important;flex-direction:column!important;justify-content:flex-start!important;
+  flex:1 0 auto!important;gap:8px!important;margin:0!important;padding:0!important;
+}
+body#blinqPremium .upgrade-plan-grid .upgrade-tier-cta{
+  flex:none!important;display:flex!important;align-items:center!important;justify-content:center!important;
+  margin-top:12px!important;min-height:42px!important;text-decoration:none!important;
+}
+body#blinqPremium .upgrade-plan-grid .upgrade-tier-cta.is-disabled{
+  pointer-events:none!important;box-shadow:none!important;opacity:.7!important;
+}
+@media(max-width:900px){
+  body#blinqPremium .upgrade-plan-grid .upgrade-tier-card{height:auto!important}
+}
