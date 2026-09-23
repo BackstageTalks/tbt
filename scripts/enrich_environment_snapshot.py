@@ -693,6 +693,10 @@ def main() -> None:
         client.close()
 
     report["open_meteo_requests"] = client.request_count
+    geocode_cache = client.geocode.cache_info()
+    report["geocode_cache_hits"] = geocode_cache.hits
+    report["geocode_cache_misses"] = geocode_cache.misses
+    report["geocode_cache_entries"] = geocode_cache.currsize
     report["geocoder_resolutions_per_request"] = round(
         report["resolved_from_geocoder"] / max(1, client.request_count), 6
     )
