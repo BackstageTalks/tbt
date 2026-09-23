@@ -1893,7 +1893,7 @@
     let metrics=candidates.filter(([,a,b])=>Number.isFinite(a)&&Number.isFinite(b));
     metrics=metrics.slice(0,6);
     if(metrics.length<3){
-      return '<div class="insight-radar-head"><div><small>'+escapeHtml(lcopy('Match comparison','Porovnanie zápasu','Porovnání zápasu'))+'</small><h3>'+escapeHtml(lcopy('Player radar','Radar hráčov','Radar hráčů'))+'</h3></div></div><div class="radar-unavailable">'+escapeHtml(lcopy('Not enough comparable API data for a radar yet.','Zatiaľ nie je dosť porovnateľných API dát pre radar.','Zatím není dost porovnatelných API dat pro radar.'))+'</div>';
+      return '<div class="insight-radar-head"><div><h3>'+escapeHtml(lcopy('Player radar','Radar hráčov','Radar hráčů'))+'</h3></div></div><div class="radar-unavailable">'+escapeHtml(lcopy('Not enough comparable API data for a radar yet.','Zatiaľ nie je dosť porovnateľných API dát pre radar.','Zatím není dost porovnatelných API dat pro radar.'))+'</div>';
     }
     const labels=metrics.map(m=>m[0]),p1=metrics.map(m=>m[1]),p2=metrics.map(m=>m[2]);
     const cx=170,cy=168,radius=112,levels=5;
@@ -1906,7 +1906,7 @@
     const axes=labels.map((label,index)=>{const angle=-Math.PI/2+(Math.PI*2*index/labels.length);const x=cx+Math.cos(angle)*radius;const y=cy+Math.sin(angle)*radius;const lx=cx+Math.cos(angle)*(radius+24);const ly=cy+Math.sin(angle)*(radius+24);return '<g><line x1="'+cx+'" y1="'+cy+'" x2="'+x.toFixed(1)+'" y2="'+y.toFixed(1)+'" class="insight-radar-axis"></line><text x="'+lx.toFixed(1)+'" y="'+ly.toFixed(1)+'" class="insight-radar-label">'+escapeHtml(label)+'</text></g>';}).join('');
     const p1Polygon=svgPointString(radarPoints(p1,cx,cy,radius));
     const p2Polygon=svgPointString(radarPoints(p2,cx,cy,radius));
-    return '<div class="insight-radar-head"><div><small>'+escapeHtml(lcopy('Match comparison','Porovnanie zápasu','Porovnání zápasu'))+'</small><h3>'+escapeHtml(lcopy('Player radar','Radar hráčov','Radar hráčů'))+'</h3></div><div class="insight-radar-legend"><span><i class="legend-dot player-1"></i>'+escapeHtml(match.p1)+'</span><span><i class="legend-dot player-2"></i>'+escapeHtml(match.p2)+'</span></div></div><svg class="insight-radar-svg" viewBox="0 0 340 340" role="img" aria-label="Player comparison radar chart">'+grids.join('')+axes+'<polygon points="'+p2Polygon+'" class="insight-radar-area player-2"></polygon><polygon points="'+p1Polygon+'" class="insight-radar-area player-1"></polygon></svg>';
+    return '<div class="insight-radar-head"><div><h3>'+escapeHtml(lcopy('Player radar','Radar hráčov','Radar hráčů'))+'</h3></div><div class="insight-radar-legend"><span><i class="legend-dot player-1"></i>'+escapeHtml(match.p1)+'</span><span><i class="legend-dot player-2"></i>'+escapeHtml(match.p2)+'</span></div></div><svg class="insight-radar-svg" viewBox="0 0 340 340" role="img" aria-label="Player comparison radar chart">'+grids.join('')+axes+'<polygon points="'+p2Polygon+'" class="insight-radar-area player-2"></polygon><polygon points="'+p1Polygon+'" class="insight-radar-area player-1"></polygon></svg>';
   }
   function insightSummaryCards(row,tab){
     const match=normalize(row),stats1=playerInsightStats(row,1),stats2=playerInsightStats(row,2);const probability=marketProbability(row);const line=apiMarketLine(row),odds=Number(row?.odds??row?.betting?.odds),ev=Number(row?.expected_value??row?.betting?.expected_value);
