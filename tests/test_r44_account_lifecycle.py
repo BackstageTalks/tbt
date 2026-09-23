@@ -28,7 +28,8 @@ def test_r44_transactional_mail_renderer_is_shared():
     lifecycle = text("api/tbt/services/account_inactivity.py")
     assert "def render_blinq_email(" in mail
     assert "def send_blinq_transactional_email(" in mail
-    assert "blinq_logo_email.png" in mail
+    assert "Blin<span" in mail  # visible even if Gmail blocks images
+    assert "cid:blinq-logo" not in mail  # no broken inline attachment
     assert "send_blinq_transactional_email" in lifecycle
     assert "BLINQ MEMBERSHIP" in lifecycle
     assert "Tvoje {plan} predplatné končí o {days} dní" in lifecycle
