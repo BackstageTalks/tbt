@@ -6,10 +6,11 @@ CSS = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
 INDEX = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 
 
-def test_prime_top_and_value_cards_keep_four_metrics():
+def test_prime_top_and_value_cards_keep_four_public_metrics():
     assert "[publicText('Odds')" in APP
     assert "lcopy('Form','Forma','Forma')" in APP
-    assert "['EV'" in APP
+    assert "else if(key==='value'){metrics=[[publicText('Odds')" in APP
+    assert "[publicText('Surface'),surfaceSampleLabel(row)]" in APP
     assert ".daily-hub-table" in CSS
 
 
