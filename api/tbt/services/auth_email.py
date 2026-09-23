@@ -11,7 +11,6 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from html import escape as html_escape
-from pathlib import Path
 import hashlib
 import smtplib
 import ssl
@@ -20,7 +19,6 @@ from urllib.parse import urlsplit, urlunsplit
 from .auth import AuthUnavailable, firebase_app, _firebase_modules
 from .admin_storage import AdminStorageUnavailable, _table
 
-_LOGO = Path(__file__).resolve().parents[1] / "assets" / "blinq_logo_email.png"
 _AUTH_EMAIL_THROTTLE_TABLE = "BlinQAuthEmailThrottle"
 
 
@@ -162,7 +160,7 @@ def render_blinq_email(
     html = f'''<!doctype html><html><body style="margin:0;background:#020c0b;color:#eaf6f1;font-family:Arial,Helvetica,sans-serif">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020c0b;padding:28px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#061713;border:1px solid #164c3b;border-radius:18px;overflow:hidden">
-<tr><td style="padding:28px 30px 18px"><img src="cid:blinq-logo" width="150" alt="BlinQ" style="display:block;width:150px;height:auto;border:0"></td></tr>
+<tr><td style="padding:28px 30px 18px"><span style="display:inline-block;color:#f3fbf8;font-family:Arial,Helvetica,sans-serif;font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.1">Blin<span style="color:#43e6a0">Q</span></span></td></tr>
 <tr><td style="padding:6px 30px 30px"><div style="font-size:12px;letter-spacing:.16em;color:#45e7a2;font-weight:700">{safe["eyebrow"]}</div>
 <h1 style="margin:10px 0 8px;font-size:27px;line-height:1.2;color:#f3fbf8">{safe["title_sk"]}</h1>
 <p style="margin:0;color:#a9c2b9;font-size:15px;line-height:1.65">{safe["body_sk"]}</p>
@@ -212,9 +210,6 @@ def send_blinq_transactional_email(
     msg["To"] = recipient
     msg.set_content(plain)
     msg.add_alternative(html, subtype="html")
-    if _LOGO.exists():
-        html_part = msg.get_payload()[-1]
-        html_part.add_related(_LOGO.read_bytes(), maintype="image", subtype="png", cid="<blinq-logo>", filename="blinq.png")
 
     host = str(getattr(cfg, "blinq_smtp_host", "") or "").strip()
     port = int(getattr(cfg, "blinq_smtp_port", 587) or 587)
@@ -277,9 +272,6 @@ def send_blinq_action_email(cfg, recipient: str, kind: str) -> bool:
     msg["To"] = str(recipient or "").strip()
     msg.set_content(plain)
     msg.add_alternative(html, subtype="html")
-    if _LOGO.exists():
-        html_part = msg.get_payload()[-1]
-        html_part.add_related(_LOGO.read_bytes(), maintype="image", subtype="png", cid="<blinq-logo>", filename="blinq.png")
 
     host = str(getattr(cfg, "blinq_smtp_host", "") or "").strip()
     port = int(getattr(cfg, "blinq_smtp_port", 587) or 587)
