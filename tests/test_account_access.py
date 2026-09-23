@@ -194,3 +194,71 @@ def test_suspension_overrides_admin_claim():
     assert access["status"] == "suspended"
     assert access["is_admin"] is False
     assert access["role"] == "user"
+
+
+@pytest.mark.parametrize("plan", ["pro", "elite", "legend", "goat"])
+def test_paid_expiry_becomes_active_rookie_at_exact_deadline(plan):
+    expiry = NOW.isoformat()
+    member = user(app_metadata={
+        "blinq_plan": plan,
+        "blinq_status": "active",
+        "blinq_expires_at": expiry,
+    })
+    before = account_access(member, now=NOW - timedelta(seconds=1))
+    at_deadline = account_access(member, now=NOW)
+    assert before["plan"] == plan
+    assert before["status"] == "active"
+    assert at_deadline["plan"] == "rookie"
+    assert at_deadline["status"] == "active"
+    assert at_deadline["expires_at"] is None
+    assert at_deadline["is_admin"] is False
+    assert public_account(member, now=NOW)["plan"] == "rookie"
+
+
+@pytest.mark.parametrize("status", ["active", "expired"])
+def test_elapsed_paid_memberships_recover_but_early_revocation_does_not(status):
+    member = user(app_metadata={
+        "blinq_plan": "elite",
+        "blinq_status": status,
+        "blinq_expires_at": (NOW - timedelta(days=1)).isoformat(),
+    })
+    assert account_access(member, now=NOW)["plan"] == "rookie"
+    member["app_metadata"]["blinq_expires_at"] = (NOW + timedelta(days=2)).isoformat()
+    assert account_access(member, now=NOW)["plan"] == "elite"
+    assert account_access(member, now=NOW)["status"] == status
+
+
+def test_paid_downgrade_never_unblocks_suspension_or_changes_lifetime_goat():
+    expired = (NOW - timedelta(hours=1)).isoformat()
+    suspended = user(app_metadata={
+        "blinq_plan": "pro", "blinq_status": "suspended", "blinq_expires_at": expired,
+    })
+    lifetime = user(app_metadata={
+        "blinq_plan": "goat", "blinq_status": "lifetime", "blinq_expires_at": expired,
+    })
+    assert account_access(suspended, now=NOW)["status"] == "suspended"
+    assert account_access(lifetime, now=NOW)["plan"] == "goat"
+    assert account_access(lifetime, now=NOW)["status"] == "lifetime"
+
+
+def test_guarded_worker_write_does_not_overwrite_renewed_firebase_claims(monkeypatch):
+    import tbt.services.admin_accounts as admin
+    claims = {
+        "role": "user", "blinq_plan": "pro", "blinq_status": "active",
+        "blinq_expires_at": (NOW + timedelta(days=30)).isoformat(),
+    }
+    record = SimpleNamespace(custom_claims=claims)
+    writes = []
+    firebase = SimpleNamespace(
+        get_user=lambda *_a, **_kw: record,
+        set_custom_user_claims=lambda *_a, **_kw: writes.append(True),
+    )
+    monkeypatch.setattr(admin, "_firebase_modules", lambda: (None, firebase, None))
+    monkeypatch.setattr(admin, "firebase_app", lambda _cfg: object())
+    with pytest.raises(admin.AccessConflict):
+        admin.update_user_access(
+            cfg(), "u1",
+            {"role": "user", "plan": "rookie", "status": "active"},
+            expected_claims={**claims, "blinq_expires_at": (NOW - timedelta(days=1)).isoformat()},
+        )
+    assert writes == []

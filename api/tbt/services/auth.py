@@ -433,6 +433,27 @@ def account_access(user, *, cfg=None, now=None):
             "is_admin": False,
         }
 
+    # Access changes at the exact paid deadline, independent of the daily worker.
+    # Preserve the Firebase identity and operational profile; only the effective
+    # membership becomes the permanent free tier. Explicit suspension, admin and
+    # grandfathered lifetime GOAT have already been handled above. A paid claim
+    # missing a valid expiry remains expired (fail closed), not auto-converted.
+    if (
+        assigned_plan in {"pro", "elite", "legend", "goat"}
+        and assigned_status in {"active", "expired"}
+        and expires_at is not None
+        and expires_at <= now
+    ):
+        return {
+            "role": "user",
+            "plan": "rookie",
+            "plan_label": PLAN_LABELS["rookie"],
+            "status": "active",
+            "expires_at": None,
+            "trial_expires_at": None,
+            "is_admin": False,
+        }
+
     if assigned_plan in {"pro", "elite", "legend", "goat"} and assigned_status == "active" and expires_at is not None and expires_at > now:
         return {
             "role": "user",

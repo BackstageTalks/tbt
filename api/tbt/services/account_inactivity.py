@@ -5,6 +5,7 @@ The worker has two deliberately separate jobs:
    It never disables or deletes the Firebase identity.
 2. Paid membership reminders: one notice around 7 days and one around 3 days
    before the exact configured expiry timestamp.
+3. Reconcile expired PRO/ELITE/LEGEND/GOAT to permanent ROOKIE.
 
 All user notices use the canonical BlinQ transactional e-mail renderer.
 """
@@ -20,10 +21,11 @@ from .account_storage import (
     save_inactivity_state,
     save_subscription_notice_state,
 )
-from .admin_accounts import list_users, update_user_access
+from .admin_accounts import AccessConflict, list_users, update_user_access
 from .admin_storage import AdminStorageUnavailable
 from .auth import account_access, firebase_get_user, is_admin
 from .auth_email import send_blinq_transactional_email
+from .push_notifications import sync_push_access
 
 _BRATISLAVA = ZoneInfo("Europe/Bratislava")
 _EMAIL_SPLIT = re.compile(r"[;,\s]+")
@@ -227,12 +229,12 @@ def _send_subscription_expiry(cfg, user: dict, access: dict, *, days: int, expir
         title_sk=f"Tvoje {plan} predplatné končí o {days} dní",
         body_sk=(
             f"Platený prístup {plan} je aktívny do {sk_expiry}.\n\n"
-            "Po skončení sa platený prístup ukončí, ale tvoj BlinQ účet zostane zachovaný."
+            "Po skončení sa automaticky vrátiš na bezplatný ROOKIE. Tvoj BlinQ účet a profil zostanú zachované."
         ),
         title_en=f"Your {plan} subscription ends in {days} days",
         body_en=(
             f"Your paid {plan} access is active until {en_expiry}.\n\n"
-            "When it expires, paid access ends, but your BlinQ account remains available."
+            "When it expires, your account automatically returns to free ROOKIE. Your BlinQ account and profile remain available."
         ),
         button_label="Otvoriť BlinQ / Open BlinQ" if url else "",
         button_url=url,
@@ -241,7 +243,7 @@ def _send_subscription_expiry(cfg, user: dict, access: dict, *, days: int, expir
     )
 
 
-def _admin_summary_body(policy: dict, warnings: list[dict], expired: list[dict], paid7: list[dict], paid3: list[dict], failures: list[str]) -> str:
+def _admin_summary_body(policy: dict, warnings: list[dict], expired: list[dict], paid7: list[dict], paid3: list[dict], failures: list[str], downgraded: list[dict] | None = None) -> str:
     lines = [
         "Denný account lifecycle prebehol.",
         "",
@@ -250,9 +252,10 @@ def _admin_summary_body(policy: dict, warnings: list[dict], expired: list[dict],
         f"Novo označené EXPIRED: {len(expired)}",
         f"Paid expiry 7-day maily: {len(paid7)}",
         f"Paid expiry 3-day maily: {len(paid3)}",
+        f"Paid → ROOKIE: {len(downgraded or [])}",
         f"Chyby jednotlivých mailov: {len(failures)}",
     ]
-    for title, rows in (("Inactivity warnings", warnings), ("EXPIRED", expired), ("Paid 7d", paid7), ("Paid 3d", paid3)):
+    for title, rows in (("Inactivity warnings", warnings), ("EXPIRED", expired), ("Paid 7d", paid7), ("Paid 3d", paid3), ("Paid → ROOKIE (check manual Telegram VIP removal)", downgraded or [])):
         if rows:
             lines += ["", f"{title}:"]
             for row in rows[:30]:
@@ -318,6 +321,7 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
         "expired": 0,
         "subscription_7": 0,
         "subscription_3": 0,
+        "paid_downgraded": 0,
         "user_emails": 0,
         "mail_failures": 0,
         "admin_email": False,
@@ -342,6 +346,7 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
     newly_expired: list[dict] = []
     paid7: list[dict] = []
     paid3: list[dict] = []
+    downgraded: list[dict] = []
     failures: list[str] = []
 
     for user in users:
@@ -356,6 +361,59 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
             meta = {}
             meta_available = False
             summary["storage_available"] = False
+
+        # The API already resolves an elapsed paid plan as ROOKIE on every
+        # request. Reconcile stale Firebase claims here for admin views and
+        # future logins, independently of SMTP and free-account inactivity.
+        raw_claims = user.get("app_metadata") or {}
+        raw_plan = str(raw_claims.get("blinq_plan") or "").strip().lower()
+        raw_status = str(raw_claims.get("blinq_status") or "").strip().lower()
+        raw_expiry = _parse_utc(raw_claims.get("blinq_expires_at"))
+        if (
+            raw_plan in {"pro", "elite", "legend", "goat"}
+            and raw_status in {"active", "expired"}
+            and raw_expiry is not None
+            and raw_expiry <= now
+        ):
+            try:
+                # A payment/admin update may have renewed this account since
+                # the paginated scan. Recheck before the guarded claim write.
+                latest_user = firebase_get_user(cfg, uid)
+                if latest_user is None or is_admin(latest_user, cfg):
+                    continue
+                latest_claims = latest_user.get("app_metadata") or {}
+                latest_plan = str(latest_claims.get("blinq_plan") or "").strip().lower()
+                latest_status = str(latest_claims.get("blinq_status") or "").strip().lower()
+                latest_expiry = _parse_utc(latest_claims.get("blinq_expires_at"))
+                if (
+                    latest_plan not in {"pro", "elite", "legend", "goat"}
+                    or latest_status not in {"active", "expired"}
+                    or latest_expiry is None
+                    or latest_expiry > now
+                ):
+                    continue
+                expected_claims = {
+                    key: latest_claims.get(key)
+                    for key in ("role", "blinq_plan", "blinq_status", "blinq_expires_at")
+                }
+                update_user_access(
+                    cfg, uid,
+                    {"role": "user", "plan": "rookie", "status": "active", "expires_at": None},
+                    actor_id="account-lifecycle-worker",
+                    expected_claims=expected_claims,
+                )
+                sync_push_access(user_id=uid, plan="rookie", status="active", expires_at=None)
+                downgraded.append({
+                    "id": uid, "email": email, "plan": latest_plan.upper(),
+                    "expired_at": latest_expiry.isoformat(),
+                })
+            except AccessConflict:
+                # The membership changed after our read; never overwrite it.
+                pass
+            except Exception as exc:
+                failures.append(f"{email or uid} · paid downgrade · {exc.__class__.__name__}")
+            # Do not immediately archive a just-downgraded ROOKIE for inactivity.
+            continue
 
         access = account_access(user, cfg=cfg, now=now)
         plan = str(access.get("plan") or "rookie").lower()
@@ -517,9 +575,10 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
     summary["expired"] = len(newly_expired)
     summary["subscription_7"] = len(paid7)
     summary["subscription_3"] = len(paid3)
+    summary["paid_downgraded"] = len(downgraded)
 
-    if policy["notify_admin"] and mail["configured"] and mail["admin_recipient_configured"] and (new_warnings or newly_expired or paid7 or paid3 or failures):
-        count = _send_admin_summary(cfg, _admin_summary_body(policy, new_warnings, newly_expired, paid7, paid3, failures))
+    if policy["notify_admin"] and mail["configured"] and mail["admin_recipient_configured"] and (new_warnings or newly_expired or paid7 or paid3 or downgraded or failures):
+        count = _send_admin_summary(cfg, _admin_summary_body(policy, new_warnings, newly_expired, paid7, paid3, failures, downgraded))
         summary["admin_emails"] = count
         summary["admin_email"] = count > 0
 

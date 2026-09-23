@@ -32,6 +32,11 @@ ALLOWED_STATUSES = {"active", "expired", "suspended", "lifetime"}
 ALLOWED_ROLES = {"user", "admin"}
 
 
+class AccessConflict(ValueError):
+    """The paid membership changed after the lifecycle worker read it."""
+
+
+
 def tg_private_state(account: dict, profile: dict | None = None) -> dict:
     """Return the manual Telegram Private operational state for an account."""
     profile = profile if isinstance(profile, dict) else {}
@@ -281,13 +286,17 @@ def _apply_access_metadata(app, changes):
     return app
 
 
-def _update_firebase_user_access(cfg, user_id, changes, *, actor_id=""):
+def _update_firebase_user_access(cfg, user_id, changes, *, actor_id="", expected_claims=None):
     _, firebase_auth, _ = _firebase_modules()
     app = firebase_app(cfg)
     uid = str(user_id).strip()
     storage_warning = ""
     try:
         record = firebase_auth.get_user(uid, app=app)
+        if expected_claims is not None:
+            current = record.custom_claims or {}
+            if any(current.get(key) != value for key, value in expected_claims.items()):
+                raise AccessConflict("Membership changed during paid-expiry review")
         before_user = firebase_user_to_dict(record)
         before_access = account_access(before_user, cfg=cfg)
 
@@ -410,8 +419,8 @@ def delete_user_account(cfg, user_id):
     except Exception as exc:
         raise AuthUnavailable("Firebase admin service temporarily unavailable") from exc
 
-def update_user_access(cfg, user_id, payload, *, actor_id="", client=None):
+def update_user_access(cfg, user_id, payload, *, actor_id="", client=None, expected_claims=None):
     changes = normalize_access_update(payload)
     if not firebase_configured(cfg):
         raise AuthUnavailable("Firebase admin account management is not configured")
-    return _update_firebase_user_access(cfg, user_id, changes, actor_id=actor_id)
+    return _update_firebase_user_access(cfg, user_id, changes, actor_id=actor_id, expected_claims=expected_claims)
