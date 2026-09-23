@@ -7167,3 +7167,56 @@ body#blinqPremium .match-history-grid small{
     color:#59f0ac!important;background:rgba(59,232,157,.12)!important;
   }
 }
+
+/* R59: one hero watermark; force three responsive KPI icons to remain outlined. */
+/* The former viewport-fixed watermark repeated above the footer/background.
+   One subtle decorative mark now belongs to the hero only. */
+body#blinqPremium .anti-share-watermarks{display:none!important}
+body#blinqPremium.blinq-home #dashboardHero{
+  position:relative!important;isolation:isolate!important;
+}
+body#blinqPremium.blinq-home #dashboardHero::after{
+  content:"";position:absolute!important;
+  left:50%!important;top:50%!important;
+  width:min(24vw,230px)!important;height:90px!important;
+  transform:translate(-50%,-50%)!important;
+  background:url("/assets/blinq_logo.svg") center/contain no-repeat!important;
+  filter:grayscale(1) brightness(1.5)!important;
+  opacity:.065!important;pointer-events:none!important;z-index:12!important;
+}
+/* Avoid a second watermark from optional per-banner artwork settings. */
+body#blinqPremium.blinq-home #dashboardHero .slot-watermark{display:none!important}
+body#blinqPremium:not(.blinq-admin) .dashboard-kpis{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+}
+body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span{
+  display:grid!important;place-items:center!important;
+  flex:0 0 38px!important;width:38px!important;height:38px!important;
+  min-width:38px!important;min-height:38px!important;overflow:visible!important;
+}
+body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span>svg,
+body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span>svg *{
+  fill:none!important;stroke:#35efa0!important;stroke-width:1.8!important;
+  stroke-linecap:round!important;stroke-linejoin:round!important;opacity:1!important;
+}
+body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span>svg{
+  display:block!important;width:20px!important;height:20px!important;
+  min-width:20px!important;min-height:20px!important;overflow:visible!important;
+}
+@media(max-width:760px){
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpis{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpis>.dashboard-kpi:last-child{grid-column:1/-1}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span{
+    flex-basis:32px!important;width:32px!important;height:32px!important;
+    min-width:32px!important;min-height:32px!important;
+  }
+  body#blinqPremium.blinq-home #dashboardHero::after{
+    left:67%!important;width:130px!important;height:54px!important;opacity:.055!important;
+  }
+}
+@media(max-width:420px){
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpis{grid-template-columns:1fr!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpis>.dashboard-kpi:last-child{grid-column:auto}
+}
