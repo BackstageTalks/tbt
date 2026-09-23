@@ -198,7 +198,7 @@ def test_upload_checkpoint_recovers_stale_remote_manifest_asset(monkeypatch, tmp
                 "releases/assets/583058063)"
             )
         if args[0] == "api" and "--jq" in args:
-            return "383532078\\n"
+            return "383532078"
         if args[0] == "api" and "--paginate" in args:
             return json.dumps([[{
                 "id": 583400001, "name": store.BUNDLE_MANIFEST,
