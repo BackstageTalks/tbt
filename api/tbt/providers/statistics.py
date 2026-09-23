@@ -71,6 +71,12 @@ RATE_ALIASES = {
     "servicepointswon": "service_points_won", "servicepoints": "service_points_won",
     "returnpointswon": "return_points_won", "returnpoints": "return_points_won",
     "breakpointsconverted": "break_points_won",
+    # TennisApi names verified in provider-probe 2026-09-23. Serve placement
+    # (firstServeAccuracy) is NOT the same as points won on first serve.
+    "firstservepointsaccuracy": "first_serve_win",
+    "secondservepointsaccuracy": "second_serve_win",
+    "firstreturnpoints": "first_return_win",
+    "secondreturnpoints": "second_return_win",
 }
 
 COUNT_ALIASES = {
@@ -127,6 +133,13 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
                 values[field] = value
                 if total is not None:
                     rate_counts[field] = (won, total)
+
+    # Weighted return quality is computed from *return-point* wins and chances;
+    # do not average percentages or mistake a first-serve-in rate for quality.
+    for prefix in ("p1", "p2"):
+        first, second = (rate_counts.get(f"{prefix}_{kind}_return_win") for kind in ("first", "second"))
+        if first is not None and second is not None and first[1] + second[1] > 0:
+            values[f"{prefix}_return_points_won"] = (first[0] + second[0]) / (first[1] + second[1])
 
     for prefix, opponent in (("p1", "p2"), ("p2", "p1")):
         first, second = (rate_counts.get(f"{prefix}_{kind}_serve_win") for kind in ("first", "second"))
