@@ -1157,9 +1157,9 @@
     const accuracy=Number(dashboardBest?.accuracy??bestModel?.accuracy??perf?.accuracy);
     const avgOdds=odds.length?odds.reduce((a,b)=>a+b,0)/odds.length:null;
     const icons={
-      board:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 20V11M10 20V6M15 20v-8M20 20V3"/></svg>',
-      target:'<svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/><path d="M17 7l3-3M17 4h3v3"/></svg>',
-      chart:'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18l5-5 4 3 7-9"/><path d="M15 7h5v5"/></svg>'
+      board:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#35efa0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 20V11M10 20V6M15 20v-8M20 20V3"/></svg>',
+      target:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#35efa0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/><path d="M17 7l3-3M17 4h3v3"/></svg>',
+      chart:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#35efa0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18l5-5 4 3 7-9"/><path d="M15 7h5v5"/></svg>'
     };
     const cards=[
       [icons.board,lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(totalToday),'',''],
