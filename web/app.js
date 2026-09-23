@@ -110,8 +110,18 @@
       return;
     }
     if(img.matches('[data-player-fallback]')){
-      img.hidden=true;
       const host=img.parentElement;
+      // An Admin-configured fallback can point to an old or missing asset.
+      // Retry the shipped local ATP/WTA fallback once before showing initials.
+      const localFallback=host?.classList.contains('player-fallback-wta')
+        ?'/assets/missing_foto_w.webp':'/assets/missing_foto_m.webp';
+      if(img.dataset.localFallbackRetry!=='1' &&
+         new URL(img.src,location.href).pathname!==localFallback){
+        img.dataset.localFallbackRetry='1';
+        img.src=localFallback;
+        return;
+      }
+      img.hidden=true;
       if(host){
         host.classList.remove('has-photo','using-fallback');
         host.classList.add('using-initials');
