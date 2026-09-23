@@ -200,7 +200,7 @@ class ReleaseStore:
         except RuntimeError as exc:
             # Only recover a stale GitHub asset ID. Auth errors, rate limits and
             # other failures retain their existing fail-closed behavior.
-            if not re.search(r"HTTP\\s+404\\b", str(exc)):
+            if not re.search(r"HTTP\s+404\b", str(exc)):
                 raise
             print(
                 f"Stale tag release asset for {name}; refreshing by release ID",
