@@ -387,11 +387,13 @@ class ReleaseStore:
         assets = self._asset_names()
         if self.BUNDLE_MANIFEST not in assets:
             return {}
-        # Read this release's committed manifest, never another tag's local cache.
-        with tempfile.TemporaryDirectory(dir=self.directory) as temporary:
-            gh("release", "download", self.tag, "--repo", self.repository,
-               "--pattern", self.BUNDLE_MANIFEST, "--dir", temporary, "--clobber")
-            value = json.loads((Path(temporary) / self.BUNDLE_MANIFEST).read_text(encoding="utf-8"))
+        # Use the same stale-ID 404 recovery as initial bundle downloads.
+        # A direct gh release download can reference a deleted asset ID after
+        # concurrent release --clobber; resolve the current asset by ID instead.
+        self._download_asset(self.BUNDLE_MANIFEST)
+        value = json.loads(
+            (self.directory / self.BUNDLE_MANIFEST).read_text(encoding="utf-8")
+        )
         files = value.get("files")
         if not isinstance(files, dict):
             raise ValueError("Invalid committed bundle manifest")
