@@ -7079,3 +7079,32 @@ body#blinqPremium .upgrade-plan-grid .upgrade-tier-cta.is-disabled{
 @media(max-width:900px){
   body#blinqPremium .upgrade-plan-grid .upgrade-tier-card{height:auto!important}
 }
+
+/* Dashboard KPI audit: three columns and visible inline SVG icons at every width. */
+body#blinqPremium:not(.blinq-admin) .dashboard-kpis{
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+}
+body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span{
+  display:grid!important;place-items:center!important;
+  flex-shrink:0!important;min-width:28px!important;min-height:28px!important;
+}
+body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span svg{
+  display:block!important;width:20px!important;height:20px!important;
+  flex:none!important;overflow:visible!important;
+  fill:none!important;stroke:#35efa0!important;
+  stroke-width:1.8!important;stroke-linecap:round!important;
+  stroke-linejoin:round!important;opacity:1!important;
+}
+@media(max-width:760px){
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpis{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpis>.dashboard-kpi:last-child{
+    grid-column:1/-1;
+  }
+}
+@media(max-width:420px){
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpis{
+    grid-template-columns:1fr!important;
+  }
+}
