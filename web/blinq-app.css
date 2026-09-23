@@ -7002,3 +7002,44 @@ body#blinqPremium .membership-unavailable{
 }
 body#blinqPremium .account-modal-plan.is-unavailable-plan,
 body#blinqPremium .account-plan-grid>.membership-card.is-unavailable-plan{pointer-events:none!important}
+
+
+/* R57: match detail header action space; keep close and pop-out independent. */
+body#blinqPremium .match-dialog{position:relative!important}
+body#blinqPremium .match-dialog>.dialog-close{
+  position:absolute!important;inset:14px 14px auto auto!important;
+  float:none!important;margin:0!important;z-index:40!important;
+  width:38px!important;height:38px!important;flex:none!important;
+}
+body#blinqPremium .match-dialog .match-detail-head{
+  display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;
+  gap:14px!important;align-items:start!important;
+  padding-right:58px!important;min-width:0!important;
+}
+body#blinqPremium .match-dialog .match-detail-head>div:first-child{
+  min-width:0!important;overflow-wrap:anywhere!important;
+}
+body#blinqPremium .match-dialog .match-detail-head .match-popout-button{
+  max-width:180px!important;min-width:0!important;
+  margin:0!important;flex-shrink:0!important;
+  display:inline-flex!important;align-items:center!important;
+  white-space:nowrap!important;box-sizing:border-box!important;
+}
+body#blinqPremium.blinq-detail-popout .match-popout-button{display:none!important}
+body#blinqPremium.blinq-detail-popout .match-detail-head{padding-right:0!important}
+@media(max-width:760px){
+  body#blinqPremium .match-dialog>.dialog-close{
+    inset:10px 10px auto auto!important;width:36px!important;height:36px!important;
+  }
+  body#blinqPremium .match-dialog .match-detail-head{
+    grid-template-columns:minmax(0,1fr)!important;
+    padding-right:44px!important;gap:10px!important;
+  }
+  body#blinqPremium .match-dialog .match-detail-head .match-popout-button{
+    width:36px!important;height:36px!important;padding:0!important;
+    font-size:0!important;
+  }
+  body#blinqPremium .match-dialog .match-detail-head .match-popout-button svg{
+    width:16px!important;height:16px!important;flex:none!important;
+  }
+}
