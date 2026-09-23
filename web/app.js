@@ -3569,7 +3569,7 @@
     };
     return features[id]||[];
   }
-  function renderUpgradeTierCard(id,p,requiredIndex,lockedContext=false){
+  function renderUpgradeTierCard(id,p,requiredIndex,lockedContext=false,currentIndex=-1){
     const idx=membershipHierarchy.indexOf(id),below=requiredIndex>0&&idx<requiredIndex;
     const url=safeExternalUrl(p?.url||''),label=String(p?.label||id.toUpperCase()),title=p?.card_title||label;
     const short=String(p?.short_description||p?.description||p?.note||'').trim();
@@ -3577,11 +3577,18 @@
     const detail=fullDescription&&fullDescription!==short?fullDescription:'';
     const features=upgradePlanFeatureList(id);
     const required=Boolean(lockedContext&&idx===requiredIndex);
+    const isCurrent=idx===currentIndex;
+    const alreadyOwned=idx<currentIndex;
     const actionLabel=p?.cta_label||lcopy(`Upgrade to ${id.toUpperCase()}`,`Upgrade na ${id.toUpperCase()}`,`Upgrade na ${id.toUpperCase()}`);
     let action='';
-    if(url) action=`<a class="upgrade-tier-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(actionLabel)} →</a>`;
+    if(isCurrent) action=`<span class="upgrade-tier-cta is-disabled" aria-label="${escapeHtml(lcopy('Current plan','Aktuálny plán','Aktuální plán'))}">${escapeHtml(lcopy('Current plan','Aktuálny plán','Aktuální plán'))}</span>`;
+    else if(alreadyOwned) action=`<span class="upgrade-tier-cta is-disabled">${escapeHtml(lcopy('Already included','Už máte zahrnuté','Již máte zahrnuto'))}</span>`;
+    else if(lockedContext&&below) action=`<span class="upgrade-tier-cta is-disabled">${escapeHtml(lcopy('Does not unlock this section','Neodomkne túto sekciu','Neodemkne tuto sekci'))}</span>`;
+    else if(url) action=`<a class="upgrade-tier-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(actionLabel)} →</a>`;
     else action=`<button class="upgrade-tier-cta" type="button" data-upgrade-account-route="1">${escapeHtml(actionLabel)} →</button>`;
-    const note=lockedContext&&below
+    const note=isCurrent
+      ?`<span class="upgrade-tier-note">${escapeHtml(lcopy('Your current level','Vaša aktuálna úroveň','Vaše aktuální úroveň'))}</span>`
+      :lockedContext&&below
       ?`<span class="upgrade-tier-note is-warning">${escapeHtml(lcopy('Does not unlock this section','Neodomkne túto sekciu','Neodemkne tuto sekci'))}</span>`
       :required?`<span class="upgrade-tier-note">${escapeHtml(lcopy('Required for this section','Potrebné pre túto sekciu','Potřebné pro tuto sekci'))}</span>`:'';
     const featureHeading=String(p?.note||'').trim();
@@ -3611,7 +3618,7 @@
       ?uiCopyTemplate('upgrade.requires',lcopy(`Requires ${requiredName}`,`Vyžaduje ${requiredName}`,`Vyžaduje ${requiredName}`),{plan:requiredName})
       :uiCopy('upgrade.generic_badge',lcopy('Membership upgrade','Upgrade členstva','Upgrade členství'));
     const summaryLabel=isAdmin?'ADMIN':(currentLabel||'FREE');
-    host.innerHTML=`<div class="upgrade-dialog-head"><div class="upgrade-dialog-intro"><span class="upgrade-dialog-eyebrow">${escapeHtml(uiCopy('upgrade.eyebrow',lcopy('BLINQ MEMBERSHIP','BLINQ ČLENSTVO','BLINQ ČLENSTVÍ')))}</span>${lockedContext?`<span class="upgrade-requires-pill is-required-context">▣ ${escapeHtml(badge)}</span>`:''}<h2 id="upgradeDialogTitle" class="upgrade-dialog-title">${escapeHtml(lcopy('Unlock higher access','Odomknúť ','Odemknout '))}<span class="accent">${escapeHtml(lcopy('higher access','vyšší prístup','vyšší přístup'))}</span></h2><p class="upgrade-dialog-copy"><strong>${escapeHtml(availability)}</strong></p></div><div class="upgrade-account-summary"><span class="upgrade-account-avatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:escapeHtml(accountAvatarFallback(a))}</span><div class="upgrade-account-copy"><small>${escapeHtml(lcopy('Your account','Tvoj účet','Tvůj účet'))}</small><strong>${escapeHtml(accountName)}</strong><b>${escapeHtml(summaryLabel)}</b></div></div></div><div class="upgrade-tier-heading"><div><h3>${escapeHtml(lcopy('Choose your level','Vyber si svoju úroveň','Vyber si svou úroveň'))}</h3></div></div><div class="upgrade-plan-grid">${upgradePlans.map(id=>renderUpgradeTierCard(id,state.ui?.plans?.[id]||{},requiredIndex,lockedContext)).join('')}</div>`;
+    host.innerHTML=`<div class="upgrade-dialog-head"><div class="upgrade-dialog-intro"><span class="upgrade-dialog-eyebrow">${escapeHtml(uiCopy('upgrade.eyebrow',lcopy('BLINQ MEMBERSHIP','BLINQ ČLENSTVO','BLINQ ČLENSTVÍ')))}</span>${lockedContext?`<span class="upgrade-requires-pill is-required-context">▣ ${escapeHtml(badge)}</span>`:''}<h2 id="upgradeDialogTitle" class="upgrade-dialog-title">${escapeHtml(lcopy('Unlock higher access','Odomknúť ','Odemknout '))}<span class="accent">${escapeHtml(lcopy('higher access','vyšší prístup','vyšší přístup'))}</span></h2><p class="upgrade-dialog-copy"><strong>${escapeHtml(availability)}</strong></p></div><div class="upgrade-account-summary"><span class="upgrade-account-avatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:escapeHtml(accountAvatarFallback(a))}</span><div class="upgrade-account-copy"><small>${escapeHtml(lcopy('Your account','Tvoj účet','Tvůj účet'))}</small><strong>${escapeHtml(accountName)}</strong><b>${escapeHtml(summaryLabel)}</b></div></div></div><div class="upgrade-tier-heading"><div><h3>${escapeHtml(lcopy('Choose your level','Vyber si svoju úroveň','Vyber si svou úroveň'))}</h3></div></div><div class="upgrade-plan-grid">${upgradePlans.map(id=>renderUpgradeTierCard(id,state.ui?.plans?.[id]||{},requiredIndex,lockedContext,membershipHierarchy.indexOf(currentPlan))).join('')}</div>`;
     host.querySelectorAll('[data-upgrade-account-route]').forEach(button=>button.onclick=()=>{if(dialog.open)dialog.close();setRoute('account',true);});
     if(locale!=='en')translatePublicDom(dialog);if(!dialog.open)dialog.showModal();
     $('upgradeDialogClose')?.focus({preventScroll:true});
