@@ -51,6 +51,9 @@ def _assert_gmail_safe(msg):
     assert "Blin" in html and "color:#43e6a0" in html
     assert "<img" not in html and "cid:" not in html
     assert "blinq.png" not in str(msg)
+    assert msg["Date"] and msg["Date"].endswith("+0000")
+    assert msg["Message-ID"] and msg["Message-ID"].endswith("@example.test>")
+    assert msg["Auto-Submitted"] == "auto-generated"
     return plain, html
 
 
@@ -111,3 +114,14 @@ def test_text_brand_remains_present_when_all_images_blocked():
     assert "Verify your email" in plain
     assert "Blin<span" in html
     assert "cid:" not in html
+
+
+def test_transactional_mail_requires_valid_sender_mailbox():
+    import pytest
+
+    cfg = _config()
+    cfg.blinq_smtp_from = "BlinQ"
+    with pytest.raises(ValueError, match="BLINQ_SMTP_FROM"):
+        auth_email._build_transactional_message(
+            cfg, "member@example.test", "Subject", "Plain body", "<p>HTML body</p>"
+        )
