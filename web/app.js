@@ -1111,14 +1111,14 @@
     if(Number.isFinite(altitude)) signals.push({key:'altitude',label:lcopy('Altitude shift','Zmena výšky','Změna výšky'),value:`${Math.round(altitude)} m`,tone:altitude>1500?'warning':'neutral',note:''});
     if(recent.winPct!=null) signals.push({key:'form',label:lcopy('Momentum','Momentum','Momentum'),value:`${Math.round(recent.winPct*100)}%`,tone:recent.winPct>=.65?'positive':recent.winPct<=.4?'negative':'neutral',note:lcopy('recent form','posledná forma','poslední forma')});
     if(surface.winPct!=null) signals.push({key:'surface',label:lcopy('Surface form','Forma na povrchu','Forma na povrchu'),value:`${Math.round(surface.winPct*100)}%`,tone:surface.winPct>=.65?'positive':surface.winPct<=.4?'negative':'neutral',note:''});
-    if(Number.isFinite(overallElo)&&Number.isFinite(surfaceElo)){const delta=surfaceElo-overallElo;signals.push({key:'fit',label:lcopy('Surface fit','Povrchový fit','Povrchový fit'),value:`${delta>=0?'+':''}${Math.round(delta)}`,tone:delta>35?'positive':delta<-35?'warning':'neutral',note:'Elo'});}
+    if(Number.isFinite(overallElo)&&Number.isFinite(surfaceElo)){const delta=surfaceElo-overallElo;signals.push({key:'fit',label:lcopy('Surface fit','Povrchový fit','Povrchový fit'),value:`${delta>=0?'+':''}${Math.round(delta)}`,tone:delta>35?'positive':delta<-35?'warning':'neutral',note:''});}
     const known=signals.filter(item=>item.key!=='stakes').length;
     return {motivation,label:motivation>=3?lcopy('High','Vysoká','Vysoká'):motivation>=1?lcopy('Elevated','Zvýšená','Zvýšená'):lcopy('Neutral','Neutrálna','Neutrální'),signals,known};
   }
   function renderMotivationPanel(row){
     const match=normalize(row),m1=motivationContext(row,1),m2=motivationContext(row,2);
     const card=(name,m)=>`<article class="motivation-card context-card"><header><div><small>${escapeHtml(lcopy('PRE-MATCH CONTEXT','PREDZÁPASOVÝ KONTEXT','PŘEDZÁPASOVÝ KONTEXT'))}</small><strong>${escapeHtml(name)}</strong></div><b class="motivation-score ${m.motivation>=1?'is-positive':''}">${escapeHtml(m.label)}</b></header><div class="context-signal-grid">${m.signals.slice(0,8).map(item=>`<span class="context-signal tone-${escapeHtml(item.tone||'neutral')}"><small>${escapeHtml(item.label)}</small><strong>${escapeHtml(item.value)}</strong>${item.note?`<em>${escapeHtml(item.note)}</em>`:''}</span>`).join('')}</div></article>`;
-    return `<section class="rail-motivation rail-context"><div class="rail-section-title"><div><small>CONTEXT</small><h3>${escapeHtml(lcopy('Motivation & readiness','Motivácia & pripravenosť','Motivace & připravenost'))}</h3></div><span>${escapeHtml(lcopy('Point-in-time · pre-match','Point-in-time · pred zápasom','Point-in-time · před zápasem'))}</span></div><div class="motivation-grid">${card(match.p1,m1)}${card(match.p2,m2)}</div><p class="motivation-note">${escapeHtml(lcopy('Motivation reflects observable stakes and home context. Rest, workload, travel, altitude and form are shown separately; no psychological state is inferred.','Motivácia vychádza iba z pozorovateľnej dôležitosti zápasu a domáceho prostredia. Oddych, zaťaženie, presun, výška a forma sú zobrazené samostatne; psychický stav neodhadujeme.','Motivace vychází pouze z pozorovatelné důležitosti zápasu a domácího prostředí. Odpočinek, zátěž, přesun, výška a forma jsou zobrazeny samostatně; psychický stav neodhadujeme.'))}</p></section>`;
+    return `<section class="rail-motivation rail-context"><div class="rail-section-title"><div><h3>${escapeHtml(lcopy('Motivation & readiness','Motivácia & pripravenosť','Motivace & připravenost'))}</h3></div></div><div class="motivation-grid">${card(match.p1,m1)}${card(match.p2,m2)}</div><p class="motivation-note">${escapeHtml(lcopy('Motivation reflects observable stakes and home context. Rest, workload, travel, altitude and form are shown separately; no psychological state is inferred.','Motivácia vychádza iba z pozorovateľnej dôležitosti zápasu a domáceho prostredia. Oddych, zaťaženie, presun, výška a forma sú zobrazené samostatne; psychický stav neodhadujeme.','Motivace vychází pouze z pozorovatelné důležitosti zápasu a domácího prostředí. Odpočinek, zátěž, přesun, výška a forma jsou zobrazeny samostatně; psychický stav neodhadujeme.'))}</p></section>`;
   }
   function dashboardDailyRows(){
     const rows=dailyHubRows('daily');
@@ -1127,10 +1127,15 @@
   function renderDashboardKpis(){
     const host=$('dashboardKpis');if(!host)return;
     const rows=dashboardDailyRows();
-    // Show the complete TOP supply for today, not only the rows exposed to
-    // the current membership (e.g. ROOKIE can see 2 while the KPI says 10).
-    const dailyEnt=dailyHubEntitlement('daily');
-    const totalToday=Math.max(Number(dailyEnt?.total)||0,rows.length);
+    // A published bet may occur in both TOP / SHORT ODDS and again in SEE ALL.
+    // Read the server's unique total from all eight actual markets, never
+    // count SEE ALL as a ninth category and never use only visible TOP rows.
+    const suppliedTotal=Number(state.feed?.entitlements?.daily_pick_count);
+    const totalToday=Number.isSafeInteger(suppliedTotal)&&suppliedTotal>=0
+      ?suppliedTotal
+      :Math.max(dailyHubRows('see_all').length,
+        ['daily','prime','value','ace','double_faults','doubles','games','sets']
+          .reduce((sum,tab)=>sum+Math.max(0,Number(dailyHubEntitlement(tab)?.total)||0),0));
     const odds=rows.map(r=>Number(r?.odds??r?.betting?.odds)).filter(Number.isFinite);
     const depths=rows.map(r=>Number(r?.data_depth)).filter(Number.isFinite);
     const perf=state.feed?.performance||{};
@@ -1150,7 +1155,7 @@
       coins:'<svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v6c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12v6c0 1.7 3.1 3 7 3s7-1.3 7-3v-6"/></svg>'
     };
     const cards=[
-      [icons.board,lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(totalToday),lcopy('matches','zápasov','zápasů'),''],
+      [icons.board,lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(totalToday),lcopy('picks','pickov','tipů'),''],
       [icons.target,lcopy('MODEL SUCCESS','MODEL ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—','',''],
       [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'',''],
       [icons.coins,lcopy('AVG DATA DEPTH','PRIEMERNÁ HĹBKA DÁT','PRŮMĚRNÁ HLOUBKA DAT'),avgDepth==null?'—':pct(avgDepth),'','']
