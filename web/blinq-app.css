@@ -7108,3 +7108,28 @@ body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span svg{
     grid-template-columns:1fr!important;
   }
 }
+
+/* Match detail / History-H2H: match the green/teal BlinQ palette. */
+body#blinqPremium .match-history-wrap{
+  border-color:rgba(74,164,132,.36)!important;
+  background:#091d19!important;
+}
+body#blinqPremium .match-history-card + .match-history-card{
+  border-left-color:rgba(74,164,132,.30)!important;
+}
+body#blinqPremium .match-history-title span{
+  color:#65edb9!important;
+}
+body#blinqPremium .match-history-grid span{
+  border-color:rgba(74,164,132,.30)!important;
+  background:#0b211c!important;
+}
+body#blinqPremium .match-history-grid small{
+  color:#91b0a6!important;
+}
+@media(max-width:760px){
+  body#blinqPremium .match-history-card + .match-history-card{
+    border-left:0!important;
+    border-top:1px solid rgba(74,164,132,.30)!important;
+  }
+}
