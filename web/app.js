@@ -3581,7 +3581,8 @@
     const alreadyOwned=idx<currentIndex;
     const actionLabel=p?.cta_label||lcopy(`Upgrade to ${id.toUpperCase()}`,`Upgrade na ${id.toUpperCase()}`,`Upgrade na ${id.toUpperCase()}`);
     let action='';
-    if(isCurrent) action=`<button class="upgrade-tier-cta" type="button" data-upgrade-account-route="1">${escapeHtml(lcopy(`Extend ${id.toUpperCase()} membership`,`Predĺžiť členstvo ${id.toUpperCase()}`,`Prodloužit členství ${id.toUpperCase()}`))} →</button>`;
+    if(isCurrent&&url) action=`<a class="upgrade-tier-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(lcopy(`Extend ${id.toUpperCase()} membership`,`Predĺžiť členstvo ${id.toUpperCase()}`,`Prodloužit členství ${id.toUpperCase()}`))} →</a>`;
+    else if(isCurrent) action=`<span class="upgrade-tier-cta is-disabled" aria-disabled="true">${escapeHtml(lcopy('Payment link not configured','Platobný odkaz nie je nastavený','Platební odkaz není nastaven'))}</span>`;
     else if(alreadyOwned) action=`<span class="upgrade-tier-cta is-disabled">${escapeHtml(lcopy('Already included','Už máte zahrnuté','Již máte zahrnuto'))}</span>`;
     else if(lockedContext&&below) action=`<span class="upgrade-tier-cta is-disabled">${escapeHtml(lcopy('Does not unlock this section','Neodomkne túto sekciu','Neodemkne tuto sekci'))}</span>`;
     else if(url) action=`<a class="upgrade-tier-cta" href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(actionLabel)} →</a>`;
