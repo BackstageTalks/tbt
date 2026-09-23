@@ -117,7 +117,9 @@ class OpenMeteoClient:
             raise ValueError("Invalid Open-Meteo response")
         return payload
 
-    @lru_cache(maxsize=4096)
+    # Retain positive AND negative queries throughout a full history pass.
+    # 4k evicted common ITF city misses and repeated paid geocodes.
+    @lru_cache(maxsize=65536)
     def geocode(self, query: str) -> Venue | None:
         query = " ".join(str(query or "").split())
         if not query:
@@ -351,6 +353,7 @@ _LOCATION_ALIASES = {
     "torino": "Turin, IT",
     "madrid": "Madrid, ES",
     "barcelona": "Barcelona, ES",
+    "pozoblanco": "Pozoblanco, ES",
     "valencia": "Valencia, ES",
     "seville": "Seville, ES",
     "sevilla": "Seville, ES",
@@ -374,6 +377,7 @@ _LOCATION_ALIASES = {
     "geneva": "Geneva, CH",
     "gstaad": "Gstaad, CH",
     "rotterdam": "Rotterdam, NL",
+    "little rock": "Little Rock, Arkansas, US",
     "s-hertogenbosch": "'s-Hertogenbosch, NL",
     "hertogenbosch": "'s-Hertogenbosch, NL",
     "antwerp": "Antwerp, BE",
