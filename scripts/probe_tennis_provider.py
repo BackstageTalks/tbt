@@ -436,7 +436,14 @@ def main() -> None:
         # expose aces/serve/break-point data at all, then add singles for comparison.
         finished_doubles = [row for row in doubles if row["status"] == "finished"]
         finished_singles = [row for row in singles if row["status"] == "finished"]
-        stat_candidates = finished_doubles + finished_singles
+        # Reserve half the sample for singles. Doubles are discovered first,
+        # which previously exhausted all 8 samples before we saw any singles.
+        doubles_quota = max(0, args.stats_samples // 2)
+        stat_candidates = (
+            finished_doubles[:doubles_quota]
+            + finished_singles
+            + finished_doubles[doubles_quota:]
+        )
         used_ids.clear()
         for row in stat_candidates:
             if len(report["statistics_samples"]) >= max(0, args.stats_samples):
