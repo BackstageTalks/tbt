@@ -22,7 +22,7 @@ def test_r54_identity_and_projection_odds_budget():
 
 
 def test_projection_odds_null_is_never_rendered_as_zero():
-    assert "const odds=firstFinite(row?.odds,row?.betting?.odds);" in APP
+    assert "const oddsHtml=projectionOddsHtml(row);" in APP
     assert "Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—'" in APP
     projection_slice = APP[APP.index("function dailyHubRow") : APP.index("function dailyHubLockedRow")]
     assert "const odds=Number(row?.odds);" not in projection_slice
