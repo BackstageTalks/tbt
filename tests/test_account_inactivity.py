@@ -205,3 +205,75 @@ def test_paid_reminders_still_run_when_inactivity_housekeeping_is_disabled(monke
     assert result["subscription_7"] == 1
     assert saved_paid and saved_paid[0][1]["days"] == 7
     assert any(recipient == user["email"] for recipient, _ in sent)
+
+
+
+def test_expired_paid_plans_are_persistently_downgraded_and_push_is_synced(monkeypatch):
+    for plan in ("pro", "elite", "legend", "goat"):
+        account = paid(0, plan)
+        sent, _, _, updates = setup(monkeypatch, [account])
+        push = []
+        monkeypatch.setattr(lifecycle, "sync_push_access", lambda **kw: push.append(kw))
+        result = lifecycle.run_inactivity_review(
+            cfg(), {"account_inactivity": {"enabled": False}}, now=NOW,
+        )
+        assert result["paid_downgraded"] == 1
+        assert len(updates) == 1
+        uid, changes, opts = updates[0]
+        assert uid == account["id"]
+        assert changes == {
+            "role": "user", "plan": "rookie", "status": "active", "expires_at": None,
+        }
+        assert opts["actor_id"] == "account-lifecycle-worker"
+        assert opts["expected_claims"]["blinq_plan"] == plan
+        assert opts["expected_claims"]["blinq_expires_at"] == account["app_metadata"]["blinq_expires_at"]
+        assert push == [{"user_id": uid, "plan": "rookie", "status": "active", "expires_at": None}]
+        assert result["subscription_7"] == result["subscription_3"] == 0
+        if plan in {"elite", "legend", "goat"}:
+            admin_mail = next(kwargs for recipient, kwargs in sent if recipient == "ops@example.test")
+            assert "check manual Telegram VIP removal" in admin_mail["body_sk"]
+
+
+def test_renewed_paid_membership_is_not_downgraded_from_stale_scan(monkeypatch):
+    old = paid(0, "pro")
+    renewed = {**old, "app_metadata": {
+        **old["app_metadata"],
+        "blinq_expires_at": (NOW + timedelta(days=30)).isoformat(),
+    }}
+    _, _, _, updates = setup(monkeypatch, [old])
+    monkeypatch.setattr(lifecycle, "firebase_get_user", lambda _cfg, _uid: renewed)
+    monkeypatch.setattr(lifecycle, "sync_push_access", lambda **_kw: None)
+    result = lifecycle.run_inactivity_review(cfg(), {"account_inactivity": {}}, now=NOW)
+    assert result["paid_downgraded"] == 0
+    assert updates == []
+
+
+def test_claim_race_aborts_paid_downgrade_without_losing_access(monkeypatch):
+    from tbt.services.admin_accounts import AccessConflict
+    old = paid(0, "elite")
+    _, _, _, _ = setup(monkeypatch, [old])
+    writes = []
+    def fail_changed_claims(*_args, **_kwargs):
+        writes.append("attempted")
+        raise AccessConflict("Renewed by admin")
+    monkeypatch.setattr(lifecycle, "update_user_access", fail_changed_claims)
+    monkeypatch.setattr(lifecycle, "sync_push_access", lambda **_kw: writes.append("push"))
+    result = lifecycle.run_inactivity_review(cfg(), {"account_inactivity": {}}, now=NOW)
+    assert writes == ["attempted"]
+    assert result["paid_downgraded"] == 0
+    assert result["mail_failures"] == 0
+
+
+def test_paid_downgrade_runs_without_smtp_or_inactivity_worker_policy(monkeypatch):
+    old = paid(0, "legend")
+    _, _, _, updates = setup(monkeypatch, [old])
+    monkeypatch.setattr(lifecycle, "sync_push_access", lambda **_kw: None)
+    no_smtp = cfg()
+    no_smtp.blinq_smtp_host = ""
+    result = lifecycle.run_inactivity_review(
+        no_smtp, {"account_inactivity": {"enabled": False}}, now=NOW,
+    )
+    assert result["smtp_configured"] is False
+    assert result["enabled"] is False
+    assert result["paid_downgraded"] == 1
+    assert updates[0][1]["plan"] == "rookie"
