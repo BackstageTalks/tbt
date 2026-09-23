@@ -653,6 +653,44 @@ def _source_rows_for_section(payload: dict, section: str) -> list[dict]:
     return [row for row in (rows if isinstance(rows,list) else []) if isinstance(row,dict)]
 
 
+def _published_daily_pick_count(payload: dict) -> int:
+    """Count actual published picks in all eight markets, without SEE ALL.
+
+    SEE ALL re-lists the same bets and TOP has a legacy duplicate feed key.
+    A match can legitimately have different bets (e.g. winner and sets), so
+    deduplicate by event + market + selection, not by event alone. Compute this
+    from the private serving feed before per-membership row redaction so the
+    dashboard count does not change for ROOKIE / PRO accounts.
+    """
+    seen: set[tuple[str, str, str]] = set()
+    for section in (
+        "daily", "prime", "value", "ace", "double_faults",
+        "doubles", "games", "sets",
+    ):
+        for index, row in enumerate(_source_rows_for_section(payload, section)):
+            surface = str(row.get("surface") or row.get("court_surface") or "").strip().lower()
+            if not surface or surface == "unknown":
+                continue  # The dashboard does not publish rows with unknown surface.
+            betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+            event = str(row.get("event_id") or row.get("id") or row.get("match_id") or "").strip()
+            market = str(
+                row.get("market") or row.get("projection_metric") or betting.get("market")
+                or ("match_winner" if section in {"daily", "prime", "value"} else section)
+            ).strip().lower()
+            # Distinguish market types on one event while unifying duplicate
+            # match-winner offers displayed in TOP and SHORT ODDS / VALUE.
+            if market in {"top", "prime", "value", "daily"}:
+                market = "match_winner"
+            selection = str(
+                row.get("winner_id") or row.get("pick_id") or row.get("selection_id")
+                or betting.get("selection_id") or row.get("pick") or row.get("selection")
+                or row.get("prediction") or ""
+            ).strip().lower()
+            key = (event, market, selection) if event else (section, str(index), selection)
+            seen.add(key)
+    return len(seen)
+
+
 def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: dict | None = None) -> dict:
     plan = effective_plan(access)
     if plan == "suspended":
@@ -800,6 +838,7 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
     history_hours = _results_history_hours(ui_config, plan) if results_allowed else 0
     return {
         "plan": plan,
+        "daily_pick_count": _published_daily_pick_count(payload),
         "sections": sections,
         "results": bool(results_allowed and history_hours != 0),
         "performance": bool(results_allowed and history_hours is None),
