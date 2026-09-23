@@ -175,3 +175,57 @@ def test_stale_release_fallback_does_not_mask_permissions_errors(
     )
     with pytest.raises(RuntimeError, match="HTTP 403"):
         store._download_asset("feed.json")
+
+
+def test_upload_checkpoint_recovers_stale_remote_manifest_asset(monkeypatch, tmp_path):
+    """The upload path must use the same stale 404 recovery as download()."""
+    import json
+
+    store = _store_for_test(tmp_path)
+    manifest = json.dumps({
+        "schema": 1,
+        "files": {
+            "history-2025.parquet": {"sha256": "abc", "bytes": 123},
+        },
+    }).encode()
+    store._asset_names = lambda: {store.BUNDLE_MANIFEST}
+
+    def fake_gh(*args):
+        if args[:2] == ("release", "download"):
+            raise RuntimeError(
+                "GitHub CLI operation failed: HTTP 404: Not Found "
+                "(https://api.github.com/repos/BackstageTalks/tbt-data/"
+                "releases/assets/583058063)"
+            )
+        if args[0] == "api" and "--jq" in args:
+            return "383532078\\n"
+        if args[0] == "api" and "--paginate" in args:
+            return json.dumps([[{
+                "id": 583400001, "name": store.BUNDLE_MANIFEST,
+                "state": "uploaded", "size": len(manifest),
+            }]])
+        raise AssertionError(args)
+
+    def fake_run(cmd, *, stdout, stderr):
+        assert str(cmd[-1]).endswith("/assets/583400001")
+        stdout.write(manifest)
+        return subprocess.CompletedProcess(cmd, 0, None, b"")
+
+    monkeypatch.setattr(release_store, "gh", fake_gh)
+    monkeypatch.setattr(release_store.subprocess, "run", fake_run)
+    assert store._remote_bundle_files() == {
+        "history-2025.parquet": {"sha256": "abc", "bytes": 123}
+    }
+
+
+def test_checkpoint_remote_manifest_403_still_fails_closed(monkeypatch, tmp_path):
+    import pytest
+
+    store = _store_for_test(tmp_path)
+    store._asset_names = lambda: {store.BUNDLE_MANIFEST}
+    monkeypatch.setattr(
+        release_store, "gh",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("HTTP 403: Forbidden")),
+    )
+    with pytest.raises(RuntimeError, match="HTTP 403"):
+        store._remote_bundle_files()
