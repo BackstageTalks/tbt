@@ -7000,6 +7000,13 @@ body#blinqPremium .membership-unavailable{
   font-size:8px!important;font-weight:850!important;letter-spacing:.06em!important;text-transform:uppercase!important;
   white-space:nowrap!important;
 }
+/* Center the FREE unavailable label despite the generic account-plan span rule. */
+body#blinqPremium .account-modal-plan > .account-plan-unavailable{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  text-align:center!important;
+}
 body#blinqPremium .account-modal-plan.is-unavailable-plan,
 body#blinqPremium .account-plan-grid>.membership-card.is-unavailable-plan{pointer-events:none!important}
 
