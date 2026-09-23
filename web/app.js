@@ -2037,6 +2037,14 @@
     dialog.classList.remove('ace-projection-dialog');dialog.classList.add('sg-projection-dialog');
     if(!dialog.open)dialog.showModal();
   }
+  function projectionOddsHtml(row){
+    // Only prices attached to this selection are eligible; never use model
+    // confidence, projected totals, or the match-winner market as a price.
+    const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
+    if(Number.isFinite(odds))return hubNumberHtml(odds.toFixed(2),lcopy('odds','kurz','kurz'));
+    const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
+    return `<span title="${escapeHtml(reason)}">${hubNumberHtml('N/A',reason)}</span>`;
+  }
   function dailyHubRow(row,tab,active=false,index=0){
     const sourceTab=tab==='see_all'?String(row?._hub_source||''):tab;
     const scheduled=row?.scheduled_at||row?.date;
@@ -2053,11 +2061,11 @@
       const confidence=Number(row?.projection_confidence),rawProjection=Number(row?.projection),projection=sourceTab==='sets'?setsTotalProjectionValue(row):rawProjection,pick=projectionPickText(row,sourceTab);
       const projectionText=Number.isFinite(projection)?(sourceTab==='sets'?projection.toFixed(2):projection.toFixed(1)):'—';
       const projectionUnit=sourceTab==='sets'?lcopy('projected sets','projekcia setov','projekce setů'):lcopy('projected games','projekcia gemov','projekce gemů');
-      const odds=firstFinite(row?.odds,row?.betting?.odds);
+      const oddsHtml=projectionOddsHtml(row);
       if(tab==='see_all'){
-        return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-seeall-model-cell">${hubSeeAllProjectionHtml(projectionText,projectionUnit,confidence,row)}</td><td class="hub-action-cell hub-optional-action"><span class="hub-projection-badge">MODEL</span></td></tr>`;
+        return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-seeall-model-cell">${hubSeeAllProjectionHtml(projectionText,projectionUnit,confidence,row)}</td><td class="hub-action-cell hub-optional-action"><span class="hub-projection-badge">MODEL</span></td></tr>`;
       }
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td></tr>`;
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,lcopy('Model prediction','Modelová predikcia','Modelová predikce'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td></tr>`;
     }
     if(sourceTab==='ace'||sourceTab==='double_faults'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=projectionPickText(row,sourceTab),market=aceMarketName(row);
@@ -3489,7 +3497,11 @@
       [publicText('Validity'),duration],
     ];
   }
-  let accessHintTimer=0,accessHintHoverTimer=0,accessHintTarget=null;
+  let accessHintTimer=0,accessHintHoverTimer=0,accessHintTarget=null,upgradeReturnTarget=null;
+  function accessHintTrigger(node){
+    if(node?.closest?.('#accessHint')||$('upgradeDialog')?.open)return null;
+    return node?.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])');
+  }
   function accessHintDetails(planId='elite',sectionLabel=''){
     const levelName=String(upgradePlanLabel(planId)||planId).replace(/^BlinQ\s+/i,'').toUpperCase();
     const section=String(sectionLabel||'').trim();
@@ -3510,10 +3522,12 @@
     hint.style.width=`${w}px`;
     const left=Math.max(12,Math.min(window.innerWidth-w-12,r.left+r.width/2-w/2));
     hint.style.left=`${left}px`;
-    requestAnimationFrame(()=>{const h=hint.getBoundingClientRect().height;const below=r.bottom+9;const top=below+h<window.innerHeight-10?below:Math.max(10,r.top-h-9);hint.style.top=`${top}px`;});
+    const h=hint.getBoundingClientRect().height,below=r.bottom+9;
+    hint.style.top=`${below+h<window.innerHeight-10?below:Math.max(10,r.top-h-9)}px`;
   }
   function showAccessHint(target,planId='elite',sectionLabel='',autoHide=false){
-    const hint=$('accessHint'),title=$('accessHintTitle'),text=$('accessHintText'),button=$('accessHintUpgrade');if(!hint||!target)return;
+    const hint=$('accessHint'),title=$('accessHintTitle'),text=$('accessHintText'),button=$('accessHintUpgrade');if(!hint||!target||!target.isConnected||hint.contains(target)||$('upgradeDialog')?.open)return;
+    clearTimeout(accessHintHoverTimer);
     const d=accessHintDetails(planId,sectionLabel);accessHintTarget=target;
     if(title)title.textContent=d.title;if(text)text.textContent=d.text;
     if(button){button.textContent=`Upgrade na ${d.levelName}`;button.dataset.upgradePlan=planId;button.dataset.upgradeSection=sectionLabel||d.levelName;}
@@ -3575,6 +3589,9 @@
   }
   function showUpgradePrompt(planId='pro',sectionLabel='this content',lockedContext=false){
     const dialog=$('upgradeDialog'),host=$('upgradeDialogContent');if(!dialog||!host)return;
+    if(dialog.open)return;
+    upgradeReturnTarget=$('accessHint')?.contains(document.activeElement)?accessHintTarget:document.activeElement;
+    hideAccessHint();
     const a=state.feed?.account||{};
     const requiredId=membershipHierarchy.includes(String(planId||'').toLowerCase())?String(planId).toLowerCase():'pro';
     const requiredIndex=lockedContext?Math.max(1,membershipHierarchy.indexOf(requiredId)):0;
@@ -3597,6 +3614,7 @@
     host.innerHTML=`<div class="upgrade-dialog-head"><div class="upgrade-dialog-intro"><span class="upgrade-dialog-eyebrow">${escapeHtml(uiCopy('upgrade.eyebrow',lcopy('BLINQ MEMBERSHIP','BLINQ ČLENSTVO','BLINQ ČLENSTVÍ')))}</span>${lockedContext?`<span class="upgrade-requires-pill is-required-context">▣ ${escapeHtml(badge)}</span>`:''}<h2 id="upgradeDialogTitle" class="upgrade-dialog-title">${escapeHtml(lcopy('Unlock higher access','Odomknúť ','Odemknout '))}<span class="accent">${escapeHtml(lcopy('higher access','vyšší prístup','vyšší přístup'))}</span></h2><p class="upgrade-dialog-copy"><strong>${escapeHtml(availability)}</strong></p></div><div class="upgrade-account-summary"><span class="upgrade-account-avatar">${avatar?`<img src="${escapeHtml(avatar)}" alt="">`:escapeHtml(accountAvatarFallback(a))}</span><div class="upgrade-account-copy"><small>${escapeHtml(lcopy('Your account','Tvoj účet','Tvůj účet'))}</small><strong>${escapeHtml(accountName)}</strong><b>${escapeHtml(summaryLabel)}</b></div></div></div><div class="upgrade-tier-heading"><div><h3>${escapeHtml(lcopy('Choose your level','Vyber si svoju úroveň','Vyber si svou úroveň'))}</h3></div></div><div class="upgrade-plan-grid">${upgradePlans.map(id=>renderUpgradeTierCard(id,state.ui?.plans?.[id]||{},requiredIndex,lockedContext)).join('')}</div>`;
     host.querySelectorAll('[data-upgrade-account-route]').forEach(button=>button.onclick=()=>{if(dialog.open)dialog.close();setRoute('account',true);});
     if(locale!=='en')translatePublicDom(dialog);if(!dialog.open)dialog.showModal();
+    $('upgradeDialogClose')?.focus({preventScroll:true});
   }
   function clearPrivateWorkspaceState(){
     state.feed={upcoming:[],results:[],performance:{},history:{},model:null};
@@ -3708,7 +3726,7 @@
     document.addEventListener('click',e=>{
       if(!e.target.closest('#profileShell'))closeProfileMenu();
       const dashboardToggle=e.target.closest('[data-dashboard-toggle]');if(dashboardToggle&&state.route==='predictions'){e.preventDefault();toggleDashboardSection(dashboardToggle.dataset.dashboardToggle);return;}
-      const accessUpgrade=e.target.closest('#accessHintUpgrade');if(accessUpgrade){e.preventDefault();e.stopPropagation();hideAccessHint();showUpgradePrompt(accessUpgrade.dataset.upgradePlan||'elite',accessUpgrade.dataset.upgradeSection||'BlinQ',true);return;}
+      const accessUpgrade=e.target.closest('#accessHintUpgrade');if(accessUpgrade){e.preventDefault();e.stopPropagation();showUpgradePrompt(accessUpgrade.dataset.upgradePlan||'elite',accessUpgrade.dataset.upgradeSection||'BlinQ',true);return;}
       const upgradeTarget=e.target.closest('[data-upgrade-plan]');
       const lockedResultsRoute=Boolean(upgradeTarget?.dataset?.uiElement==='SIDEBAR_RESULTS'&&upgradeTarget?.dataset?.route==='results');
       if(upgradeTarget&&state.route!=='admin'&&!lockedResultsRoute){e.preventDefault();e.stopPropagation();const plan=upgradeTarget.dataset.upgradePlan||'pro',section=upgradeTarget.dataset.upgradeSection||'this content';if(upgradeTarget.dataset.upgradeExplicit==='1')showUpgradePrompt(plan,section);else showAccessHint(upgradeTarget,plan,section,true);return;}
@@ -3720,15 +3738,18 @@
       const next=e.target.closest('[data-market-next]');if(next){const key=next.dataset.marketNext;state.marketPage[key]=Number(state.marketPage[key]||0)+1;renderMarketSections();return;}
       const target=e.target.closest('[data-route]');if(!target)return;const route=target.dataset.route;if(!routeMeta[route])return;e.preventDefault();if(route==='account'){openAccountDialog();return;}const upgradeDialog=$('upgradeDialog');if(upgradeDialog?.open&&target.closest('#upgradeDialog'))upgradeDialog.close();const matchDialog=$('matchDialog');if(matchDialog?.open&&target.closest('#matchDialog'))matchDialog.close();setRoute(route);
     });
-    document.addEventListener('pointerover',e=>{const target=e.target.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])');if(!target||state.route==='admin'||window.matchMedia('(hover: none)').matches)return;clearTimeout(accessHintHoverTimer);accessHintHoverTimer=setTimeout(()=>showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false),320);});
-    document.addEventListener('pointerout',e=>{const target=e.target.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])');if(!target)return;const next=e.relatedTarget;const hint=$('accessHint');if(next instanceof Node&&(target.contains(next)||hint?.contains(next)))return;clearTimeout(accessHintHoverTimer);hideAccessHint(240);});
+    document.addEventListener('pointerover',e=>{const target=accessHintTrigger(e.target);if(!target||state.route==='admin'||window.matchMedia('(hover: none)').matches)return;if(e.relatedTarget instanceof Node&&target.contains(e.relatedTarget))return;clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);accessHintHoverTimer=setTimeout(()=>showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false),320);});
+    document.addEventListener('pointerout',e=>{const target=accessHintTrigger(e.target);if(!target)return;const next=e.relatedTarget;const hint=$('accessHint');if(next instanceof Node&&(target.contains(next)||hint?.contains(next)))return;clearTimeout(accessHintHoverTimer);hideAccessHint(240);});
     const accessHintNode=$('accessHint');
     if(accessHintNode){
+      accessHintNode.addEventListener('focusin',()=>{clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);});
       accessHintNode.addEventListener('pointerenter',()=>{clearTimeout(accessHintTimer);clearTimeout(accessHintHoverTimer);});
       accessHintNode.addEventListener('pointerleave',e=>{const next=e.relatedTarget;if(next instanceof Node&&accessHintTarget?.contains?.(next))return;hideAccessHint(220);});
     }
-    document.addEventListener('focusin',e=>{const target=e.target.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])');if(target&&state.route!=='admin')showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false);});
-    document.addEventListener('focusout',e=>{if(e.target.closest?.('[data-upgrade-plan]:not([data-upgrade-explicit="1"])'))hideAccessHint(180);});
+    document.addEventListener('focusin',e=>{const target=accessHintTrigger(e.target);if(target&&state.route!=='admin')showAccessHint(target,target.dataset.upgradePlan||'elite',target.dataset.upgradeSection||'',false);});
+    document.addEventListener('focusout',e=>{const hint=$('accessHint'),next=e.relatedTarget;if(next instanceof Node&&(hint?.contains(next)||accessHintTarget?.contains(next)))return;if(accessHintTrigger(e.target)||hint?.contains(e.target))hideAccessHint(180);});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('accessHint')?.hidden){hideAccessHint();}});
+    $('upgradeDialog').addEventListener('close',()=>{const target=upgradeReturnTarget;upgradeReturnTarget=null;if(target?.isConnected){target.focus({preventScroll:true});}hideAccessHint();});
     window.addEventListener('scroll',()=>hideAccessHint(),{passive:true});
     window.addEventListener('resize',()=>{if(accessHintTarget&&!$('accessHint')?.hidden)positionAccessHint(accessHintTarget);},{passive:true});
     let resizeTimer,lastCardCapacity=dashboardCardsPerPanel(); window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{const capacity=dashboardCardsPerPanel();if(capacity===lastCardCapacity)return;lastCardCapacity=capacity;if(state.route==='predictions'){state.page=0;Object.keys(state.marketPage||{}).forEach(k=>{state.marketPage[k]=0;});renderPredictions();renderMarketSections();renderDashboardComposition();}},120)});
