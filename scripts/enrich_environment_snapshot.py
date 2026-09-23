@@ -8,7 +8,7 @@ import time
 from collections import Counter, defaultdict
 from copy import deepcopy
 from dataclasses import asdict
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -212,6 +212,31 @@ def _learned_environment(
     return env, cache_key
 
 
+def _negative_is_cooling_down(
+    existing: dict[str, Any],
+    *,
+    now: datetime,
+    negative_retry_hours: int,
+) -> bool:
+    """Do not spend geocoder requests on recently confirmed negatives.
+
+    Only a negative from this resolver version counts. New resolver versions,
+    missing timestamps and explicit zero-hour retries remain eligible.
+    """
+    if negative_retry_hours <= 0 or existing.get("venue_resolved") is not False:
+        return False
+    try:
+        version = int(existing.get("resolver_version") or 0)
+        enriched_at = parse_utc(str(existing.get("enriched_at_utc") or ""))
+    except (ValueError, TypeError):
+        return False
+    return (
+        version >= ENVIRONMENT_RESOLVER_VERSION
+        and enriched_at <= now
+        and now - enriched_at < timedelta(hours=negative_retry_hours)
+    )
+
+
 def _needs_work(
     *,
     match: Any,
@@ -220,6 +245,8 @@ def _needs_work(
     force: bool,
     complete_static: bool,
     retry_unresolved: bool,
+    now: datetime | None = None,
+    negative_retry_hours: int = 72,
 ) -> tuple[bool, str]:
     existing = _as_dict(payload.get("_tbt_environment"))
     has_existing = bool(existing)
@@ -240,28 +267,37 @@ def _needs_work(
             # modes so a poisoned history-cache result can be repaired or cleared.
             return True, "incompatible_resolved"
 
+    now_utc = now or datetime.now(timezone.utc)
     if complete_static:
         if existing.get("venue_resolved") is True:
             return False, "resolved"
-        if has_existing:
-            try:
-                resolver_version = int(existing.get("resolver_version") or 0)
-            except (TypeError, ValueError):
-                resolver_version = 0
-            if resolver_version >= ENVIRONMENT_RESOLVER_VERSION:
-                # A current-version negative result is normally a durable negative
-                # cache. In an explicit retry pass we revisit it, while still
-                # allowing newly learned positive history to resolve it locally.
-                learned, _ = knowledge.lookup(match, payload)
-                if learned is None:
-                    if retry_unresolved:
-                        return True, "retry_unresolved"
-                    return False, "unresolved_current_resolver"
-        return True, "complete_static"
+        if not has_existing:
+            return True, "missing"
+        try:
+            resolver_version = int(existing.get("resolver_version") or 0)
+        except (TypeError, ValueError):
+            resolver_version = 0
+        if resolver_version < ENVIRONMENT_RESOLVER_VERSION:
+            return True, "stale_unresolved"
+        # New positive evidence may immediately supersede a failed attempt.
+        learned, _ = knowledge.lookup(match, payload)
+        if learned is not None:
+            return True, "learned_unresolved"
+        if not retry_unresolved:
+            return False, "unresolved_current_resolver"
+        if _negative_is_cooling_down(
+            existing, now=now_utc, negative_retry_hours=negative_retry_hours
+        ):
+            return False, "negative_cooldown"
+        return True, "retry_unresolved"
 
     if retry_unresolved:
         if not has_existing or existing.get("venue_resolved") is True:
             return False, "not_unresolved"
+        if _negative_is_cooling_down(
+            existing, now=now_utc, negative_retry_hours=negative_retry_hours
+        ):
+            return False, "negative_cooldown"
         return True, "retry_unresolved"
 
     if has_existing:
@@ -302,7 +338,26 @@ def main() -> None:
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--diagnostics-limit", type=int, default=100)
-    parser.add_argument("--checkpoint-every", type=int, default=250)
+    parser.add_argument(
+        "--checkpoint-every", type=int, default=1000,
+        help="Publish each 1000 changed matches instead of rewriting full year parquet every 250 rows.",
+    )
+    parser.add_argument(
+        "--checkpoint-minutes", type=int, default=10,
+        help="Also checkpoint dirty data after this many minutes; 0 disables timer.",
+    )
+    parser.add_argument(
+        "--negative-retry-hours", type=int, default=72,
+        help="Cooldown for current-version unresolved geocodes in retry mode; 0 forces retry.",
+    )
+    parser.add_argument(
+        "--yield-guard-after-requests", type=int, default=750,
+        help="Check geocoder success rate after this many Open-Meteo calls; 0 disables the guard.",
+    )
+    parser.add_argument(
+        "--min-geocoder-success-rate", type=float, default=0.005,
+        help="Stop gracefully if new geocoder resolutions/calls fall below this rate.",
+    )
     parser.add_argument(
         "--max-runtime-minutes",
         type=int,
@@ -340,6 +395,12 @@ def main() -> None:
         parser.error("limit must be >= 0")
     if args.max_runtime_minutes < 0:
         parser.error("--max-runtime-minutes must be >= 0")
+    if args.checkpoint_every < 1 or args.checkpoint_minutes < 0:
+        parser.error("Invalid checkpoint cadence")
+    if args.negative_retry_hours < 0 or args.yield_guard_after_requests < 0:
+        parser.error("Retry cooldown and yield-guard threshold must be >= 0")
+    if not 0 <= args.min_geocoder_success_rate <= 1:
+        parser.error("--min-geocoder-success-rate must be in 0..1")
     if args.force and (args.retry_unresolved or args.complete_static):
         parser.error("--force cannot be combined with --retry-unresolved/--complete-static")
 
@@ -347,6 +408,7 @@ def main() -> None:
     end = parse_utc(args.end)
     stop_at = parse_utc(args.stop_at) if args.stop_at.strip() else None
     run_started_monotonic = time.monotonic()
+    run_now_utc = datetime.now(timezone.utc)
     if end <= start:
         parser.error("--end must be later than --start")
     if end > datetime.now(timezone.utc):
@@ -409,6 +471,12 @@ def main() -> None:
         "weather_policy": "not_requested_static_only" if args.static_only else "historical_archive_posthoc_research_only",
         "training_eligible_weather": False,
         "budget_exhausted": False,
+        "negative_retry_hours": args.negative_retry_hours,
+        "negative_cooldown_skipped": 0,
+        "selected_reason_counts": {},
+        "yield_guard_after_requests": args.yield_guard_after_requests,
+        "min_geocoder_success_rate": args.min_geocoder_success_rate,
+        "low_geocoder_yield_stopped": False,
         "runtime_guard_minutes": int(args.max_runtime_minutes),
         "stop_at": stop_at.isoformat() if stop_at else None,
         "runtime_guard_exhausted": False,
@@ -430,6 +498,8 @@ def main() -> None:
             force=bool(args.force),
             complete_static=bool(args.complete_static),
             retry_unresolved=bool(args.retry_unresolved),
+            now=run_now_utc,
+            negative_retry_hours=args.negative_retry_hours,
         )
         if needs_work:
             pending.append(match)
@@ -440,21 +510,44 @@ def main() -> None:
             report["already_enriched"] += 1
             if reason == "unresolved_current_resolver":
                 report["skipped_current_resolver_unresolved"] += 1
+            elif reason == "negative_cooldown":
+                report["negative_cooldown_skipped"] += 1
 
     report["pending_before_limit"] = len(pending)
+    # Cache-only recoveries first, then missing rows and stale negatives. Leave
+    # repeat geocoding of proven recent negatives until after useful work.
+    priority = {
+        "learned_unresolved": 0,
+        "missing": 1,
+        "stale_unresolved": 2,
+        "incompatible_resolved": 3,
+        "retry_unresolved": 4,
+    }
+    pending.sort(
+        key=lambda match: (
+            priority.get(pending_reasons[str(match.match_id)], 5),
+            -match.scheduled_at.timestamp(),
+            str(match.match_id),
+        )
+    )
     if args.limit > 0:
         pending = pending[: args.limit]
     report["selected_for_run"] = len(pending)
+    report["selected_reason_counts"] = dict(Counter(
+        pending_reasons[str(match.match_id)] for match in pending
+    ))
 
     client = OpenMeteoClient(request_limit=args.max_requests)
     changed_years: set[int] = set()
     published_years: set[int] = set()
     dirty_since_checkpoint = 0
+    last_checkpoint_monotonic = time.monotonic()
 
     def checkpoint() -> None:
-        nonlocal dirty_since_checkpoint
+        nonlocal dirty_since_checkpoint, last_checkpoint_monotonic
         if args.dry_run or not changed_years:
             dirty_since_checkpoint = 0
+            last_checkpoint_monotonic = time.monotonic()
             return
         paths: list[Path] = []
         for year in sorted(changed_years):
@@ -483,6 +576,7 @@ def main() -> None:
         published_years.update(changed_years)
         changed_years.clear()
         dirty_since_checkpoint = 0
+        last_checkpoint_monotonic = time.monotonic()
 
     try:
         for match in pending:
@@ -568,14 +662,40 @@ def main() -> None:
                 report["updated"] += 1
                 changed_years.add(match.scheduled_at.astimezone(timezone.utc).year)
                 dirty_since_checkpoint += 1
-                if dirty_since_checkpoint >= args.checkpoint_every:
+                if (
+                    dirty_since_checkpoint >= args.checkpoint_every
+                    or (
+                        args.checkpoint_minutes
+                        and time.monotonic() - last_checkpoint_monotonic
+                        >= args.checkpoint_minutes * 60
+                    )
+                ):
                     checkpoint()
+
+            # A low-yield circuit breaker prevents thousands of repeat negative
+            # geocodes, while never writing skipped matches as false negatives.
+            if (
+                args.yield_guard_after_requests
+                and args.min_geocoder_success_rate > 0
+                and client.request_count >= args.yield_guard_after_requests
+                and (
+                    report["resolved_from_geocoder"] / max(1, client.request_count)
+                    < args.min_geocoder_success_rate
+                )
+            ):
+                report["low_geocoder_yield_stopped"] = True
+                report["stopped_reason"] = "low_geocoder_yield"
+                checkpoint()
+                break
 
         checkpoint()
     finally:
         client.close()
 
     report["open_meteo_requests"] = client.request_count
+    report["geocoder_resolutions_per_request"] = round(
+        report["resolved_from_geocoder"] / max(1, client.request_count), 6
+    )
     report["elapsed_runtime_seconds"] = round(time.monotonic() - run_started_monotonic, 3)
     report["changed_years"] = sorted(published_years | changed_years)
     report["venue_cache_reusable_keys_after_run"] = knowledge.reusable_keys
