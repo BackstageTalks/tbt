@@ -18,7 +18,9 @@ def test_admin_frontend_never_renders_membership_slot_locks():
 
 def test_today_kpi_uses_total_supply_not_authorized_rows():
     text=(ROOT/'web/app.js').read_text(encoding='utf-8')
-    assert "const totalToday=Math.max(Number(dailyEnt?.total)||0,rows.length);" in text
+    assert "state.feed?.entitlements?.daily_pick_count" in text
+    assert "Number.isSafeInteger(suppliedTotal)" in text
+    assert "dailyHubRows('see_all').length" in text
     assert 'String(totalToday)' in text
 
 def test_footer_status_replaces_legacy_watermark_and_matches_current_patch():
