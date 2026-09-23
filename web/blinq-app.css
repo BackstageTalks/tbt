@@ -7168,7 +7168,7 @@ body#blinqPremium .match-history-grid small{
   }
 }
 
-/* R59: one hero watermark; force three responsive KPI icons to remain outlined. */
+/* BlinQ runtime patch 7.3.6-r59 — one hero watermark and three responsive KPI icons. */
 /* The former viewport-fixed watermark repeated above the footer/background.
    One subtle decorative mark now belongs to the hero only. */
 body#blinqPremium .anti-share-watermarks{display:none!important}
