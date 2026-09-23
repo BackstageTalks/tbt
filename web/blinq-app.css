@@ -6968,3 +6968,37 @@ body#blinqPremium .match-detail-overview .insight-player-metrics>span{
   body#blinqPremium .match-popout-button{font-size:0!important;width:36px!important;min-width:36px!important;padding:0!important}
   body#blinqPremium .match-popout-button svg{margin:0!important}
 }
+
+
+/* R56 membership catalogue — keep all five tiers visible */
+body#blinqPremium .account-modal-plan.is-unavailable-plan,
+body#blinqPremium .account-plan-grid>.membership-card.is-unavailable-plan{
+  border-color:rgba(115,133,127,.12)!important;
+  background:linear-gradient(145deg,rgba(18,28,26,.72),rgba(9,18,16,.76))!important;
+  box-shadow:none!important;
+  opacity:.52!important;
+  filter:saturate(.24)!important;
+}
+body#blinqPremium .account-modal-plan.is-unavailable-plan .plan-avatar-pair,
+body#blinqPremium .account-plan-grid>.membership-card.is-unavailable-plan .plan-avatar-pair{
+  filter:grayscale(.88) brightness(.72)!important;
+  opacity:.68!important;
+}
+body#blinqPremium .account-modal-plan.is-unavailable-plan .account-modal-plan-copy small,
+body#blinqPremium .account-modal-plan.is-unavailable-plan .account-modal-plan-copy strong,
+body#blinqPremium .account-modal-plan.is-unavailable-plan .account-modal-plan-copy span,
+body#blinqPremium .account-plan-grid>.membership-card.is-unavailable-plan .membership-card-copy small,
+body#blinqPremium .account-plan-grid>.membership-card.is-unavailable-plan .membership-card-copy strong,
+body#blinqPremium .account-plan-grid>.membership-card.is-unavailable-plan .membership-card-copy p{
+  color:#70807b!important;
+}
+body#blinqPremium .account-plan-unavailable,
+body#blinqPremium .membership-unavailable{
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;
+  min-height:32px!important;padding:0 10px!important;border:1px solid rgba(114,133,127,.18)!important;
+  border-radius:8px!important;background:rgba(8,17,15,.42)!important;color:#65746f!important;
+  font-size:8px!important;font-weight:850!important;letter-spacing:.06em!important;text-transform:uppercase!important;
+  white-space:nowrap!important;
+}
+body#blinqPremium .account-modal-plan.is-unavailable-plan,
+body#blinqPremium .account-plan-grid>.membership-card.is-unavailable-plan{pointer-events:none!important}
