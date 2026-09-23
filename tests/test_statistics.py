@@ -170,6 +170,95 @@ def test_statistics_schema_one_is_revisited_for_new_count_contract(match_factory
     assert enricher.enrich(match) == "enriched"
     assert match.stats["p1_aces"] == 8
     assert match.stats["p2_double_faults"] == 4
-    assert match.provider_payload["_tbt_statistics"]["schema"] == 2
+    assert match.provider_payload["_tbt_statistics"]["schema"] == 3
     assert enricher.enrich(match) == "cached"
+    enricher.close()
+
+
+def _tennisapi_rate_sample():
+    # Real ALL-period item keys/counts captured by the 2026-09-23 provider probe.
+    items = [
+        {"key": "aces", "homeValue": 5, "awayValue": 0},
+        {"key": "doubleFaults", "homeValue": 4, "awayValue": 3},
+        {"key": "firstServeAccuracy", "homeValue": 45, "homeTotal": 64,
+         "awayValue": 42, "awayTotal": 67},
+        {"key": "secondServeAccuracy", "homeValue": 15, "homeTotal": 19,
+         "awayValue": 22, "awayTotal": 25},
+        {"key": "firstServePointsAccuracy", "homeValue": 31, "homeTotal": 45,
+         "awayValue": 27, "awayTotal": 42},
+        {"key": "secondServePointsAccuracy", "homeValue": 8, "homeTotal": 19,
+         "awayValue": 9, "awayTotal": 25},
+        {"key": "firstReturnPoints", "homeValue": 15, "homeTotal": 42,
+         "awayValue": 14, "awayTotal": 45},
+        {"key": "secondReturnPoints", "homeValue": 16, "homeTotal": 25,
+         "awayValue": 11, "awayTotal": 19},
+    ]
+    return {"statistics": [
+        {"period": "ALL", "groups": [{"statisticsItems": items}]},
+        {"period": "1ST", "groups": [{"statisticsItems": [
+            {"key": "firstServePointsAccuracy", "homeValue": 1, "homeTotal": 10},
+        ]}]},
+    ]}
+
+
+def test_real_tennisapi_rates_are_weighted_and_serve_placement_is_not_quality():
+    stats = parse_statistics(_tennisapi_rate_sample(), home_is_player1=True)
+    assert stats["p1_first_serve_win"] == 31 / 45
+    assert stats["p1_second_serve_win"] == 8 / 19
+    assert stats["p1_service_points_won"] == 39 / 64
+    assert stats["p2_service_points_won"] == 36 / 67
+    assert stats["p1_return_points_won"] == 31 / 67
+    assert stats["p2_return_points_won"] == 25 / 64
+    assert stats["p1_aces"] == 5 and stats["p2_double_faults"] == 3
+    assert "p1_first_serve_in" not in stats
+    assert FeatureBuilder._extract_quality(stats, "p1") == (39 / 64, 31 / 67)
+
+
+def test_tennisapi_rates_follow_verified_home_away_orientation():
+    stats = parse_statistics(_tennisapi_rate_sample(), home_is_player1=False)
+    assert stats["p2_service_points_won"] == 39 / 64
+    assert stats["p2_return_points_won"] == 31 / 67
+    assert stats["p1_service_points_won"] == 36 / 67
+    assert stats["p1_return_points_won"] == 25 / 64
+
+
+def test_first_serve_placement_alone_never_becomes_serve_quality():
+    raw = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+        {"key": "firstServeAccuracy", "homeValue": 45, "homeTotal": 64,
+         "awayValue": 42, "awayTotal": 67},
+        {"key": "secondServeAccuracy", "homeValue": 15, "homeTotal": 19,
+         "awayValue": 22, "awayTotal": 25},
+    ]}]}]}
+    with pytest.raises(ProviderError):
+        parse_statistics(raw, home_is_player1=True)
+
+
+def test_schema_two_count_only_marker_is_retried_for_quality_rates(match_factory, tmp_path):
+    class Provider:
+        calls = []
+        def _get(self, path, **kwargs):
+            self.calls.append(path)
+            assert path.endswith("/statistics")
+            return _tennisapi_rate_sample()
+
+    match = match_factory("old", "A", "B", "A")
+    match.stats = {"p1_aces": 5.0, "p2_aces": 0.0}
+    match.provider_payload = {
+        "id": "123",
+        "_tbt_event_identity": {
+            "event_id": "123", "home": "A", "away": "B", "status": "finished"
+        },
+        "_tbt_statistics": {
+            "schema": 2, "event_id": "123", "source": "tennisapi1",
+            "fetched_at": datetime.now(timezone.utc).isoformat(), "status": "available",
+        },
+    }
+    provider = Provider()
+    enricher = StatisticsEnricher(provider, tmp_path / "schema3.sqlite")
+    assert enricher.enrich(match) == "enriched"
+    assert match.stats["p1_service_points_won"] == 39 / 64
+    assert match.stats["p1_return_points_won"] == 31 / 67
+    assert match.provider_payload["_tbt_statistics"]["schema"] == 3
+    assert enricher.enrich(match) == "cached"
+    assert provider.calls == ["/api/tennis/event/123/statistics"]
     enricher.close()
