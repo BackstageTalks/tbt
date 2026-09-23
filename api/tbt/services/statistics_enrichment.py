@@ -8,7 +8,9 @@ from ..errors import ProviderError
 from ..providers.statistics import NoSupportedStatisticsError, parse_statistics
 
 
-STATISTICS_SCHEMA_VERSION = 2
+# V3 re-reads previously count-only V2 rows to capture the provider's
+# now-supported whole-match serve/return point rates.
+STATISTICS_SCHEMA_VERSION = 3
 
 
 class StatisticsEnricher:
