@@ -119,6 +119,95 @@ class ReleaseStore:
             if asset.get("name")
         }
 
+    def _download_current_asset_after_stale_404(self, name: str) -> None:
+        """Recover when tag-based GitHub release metadata points to a deleted asset.
+
+        A --clobber upload deletes and recreates asset IDs. GitHub can cache the
+        tag view used by 'gh release download' after the exact release-ID asset
+        listing has already been refreshed. Never turn a 404 into an empty feed:
+        resolve the current asset by ID and verify the downloaded byte count.
+        The committed bundle SHA-256 check still runs after all downloads.
+        """
+        release_id = int(gh(
+            "api", f"repos/{self.repository}/releases/tags/{self.tag}",
+            "--jq", ".id",
+        ).strip())
+        pages = json.loads(gh(
+            "api", "--paginate", "--slurp",
+            f"repos/{self.repository}/releases/{release_id}/assets?per_page=100",
+        ))
+        if not isinstance(pages, list):
+            raise ValueError("Invalid release asset inventory")
+        assets = [
+            asset
+            for page in pages
+            for asset in (page if isinstance(page, list) else [page])
+            if isinstance(asset, dict)
+        ]
+        current = next(
+            (asset for asset in assets if asset.get("name") == name
+             and asset.get("state") == "uploaded"), None,
+        )
+        if current is None:
+            raise FileNotFoundError(
+                f"Release asset {name} disappeared during deployment; "
+                "retry when the prediction release upload is complete"
+            )
+        asset_id = int(current["id"])
+        expected_bytes = int(current["size"])
+        if expected_bytes <= 0:
+            raise ValueError(f"Release asset {name} is empty")
+        self.directory.mkdir(parents=True, exist_ok=True)
+        # A partial response must never overwrite an existing verified file.
+        with tempfile.NamedTemporaryFile(
+            mode="wb", prefix=".blinq-asset-", suffix=".part",
+            dir=self.directory, delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            result = subprocess.run(
+                [
+                    "gh", "api", "-H", "Accept: application/octet-stream",
+                    f"repos/{self.repository}/releases/assets/{asset_id}",
+                ],
+                stdout=handle,
+                stderr=subprocess.PIPE,
+            )
+        try:
+            if result.returncode:
+                detail = (result.stderr or b"").decode("utf-8", "replace").strip()
+                raise RuntimeError(
+                    f"Current release asset {name} (id {asset_id}) could not be "
+                    f"downloaded: {detail[:350]}"
+                )
+            received = temporary.stat().st_size
+            if received != expected_bytes:
+                raise RuntimeError(
+                    f"Current release asset {name} (id {asset_id}) has "
+                    f"{received} bytes; expected {expected_bytes}; refusing "
+                    "a partial or non-binary GitHub API response"
+                )
+            temporary.replace(self.directory / name)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _download_asset(self, name: str) -> None:
+        try:
+            gh(
+                "release", "download", self.tag,
+                "--repo", self.repository, "--pattern", name,
+                "--dir", self.directory, "--clobber",
+            )
+        except RuntimeError as exc:
+            # Only recover a stale GitHub asset ID. Auth errors, rate limits and
+            # other failures retain their existing fail-closed behavior.
+            if not re.search(r"HTTP\\s+404\\b", str(exc)):
+                raise
+            print(
+                f"Stale tag release asset for {name}; refreshing by release ID",
+                file=sys.stderr,
+            )
+            self._download_current_asset_after_stale_404(name)
+
     def _read_local_bundle_manifest(self) -> dict:
         path = self.directory / self.BUNDLE_MANIFEST
         if not path.is_file():
@@ -147,18 +236,7 @@ class ReleaseStore:
         bundle_manifest = {}
         bundle_files = {}
         if self.BUNDLE_MANIFEST in assets:
-            gh(
-                "release",
-                "download",
-                self.tag,
-                "--repo",
-                self.repository,
-                "--pattern",
-                self.BUNDLE_MANIFEST,
-                "--dir",
-                self.directory,
-                "--clobber",
-            )
+            self._download_asset(self.BUNDLE_MANIFEST)
             try:
                 bundle_manifest = json.loads(
                     (self.directory / self.BUNDLE_MANIFEST).read_text(encoding="utf-8")
@@ -212,18 +290,7 @@ class ReleaseStore:
         }
 
         for name in sorted(selected):
-            gh(
-                "release",
-                "download",
-                self.tag,
-                "--repo",
-                self.repository,
-                "--pattern",
-                name,
-                "--dir",
-                self.directory,
-                "--clobber",
-            )
+            self._download_asset(name)
 
         # history_manifest.json is the authoritative partition inventory.
         # A missing remote partition must fail closed instead of silently
