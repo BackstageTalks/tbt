@@ -7133,3 +7133,37 @@ body#blinqPremium .match-history-grid small{
     border-top:1px solid rgba(74,164,132,.30)!important;
   }
 }
+
+/* Responsive navigation audit: make tablet account visible and mobile routes legible. */
+@media (min-width:901px) and (max-width:1180px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{
+    width:154px!important;min-width:154px!important;max-width:154px!important;
+    height:42px!important;min-height:42px!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    padding:3px 5px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-button{
+    display:flex!important;align-items:center!important;justify-content:flex-start!important;
+    width:100%!important;min-width:0!important;min-height:34px!important;
+    gap:8px!important;padding:0 3px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-copy{
+    display:grid!important;min-width:0!important;max-width:103px!important;
+    overflow:hidden!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-copy strong{
+    overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-toggle{
+    display:none!important;
+  }
+}
+@media (max-width:900px){
+  /* Predikcie / Vysledky / Ucet are intentionally in the fixed bottom bar. */
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs a{
+    font-size:11px!important;font-weight:800!important;color:#b6cac3!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs a.active{
+    color:#59f0ac!important;background:rgba(59,232,157,.12)!important;
+  }
+}
