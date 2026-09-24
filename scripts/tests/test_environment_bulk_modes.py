@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from enrich_environment_snapshot import (
-    _build_venue_knowledge, _learned_environment, _needs_work
+    _build_venue_knowledge, _learned_environment, _needs_work,
+    _verified_unique_environment, _probe_unique_geocoder,
 )
 from tbt.services.environment import (
     OpenMeteoBudgetExceeded, OpenMeteoClient, GEOCODE_URL,
@@ -114,6 +115,68 @@ class BulkEnvironmentSafetyTests(unittest.TestCase):
         self.assertFalse(venue_context_compatible(
             match.provider_payload, match.tournament, incompatible
         )[0])
+
+    def test_empty_geocode_must_not_create_negative_environment(self):
+        class EmptyClient:
+            def geocode(self, query):
+                return None
+        match = fixture_match(resolved=False)
+        env, reason = _verified_unique_environment(
+            EmptyClient(), match.provider_payload, match.tournament, "Saitama, JP"
+        )
+        self.assertIsNone(env)
+        self.assertEqual(reason, "no_result")
+
+    def test_mismatched_country_must_not_create_environment(self):
+        class WrongCountryClient:
+            def geocode(self, query):
+                return SimpleNamespace(
+                    query=query, name="Saitama",
+                    latitude=35.86, longitude=139.65,
+                    elevation_m=15, timezone="Asia/Tokyo",
+                    country="United States",
+                )
+        match = fixture_match(resolved=False)
+        env, reason = _verified_unique_environment(
+            WrongCountryClient(), match.provider_payload, match.tournament, "Saitama, JP"
+        )
+        self.assertIsNone(env)
+        self.assertEqual(reason, "incompatible")
+
+    def test_successful_verified_geocode_is_positive_and_static(self):
+        network = RecordingNetwork()
+        client = OpenMeteoClient(request_limit=2, min_interval_seconds=0, client=network)
+        match = fixture_match(resolved=False)
+        env, reason = _verified_unique_environment(
+            client, match.provider_payload, match.tournament, "Saitama, JP"
+        )
+        self.assertEqual(reason, "resolved")
+        self.assertTrue(env["venue_resolved"])
+        self.assertEqual(env["source"], "open-meteo")
+        self.assertNotIn("weather", env)
+        self.assertEqual(client.request_count, 1)
+
+    def test_probe_fails_closed_on_empty_provider(self):
+        class EmptyClient:
+            def geocode(self, query):
+                return None
+        with self.assertRaisesRegex(RuntimeError, "health probe"):
+            _probe_unique_geocoder(EmptyClient())
+
+    def test_current_negative_can_be_retried_without_cooldown(self):
+        match = fixture_match(resolved=False)
+        match.provider_payload["_tbt_environment"] = {
+            "venue_resolved": False, "resolver_version": 6,
+            "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
+        }
+        should_retry, reason = _needs_work(
+            match=match, payload=match.provider_payload,
+            knowledge=_build_venue_knowledge([]),
+            force=False, complete_static=True, retry_unresolved=True,
+            negative_retry_hours=0,
+        )
+        self.assertTrue(should_retry)
+        self.assertEqual(reason, "retry_unresolved")
 
     def test_identical_preferred_query_is_single_request(self):
         network = RecordingNetwork()
