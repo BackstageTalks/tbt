@@ -202,7 +202,9 @@ jobs:
           stamp="${GITHUB_SHA}"
           curl -fsSL -H 'Cache-Control: no-cache' "$base/?__blinq_release=$stamp" -o /tmp/blinq-index.html
           grep -q 'data-web-release="7.3.6"' /tmp/blinq-index.html
-          patch=$(python -c "import re,pathlib; s=pathlib.Path('/tmp/blinq-index.html').read_text(); print(re.search(r'blinq-web-patch\" content=\"736-r(\\d+)',s).group(1))")
+          # Compare against this checkout, not the potentially stale deployed HTML.
+          patch=$(python -c "import json; print(json.load(open('web/release.json', encoding='utf-8'))['patch'].split('-r')[-1])")
+          grep -q "blinq-web-patch\" content=\"736-r${patch}" /tmp/blinq-index.html
           grep -q "/blinq-app.css?v=7360&p=${patch}" /tmp/blinq-index.html
           grep -q "/app.js?v=7360&p=${patch}" /tmp/blinq-index.html
           grep -q "/auth.js?v=7360&p=${patch}" /tmp/blinq-index.html
@@ -217,6 +219,8 @@ jobs:
           import json
           data=json.load(open('/tmp/blinq-release.json', encoding='utf-8'))
           assert data.get('frontend_marker') == 'blinq-web-736', data
+          expected=json.load(open('web/release.json', encoding='utf-8'))
+          assert data.get('patch') == expected.get('patch'), (data, expected)
           print(json.dumps(data, indent=2))
           PYWEB
 
