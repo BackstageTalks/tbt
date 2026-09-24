@@ -76,7 +76,9 @@ else:
         f'/auth.js?v={asset}&p={patch_n}',
         f'/responsive.js?v={asset}&p={patch_n}',
         f'/app.js?v={asset}&p={patch_n}',
-        f'/assets/blinq_loading_r29.svg?v={asset}&p={patch_n}',
+        f'/assets/blinq-loader.webp?v={asset}&p={patch_n}',
+        f'/assets/blinq-loader.gif?v={asset}&p={patch_n}',
+        f'/assets/blinq-loader-static.webp?v={asset}&p={patch_n}',
     ]
     for ref in required_refs:
         if ref not in index:
