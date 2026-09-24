@@ -65,6 +65,26 @@ def main():
                 else:
                     assert len({b['y'] for b in sizes}) == 3, (width, sizes, page.locator('#dashboardKpis').evaluate('(e)=>getComputedStyle(e).gridTemplateColumns'))
                 assert 'blinq_background.webp' in page.locator('body').evaluate('(e)=>getComputedStyle(e).backgroundImage')
+                # Home stays free of global/hero/footer watermark overlays.  Only
+                # individual predictions receive a small, non-interactive mark.
+                assert page.locator('#dashboardHero').evaluate(
+                    '(e) => getComputedStyle(e, "::after").display'
+                ) == 'none'
+                assert page.locator('#dashboardHero .slot-watermark').count() == 0
+                assert page.locator('.anti-share-watermarks:visible').count() == 0
+                match_cell = page.locator('#dailyHubBody tr:not(.hub-row-locked) .hub-match-cell').first
+                assert match_cell.count() == 1, width
+                assert 'blinq_logo.svg' in match_cell.evaluate(
+                    '(e) => getComputedStyle(e, "::after").backgroundImage'
+                )
+                assert match_cell.evaluate(
+                    '(e) => getComputedStyle(e, "::after").pointerEvents'
+                ) == 'none'
+                loader = page.locator('#bootSplash')
+                # The preproduction harness removes bootSplash above; confirm
+                # the deployed CSS rule itself still references shared artwork.
+                css_source = (WEB / 'blinq-app.css').read_text(encoding='utf-8')
+                assert 'visual revision home-wm-20260924' in css_source
                 button = page.locator('.hub-detail.is-locked').first
                 assert button.is_visible(), (width, page.locator('#dailyHub').inner_text(), page.locator('#dailyHubBody').inner_html())
                 assert button.evaluate('(e)=>getComputedStyle(e).flexDirection') == 'row'
