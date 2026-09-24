@@ -1,4 +1,4 @@
-/* BlinQ visual revision: green-login-loader-20260924 */
+/* BlinQ visual revision: green-login-loader-20260924; public-green-backdrop-20260924 */
 (() => {
   'use strict';
 
@@ -346,8 +346,11 @@
   function applyManagedPageBackground(){
     const hero=state.ui?.elements?.HERO_BANNER_1?.content||{};
     const theme=state.presentationConfig?.theme?.background||{};
-    const bg=String(hero.site_background_url||theme.image||theme.fallback||'').trim();
-    const fallback=String(theme.fallback||bg||'').trim();
+    const configured=String(hero.site_background_url||theme.image||theme.fallback||'').trim();
+    // Upgrade only the former built-in dashboard asset; respect custom admin uploads.
+    const bg=configured==='/assets/blinq_background.webp'?'/assets/blinq_page_background.webp':configured;
+    if(hero.site_background_url==='/assets/blinq_background.webp')hero.site_background_url=bg;
+    const fallback=String(theme.fallback||bg||'/assets/blinq_page_background.webp').trim();
     const style=document.documentElement.style;
     if(bg)style.setProperty('--blinq-page-bg',`url("${bg.replaceAll('\"','')}")`);
     if(fallback)style.setProperty('--blinq-page-bg-fallback',`url("${fallback.replaceAll('\"','')}")`);
@@ -386,8 +389,7 @@
         state.ui.dashboard.user_switches=false;
         state.ui.dashboard.show_disabled_strip=false;
         state.ui.hero_banner=mergeConfig(state.uiSource.hero_banner||{enabled:true,slot_count:1,rotation_seconds:10,auto_rotate:true,show_dots:true,pause_on_hover:true},runtime.config.hero_banner||{});
-        const srcHero=state.uiSource?.elements?.HERO_BANNER_1?.content,liveHero=state.ui?.elements?.HERO_BANNER_1?.content;
-        if(srcHero&&liveHero){['eyebrow','headline','accent_text','text','button_text','theme','show_copy','creative_mode'].forEach(k=>{liveHero[k]=srcHero[k];});}
+        // Admin-published hero text and assets remain authoritative across releases.
       }
     }
 
