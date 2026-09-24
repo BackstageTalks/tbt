@@ -793,7 +793,7 @@
     const showCopy=c.show_copy!==false;
     const sponsored=c.sponsored?'<span class="sponsored-label hero-sponsored">SPONSORED</span>':'';
     const image=heroImageHtml(c,index);
-    const art=image?'':`<div class="dashboard-hero-ball" aria-hidden="true"><i></i><b></b></div><div class="dashboard-hero-mark" aria-hidden="true"><strong>BlinQ</strong><span>STATISTICAL ENGINE</span><small>by BackstageTalks</small></div>`;
+    const art=image?'':`<div class="dashboard-hero-ball" aria-hidden="true"><i></i><b></b></div>`;
     const accent=String(c.accent_text||'').trim();
     const title=escapeHtml(c.headline||'Data. Analysis.');
     const titleHtml=accent?`<h2><span>${title}</span><strong>${escapeHtml(accent)}</strong></h2>`:`<h2><strong>${title}</strong></h2>`;
