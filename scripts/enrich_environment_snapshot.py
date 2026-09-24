@@ -533,6 +533,8 @@ def main() -> None:
         "geocode_candidate_skipped": 0,
         "geocode_query_errors": 0,
         "geocode_no_result_skipped": 0,
+        "geocode_no_result_unique": 0,
+        "geocode_diagnostics": [],
         "geocode_health_probe": None,
         "geocode_health_probe_failed": False,
         "positive_only": bool(args.unique_geocode),
@@ -674,6 +676,8 @@ def main() -> None:
             ) from exc
     attempted_queries: set[str] = set()
     failed_queries: set[str] = set()
+    no_result_queries: set[str] = set()
+    diagnostic_queries: set[str] = set()
     changed_years: set[int] = set()
     published_years: set[int] = set()
     dirty_since_checkpoint = 0
@@ -766,6 +770,9 @@ def main() -> None:
                     if query_key in failed_queries:
                         report["geocode_candidate_skipped"] += 1
                         continue
+                    if query_key in no_result_queries:
+                        report["geocode_no_result_skipped"] += 1
+                        continue
                     attempted_queries.add(query_key)
                     try:
                         env, outcome = _verified_unique_environment(
@@ -777,7 +784,17 @@ def main() -> None:
                         failed_queries.add(query_key)
                         report["geocode_query_errors"] += 1
                         raise
+                    if query_key not in diagnostic_queries and len(report["geocode_diagnostics"]) < 60:
+                        diagnostic_queries.add(query_key)
+                        report["geocode_diagnostics"].append({
+                            "query": query,
+                            "outcome": outcome,
+                            "recoverable_matches": counts.get(query_key, 0),
+                            "venue": (_as_dict(env.get("venue")).get("name") if env else None),
+                        })
                     if outcome == "no_result":
+                        no_result_queries.add(query_key)
+                        report["geocode_no_result_unique"] += 1
                         report["geocode_no_result_skipped"] += 1
                         continue
                     if outcome == "incompatible":
