@@ -40,9 +40,9 @@ on:
         default: true
         type: boolean
       max_requests:
-        description: "Open-Meteo/geocoder cap for this run (does NOT use Tennis RapidAPI quota)"
+        description: "Shared Open-Meteo/geocoder cap across both passes (does NOT use Tennis RapidAPI quota)"
         required: true
-        default: "12000"
+        default: "500"
         type: string
 
 permissions:
@@ -105,6 +105,7 @@ jobs:
           set -euo pipefail
           python -m pip install -r api/requirements-train.txt
           python -m compileall -q api scripts
+          PYTHONPATH=api python -m unittest discover -s scripts/tests -p "test_environment_location_candidates.py"
       - name: Preflight
         shell: bash
         env:
@@ -193,6 +194,7 @@ jobs:
           set -euo pipefail
           python -m pip install -r api/requirements-train.txt
           python -m compileall -q api scripts
+          PYTHONPATH=api python -m unittest discover -s scripts/tests -p "test_environment_location_candidates.py"
       - name: Enrich GitHub history - continuation
         shell: bash
         env:
