@@ -39,3 +39,12 @@ recheck its UI configuration and asset dependencies. The two obsolete scene
 URL declarations were removed from `blinq-app.css`, and historical loader
 assertions were updated to protect the current WebP, GIF, and reduced-motion
 fallbacks. All other legacy CSS remains pending a separate visual refactor.
+
+## Modernized banner editor
+
+Admin > Bannery has a live desktop/mobile carousel preview separate from the
+selected editing slot. Both previews share the production banner image and
+size/color variables. Headline, subtitle and eyebrow each have a pixel-size
+selector and an intentionally restricted black-to-white palette. Empty fields
+stay hidden on the public hero; historic `accent_text` never reappears.
+Admin-uploaded `/api/v1/media/...` images are supported by both previews.

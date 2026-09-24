@@ -1,0 +1,15 @@
+'use strict';
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const app=fs.readFileSync('web/app.js','utf8');
+const css=fs.readFileSync('web/blinq-app.css','utf8');
+const ui=JSON.parse(fs.readFileSync('web/ui-config.json','utf8'));
+for(const field of ['headline','text','eyebrow','headline_size','text_size','eyebrow_size','headline_color','text_color','eyebrow_color'])assert.ok(app.includes('data-simple-banner-field="'+field+'"'),field);
+for(const hex of ['#000000','#303030','#555555','#808080','#b5b5b5','#e4e4e4','#ffffff'])assert.ok(app.includes(hex),hex);
+for(const token of ['function syncAdminHeroPreview()','function startAdminHeroPreview()','state.adminPreviewIndex','data-admin-preview-card="desktop"','data-admin-preview-card="mobile"','data-admin-preview-pause'])assert.ok(app.includes(token),token);
+assert.ok(app.includes("const title=String(c.headline||'').trim();"));
+assert.ok(!app.includes("const accent=String(c.accent_text||'').trim();"));
+assert.ok(css.includes('var(--creative-headline-size,36px)'));
+assert.ok(css.includes('var(--creative-headline-color,#ffffff)'));
+for(let i=1;i<=5;i++)assert.equal(ui.elements['HERO_BANNER_'+i].content.accent_text,'');
+console.log('PASS: banner editor contract');

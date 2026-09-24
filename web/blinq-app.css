@@ -7427,3 +7427,175 @@ body#blinqPremium.blinq-home .daily-hub-table tbody tr:not(.hub-row-locked) .hub
 body#blinqPremium.blinq-home .prediction-card.match-card-v3::after{
   content:none!important;display:none!important;background:none!important;
 }
+
+/* Banner editor 2026-09-24: the published hero and both Admin previews share
+   editable sizes and grayscale colors, without changing the base brand UI. */
+body#blinqPremium.blinq-home #dashboardHero .hero-slide .dashboard-hero-copy h2,
+body#blinqPremium.blinq-home #dashboardHero .hero-slide .dashboard-hero-copy h2 strong,
+body#blinqPremium.blinq-home #dashboardHero .hero-slide .dashboard-hero-copy h2 span{
+  font-size:var(--creative-headline-size,36px)!important;
+  color:var(--creative-headline-color,#ffffff)!important;
+}
+body#blinqPremium.blinq-home #dashboardHero .hero-slide .dashboard-hero-copy p{
+  font-size:var(--creative-text-size,14px)!important;
+  color:var(--creative-text-color,#c8dad6)!important;
+}
+body#blinqPremium.blinq-home #dashboardHero .hero-slide .dashboard-hero-copy>small{
+  font-size:var(--creative-eyebrow-size,10px)!important;
+  color:var(--creative-eyebrow-color,var(--lean-green))!important;
+}
+@media(max-width:760px){
+  body#blinqPremium.blinq-home #dashboardHero .hero-slide .dashboard-hero-copy h2,
+  body#blinqPremium.blinq-home #dashboardHero .hero-slide .dashboard-hero-copy h2 strong{
+    font-size:clamp(18px,calc(var(--creative-headline-size,36px)*.75),38px)!important;
+  }
+  body#blinqPremium.blinq-home #dashboardHero .hero-slide .dashboard-hero-copy p{
+    font-size:clamp(10px,var(--creative-text-size,14px),17px)!important;
+  }
+}
+body#blinqPremium .admin-hero-manager{max-width:1200px!important}
+body#blinqPremium .admin-hero-manager .admin-ux-heading h2{
+  font-size:24px!important;letter-spacing:-.03em!important;
+}
+body#blinqPremium .admin-hero-manager .admin-ux-heading p{
+  font-size:12px!important;color:#9eb8af!important;line-height:1.5!important;
+}
+body#blinqPremium .admin-hero-preview-stage{
+  margin:16px 0!important;padding:17px!important;
+  border-radius:18px!important;border:1px solid rgba(80,191,150,.22)!important;
+  background:linear-gradient(150deg,rgba(15,58,44,.30),rgba(3,18,18,.94))!important;
+  box-shadow:0 12px 44px rgba(0,0,0,.17)!important;
+}
+body#blinqPremium .admin-hero-preview-toolbar{
+  display:flex!important;align-items:center!important;justify-content:space-between!important;
+  gap:12px!important;margin-bottom:14px!important;
+}
+body#blinqPremium .admin-hero-preview-toolbar>div:first-child{
+  display:grid!important;gap:5px!important;
+}
+body#blinqPremium .admin-hero-preview-toolbar small{
+  font-size:10px!important;letter-spacing:.11em!important;color:#70d5ad!important;font-weight:850!important;
+}
+body#blinqPremium .admin-hero-preview-toolbar strong{
+  font-size:15px!important;color:#edf9f4!important;
+}
+body#blinqPremium .admin-hero-preview-actions{
+  display:flex!important;align-items:center!important;gap:7px!important;
+}
+body#blinqPremium .admin-hero-preview-actions button{
+  min-width:36px!important;min-height:36px!important;
+  padding:7px 12px!important;border-radius:10px!important;
+  border:1px solid rgba(100,190,161,.30)!important;
+  color:#e9f7f1!important;background:#0a2822!important;
+  font-size:13px!important;font-weight:700!important;
+}
+body#blinqPremium .admin-hero-preview-actions button:hover{
+  background:#164738!important;border-color:#52bd91!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview-grid{
+  grid-template-columns:minmax(0,1.8fr) minmax(195px,.68fr)!important;
+  margin:0!important;gap:16px!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview-grid>div>span{
+  font-size:10px!important;color:#b1cec3!important;margin-bottom:9px!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview{
+  position:relative!important;isolation:isolate!important;
+  border-radius:13px!important;
+  background:rgba(0,14,13,.9)!important;
+  border:1px solid rgba(100,190,161,.23)!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview>img{
+  position:absolute!important;inset:0!important;width:100%!important;height:100%!important;
+  display:block!important;object-fit:cover!important;z-index:0!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview::before{
+  content:""!important;position:absolute!important;inset:0!important;
+  display:block!important;
+  background:linear-gradient(90deg,rgba(0,13,13,.66),rgba(0,13,13,.08))!important;
+  z-index:1!important;pointer-events:none!important;
+}
+body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy{
+  position:absolute!important;inset:0!important;z-index:2!important;
+  padding:clamp(13px,2.5vw,28px)!important;
+  max-width:75%!important;display:flex!important;flex-direction:column!important;
+  justify-content:center!important;align-items:flex-start!important;
+  color:var(--creative-headline-color,#ffffff)!important;
+}
+body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy small{
+  font-size:var(--creative-eyebrow-size,10px)!important;
+  color:var(--creative-eyebrow-color,#6be8b4)!important;
+  letter-spacing:.08em!important;
+}
+body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy strong{
+  font-size:clamp(14px,calc(var(--creative-headline-size,36px)*.65),44px)!important;
+  line-height:1.05!important;font-weight:850!important;
+  color:var(--creative-headline-color,#ffffff)!important;
+  overflow-wrap:anywhere!important;
+}
+body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy p{
+  font-size:clamp(10px,var(--creative-text-size,14px),22px)!important;
+  line-height:1.38!important;color:var(--creative-text-color,#c8dad6)!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile .admin-hero-preview-copy{
+  max-width:90%!important;padding:13px!important;
+}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile .admin-hero-preview-copy strong{
+  font-size:clamp(13px,calc(var(--creative-headline-size,36px)*.55),30px)!important;
+}
+body#blinqPremium .admin-hero-preview-dots{
+  display:flex!important;justify-content:center!important;gap:8px!important;margin-top:14px!important;
+}
+body#blinqPremium .admin-hero-preview-dots button{
+  width:23px!important;height:5px!important;border:0!important;border-radius:99px!important;
+  background:rgba(191,230,212,.27)!important;
+}
+body#blinqPremium .admin-hero-preview-dots button.is-active{
+  width:34px!important;background:#4fdda5!important;box-shadow:0 0 12px rgba(70,221,165,.3)!important;
+}
+body#blinqPremium .admin-hero-manager .admin-hero-selected-head{
+  margin:22px 0 10px!important;padding:10px 4px!important;
+  border-bottom:1px solid rgba(115,174,153,.22)!important;
+}
+body#blinqPremium .admin-hero-manager .admin-hero-selected-head strong{font-size:16px!important}
+body#blinqPremium .admin-hero-manager .admin-hero-selected-head>span{font-size:10px!important}
+body#blinqPremium .admin-hero-manager .admin-form-section{
+  border:1px solid rgba(115,174,153,.19)!important;
+  border-radius:15px!important;
+  padding:17px!important;margin-bottom:14px!important;
+  background:linear-gradient(150deg,rgba(6,34,29,.83),rgba(6,22,22,.93))!important;
+}
+body#blinqPremium .admin-hero-manager .admin-form-section-title strong{
+  font-size:14px!important;color:#f0fbf6!important;
+}
+body#blinqPremium .admin-hero-manager .admin-form-section-title>span{
+  font-size:11px!important;color:#9cb6ad!important;
+}
+body#blinqPremium .admin-banner-type-grid{
+  display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:14px!important;margin-top:12px!important;
+}
+body#blinqPremium .admin-banner-type-grid label{
+  display:grid!important;gap:7px!important;
+  font-size:11px!important;color:#d7ebe2!important;
+}
+body#blinqPremium .admin-banner-type-grid select{
+  min-height:41px!important;max-width:100%!important;
+  padding:8px 11px!important;border-radius:9px!important;
+  border:1px solid rgba(105,173,150,.33)!important;
+  background:#071d1c!important;color:#f0fbf6!important;font-size:12px!important;
+}
+@media(max-width:900px){
+  body#blinqPremium .admin-hero-preview-stage .lean-admin-preview-grid{
+    grid-template-columns:minmax(0,1fr) minmax(160px,.55fr)!important;
+  }
+}
+@media(max-width:640px){
+  body#blinqPremium .admin-hero-preview-stage{padding:12px!important}
+  body#blinqPremium .admin-hero-preview-toolbar{align-items:flex-start!important;flex-wrap:wrap!important}
+  body#blinqPremium .admin-hero-preview-stage .lean-admin-preview-grid{
+    grid-template-columns:1fr!important;
+  }
+  body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile{max-width:270px!important}
+  body#blinqPremium .admin-banner-type-grid{grid-template-columns:1fr!important}
+}
