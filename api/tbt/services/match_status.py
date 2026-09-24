@@ -15,6 +15,7 @@ are changed here.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+import re
 from typing import Any
 
 
@@ -206,11 +207,17 @@ def classify_finished_event(
         "checked_at": checked_at.isoformat(),
         "provider_status": status_text[:120],
     }
+    home = event.get("homeTeam") if isinstance(event.get("homeTeam"), dict) else {}
+    away = event.get("awayTeam") if isinstance(event.get("awayTeam"), dict) else {}
+    # A recycled or incorrectly mapped provider ID must never mark an
+    # unrelated published pick as a loss (or retirement).
+    feed_players = {_player_id(row, "player1"), _player_id(row, "player2")}
+    provider_players = {str(home.get("id") or "").strip(), str(away.get("id") or "").strip()}
+    if "" in feed_players or "" in provider_players or feed_players != provider_players:
+        return None
     if retired:
         return {**base, "status": "retired"}
 
-    home = event.get("homeTeam") if isinstance(event.get("homeTeam"), dict) else {}
-    away = event.get("awayTeam") if isinstance(event.get("awayTeam"), dict) else {}
     provider_winner = ""
     if winner_code == 1:
         provider_winner = str(home.get("id") or "").strip()
@@ -230,6 +237,13 @@ def classify_finished_event(
     }
 
 
+def _provider_error_code(error: Exception) -> str:
+    """Only report a safe exception class and HTTP status, never URLs or payloads."""
+    kind = type(error).__name__[:48]
+    code = re.search(r"\bHTTP\s+([1-5]\d\d)\b", str(error))
+    return f"{kind}_HTTP_{code.group(1)}" if code else kind
+
+
 def scan_match_statuses(
     feed: dict[str, Any],
     provider: Any,
@@ -239,14 +253,18 @@ def scan_match_statuses(
     max_checks: int = 30,
     lookback_hours: int = 36,
 ) -> dict[str, Any]:
-    """Resolve already-started current-feed fixtures with a bounded request budget."""
+    """Resolve post-start fixtures, report provider faults, and never invent results.
+
+    A systematic provider failure must not spend 30 requests and return a
+    successful zero-outcome snapshot. The Azure caller records the diagnostics
+    and fails the workflow on a completely unusable history endpoint.
+    """
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     rows = prediction_rows(feed)
     existing_payload = previous_snapshot if isinstance(previous_snapshot, dict) else {}
     existing = existing_payload.get("statuses")
     existing = existing if isinstance(existing, dict) else {}
 
-    # Keep only terminal statuses that still belong to the current serving feed.
     statuses: dict[str, dict[str, Any]] = {
         str(eid): dict(value)
         for eid, value in existing.items()
@@ -268,53 +286,87 @@ def scan_match_statuses(
         due.append((scheduled, eid, row))
     due.sort(key=lambda item: item[0])
 
-    live_ids: set[str] = set()
-    provider_requests = 0
+    provider_errors: dict[str, int] = {}
+    live_by_id: dict[str, dict[str, Any]] = {}
+    nominal_requests = 0
+    request_count_before = getattr(provider, "request_count", None)
     if due:
         try:
             live_events = provider.live_events()
-            provider_requests += 1
-            live_ids = {
-                _provider_event_id(event)
+            nominal_requests += 1
+            live_by_id = {
+                _provider_event_id(event): event
                 for event in live_events
                 if isinstance(event, dict) and _provider_event_id(event)
             }
-        except Exception:
-            # A live-list failure should not prevent finished-event checks.
-            live_ids = set()
+        except Exception as exc:
+            code = _provider_error_code(exc)
+            provider_errors[code] = provider_errors.get(code, 0) + 1
+            # A live-list failure must not prevent completed-event lookups.
 
     checked = 0
     skipped_live = 0
+    successful_history = 0
+    matched_events = 0
+    newly_resolved = 0
+    consecutive_errors = 0
     for _, eid, row in due:
         if checked >= max(0, int(max_checks)):
             break
-        if eid in live_ids:
-            skipped_live += 1
-            continue
 
-        player_id = _player_id(row, "player1")
-        try:
-            payload = provider.previous_player_matches(player_id, 0)
-            provider_requests += 1
-        except Exception:
-            checked += 1
+        live_event = live_by_id.get(eid)
+        if live_event is not None:
+            result = classify_finished_event(row, live_event, checked_at=now)
+            if result:
+                statuses[eid] = result
+                newly_resolved += 1
+            else:
+                skipped_live += 1
             continue
 
         checked += 1
+        player_id = _player_id(row, "player1")
+        try:
+            payload = provider.previous_player_matches(player_id, 0)
+            nominal_requests += 1
+        except Exception as exc:
+            code = _provider_error_code(exc)
+            provider_errors[code] = provider_errors.get(code, 0) + 1
+            # A quota failure cannot be solved by trying another player.
+            if type(exc).__name__ == "RequestBudgetExceeded":
+                break
+            consecutive_errors += 1
+            # Three consecutive errors with no successful history response
+            # indicate a broken provider endpoint, permission or quota.
+            if consecutive_errors >= 3:
+                break
+            continue
+
+        consecutive_errors = 0
+        successful_history += 1
         event = next(
-            (
-                event
-                for event in _provider_rows(payload)
-                if _provider_event_id(event) == eid
-            ),
+            (candidate for candidate in _provider_rows(payload)
+             if _provider_event_id(candidate) == eid),
             None,
         )
         if event is None:
             continue
+        matched_events += 1
         result = classify_finished_event(row, event, checked_at=now)
         if result:
             statuses[eid] = result
+            newly_resolved += 1
 
+    # RapidTennisClient increments request_count for every attempted request,
+    # including failures and retries. Older fakes may not expose that field.
+    actual_request_count = getattr(provider, "request_count", None)
+    if isinstance(request_count_before, int) and isinstance(actual_request_count, int):
+        provider_requests = max(0, actual_request_count - request_count_before)
+    else:
+        provider_requests = nominal_requests
+
+    failed_history = checked - successful_history
+    degraded = checked > 0 and successful_history == 0 and failed_history > 0
     return {
         "schema": 1,
         "updated_at": now.isoformat(),
@@ -325,4 +377,10 @@ def scan_match_statuses(
         "skipped_live": skipped_live,
         "provider_requests": provider_requests,
         "terminal": len(statuses),
+        "newly_resolved": newly_resolved,
+        "successful_history": successful_history,
+        "failed_history": failed_history,
+        "matched_events": matched_events,
+        "provider_errors": provider_errors,
+        "degraded": degraded,
     }

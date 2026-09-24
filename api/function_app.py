@@ -1322,6 +1322,22 @@ def internal_match_status_worker(req):
             except Exception:
                 pass
         saved = save_match_status_snapshot(snapshot)
+        if saved.get("degraded"):
+            logging.warning(
+                "Hourly match status provider failed: checked=%s requests=%s codes=%s",
+                saved.get("checked"),
+                saved.get("provider_requests"),
+                saved.get("provider_errors"),
+            )
+            return response({
+                "error": "match_status_provider_unavailable",
+                "autonomous": True,
+                "due": saved.get("due"),
+                "checked": saved.get("checked"),
+                "provider_requests": saved.get("provider_requests"),
+                "provider_errors": saved.get("provider_errors"),
+                "newly_resolved": saved.get("newly_resolved"),
+            }, 503)
         return response({**saved, "autonomous": True})
     except AdminStorageUnavailable:
         return response({"error": "match_status_storage_unavailable"}, 503)
