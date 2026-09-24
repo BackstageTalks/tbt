@@ -7242,3 +7242,28 @@ body#blinqPremium .boot-tennis-card .blinq-loader-media>img{
   max-height:none!important;object-fit:contain!important;border:0!important;border-radius:0!important;
   filter:none!important;opacity:1!important;mix-blend-mode:normal!important
 }
+
+/* Dark loader final polish: rounded outline and dedicated caption.
+   The legacy bootStatus remains visually hidden and JS-managed. */
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source{
+  display:flex!important;flex-direction:column!important;align-items:center!important;
+  gap:18px!important;aspect-ratio:auto!important;height:auto!important;
+}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source .blinq-loader-media{
+  display:block!important;box-sizing:border-box!important;width:100%!important;
+  aspect-ratio:704/410!important;overflow:hidden!important;
+  border:1px solid rgba(94,190,166,.24)!important;border-radius:16px!important;
+  background:#031314!important;box-shadow:none!important;
+}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source .blinq-loader-caption{
+  display:block!important;position:static!important;visibility:visible!important;
+  width:auto!important;height:auto!important;max-width:100%!important;
+  clip:auto!important;clip-path:none!important;overflow:visible!important;
+  margin:0!important;padding:0!important;opacity:1!important;
+  color:#eef8f4!important;background:none!important;
+  font:400 12px/1.5 Arial,sans-serif!important;text-align:center!important;
+  letter-spacing:normal!important;white-space:normal!important;
+}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source .blinq-loader-caption strong{
+  color:#00dca3!important;font-weight:700!important;
+}
