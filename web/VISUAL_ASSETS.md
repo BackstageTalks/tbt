@@ -5,9 +5,9 @@ backgrounds when changing login, loading, dashboard, or hero art.
 
 | Asset | Canonical usage | Keep? |
 | --- | --- | --- |
-| `/assets/blinq_page_background.webp` | **Green tennis/globe graphic**, shown on the login dialog and behind the loading animation. Shared through `--blinq-login-loader-backdrop` in `blinq-app.css`. | Yes |
-| `/assets/blinq_background.webp` | Darker main dashboard/page background. **Not** the login/loading artwork. | Yes |
-| `/assets/blinq_logo.svg` | Header/brand identity, login watermark, and small non-interactive attribution per prediction. Not a global home/hero/footer overlay. | Yes |
+| `/assets/blinq_page_background.webp` | **Green tennis/globe graphic** for login, loader and homepage. Their common overlay is `--blinq-login-loader-backdrop`. | Yes |
+| `/assets/blinq_background.webp` | Former dark dashboard background retained for historical compatibility; no longer used by the current homepage default. | Yes |
+| `/assets/blinq_logo.svg` | Header identity and login watermark. Homepage has no page, banner, footer or per-prediction watermark overlays. | Yes |
 | `/assets/blinq-loader.webp` | Approved animated loading illustration, preferred WebP source of the loader picture. | Yes |
 | `/assets/blinq-loader.gif` | GIF fallback via the loader picture's `<img>` element. | Yes |
 | `/assets/blinq-loader-static.webp` | Reduced-motion image selected by the loader picture's media source. | Yes |
@@ -16,9 +16,10 @@ backgrounds when changing login, loading, dashboard, or hero art.
 The final, authoritative shared **login and loader backdrop** rule is marked
 `BlinQ visual revision green-login-loader-20260924` near the end of
 `blinq-app.css`. Keep their background image and dark overlay in one variable
-rather than adding separate `!important` overrides. This revision does not
-change the approved animation, auth form, login watermark, main dashboard
-background, or per-prediction attribution.
+rather than adding separate `!important` overrides. The shared background applies to the public home while the approved loader
+animation, auth form, and login watermark remain unchanged. A deliberately
+custom Admin page-image URL is retained; the former built-in dark dashboard URL
+is migrated to the approved green asset.
 
 **Repository cleanup:** older sections in `blinq-app.css` still contain
 historical loading/background overrides. They are superseded by the canonical

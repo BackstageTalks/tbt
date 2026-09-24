@@ -7402,3 +7402,26 @@ body#blinqPremium.blinq-home .prediction-card.match-card-v3>*{
     width:62px!important;height:25px!important;opacity:.06!important;
   }
 }
+
+/* Canonical public backdrop: same green artwork and overlay as login and boot.
+   Site background configured in Admin can still override the image only. */
+body#blinqPremium.blinq-home:not(.blinq-admin){
+  background-image:var(--blinq-login-loader-backdrop)!important;
+  background-color:#031314!important;
+  background-position:center!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+  background-attachment:fixed!important;
+}
+@media(max-width:900px){
+  body#blinqPremium.blinq-home:not(.blinq-admin){background-attachment:scroll!important}
+}
+/* Never paint a separate watermark layer over the shared loader or homepage. */
+body#blinqPremium .boot-splash.boot-splash-tennis::before,
+body#blinqPremium .boot-splash.boot-splash-tennis::after{
+  content:none!important;display:none!important;background:none!important;
+}
+body#blinqPremium.blinq-home .daily-hub-table tbody tr:not(.hub-row-locked) .hub-match-cell::after,
+body#blinqPremium.blinq-home .prediction-card.match-card-v3::after{
+  content:none!important;display:none!important;background:none!important;
+}
