@@ -74,7 +74,6 @@ def main() -> None:
 
         output = {
             "audited_at_utc": datetime.now(timezone.utc).isoformat(),
-            "history_identity_safety": safety,
             "counts": dict(totals),
             "unique_tournaments": len(tournament_groups),
             "unique_tournaments_missing_venue": len(missing_groups),
@@ -91,16 +90,16 @@ def main() -> None:
         summary = os.getenv("GITHUB_STEP_SUMMARY")
         if summary:
             with open(summary, "a", encoding="utf-8") as fh:
-                fh.write("## BlinQ Environment bulk audit (read-only)\\n\\n")
+                fh.write("## BlinQ Environment bulk audit (read-only)\n\n")
                 for key, value in output["counts"].items():
-                    fh.write(f"- **{key}**: {value:,}\\n")
+                    fh.write(f"- **{key}**: {value:,}\n")
                 for key in (
                     "unique_tournaments", "unique_tournaments_missing_venue",
                     "unique_tournaments_recoverable_from_cache",
                     "unique_tournaments_without_candidate", "unique_preferred_geocode_queries",
                 ):
-                    fh.write(f"- **{key}**: {output[key]:,}\\n")
-                fh.write("\\nNo geocoding requests, no writes to historical releases.\\n")
+                    fh.write(f"- **{key}**: {output[key]:,}\n")
+                fh.write("\nNo geocoding requests, no writes to historical releases.\n")
 
 
 if __name__ == "__main__":
