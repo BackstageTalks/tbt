@@ -430,6 +430,17 @@ class RapidTennisClient:
             enrichment=True,
         )
 
+    def near_player_matches_for_status(self, player_id: str | int) -> Any:
+        """One documented near-match lookup for bounded status settlement.
+
+        Unlike the general presentation helper, an HTTP 404 must propagate so
+        the hourly worker can distinguish a missing player/route from no match.
+        """
+        return self._get(
+            f"/api/tennis/player/{player_id}/events/near",
+            enrichment=True,
+        )
+
     def player_near_matches(self, player_id: str | int) -> Any:
         """Nearest previous/next player events from TennisApi."""
         for path in (

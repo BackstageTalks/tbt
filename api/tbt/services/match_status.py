@@ -135,7 +135,9 @@ def _provider_rows(payload: Any) -> list[dict[str, Any]]:
         ):
             found.append(value)
             return
-        for key in ("events", "data", "result", "results", "response", "matches"):
+        for key in ("events", "data", "result", "results", "response", "matches",
+                    "previousEvent", "previous", "lastEvent", "lastMatch",
+                    "previousMatch", "event", "near", "last"):
             child = value.get(key)
             if isinstance(child, (list, dict)):
                 walk(child, depth + 1)
@@ -252,19 +254,19 @@ def scan_match_statuses(
     now: datetime | None = None,
     max_checks: int = 30,
     lookback_hours: int = 36,
+    max_near_checks: int = 12,
 ) -> dict[str, Any]:
-    """Resolve post-start fixtures, report provider faults, and never invent results.
+    """Settle verified events without trusting a consistently 404ing history route.
 
-    A systematic provider failure must not spend 30 requests and return a
-    successful zero-outcome snapshot. The Azure caller records the diagnostics
-    and fails the workflow on a completely unusable history endpoint.
+    TennisApi's /player/{id}/events/near is an alternate compact source for
+    the closest previous/next match. It is NOT guaranteed to contain every
+    historical match, so a missing event is left pending, never scored.
     """
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     rows = prediction_rows(feed)
-    existing_payload = previous_snapshot if isinstance(previous_snapshot, dict) else {}
-    existing = existing_payload.get("statuses")
+    prior = previous_snapshot if isinstance(previous_snapshot, dict) else {}
+    existing = prior.get("statuses")
     existing = existing if isinstance(existing, dict) else {}
-
     statuses: dict[str, dict[str, Any]] = {
         str(eid): dict(value)
         for eid, value in existing.items()
@@ -286,14 +288,24 @@ def scan_match_statuses(
         due.append((scheduled, eid, row))
     due.sort(key=lambda item: item[0])
 
+    prior_errors = prior.get("provider_errors")
+    prior_errors = prior_errors if isinstance(prior_errors, dict) else {}
+    known_history_404 = int(prior_errors.get("ProviderError_HTTP_404") or 0) >= 2
+    prefer_near = prior.get("preferred_route") == "near" or (
+        known_history_404 and int(prior.get("successful_history") or 0) == 0
+    )
+    near_method = getattr(provider, "near_player_matches_for_status", None)
+    near_cache: dict[str, Any] = {}
+    max_near_checks = max(0, min(30, int(max_near_checks)))
+
     provider_errors: dict[str, int] = {}
     live_by_id: dict[str, dict[str, Any]] = {}
     nominal_requests = 0
     request_count_before = getattr(provider, "request_count", None)
     if due:
         try:
-            live_events = provider.live_events()
             nominal_requests += 1
+            live_events = provider.live_events()
             live_by_id = {
                 _provider_event_id(event): event
                 for event in live_events
@@ -302,17 +314,23 @@ def scan_match_statuses(
         except Exception as exc:
             code = _provider_error_code(exc)
             provider_errors[code] = provider_errors.get(code, 0) + 1
-            # A live-list failure must not prevent completed-event lookups.
 
-    checked = 0
-    skipped_live = 0
-    successful_history = 0
-    matched_events = 0
-    newly_resolved = 0
-    consecutive_errors = 0
-    for _, eid, row in due:
-        if checked >= max(0, int(max_checks)):
+    checked = skipped_live = successful_history = matched_events = 0
+    newly_resolved = consecutive_errors = near_attempts = unmatched = 0
+    next_due_id = ""
+    last_checked_eid = ""
+    max_checks = max(0, min(120, int(max_checks)))
+    cursor = str(prior.get("next_due_id") or "")
+    offset = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), 0)
+    ordered = due[offset:] + due[:offset]
+
+    for position, (_, eid, row) in enumerate(ordered):
+        if checked >= max_checks:
             break
+        if prefer_near and near_attempts >= max_near_checks:
+            break
+        last_checked_eid = eid
+        next_due_id = ordered[(position + 1) % len(ordered)][1]
 
         live_event = live_by_id.get(eid)
         if live_event is not None:
@@ -324,20 +342,54 @@ def scan_match_statuses(
                 skipped_live += 1
             continue
 
-        checked += 1
         player_id = _player_id(row, "player1")
+        checked += 1
+        payload = None
+        near_used = False
         try:
-            payload = provider.previous_player_matches(player_id, 0)
-            nominal_requests += 1
+            if prefer_near:
+                if player_id in near_cache:
+                    payload = near_cache[player_id]
+                else:
+                    if near_attempts >= max_near_checks:
+                        checked -= 1
+                        break
+                    if not callable(near_method):
+                        raise RuntimeError("NearStatusRouteUnavailable")
+                    near_attempts += 1
+                    nominal_requests += 1
+                    payload = near_method(player_id)
+                    near_cache[player_id] = payload
+                near_used = True
+            else:
+                nominal_requests += 1
+                payload = provider.previous_player_matches(player_id, 0)
         except Exception as exc:
-            code = _provider_error_code(exc)
-            provider_errors[code] = provider_errors.get(code, 0) + 1
-            # A quota failure cannot be solved by trying another player.
-            if type(exc).__name__ == "RequestBudgetExceeded":
+            error_code = _provider_error_code(exc)
+            provider_errors[error_code] = provider_errors.get(error_code, 0) + 1
+            if (
+                not prefer_near and error_code.endswith("_HTTP_404")
+                and callable(near_method) and near_attempts < max_near_checks
+            ):
+                # Stop repeating the known 404 route once the documented
+                # near-match endpoint succeeds for one real player.
+                try:
+                    near_attempts += 1
+                    nominal_requests += 1
+                    payload = near_method(player_id)
+                    near_cache[player_id] = payload
+                    prefer_near = True
+                    near_used = True
+                except Exception as fallback_exc:
+                    code = _provider_error_code(fallback_exc)
+                    provider_errors[code] = provider_errors.get(code, 0) + 1
+                    if type(fallback_exc).__name__ == "RequestBudgetExceeded":
+                        break
+            elif type(exc).__name__ == "RequestBudgetExceeded":
                 break
+
+        if payload is None:
             consecutive_errors += 1
-            # Three consecutive errors with no successful history response
-            # indicate a broken provider endpoint, permission or quota.
             if consecutive_errors >= 3:
                 break
             continue
@@ -350,6 +402,7 @@ def scan_match_statuses(
             None,
         )
         if event is None:
+            unmatched += 1
             continue
         matched_events += 1
         result = classify_finished_event(row, event, checked_at=now)
@@ -357,16 +410,16 @@ def scan_match_statuses(
             statuses[eid] = result
             newly_resolved += 1
 
-    # RapidTennisClient increments request_count for every attempted request,
-    # including failures and retries. Older fakes may not expose that field.
-    actual_request_count = getattr(provider, "request_count", None)
-    if isinstance(request_count_before, int) and isinstance(actual_request_count, int):
-        provider_requests = max(0, actual_request_count - request_count_before)
+    request_count_after = getattr(provider, "request_count", None)
+    if isinstance(request_count_before, int) and isinstance(request_count_after, int):
+        provider_requests = max(0, request_count_after - request_count_before)
     else:
         provider_requests = nominal_requests
 
     failed_history = checked - successful_history
     degraded = checked > 0 and successful_history == 0 and failed_history > 0
+    # Preserve a successful near-route preference, but never store private
+    # provider payloads, player names or error text.
     return {
         "schema": 1,
         "updated_at": now.isoformat(),
@@ -383,4 +436,8 @@ def scan_match_statuses(
         "matched_events": matched_events,
         "provider_errors": provider_errors,
         "degraded": degraded,
+        "preferred_route": "near" if prefer_near else "history",
+        "near_attempts": near_attempts,
+        "unmatched": unmatched,
+        "next_due_id": next_due_id if len(due) > 1 else "",
     }

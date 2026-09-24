@@ -189,3 +189,125 @@ def test_valid_but_not_yet_in_previous_matches_is_not_a_provider_failure():
     assert snapshot["successful_history"] == 1
     assert snapshot["degraded"] is False
     assert snapshot["statuses"] == {}
+
+
+class _NearFallbackProvider:
+    def __init__(self, events=None, near_error=None):
+        self.events = events or {}
+        self.near_error = near_error
+        self.request_count = 0
+        self.previous_calls = []
+        self.near_calls = []
+
+    def live_events(self):
+        self.request_count += 1
+        return []
+
+    def previous_player_matches(self, player_id, page=0):
+        from tbt.errors import ProviderError
+        self.request_count += 1
+        self.previous_calls.append(str(player_id))
+        raise ProviderError("RapidAPI HTTP 404: unknown player or route")
+
+    def near_player_matches_for_status(self, player_id):
+        self.request_count += 1
+        self.near_calls.append(str(player_id))
+        if self.near_error:
+            raise self.near_error
+        return {"data": {"previousEvent": self.events.get(str(player_id))}}
+
+
+def test_404_previous_history_uses_valid_near_match_with_identity_check():
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    first = _row("101", "11", (now-timedelta(hours=2)).isoformat())
+    second = {
+        **_row("202", "44", (now-timedelta(hours=1)).isoformat()),
+        "player1": {"id": "33"},
+        "player2": {"id": "44"},
+    }
+    event2 = {
+        **_event("202", winner_code=2),
+        "homeTeam": {"id": "33"},
+        "awayTeam": {"id": "44"},
+    }
+    provider = _NearFallbackProvider({"11": _event(), "33": event2})
+    snapshot = scan_match_statuses(
+        {"upcoming": [first, second]}, provider, now=now,
+        max_checks=10,
+    )
+    assert snapshot["statuses"]["101"]["status"] == "win"
+    assert snapshot["statuses"]["202"]["status"] == "win"
+    assert snapshot["newly_resolved"] == 2
+    assert snapshot["preferred_route"] == "near"
+    assert provider.previous_calls == ["11"]  # only one wasted 404 per batch
+    assert provider.near_calls == ["11", "33"]
+    assert snapshot["provider_requests"] == 4  # live + 404 + two near
+
+
+def test_previous_404_snapshot_starts_with_near_route():
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    provider = _NearFallbackProvider({"11": _event()})
+    previous = {
+        "statuses": {},
+        "provider_errors": {"ProviderError_HTTP_404": 3},
+        "successful_history": 0,
+    }
+    snapshot = scan_match_statuses(
+        {"upcoming": [_row(scheduled_at=(now-timedelta(hours=1)).isoformat())]},
+        provider, previous, now=now,
+    )
+    assert provider.previous_calls == []
+    assert snapshot["statuses"]["101"]["status"] == "win"
+    assert snapshot["near_attempts"] == 1
+
+
+def test_near_404_fails_fast_without_fabricating_any_result():
+    from tbt.errors import ProviderError
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    feed = {"upcoming": [
+        _row(str(101+i), "11", (now-timedelta(hours=i+1)).isoformat())
+        for i in range(8)
+    ]}
+    provider = _NearFallbackProvider(
+        near_error=ProviderError("RapidAPI HTTP 404: player not found")
+    )
+    snapshot = scan_match_statuses(
+        feed, provider,
+        {"preferred_route": "near"}, now=now, max_checks=30,
+    )
+    assert provider.previous_calls == []
+    assert len(provider.near_calls) == 3
+    assert snapshot["degraded"] is True
+    assert snapshot["provider_errors"] == {"ProviderError_HTTP_404": 3}
+    assert snapshot["newly_resolved"] == 0
+    assert snapshot["provider_requests"] == 4
+
+
+def test_near_mismatched_event_is_not_scored():
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    bad = _event()
+    bad["homeTeam"]["id"] = "999"
+    provider = _NearFallbackProvider({"11": bad})
+    snapshot = scan_match_statuses(
+        {"upcoming": [_row(scheduled_at=(now-timedelta(hours=1)).isoformat())]},
+        provider, {"preferred_route": "near"}, now=now,
+    )
+    assert snapshot["statuses"] == {}
+    assert snapshot["matched_events"] == 1
+    assert snapshot["newly_resolved"] == 0
+    assert snapshot["degraded"] is False
+
+
+def test_round_robin_checks_next_pending_id_on_next_run():
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    feed = {"upcoming": [
+        _row("101", scheduled_at=(now-timedelta(hours=2)).isoformat()),
+        _row("202", scheduled_at=(now-timedelta(hours=1)).isoformat()),
+    ]}
+    provider = _Provider()
+    first = scan_match_statuses(feed, provider, now=now, max_checks=1)
+    assert first["checked"] == 1
+    assert first["next_due_id"] == "202"
+    second = scan_match_statuses(feed, provider, first, now=now, max_checks=1)
+    assert second["checked"] == 1
+    assert second["next_due_id"] == "101"
