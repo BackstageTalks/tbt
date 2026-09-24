@@ -305,6 +305,57 @@ def _needs_work(
     return True, "missing"
 
 
+def _verified_unique_environment(
+    client: OpenMeteoClient,
+    provider_payload: dict[str, Any],
+    tournament: str,
+    query: str,
+) -> tuple[dict[str, Any] | None, str]:
+    """Persist ONLY compatible positive geocodes during bulk mode.
+
+    No result, ambiguity, or a city/country mismatch is NOT a negative venue
+    observation. Transient network exceptions propagate so the row is not
+    modified and the operator sees the error.
+    """
+    venue = client.geocode(query)
+    if venue is None:
+        return None, "no_result"
+    compatible, _ = venue_context_compatible(
+        provider_payload, tournament, asdict(venue)
+    )
+    if not compatible:
+        return None, "incompatible"
+    return {
+        "schema_version": ENVIRONMENT_SCHEMA_VERSION,
+        "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
+        "venue_resolved": True,
+        "location_query": query,
+        "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
+        "source": "open-meteo",
+        "weather_provenance": "historical_archive_posthoc",
+        "training_eligible_weather": False,
+        "venue": asdict(venue),
+    }, "resolved"
+
+
+def _probe_unique_geocoder(client: OpenMeteoClient) -> dict[str, Any]:
+    """Verify real provider responses before touching any historical rows.
+
+    The probe shares the SAME Open-Meteo client and request cap with the bulk
+    run; failed requests still count. A valid but empty response fails closed.
+    """
+    venue = client.geocode("Tokyo, JP")
+    if venue is None or not (-90 <= venue.latitude <= 90 and -180 <= venue.longitude <= 180):
+        raise RuntimeError("Open-Meteo health probe did not resolve Tokyo, JP")
+    return {
+        "query": "Tokyo, JP",
+        "country": venue.country,
+        "latitude": venue.latitude,
+        "longitude": venue.longitude,
+        "requests_used": client.request_count,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
@@ -481,6 +532,10 @@ def main() -> None:
         "unique_queries_attempted": 0,
         "geocode_candidate_skipped": 0,
         "geocode_query_errors": 0,
+        "geocode_no_result_skipped": 0,
+        "geocode_health_probe": None,
+        "geocode_health_probe_failed": False,
+        "positive_only": bool(args.unique_geocode),
         "max_requests": int(args.max_requests),
         "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
         "venue_cache_observations": knowledge.observations,
@@ -519,9 +574,11 @@ def main() -> None:
             knowledge=knowledge,
             force=bool(args.force),
             complete_static=bool(args.complete_static),
-            retry_unresolved=bool(args.retry_unresolved),
+            # Bulk positive-only retry revisits the false negatives generated
+            # by older bulk runs immediately, without rewriting negatives.
+            retry_unresolved=bool(args.retry_unresolved or args.unique_geocode),
             now=run_now_utc,
-            negative_retry_hours=args.negative_retry_hours,
+            negative_retry_hours=0 if args.unique_geocode else args.negative_retry_hours,
         )
         if needs_work:
             pending.append(match)
@@ -595,6 +652,26 @@ def main() -> None:
     ))
 
     client = OpenMeteoClient(request_limit=args.max_requests)
+    if args.unique_geocode:
+        # Stop BEFORE processing history if the provider is unavailable or
+        # returns an empty/malformed response to a known unambiguous city.
+        try:
+            report["geocode_health_probe"] = _probe_unique_geocoder(client)
+        except Exception as exc:
+            report["geocode_health_probe_failed"] = True
+            report["stopped_reason"] = "geocoder_health_probe_failed"
+            report["errors"] += 1
+            report["error_details"].append({
+                "step": "health_probe",
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+            report["open_meteo_requests"] = client.request_count
+            _write_report(history_dir / "environment_enrichment_report.json", report)
+            client.close()
+            raise SystemExit(
+                "Geocoder health probe failed: NO history rows changed. "
+                "Review the artifact before retrying."
+            ) from exc
     attempted_queries: set[str] = set()
     failed_queries: set[str] = set()
     changed_years: set[int] = set()
@@ -691,35 +768,24 @@ def main() -> None:
                         continue
                     attempted_queries.add(query_key)
                     try:
-                        venue = client.geocode(query)
+                        env, outcome = _verified_unique_environment(
+                            client, payload, match.tournament, query
+                        )
                     except OpenMeteoBudgetExceeded:
                         raise
                     except Exception:
                         failed_queries.add(query_key)
                         report["geocode_query_errors"] += 1
                         raise
-                    if venue is not None:
-                        compatible, reason = venue_context_compatible(
-                            payload, match.tournament, asdict(venue)
-                        )
-                        if not compatible:
-                            report["geocode_candidate_skipped"] += 1
-                            # A city/country mismatch is not evidence that the
-                            # underlying location is unknown: leave row untouched.
-                            continue
-                    env = {
-                        "schema_version": ENVIRONMENT_SCHEMA_VERSION,
-                        "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
-                        "venue_resolved": venue is not None,
-                        "location_query": query,
-                        "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
-                        "source": "open-meteo",
-                        "weather_provenance": "historical_archive_posthoc",
-                        "training_eligible_weather": False,
-                    }
-                    if venue is not None:
-                        env["venue"] = asdict(venue)
-                        report["resolved_from_geocoder"] += 1
+                    if outcome == "no_result":
+                        report["geocode_no_result_skipped"] += 1
+                        continue
+                    if outcome == "incompatible":
+                        report["geocode_candidate_skipped"] += 1
+                        continue
+                    # Only positives can reach the persistence path.
+                    assert env is not None and env["venue_resolved"] is True
+                    report["resolved_from_geocoder"] += 1
                 else:
                     env = environment_payload(
                         client,
@@ -743,6 +809,10 @@ def main() -> None:
                     report["error_details"].append(
                         {**detail, "error": f"{type(exc).__name__}: {exc}"}
                     )
+                if args.unique_geocode and report["geocode_query_errors"] >= 3:
+                    report["stopped_reason"] = "repeated_geocoder_errors"
+                    checkpoint()
+                    break
                 continue
 
             payload["_tbt_environment"] = env
