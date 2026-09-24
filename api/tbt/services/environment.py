@@ -781,6 +781,11 @@ def location_candidates(
         text = _clean_location_token(value)
         if not text:
             return
+        # Normalize only explicit, proven alternative city spellings.
+        city_part, separator, qualifier = text.partition(",")
+        canonical = _normal(city_part)
+        if canonical in {"sharm el sheikh", "santa margherita di pula"}:
+            text = canonical + (separator + qualifier if separator else "")
         # Never fall back to a countryless query when the provider supplied
         # an unambiguous country; this prevents homonymous-city mismatches.
         if city and only_country and "," not in text:
