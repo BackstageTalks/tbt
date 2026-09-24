@@ -28,14 +28,26 @@ def main():
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.goto(ORIGIN+'/index.html?lang=sk', wait_until='networkidle')
                 page.wait_for_function('releaseTest.state.ui && document.querySelector(".dashboard-kpi")')
-                loader_background = page.locator('#bootSplash').evaluate(
-                    '(e) => getComputedStyle(e).backgroundImage'
-                )
+                # boot() may remove the splash as soon as the feed loads.
+                # Probe the actual stylesheet using a temporary matching node.
+                loader_background = page.evaluate('''() => {
+                    const splash=document.createElement('div');
+                    splash.className='boot-splash boot-splash-tennis';
+                    document.body.append(splash);
+                    const background=getComputedStyle(splash).backgroundImage;
+                    splash.remove();
+                    return background;
+                }''')
                 assert 'blinq_background.webp' in loader_background, (width, loader_background)
-                assert page.locator('#bootSplash .blinq-loader-media img').count() == 1
-                assert 'blinq_logo.svg' in page.locator('#authDialog').evaluate(
-                    '(e) => getComputedStyle(e, "::after").backgroundImage'
-                )
+                # Login watermark remains deliberately independent of home.
+                assert 'blinq_logo.svg' in page.evaluate('''() => {
+                    const dialog=document.querySelector('#authDialog');
+                    const wasOpen=dialog.hasAttribute('open');
+                    if(!wasOpen)dialog.setAttribute('open','');
+                    const image=getComputedStyle(dialog,'::after').backgroundImage;
+                    if(!wasOpen)dialog.removeAttribute('open');
+                    return image;
+                }''')
                 # Verify the existing animation frame receives the shared site
                 # background, including if the boot JS already removed splash.
                 assert page.evaluate('''() => {
