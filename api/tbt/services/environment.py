@@ -46,12 +46,22 @@ class WeatherAtMatch:
     source_time_utc: str | None
 
 
+# Only documented equivalent city spellings. Never guess arbitrary cities.
+_CITY_CANONICAL = {
+    "sharm elsheikh": "sharm el sheikh",
+    "sharm el-sheikh": "sharm el sheikh",
+    "s. margherita di pula": "santa margherita di pula",
+    "s margherita di pula": "santa margherita di pula",
+}
+
+
 def _normal(value: Any) -> str:
-    return "".join(
+    normalized = "".join(
         c
         for c in unicodedata.normalize("NFKD", str(value or "").casefold())
         if not unicodedata.combining(c)
     ).strip()
+    return _CITY_CANONICAL.get(normalized, normalized)
 
 
 _COUNTRY_HINT_ALIASES = {
@@ -782,6 +792,8 @@ def location_candidates(
         city = _clean_location_token(value)
         if not city:
             return
+        # Canonical aliases preserve the original explicit country restriction.
+        city = _CITY_CANONICAL.get(_normal(city), city)
         explicit = normalize_country_code(country)
         if explicit:
             add(f"{city}, {explicit}")
