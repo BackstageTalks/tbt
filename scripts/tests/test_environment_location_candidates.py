@@ -1,0 +1,68 @@
+"""Regression tests for conservative Environment location resolution.
+
+Run: PYTHONPATH=api python -m unittest discover -s scripts/tests
+"""
+import unittest
+
+from tbt.services.environment import (
+    ENVIRONMENT_RESOLVER_VERSION,
+    _clean_tournament_location_part,
+    location_candidates,
+    resolve_match_venue,
+)
+
+
+class RecordingGeocoder:
+    def __init__(self):
+        self.queries = []
+
+    def geocode(self, query):
+        self.queries.append(query)
+        return None
+
+
+class LocationCandidatesTest(unittest.TestCase):
+    def test_utr_ptt_city_only(self):
+        self.assertEqual(_clean_tournament_location_part("UTR PTT Saitama Men 06"), "Saitama")
+        candidates = location_candidates({}, "UTR PTT Saitama Men 06")
+        self.assertEqual(candidates, ["Saitama"])
+        self.assertNotIn("UTR PTT Saitama Men 06", candidates)
+
+    def test_itf_city_only(self):
+        self.assertEqual(_clean_tournament_location_part("ITF M15 Astana 2 Men"), "Astana")
+        self.assertEqual(location_candidates({}, "ITF M15 Astana 2 Men"), ["Astana"])
+
+    def test_provider_country_limits_geocoding(self):
+        payload = {"tournament": {"country": {"alpha2": "JP"}}}
+        candidates = location_candidates(payload, "UTR PTT Saitama Men 06")
+        self.assertEqual(candidates, ["Saitama, JP"])
+        client = RecordingGeocoder()
+        venue, query = resolve_match_venue(client, payload, "UTR PTT Saitama Men 06")
+        self.assertIsNone(venue)
+        self.assertIsNone(query)
+        self.assertEqual(client.queries, ["Saitama, JP"])
+
+    def test_itf_country_code(self):
+        self.assertEqual(
+            location_candidates({}, "ITF M15 Astana Men, M-ITF-KAZ-02A"),
+            ["Astana, KZ"],
+        )
+
+    def test_unparseable_label_does_not_spend_api(self):
+        client = RecordingGeocoder()
+        self.assertEqual(location_candidates({}, "ATP Challenger Unknown Open 2026"), [])
+        self.assertEqual(resolve_match_venue(client, {}, "ATP Challenger Unknown Open 2026"), (None, None))
+        self.assertEqual(client.queries, [])
+
+    def test_plain_city_allowed(self):
+        self.assertEqual(location_candidates({}, "Saitama"), ["Saitama"])
+
+    def test_existing_alias_preserved(self):
+        self.assertIn("Miami, Florida, US", location_candidates({}, "Miami Open"))
+
+    def test_resolver_version_invalidates_old_negative_cache(self):
+        self.assertGreaterEqual(ENVIRONMENT_RESOLVER_VERSION, 6)
+
+
+if __name__ == "__main__":
+    unittest.main()
