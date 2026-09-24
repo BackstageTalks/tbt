@@ -124,6 +124,7 @@ jobs:
           python tests/browser_preproduction_r61.py
           python tests/browser_banner_editor_r62.py
           python tests/browser_admin_account_filters.py
+          python tests/browser_profile_chip_fit.py
 
       - name: Check production web artifact
         run: |
