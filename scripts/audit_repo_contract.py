@@ -200,8 +200,9 @@ ok('r23 legacy visual/header/promo/banner-tier systems removed')
 
 # 5. Critical local assets and fallbacks.
 critical_assets = [
-    WEB / 'assets' / 'blinq_loading_r29.svg',
-    WEB / 'assets' / 'blinq_loading_scene_v736.webp',
+    WEB / 'assets' / 'blinq-loader.webp',
+    WEB / 'assets' / 'blinq-loader.gif',
+    WEB / 'assets' / 'blinq-loader-static.webp',
     WEB / 'assets' / 'blinq_logo.svg',
     WEB / 'assets' / 'missing_foto_m.webp',
     WEB / 'assets' / 'missing_foto_w.webp',
@@ -210,11 +211,19 @@ critical_assets = [
 for path in critical_assets:
     if not path.is_file() or path.stat().st_size == 0:
         fail(f'critical asset missing/empty: {path.relative_to(ROOT)}')
-loader = read(WEB / 'assets' / 'blinq_loading_r29.svg')
-if '<animateTransform' not in loader:
-    fail('loader ball animation missing')
-if 'data:image/webp;base64,' in loader:
-    fail('loader scene is embedded as base64 again')
+animated = WEB / 'assets' / 'blinq-loader.webp'
+static = WEB / 'assets' / 'blinq-loader-static.webp'
+gif = WEB / 'assets' / 'blinq-loader.gif'
+if animated.is_file():
+    payload = animated.read_bytes()
+    if not payload.startswith(b'RIFF') or payload[8:12] != b'WEBP' or b'ANIM' not in payload[:4096]:
+        fail('loader must be an animated WebP')
+if static.is_file():
+    payload = static.read_bytes()
+    if not payload.startswith(b'RIFF') or payload[8:12] != b'WEBP':
+        fail('reduced-motion loader must be WebP')
+if gif.is_file() and not gif.read_bytes().startswith((b'GIF87a', b'GIF89a')):
+    fail('loader GIF fallback invalid')
 for path in re.findall(r"url\(['\"]?(/assets/[^)'\"?#]+)", css):
     candidate = WEB / path.lstrip('/')
     if not candidate.is_file():
