@@ -22,11 +22,19 @@ def test_runtime_css_is_consolidated_on_current_asset_revision():
     assert 'final-polish-' not in INDEX
 
 
-def test_login_loader_and_footer_have_blinq_background_watermarks():
-    assert "/assets/blinq_background.webp" in CSS736
-    assert (ROOT / 'web' / 'assets' / 'blinq_loading_scene_v736.webp').is_file()
-    loader = (ROOT / 'web' / 'assets' / 'blinq_loading_animated_v6.svg').read_text(encoding='utf-8')
-    assert 'data:image/webp;base64,' not in loader
+def test_login_loader_and_footer_use_current_approved_assets():
+    assert "/assets/blinq_background.webp" in CSS736  # Separate dashboard background.
+    assert 'url("/assets/blinq_page_background.webp")' in CSS736
+    assert '--blinq-login-loader-backdrop' in CSS736
+    assert 'background-image:var(--blinq-login-loader-backdrop)!important' in CSS736
+    assert '<picture class="blinq-loader-media">' in INDEX
+    assert 'media="(prefers-reduced-motion: reduce)" srcset="/assets/blinq-loader-static.webp' in INDEX
+    assert 'srcset="/assets/blinq-loader.webp' in INDEX
+    assert '<img src="/assets/blinq-loader.gif' in INDEX
+    for name in ('blinq-loader.webp', 'blinq-loader.gif', 'blinq-loader-static.webp',
+                 'blinq_page_background.webp', 'blinq_background.webp'):
+        assert (ROOT / 'web' / 'assets' / name).is_file()
+    assert '/assets/blinq_loading_scene_v736.webp' not in CSS736
     assert CSS735.count("/assets/blinq_logo.svg") >= 2
     assert 'bootEyebrow' in INDEX and 'bootStatus' in INDEX
     assert 'auth-copy h2' in CSS and 'font-size:17px' in CSS

@@ -1,0 +1,35 @@
+# Python caches and local tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node and browser-test dependencies
+node_modules/
+.cache/
+.playwright/
+
+# Local credentials (do not ignore checked-in templates)
+.env
+.env.*
+!.env.example
+!.env.sample
+*.pem
+*.p12
+*.pfx
+*.key
+
+# Generated runtime feed and private model/data outputs
+/api/data/feed.json
+/api/data/feed.json.tmp
+/api/data/*.parquet
+/api/data/*.pkl
+/api/data/*.joblib
+/web/assets/generated/
+
+# Temporary local output
+*.log
+*.tmp
