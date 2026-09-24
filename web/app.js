@@ -798,7 +798,7 @@
     const titleHtml=accent?`<h2><span>${title}</span><strong>${escapeHtml(accent)}</strong></h2>`:`<h2><strong>${title}</strong></h2>`;
     const heroEyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
     const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${escapeHtml(heroEyebrow)}</small>`:''}${titleHtml}<p>${escapeHtml(c.text||'')}</p>${c.button_text?`<b class="hero-slide-cta">${escapeHtml(c.button_text)} →</b>`:''}</div>`:'';
-    return `<a class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}" ${bannerCreativeStyle(c)} href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${sponsored}${image}${copy}${art}${watermarkHtml(item)}</a>`;
+    return `<a class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}" ${bannerCreativeStyle(c)} href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${sponsored}${image}${copy}${art}</a>`;
   }
   function clearHeroRotation(){
     if(state.heroTimer){clearInterval(state.heroTimer);state.heroTimer=null;}
