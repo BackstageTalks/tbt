@@ -46,7 +46,7 @@ def test_r29_frontend_contract_has_separate_df_tab_new_loader_and_history_window
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     config = (ROOT / "web" / "ui-config.json").read_text(encoding="utf-8")
     index = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
-    loader = ROOT / "web" / "assets" / "blinq_loading_r29.svg"
+    loader = ROOT / "web" / "assets" / "blinq-loader.webp"
 
     assert "double_faults:'DVOJCHYBY'" in app
     assert "['3',lcopy('3 days'" in app
@@ -54,11 +54,11 @@ def test_r29_frontend_contract_has_separate_df_tab_new_loader_and_history_window
     assert "['14',lcopy('14 days'" in app
     assert "performance_window_summary" in app
     assert '"double_faults"' in config
-    assert '"ui_patch": "736-r55"' in config
-    assert "blinq_loading_r29.svg" in index
+    assert '"ui_patch": "736-r60"' in config
+    assert "blinq-loader.webp" in index and "blinq-loader-static.webp" in index
     assert loader.is_file()
-    # The supplied loader contained a metadata-heavy embedded PNG (~1.7 MB).
-    # r29 preserves the visual/animation but strips that payload down so the
-    # loading screen itself does not become the slowest resource.
-    assert loader.stat().st_size < 250_000
-    assert "data:image/jpeg;base64," in loader.read_text(encoding="utf-8")
+    # Genuine animated WebP, without an embedded base64 SVG payload.
+    assert loader.stat().st_size < 350_000
+    payload = loader.read_bytes()
+    assert payload[:4] == b"RIFF" and payload[8:12] == b"WEBP"
+    assert b"ANIM" in payload[:4096]

@@ -12,10 +12,10 @@ UI = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
 
 
 def test_r49_release_identity_and_cache_bust():
-    assert RELEASE['patch'] == UI['ui_patch'] == '736-r55'
-    assert 'content="736-r55"' in INDEX
+    assert RELEASE['patch'] == UI['ui_patch'] == '736-r60'
+    assert 'content="736-r60"' in INDEX
     for asset in ('blinq-app.css', 'auth.js', 'responsive.js', 'app.js'):
-        assert f'/{asset}?v=7360&p=55' in INDEX
+        assert f'/{asset}?v=7360&p=60' in INDEX
     assert 'BlinQ runtime patch 7.3.6-r55' in CSS
 
 
@@ -45,10 +45,10 @@ def test_doubles_ev_is_analysis_only_not_publication_gate():
 
 
 def test_one_bottom_right_watermark_and_no_footer_duplicate():
-    assert '<i class="wm wm-b"></i>' in INDEX
+    assert '<i class="wm wm-b"></i>' not in INDEX and 'id="dashboardHero"' in INDEX
     assert 'wm wm-a' not in INDEX and 'wm wm-c' not in INDEX
-    assert '.anti-share-watermarks .wm-b' in CSS
-    assert 'right:24px!important;bottom:20px!important' in CSS
+    assert '#dashboardHero::after' in CSS
+    assert '.anti-share-watermarks{display:none!important}' in CSS
     assert '.site-footer:before{display:none!important;content:none!important}' in CSS
 
 
