@@ -19,6 +19,12 @@
       }
     },
     {
+      "route": "/blinq-app.css",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
       "route": "/auth.js",
       "headers": {
         "Cache-Control": "no-store, max-age=0, must-revalidate"
