@@ -7344,12 +7344,23 @@ body#blinqPremium.blinq-home #dashboardHero::before,
 body#blinqPremium.blinq-home #dashboardHero::after{
   content:none!important;display:none!important;
 }
-/* Match the shared public-page background on the loader, keeping its dark
-   central media frame and approved animation unchanged. */
+/* BlinQ visual revision green-login-loader-20260924:
+   The login screenshot uses blinq_page_background.webp (green tennis artwork).
+   Keep one canonical backdrop for login and boot, not the older dashboard asset.
+   Retain the approved animated loader/card and login watermark independently. */
+body#blinqPremium{
+  --blinq-login-loader-backdrop:
+    linear-gradient(90deg,rgba(1,11,12,.80),rgba(2,23,20,.58),rgba(1,10,12,.82)),
+    url("/assets/blinq_page_background.webp");
+}
+body#blinqPremium .auth-dialog[open],
 body#blinqPremium .boot-splash.boot-splash-tennis{
-  background:
-    linear-gradient(90deg,rgba(1,11,12,.88),rgba(2,22,20,.73),rgba(1,10,12,.88)),
-    url("/assets/blinq_background.webp") center center/cover no-repeat!important;
+  background-image:var(--blinq-login-loader-backdrop)!important;
+  background-position:center!important;
+  background-size:cover!important;
+  background-repeat:no-repeat!important;
+}
+body#blinqPremium .boot-splash.boot-splash-tennis{
   background-color:#031314!important;
 }
 body#blinqPremium .daily-hub-table tbody tr:not(.hub-row-locked) .hub-match-cell{
