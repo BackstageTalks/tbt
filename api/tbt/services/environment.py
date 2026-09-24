@@ -816,12 +816,13 @@ def location_candidates(
             lowered = _normal(text)
             if (
                 text and 1 <= len(text.split()) <= 2
-                and not re.search(r"\\d", text)
-                and not any(re.search(rf"\\b{re.escape(token)}\\b", lowered)
+                and not re.search(r"\d", text)
+                and not any(re.search(rf"\b{re.escape(token)}\b", lowered)
                             for token in ("open", "final", "masters", "challenger", "itf", "atp", "wta", "utr", "ptt", "men", "women"))
             ):
                 add(text, city=True)
     return candidates
+
 
 def venue_learning_keys(
     provider_payload: dict[str, Any],
