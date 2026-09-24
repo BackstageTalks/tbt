@@ -1,0 +1,37 @@
+name: Environment regression tests
+
+on:
+  pull_request:
+    paths:
+      - "api/tbt/services/environment.py"
+      - "api/tbt/services/countries.py"
+      - "scripts/enrich_environment_snapshot.py"
+      - "scripts/tests/test_environment_location_candidates.py"
+      - ".github/workflows/environment-*.yml"
+  push:
+    branches:
+      - "fix/environment-geocoding-*"
+    paths:
+      - "api/tbt/services/environment.py"
+      - "scripts/tests/test_environment_location_candidates.py"
+      - ".github/workflows/environment-*.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  venue-resolution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install test dependencies
+        run: python -m pip install httpx
+      - name: Compile environment source
+        run: python -m compileall -q api/tbt/services/environment.py scripts/enrich_environment_snapshot.py
+      - name: Regression tests
+        env:
+          PYTHONPATH: api
+        run: python -m unittest discover -s scripts/tests -p "test_environment_location_candidates.py" -v
