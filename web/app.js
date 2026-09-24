@@ -2884,8 +2884,8 @@
     return `<section class="admin-ux-section lean-admin-banners admin-hero-manager" data-simple-banner="${escapeHtml(selectedId)}">
       <div class="admin-ux-heading"><div><small>BANNERY</small><h2>Hero bannery</h2><p>Nastav text, typografiu, podklady a rotáciu. Živý náhľad beží nezávisle od formulára.</p></div></div>
       <div class="admin-hero-carousel-controls">
-        <label><span>Aktívne bannery</span><select data-admin-hero-count>${countOptions}</select><small>Zvolený počet z piatich pozícií.</small></label>
-        <label><span>Interval zmeny</span><select data-admin-hero-seconds>${delayOptions}</select><small>3 až 10 sekúnd, rovnako ako na webe.</small></label>
+        <label><span>Počet aktívnych bannerov</span><select data-admin-hero-count>${countOptions}</select><small>Zvolený počet z piatich pozícií.</small></label>
+        <label><span>Interval automatickej zmeny</span><select data-admin-hero-seconds>${delayOptions}</select><small>3 až 10 sekúnd, rovnako ako na webe.</small></label>
         <div class="admin-hero-rotation-status"><i></i><div><strong>${activeCount>1?'Živá rotácia':'Jeden banner'}</strong><small>${activeCount>1?'Náhľad sa prepína, editačný formulár zostáva na vybranom bannere.':'Pridaj druhý aktívny banner pre rotáciu.'}</small></div></div>
       </div>
       <div class="admin-hero-tabs" role="group" aria-label="Vybrať banner na úpravu">${tabs}</div>
@@ -2912,8 +2912,8 @@
         <label><span>Popiska · farba</span><select data-simple-banner-field="eyebrow_color">${bannerColorOptions(c.eyebrow_color)}</select></label>
       </div></div>
       <div class="admin-form-section admin-banner-image-editor"><div class="admin-form-section-title"><strong>Grafické podklady · Banner ${escapeHtml(selectedId.split('_').pop())}</strong><span>Vlastný desktop a mobilný obrázok bez textu.</span></div><div class="admin-form-grid">
-        <label class="span-2">Desktop hero · 1920 × 640<input data-simple-banner-field="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/hero.webp"></label>
-        <label class="span-2">Mobilný hero · 1080 × 720<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/hero-mobile.webp"></label>
+        <label class="span-2">Desktop hero · 1920×640<input data-simple-banner-field="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/hero.webp"></label>
+        <label class="span-2">Mobilný hero · 1080×720<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/hero-mobile.webp"></label>
         <label class="admin-toggle-line span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť text nad obrázkom</span></label>
       </div></div>
       <div class="admin-form-section admin-page-background-editor" data-simple-banner="HERO_BANNER_1"><div class="admin-form-section-title"><strong>Pozadie hlavnej stránky</strong><span>Predvolené je rovnaké zelené tenisové pozadie ako pri prihlásení a loadingu, bez watermarku.</span></div><div class="admin-form-grid">
