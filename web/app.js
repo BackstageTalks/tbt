@@ -1,4 +1,4 @@
-/* BlinQ visual revision: home-wm-20260924 */
+/* BlinQ visual revision: green-login-loader-20260924 */
 (() => {
   'use strict';
 
