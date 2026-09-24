@@ -64,6 +64,8 @@ from tbt.services.admin_storage import (
     mark_insight_read,
     save_live_worker_status,
     load_live_worker_status,
+    save_match_status_snapshot,
+    load_match_status_snapshot,
     save_account_worker_status,
     load_account_worker_status,
     live_min_level,
@@ -91,6 +93,7 @@ from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
     attach_second_set_odds, set2_push_eligible, set2_push_thresholds,
 )
+from tbt.services.match_status import event_ids_from_feed, scan_match_statuses
 from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_slot
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
@@ -1018,6 +1021,23 @@ def feed(req):
             return response({"error": "account_suspended"}, 403)
         data["account"] = account_data
         data["entitlements"] = entitlements
+        # Match outcomes are a tiny runtime overlay. They never mutate the
+        # immutable prediction feed; only statuses for rows this account can
+        # already see are returned.
+        try:
+            status_snapshot = load_match_status_snapshot() or {}
+            allowed_event_ids = event_ids_from_feed(data)
+            raw_statuses = status_snapshot.get("statuses")
+            raw_statuses = raw_statuses if isinstance(raw_statuses, dict) else {}
+            data["match_statuses"] = {
+                str(event_id): value
+                for event_id, value in raw_statuses.items()
+                if str(event_id) in allowed_event_ids and isinstance(value, dict)
+            }
+            data["match_status_updated_at"] = status_snapshot.get("updated_at")
+        except AdminStorageUnavailable:
+            data["match_statuses"] = {}
+            data["match_status_updated_at"] = None
         return response(data)
     except AuthUnavailable as exc:
         record_system_event("error", "feed", "Authentication service unavailable while serving feed", details={"error": exc.__class__.__name__})
@@ -1269,6 +1289,54 @@ def internal_live_radar_worker(req):
         except Exception:
             pass
         return response({"error":"live_worker_failed","detail":exc.__class__.__name__},503)
+
+
+@app.route(route="v1/internal/match-status-worker", methods=["POST"])
+def internal_match_status_worker(req):
+    """Hourly result overlay for already-started prediction rows."""
+    if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
+        return response({"error": "live_worker_not_configured"}, 503)
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        feed_payload = read_feed(FEED)
+        previous = load_match_status_snapshot() or {}
+        client = RapidTennisClient(settings)
+        try:
+            snapshot = scan_match_statuses(
+                feed_payload,
+                client,
+                previous,
+                max_checks=max(
+                    1,
+                    min(120, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS", "30"))),
+                ),
+                lookback_hours=max(
+                    6,
+                    min(72, int(os.getenv("BLINQ_MATCH_STATUS_LOOKBACK_HOURS", "36"))),
+                ),
+            )
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+        saved = save_match_status_snapshot(snapshot)
+        return response({**saved, "autonomous": True})
+    except AdminStorageUnavailable:
+        return response({"error": "match_status_storage_unavailable"}, 503)
+    except Exception as exc:
+        logging.exception("Hourly match status worker failed")
+        record_system_event(
+            "warning",
+            "match-status",
+            "Hourly match status worker failed",
+            details={"error": exc.__class__.__name__},
+        )
+        return response(
+            {"error": "match_status_worker_failed", "detail": exc.__class__.__name__},
+            503,
+        )
 
 
 @app.route(route="v1/internal/account-inactivity-worker", methods=["POST"])
