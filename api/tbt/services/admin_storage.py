@@ -610,6 +610,10 @@ def save_match_status_snapshot(payload: object) -> dict:
         "successful_history": max(0, int(data.get("successful_history") or 0)),
         "failed_history": max(0, int(data.get("failed_history") or 0)),
         "matched_events": max(0, int(data.get("matched_events") or 0)),
+        "preferred_route": "near" if data.get("preferred_route") == "near" else "history",
+        "near_attempts": max(0, int(data.get("near_attempts") or 0)),
+        "unmatched": max(0, int(data.get("unmatched") or 0)),
+        "next_due_id": str(data.get("next_due_id") or "")[:64],
         "provider_errors": {
             str(k)[:64]: max(0, int(v))
             for k, v in list((data.get("provider_errors") or {}).items())[:8]
