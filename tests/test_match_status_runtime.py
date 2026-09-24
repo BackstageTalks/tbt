@@ -113,3 +113,79 @@ def test_scan_does_not_requery_terminal_snapshot():
 
     assert snapshot["statuses"]["101"]["status"] == "loss"
     assert provider.previous_calls == []
+
+
+def test_rejects_wrong_players_even_if_provider_reuses_event_id():
+    row = _row()
+    wrong = _event(winner_code=1)
+    wrong["homeTeam"]["id"] = "999"
+    assert classify_finished_event(row, wrong) is None
+    wrong["status"] = {"type": "finished", "description": "Player retired"}
+    assert classify_finished_event(row, wrong) is None
+
+
+class _BrokenProvider:
+    def __init__(self, error):
+        self.error = error
+        self.request_count = 0
+        self.calls = 0
+
+    def live_events(self):
+        self.request_count += 1
+        return []
+
+    def previous_player_matches(self, player_id, page=0):
+        self.calls += 1
+        self.request_count += 1
+        raise self.error
+
+
+def test_broken_player_endpoint_fails_fast_with_safe_diagnostics():
+    from tbt.errors import ProviderError
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    feed = {"upcoming": [
+        _row(str(100+i), "11", (now - timedelta(hours=2+i)).isoformat())
+        for i in range(8)
+    ]}
+    client = _BrokenProvider(ProviderError("RapidAPI HTTP 403: secrets must not leak"))
+    snapshot = scan_match_statuses(feed, client, now=now, max_checks=30)
+    assert snapshot["checked"] == 3
+    assert client.calls == 3
+    assert snapshot["provider_requests"] == 4  # live + 3 failed HTTP calls
+    assert snapshot["provider_errors"] == {"ProviderError_HTTP_403": 3}
+    assert "secrets" not in repr(snapshot)
+    assert snapshot["newly_resolved"] == 0
+    assert snapshot["degraded"] is True
+
+
+def test_quota_error_stops_after_one_history_attempt():
+    from tbt.providers.budget import RequestBudgetExceeded
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (now - timedelta(hours=1)).isoformat())
+    client = _BrokenProvider(RequestBudgetExceeded("No more calls allowed"))
+    snapshot = scan_match_statuses({"upcoming": [row]}, client, now=now)
+    assert client.calls == 1
+    assert snapshot["provider_errors"] == {"RequestBudgetExceeded": 1}
+    assert snapshot["degraded"] is True
+
+
+def test_finished_live_event_can_resolve_without_history_request():
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (now - timedelta(hours=1)).isoformat())
+    client = _Provider(live=[_event()])
+    snapshot = scan_match_statuses({"upcoming": [row]}, client, now=now)
+    assert snapshot["newly_resolved"] == 1
+    assert snapshot["statuses"]["101"]["status"] == "win"
+    assert snapshot["checked"] == 0
+    assert client.previous_calls == []
+
+
+def test_valid_but_not_yet_in_previous_matches_is_not_a_provider_failure():
+    now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (now - timedelta(minutes=10)).isoformat())
+    client = _Provider()
+    snapshot = scan_match_statuses({"upcoming": [row]}, client, now=now)
+    assert snapshot["checked"] == 1
+    assert snapshot["successful_history"] == 1
+    assert snapshot["degraded"] is False
+    assert snapshot["statuses"] == {}

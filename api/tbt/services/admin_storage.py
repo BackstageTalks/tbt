@@ -606,6 +606,16 @@ def save_match_status_snapshot(payload: object) -> dict:
         "checked": max(0, int(data.get("checked") or 0)),
         "skipped_live": max(0, int(data.get("skipped_live") or 0)),
         "provider_requests": max(0, int(data.get("provider_requests") or 0)),
+        "newly_resolved": max(0, int(data.get("newly_resolved") or 0)),
+        "successful_history": max(0, int(data.get("successful_history") or 0)),
+        "failed_history": max(0, int(data.get("failed_history") or 0)),
+        "matched_events": max(0, int(data.get("matched_events") or 0)),
+        "provider_errors": {
+            str(k)[:64]: max(0, int(v))
+            for k, v in list((data.get("provider_errors") or {}).items())[:8]
+            if isinstance(k, str) and k.replace("_", "").isalnum()
+        },
+        "degraded": bool(data.get("degraded")),
         "terminal": len(statuses),
     }
     entity = {
