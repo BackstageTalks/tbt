@@ -11,11 +11,11 @@ INDEX = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8')
 def test_r47_release_contract():
     release = json.loads((ROOT / 'web' / 'release.json').read_text(encoding='utf-8'))
     ui = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
-    assert release['patch'] == ui['ui_patch'] == '736-r55'
-    assert 'content="736-r55"' in INDEX
+    assert release['patch'] == ui['ui_patch'] == '736-r60'
+    assert 'content="736-r60"' in INDEX
     assert 'BlinQ runtime patch 7.3.6-r55' in CSS
     for asset in ('blinq-app.css', 'auth.js', 'responsive.js', 'app.js'):
-        assert f'/{asset}?v=7360&p=55' in INDEX
+        assert f'/{asset}?v=7360&p=60' in INDEX
 
 
 def test_projection_results_are_human_readable_and_projection_only_categories_share_clean_layout():
@@ -46,8 +46,8 @@ def test_admin_live_radar_uses_canonical_prime_keys_and_shows_set2_health():
 
 def test_shared_background_watermarks_and_free_membership_contract_survive_r47():
     assert '/assets/blinq_page_background.webp' in CSS
-    assert 'anti-share-watermarks' in INDEX
-    assert 'wm-b' in INDEX
+    assert 'anti-share-watermarks' not in INDEX
+    assert 'id="dashboardHero"' in INDEX and '#dashboardHero::after' in CSS
     assert 'wm-a' not in INDEX and 'wm-c' not in INDEX
     assert "if(id==='rookie')return 'FREE'" in APP
     assert 'data-reactivate-free' in APP

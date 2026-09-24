@@ -7220,3 +7220,25 @@ body#blinqPremium:not(.blinq-admin) .dashboard-kpi>span>svg{
   body#blinqPremium:not(.blinq-admin) .dashboard-kpis{grid-template-columns:1fr!important}
   body#blinqPremium:not(.blinq-admin) .dashboard-kpis>.dashboard-kpi:last-child{grid-column:auto}
 }
+
+/* BlinQ runtime patch 7.3.6-r60 — original dark WebP loader. */
+body#blinqPremium .boot-splash.boot-splash-tennis{background:#031314!important;isolation:isolate!important}
+body#blinqPremium .boot-splash.boot-splash-tennis::before,
+body#blinqPremium .boot-splash.boot-splash-tennis::after,
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source::before,
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source::after{display:none!important;content:none!important;animation:none!important}
+body#blinqPremium .boot-tennis-card.boot-tennis-card-source{
+  width:min(352px,calc(100vw - 40px))!important;max-width:352px!important;max-height:none!important;
+  height:auto!important;aspect-ratio:704/410!important;padding:0!important;margin:0!important;
+  border:0!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;
+  backdrop-filter:none!important;overflow:visible!important;display:block!important
+}
+body#blinqPremium .boot-tennis-card .blinq-loader-media{
+  display:block!important;width:100%!important;aspect-ratio:704/410!important;background:#031314!important;
+  border:0!important;border-radius:0!important;box-shadow:none!important;overflow:hidden!important
+}
+body#blinqPremium .boot-tennis-card .blinq-loader-media>img{
+  display:block!important;width:100%!important;height:auto!important;max-width:100%!important;
+  max-height:none!important;object-fit:contain!important;border:0!important;border-radius:0!important;
+  filter:none!important;opacity:1!important;mix-blend-mode:normal!important
+}

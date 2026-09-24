@@ -18,13 +18,20 @@ def test_goat_is_regular_upgrade_tier():
     assert goat["cta_label"] == "Upgrade na GOAT"
     assert goat["invite_only"] is False
 
-def test_loader_is_compact_svg_rally_without_progress_track():
+def test_loader_uses_uploaded_dark_webp_gif_and_reduced_motion():
     html=(ROOT/"web"/"index.html").read_text(encoding="utf-8")
-    loader=(ROOT/"web"/"assets"/"blinq_loading_r29.svg").read_text(encoding="utf-8")
+    animated=(ROOT/"web"/"assets"/"blinq-loader.webp").read_bytes()
+    static=(ROOT/"web"/"assets"/"blinq-loader-static.webp").read_bytes()
+    gif=(ROOT/"web"/"assets"/"blinq-loader.gif").read_bytes()
     assert "boot-tennis-track" not in html
-    assert "/assets/blinq_loading_r29.svg" in html
-    assert "<animateTransform" in loader
-    assert 'aria-label="BlinQ animated loading screen"' in loader
+    assert "/assets/blinq-loader.webp" in html
+    assert "/assets/blinq-loader-static.webp" in html
+    assert "/assets/blinq-loader.gif" in html
+    assert "prefers-reduced-motion: reduce" in html
+    assert animated[:4] == b"RIFF" and animated[8:12] == b"WEBP"
+    assert b"ANIM" in animated[:4096]
+    assert static[:4] == b"RIFF" and static[8:12] == b"WEBP"
+    assert gif.startswith((b"GIF87a", b"GIF89a"))
 
 def test_indoor_hard_uses_hard_stats_bucket():
     text=(ROOT/"api"/"tbt"/"models"/"feature_builder.py").read_text(encoding="utf-8")

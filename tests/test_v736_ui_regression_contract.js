@@ -5,16 +5,27 @@ const app = fs.readFileSync('web/app.js','utf8');
 const css = fs.readFileSync('web/blinq-app.css','utf8');
 const html = fs.readFileSync('web/index.html','utf8');
 const tiers = JSON.parse(fs.readFileSync('web/config/membership-tiers.json','utf8'));
-const loader = fs.readFileSync('web/assets/blinq_loading_r29.svg','utf8');
+const ui = JSON.parse(fs.readFileSync('web/ui-config.json','utf8'));
+const loader = fs.readFileSync('web/assets/blinq-loader.webp');
+const reduced = fs.readFileSync('web/assets/blinq-loader-static.webp');
+const gif = fs.readFileSync('web/assets/blinq-loader.gif');
 
-// Loading: animated rally remains present and both loader + normal app have watermark contracts.
-assert.match(html,/blinq_loading_r29\.svg\?v=7360\&p=55/);
-assert.match(loader,/<animateTransform/);
-assert.equal(loader.includes('data:image/webp;base64,'),false);
+// Loading: original dark animated WebP, GIF fallback and reduced-motion WebP.
+const patchNum = ui.ui_patch.split('r').pop();
+for (const file of ['blinq-loader.webp','blinq-loader-static.webp','blinq-loader.gif']) {
+  assert.ok(html.includes('/assets/' + file + '?v=' + ui.asset_revision + '&p=' + patchNum), file);
+}
+assert.match(html,/prefers-reduced-motion: reduce/);
+assert.equal(loader.toString('ascii',0,4),'RIFF');
+assert.equal(loader.toString('ascii',8,12),'WEBP');
+assert.ok(loader.subarray(0,4096).includes(Buffer.from('ANIM')));
+assert.equal(reduced.toString('ascii',0,4),'RIFF');
+assert.equal(reduced.toString('ascii',8,12),'WEBP');
+assert.ok(['GIF87a','GIF89a'].includes(gif.toString('ascii',0,6)));
 assert.ok(fs.existsSync('web/assets/blinq_background.webp'));
-assert.match(css,/blinq_background\.webp/);
-assert.match(css,/boot-splash\.boot-splash-tennis::after/);
-assert.match(css,/app-shell:not\(\[hidden\]\)::after/);
+assert.match(css,/background:#031314!important/);
+assert.ok(css.includes('.anti-share-watermarks{display:none!important}'));
+assert.ok(css.includes('#dashboardHero::after'));
 
 // Fallbacks: CSP-safe delegated handler, no inline onerror.
 assert.match(app,/handleAssetImageError/);
