@@ -1,3 +1,4 @@
+/* BlinQ visual revision: home-wm-20260924 */
 (() => {
   'use strict';
 
