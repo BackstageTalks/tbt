@@ -14,9 +14,15 @@ API = (ROOT / "api" / "function_app.py").read_text(encoding="utf-8")
 
 
 def test_loading_and_normal_page_keep_blinq_watermarks_and_motion():
-    assert "/assets/blinq_loading_r29.svg?v=7360" in INDEX
+    asset_revision = str(UI["asset_revision"])
+    patch = UI["ui_patch"].rsplit("r", 1)[-1]
+    for asset in ("blinq-loader.webp", "blinq-loader-static.webp", "blinq-loader.gif"):
+        assert f"/assets/{asset}?v={asset_revision}&p={patch}" in INDEX
+    assert "prefers-reduced-motion: reduce" in INDEX
     assert "boot-splash.boot-splash-tennis::after" in CSS
-    assert "app-shell:not([hidden])::after" in CSS
+    assert "display:none!important;content:none!important;animation:none!important" in CSS
+    assert ".anti-share-watermarks{display:none!important}" in CSS
+    assert "#dashboardHero::after" in CSS
     assert "/assets/blinq_logo.svg" in CSS
     assert "clip-path:none!important" in CSS
 
