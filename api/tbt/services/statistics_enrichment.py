@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from ..errors import ProviderError
-from ..providers.statistics import NoSupportedStatisticsError, parse_statistics
+from ..providers.statistics import (NoSupportedStatisticsError, complete_opponent_service_rates, parse_statistics)
 
 
 # V3 re-reads previously count-only V2 rows to capture the provider's
@@ -44,7 +44,14 @@ class StatisticsEnricher:
         event_id = next((raw.get(k) for k in ("_tbt_provider_event_id", "provider_event_id", "event_id", "eventId", "id") if raw.get(k)), None)
         if event_id is None or not str(event_id).isascii() or not str(event_id).isdigit():
             return "missing_event_id"
+        # Repair existing schema-3 return-only snapshots locally before the
+        # normal cache check. This requires zero provider/API requests.
         marker = raw.get("_tbt_statistics", {})
+        if (marker.get("schema") == STATISTICS_SCHEMA_VERSION
+                and marker.get("event_id") == str(event_id)
+                and marker.get("status") == "available"
+                and complete_opponent_service_rates(match.stats)):
+            return "enriched"
         if marker.get("schema") == STATISTICS_SCHEMA_VERSION and marker.get("event_id") == str(event_id):
             checked = datetime.fromisoformat(marker["fetched_at"])
             # Completed historical statistics persist in Parquet, not just the
