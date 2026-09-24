@@ -687,15 +687,6 @@
     const profileAdmin=$('profileAdminLink');if(profileAdmin)profileAdmin.hidden=!isAdminAccount();
   }
 
-  function watermarkHtml(item){
-    const wm=item?.watermark||{};
-    if(!wm.enabled)return '';
-    const preset=String(wm.preset||'violet').replace(/[^a-z0-9_-]/gi,'');
-    const position=['top-left','top-right','bottom-left','bottom-right','center'].includes(String(wm.position))?String(wm.position):'bottom-right';
-    const opacity=Math.max(.12,Math.min(1,Number(wm.opacity)||.42));
-    const size=Math.max(.7,Math.min(1.6,Number(wm.size)||1));
-    return `<span class="slot-watermark wm-${escapeHtml(preset)} wm-${escapeHtml(position)}" style="--wm-opacity:${opacity};--wm-scale:${size}">${escapeHtml(wm.text||'COMING SOON')}</span>`;
-  }
   function safeLink(value, fallback='#predictions'){
     const text=String(value||'').trim();
     if(!text)return fallback;
