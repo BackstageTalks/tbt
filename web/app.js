@@ -1,4 +1,4 @@
-/* BlinQ visual revision: green-login-loader-20260924 */
+/* BlinQ visual revision: green-login-loader-20260924; public-green-backdrop-20260924 */
 (() => {
   'use strict';
 

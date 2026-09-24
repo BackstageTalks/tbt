@@ -7404,9 +7404,11 @@ body#blinqPremium.blinq-home .prediction-card.match-card-v3>*{
 }
 
 /* Canonical public backdrop: same green artwork and overlay as login and boot.
-   Site background configured in Admin can still override the image only. */
+   Custom Admin uploads may replace only the image, not the matching gradient. */
 body#blinqPremium.blinq-home:not(.blinq-admin){
-  background-image:var(--blinq-login-loader-backdrop)!important;
+  background-image:
+    linear-gradient(90deg,rgba(1,11,12,.80),rgba(2,23,20,.58),rgba(1,10,12,.82)),
+    var(--blinq-page-bg,url("/assets/blinq_page_background.webp"))!important;
   background-color:#031314!important;
   background-position:center!important;
   background-size:cover!important;
