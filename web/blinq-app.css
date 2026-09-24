@@ -7649,3 +7649,23 @@ body#blinqPremium .admin-simple-user-list .admin-filter-empty{
     display:block!important;margin:auto!important;
   }
 }
+
+/* One responsive grid for the admin account heading AND rows.
+   The old row-only 84/88/72px track rule pushed data hundreds of pixels
+   to the right of the headings on full-width account lists. */
+@media (min-width:861px){
+  body#blinqPremium.blinq-admin .admin-simple-user-table{
+    --blinq-account-columns:minmax(220px,1.7fr) minmax(90px,.55fr) minmax(100px,.65fr) minmax(86px,.5fr) 24px;
+  }
+  body#blinqPremium.blinq-admin .admin-simple-user-head,
+  body#blinqPremium.blinq-admin .admin-simple-user-row{
+    display:grid!important;
+    grid-template-columns:var(--blinq-account-columns)!important;
+    column-gap:8px!important;
+    align-items:center!important;
+    box-sizing:border-box!important;
+    width:100%!important;
+  }
+  body#blinqPremium.blinq-admin .admin-simple-user-head{padding:0 10px!important}
+  body#blinqPremium.blinq-admin .admin-simple-user-row{padding:6px 10px!important}
+}
