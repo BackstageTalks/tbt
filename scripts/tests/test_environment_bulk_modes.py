@@ -8,7 +8,7 @@ from enrich_environment_snapshot import (
     _verified_unique_environment, _probe_unique_geocoder,
 )
 from tbt.services.environment import (
-    OpenMeteoBudgetExceeded, OpenMeteoClient, GEOCODE_URL,
+    OpenMeteoBudgetExceeded, OpenMeteoClient, GEOCODE_URL, Venue,
     location_candidates, venue_context_compatible,
 )
 
@@ -130,7 +130,7 @@ class BulkEnvironmentSafetyTests(unittest.TestCase):
     def test_mismatched_country_must_not_create_environment(self):
         class WrongCountryClient:
             def geocode(self, query):
-                return SimpleNamespace(
+                return Venue(
                     query=query, name="Saitama",
                     latitude=35.86, longitude=139.65,
                     elevation_m=15, timezone="Asia/Tokyo",
