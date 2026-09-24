@@ -38,7 +38,7 @@ def main():
                     splash.remove();
                     return background;
                 }''')
-                assert 'blinq_background.webp' in loader_background, (width, loader_background)
+                assert 'blinq_page_background.webp' in loader_background, (width, loader_background)
                 # Login watermark remains deliberately independent of home.
                 assert 'blinq_logo.svg' in page.evaluate('''() => {
                     const dialog=document.querySelector('#authDialog');
@@ -48,6 +48,17 @@ def main():
                     if(!wasOpen)dialog.removeAttribute('open');
                     return image;
                 }''')
+                # Both views must resolve the exact same green artwork and
+                # overlay; this prevents another conflicting loader-only override.
+                login_background = page.evaluate('''() => {
+                    const dialog=document.querySelector('#authDialog');
+                    const wasOpen=dialog.hasAttribute('open');
+                    if(!wasOpen)dialog.setAttribute('open','');
+                    const background=getComputedStyle(dialog).backgroundImage;
+                    if(!wasOpen)dialog.removeAttribute('open');
+                    return background;
+                }''')
+                assert loader_background == login_background, (width, loader_background, login_background)
                 # Verify the existing animation frame receives the shared site
                 # background, including if the boot JS already removed splash.
                 assert page.evaluate('''() => {
@@ -55,7 +66,7 @@ def main():
                   if(!splash){splash=document.createElement('div');splash.className='boot-splash boot-splash-tennis';document.body.append(splash);temporary=true;}
                   const image=getComputedStyle(splash).backgroundImage;
                   if(temporary)splash.remove();
-                  return image.includes('blinq_background.webp');
+                  return image.includes('blinq_page_background.webp');
                 }'''), width
                 page.evaluate('''() => {
                   document.querySelector('#bootSplash')?.remove();
