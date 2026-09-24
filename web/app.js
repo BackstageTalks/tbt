@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -38,7 +38,7 @@
     const tourText=String(tour||'').trim().toUpperCase();
     return `${flagIconHtml(country,true)}<span class="player-rank-number">${escapeHtml(rankText)}</span>${tourText?`<span class="player-rank-tour">${escapeHtml(tourText)}</span>`:''}`;
   }
-  const safePhotoUrl = value => { const url=String(value||'').trim(); if(/^\/assets\/[A-Za-z0-9_.\/-]+(?:\?[A-Za-z0-9_=&.%-]+)?$/.test(url)&&!url.split('?')[0].split('/').includes('..'))return url; if(/^\/api\/v1\/(?:tournament-logo|player-image)\/[0-9]{1,12}$/.test(url))return url; if(/^https:\/\//i.test(url)){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}} return ''; };
+  const safePhotoUrl = value => { const url=String(value||'').trim(); if(/^\/assets\/[A-Za-z0-9_.\/-]+(?:\?[A-Za-z0-9_=&.%-]+)?$/.test(url)&&!url.split('?')[0].split('/').includes('..'))return url; if(/^\/api\/v1\/(?:tournament-logo|player-image)\/[0-9]{1,12}$/.test(url))return url; if(/^\/api\/v1\/media\/[A-Za-z0-9._-]+(?:\?[A-Za-z0-9_=&.%-]+)?$/.test(url))return url; if(/^https:\/\//i.test(url)){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}} return ''; };
   const safeUiAsset = value => { const url=String(value||'').trim(); if(!/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)||url.split('/').includes('..'))return ''; return url; };
   const webPatch = () => String(document.querySelector('meta[name="blinq-web-patch"]')?.content||'736').trim();
   const versionedPlayerAsset = value => { const url=String(value||'').trim(); return /^\/assets\/(?:players\/|missing_foto_)/.test(url)?`${url}${url.includes('?')?'&':'?'}p=${encodeURIComponent(webPatch())}`:url; };
@@ -321,10 +321,22 @@
     .filter(item=>(!kind||item.kind===kind)&&(!zone||item.zone===zone))
     .sort((a,b)=>Number(a.order||0)-Number(b.order||0));
 
+  const BANNER_GREYS=[['Predvolené',''],['Čierna','#000000'],['Antracit','#303030'],['Tmavosivá','#555555'],['Sivá','#808080'],['Svetlosivá','#b5b5b5'],['Takmer biela','#e4e4e4'],['Biela','#ffffff']];
+  function bannerColorOptions(current){
+    const value=String(current||'').trim().toLowerCase();
+    const palette=BANNER_GREYS.map(([label,hex])=>hex);
+    const legacy=value&&!palette.includes(value)&&/^#[0-9a-f]{6}$/i.test(value)
+      ?`<option value="${escapeHtml(value)}" selected>Pôvodná farba (${escapeHtml(value)})</option>`:'';
+    return legacy+BANNER_GREYS.map(([label,hex])=>`<option value="${hex}"${value===hex?' selected':''}>${label}${hex?' · '+hex:''}</option>`).join('');
+  }
   function bannerCreativeStyle(c={}){
-    const n=(v,min,max,fallback)=>{const x=Number(v);return Number.isFinite(x)?Math.max(min,Math.min(max,x)):fallback;};
+    const n=(v,min,max,fallback)=>{const x=Number(v);return Number.isFinite(x)&&v!==''?Math.max(min,Math.min(max,x)):fallback;};
     const vars=[`--creative-headline-size:${n(c.headline_size,16,72,36)}px`,`--creative-text-size:${n(c.text_size,9,28,14)}px`,`--creative-eyebrow-size:${n(c.eyebrow_size,7,18,10)}px`,`--creative-delay:${n(c.animation_delay_ms,0,5000,80)}ms`];
-    if(c.headline_color)vars.push(`--creative-headline-color:${String(c.headline_color)}`);if(c.text_color)vars.push(`--creative-text-color:${String(c.text_color)}`);if(c.overlay)vars.push(`--creative-overlay:${String(c.overlay)}`);
+    for(const field of ['headline','text','eyebrow']){
+      const color=String(c[`${field}_color`]||'').trim();
+      if(/^#[0-9a-f]{6}$/i.test(color))vars.push(`--creative-${field}-color:${color}`);
+    }
+    if(c.overlay)vars.push(`--creative-overlay:${String(c.overlay)}`);
     return `style="${escapeHtml(vars.join(';'))}"`;
   }
   function bannerCreativeClasses(c={}){
@@ -787,11 +799,12 @@
     const sponsored=c.sponsored?'<span class="sponsored-label hero-sponsored">SPONSORED</span>':'';
     const image=heroImageHtml(c,index);
     const art=image?'':`<div class="dashboard-hero-ball" aria-hidden="true"><i></i><b></b></div>`;
-    const accent=String(c.accent_text||'').trim();
-    const title=escapeHtml(c.headline||'Data. Analysis.');
-    const titleHtml=accent?`<h2><span>${title}</span><strong>${escapeHtml(accent)}</strong></h2>`:`<h2><strong>${title}</strong></h2>`;
+    // Do not render the obsolete, uneditable accent_text from saved banner revisions.
+    const title=String(c.headline||'').trim();
+    const titleHtml=title?`<h2><strong>${escapeHtml(title)}</strong></h2>`:'';
     const heroEyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
-    const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${escapeHtml(heroEyebrow)}</small>`:''}${titleHtml}<p>${escapeHtml(c.text||'')}</p>${c.button_text?`<b class="hero-slide-cta">${escapeHtml(c.button_text)} →</b>`:''}</div>`:'';
+    const subtitle=String(c.text||'').trim();
+    const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${escapeHtml(heroEyebrow)}</small>`:''}${titleHtml}${subtitle?`<p>${escapeHtml(subtitle)}</p>`:''}${c.button_text?`<b class="hero-slide-cta">${escapeHtml(c.button_text)} →</b>`:''}</div>`:'';
     return `<a class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}" ${bannerCreativeStyle(c)} href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${sponsored}${image}${copy}${art}</a>`;
   }
   function clearHeroRotation(){
@@ -2796,6 +2809,56 @@
     </section>`;
   }
 
+  function activeAdminBanners(){
+    const count=Math.max(1,Math.min(5,Number(state.ui?.hero_banner?.slot_count)||1));
+    return Array.from({length:count},(_,i)=>({
+      id:`HERO_BANNER_${i+1}`,
+      item:elements()?.[`HERO_BANNER_${i+1}`]||{content:{}}
+    }));
+  }
+  function adminHeroPreviewCard(entry,mode){
+    const c=entry.item?.content||{};
+    const desktop=safePhotoUrl(c.image_url||'')||'/assets/hero-reference-exact-v680.webp';
+    const mobile=safePhotoUrl(c.mobile_image_url||'')||desktop;
+    const img=mode==='mobile'?mobile:desktop;
+    const eyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
+    const headline=String(c.headline||'').trim();
+    const subtitle=String(c.text||'').trim();
+    const copy=c.show_copy===false?'':`<div class="admin-hero-preview-copy">${eyebrow?`<small>${escapeHtml(eyebrow)}</small>`:''}${headline?`<strong>${escapeHtml(headline)}</strong>`:''}${subtitle?`<p>${escapeHtml(subtitle)}</p>`:''}${c.button_text?`<b>${escapeHtml(c.button_text)} →</b>`:''}</div>`;
+    return `<div class="lean-admin-preview ${mode}" ${bannerCreativeStyle(c)} data-preview-slot="${escapeHtml(entry.id)}"><img src="${escapeHtml(img)}" alt="" loading="lazy">${copy}</div>`;
+  }
+  function syncAdminHeroPreview(){
+    const stage=document.querySelector('#adminHeroLivePreview');
+    if(!stage||state.route!=='admin'||state.adminTab!=='banners')return;
+    const entries=activeAdminBanners();
+    state.adminPreviewIndex=((state.adminPreviewIndex%entries.length)+entries.length)%entries.length;
+    const entry=entries[state.adminPreviewIndex];
+    for(const mode of ['desktop','mobile']){
+      const host=stage.querySelector(`[data-admin-preview-card="${mode}"]`);
+      if(host)host.innerHTML=adminHeroPreviewCard(entry,mode);
+    }
+    const status=stage.querySelector('[data-admin-preview-status]');
+    if(status)status.textContent=`Banner ${state.adminPreviewIndex+1} / ${entries.length} · ${state.adminPreviewPaused?'pozastavené':'živý náhľad'}`;
+    const pause=stage.querySelector('[data-admin-preview-pause]');
+    if(pause){pause.textContent=state.adminPreviewPaused?'Spustiť':'Pozastaviť';pause.setAttribute('aria-pressed',String(state.adminPreviewPaused));}
+    stage.querySelectorAll('[data-admin-preview-dot]').forEach(dot=>{
+      const active=Number(dot.dataset.adminPreviewDot)===state.adminPreviewIndex;
+      dot.classList.toggle('is-active',active);
+      dot.setAttribute('aria-current',String(active));
+    });
+  }
+  function startAdminHeroPreview(){
+    if(state.adminPreviewTimer){clearInterval(state.adminPreviewTimer);state.adminPreviewTimer=null;}
+    if(state.route!=='admin'||state.adminTab!=='banners'||state.ui?.hero_banner?.auto_rotate===false)return;
+    const entries=activeAdminBanners();
+    if(entries.length<2||matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+    const seconds=Math.max(3,Math.min(10,Number(state.ui?.hero_banner?.rotation_seconds)||6));
+    state.adminPreviewTimer=setInterval(()=>{
+      if(document.hidden||state.adminPreviewPaused||state.route!=='admin'||state.adminTab!=='banners')return;
+      state.adminPreviewIndex=(state.adminPreviewIndex+1)%activeAdminBanners().length;
+      syncAdminHeroPreview();
+    },seconds*1000);
+  }
   function renderAdminBanners(){
     const heroIds=[1,2,3,4,5].map(i=>`HERO_BANNER_${i}`);
     if(!heroIds.includes(state.selectedElement))state.selectedElement='HERO_BANNER_1';
@@ -2805,47 +2868,60 @@
     const globalHero=state.ui.hero_banner=state.ui.hero_banner||{};
     const activeCount=Math.max(1,Math.min(5,Number(globalHero.slot_count)||1));
     const rotation=Math.max(3,Math.min(10,Number(globalHero.rotation_seconds)||6));
-    const desktop=safePhotoUrl(c.image_url||'')||'/assets/hero-reference-exact-v680.webp';
-    const mobile=safePhotoUrl(c.mobile_image_url||'')||desktop;
+    const entries=activeAdminBanners();
+    state.adminPreviewIndex=Math.max(0,Math.min(state.adminPreviewIndex,entries.length-1));
+    const previewEntry=entries[state.adminPreviewIndex];
     const hero1=elements()?.HERO_BANNER_1?.content||{};
     const bg=safePhotoUrl(hero1.site_background_url||'')||String(state.presentationConfig?.theme?.background?.image||'/assets/blinq_page_background.webp');
     const effects=['fade-up','fade','slide-down'];
-    const preview=(mode,img)=>`<div class="lean-admin-preview ${mode}" style="--preview-image:url('${escapeHtml(img)}')"><div><small>${escapeHtml(c.eyebrow||'BLINQ')}</small><strong>${escapeHtml(c.headline||'Tennis intelligence for a smarter tomorrow.')}</strong><p>${escapeHtml(c.text||'')}</p>${c.button_text?`<b>${escapeHtml(c.button_text)} →</b>`:''}</div></div>`;
-    const tabs=heroIds.map((id,index)=>{const slot=elements()?.[id]||{},content=slot.content||{},active=index<activeCount,selected=id===selectedId,ready=Boolean(String(content.image_url||'').trim());return `<button type="button" class="admin-hero-tab${selected?' is-selected':''}${active?' is-live':''}${ready?' is-ready':''}" data-admin-element="${id}"><span>0${index+1}</span><strong>Banner ${index+1}</strong><small>${active?'AKTÍVNY':ready?'PRIPRAVENÝ':'NEAKTÍVNY'}</small></button>`;}).join('');
+    const tabs=heroIds.map((id,index)=>{
+      const slot=elements()?.[id]||{},content=slot.content||{},active=index<activeCount,selected=id===selectedId,ready=Boolean(String(content.image_url||'').trim());
+      return `<button type="button" class="admin-hero-tab${selected?' is-selected':''}${active?' is-live':''}${ready?' is-ready':''}" data-admin-element="${id}" aria-pressed="${selected}"><span>0${index+1}</span><strong>Banner ${index+1}</strong><small>${active?'AKTÍVNY':ready?'PRIPRAVENÝ':'NEAKTÍVNY'}</small></button>`;
+    }).join('');
     const countOptions=[1,2,3,4,5].map(n=>`<option value="${n}"${n===activeCount?' selected':''}>${n}</option>`).join('');
     const delayOptions=[3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${n===rotation?' selected':''}>${n} s</option>`).join('');
+    const sizes=(values,current,fallback)=>values.map(n=>`<option value="${n}"${n===(Number(current)||fallback)?' selected':''}>${n} px</option>`).join('');
     return `<section class="admin-ux-section lean-admin-banners admin-hero-manager" data-simple-banner="${escapeHtml(selectedId)}">
-      <div class="admin-ux-heading"><div><small>BANNERY</small><h2>Hero carousel</h2><p>Pripravených je 5 pevných bannerových pozícií. Vyplň ďalší banner a potom zvýš počet aktívnych bannerov.</p></div></div>
+      <div class="admin-ux-heading"><div><small>BANNERY</small><h2>Hero bannery</h2><p>Nastav text, typografiu, podklady a rotáciu. Živý náhľad beží nezávisle od formulára.</p></div></div>
       <div class="admin-hero-carousel-controls">
-        <label><span>Počet aktívnych bannerov</span><select data-admin-hero-count>${countOptions}</select><small>Aktivujú sa bannery od 1 po zvolený počet.</small></label>
-        <label><span>Interval automatickej zmeny</span><select data-admin-hero-seconds>${delayOptions}</select><small>Rozsah 3–10 sekúnd.</small></label>
-        <div class="admin-hero-rotation-status"><i></i><div><strong>${activeCount>1?'Automatické prepínanie zapnuté':'Jeden statický banner'}</strong><small>${activeCount>1?`Zmena každých ${rotation} sekúnd · pozastaví sa pri hoveri`:'Pridaj Banner 2 a nastav počet aktívnych na 2.'}</small></div></div>
+        <label><span>Počet aktívnych bannerov</span><select data-admin-hero-count>${countOptions}</select><small>Zvolený počet z piatich pozícií.</small></label>
+        <label><span>Interval automatickej zmeny</span><select data-admin-hero-seconds>${delayOptions}</select><small>3 až 10 sekúnd, rovnako ako na webe.</small></label>
+        <div class="admin-hero-rotation-status"><i></i><div><strong>${activeCount>1?'Živá rotácia':'Jeden banner'}</strong><small>${activeCount>1?'Náhľad sa prepína, editačný formulár zostáva na vybranom bannere.':'Pridaj druhý aktívny banner pre rotáciu.'}</small></div></div>
       </div>
-      <div class="admin-hero-tabs" role="tablist" aria-label="Hero bannery">${tabs}</div>
-      <div class="admin-hero-selected-head"><div><small>UPRAVUJEŠ</small><strong>${escapeHtml(item.label||selectedId)}</strong></div><span>${Number(selectedId.split('_').pop())<=activeCount?'Zobrazuje sa v rotácii':'Mimo aktuálnej rotácie'}</span></div>
-      <div class="lean-admin-specs"><article><strong>DESKTOP HERO</strong><span>1920 × 640 px</span><small>WebP / AVIF odporúčané</small></article><article><strong>MOBILE HERO</strong><span>1080 × 720 px</span><small>Samostatný crop pre telefón</small></article><article><strong>ROTÁCIA</strong><span>${activeCount} / 5</span><small>${rotation} s medzi bannermi</small></article></div>
-      <div class="lean-admin-preview-grid"><div><span>Desktop preview</span>${preview('desktop',desktop)}</div><div><span>Mobile preview</span>${preview('mobile',mobile)}</div></div>
-      <div class="admin-form-section"><div class="admin-form-section-title"><strong>Text nad bannerom</strong><span>Nie je súčasťou obrázka.</span></div><div class="admin-form-grid">
-        <label>Popiska nad nadpisom <small>(prázdne = skryť)</small><input data-simple-banner-field="eyebrow" value="${escapeHtml(c.eyebrow||'')}"></label>
+      <div class="admin-hero-tabs" role="group" aria-label="Vybrať banner na úpravu">${tabs}</div>
+      <section class="admin-hero-preview-stage" id="adminHeroLivePreview" aria-label="Živý náhľad carouselu">
+        <div class="admin-hero-preview-toolbar"><div><small>ŽIVÝ NÁHĽAD</small><strong data-admin-preview-status>Banner ${state.adminPreviewIndex+1} / ${entries.length} · živý náhľad</strong></div><div class="admin-hero-preview-actions"><button type="button" data-admin-preview-step="-1" aria-label="Predchádzajúci banner">‹</button><button type="button" data-admin-preview-pause aria-pressed="${state.adminPreviewPaused}">${state.adminPreviewPaused?'Spustiť':'Pozastaviť'}</button><button type="button" data-admin-preview-step="1" aria-label="Nasledujúci banner">›</button></div></div>
+        <div class="lean-admin-preview-grid"><div><span>Desktop · 1920 × 640</span><div data-admin-preview-card="desktop">${adminHeroPreviewCard(previewEntry,'desktop')}</div></div><div><span>Mobil · 1080 × 720</span><div data-admin-preview-card="mobile">${adminHeroPreviewCard(previewEntry,'mobile')}</div></div></div>
+        <div class="admin-hero-preview-dots" aria-label="Pozícia náhľadu">${entries.map((_,i)=>`<button type="button" data-admin-preview-dot="${i}" class="${i===state.adminPreviewIndex?'is-active':''}" aria-current="${i===state.adminPreviewIndex}" aria-label="Zobraziť banner ${i+1}"></button>`).join('')}</div>
+      </section>
+      <div class="admin-hero-selected-head"><div><small>UPRAVUJEŠ</small><strong>${escapeHtml(item.label||selectedId)}</strong></div><span>${Number(selectedId.split('_').pop())<=activeCount?'V rotácii':'Neaktívny banner'}</span></div>
+      <div class="admin-form-section admin-banner-copy-editor"><div class="admin-form-section-title"><strong>Text bannera</strong><span>Prázdne pole zostane skryté. Pôvodný skrytý doplnkový nadpis sa nepoužíva.</span></div><div class="admin-form-grid">
+        <label>Popiska <small>(prázdne = skryť)</small><input data-simple-banner-field="eyebrow" value="${escapeHtml(c.eyebrow||'')}"></label>
         <label>Animácia<select data-simple-banner-field="effect">${effects.map(v=>`<option value="${v}"${v===(c.effect||'fade-up')?' selected':''}>${v}</option>`).join('')}</select></label>
         <label class="span-2">Nadpis<input data-simple-banner-field="headline" value="${escapeHtml(c.headline||'')}"></label>
         <label class="span-2">Podnadpis<textarea rows="3" data-simple-banner-field="text">${escapeHtml(c.text||'')}</textarea></label>
         <label>Text tlačidla<input data-simple-banner-field="button_text" value="${escapeHtml(c.button_text||'')}"></label>
         <label>Odkaz<input data-simple-banner-field="link" value="${escapeHtml(c.link||'')}"></label>
       </div></div>
-      <div class="admin-form-section"><div class="admin-form-section-title"><strong>Grafické podklady · Banner ${escapeHtml(selectedId.split('_').pop())}</strong><span>Nahraj vlastný desktop a mobilný podklad.</span></div><div class="admin-form-grid">
+      <div class="admin-form-section admin-banner-typography"><div class="admin-form-section-title"><strong>Veľkosť a farba textu</strong><span>Jednoduchá škála od čiernej po bielu. Platí pre desktop aj mobil, náhľad reaguje hneď.</span></div><div class="admin-banner-type-grid">
+        <label><span>Nadpis · veľkosť</span><select data-simple-banner-field="headline_size">${sizes([20,24,28,32,36,40,44,48,56,64,72],c.headline_size,36)}</select></label>
+        <label><span>Nadpis · farba</span><select data-simple-banner-field="headline_color">${bannerColorOptions(c.headline_color)}</select></label>
+        <label><span>Podnadpis · veľkosť</span><select data-simple-banner-field="text_size">${sizes([10,12,14,16,18,20,24,28],c.text_size,14)}</select></label>
+        <label><span>Podnadpis · farba</span><select data-simple-banner-field="text_color">${bannerColorOptions(c.text_color)}</select></label>
+        <label><span>Popiska · veľkosť</span><select data-simple-banner-field="eyebrow_size">${sizes([8,10,12,14,16,18],c.eyebrow_size,10)}</select></label>
+        <label><span>Popiska · farba</span><select data-simple-banner-field="eyebrow_color">${bannerColorOptions(c.eyebrow_color)}</select></label>
+      </div></div>
+      <div class="admin-form-section admin-banner-image-editor"><div class="admin-form-section-title"><strong>Grafické podklady · Banner ${escapeHtml(selectedId.split('_').pop())}</strong><span>Vlastný desktop a mobilný obrázok bez textu.</span></div><div class="admin-form-grid">
         <label class="span-2">Desktop hero · 1920×640<input data-simple-banner-field="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/hero.webp"></label>
-        <label class="span-2">Mobile hero · 1080×720<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/hero-mobile.webp"></label>
-        <label class="admin-toggle-line span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť editovateľný text nad podkladom</span></label>
+        <label class="span-2">Mobilný hero · 1080×720<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/hero-mobile.webp"></label>
+        <label class="admin-toggle-line span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť text nad obrázkom</span></label>
       </div></div>
-      <div class="admin-form-section admin-page-background-editor" data-simple-banner="HERO_BANNER_1"><div class="admin-form-section-title"><strong>Pozadie celej stránky</strong><span>Spoločné pre všetkých 5 bannerov. Nad obrázkom sa automaticky pridáva jemný BlinQ ambient efekt.</span></div><div class="admin-form-grid">
-        <label class="span-2">Background · odporúčané 1920×1080<input data-simple-banner-field="site_background_url" value="${escapeHtml(hero1.site_background_url||bg)}" placeholder="/assets/blinq_page_background.webp"></label>
+      <div class="admin-form-section admin-page-background-editor" data-simple-banner="HERO_BANNER_1"><div class="admin-form-section-title"><strong>Pozadie hlavnej stránky</strong><span>Predvolené je rovnaké zelené tenisové pozadie ako pri prihlásení a loadingu, bez watermarku.</span></div><div class="admin-form-grid">
+        <label class="span-2">Background · 1920 × 1080<input data-simple-banner-field="site_background_url" value="${escapeHtml(hero1.site_background_url||bg)}" placeholder="/assets/blinq_page_background.webp"></label>
       </div></div>
-      <div class="admin-banner-save-note"><span></span><strong>Po úprave klikni Publikovať.</strong><small>Prepínanie na webe sa aktivuje automaticky pri 2–5 banneroch.</small></div>
+      <div class="admin-banner-save-note"><span></span><strong>Zmeny sú zatiaľ iba v koncepte.</strong><small>Po kontrole klikni hore na Publikovať.</small></div>
     </section>`;
   }
-
-
   function userDateValue(value){ if(!value)return ''; const d=new Date(value); if(Number.isNaN(d.getTime()))return ''; const pad=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`; }
   function adminTelegramIcon(){
     return `<svg class="admin-tg-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21.5 3.3 18.3 19c-.24 1.11-.88 1.38-1.79.86l-4.87-3.59-2.35 2.26c-.26.26-.48.48-.98.48l.35-4.96 9.02-8.15c.39-.35-.09-.55-.61-.2L5.92 12.72l-4.8-1.5c-1.04-.33-1.06-1.04.22-1.54L20.1 2.45c.87-.32 1.63.2 1.4.85Z"/></svg>`;
@@ -2897,8 +2973,12 @@
   function adminFilteredUsers(){return adminSortedUsers(Array.isArray(state.adminUsers)?state.adminUsers:[]).filter(adminUserMatchesFilters);}
   function adminApplyUserFilters(){
     const visible=new Set(adminFilteredUsers().map(u=>String(u.id)));
-    document.querySelectorAll('[data-admin-user]').forEach(row=>{row.hidden=!visible.has(String(row.dataset.adminUser));});
+    const list=$('routePanel')?.querySelector('.admin-simple-user-list');
+    list?.querySelectorAll('.admin-simple-user-row[data-admin-user]').forEach(row=>{
+      row.hidden=!visible.has(String(row.dataset.adminUser));
+    });
     const count=$('adminFilteredCount');if(count)count.textContent=String(visible.size);
+    const empty=$('adminUserFilterEmpty');if(empty)empty.hidden=visible.size!==0;
   }
 
   function renderAdminUserEditor(user){
@@ -2934,7 +3014,7 @@
       ${state.adminUsersWarning?`<div class="admin-note admin-note-warning"><strong>Profilové úložisko je v náhradnom režime</strong><span>Levely fungujú cez Firebase. Niektoré profilové zmeny môžu čakať na dostupné úložisko.</span></div>`:''}
       <div class="admin-simple-stats"><span><b>${users.length}</b> účtov</span><span><b>${countActive}</b> aktívnych</span>${countSuspended?`<span><b>${countSuspended}</b> pozastavených</span>`:''}</div>
       <div class="admin-simple-toolbar"><label class="search-box"><span class="admin-search-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5"></circle><path d="m12.2 12.2 4 4"></path></svg></span><input id="adminUserSearch" type="search" value="${escapeHtml(f.q)}" placeholder="Hľadať e-mail, Telegram alebo UID"></label><label>Level<select id="adminUserLevelFilter">${levelOptions}</select></label><label>Stav<select id="adminUserStatusFilter">${statusOptions}</select></label><label>Zoradiť<select id="adminUserSort"><option value="email"${f.sort==='email'?' selected':''}>E-mail</option><option value="telegram"${f.sort==='telegram'?' selected':''}>Telegram</option><option value="level"${f.sort==='level'?' selected':''}>Level</option><option value="expiry"${f.sort==='expiry'?' selected':''}>Najbližšia expirácia</option><option value="last-login"${f.sort==='last-login'?' selected':''}>Posledné prihlásenie</option></select></label><span>Zobrazených <b id="adminFilteredCount">${filtered.length}</b></span></div>
-      <div class="admin-accounts-split admin-accounts-split-v22${state.adminSelectedUser?' has-selection':' no-selection'}"><div class="admin-simple-user-table"><div class="admin-simple-user-head"><span>Používateľ</span><span>Level</span><span>Platnosť</span><span>Stav</span><span></span></div><div class="admin-simple-user-list">${rows}</div></div><div class="admin-simple-user-editor-wrap">${renderAdminUserEditor(state.adminSelectedUser)}</div></div>
+      <div class="admin-accounts-split admin-accounts-split-v22${state.adminSelectedUser?' has-selection':' no-selection'}"><div class="admin-simple-user-table"><div class="admin-simple-user-head"><span>Používateľ</span><span>Level</span><span>Platnosť</span><span>Stav</span><span></span></div><div class="admin-simple-user-list">${rows}${!state.adminUsersLoading&&users.length?`<div id="adminUserFilterEmpty" class="admin-filter-empty"${filtered.length?" hidden":""} role="status">Žiadne účty nezodpovedajú zvoleným filtrom.</div>`:""}</div></div><div class="admin-simple-user-editor-wrap">${renderAdminUserEditor(state.adminSelectedUser)}</div></div>
     </section>`;
   }
   function buildDemoMatch(i,section='prime'){
@@ -3173,6 +3253,12 @@
       const tgAction=event.target.closest('[data-admin-action="tg-add"],[data-admin-action="tg-remove"]');if(tgAction){const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]};cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];if(tgAction.dataset.adminAction==='tg-add'){cfg.groups.push({id:`group_${Date.now()}`,enabled:true,badge:'KOMUNITA',title:'Telegram skupina',description:'',cta:'Otvoriť Telegram',url:'',min_plan:'rookie'});}else{const index=Number(tgAction.dataset.tgIndex);if(Number.isInteger(index)&&index>=0)cfg.groups.splice(index,1);}renderTelegramGroupsPanel();rerenderAdmin();return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
       const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.tab_enabled=true;rule.row_overrides={};if(preset==='full'){rule.display_state='active';rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.display_state='active';rule.visible_rows=3;rule.selection_mode='first';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='rookie2'){rule.display_state='active';rule.visible_rows=tab==='daily'?2:Math.min(1,Number(rule.visible_rows)||1);rule.selection_mode='stable_random';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='blurred'){rule.display_state='blurred';rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.display_state='hidden';rule.visible_rows=0;rule.blur_remaining=false;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Zobrazenie · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
+      const previewStep=event.target.closest('[data-admin-preview-step]');
+      if(previewStep){const n=activeAdminBanners().length;state.adminPreviewIndex=(state.adminPreviewIndex+Number(previewStep.dataset.adminPreviewStep)+n)%n;syncAdminHeroPreview();return;}
+      const previewDot=event.target.closest('[data-admin-preview-dot]');
+      if(previewDot){state.adminPreviewIndex=Number(previewDot.dataset.adminPreviewDot)||0;syncAdminHeroPreview();return;}
+      const previewPause=event.target.closest('[data-admin-preview-pause]');
+      if(previewPause){state.adminPreviewPaused=!state.adminPreviewPaused;syncAdminHeroPreview();return;}
       const element=event.target.closest('[data-admin-element]');if(element){setSelectedElement(element.dataset.adminElement);return;}
       const userButton=event.target.closest('[data-admin-user]');if(userButton){state.adminSelectedUser=(state.adminUsers||[]).find(x=>String(x.id)===String(userButton.dataset.adminUser))||null;rerenderAdmin();return;}
       const quick=event.target.closest('[data-admin-user-plan]');if(quick){const input=$('adminUserPlan');if(input){input.value=quick.dataset.adminUserPlan;host.querySelectorAll('[data-admin-user-plan]').forEach(btn=>btn.classList.toggle('active',btn===quick));setAdminPlanDefaults(input.value,false);}return;}
@@ -3217,12 +3303,12 @@
       if(t.id==='adminUserStatusFilter'){uf.status=t.value;adminApplyUserFilters();return;}
       if(t.id==='adminUserSort'){uf.sort=t.value;rerenderAdmin();adminApplyUserFilters();return;}
       if(t.id==='adminPlanSelect'){state.adminPlan=t.value;rerenderAdmin();return;}
-      if(t.dataset.adminHeroCount!==undefined){const count=Math.max(1,Math.min(5,Number(t.value)||1));state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.enabled=true;state.ui.hero_banner.slot_count=count;state.ui.hero_banner.auto_rotate=count>1;state.ui.hero_banner.show_dots=count>1;state.ui.hero_banner.pause_on_hover=true;[1,2,3,4,5].forEach(i=>{const slot=elements()?.[`HERO_BANNER_${i}`];if(slot){slot.content=slot.content||{};slot.content.enabled=i<=count;}});state.heroIndex=0;renderAllUiContent();rerenderAdmin();return;}
+      if(t.dataset.adminHeroCount!==undefined){const count=Math.max(1,Math.min(5,Number(t.value)||1));state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.enabled=true;state.ui.hero_banner.slot_count=count;state.ui.hero_banner.auto_rotate=count>1;state.ui.hero_banner.show_dots=count>1;state.ui.hero_banner.pause_on_hover=true;[1,2,3,4,5].forEach(i=>{const slot=elements()?.[`HERO_BANNER_${i}`];if(slot){slot.content=slot.content||{};slot.content.enabled=i<=count;}});state.heroIndex=0;state.adminPreviewIndex=0;renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHeroSeconds!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.rotation_seconds=Math.max(3,Math.min(10,Number(t.value)||6));renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroRotate!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.auto_rotate=t.checked;renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
-      if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();}return;}
+      if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/_size$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.dashboardGlobalField){state.ui.dashboard=state.ui.dashboard||{};let value=t.type==='checkbox'?t.checked:Number(t.value);state.ui.dashboard[t.dataset.dashboardGlobalField]=value;state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHubGlobalField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc[t.dataset.adminHubGlobalField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();showStatus(`${dailyHubTabLabel(tab)} · ${tc.enabled===false?'vypnuté':'zapnuté'} globálne.`);return;}
       if(t.dataset.adminHubField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{visible_rows:0,blur_remaining:true,tab_enabled:true,see_all:false,selection_mode:'first',display_state:'active',row_overrides:{}};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.adminHubField==='visible_rows'&&String(value).toUpperCase()!=='ALL')value=Number(value);rule[t.dataset.adminHubField]=value;rule.tab_enabled=rule.display_state!=='hidden';if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}
@@ -3235,6 +3321,17 @@
       if(t.dataset.adminLevelField){const card=t.closest('[data-admin-level-plan]'),id=String(card?.dataset.adminLevelPlan||'').toLowerCase();if(membershipHierarchy.includes(id)){const p=state.ui.plans[id]=state.ui.plans[id]||{};const field=t.dataset.adminLevelField;let value=t.type==='checkbox'?t.checked:t.value;if(id==='rookie'&&field==='enabled')value=true;if(id==='rookie'&&field==='duration_days')value=null;else if(field==='duration_days'){value=value===''?null:Math.max(1,Math.min(3650,Number(value)||30));if(id==='goat'){p.lifetime=false;p.unlimited=false;}}else if(field==='features')value=String(value||'').split(/\r?\n/).map(x=>x.trim()).filter(Boolean);else if(field==='eyebrow')value=String(value||'').slice(0,40);p[field]=value;showStatus(`${String(p.label||id).replace(/^BlinQ\s+/i,'')} · zmena je v koncepte. Klikni Publikovať.`);}return;}
       if(t.dataset.adminAccess){const item=elements()?.[state.selectedElement];if(item){item.access=item.access||{};item.access[t.dataset.adminAccess]=t.value;if(t.dataset.adminAccess==='rookie')item.access.trial=t.value;rerenderAdmin();}return;}
     };
+    // Live copy feedback without replacing the selected editor or interrupting typing.
+    host.oninput=event=>{
+      const t=event.target,field=t?.dataset?.simpleBannerField;
+      if(!field||!['eyebrow','headline','text','button_text'].includes(field))return;
+      const wrap=t.closest('[data-simple-banner]'),item=elements()?.[wrap?.dataset?.simpleBanner];
+      if(!item)return;
+      item.content=item.content||{};
+      item.content[field]=t.value;
+      syncAdminHeroPreview();
+    };
+    startAdminHeroPreview();
     const search=$('adminUserSearch');if(search)search.oninput=()=>{adminUserFilterState().q=search.value;adminApplyUserFilters();};
     adminApplyUserFilters();
     const form=$('adminUserForm');if(form)form.onsubmit=async event=>{event.preventDefault();const user=state.adminSelectedUser;if(!user)return;const message=$('adminUserMessage');message.textContent='Ukladám…';try{
