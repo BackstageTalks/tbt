@@ -31,12 +31,30 @@ def assert_results(page,nicks):
     assert page.locator("#adminFilteredCount").inner_text()==str(len(nicks))
 
 
+def assert_column_alignment(page, label):
+    geometry=page.evaluate("""() => {
+      const head=document.querySelector('.admin-simple-user-head');
+      const row=document.querySelector('.admin-simple-user-row:not([hidden])');
+      const headers=[...head.children].map(e=>e.getBoundingClientRect().left);
+      const cells=[...row.children].map(e=>e.getBoundingClientRect().left);
+      return {headers,cells,tableWidth:head.getBoundingClientRect().width,
+        headDisplay:getComputedStyle(head).display,rowDisplay:getComputedStyle(row).display};
+    }""")
+    assert geometry["headDisplay"]=="grid" and geometry["rowDisplay"]=="grid",(label,geometry)
+    for column in (1,2,3):  # Level, expiry, status. Chevron is right-aligned by design.
+        delta=abs(geometry["headers"][column]-geometry["cells"][column])
+        assert delta<=2.5,(label,column,geometry)
+    # The Level track must not get pushed to the far right, leaving a huge empty user track.
+    ratio=(geometry["headers"][1]-geometry["headers"][0])/geometry["tableWidth"]
+    assert ratio<0.72,(label,ratio,geometry)
+
+
 def main():
     with sync_playwright() as pw:
         browser=pw.chromium.launch(headless=True,
                                    executable_path=os.getenv("BLINQ_BROWSER") or browser_path())
         try:
-            for width in (390,1440):
+            for width in (390,1024,1280,1440,1920):
                 page=browser.new_page(viewport={"width":width,"height":900})
                 page.route("**/*",route_request)
                 errors=[]
@@ -68,6 +86,8 @@ def main():
                     accountHarness.wireAdmin();
                 }""")
                 assert_results(page,["@Zara","@Ladislav","@Adam","@Franta"])
+                if width>860:
+                    assert_column_alignment(page,f"full-width {width}px")
                 page.locator("#adminUserSearch").fill("franta")
                 assert_results(page,["@Franta"])
                 page.locator("#adminUserLevelFilter").select_option("elite")
@@ -83,6 +103,14 @@ def main():
                 page.locator("#adminUserLevelFilter").select_option("all")
                 page.locator("#adminUserSort").select_option("telegram")
                 assert_results(page,["@Adam","@Franta","@Ladislav","@Zara"])
+                if width==1440:
+                    split=page.locator('.admin-accounts-split-v22')
+                    split.evaluate("""node=>{
+                      node.classList.remove('no-selection');
+                      node.classList.add('has-selection');
+                      node.querySelector('.admin-simple-user-editor-wrap').innerHTML='<div>Editor fixture</div>';
+                    }""")
+                    assert_column_alignment(page,"with-editor 1440px")
                 assert not errors,(width,errors)
                 page.close()
                 print("PASS admin account filters/search/sort at",width)
