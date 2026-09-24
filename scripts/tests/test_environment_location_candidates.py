@@ -45,7 +45,7 @@ class LocationCandidatesTest(unittest.TestCase):
     def test_itf_country_code(self):
         self.assertEqual(
             location_candidates({}, "ITF M15 Astana Men, M-ITF-KAZ-02A"),
-            ["Astana, KZ", "Astana"],
+            ["Astana, KZ"],
         )
 
     def test_unparseable_label_does_not_spend_api(self):
