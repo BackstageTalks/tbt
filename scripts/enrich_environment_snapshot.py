@@ -315,6 +315,16 @@ def main() -> None:
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True, help="Exclusive UTC end")
     parser.add_argument("--limit", type=int, default=0, help="0 = all rows that actually need work")
+    bulk_modes = parser.add_mutually_exclusive_group()
+    bulk_modes.add_argument(
+        "--cache-only", action="store_true",
+        help="Backfill only confidently learned historical venues; NO network geocoding.",
+    )
+    bulk_modes.add_argument(
+        "--unique-geocode", action="store_true",
+        help="Geocode just the first preferred candidate for each missing venue; "
+             "group repeated queries and reuse verified results.",
+    )
     parser.add_argument("--force", action="store_true")
     parser.add_argument(
         "--static-only", action="store_true",
@@ -389,6 +399,10 @@ def main() -> None:
         parser.error("Set TBT_WEATHER_RESEARCH=true only when historical weather research is requested")
     if args.complete_static and not args.static_only:
         parser.error("--complete-static requires --static-only")
+    if (args.cache_only or args.unique_geocode) and not args.static_only:
+        parser.error("Bulk modes require --static-only to prevent weather API requests")
+    if (args.cache_only or args.unique_geocode) and args.force:
+        parser.error("Bulk modes cannot overwrite existing resolved venues")
     if not 1 <= args.max_requests <= 12000:
         parser.error("--max-requests must be 1..12000")
     if args.limit < 0:
@@ -459,6 +473,14 @@ def main() -> None:
             "missing_only"
         ),
         "static_only": bool(args.static_only),
+        "bulk_mode": "cache_only" if args.cache_only else (
+            "unique_geocode" if args.unique_geocode else None
+        ),
+        "cache_only_candidates": 0,
+        "unique_preferred_queries": 0,
+        "unique_queries_attempted": 0,
+        "geocode_candidate_skipped": 0,
+        "geocode_query_errors": 0,
         "max_requests": int(args.max_requests),
         "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
         "venue_cache_observations": knowledge.observations,
@@ -530,6 +552,35 @@ def main() -> None:
             str(match.match_id),
         )
     )
+    # Cache-only mode considers every pending row, including older unresolved
+    # records. Never attempt a geocoder request for cache misses.
+    if args.cache_only:
+        pending = [
+            match for match in pending
+            if knowledge.lookup(match, dict(match.provider_payload or {}))[0] is not None
+        ]
+        report["cache_only_candidates"] = len(pending)
+    elif args.unique_geocode:
+        # Query groups are sorted by recoverable match count, not chronology.
+        # Open-Meteo's positive/negative LRU then performs at most one network
+        # geocode for each distinct preferred query during this job.
+        preferred = {}
+        counts = Counter()
+        for match in pending:
+            candidates = location_candidates(dict(match.provider_payload or {}), match.tournament)
+            key = " ".join(candidates[0].casefold().split()) if candidates else ""
+            preferred[str(match.match_id)] = key
+            if key:
+                counts[key] += 1
+        report["unique_preferred_queries"] = len(counts)
+        pending.sort(
+            key=lambda match: (
+                -counts[preferred[str(match.match_id)]]
+                if preferred[str(match.match_id)] else 1,
+                preferred[str(match.match_id)],
+                str(match.match_id),
+            )
+        )
     if args.limit > 0:
         pending = pending[: args.limit]
     report["selected_for_run"] = len(pending)
@@ -538,6 +589,8 @@ def main() -> None:
     ))
 
     client = OpenMeteoClient(request_limit=args.max_requests)
+    attempted_queries: set[str] = set()
+    failed_queries: set[str] = set()
     changed_years: set[int] = set()
     published_years: set[int] = set()
     dirty_since_checkpoint = 0
@@ -614,6 +667,53 @@ def main() -> None:
                 if env is not None:
                     report["resolved_from_history_cache"] += 1
                     detail["venue_cache_key"] = cache_key
+                elif args.cache_only:
+                    # A miss is never written as unresolved and NEVER contacts
+                    # Open-Meteo. Only positive historical evidence is persisted.
+                    continue
+                elif args.unique_geocode:
+                    # Exactly one preferred candidate per match. Grouping and
+                    # OpenMeteoClient.geocode's 65k LRU avoid repeated requests.
+                    candidates = detail["location_candidates"]
+                    if not candidates:
+                        report["geocode_candidate_skipped"] += 1
+                        continue
+                    query = candidates[0]
+                    query_key = " ".join(query.casefold().split())
+                    if query_key in failed_queries:
+                        report["geocode_candidate_skipped"] += 1
+                        continue
+                    attempted_queries.add(query_key)
+                    try:
+                        venue = client.geocode(query)
+                    except OpenMeteoBudgetExceeded:
+                        raise
+                    except Exception:
+                        failed_queries.add(query_key)
+                        report["geocode_query_errors"] += 1
+                        raise
+                    if venue is not None:
+                        compatible, reason = venue_context_compatible(
+                            payload, match.tournament, asdict(venue)
+                        )
+                        if not compatible:
+                            report["geocode_candidate_skipped"] += 1
+                            # A city/country mismatch is not evidence that the
+                            # underlying location is unknown: leave row untouched.
+                            continue
+                    env = {
+                        "schema_version": ENVIRONMENT_SCHEMA_VERSION,
+                        "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
+                        "venue_resolved": venue is not None,
+                        "location_query": query,
+                        "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
+                        "source": "open-meteo",
+                        "weather_provenance": "historical_archive_posthoc",
+                        "training_eligible_weather": False,
+                    }
+                    if venue is not None:
+                        env["venue"] = asdict(venue)
+                        report["resolved_from_geocoder"] += 1
                 else:
                     env = environment_payload(
                         client,
@@ -692,6 +792,7 @@ def main() -> None:
     finally:
         client.close()
 
+    report["unique_queries_attempted"] = len(attempted_queries)
     report["open_meteo_requests"] = client.request_count
     geocode_cache = client.geocode.cache_info()
     report["geocode_cache_hits"] = geocode_cache.hits
