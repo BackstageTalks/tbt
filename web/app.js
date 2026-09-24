@@ -2065,7 +2065,8 @@
     const startsAt=Date.parse(String(scheduled||''));
     const started=Number.isFinite(startsAt)&&startsAt<=Date.now();
     const runtimeStatus=String(state.feed?.match_statuses?.[eventId]?.status||'').toLowerCase();
-    const terminal=['win','loss','retired'].includes(runtimeStatus)?runtimeStatus:'';
+    const matchWinnerTab=['daily','prime','value','doubles'].includes(sourceTab);
+    const terminal=matchWinnerTab&&['win','loss','retired'].includes(runtimeStatus)?runtimeStatus:'';
     const statusLabel=terminal==='win'
       ?lcopy('WIN','VÝHRA','VÝHRA')
       :terminal==='loss'
