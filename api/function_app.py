@@ -66,6 +66,8 @@ from tbt.services.admin_storage import (
     load_live_worker_status,
     save_account_worker_status,
     load_account_worker_status,
+    save_match_status_snapshot,
+    load_match_status_snapshot,
     live_min_level,
     membership_levels_from,
 )
@@ -92,6 +94,12 @@ from tbt.services.live_comeback import (
     attach_second_set_odds, set2_push_eligible, set2_push_thresholds,
 )
 from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_slot
+from tbt.services.match_status import (
+    betting_day, tracked_matches, status_snapshot, pending_calendar_dates,
+    event_id as match_status_event_id, TERMINAL as MATCH_STATUS_TERMINAL,
+    OFFER_SECTIONS as MATCH_STATUS_SECTIONS,
+)
+from tbt.providers.budget import RequestBudgetExceeded
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 FEED = Path(__file__).parent / "data/feed.json"
@@ -1016,6 +1024,36 @@ def feed(req):
             data, entitlements = filter_feed_for_access(data, access_context, runtime_ui)
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
+        # Attach only statuses for picks this account was authorized to see.
+        # A missing hourly worker/storage must not block the immutable feed.
+        try:
+            current_status = load_match_status_snapshot(data["daily_offer_day"]) or {}
+            permitted = set()
+            for section in (*MATCH_STATUS_SECTIONS, "daily_picks", "board_upcoming"):
+                for item in data.get(section, []) or []:
+                    if isinstance(item, dict):
+                        key = str(item.get("event_id") or "")
+                        if key:
+                            permitted.add(key)
+            markets = data.get("markets")
+            if isinstance(markets, dict):
+                for market_rows in markets.values():
+                    if isinstance(market_rows, list):
+                        for item in market_rows:
+                            if isinstance(item, dict) and item.get("event_id"):
+                                permitted.add(str(item["event_id"]))
+            all_items = current_status.get("items") if isinstance(current_status.get("items"), dict) else {}
+            data["match_status"] = {
+                "scanned_at": current_status.get("scanned_at"),
+                "partial": bool(current_status.get("partial")),
+                "items": {key: {"status": value.get("status"),
+                                "winner_id": value.get("winner_id"),
+                                "observed_at": value.get("observed_at")}
+                          for key, value in all_items.items()
+                          if key in permitted and isinstance(value, dict)},
+            }
+        except (AdminStorageUnavailable, KeyError, ValueError):
+            data["match_status"] = {"scanned_at": None, "items": {}}
         data["account"] = account_data
         data["entitlements"] = entitlements
         return response(data)
@@ -1081,6 +1119,116 @@ def _live_worker_token_ok(req) -> bool:
     expected=str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip()
     supplied=str((getattr(req,"headers",{}) or {}).get("X-Blinq-Worker-Token") or "").strip()
     return bool(expected and supplied and hmac.compare_digest(expected,supplied))
+
+
+
+
+def _run_hourly_match_status() -> dict:
+    """Read only today's issued board; never recalculate picks or settle bets."""
+    now = datetime.now(timezone.utc)
+    current_feed = visible_feed(read_feed(FEED), now=now)
+    tracked = tracked_matches(current_feed, now)
+    previous = load_match_status_snapshot(betting_day(now)) or {}
+    old_items = previous.get("items") if isinstance(previous.get("items"), dict) else {}
+    open_matches = [key for key in tracked
+                    if (old_items.get(key) or {}).get("status") not in MATCH_STATUS_TERMINAL]
+    events = []
+    partial = False
+    request_count = 0
+    if open_matches:
+        client = RapidTennisClient(settings)
+        client.request_limit = max(2, min(24, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_CAP", "16"))))
+        try:
+            # One inexpensive LIVE request for every currently running match.
+            live = client.live_events()
+            events.extend(live)
+            live_ids = {match_status_event_id(row) for row in live}
+            interim = status_snapshot(current_feed, previous, events, now=now)
+            due = {key: row for key, row in tracked.items()
+                   if key not in live_ids and key in open_matches}
+            date_candidates = pending_calendar_dates(due, interim, now)
+            for day in date_candidates:
+                if client.request_count >= client.request_limit:
+                    partial = True
+                    break
+                day_targets = {
+                    key: row for key, row in due.items()
+                    if (datetime.fromisoformat(row["scheduled_at"]).date() == day
+                        or datetime.fromisoformat(row["scheduled_at"]).astimezone(
+                            __import__("zoneinfo").ZoneInfo("Europe/Bratislava")).date() == day)
+                    and (interim.get("items", {}).get(key) or {}).get("status")
+                        not in MATCH_STATUS_TERMINAL
+                }
+                if not day_targets:
+                    continue
+                try:
+                    categories = client.calendar_categories(day)
+                except RequestBudgetExceeded:
+                    partial = True
+                    break
+                except Exception:
+                    partial = True
+                    logging.warning("Hourly match-status categories unavailable for %s", day)
+                    continue
+                tours = {str(row.get("tour") or "").lower() for row in day_targets.values()}
+                # Only supported tour buckets; avoid sweeping every tennis
+                # category globally and consuming the API quota.
+                supported = client._ATP_CATEGORY_IDS | client._WTA_CATEGORY_IDS | {
+                    client.CATEGORY_GRAND_SLAM
+                }
+                relevant = [category for category in categories
+                            if client._category_id(category) in supported
+                            and (client._category_tour(category) in tours
+                                 or client._category_id(category) == client.CATEGORY_GRAND_SLAM)]
+                for category in relevant:
+                    if client.request_count >= client.request_limit:
+                        partial = True
+                        break
+                    cid = client._category_id(category)
+                    try:
+                        rows = client.category_events(cid, day)
+                    except RequestBudgetExceeded:
+                        partial = True
+                        break
+                    except Exception:
+                        partial = True
+                        logging.warning("Hourly match-status category unavailable: %s %s", day, cid)
+                        continue
+                    for row in rows:
+                        if match_status_event_id(row) in day_targets:
+                            events.append(row)
+                    interim = status_snapshot(current_feed, previous, events, now=now)
+                    if all((interim.get("items", {}).get(key) or {}).get("status")
+                           in MATCH_STATUS_TERMINAL for key in day_targets):
+                        break
+        finally:
+            request_count = client.request_count
+            client.close()
+    snapshot = status_snapshot(current_feed, previous, events, now=now, partial=partial)
+    save_match_status_snapshot(snapshot)
+    return {
+        "betting_day": snapshot["betting_day"],
+        "scanned_at": snapshot["scanned_at"],
+        "tracked": snapshot["tracked"],
+        "observed": snapshot["observed"],
+        "request_count": request_count,
+        "partial": partial,
+        "persisted": True,
+    }
+
+
+@app.route(route="v1/internal/match-status-worker", methods=["POST"])
+def internal_match_status_worker(req):
+    """Reuse the existing private LIVE worker token; never expose provider quota to browsers."""
+    if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
+        return response({"error": "match_status_worker_not_configured"}, 503)
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        return response(_run_hourly_match_status())
+    except Exception as exc:
+        logging.exception("Hourly match-status worker failed")
+        return response({"error": "match_status_worker_failed", "detail": exc.__class__.__name__}, 503)
 
 
 def _account_worker_token_ok(req) -> bool:
