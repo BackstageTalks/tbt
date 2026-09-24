@@ -23,7 +23,7 @@ def test_v725_has_five_fixed_hero_slots_and_admin_tabs():
     for i in range(1, 6):
         assert f'HERO_BANNER_{i}' in UI['elements']
     assert 'admin-hero-tabs' in APP
-    assert 'Počet aktívnych bannerov' in APP
+    assert 'Aktívne bannery' in APP
     assert 'Interval automatickej zmeny' in APP
     assert 'data-admin-hero-count' in APP
     assert 'data-admin-hero-seconds' in APP
