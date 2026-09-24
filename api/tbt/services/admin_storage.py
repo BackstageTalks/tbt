@@ -1397,3 +1397,51 @@ def mark_insight_read(*, insight_id: str, user_id: str) -> dict:
         # Read state is authoritative; aggregate count is best effort.
         pass
     return {"read": True, "already_read": False}
+
+
+def save_match_status_snapshot(payload: dict) -> dict:
+    """Save the current betting-day presentation overlay independently of feed releases."""
+    if not isinstance(payload, dict) or payload.get("schema") != 1:
+        raise ValueError("Invalid match-status snapshot")
+    day = str(payload.get("betting_day") or "")
+    if not re.fullmatch(r"20\\d{2}-\\d{2}-\\d{2}", day):
+        raise ValueError("Invalid match-status betting day")
+    safe = {
+        "schema": 1,
+        "betting_day": day,
+        "scanned_at": str(payload.get("scanned_at") or "")[:64],
+        "partial": bool(payload.get("partial")),
+        "items": payload.get("items") if isinstance(payload.get("items"), dict) else {},
+    }
+    serialized = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
+    if len(serialized.encode("utf-8")) > 56000:
+        raise AdminStorageUnavailable("Match-status snapshot exceeds Azure Table property limit")
+    try:
+        _table(UI_TABLE).upsert_entity({
+            "PartitionKey": "runtime", "RowKey": f"match-status-{day}",
+            "payload": serialized, "updated_at": datetime.now(timezone.utc).isoformat(),
+        }, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save match-status snapshot") from exc
+    return safe
+
+
+def load_match_status_snapshot(day: str) -> dict | None:
+    """Retrieve only the explicitly requested betting day; never leak a prior day's picks."""
+    if not re.fullmatch(r"20\\d{2}-\\d{2}-\\d{2}", str(day or "")):
+        raise ValueError("Invalid match-status betting day")
+    try:
+        entity = _table(UI_TABLE).get_entity(
+            partition_key="runtime", row_key=f"match-status-{day}"
+        )
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        name = exc.__class__.__name__.lower()
+        if status == 404 or "notfound" in name or isinstance(exc, KeyError):
+            return None
+        raise AdminStorageUnavailable("Unable to load match-status snapshot") from exc
+    try:
+        result = json.loads(str(entity.get("payload") or "{}"))
+    except ValueError:
+        return None
+    return result if isinstance(result, dict) and result.get("betting_day") == day else None
