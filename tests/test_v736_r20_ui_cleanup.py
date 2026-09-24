@@ -7,12 +7,21 @@ PATCH_NUM = PATCH.rsplit('r',1)[-1]
 APP=(ROOT/'web'/'app.js').read_text(encoding='utf-8')
 CSS=(ROOT/'web'/'blinq-app.css').read_text(encoding='utf-8')
 INDEX=(ROOT/'web'/'index.html').read_text(encoding='utf-8')
-LOADER=(ROOT/'web'/'assets'/'blinq_loading_animated_v6.svg').read_text(encoding='utf-8')
 
-def test_loader_uses_original_character_scene_and_rally_ball():
-    assert '<image ' in LOADER and 'data:image/png;base64,' in LOADER
-    assert '<animateTransform' in LOADER and 'repeatCount="indefinite"' in LOADER
-    assert 'width:min(420px,78vw)!important' in CSS
+def test_loader_uses_approved_picture_with_reduced_motion_and_fallbacks():
+    picture = INDEX.split('<picture class="blinq-loader-media">', 1)[1].split('</picture>', 1)[0]
+    assert 'media="(prefers-reduced-motion: reduce)"' in picture
+    assert '/assets/blinq-loader-static.webp' in picture
+    assert '/assets/blinq-loader.webp' in picture
+    assert '/assets/blinq-loader.gif' in picture
+    for name in ('blinq-loader.webp', 'blinq-loader.gif', 'blinq-loader-static.webp'):
+        assert (ROOT / 'web' / 'assets' / name).is_file()
+    for retired in ('blinq_loading_r29.svg', 'blinq_loading_r2911.svg',
+                    'blinq_loading_animated_v6.svg', 'blinq_loading_scene_v736.webp'):
+        assert not (ROOT / 'web' / 'assets' / retired).exists()
+    assert '/assets/blinq_loading_scene_v736.webp' not in CSS
+    assert '--blinq-login-loader-backdrop' in CSS
+
 
 def test_results_cleanup_removes_redundant_copy():
     assert 'results-access-note is-full' not in APP

@@ -8,7 +8,9 @@ backgrounds when changing login, loading, dashboard, or hero art.
 | `/assets/blinq_page_background.webp` | **Green tennis/globe graphic**, shown on the login dialog and behind the loading animation. Shared through `--blinq-login-loader-backdrop` in `blinq-app.css`. | Yes |
 | `/assets/blinq_background.webp` | Darker main dashboard/page background. **Not** the login/loading artwork. | Yes |
 | `/assets/blinq_logo.svg` | Header/brand identity, login watermark, and small non-interactive attribution per prediction. Not a global home/hero/footer overlay. | Yes |
-| `/assets/blinq-loader.webp` | Approved animated loading illustration (GIF and static WebP fallbacks remain). | Yes |
+| `/assets/blinq-loader.webp` | Approved animated loading illustration, preferred WebP source of the loader picture. | Yes |
+| `/assets/blinq-loader.gif` | GIF fallback via the loader picture's `<img>` element. | Yes |
+| `/assets/blinq-loader-static.webp` | Reduced-motion image selected by the loader picture's media source. | Yes |
 | Hero banner images | Configurable in admin. A logo embedded directly in the image **cannot** be removed by hiding a CSS watermark; edit/replace that banner artwork. | Depends on active admin configuration |
 
 The final, authoritative shared **login and loader backdrop** rule is marked
@@ -24,3 +26,15 @@ rule but cannot safely be removed en masse without checking desktop/mobile
 cascade behavior and admin overrides. Remove obsolete declarations in a
 separate regression-tested refactor. Do not delete either WebP merely because
 they look similarly named: both are currently needed.
+
+## Removed historical loader assets
+
+The 2026-09-24 cleanup removes `blinq_loading_r29.svg`,
+`blinq_loading_r2911.svg`, `blinq_loading_animated_v6.svg`, and
+`blinq_loading_scene_v736.webp` from the current deployment. They are not
+part of the approved `<picture>` or active admin UI configuration. Older Git
+commits still retain them for historical rollback; before any rollback,
+recheck its UI configuration and asset dependencies. The two obsolete scene
+URL declarations were removed from `blinq-app.css`, and historical loader
+assertions were updated to protect the current WebP, GIF, and reduced-motion
+fallbacks. All other legacy CSS remains pending a separate visual refactor.
