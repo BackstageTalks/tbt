@@ -557,10 +557,16 @@ def main() -> None:
     if args.cache_only:
         pending = [
             match for match in pending
-            if knowledge.lookup(match, dict(match.provider_payload or {}))[0] is not None
+            if _as_dict(_as_dict(match.provider_payload).get("_tbt_environment")).get("venue_resolved") is not True
+            and knowledge.lookup(match, dict(match.provider_payload or {}))[0] is not None
         ]
         report["cache_only_candidates"] = len(pending)
     elif args.unique_geocode:
+        # Bulk mode never overwrites previously resolved positive venues.
+        pending = [
+            match for match in pending
+            if _as_dict(_as_dict(match.provider_payload).get("_tbt_environment")).get("venue_resolved") is not True
+        ]
         # Query groups are sorted by recoverable match count, not chronology.
         # Open-Meteo's positive/negative LRU then performs at most one network
         # geocode for each distinct preferred query during this job.
