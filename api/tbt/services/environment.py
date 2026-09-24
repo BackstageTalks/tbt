@@ -16,7 +16,7 @@ GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 ENVIRONMENT_SCHEMA_VERSION = 2
-ENVIRONMENT_RESOLVER_VERSION = 5
+ENVIRONMENT_RESOLVER_VERSION = 6
 
 
 class OpenMeteoBudgetExceeded(RuntimeError):
@@ -476,6 +476,7 @@ _TOURNAMENT_NOISE_RE = re.compile(
     re.IGNORECASE,
 )
 
+_LEADING_UTR_RE = re.compile(r"^(?:utr\s+)?(?:ptt\s+|pro\s+tennis\s+tour\s+)+", re.IGNORECASE)
 _LEADING_TOUR_CLASS_RE = re.compile(
     r"^(?:(?:itf|atp|wta)\s+)?(?:m|w)\s*\d{2,3}\b[\s:,-]*",
     re.IGNORECASE,
@@ -545,6 +546,7 @@ def _clean_tournament_location_part(value: Any) -> str:
     """
     text = _clean_location_token(value)
     text = _ITF_COUNTRY_CODE_RE.sub(" ", text)
+    text = _LEADING_UTR_RE.sub("", text).strip()
     text = _LEADING_TOUR_CLASS_RE.sub("", text).strip()
     previous = None
     while text and text != previous:
@@ -746,66 +748,80 @@ def location_candidates(
     provider_payload: dict[str, Any],
     tournament: str = "",
 ) -> list[str]:
-    """Build only location strings present in provider/history data."""
+    """Prefer explicit geography; never send decorated event labels to geocoding.
+
+    Country-scoped candidates are preferred over bare city names. A conflicting
+    provider country is not guessed away, and unparseable tournament labels are
+    reported unresolved without spending Open-Meteo requests.
+    """
     raw = _as_dict(provider_payload)
     tournament_obj = _as_dict(raw.get("tournament"))
     unique = _as_dict(tournament_obj.get("uniqueTournament"))
     venue = _as_dict(raw.get("venue"))
-    country = _as_dict(tournament_obj.get("country")) or _as_dict(unique.get("country"))
+    hints = explicit_country_hints(raw, tournament)
+    only_country = next(iter(hints)) if len(hints) == 1 else ""
     candidates: list[str] = []
 
-    def add(value: Any) -> None:
+    def add(value: Any, *, city: bool = False) -> None:
         text = _clean_location_token(value)
-        if text and text.lower() not in {item.lower() for item in candidates}:
+        if not text:
+            return
+        # Never fall back to a countryless query when the provider supplied
+        # an unambiguous country; this prevents homonymous-city mismatches.
+        if city and only_country and "," not in text:
+            text = f"{text}, {only_country.upper()}"
+        if text.casefold() not in {item.casefold() for item in candidates}:
             candidates.append(text)
 
-    venue_name = venue.get("name") or venue.get("city")
-    venue_city = venue.get("city")
+    def add_city(value: Any, country: Any = None) -> None:
+        city = _clean_location_token(value)
+        if not city:
+            return
+        explicit = normalize_country_code(country)
+        if explicit:
+            add(f"{city}, {explicit}")
+        else:
+            add(city, city=True)
+
     venue_country = (
-        _as_dict(venue.get("country")).get("name")
-        or _as_dict(venue.get("country")).get("alpha2")
+        _as_dict(venue.get("country")).get("alpha2")
+        or _as_dict(venue.get("country")).get("name")
         or venue.get("countryName")
     )
-    if venue_city and venue_country:
-        add(f"{venue_city}, {venue_country}")
-    add(venue_city)
-    if venue_name and venue_country and venue_name != venue_city:
-        add(f"{venue_name}, {venue_country}")
+    add_city(venue.get("city"), venue_country)
 
-    city = (
-        tournament_obj.get("city")
-        or unique.get("city")
-        or raw.get("city")
-        or raw.get("venueCity")
-    )
+    country = _as_dict(tournament_obj.get("country")) or _as_dict(unique.get("country"))
     country_name = (
-        country.get("name")
-        or country.get("alpha2")
+        country.get("alpha2") or country.get("name")
         or raw.get("countryName")
-        or _as_dict(raw.get("country")).get("name")
         or _as_dict(raw.get("country")).get("alpha2")
+        or _as_dict(raw.get("country")).get("name")
     )
-    if city and country_name:
-        add(f"{city}, {country_name}")
-    add(city)
+    for city in (tournament_obj.get("city"), unique.get("city"), raw.get("city"), raw.get("venueCity")):
+        add_city(city, country_name)
 
-    for source_name in (
-        tournament_obj.get("name"),
-        tournament,
-        unique.get("name"),
-    ):
-        alias = _tournament_alias(source_name)
+    for name in (tournament_obj.get("name"), tournament, unique.get("name")):
+        alias = _tournament_alias(name)
         if alias:
             add(alias)
-        for parsed in _location_from_tournament_name(source_name):
-            add(parsed)
+        for parsed in _location_from_tournament_name(name):
+            # Explicit country hints are applied to names parsed from labels.
+            add(parsed, city=True)
 
-    # Bare names are last resort and still require an exact, unique geocoder match.
-    add(unique.get("name"))
-    add(tournament_obj.get("name"))
-    add(tournament)
+    # A genuinely plain location label (e.g. "Saitama") is useful; tournament
+    # descriptions such as "UTR PTT Saitama Men 06" are never sent verbatim.
+    if not candidates:
+        for name in (tournament_obj.get("name"), tournament, unique.get("name")):
+            text = _clean_location_token(name)
+            lowered = _normal(text)
+            if (
+                text and 1 <= len(text.split()) <= 2
+                and not re.search(r"\\d", text)
+                and not any(re.search(rf"\\b{re.escape(token)}\\b", lowered)
+                            for token in ("open", "final", "masters", "challenger", "itf", "atp", "wta", "utr", "ptt", "men", "women"))
+            ):
+                add(text, city=True)
     return candidates
-
 
 def venue_learning_keys(
     provider_payload: dict[str, Any],
