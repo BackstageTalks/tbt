@@ -310,7 +310,7 @@ def _verified_unique_environment(
     provider_payload: dict[str, Any],
     tournament: str,
     query: str,
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str]:
     """Persist ONLY compatible positive geocodes during bulk mode.
 
     No result, ambiguity, or a city/country mismatch is NOT a negative venue
@@ -319,12 +319,12 @@ def _verified_unique_environment(
     """
     venue = client.geocode(query)
     if venue is None:
-        return None
+        return None, "no_result"
     compatible, _ = venue_context_compatible(
         provider_payload, tournament, asdict(venue)
     )
     if not compatible:
-        return None
+        return None, "incompatible"
     return {
         "schema_version": ENVIRONMENT_SCHEMA_VERSION,
         "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
@@ -335,7 +335,7 @@ def _verified_unique_environment(
         "weather_provenance": "historical_archive_posthoc",
         "training_eligible_weather": False,
         "venue": asdict(venue),
-    }
+    }, "resolved"
 
 
 def _probe_unique_geocoder(client: OpenMeteoClient) -> dict[str, Any]:
@@ -768,36 +768,23 @@ def main() -> None:
                         continue
                     attempted_queries.add(query_key)
                     try:
-                        venue = client.geocode(query)
+                        env, outcome = _verified_unique_environment(
+                            client, payload, match.tournament, query
+                        )
                     except OpenMeteoBudgetExceeded:
                         raise
                     except Exception:
                         failed_queries.add(query_key)
                         report["geocode_query_errors"] += 1
                         raise
-                    if venue is None:
-                        # Negative geocoder observations are not durable truth.
-                        # Most importantly, do NOT overwrite a previously
-                        # unresolved row with another false result.
+                    if outcome == "no_result":
                         report["geocode_no_result_skipped"] += 1
                         continue
-                    compatible, _ = venue_context_compatible(
-                        payload, match.tournament, asdict(venue)
-                    )
-                    if not compatible:
+                    if outcome == "incompatible":
                         report["geocode_candidate_skipped"] += 1
                         continue
-                    env = {
-                        "schema_version": ENVIRONMENT_SCHEMA_VERSION,
-                        "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
-                        "venue_resolved": True,
-                        "location_query": query,
-                        "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
-                        "source": "open-meteo",
-                        "weather_provenance": "historical_archive_posthoc",
-                        "training_eligible_weather": False,
-                        "venue": asdict(venue),
-                    }
+                    # Only positives can reach the persistence path.
+                    assert env is not None and env["venue_resolved"] is True
                     report["resolved_from_geocoder"] += 1
                 else:
                     env = environment_payload(
@@ -822,6 +809,10 @@ def main() -> None:
                     report["error_details"].append(
                         {**detail, "error": f"{type(exc).__name__}: {exc}"}
                     )
+                if args.unique_geocode and report["geocode_query_errors"] >= 3:
+                    report["stopped_reason"] = "repeated_geocoder_errors"
+                    checkpoint()
+                    break
                 continue
 
             payload["_tbt_environment"] = env
