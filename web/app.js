@@ -37,10 +37,10 @@
     const tourText=String(tour||'').trim().toUpperCase();
     return `${flagIconHtml(country,true)}<span class="player-rank-number">${escapeHtml(rankText)}</span>${tourText?`<span class="player-rank-tour">${escapeHtml(tourText)}</span>`:''}`;
   }
-  const safePhotoUrl = value => { const url=String(value||'').trim(); if(/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)&&!url.split('/').includes('..'))return url; if(/^\/api\/v1\/(?:tournament-logo|player-image)\/[0-9]{1,12}$/.test(url))return url; if(/^https:\/\//i.test(url)){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}} return ''; };
+  const safePhotoUrl = value => { const url=String(value||'').trim(); if(/^\/assets\/[A-Za-z0-9_.\/-]+(?:\?[A-Za-z0-9_=&.%-]+)?$/.test(url)&&!url.split('?')[0].split('/').includes('..'))return url; if(/^\/api\/v1\/(?:tournament-logo|player-image)\/[0-9]{1,12}$/.test(url))return url; if(/^https:\/\//i.test(url)){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}} return ''; };
   const safeUiAsset = value => { const url=String(value||'').trim(); if(!/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)||url.split('/').includes('..'))return ''; return url; };
   const webPatch = () => String(document.querySelector('meta[name="blinq-web-patch"]')?.content||'736').trim();
-  const versionedPlayerAsset = value => { const url=String(value||'').trim(); return /^\/assets\/(?:players\/|missing_foto_)/.test(url)?`${url}?p=${encodeURIComponent(webPatch())}`:url; };
+  const versionedPlayerAsset = value => { const url=String(value||'').trim(); return /^\/assets\/(?:players\/|missing_foto_)/.test(url)?`${url}${url.includes('?')?'&':'?'}p=${encodeURIComponent(webPatch())}`:url; };
   const avatarAssetSrc = value => { const url=safeUiAsset(value); return url ? `${url}?v=v6544` : ''; };
   function playerFallbackUrl(tour,gender=''){
     const key=String(tour||'').trim().toLowerCase();
@@ -359,8 +359,8 @@
     // optional endpoint must not serialize several timeout windows and hold an
     // authenticated user behind presentation configuration.
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
-      getJSON('/ui-config.json?v=7360&p=60',{timeoutMs:3000}),
-      getJSON('/config/telegram-groups.json?v=7360&p=60',{timeoutMs:3000}),
+      getJSON('/ui-config.json?v=7360&p=61',{timeoutMs:3000}),
+      getJSON('/config/telegram-groups.json?v=7360&p=61',{timeoutMs:3000}),
       getJSON('/api/v1/ui-config',{timeoutMs:3500}),
       getJSON('/membership-links.json',{timeoutMs:3000})
     ]);
@@ -427,7 +427,7 @@
       if(rookiePrime)rookiePrime.selection_mode='stable_random';
     }
     applyAccessContractV1(state.ui);
-    state.ui.ui_patch='736-r60';
+    state.ui.ui_patch='736-r61';
     applyV6514AdminCleanup();
     state.dashboardVisibility=null;
     renderAllUiContent();
@@ -1237,7 +1237,7 @@
     if(matchDetailPlanAllowed())return `<button class="hub-detail" type="button" data-hub-detail aria-label="Detail"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span></button>`;
     const minPlan=firstMatchDetailUnlockPlan();
     const required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
-    return `<button class="hub-detail is-locked" type="button" data-detail-locked data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}" aria-label="${escapeHtml(lcopy(`Match detail available from ${required}`,`Detail zápasu dostupný od ${required}`,`Detail zápasu dostupný od ${required}`))}" title="${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od ${required}`,`Dostupné od ${required}`))}"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><i aria-hidden="true">🔒</i></button>`;
+    return `<button class="hub-detail is-locked" type="button" data-detail-locked data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}" aria-label="${escapeHtml(lcopy(`Match detail available from ${required}`,`Detail zápasu dostupný od ${required}`,`Detail zápasu dostupný od ${required}`))}" title="${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od ${required}`,`Dostupné od ${required}`))}"><span>${escapeHtml(lcopy('Detail','Detail','Detail'))}</span><i aria-hidden="true"><svg viewBox="0 0 20 20"><rect x="4" y="8" width="12" height="9" rx="2"/><path d="M6.5 8V5a3.5 3.5 0 0 1 7 0v3"/></svg></i></button>`;
   }
   function renderSystemFooterStatus(){
     const host=$('footerSystemStatus'),time=$('footerLastUpdate');if(!host||!time)return;
@@ -2112,7 +2112,7 @@
       const requiredPlan=locked?firstDailyHubUnlockPlan(tab,0,tab==='see_all'):'';
       const requiredLabel=requiredPlan?String(upgradePlanLabel(requiredPlan)||requiredPlan).replace(/^BlinQ\s+/i,'').toUpperCase():'';
       const accessAttrs=locked?` data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}" title="${escapeHtml(lcopy(`Available from ${requiredLabel}`,`Dostupné od ${requiredLabel}`,`Dostupné od ${requiredLabel}`))}"`:'';
-      return `<button type="button" role="tab" aria-selected="${tab===state.dailyHubTab?'true':'false'}" class="daily-hub-tab${tab===state.dailyHubTab?' active':''}${coming?' is-coming':''}${locked?' is-locked':''}" data-daily-hub-tab="${tab}"${accessAttrs}><span class="daily-hub-tab-copy"><span>${escapeHtml(dailyHubTabLabel(tab))}</span></span>${count}</button>`;
+      return `<button type="button" role="tab" aria-selected="${tab===state.dailyHubTab?'true':'false'}" class="daily-hub-tab${tab===state.dailyHubTab?' active':''}${coming?' is-coming':''}${locked?' is-locked':''}" data-daily-hub-tab="${tab}"${accessAttrs}><span class="daily-hub-tab-copy"><span>${escapeHtml(dailyHubTabLabel(tab))}</span></span>${locked?'<i class="hub-tab-lock" aria-hidden="true"><svg viewBox="0 0 20 20"><rect x="4" y="8" width="12" height="9" rx="2"/><path d="M6.5 8V5a3.5 3.5 0 0 1 7 0v3"/></svg></i>':''}${count}</button>`;
     }).join('');
     const tab=state.dailyHubTab; host.dataset.tab=tab; host.dataset.plan=plan;
     const empty=$('dailyHubEmpty'),head=$('dailyHubHead'),body=$('dailyHubBody'),expand=$('dailyHubExpand');
@@ -2363,7 +2363,7 @@
     // same-origin script instead of an inline <script>. The popup runtime also
     // reinstalls image fallback handling because DOM event listeners are not
     // copied with innerHTML.
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=60"><script defer src="/match-popout.js?v=7360&p=60"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=61"><script defer src="/match-popout.js?v=7360&p=61"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}

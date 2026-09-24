@@ -54,7 +54,7 @@ def test_r29_frontend_contract_has_separate_df_tab_new_loader_and_history_window
     assert "['14',lcopy('14 days'" in app
     assert "performance_window_summary" in app
     assert '"double_faults"' in config
-    assert '"ui_patch": "736-r60"' in config
+    assert '"ui_patch": "736-r61"' in config
     assert "blinq-loader.webp" in index and "blinq-loader-static.webp" in index
     assert loader.is_file()
     # Genuine animated WebP, without an embedded base64 SVG payload.

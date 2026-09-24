@@ -14,10 +14,10 @@ INDEX = (WEB / "index.html").read_text(encoding="utf-8")
 
 
 def test_r33_identity_and_cache_revision():
-    assert RELEASE["patch"] == UI["ui_patch"] == "736-r60"
-    assert 'content="736-r60"' in INDEX
-    assert '/app.js?v=7360&p=60' in INDEX
-    assert '/blinq-app.css?v=7360&p=60' in INDEX
+    assert RELEASE["patch"] == UI["ui_patch"] == "736-r61"
+    assert 'content="736-r61"' in INDEX
+    assert '/app.js?v=7360&p=61' in INDEX
+    assert '/blinq-app.css?v=7360&p=61' in INDEX
 
 
 def test_results_are_filtered_to_real_blinq_public_categories_client_and_server():

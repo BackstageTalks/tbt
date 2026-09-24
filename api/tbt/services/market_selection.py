@@ -131,6 +131,8 @@ def _walk_market_rows(value: Any, inherited_market: str = "") -> Iterable[tuple[
         return
 
     explicit_market = value.get("marketName") or value.get("market_name") or value.get("market")
+    if isinstance(explicit_market, dict):
+        explicit_market = explicit_market.get("name") or explicit_market.get("label")
     if not explicit_market and not inherited_market and not any(
         key in value for key in ("fractionalValue", "currentFractionalValue", "odds", "price", "decimalOdds", "decimal_odds", "value")
     ):

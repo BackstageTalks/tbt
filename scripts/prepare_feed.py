@@ -126,6 +126,9 @@ def _feed_player_ids(payload: dict) -> set[str]:
                         player_id = str(player.get("id") or "").strip()
                         if player_id:
                             ids.add(player_id)
+                        for member in player.get("members", []) or []:
+                            if isinstance(member, dict) and member.get("id"):
+                                ids.add(str(member["id"]).strip())
     return ids
 
 
@@ -237,8 +240,9 @@ def _extract_current_photos(zip_path: Path, player_ids: set[str]) -> set[str]:
 def _merge_player_profile(player: dict, profiles: dict[str, dict], photos: set[str]) -> None:
     player_id = str(player.get("id") or "").strip()
     profile = profiles.get(player_id)
-    if not player_id or not isinstance(profile, dict):
+    if not player_id:
         return
+    profile = profile if isinstance(profile, dict) else {}
     if profile.get("rank") not in (None, ""):
         player["rank"] = profile.get("rank")
     for source, target in (
@@ -261,6 +265,12 @@ def _merge_player_profile(player: dict, profiles: dict[str, dict], photos: set[s
     if normalized_country:
         player["country_code"] = normalized_country
     photo_file = Path(str(profile.get("photo_file") or "")).name
+    if photo_file not in photos:
+        # A profile and its photo archive can be refreshed separately. Recover
+        # by exact player ID from files actually shipped; never invent a URL.
+        photo_file = next((name for name in sorted(photos)
+                           if Path(name).stem == player_id
+                           and Path(name).suffix.lower() in {".webp", ".png", ".jpg", ".jpeg"}), "")
     if photo_file and photo_file in photos:
         player["photo_url"] = f"/assets/players/{photo_file}"
 

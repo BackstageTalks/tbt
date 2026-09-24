@@ -73,6 +73,18 @@ def _connection_string() -> str:
     return _connection_string_source()[0]
 
 
+class _VersionedStorageEntity(dict):
+    """Mapping compatible with Azure TableEntity's version metadata."""
+
+    def __init__(self, data, version):
+        super().__init__(data)
+        self.metadata = {"etag": version}
+
+
+class _StorageWriteConflict(Exception):
+    status_code = 412
+
+
 class _FirestoreTableAdapter:
     """Small Azure-Table-compatible adapter backed by Firebase Firestore.
 
@@ -105,7 +117,24 @@ class _FirestoreTableAdapter:
         snap = self._collection.document(self._doc_id(partition_key, row_key)).get()
         if not snap.exists:
             raise KeyError(str(row_key))
-        return dict(snap.to_dict() or {})
+        return _VersionedStorageEntity(snap.to_dict() or {}, snap.update_time)
+
+    def update_entity(self, entity, *, mode, etag, match_condition):
+        from azure.core import MatchConditions
+        from google.api_core.exceptions import FailedPrecondition, NotFound
+        from google.cloud.firestore_v1 import LastUpdateOption
+
+        if str(mode).lower() != "merge" or match_condition != MatchConditions.IfNotModified or etag is None:
+            raise ValueError("Conditional merge requires the last-read entity version")
+        row = dict(entity)
+        pk, rk = row.get("PartitionKey"), row.get("RowKey")
+        if pk is None or rk is None:
+            raise ValueError("PartitionKey and RowKey are required")
+        ref = self._collection.document(self._doc_id(pk, rk))
+        try:
+            ref.update(row, option=LastUpdateOption(etag))
+        except (FailedPrecondition, NotFound) as exc:
+            raise _StorageWriteConflict("Entity changed before conditional update") from exc
 
     def upsert_entity(self, entity, mode=None):
         row = dict(entity or {})
@@ -117,6 +146,8 @@ class _FirestoreTableAdapter:
         )
 
     def create_entity(self, entity):
+        from google.api_core.exceptions import AlreadyExists
+
         row = dict(entity or {})
         pk, rk = row.get("PartitionKey"), row.get("RowKey")
         if pk is None or rk is None:
@@ -124,9 +155,8 @@ class _FirestoreTableAdapter:
         ref = self._collection.document(self._doc_id(pk, rk))
         try:
             ref.create(row)
-        except Exception as exc:
-            # Audit row keys are UUID-backed, so a collision is exceptional.
-            raise exc
+        except AlreadyExists as exc:
+            raise _StorageWriteConflict("Entity was already created") from exc
 
     def delete_entity(self, *, partition_key, row_key):
         self._collection.document(self._doc_id(partition_key, row_key)).delete()

@@ -430,14 +430,20 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                 already_claimed = marker == exact_expiry and marker_status in {"pending", "sent"}
                 legacy_sent = marker == exact_expiry and not marker_status
                 if not already_claimed and not legacy_sent and meta_available:
-                    delivered = False
                     try:
-                        save_subscription_notice_state(
+                        latest_user = firebase_get_user(cfg, uid)
+                        latest_access = account_access(latest_user, cfg=cfg, now=now) if latest_user else {}
+                        if (latest_access.get("status") != "active"
+                                or _parse_utc(latest_access.get("expires_at")) != expiry
+                                or latest_access.get("plan") != plan):
+                            continue
+                        claim = save_subscription_notice_state(
                             uid, days=due, expires_for=exact_expiry,
                             status="pending", pending_at=now.isoformat(),
                         )
+                        if claim.get("notice_claimed") is False:
+                            continue
                         if _send_subscription_expiry(cfg, user, access, days=due, expiry=expiry):
-                            delivered = True
                             summary["user_emails"] += 1
                             save_subscription_notice_state(
                                 uid, days=due, expires_for=exact_expiry,
@@ -445,19 +451,17 @@ def run_inactivity_review(cfg, runtime_config: object, *, now=None) -> dict:
                             )
                             row = {"id": uid, "email": email, "plan": plan.upper(), "expires_at": exact_expiry}
                             (paid3 if due == 3 else paid7).append(row)
+                        else:
+                            save_subscription_notice_state(
+                                uid, days=due, expires_for=exact_expiry,
+                                status="failed", pending_at=now.isoformat(),
+                            )
+                            summary["mail_failures"] += 1
+                            failures.append(f"{email or uid} · paid {due}d · mail not accepted")
                     except Exception as exc:
-                        # If SMTP already accepted the message, preserve the
-                        # durable pending claim rather than risk a duplicate on
-                        # the next worker run. Only pre-delivery failures become
-                        # retryable `failed` states.
-                        if not delivered:
-                            try:
-                                save_subscription_notice_state(
-                                    uid, days=due, expires_for=exact_expiry,
-                                    status="failed", pending_at=now.isoformat(),
-                                )
-                            except Exception:
-                                pass
+                        # An SMTP exception can follow acceptance (lost reply).
+                        # Preserve the claim for operator review, never resend
+                        # an ambiguous delivery automatically.
                         summary["mail_failures"] += 1
                         failures.append(f"{email or uid} · paid {due}d · {exc.__class__.__name__}")
 

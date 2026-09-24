@@ -124,6 +124,10 @@ def extract_player_superiority_odds(payload: Any, metric: str, player1: str, pla
             exact = False
         if not exact or any(token in text for token in ("total", "over", "under", "handicap")):
             continue
+        # First-set and match prices describe different bets. A match-wide
+        # projection must not silently acquire a partial-match price.
+        if re.search(r"\bset\b|\bsets\b|\bperiod\b|\btie.?break\b", text):
+            continue
         price = _price(row)
         if price is None:
             continue
