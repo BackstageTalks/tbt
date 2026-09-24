@@ -202,6 +202,8 @@ jobs:
           stamp="${GITHUB_SHA}"
           curl -fsSL -H 'Cache-Control: no-cache' "$base/?__blinq_release=$stamp" -o /tmp/blinq-index.html
           grep -q 'data-web-release="7.3.6"' /tmp/blinq-index.html
+          visual=$(python -c "import json; print(json.load(open('web/release.json', encoding='utf-8'))['visual_revision'])")
+          grep -Fq "blinq-visual-revision\" content=\"${visual}" /tmp/blinq-index.html
           # Compare against this checkout, not the potentially stale deployed HTML.
           patch=$(python -c "import json; print(json.load(open('web/release.json', encoding='utf-8'))['patch'].split('-r')[-1])")
           grep -q "blinq-web-patch\" content=\"736-r${patch}" /tmp/blinq-index.html
@@ -210,10 +212,12 @@ jobs:
           grep -q "/auth.js?v=7360&p=${patch}" /tmp/blinq-index.html
           curl -fsSL -H 'Cache-Control: no-cache' "$base/blinq-app.css?__blinq_release=$stamp" -o /tmp/blinq-app.css
           grep -q "BlinQ runtime patch 7.3.6-r${patch}" /tmp/blinq-app.css
+          grep -Fq "BlinQ visual revision ${visual}" /tmp/blinq-app.css
           curl -fsSL -H 'Cache-Control: no-cache' "$base/auth.js?__blinq_release=$stamp" -o /tmp/blinq-auth.js
           grep -q "AUTH_RUNTIME = '736-r${patch}'" /tmp/blinq-auth.js
           curl -fsSL -H 'Cache-Control: no-cache' "$base/app.js?__blinq_release=$stamp" -o /tmp/blinq-app.js
           grep -q "UI config failed; auth remains available" /tmp/blinq-app.js
+          grep -Fq "BlinQ visual revision: ${visual}" /tmp/blinq-app.js
           curl -fsSL -H 'Cache-Control: no-cache' "$base/release.json?__blinq_release=$stamp" -o /tmp/blinq-release.json
           python - <<'PYWEB'
           import json
@@ -221,6 +225,7 @@ jobs:
           assert data.get('frontend_marker') == 'blinq-web-736', data
           expected=json.load(open('web/release.json', encoding='utf-8'))
           assert data.get('patch') == expected.get('patch'), (data, expected)
+          assert data.get('visual_revision') == expected.get('visual_revision'), (data, expected)
           print(json.dumps(data, indent=2))
           PYWEB
 

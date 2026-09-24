@@ -28,6 +28,35 @@ def main():
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.goto(ORIGIN+'/index.html?lang=sk', wait_until='networkidle')
                 page.wait_for_function('releaseTest.state.ui && document.querySelector(".dashboard-kpi")')
+                # boot() may remove the splash as soon as the feed loads.
+                # Probe the actual stylesheet using a temporary matching node.
+                loader_background = page.evaluate('''() => {
+                    const splash=document.createElement('div');
+                    splash.className='boot-splash boot-splash-tennis';
+                    document.body.append(splash);
+                    const background=getComputedStyle(splash).backgroundImage;
+                    splash.remove();
+                    return background;
+                }''')
+                assert 'blinq_background.webp' in loader_background, (width, loader_background)
+                # Login watermark remains deliberately independent of home.
+                assert 'blinq_logo.svg' in page.evaluate('''() => {
+                    const dialog=document.querySelector('#authDialog');
+                    const wasOpen=dialog.hasAttribute('open');
+                    if(!wasOpen)dialog.setAttribute('open','');
+                    const image=getComputedStyle(dialog,'::after').backgroundImage;
+                    if(!wasOpen)dialog.removeAttribute('open');
+                    return image;
+                }''')
+                # Verify the existing animation frame receives the shared site
+                # background, including if the boot JS already removed splash.
+                assert page.evaluate('''() => {
+                  let splash=document.querySelector('#bootSplash'),temporary=false;
+                  if(!splash){splash=document.createElement('div');splash.className='boot-splash boot-splash-tennis';document.body.append(splash);temporary=true;}
+                  const image=getComputedStyle(splash).backgroundImage;
+                  if(temporary)splash.remove();
+                  return image.includes('blinq_background.webp');
+                }'''), width
                 page.evaluate('''() => {
                   document.querySelector('#bootSplash')?.remove();
                   document.querySelector('#appShell').hidden=false;
@@ -56,6 +85,26 @@ def main():
                 else:
                     assert len({b['y'] for b in sizes}) == 3, (width, sizes, page.locator('#dashboardKpis').evaluate('(e)=>getComputedStyle(e).gridTemplateColumns'))
                 assert 'blinq_background.webp' in page.locator('body').evaluate('(e)=>getComputedStyle(e).backgroundImage')
+                # Home stays free of global/hero/footer watermark overlays.  Only
+                # individual predictions receive a small, non-interactive mark.
+                assert page.locator('#dashboardHero').evaluate(
+                    '(e) => getComputedStyle(e, "::after").display'
+                ) == 'none'
+                assert page.locator('#dashboardHero .slot-watermark').count() == 0
+                assert page.locator('.anti-share-watermarks:visible').count() == 0
+                match_cell = page.locator('#dailyHubBody tr:not(.hub-row-locked) .hub-match-cell').first
+                assert match_cell.count() == 1, width
+                assert 'blinq_logo.svg' in match_cell.evaluate(
+                    '(e) => getComputedStyle(e, "::after").backgroundImage'
+                )
+                assert match_cell.evaluate(
+                    '(e) => getComputedStyle(e, "::after").pointerEvents'
+                ) == 'none'
+                loader = page.locator('#bootSplash')
+                # The preproduction harness removes bootSplash above; confirm
+                # the deployed CSS rule itself still references shared artwork.
+                css_source = (WEB / 'blinq-app.css').read_text(encoding='utf-8')
+                assert 'visual revision home-wm-20260924' in css_source
                 button = page.locator('.hub-detail.is-locked').first
                 assert button.is_visible(), (width, page.locator('#dailyHub').inner_text(), page.locator('#dailyHubBody').inner_html())
                 assert button.evaluate('(e)=>getComputedStyle(e).flexDirection') == 'row'
@@ -63,6 +112,16 @@ def main():
                 label, icon = [button.locator(s).bounding_box() for s in ('span','i')]
                 assert abs(label['y']+label['height']/2-icon['y']-icon['height']/2) <= 1
                 assert page.locator('#appShell').evaluate('(e)=>getComputedStyle(e,"::after").display') == 'none'
+                assert page.locator('#dashboardHero').evaluate('(e)=>getComputedStyle(e,"::after").content') == 'none'
+                assert page.locator('#dashboardHero .slot-watermark').count() == 0
+                assert page.locator('.site-footer .footer-watermark-logo').count() == 0
+                match = page.locator('#dailyHubBody tr:not(.hub-row-locked) .hub-match-cell').first
+                assert match.count(), (width, page.locator('#dailyHubBody').inner_html())
+                assert match.evaluate('''e => {
+                  const wm=getComputedStyle(e,'::after');
+                  return wm.content!=='none' && wm.backgroundImage.includes('blinq_logo.svg')
+                    && parseFloat(wm.opacity)<=0.10;
+                }'''), width
                 assert button.locator('svg').count() == 1
                 # Safe versioned local photos must survive both source selection
                 # and avatar rendering; no malformed second question mark.
