@@ -336,6 +336,7 @@
       const color=String(c[`${field}_color`]||'').trim();
       if(/^#[0-9a-f]{6}$/i.test(color))vars.push(`--creative-${field}-color:${color}`);
     }
+    if(c.overlay)vars.push(`--creative-overlay:${String(c.overlay)}`);
     return `style="${escapeHtml(vars.join(';'))}"`;
   }
   function bannerCreativeClasses(c={}){
@@ -3327,8 +3328,7 @@
       syncAdminHeroPreview();
     };
     startAdminHeroPreview();
-    const search=$('adminUserSearch');if(search)search.oninput=
-()=>{adminUserFilterState().q=search.value;adminApplyUserFilters();};
+    const search=$('adminUserSearch');if(search)search.oninput=()=>{adminUserFilterState().q=search.value;adminApplyUserFilters();};
     adminApplyUserFilters();
     const form=$('adminUserForm');if(form)form.onsubmit=async event=>{event.preventDefault();const user=state.adminSelectedUser;if(!user)return;const message=$('adminUserMessage');message.textContent='Ukladám…';try{
       const email=String($('adminUserEmail')?.value||'').trim(),telegram_nick=String($('adminUserTelegram')?.value||'').trim();if(!email)throw new Error('E-mail je povinný.');
