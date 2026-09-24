@@ -1404,7 +1404,7 @@ def save_match_status_snapshot(payload: dict) -> dict:
     if not isinstance(payload, dict) or payload.get("schema") != 1:
         raise ValueError("Invalid match-status snapshot")
     day = str(payload.get("betting_day") or "")
-    if not re.fullmatch(r"20\\d{2}-\\d{2}-\\d{2}", day):
+    if not re.fullmatch(r"20\d{2}-\d{2}-\d{2}", day):
         raise ValueError("Invalid match-status betting day")
     safe = {
         "schema": 1,
@@ -1428,7 +1428,7 @@ def save_match_status_snapshot(payload: dict) -> dict:
 
 def load_match_status_snapshot(day: str) -> dict | None:
     """Retrieve only the explicitly requested betting day; never leak a prior day's picks."""
-    if not re.fullmatch(r"20\\d{2}-\\d{2}-\\d{2}", str(day or "")):
+    if not re.fullmatch(r"20\d{2}-\d{2}-\d{2}", str(day or "")):
         raise ValueError("Invalid match-status betting day")
     try:
         entity = _table(UI_TABLE).get_entity(
