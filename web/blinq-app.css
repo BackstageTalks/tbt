@@ -6806,6 +6806,10 @@ body#blinqPremium .daily-hub-table tbody tr.hub-row-started td{background:rgba(5
 body#blinqPremium .daily-hub-table tbody tr.hub-row-started .hub-match-cell,
 body#blinqPremium .daily-hub-table tbody tr.hub-row-started .hub-pick{opacity:.82}
 body#blinqPremium .hub-offer-status{display:inline-flex!important;align-items:center!important;width:max-content!important;margin-top:2px!important;padding:2px 5px!important;border:1px solid rgba(215,190,91,.34)!important;border-radius:999px!important;color:#d9c56c!important;font-size:6.5px!important;font-style:normal!important;font-weight:900!important;letter-spacing:.07em!important;line-height:1!important}
+body#blinqPremium .hub-offer-status.is-started{border-color:rgba(215,190,91,.34)!important;color:#d9c56c!important;background:rgba(215,190,91,.06)!important}
+body#blinqPremium .hub-offer-status.is-win{border-color:rgba(72,201,126,.42)!important;color:#67d993!important;background:rgba(72,201,126,.08)!important}
+body#blinqPremium .hub-offer-status.is-loss{border-color:rgba(235,88,88,.42)!important;color:#f06f6f!important;background:rgba(235,88,88,.08)!important}
+body#blinqPremium .hub-offer-status.is-retired{border-color:rgba(173,112,255,.44)!important;color:#bf8cff!important;background:rgba(173,112,255,.08)!important}
 @media(max-width:760px){body#blinqPremium .hub-offer-status{font-size:6px!important;padding:2px 4px!important}}
 
 

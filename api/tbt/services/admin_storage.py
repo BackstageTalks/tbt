@@ -575,6 +575,69 @@ def load_live_worker_status() -> dict | None:
         return None
     return payload if isinstance(payload, dict) else None
 
+def save_match_status_snapshot(payload: object) -> dict:
+    """Persist the compact hourly match-status map used by prediction tables."""
+    data = dict(payload or {}) if isinstance(payload, dict) else {}
+    now = datetime.now(timezone.utc).isoformat()
+    raw_statuses = data.get("statuses")
+    raw_statuses = raw_statuses if isinstance(raw_statuses, dict) else {}
+    statuses = {}
+    for event_id, value in list(raw_statuses.items())[:240]:
+        if not isinstance(value, dict):
+            continue
+        status = str(value.get("status") or "").strip().lower()
+        if status not in {"win", "loss", "retired"}:
+            continue
+        eid = str(event_id or "").strip()[:64]
+        if not eid:
+            continue
+        statuses[eid] = {
+            "status": status,
+            "checked_at": str(value.get("checked_at") or "")[:64],
+            "winner_id": str(value.get("winner_id") or "")[:64],
+            "provider_status": str(value.get("provider_status") or "")[:120],
+        }
+    safe = {
+        "schema": 1,
+        "updated_at": str(data.get("updated_at") or now)[:64],
+        "statuses": statuses,
+        "tracked": max(0, int(data.get("tracked") or 0)),
+        "due": max(0, int(data.get("due") or 0)),
+        "checked": max(0, int(data.get("checked") or 0)),
+        "skipped_live": max(0, int(data.get("skipped_live") or 0)),
+        "provider_requests": max(0, int(data.get("provider_requests") or 0)),
+        "terminal": len(statuses),
+    }
+    entity = {
+        "PartitionKey": "runtime",
+        "RowKey": "match-status-worker",
+        "payload": json.dumps(safe, ensure_ascii=False, separators=(",", ":")),
+        "updated_at": now,
+    }
+    try:
+        _table(UI_TABLE).upsert_entity(entity, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save match status snapshot") from exc
+    return safe
+
+
+def load_match_status_snapshot() -> dict | None:
+    """Load the last compact hourly match-status snapshot."""
+    try:
+        entity = _table(UI_TABLE).get_entity(
+            partition_key="runtime", row_key="match-status-worker"
+        )
+    except Exception as exc:
+        if _storage_not_found(exc):
+            return None
+        raise AdminStorageUnavailable("Unable to load match status snapshot") from exc
+    try:
+        payload = json.loads(str(entity.get("payload") or "{}"))
+    except ValueError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def save_account_worker_status(payload: object) -> dict:
     """Persist the last account-inactivity worker summary for Admin diagnostics."""
     data = dict(payload or {}) if isinstance(payload, dict) else {}

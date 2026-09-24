@@ -1,0 +1,30 @@
+name: Hourly prediction match status
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-hourly-match-status
+  cancel-in-progress: true
+
+jobs:
+  match-status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Refresh already-started prediction outcomes
+        env:
+          BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+          BLINQ_LIVE_WORKER_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$BLINQ_LIVE_WORKER_TOKEN" || { echo 'Missing BLINQ_LIVE_WORKER_TOKEN GitHub secret'; exit 1; }
+          base="${BLINQ_BASE_URL%/}"
+          curl --fail-with-body --silent --show-error             --retry 2 --retry-delay 3 --retry-all-errors --max-time 120             -X POST             -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN"             "$base/api/v1/internal/match-status-worker"
+          echo
