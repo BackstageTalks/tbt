@@ -7371,3 +7371,24 @@ body#blinqPremium .daily-hub-table tbody tr:not(.hub-row-locked) .hub-match-cell
     width:62px!important;height:25px!important;opacity:.07!important;
   }
 }
+
+/* BlinQ visual revision home-wm-20260924: prediction attribution only. */
+body#blinqPremium.blinq-home .prediction-card.match-card-v3{
+  position:relative!important;isolation:isolate!important;
+}
+body#blinqPremium.blinq-home .prediction-card.match-card-v3::after{
+  content:""!important;display:block!important;position:absolute!important;
+  left:50%!important;top:52%!important;width:88px!important;height:34px!important;
+  transform:translate(-50%,-50%) rotate(-12deg)!important;
+  background:url("/assets/blinq_logo.svg") center/contain no-repeat!important;
+  opacity:.07!important;filter:grayscale(1) brightness(1.55)!important;
+  pointer-events:none!important;z-index:0!important;
+}
+body#blinqPremium.blinq-home .prediction-card.match-card-v3>*{
+  position:relative;z-index:1;
+}
+@media(max-width:760px){
+  body#blinqPremium.blinq-home .prediction-card.match-card-v3::after{
+    width:62px!important;height:25px!important;opacity:.06!important;
+  }
+}
