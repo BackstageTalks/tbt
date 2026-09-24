@@ -28,6 +28,15 @@ def main():
                 page.on('pageerror', lambda error: errors.append(str(error)))
                 page.goto(ORIGIN+'/index.html?lang=sk', wait_until='networkidle')
                 page.wait_for_function('releaseTest.state.ui && document.querySelector(".dashboard-kpi")')
+                # Verify the existing animation frame receives the shared site
+                # background, including if the boot JS already removed splash.
+                assert page.evaluate('''() => {
+                  let splash=document.querySelector('#bootSplash'),temporary=false;
+                  if(!splash){splash=document.createElement('div');splash.className='boot-splash boot-splash-tennis';document.body.append(splash);temporary=true;}
+                  const image=getComputedStyle(splash).backgroundImage;
+                  if(temporary)splash.remove();
+                  return image.includes('blinq_background.webp');
+                }'''), width
                 page.evaluate('''() => {
                   document.querySelector('#bootSplash')?.remove();
                   document.querySelector('#appShell').hidden=false;
@@ -63,6 +72,16 @@ def main():
                 label, icon = [button.locator(s).bounding_box() for s in ('span','i')]
                 assert abs(label['y']+label['height']/2-icon['y']-icon['height']/2) <= 1
                 assert page.locator('#appShell').evaluate('(e)=>getComputedStyle(e,"::after").display') == 'none'
+                assert page.locator('#dashboardHero').evaluate('(e)=>getComputedStyle(e,"::after").content') == 'none'
+                assert page.locator('#dashboardHero .slot-watermark').count() == 0
+                assert page.locator('.site-footer .footer-watermark-logo').count() == 0
+                match = page.locator('#dailyHubBody tr:not(.hub-row-locked) .hub-match-cell').first
+                assert match.count(), (width, page.locator('#dailyHubBody').inner_html())
+                assert match.evaluate('''e => {
+                  const wm=getComputedStyle(e,'::after');
+                  return wm.content!=='none' && wm.backgroundImage.includes('blinq_logo.svg')
+                    && parseFloat(wm.opacity)<=0.10;
+                }'''), width
                 assert button.locator('svg').count() == 1
                 # Safe versioned local photos must survive both source selection
                 # and avatar rendering; no malformed second question mark.
