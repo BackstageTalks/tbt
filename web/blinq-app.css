@@ -7599,3 +7599,18 @@ body#blinqPremium .admin-banner-type-grid select{
   body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile{max-width:270px!important}
   body#blinqPremium .admin-banner-type-grid{grid-template-columns:1fr!important}
 }
+
+/* Admin accounts: hiding filtered rows must override the grid display declarations.
+   The browser's default [hidden] rule loses to authored display:grid otherwise. */
+body#blinqPremium .admin-simple-user-list .admin-simple-user-row[hidden],
+body#blinqPremium .admin-simple-user-list .admin-filter-empty[hidden]{
+  display:none!important;
+}
+body#blinqPremium .admin-simple-user-list .admin-filter-empty{
+  display:block;
+  padding:22px 14px;
+  text-align:center;
+  color:#9fb7b1;
+  font-size:12px;
+  line-height:1.5;
+}

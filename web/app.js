@@ -2973,8 +2973,12 @@
   function adminFilteredUsers(){return adminSortedUsers(Array.isArray(state.adminUsers)?state.adminUsers:[]).filter(adminUserMatchesFilters);}
   function adminApplyUserFilters(){
     const visible=new Set(adminFilteredUsers().map(u=>String(u.id)));
-    document.querySelectorAll('[data-admin-user]').forEach(row=>{row.hidden=!visible.has(String(row.dataset.adminUser));});
+    const list=$('routePanel')?.querySelector('.admin-simple-user-list');
+    list?.querySelectorAll('.admin-simple-user-row[data-admin-user]').forEach(row=>{
+      row.hidden=!visible.has(String(row.dataset.adminUser));
+    });
     const count=$('adminFilteredCount');if(count)count.textContent=String(visible.size);
+    const empty=$('adminUserFilterEmpty');if(empty)empty.hidden=visible.size!==0;
   }
 
   function renderAdminUserEditor(user){
@@ -3010,7 +3014,7 @@
       ${state.adminUsersWarning?`<div class="admin-note admin-note-warning"><strong>Profilové úložisko je v náhradnom režime</strong><span>Levely fungujú cez Firebase. Niektoré profilové zmeny môžu čakať na dostupné úložisko.</span></div>`:''}
       <div class="admin-simple-stats"><span><b>${users.length}</b> účtov</span><span><b>${countActive}</b> aktívnych</span>${countSuspended?`<span><b>${countSuspended}</b> pozastavených</span>`:''}</div>
       <div class="admin-simple-toolbar"><label class="search-box"><span class="admin-search-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5"></circle><path d="m12.2 12.2 4 4"></path></svg></span><input id="adminUserSearch" type="search" value="${escapeHtml(f.q)}" placeholder="Hľadať e-mail, Telegram alebo UID"></label><label>Level<select id="adminUserLevelFilter">${levelOptions}</select></label><label>Stav<select id="adminUserStatusFilter">${statusOptions}</select></label><label>Zoradiť<select id="adminUserSort"><option value="email"${f.sort==='email'?' selected':''}>E-mail</option><option value="telegram"${f.sort==='telegram'?' selected':''}>Telegram</option><option value="level"${f.sort==='level'?' selected':''}>Level</option><option value="expiry"${f.sort==='expiry'?' selected':''}>Najbližšia expirácia</option><option value="last-login"${f.sort==='last-login'?' selected':''}>Posledné prihlásenie</option></select></label><span>Zobrazených <b id="adminFilteredCount">${filtered.length}</b></span></div>
-      <div class="admin-accounts-split admin-accounts-split-v22${state.adminSelectedUser?' has-selection':' no-selection'}"><div class="admin-simple-user-table"><div class="admin-simple-user-head"><span>Používateľ</span><span>Level</span><span>Platnosť</span><span>Stav</span><span></span></div><div class="admin-simple-user-list">${rows}</div></div><div class="admin-simple-user-editor-wrap">${renderAdminUserEditor(state.adminSelectedUser)}</div></div>
+      <div class="admin-accounts-split admin-accounts-split-v22${state.adminSelectedUser?' has-selection':' no-selection'}"><div class="admin-simple-user-table"><div class="admin-simple-user-head"><span>Používateľ</span><span>Level</span><span>Platnosť</span><span>Stav</span><span></span></div><div class="admin-simple-user-list">${rows}${!state.adminUsersLoading&&users.length?`<div id="adminUserFilterEmpty" class="admin-filter-empty"${filtered.length?" hidden":""} role="status">Žiadne účty nezodpovedajú zvoleným filtrom.</div>`:""}</div></div><div class="admin-simple-user-editor-wrap">${renderAdminUserEditor(state.adminSelectedUser)}</div></div>
     </section>`;
   }
   function buildDemoMatch(i,section='prime'){
