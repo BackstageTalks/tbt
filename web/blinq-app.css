@@ -7175,14 +7175,9 @@ body#blinqPremium .anti-share-watermarks{display:none!important}
 body#blinqPremium.blinq-home #dashboardHero{
   position:relative!important;isolation:isolate!important;
 }
+/* Home is intentionally watermark-free: leave the brand mark on login/loader. */
 body#blinqPremium.blinq-home #dashboardHero::after{
-  content:"";position:absolute!important;
-  left:50%!important;top:50%!important;
-  width:min(24vw,230px)!important;height:90px!important;
-  transform:translate(-50%,-50%)!important;
-  background:url("/assets/blinq_logo.svg") center/contain no-repeat!important;
-  filter:grayscale(1) brightness(1.5)!important;
-  opacity:.065!important;pointer-events:none!important;z-index:12!important;
+  content:none!important;display:none!important;
 }
 /* Avoid a second watermark from optional per-banner artwork settings. */
 body#blinqPremium.blinq-home #dashboardHero .slot-watermark{display:none!important}
@@ -7335,4 +7330,44 @@ body#blinqPremium .access-hint button{font-size:11px;min-height:34px}
   body#blinqPremium:not(.blinq-admin) .dashboard-kpis>.dashboard-kpi:last-child{grid-column:auto!important}
   body#blinqPremium:not(.blinq-admin) .tg-group-grid{grid-template-columns:1fr!important}
   body#blinqPremium:not(.blinq-admin) .site-footer.site-footer-minimal{flex-wrap:wrap!important}
+}
+
+
+/* Final home watermark policy: no page, hero, banner or footer overlays.
+   Each published prediction has a small non-blocking attribution instead. */
+body#blinqPremium.blinq-home .anti-share-watermarks,
+body#blinqPremium.blinq-home #dashboardHero .slot-watermark,
+body#blinqPremium.blinq-home .site-footer-minimal .footer-watermark-logo{
+  display:none!important;
+}
+body#blinqPremium.blinq-home #dashboardHero::before,
+body#blinqPremium.blinq-home #dashboardHero::after{
+  content:none!important;display:none!important;
+}
+/* Match the shared public-page background on the loader, keeping its dark
+   central media frame and approved animation unchanged. */
+body#blinqPremium .boot-splash.boot-splash-tennis{
+  background:
+    linear-gradient(90deg,rgba(1,11,12,.88),rgba(2,22,20,.73),rgba(1,10,12,.88)),
+    url("/assets/blinq_background.webp") center center/cover no-repeat!important;
+  background-color:#031314!important;
+}
+body#blinqPremium .daily-hub-table tbody tr:not(.hub-row-locked) .hub-match-cell{
+  position:relative!important;isolation:isolate!important;
+}
+body#blinqPremium .daily-hub-table tbody tr:not(.hub-row-locked) .hub-match-cell::after{
+  content:""!important;position:absolute!important;left:50%!important;top:50%!important;
+  transform:translate(-50%,-50%) rotate(-12deg)!important;
+  display:block!important;width:72px!important;height:29px!important;
+  background:url("/assets/blinq_logo.svg") center/contain no-repeat!important;
+  opacity:.09!important;filter:grayscale(1) brightness(1.65)!important;
+  pointer-events:none!important;z-index:0!important;
+}
+body#blinqPremium .daily-hub-table tbody tr:not(.hub-row-locked) .hub-match-cell>*{
+  position:relative;z-index:1;
+}
+@media(max-width:760px){
+  body#blinqPremium .daily-hub-table tbody tr:not(.hub-row-locked) .hub-match-cell::after{
+    width:62px!important;height:25px!important;opacity:.07!important;
+  }
 }
