@@ -566,6 +566,11 @@ def _location_from_tournament_name(name: Any) -> list[str]:
         cleaned = _clean_tournament_location_part(text)
         if not cleaned or cleaned == text:
             return []
+        # A leftover tour/draw token means the label is still an event title,
+        # not a trustworthy city; do not send it verbatim to the geocoder.
+        if any(re.search(rf"\b{re.escape(token)}\b", _normal(cleaned))
+               for token in ("atp", "wta", "itf", "utr", "ptt", "challenger", "open", "masters", "qualifying", "unknown")):
+            return []
         out = []
         if explicit_country:
             out.append(f"{cleaned}, {explicit_country}")
