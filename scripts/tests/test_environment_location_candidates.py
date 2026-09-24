@@ -9,6 +9,7 @@ from tbt.services.environment import (
     _clean_tournament_location_part,
     location_candidates,
     resolve_match_venue,
+    venue_context_compatible,
 )
 
 
@@ -59,6 +60,27 @@ class LocationCandidatesTest(unittest.TestCase):
 
     def test_existing_alias_preserved(self):
         self.assertIn("Miami, Florida, US", location_candidates({}, "Miami Open"))
+
+    def test_egypt_el_sheikh_city_alias_is_country_scoped(self):
+        payload = {
+            "tournament": {"city": "Sharm ElSheikh", "country": {"alpha2": "EG"}}
+        }
+        q = location_candidates(payload, "Sharm ElSheikh, Singles Qualifying, W-ITF-EGY-31A")
+        self.assertEqual(q[0], "sharm el sheikh, EG")
+        venue = {
+            "name": "Sharm El Sheikh", "query": q[0],
+            "latitude": 27.86, "longitude": 34.3, "country": "Egypt",
+        }
+        self.assertTrue(venue_context_compatible(
+            payload, "Sharm ElSheikh, Singles Qualifying, W-ITF-EGY-31A", venue
+        )[0])
+
+    def test_italian_santa_margherita_alias_is_country_scoped(self):
+        payload = {
+            "tournament": {"city": "S. Margherita Di Pula", "country": {"alpha2": "IT"}}
+        }
+        q = location_candidates(payload, "S. Margherita Di Pula, Singles Main, W-ITF-ITA-27A")
+        self.assertEqual(q[0], "santa margherita di pula, IT")
 
     def test_resolver_version_invalidates_old_negative_cache(self):
         self.assertGreaterEqual(ENVIRONMENT_RESOLVER_VERSION, 6)
