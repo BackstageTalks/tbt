@@ -15,11 +15,11 @@ WORKFLOW = (ROOT / '.github' / 'workflows' / 'data.yml').read_text(encoding='utf
 def test_r46_release_and_cache_contract():
     release = json.loads((ROOT / 'web' / 'release.json').read_text(encoding='utf-8'))
     ui = json.loads((ROOT / 'web' / 'ui-config.json').read_text(encoding='utf-8'))
-    assert release['patch'] == ui['ui_patch'] == '736-r55'
-    assert 'content="736-r55"' in INDEX
+    assert release['patch'] == ui['ui_patch'] == '736-r60'
+    assert 'content="736-r60"' in INDEX
     for asset in ('blinq-app.css', 'auth.js', 'responsive.js', 'app.js'):
-        assert f'/{asset}?v=7360&p=55' in INDEX
-    assert "const AUTH_RUNTIME = '736-r55'" in AUTH
+        assert f'/{asset}?v=7360&p=60' in INDEX
+    assert "const AUTH_RUNTIME = '736-r60'" in AUTH
 
 
 def test_rookie_stays_internal_but_public_membership_is_free():
@@ -62,8 +62,8 @@ def test_results_projection_copy_is_not_duplicated():
 
 def test_login_family_background_and_single_corner_watermark_are_shared():
     assert '/assets/blinq_page_background.webp' in CSS
-    assert 'anti-share-watermarks' in INDEX
-    assert 'wm-b' in INDEX
+    assert 'anti-share-watermarks' not in INDEX
+    assert 'id="dashboardHero"' in INDEX and '#dashboardHero::after' in CSS
     assert 'wm-a' not in INDEX and 'wm-c' not in INDEX
     assert '.boot-splash.boot-splash-tennis' in CSS
     assert '.blinq-admin .anti-share-watermarks' in CSS
