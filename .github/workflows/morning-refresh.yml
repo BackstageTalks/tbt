@@ -1,0 +1,61 @@
+name: BlinQ morning prediction refresh
+
+on:
+  # Tennis betting day starts at 06:00 Bratislava time. Schedule a few
+  # minutes after rollover so the refresh builds the *new* betting day.
+  # The IANA timezone handles CET/CEST changes without duplicate runs.
+  schedule:
+    - cron: '17 6 * * *'
+      timezone: Europe/Bratislava
+  workflow_dispatch:
+    inputs:
+      max_requests:
+        description: Tennis RapidAPI requests to reserve (1-750)
+        type: number
+        required: false
+        default: 300
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: blinq-morning-refresh-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    # Set TBT_MORNING_REFRESH_ENABLED=false to pause automatic mornings.
+    # Manual Run workflow still works when automatic mornings are paused.
+    if: github.event_name == 'workflow_dispatch' || vars.TBT_MORNING_REFRESH_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MORNING_MAX_REQUESTS: ${{ inputs.max_requests || vars.TBT_MORNING_REFRESH_MAX_REQUESTS || '300' }}
+    steps:
+      - name: Validate daily request cap
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$MORNING_MAX_REQUESTS" =~ ^[0-9]+$ ]] ||
+             (( 10#$MORNING_MAX_REQUESTS < 1 || 10#$MORNING_MAX_REQUESTS > 750 )); then
+            echo "::error::Morning max_requests must be an integer from 1 to 750."
+            exit 1
+          fi
+
+      - name: Dispatch existing prediction refresh and deployment
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Reuse data.yml instead of running an independent writer. This
+          # preserves its history/publication concurrency locks, request
+          # accounting, release validation and production deploy guards.
+          gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f mode=refresh \
+            -f max_requests="$MORNING_MAX_REQUESTS" \
+            -f market_odds_max_events=90 \
+            -f doubles_odds_max_events=25 \
+            -f betting_day_start_hour=6
+          echo "Morning data.yml refresh dispatched with max_requests=$MORNING_MAX_REQUESTS."
+          echo "Track the actual refresh/deploy result in the Tennis data and predictions workflow."
