@@ -39,7 +39,9 @@ def test_environment_force_static_no_longer_adds_complete_static():
     complete_pos = ENV.index('ARGS+=(--complete-static)', elif_retry)
     assert force_pos < elif_retry < complete_pos
     assert '--max-requests "$BLINQ_INPUT_MAX_REQUESTS"' in ENV
-    assert 'default: "12000"' in ENV
+    # The manual Environment workflow intentionally starts with a conservative
+    # Open-Meteo/geocoder cap, independent of the Tennis RapidAPI budget.
+    assert 'default: "500"' in ENV
     assert 'default: "0"' in ENV
 
 

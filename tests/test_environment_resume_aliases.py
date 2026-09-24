@@ -12,10 +12,12 @@ class FakeClient:
         return None
 
 
-def test_known_tournament_aliases_are_added_before_ambiguous_raw_labels():
+def test_known_tournament_aliases_replace_ambiguous_raw_labels():
     candidates = location_candidates({}, 'US Open, Men')
-    assert candidates[0] == 'New York, New York, US'
-    assert 'US Open, Men' in candidates
+    assert candidates == ['New York, New York, US']
+    # Raw tournament names are not geographic queries. Do not spend geocoder
+    # requests on them after a high-confidence city alias has been resolved.
+    assert 'US Open, Men' not in candidates
 
     candidates = location_candidates({}, 'Kursumlijska Banja, Singles Qualifying, M-ITF-SRB-01A')
     assert candidates[0] == 'Kuršumlijska Banja, RS'
