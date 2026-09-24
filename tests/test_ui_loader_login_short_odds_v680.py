@@ -8,17 +8,22 @@ PATCH_NUM = PATCH.rsplit('r',1)[-1]
 INDEX = (ROOT / "web" / "index.html").read_text(encoding="utf-8")
 APP = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
 CSS = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
-LOADER = (ROOT / "web" / "assets" / "blinq_loading_r29.svg").read_text(encoding="utf-8")
+ASSETS = ROOT / "web" / "assets"
+LOADER = (ASSETS / "blinq-loader.webp").read_bytes()
+STATIC = (ASSETS / "blinq-loader-static.webp").read_bytes()
+GIF = (ASSETS / "blinq-loader.gif").read_bytes()
 
 
-def test_loader_is_compact_svg_rally_without_progress_track():
-    assert '/assets/blinq_loading_r29.svg' in INDEX
+def test_loader_is_dark_animated_webp_with_fallbacks_and_no_progress_track():
+    assert '/assets/blinq-loader.webp' in INDEX
+    assert '/assets/blinq-loader-static.webp' in INDEX
+    assert '/assets/blinq-loader.gif' in INDEX
+    assert 'prefers-reduced-motion: reduce' in INDEX
     assert 'boot-tennis-track' not in INDEX
-    assert '<animateTransform' in LOADER
-    assert 'aria-label="BlinQ animated loading screen"' in LOADER
-    assert 'data:image/webp;base64,' not in LOADER
-    assert '<path' in LOADER and '<animateTransform' in LOADER
-
+    assert LOADER[:4] == b'RIFF' and LOADER[8:12] == b'WEBP'
+    assert b'ANIM' in LOADER[:4096]
+    assert STATIC[:4] == b'RIFF' and STATIC[8:12] == b'WEBP'
+    assert GIF.startswith((b'GIF87a', b'GIF89a'))
 
 def test_auth_login_hides_signup_only_telegram_field():
     assert 'id="nameLabel" hidden' in INDEX
@@ -41,13 +46,17 @@ def test_frontend_cache_bust_for_final_ui_pass():
     cache = str(cfg['asset_revision'])
     for asset in ('blinq-app.css','app.js'):
         assert f'/{asset}?v={cache}' in INDEX
-    assert f'/assets/blinq_loading_r29.svg?v={cache}' in INDEX
+    for asset in ('blinq-loader.webp', 'blinq-loader-static.webp', 'blinq-loader.gif'):
+        assert f'/assets/{asset}?v={cache}&p={PATCH_NUM}' in INDEX
 
 
-def test_loader_current_is_compact_centered_original_scene_with_rally_ball():
-    css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
-    assert "clean results, loader scene, diagnostics, membership CTA" in css
-    assert "width:min(420px,78vw)!important" in css
-    assert "blinq_background.webp" in css
-    assert "blinq_loading_r29.svg" in INDEX
-    assert 'repeatCount="indefinite"' in LOADER
+def test_loader_current_is_compact_centered_and_without_duplicate_logo():
+    assert 'width:min(352px,calc(100vw - 40px))!important' in CSS
+    assert 'aspect-ratio:704/410!important' in CSS
+    assert 'background:#031314!important' in CSS
+    assert 'class="blinq-loader-media"' in INDEX
+    assert 'src="/assets/blinq-loader.gif' in INDEX
+    assert 'srcset="/assets/blinq-loader.webp' in INDEX
+    assert 'srcset="/assets/blinq-loader-static.webp' in INDEX
+    assert 'filter:none!important' in CSS
+    assert LOADER[:4] == b'RIFF' and b'ANIM' in LOADER[:4096]
