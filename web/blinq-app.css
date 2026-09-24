@@ -4437,7 +4437,7 @@ body#blinqPremium .reference-navigation .active:after{display:block!important;le
 body#blinqPremium .reference-navigation a.active{box-shadow:none!important;background:transparent!important;color:var(--lean-green)!important}
 body#blinqPremium .reference-navigation a:hover{background:rgba(121,242,177,.055)!important}
 
-body#blinqPremium #dashboardKpis{display:grid!important;grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:10px!important;margin:0 0 10px!important}
+body#blinqPremium .dashboard-kpis{display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:10px!important;margin:0 0 10px!important}
 
 body#blinqPremium .dashboard-content-grid{display:block!important;grid-template-columns:1fr!important;padding:0!important;gap:0!important}
 body#blinqPremium .dashboard-primary-column{width:100%!important;max-width:none!important}
@@ -4472,14 +4472,14 @@ body#blinqPremium .insight-drawer[data-channel="live"] .insight-drawer-head smal
 body#blinqPremium .insight-drawer[data-channel="info"] .insight-drawer-head small{color:var(--lean-green)!important}
 
 @media(max-width:900px){
-  body#blinqPremium #dashboardKpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  body#blinqPremium .dashboard-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}
 
   body#blinqPremium .header-upgrade{padding:0 9px!important}
   body#blinqPremium .insight-info-button{min-width:38px!important;padding:0 8px!important}
   body#blinqPremium .insight-info-label,body#blinqPremium .insight-shortcut.insight-live-button #insightShortcutLabel{display:none!important}
 }
 @media(max-width:560px){
-  body#blinqPremium #dashboardKpis{grid-template-columns:1fr 1fr!important;gap:7px!important}
+  body#blinqPremium .dashboard-kpis{grid-template-columns:1fr 1fr!important;gap:7px!important}
 
   body#blinqPremium .header-upgrade{display:none!important}
   body#blinqPremium .reference-topbar .header-actions{gap:5px!important}
@@ -6569,7 +6569,7 @@ body#blinqPremium .hub-avatar.player-fallback-wta img{
 body#blinqPremium:not(.blinq-admin){
   background:
     linear-gradient(90deg,rgba(1,11,12,.86),rgba(2,22,20,.70),rgba(1,10,12,.88)),
-    url("/assets/blinq_page_background.webp") center top/cover fixed no-repeat!important;
+    url("/assets/blinq_background.webp") center top/cover fixed no-repeat!important;
 }
 body#blinqPremium .boot-splash.boot-splash-tennis{
   background:
@@ -7261,9 +7261,78 @@ body#blinqPremium .boot-tennis-card.boot-tennis-card-source .blinq-loader-captio
   clip:auto!important;clip-path:none!important;overflow:visible!important;
   margin:0!important;padding:0!important;opacity:1!important;
   color:#eef8f4!important;background:none!important;
-  font:400 12px/1.5 Arial,sans-serif!important;text-align:center!important;
+  font:400 15px/1.5 Arial,sans-serif!important;text-align:center!important;
   letter-spacing:normal!important;white-space:normal!important;
 }
 body#blinqPremium .boot-tennis-card.boot-tennis-card-source .blinq-loader-caption strong{
   color:#00dca3!important;font-weight:700!important;
+}
+
+/* BlinQ runtime patch 7.3.6-r61: shared content edges and readable dashboard components. */
+body#blinqPremium:not(.blinq-admin) .app-shell:not([hidden])::after{content:none!important;display:none!important}
+body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy{
+  left:0!important;padding-inline:0!important;
+}
+body#blinqPremium:not(.blinq-admin) .reference-topbar .brand{padding-inline:0!important}
+body#blinqPremium:not(.blinq-admin) .site-footer.site-footer-minimal{
+  width:100%!important;max-width:none!important;margin:20px 0 0!important;
+  padding:16px 0!important;align-items:center!important;gap:16px!important;
+}
+body#blinqPremium:not(.blinq-admin) .dashboard-kpi{
+  height:auto!important;min-height:74px!important;padding:12px 16px!important;
+}
+body#blinqPremium:not(.blinq-admin) .dashboard-kpi small{
+  font-size:11px!important;line-height:1.4!important;letter-spacing:.07em!important;
+}
+body#blinqPremium:not(.blinq-admin) .dashboard-kpi p{font-size:12px!important;line-height:1.4!important}
+body#blinqPremium:not(.blinq-admin) .dashboard-kpi strong{font-size:24px!important;line-height:1.2!important}
+body#blinqPremium:not(.blinq-admin) .daily-hub-table th{font-size:11px!important;line-height:1.4!important;letter-spacing:.06em!important}
+body#blinqPremium:not(.blinq-admin) .daily-hub-tab{gap:8px!important;min-height:44px!important;font-size:12px!important}
+body#blinqPremium:not(.blinq-admin) .daily-hub-tab.is-locked{padding-right:10px!important}
+body#blinqPremium:not(.blinq-admin) .daily-hub-tab.is-locked::before,
+body#blinqPremium:not(.blinq-admin) .daily-hub-tab.is-locked::after,
+body#blinqPremium:not(.blinq-admin) .daily-hub-tab.is-locked span::after{display:none!important;content:none!important}
+body#blinqPremium .hub-tab-lock{display:inline-flex;flex:none;width:12px;height:12px;opacity:.75}
+body#blinqPremium .hub-tab-lock svg{width:100%;height:100%;fill:none;stroke:currentColor;stroke-width:1.7}
+body#blinqPremium:not(.blinq-admin) .daily-empty{padding:32px 20px!important;font-size:14px!important;line-height:1.6!important}
+body#blinqPremium:not(.blinq-admin) .tg-group-grid{align-items:stretch!important}
+body#blinqPremium:not(.blinq-admin) .tg-group-card{
+  grid-template-columns:40px minmax(0,1fr)!important;grid-template-rows:1fr auto!important;
+  align-items:start!important;gap:12px!important;
+}
+body#blinqPremium:not(.blinq-admin) .tg-group-cta{grid-column:2!important;justify-self:start!important;min-height:36px!important;font-size:12px!important}
+body#blinqPremium:not(.blinq-admin) .tg-group-copy small{font-size:10px!important}
+body#blinqPremium:not(.blinq-admin) .tg-group-copy strong{font-size:15px!important}
+body#blinqPremium:not(.blinq-admin) .tg-group-copy p,
+body#blinqPremium:not(.blinq-admin) .tg-panel-head p{font-size:12px!important;line-height:1.5!important}
+body#blinqPremium:not(.blinq-admin) .footer-system-status{flex-wrap:wrap!important;min-width:0!important}
+body#blinqPremium:not(.blinq-admin) .footer-system-status strong,
+body#blinqPremium:not(.blinq-admin) .footer-system-status small{font-size:11px!important;line-height:1.5!important}
+body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-action-cell .hub-detail.is-locked{
+  display:inline-flex!important;
+  flex-direction:row!important;flex-wrap:nowrap!important;width:auto!important;
+  min-width:80px!important;max-width:none!important;min-height:36px!important;
+  padding:0 12px!important;gap:8px!important;border-radius:9px!important;
+}
+body#blinqPremium .hub-detail.is-locked>span{font-size:12px!important;line-height:1.2!important}
+body#blinqPremium .hub-detail.is-locked>i{display:inline-flex!important;font-size:12px!important}
+body#blinqPremium .hub-detail.is-locked>i svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:1.7}
+body#blinqPremium .hub-detail.is-locked:focus-visible{outline:2px solid #e1bd76;outline-offset:3px}
+body#blinqPremium .access-hint-copy strong{font-size:12px;white-space:normal}
+body#blinqPremium .access-hint-copy small{font-size:11px;white-space:normal}
+body#blinqPremium .access-hint button{font-size:11px;min-height:34px}
+@media(min-width:901px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{padding-inline:22px!important}
+}
+@media(max-width:900px){
+  body#blinqPremium:not(.blinq-admin){padding-bottom:0!important}
+  body#blinqPremium:not(.blinq-admin) .site-main{padding-bottom:0!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-content-grid{padding-inline:0!important}
+  body#blinqPremium:not(.blinq-admin) .site-footer.site-footer-minimal{padding-bottom:16px!important}
+}
+@media(max-width:760px){
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpis{grid-template-columns:1fr!important}
+  body#blinqPremium:not(.blinq-admin) .dashboard-kpis>.dashboard-kpi:last-child{grid-column:auto!important}
+  body#blinqPremium:not(.blinq-admin) .tg-group-grid{grid-template-columns:1fr!important}
+  body#blinqPremium:not(.blinq-admin) .site-footer.site-footer-minimal{flex-wrap:wrap!important}
 }

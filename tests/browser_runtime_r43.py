@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+import os
 from pathlib import Path
 import shutil
 from urllib.parse import urlparse
@@ -19,6 +20,8 @@ ORIGIN = "http://blinq.test"
 
 
 def browser_path() -> str | None:
+    if os.getenv("BLINQ_BROWSER"):
+        return os.environ["BLINQ_BROWSER"]
     for candidate in ("chromium", "chromium-browser", "google-chrome", "google-chrome-stable", "microsoft-edge"):
         found = shutil.which(candidate)
         if found:
@@ -62,7 +65,7 @@ def main() -> int:
             for width in (390, 1440):
                 for locale in ("sk", "cz", "en"):
                     context = browser.new_context(viewport={"width": width, "height": 900})
-                    context.route(f"{ORIGIN}/**", static_route)
+                    context.route("**/*", static_route)
                     page = context.new_page()
                     errors: list[str] = []
                     page.on("pageerror", lambda exc, errors=errors: errors.append(str(exc)))

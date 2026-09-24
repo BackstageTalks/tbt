@@ -10,10 +10,10 @@ INDEX = (ROOT / 'web' / 'index.html').read_text(encoding='utf-8')
 
 
 def test_r45_release_identity_and_cache_bust():
-    assert RELEASE['patch'] == UI['ui_patch'] == '736-r60'
-    assert 'content="736-r60"' in INDEX
+    assert RELEASE['patch'] == UI['ui_patch'] == '736-r61'
+    assert 'content="736-r61"' in INDEX
     for asset in ('blinq-app.css', 'auth.js', 'responsive.js', 'app.js'):
-        assert f'/{asset}?v=7360&p=60' in INDEX
+        assert f'/{asset}?v=7360&p=61' in INDEX
 
 
 def test_r45_time_cells_show_compact_date_under_time():

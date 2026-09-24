@@ -66,9 +66,9 @@ def test_r55_release_identity_and_no_bookmaker_experiment():
     release = (WEB / "release.json").read_text(encoding="utf-8")
     app = (WEB / "app.js").read_text(encoding="utf-8")
     index = (WEB / "index.html").read_text(encoding="utf-8")
-    assert '"patch": "736-r60"' in release
-    assert 'content="736-r60"' in index
-    assert '/app.js?v=7360&p=60' in index
+    assert '"patch": "736-r61"' in release
+    assert 'content="736-r61"' in index
+    assert '/app.js?v=7360&p=61' in index
     assert "hub-row-started" in app
     assert "hub-offer-status" in app
     assert "bookmaker_availability" not in app

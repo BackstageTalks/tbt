@@ -16,7 +16,7 @@ UI = json.loads((ROOT / "web/ui-config.json").read_text(encoding="utf-8"))
 
 
 def test_r54_identity_and_projection_odds_budget():
-    assert RELEASE["patch"] == UI["ui_patch"] == "736-r60"
+    assert RELEASE["patch"] == UI["ui_patch"] == "736-r61"
     assert "projection_odds_cap = max(0, int(args.market_odds_max_events or 0))" in PIPELINE
     assert "min(40" not in PIPELINE[PIPELINE.index("projection_odds_report = {}") : PIPELINE.index("if projection_odds_cap")]
 

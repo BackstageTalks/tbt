@@ -375,8 +375,31 @@ def save_subscription_notice_state(user_id: object, *, days: int, expires_for: o
     if stamp:
         entity[f"subscription_expiry_{int(days)}_sent_at"] = stamp
     try:
-        _table(ACCOUNT_TABLE).upsert_entity(entity, mode="merge")
+        table = _table(ACCOUNT_TABLE)
+        if state == "pending":
+            # The metadata read by the worker can be stale. Claim atomically
+            # before SMTP so two workers cannot both send the same notice.
+            from azure.core import MatchConditions
+            try:
+                current = table.get_entity(partition_key="account", row_key=_key(uid))
+            except Exception as exc:
+                if not _not_found(exc):
+                    raise
+                current = None
+            if current is not None:
+                same_expiry = current.get(f"subscription_expiry_{int(days)}_for") == expiry
+                prior_status = current.get(f"subscription_expiry_{int(days)}_status")
+                if same_expiry and prior_status in (None, "", "pending", "sent"):
+                    return {"notice_claimed": False}
+                table.update_entity(entity, mode="merge", etag=current.metadata["etag"],
+                                    match_condition=MatchConditions.IfNotModified)
+            else:
+                table.create_entity(entity)
+            return {"notice_claimed": True}
+        table.upsert_entity(entity, mode="merge")
     except Exception as exc:
+        if state == "pending" and getattr(exc, "status_code", None) in (409, 412):
+            return {"notice_claimed": False}
         raise AdminStorageUnavailable("Unable to save subscription notice state") from exc
     return load_account_metadata(uid)
 

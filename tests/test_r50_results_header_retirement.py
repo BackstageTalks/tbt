@@ -14,8 +14,8 @@ UI = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
 
 
 def test_r50_release_and_header_upgrade_cleanup():
-    assert RELEASE["patch"] == UI["ui_patch"] == "736-r60"
-    assert 'content="736-r60"' in INDEX
+    assert RELEASE["patch"] == UI["ui_patch"] == "736-r61"
+    assert 'content="736-r61"' in INDEX
     assert 'id="topUpgradeLabel">Upgrade</span></button>' in INDEX
     assert 'label.textContent=lcopy(\'Upgrade\',\'Upgrade\',\'Upgrade\')' in APP
     assert "BlinQ runtime patch 7.3.6-r55" in CSS

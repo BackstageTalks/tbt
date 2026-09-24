@@ -700,7 +700,7 @@
         "route": "",
         "plan_id": "",
         "effect": "fade-up",
-        "site_background_url": "/assets/blinq_page_background.webp"
+        "site_background_url": "/assets/blinq_background.webp"
       },
       "watermark": {
         "enabled": false,
@@ -1054,7 +1054,7 @@
   },
   "assets": {
     "favicon": "/assets/blinq_favi.png",
-    "background": "/assets/blinq_page_background.webp",
+    "background": "/assets/blinq_background.webp",
     "player_fallback": {
       "atp": "/assets/missing_foto_m.webp",
       "wta": "/assets/missing_foto_w.webp"
@@ -2428,7 +2428,7 @@
       }
     }
   },
-  "ui_patch": "736-r60",
+  "ui_patch": "736-r61",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 30,

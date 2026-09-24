@@ -16,8 +16,8 @@ RELEASE = json.loads((WEB / "release.json").read_text(encoding="utf-8"))
 
 def test_r36_release_identity():
     assert RELEASE["release"] == "7.3.6"
-    assert RELEASE["patch"] == "736-r60"
-    assert UI["ui_patch"] == "736-r60"
+    assert RELEASE["patch"] == "736-r61"
+    assert UI["ui_patch"] == "736-r61"
 
 
 def test_real_rookie_has_ui_and_server_admin_guards():
@@ -46,7 +46,7 @@ def test_live_and_locked_detail_copy_are_unambiguous():
     assert "shortcutLabel.textContent=liveEligible?(confirmed?'CONFIRMED':watching?'WATCH':'RADAR'):'RADAR'" in APP
     assert "LIVE ELITE" not in APP
     assert "hub-detail is-locked" in APP
-    assert "<i aria-hidden=\"true\">🔒</i>" in APP
+    assert '<i aria-hidden="true"><svg viewBox="0 0 20 20">' in APP
     assert ".hub-detail.is-locked>small{display:none!important}" in CSS
 
 
