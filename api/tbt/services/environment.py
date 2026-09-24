@@ -793,7 +793,8 @@ def location_candidates(
         if not city:
             return
         # Canonical aliases preserve the original explicit country restriction.
-        city = _CITY_CANONICAL.get(_normal(city), city)
+        if _normal(city) in {"sharm el sheikh", "santa margherita di pula"}:
+            city = _normal(city)
         explicit = normalize_country_code(country)
         if explicit:
             add(f"{city}, {explicit}")
