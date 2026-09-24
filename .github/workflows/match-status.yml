@@ -14,7 +14,6 @@ concurrency:
 
 jobs:
   match-status:
-    if: github.event_name == 'workflow_dispatch' || vars.TBT_MATCH_STATUS_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
