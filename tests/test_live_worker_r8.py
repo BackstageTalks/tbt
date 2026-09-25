@@ -58,3 +58,11 @@ def test_worker_skips_provider_when_no_prime_candidate_can_qualify():
     assert 'eligible_pool=[row for row in prime_pool' in run_block
     assert 'if not eligible_pool:' in run_block
     assert 'scan=scan_comeback_radar(feed_payload,[])' in run_block
+
+
+def test_live_drawer_has_separate_results_tab_for_settled_confirmed_signals():
+    assert 'data-live-radar-tab="results"' in WEB
+    assert "radar.results" in WEB
+    assert "Zatiaľ nie sú vyhodnotené žiadne LIVE signály." in WEB
+    assert "settle_radar_results" in API
+    assert "list_live_radar_results" in API
