@@ -313,46 +313,106 @@ def test_round_robin_checks_next_pending_id_on_next_run():
     assert second["next_due_id"] == "101"
 
 
-def test_four_hour_priority_does_not_drop_older_unfinished_today():
+def test_all_unfinished_past_start_matches_are_eligible_without_any_time_window():
     now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
     old_today = _row("old", "11", (now-timedelta(hours=5)).isoformat())
     recent = _row("recent", "11", (now-timedelta(hours=1)).isoformat())
     yesterday = _row("yesterday", "11", (now-timedelta(hours=30)).isoformat())
+    last_week = _row("last_week", "11", (now-timedelta(days=8)).isoformat())
     future = _row("future", "11", (now+timedelta(hours=2)).isoformat())
+    same_time = _row("now", "11", now.isoformat())
     provider = _Provider()
     result = scan_match_statuses(
-        {"upcoming": [old_today, recent, yesterday, future]},
-        provider, now=now, max_checks=1, lookback_hours=4,
+        {"upcoming": [old_today, recent, yesterday, last_week, future, same_time]},
+        provider, now=now, max_checks=30,
     )
-    assert result["due"] == 2
-    assert result["recent_candidates"] == 1
-    assert result["today_candidates"] == 2
-    assert result["checked"] == 1
-    assert result["pending_count"] == 2
-    assert result["next_due_id"] == "old"
+    assert result["due"] == 4
+    assert result["checked"] == 4
+    assert result["pending_count"] == 4
+    assert result["window_candidates"] == 4
+    assert "future" not in result["pending"]
+    assert "now" not in result["pending"]
 
 
-def test_thirty_checks_use_current_day_not_unseen_old_backlog():
+def test_seventy_unfinished_matches_continue_thirty_at_a_time():
     now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
     rows = []
-    for i in range(36):
+    for i in range(70):
         row = _row(
             str(1000+i), str(2000+i),
-            (now-timedelta(minutes=30+i*5)).isoformat(),
+            (now-timedelta(hours=70-i)).isoformat(),
         )
         row["player1"]["id"] = str(2000+i)
         rows.append(row)
-    for i in range(40):
-        rows.append(_row(
-            str(5000+i), str(6000+i),
-            (now-timedelta(hours=30, minutes=i)).isoformat(),
-        ))
-    provider = _Provider()
-    result = scan_match_statuses({"upcoming": rows}, provider, now=now, max_checks=30)
-    assert result["due"] == 36
-    assert result["checked"] == 30
-    assert len(provider.previous_calls) == 30
-    assert all(str(call[0]).startswith("20") for call in provider.previous_calls)
+    first = scan_match_statuses({"upcoming": rows}, _Provider(), now=now)
+    assert first["due"] == 70
+    assert first["checked"] == 30
+    assert first["pending_count"] == 70
+    assert first["next_due_id"] == "1030"
+    second_provider = _Provider()
+    second = scan_match_statuses(
+        {"upcoming": rows}, second_provider, first, now=now+timedelta(hours=1),
+    )
+    assert second["checked"] == 30
+    assert second_provider.previous_calls[0][0] == "2030"
+    assert second["next_due_id"] == "1060"
+    third_provider = _Provider()
+    third = scan_match_statuses(
+        {"upcoming": rows}, third_provider, second, now=now+timedelta(hours=2),
+    )
+    assert third["checked"] == 30
+    assert third_provider.previous_calls[0][0] == "2060"
+    assert third["next_due_id"] == "1020"
+
+
+def test_thirty_two_completed_matches_are_settled_across_two_hourly_runs():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    rows, finished = [], {}
+    for i in range(32):
+        row = _row(
+            str(1000+i), str(2000+i), (now-timedelta(hours=1)).isoformat(),
+        )
+        row["player1"]["id"] = str(2000+i)
+        rows.append(row)
+        event = _event(str(1000+i))
+        event["homeTeam"]["id"] = str(2000+i)
+        finished[str(2000+i)] = [event]
+    feed = {"upcoming": rows}
+    first = scan_match_statuses(feed, _Provider(previous=finished), now=now)
+    assert first["checked"] == 30
+    assert first["newly_resolved"] == 30
+    assert first["pending_count"] == 2
+    second = scan_match_statuses(
+        feed, _Provider(previous=finished), first, now=now+timedelta(hours=1),
+    )
+    assert second["due"] == 2
+    assert second["checked"] == 2
+    assert second["newly_resolved"] == 2
+    assert second["terminal"] == 32
+    assert second["pending_count"] == 0
+
+
+def test_started_is_provisional_and_does_not_prevent_followup():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    row = _row("101", "11", (now-timedelta(hours=4)).isoformat())
+    previous = {"statuses": {"101": {"status": "started", "checked_at": now.isoformat()}}}
+    result = scan_match_statuses(
+        {"upcoming": [row]}, _Provider(previous={"11": [_event()]}),
+        previous, now=now,
+    )
+    assert result["statuses"]["101"]["status"] == "win"
+    assert result["newly_resolved"] == 1
+
+
+def test_verified_cancelation_sets_void_and_ends_checking():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    row = _row("101", "11", (now-timedelta(hours=1)).isoformat())
+    canceled = _event(status_type="canceled", description="Canceled", winner_code=0)
+    provider = _Provider(previous={"11": [canceled]})
+    first = scan_match_statuses({"upcoming": [row]}, provider, now=now)
+    assert first["statuses"]["101"]["status"] == "void"
+    second = scan_match_statuses({"upcoming": [row]}, _Provider(), first, now=now)
+    assert second["checked"] == 0
 
 
 def test_duplicate_markets_only_cost_one_match_result_lookup():
@@ -379,7 +439,7 @@ def test_unfinished_previous_day_survives_new_feed_at_six():
     morning = scan_match_statuses(
         {"upcoming": []}, morning_provider, first, now=night+timedelta(hours=7),
     )
-    assert morning["carryover_candidates"] == 1
+    assert morning["due"] == 1
     assert morning["checked"] == 1
     assert morning["statuses"]["101"]["status"] == "win"
     assert "101" not in morning["pending"]
@@ -399,10 +459,10 @@ def test_live_api_settles_results_beyond_30_history_checks():
     assert result["provider_requests"] == 31
 
 
-def test_hourly_match_status_schedule_is_local_daytime_only():
+def test_hourly_match_status_schedule_is_24_7():
     from pathlib import Path
     workflow = (Path(__file__).resolve().parents[1] /
                 ".github/workflows/match-status.yml").read_text()
-    assert "cron: '17 6-23 * * *'" in workflow
-    assert "timezone: Europe/Bratislava" in workflow
+    assert "cron: '17 * * * *'" in workflow
+    assert "timezone:" not in workflow
     assert "workflow_dispatch:" in workflow
