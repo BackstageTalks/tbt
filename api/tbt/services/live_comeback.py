@@ -14,7 +14,7 @@ import os
 import re
 from typing import Any
 
-from .admin_storage import save_automated_insight, live_alert_levels
+from .admin_storage import save_automated_insight, save_live_signal, live_alert_levels
 from .market_selection import _walk_market_rows, _outcome_text, _price, _match_side
 
 DEFAULT_MIN_PROBABILITY = .68
@@ -205,6 +205,8 @@ class RadarCandidate:
     second_set_edge: float | None = None
     second_set_ev: float | None = None
     second_set_market: str = ""
+    favorite_id: str = ""
+    opponent_id: str = ""
 
     def public(self):
         return asdict(self)
@@ -257,6 +259,8 @@ def evaluate_prime_live(row, event, *, min_probability, max_odds):
         str(set2_meta.get("model") or ""),
         str(set2_meta.get("quality") or ""),
         samples,
+        favorite_id=str(_team(event, "homeTeam" if side == "home" else "awayTeam").get("id") or ""),
+        opponent_id=str(_team(event, "awayTeam" if side == "home" else "homeTeam").get("id") or ""),
     )
 
 
@@ -419,6 +423,10 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
     for s in scan.get("candidates", []):
         if not isinstance(s, dict) or not set2_push_eligible(s):
             continue
+        # A tip first published AFTER set two was won is retrospective, not a
+        # genuine Set-2 prediction. Existing earlier signals remain in history.
+        if str(s.get("stage") or "") == "second_set_won":
+            continue
         eid = str(s.get("event_id") or "").strip()
         if not eid:
             continue
@@ -440,6 +448,14 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
             "link_label": "Otvoriť LIVE Radar", "active": True, "pinned": False,
             "active_until": set2_until,
         }, actor_id=actor_id, insight_id=f"live-set2-{eid}"[:96])
+        if s.get("favorite_id") and s.get("opponent_id"):
+            save_live_signal({
+                "kind": "set2", "event_id": eid,
+                "favorite_id": s["favorite_id"], "opponent_id": s["opponent_id"],
+                "favorite": fav, "opponent": opp, "first_set": s.get("first_set"),
+                "stage": s.get("stage"), "odds": odds2,
+                "levels": item.get("levels", []),
+            })
         published.append({"id": item.get("id"), "event_id": eid, "stage": "set2", "created": created})
     signal_ids = {str(x.get("event_id") or "").strip() for x in scan.get("signals", []) if isinstance(x, dict)}
     for s in scan.get("candidates", []):
@@ -498,6 +514,13 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
             "link_label": "Otvoriť zápas", "active": True, "pinned": False,
             "active_until": confirmed_until,
         }, actor_id=actor_id, insight_id=f"live-comeback-{eid}"[:96])
+        if s.get("favorite_id") and s.get("opponent_id"):
+            save_live_signal({
+                "kind": "comeback", "event_id": eid,
+                "favorite_id": s["favorite_id"], "opponent_id": s["opponent_id"],
+                "favorite": fav, "opponent": opp, "first_set": s.get("first_set"),
+                "stage": stage, "odds": odds, "levels": item.get("levels", []),
+            })
         published.append({"id": item.get("id"), "event_id": eid, "stage": "confirmed", "created": created})
     return {
         "published": published,
