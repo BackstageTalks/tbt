@@ -331,7 +331,7 @@
   }
   function bannerCreativeStyle(c={}){
     const n=(v,min,max,fallback)=>{const x=Number(v);return Number.isFinite(x)&&v!==''?Math.max(min,Math.min(max,x)):fallback;};
-    const vars=[`--creative-headline-size:${n(c.headline_size,16,72,36)}px`,`--creative-text-size:${n(c.text_size,9,28,14)}px`,`--creative-eyebrow-size:${n(c.eyebrow_size,7,18,10)}px`,`--creative-delay:${n(c.animation_delay_ms,0,5000,80)}ms`];
+    const vars=[`--creative-headline-size:${n(c.headline_size,12,72,36)}px`,`--creative-text-size:${n(c.text_size,9,28,14)}px`,`--creative-eyebrow-size:${n(c.eyebrow_size,7,18,10)}px`,`--creative-delay:${n(c.animation_delay_ms,0,5000,80)}ms`];
     for(const field of ['headline','text','eyebrow']){
       const color=String(c[`${field}_color`]||'').trim();
       if(/^#[0-9a-f]{6}$/i.test(color))vars.push(`--creative-${field}-color:${color}`);
@@ -2931,7 +2931,7 @@
         <label>Odkaz<input data-simple-banner-field="link" value="${escapeHtml(c.link||'')}"></label>
       </div></div>
       <div class="admin-form-section admin-banner-typography"><div class="admin-form-section-title"><strong>Veľkosť a farba textu</strong><span>Jednoduchá škála od čiernej po bielu. Platí pre desktop aj mobil, náhľad reaguje hneď.</span></div><div class="admin-banner-type-grid">
-        <label><span>Nadpis · veľkosť</span><select data-simple-banner-field="headline_size">${sizes([20,24,28,32,36,40,44,48,56,64,72],c.headline_size,36)}</select></label>
+        <label><span>Nadpis · veľkosť</span><select data-simple-banner-field="headline_size">${sizes([12,14,16,18,20,24,28,32,36,40,44,48,56,64,72],c.headline_size,36)}</select></label>
         <label><span>Nadpis · farba</span><select data-simple-banner-field="headline_color">${bannerColorOptions(c.headline_color)}</select></label>
         <label><span>Podnadpis · veľkosť</span><select data-simple-banner-field="text_size">${sizes([10,12,14,16,18,20,24,28],c.text_size,14)}</select></label>
         <label><span>Podnadpis · farba</span><select data-simple-banner-field="text_color">${bannerColorOptions(c.text_color)}</select></label>
