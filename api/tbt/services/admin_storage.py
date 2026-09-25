@@ -28,6 +28,7 @@ class AdminStorageUnavailable(RuntimeError):
 UI_TABLE = "BlinQAdminConfig"
 ANALYTICS_TABLE = "BlinQBannerAnalytics"
 INSIGHTS_TABLE = "BlinQInsights"
+LIVE_RESULTS_TABLE = "BlinQLiveResults"
 INSIGHT_READS_TABLE = "BlinQInsightReads"
 _VALID_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
 _VALID_BANNER_SLOT = re.compile(r"^HERO_BANNER_[1-5]$")
@@ -1496,3 +1497,151 @@ def mark_insight_read(*, insight_id: str, user_id: str) -> dict:
         # Read state is authoritative; aggregate count is best effort.
         pass
     return {"read": True, "already_read": False}
+
+
+# --- Independent LIVE Radar / Set-2 result ledger --------------------------
+# Only actually published confirmed comeback or qualified Set-2 signals enter
+# this ledger. WATCH cards and projection-only candidates are deliberately absent.
+_LIVE_RESULT_KINDS = {"comeback", "set2"}
+_LIVE_RESULT_TERMINAL = {"win", "loss", "void"}
+
+
+def _live_result_row(entity: dict) -> dict:
+    raw_levels = entity.get("levels_json")
+    try:
+        levels = json.loads(raw_levels) if isinstance(raw_levels, str) else raw_levels
+    except (ValueError, TypeError):
+        levels = []
+    return {
+        "id": str(entity.get("RowKey") or ""),
+        "event_id": str(entity.get("event_id") or ""),
+        "kind": str(entity.get("kind") or ""),
+        "favorite_id": str(entity.get("favorite_id") or ""),
+        "opponent_id": str(entity.get("opponent_id") or ""),
+        "favorite": str(entity.get("favorite") or ""),
+        "opponent": str(entity.get("opponent") or ""),
+        "first_set": str(entity.get("first_set") or ""),
+        "second_set": str(entity.get("second_set") or ""),
+        "final_score": str(entity.get("final_score") or ""),
+        "odds": float(entity.get("odds") or 0),
+        "stage": str(entity.get("stage") or ""),
+        "status": str(entity.get("status") or "pending"),
+        "published_at": str(entity.get("published_at") or ""),
+        "last_checked_at": str(entity.get("last_checked_at") or ""),
+        "settled_at": str(entity.get("settled_at") or ""),
+        "levels": [str(v) for v in levels if str(v) in _INSIGHT_LEVELS] if isinstance(levels, list) else [],
+    }
+
+
+def save_live_signal(payload: dict) -> tuple[dict, bool]:
+    """Durable immutable first-publication entry; later scans cannot reroll it."""
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid LIVE result")
+    kind = str(payload.get("kind") or "")
+    eid = str(payload.get("event_id") or "").strip()
+    fav = str(payload.get("favorite_id") or "").strip()
+    opp = str(payload.get("opponent_id") or "").strip()
+    if kind not in _LIVE_RESULT_KINDS or not _VALID_ID.fullmatch(eid) or not fav or not opp or fav == opp:
+        raise ValueError("Invalid LIVE result identity")
+    key = f"{kind}:{eid}"
+    if not _VALID_ID.fullmatch(key):
+        raise ValueError("Invalid LIVE result key")
+    now = datetime.now(timezone.utc).isoformat()
+    entity = {
+        "PartitionKey": "live-results", "RowKey": key,
+        "event_id": eid, "kind": kind,
+        "favorite_id": fav[:64], "opponent_id": opp[:64],
+        "favorite": str(payload.get("favorite") or "")[:140],
+        "opponent": str(payload.get("opponent") or "")[:140],
+        "first_set": str(payload.get("first_set") or "")[:24],
+        "second_set": "", "final_score": "",
+        "odds": max(0.0, float(payload.get("odds") or 0)),
+        "stage": str(payload.get("stage") or "")[:32],
+        "status": "pending", "published_at": now,
+        "last_checked_at": "", "settled_at": "",
+        "levels_json": json.dumps([str(v) for v in payload.get("levels", []) if str(v) in _INSIGHT_LEVELS], separators=(",", ":")),
+    }
+    client = _table(LIVE_RESULTS_TABLE)
+    try:
+        client.create_entity(entity)
+        return _live_result_row(entity), True
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        name = exc.__class__.__name__.lower()
+        if status != 409 and "alreadyexists" not in name and "resourceexists" not in name and not isinstance(exc, _StorageWriteConflict):
+            raise AdminStorageUnavailable("Unable to create LIVE result record") from exc
+        try:
+            existing = client.get_entity(partition_key="live-results", row_key=key)
+            return _live_result_row(existing), False
+        except Exception as read_exc:
+            raise AdminStorageUnavailable("Unable to load existing LIVE result") from read_exc
+
+
+def list_pending_live_signals() -> list[dict]:
+    """All unfinished published signals; no age-based expiry or fixed row cap."""
+    try:
+        rows = _table(LIVE_RESULTS_TABLE).query_entities(query_filter="PartitionKey eq 'live-results'")
+        items = [_live_result_row(row) for row in rows]
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to load pending LIVE results") from exc
+    items = [row for row in items if row["status"] == "pending" and row["kind"] in _LIVE_RESULT_KINDS]
+    # Never-checked fixtures first; a 30-event cap then rotates across every
+    # outstanding match rather than repeatedly spending requests on the first 30.
+    items.sort(key=lambda x: (bool(x["last_checked_at"]), x["last_checked_at"] or x["published_at"], x["published_at"], x["id"]))
+    return items
+
+
+def update_live_signal_result(item_id: str, *, checked_at: str, status: str = "pending",
+                              second_set: str = "", final_score: str = "") -> dict:
+    if not _VALID_ID.fullmatch(str(item_id or "")) or status not in {"pending", *_LIVE_RESULT_TERMINAL}:
+        raise ValueError("Invalid LIVE result update")
+    client = _table(LIVE_RESULTS_TABLE)
+    try:
+        entity = client.get_entity(partition_key="live-results", row_key=item_id)
+        if str(entity.get("status") or "pending") in _LIVE_RESULT_TERMINAL:
+            return _live_result_row(entity)
+        patch = {
+            "PartitionKey": "live-results", "RowKey": item_id,
+            "last_checked_at": str(checked_at)[:64],
+        }
+        if status in _LIVE_RESULT_TERMINAL:
+            patch.update({
+                "status": status, "settled_at": str(checked_at)[:64],
+                "second_set": str(second_set)[:24], "final_score": str(final_score)[:60],
+            })
+        client.upsert_entity(patch, mode="merge")
+        return _live_result_row({**entity, **patch})
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to update LIVE result") from exc
+
+
+def list_live_results(*, plan: str = "", limit: int = 100) -> dict:
+    """Only verified terminal results; never expose pending picks or IDs."""
+    try:
+        rows = _table(LIVE_RESULTS_TABLE).query_entities(query_filter="PartitionKey eq 'live-results'")
+        items = [_live_result_row(row) for row in rows]
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to load LIVE result history") from exc
+    allowed_plan = str(plan or "").lower()
+    items = [
+        row for row in items
+        if row["status"] in _LIVE_RESULT_TERMINAL
+        and (not allowed_plan or allowed_plan == "admin" or allowed_plan in row["levels"])
+    ]
+    items.sort(key=lambda row: (row["settled_at"], row["id"]), reverse=True)
+    items = items[:max(1, min(250, int(limit)))]
+    public_keys = ("id", "event_id", "kind", "favorite", "opponent", "first_set",
+                   "second_set", "final_score", "odds", "stage", "status",
+                   "published_at", "settled_at")
+    summary = {
+        kind: {
+            "total": sum(row["kind"] == kind for row in items),
+            "win": sum(row["kind"] == kind and row["status"] == "win" for row in items),
+            "loss": sum(row["kind"] == kind and row["status"] == "loss" for row in items),
+            "void": sum(row["kind"] == kind and row["status"] == "void" for row in items),
+        }
+        for kind in ("comeback", "set2")
+    }
+    return {"items": [{key: row[key] for key in public_keys} for row in items], "summary": summary}
+
+
