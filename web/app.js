@@ -1344,7 +1344,7 @@
     const radarResultCards=channel==='live'&&liveEligible&&liveTab==='results'?radarResults.map(item=>{
       const kind=String(item?.kind||'')==='set2'?'2. SET':'COMEBACK';
       const outcome=String(item?.outcome||'').toLowerCase();
-      const outcomeLabel=outcome==='win'?lcopy('WIN','VÝHRA','VÝHRA'):outcome==='loss'?lcopy('LOSS','PREHRA','PROHRA'):'VOID';
+      const outcomeLabel=outcome==='win'?lcopy('WIN','VÝHRA','VÝHRA'):outcome==='loss'?lcopy('LOSS','PREHRA','PREHRA'):resultVoidLabel(item?.reason);
       const title=String(item?.title||'').replace(/^Comeback LIVE\s*·\s*/i,'').replace(/^2\. set LIVE\s*·\s*/i,'')||'—';
       const when=item?.settled_at?fmtDate(item.settled_at)+' · '+fmtTime(item.settled_at):'';
       return `<article class="live-radar-candidate is-result is-${escapeHtml(outcome)}"><header><div><small>${escapeHtml(kind)} · ${escapeHtml(outcomeLabel)}</small><strong>${escapeHtml(title)}</strong></div><b>${escapeHtml(outcomeLabel)}</b></header>${when?`<div class="live-radar-result-time">${escapeHtml(when)}</div>`:''}</article>`;
@@ -2615,10 +2615,8 @@
   function resultVoidLabel(reason=''){
     const value=String(reason||'').trim().toLowerCase();
     if(value.includes('retir')||value.includes('incomplete')||value==='ret')return lcopy('RETIREMENT','SKREČ','SKREČ');
-    if(value.includes('walkover')||value==='walk over'||value==='w/o')return 'W/O';
-    if(value.includes('cancel'))return lcopy('CANCELLED','ZRUŠENÉ','ZRUŠENO');
-    if(value.includes('postpon'))return lcopy('POSTPONED','ODLOŽENÉ','ODLOŽENO');
-    if(value.includes('abandon')||value.includes('interrupt')||value.includes('suspend'))return lcopy('STOPPED','PRERUŠENÉ','PŘERUŠENO');
+    // W/O, cancellations and other non-played results have one public label.
+    // Only a verified in-progress retirement stays separate as SKREČ.
     return 'VOID';
   }
   function filteredResults(){
@@ -2739,7 +2737,11 @@
       const tag=projection?({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'}[projectionMarket]||String(publication?.section||'projection')):String(publication?.section||'');
       const tags=`<span class="result-tag ${escapeHtml(tag)}">${escapeHtml(projection?projectionResultTypeLabel(publication):resultCategoryLabel(tag||'all'))}</span>`;
       const voidLabel=resultVoidLabel(outcome.reason);
-      const resultHtml=projection?(outcome.kind==='win'?'<b class="correct">✓ HIT</b>':outcome.kind==='loss'?'<b class="wrong">× MISS</b>':`<b class="void">○ ${escapeHtml(voidLabel)}</b>`):(outcome.kind==='win'?'<b class="correct">✓ VÝHRA</b>':outcome.kind==='loss'?'<b class="wrong">× PREHRA</b>':`<b class="void">○ ${escapeHtml(voidLabel)}</b>`);
+      const resultHtml=outcome.kind==='win'
+        ?`<b class="correct">✓ ${escapeHtml(lcopy('WIN','VÝHRA','VÝHRA'))}</b>`
+        :outcome.kind==='loss'
+          ?`<b class="wrong">× ${escapeHtml(lcopy('LOSS','PREHRA','PREHRA'))}</b>`
+          :`<b class="${voidLabel==='SKREČ'?'retired':'void'}">○ ${escapeHtml(voidLabel)}</b>`;
       const p1Name=p1.name||'Player 1',p2Name=p2.name||'Player 2';
       const p1Photo=playerPhotoSource(r,p1,'player1');
       const p2Photo=playerPhotoSource(r,p2,'player2');
@@ -3551,7 +3553,7 @@
     const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category),projectionCategory=['ace','double_faults','sg','sets','games'].includes(category);
     if(projectionCategory){
       const typeLabel=category==='ace'?lcopy('ACES','ESÁ','ESA'):category==='double_faults'?lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'):category==='sets'?lcopy('SETS','SETY','SETY'):category==='games'?lcopy('GAMES','GAMY','GEMY'):lcopy('SETS & GAMES','SETY & GAMY','SETY & GEMY');
-      return metricCards([[lcopy('Result','Výsledok','Výsledek'),`${m.wins}-${m.losses}`,lcopy('HIT - MISS','HIT - MISS','HIT - MISS')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('settled projection sample','vyhodnotená vzorka projekcií','vyhodnocený vzorek projekcí')],[lcopy('Projection type','Typ projekcie','Typ projekce'),typeLabel,lcopy('Projection only · no invented odds or ROI','Iba projekcia · bez vymysleného kurzu a ROI','Pouze projekce · bez vymyšleného kurzu a ROI')],[publicText('Sample'),String(m.sample),lcopy('published projections','publikované projekcie','publikované projekce')]]);
+      return metricCards([[lcopy('Result','Výsledok','Výsledek'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('settled projection sample','vyhodnotená vzorka projekcií','vyhodnocený vzorek projekcí')],[lcopy('Projection type','Typ projekcie','Typ projekce'),typeLabel,lcopy('Projection only · no invented odds or ROI','Iba projekcia · bez vymysleného kurzu a ROI','Pouze projekce · bez vymyšleného kurzu a ROI')],[publicText('Sample'),String(m.sample),lcopy('published projections','publikované projekcie','publikované projekce')]]);
     }
     return metricCards([[publicText('Record'),`${m.wins}-${m.losses}`,lcopy('wins - losses','výhry - prehry','výhry - prohry')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],[publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} odds-backed picks`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no issued odds')],['ROI',m.roi==null?'—':pct(m.roi),publicText('flat 1u on issued odds')],[publicText('Units'),m.oddsSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',publicText('profit · flat 1u stake')],[publicText('Sample'),String(m.sample),publicText('settled published rows')]]);
   }
