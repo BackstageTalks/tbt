@@ -48,11 +48,45 @@ def competition(row):
     return "unknown"
 
 
-def rank_band(row, selection_id, cutoff=800):
+def issued_snapshot(publication):
+    """Use only an immutable card snapshot captured at exact public issuance."""
+    if not isinstance(publication, dict):
+        return None
+    snapshot = publication.get("issued_snapshot")
+    if not isinstance(snapshot, dict) or snapshot.get("source") != "deployed_feed_at_issuance":
+        return None
+    if not publication.get("issued_at") or snapshot.get("captured_at") != publication.get("issued_at"):
+        return None
+    raw = number(publication.get("model_probability"))
+    saved = number(snapshot.get("model_probability"))
+    if raw is None or saved is None or abs(raw - saved) > 1e-9:
+        return None
+    return snapshot
+
+
+def ranking_players(row, publication=None):
+    snapshot = issued_snapshot(publication)
+    if snapshot is None:
+        return [row.get("player1") or {}, row.get("player2") or {}]
+    saved = snapshot.get("ranks") if isinstance(snapshot.get("ranks"), dict) else {}
+    # Never substitute today's or later-enriched ranks for an issuance snapshot
+    # with missing ranking evidence. Require identities to match the event.
+    players = []
+    for side in ("player1", "player2"):
+        original = row.get(side) if isinstance(row.get(side), dict) else {}
+        stored = saved.get(side) if isinstance(saved.get(side), dict) else {}
+        if str(stored.get("id") or "") != str(original.get("id") or ""):
+            return [{"id": (row.get("player1") or {}).get("id")},
+                    {"id": (row.get("player2") or {}).get("id")}]
+        players.append(stored)
+    return players
+
+
+def rank_band(row, selection_id, cutoff=800, publication=None):
     """Descriptive cohort: never exclude a TOP bet because of ranking."""
     if cutoff not in (500, 800, 1000):
         raise ValueError("Unsupported ranking cutoff")
-    players = [row.get("player1") or {}, row.get("player2") or {}]
+    players = ranking_players(row, publication)
     if not all(isinstance(p, dict) for p in players):
         return "rank_unknown"
     selected = next((p for p in players if str(p.get("id")) == selection_id), None)
@@ -70,9 +104,9 @@ def rank_band(row, selection_id, cutoff=800):
     return f"both_{cutoff}_plus"
 
 
-def picked_player_rank_band(row, selection_id):
+def picked_player_rank_band(row, selection_id, publication=None):
     """Rank of the actual published selection; opponent need not be ranked."""
-    players = [row.get("player1") or {}, row.get("player2") or {}]
+    players = ranking_players(row, publication)
     selected = next((p for p in players if isinstance(p, dict) and
                      str(p.get("id")) == selection_id), None)
     rank = number(selected.get("rank")) if selected else None
@@ -86,11 +120,17 @@ def picked_player_rank_band(row, selection_id):
 
 
 def confidence(row, publication):
-    """Only claim displayed calibration when the stored prediction agrees.
+    """Prefer the exact deployed public confidence; legacy rows are conservative.
 
-    Historical publications may use a later model/price than the immutable
-    original event row. Those cannot be assigned an invented TOP confidence.
+    Original event-row confidence can differ from a later market publication.
+    Never derive published confidence from an unrelated prediction.
     """
+    snapshot = issued_snapshot(publication)
+    if snapshot is not None:
+        displayed = number(snapshot.get("blinq_probability"))
+        if displayed is not None and .5 <= displayed <= 1:
+            return displayed
+        return None
     if str(publication.get("selection_id") or "") != str(row.get("winner_id") or ""):
         return None
     public_p = number(row.get("blinq_probability"))
@@ -117,8 +157,9 @@ def probability_band(value):
     return "85_plus"
 
 
-def observed_stats(row):
-    value = row.get("stats_available")
+def observed_stats(row, publication=None):
+    snapshot = issued_snapshot(publication)
+    value = snapshot.get("stats_available") if snapshot is not None else row.get("stats_available")
     return "yes" if value is True else "no" if value is False else "unknown"
 
 
@@ -200,7 +241,15 @@ def analyze(ledger, *, now=None, window_days=90):
             p = confidence(row, pub)
             if p is None:
                 diagnostics["confidence_not_reconstructable"] += 1
-            quality = row.get("quality") if isinstance(row.get("quality"), dict) else {}
+            snapshot = issued_snapshot(pub)
+            if snapshot is not None:
+                diagnostics["exact_issued_evidence"] += 1
+                rank_values = snapshot.get("ranks") if isinstance(snapshot.get("ranks"), dict) else {}
+                if any(number((rank_values.get(side) or {}).get("rank")) is not None
+                       for side in ("player1", "player2")):
+                    diagnostics["issued_rank_available"] += 1
+            quality_source = snapshot.get("quality") if snapshot is not None else row.get("quality")
+            quality = quality_source if isinstance(quality_source, dict) else {}
             left = quality.get("player1") if isinstance(quality.get("player1"), dict) else {}
             right = quality.get("player2") if isinstance(quality.get("player2"), dict) else {}
             surface = [number(left.get("surface_matches")), number(right.get("surface_matches"))]
@@ -210,8 +259,8 @@ def analyze(ledger, *, now=None, window_days=90):
                 else "low_or_unknown"
             )
             selected_id = str(pub.get("selection_id") or "")
-            picked_rank = picked_player_rank_band(row, selected_id)
-            stats = observed_stats(row)
+            picked_rank = picked_player_rank_band(row, selected_id, pub)
+            stats = observed_stats(row, pub)
             # BlinQ betting day begins at 06:00 in Slovakia, including DST.
             betting_day = (issued.astimezone(ZoneInfo("Europe/Bratislava")) -
                            timedelta(hours=6)).date().isoformat()
@@ -219,9 +268,9 @@ def analyze(ledger, *, now=None, window_days=90):
             entries.append({
                 "correct": correct, "odds": odds, "probability": p,
                 "competition": competition(row),
-                "ranking": rank_band(row, selected_id),  # legacy 800-band report
-                "ranking_500": rank_band(row, selected_id, cutoff=500),
-                "ranking_1000": rank_band(row, selected_id, cutoff=1000),
+                "ranking": rank_band(row, selected_id, publication=pub),  # legacy 800-band report
+                "ranking_500": rank_band(row, selected_id, cutoff=500, publication=pub),
+                "ranking_1000": rank_band(row, selected_id, cutoff=1000, publication=pub),
                 "picked_rank": picked_rank,
                 "stats": stats,
                 "rank_and_stats": f"{picked_rank}/{stats}",
@@ -305,6 +354,7 @@ def main():
     report["interpretation_limits"] = [
         "Only genuinely issued TOP predictions before actual match start are evaluated.",
         "Missing or incompatible recorded public confidence is excluded from calibration.",
+        "New records prefer confirmed deployed-card confidence/ranking snapshots; legacy records remain conservative.",
         "This is a descriptive production audit, not a replay of alternative historical selections.",
         "Subgroups below 100 settled picks are flagged as small samples.",
         "Rank buckets describe stored ledger ranks; point-in-time ranking provenance must be confirmed separately.",
