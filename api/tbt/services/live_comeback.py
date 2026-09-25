@@ -14,7 +14,10 @@ import os
 import re
 from typing import Any
 
-from .admin_storage import save_automated_insight, live_alert_levels
+from .admin_storage import (
+    save_automated_insight, live_alert_levels, load_insight_by_id,
+    save_live_radar_result,
+)
 from .market_selection import _walk_market_rows, _outcome_text, _price, _match_side
 
 DEFAULT_MIN_PROBABILITY = .68
@@ -507,3 +510,48 @@ def publish_radar_signals(scan, *, actor_id="live-radar"):
         "set2_created": sum(1 for x in published if x["created"] and x["stage"] == "set2"),
         "set2_push_thresholds": {k: (sorted(v) if isinstance(v, set) else v) for k, v in set2_push_thresholds().items()},
     }
+
+
+def settle_radar_results(settled_events: list[dict[str, Any]]) -> dict[str, int]:
+    """Settle only LIVE signals that were actually published/confirmed.
+
+    WATCH-only candidates never enter history. Comeback is settled by the final
+    match result; the independent Set-2 signal is settled by the completed
+    second-set score.
+    """
+    saved = comeback = set2 = 0
+    for row in settled_events or []:
+        if not isinstance(row, dict):
+            continue
+        eid = str(row.get("event_id") or "").strip()
+        if not eid:
+            continue
+        settled_at = str(row.get("checked_at") or datetime.now(timezone.utc).isoformat())
+
+        comeback_source = load_insight_by_id(f"live-comeback-{eid}"[:96])
+        match_status = str(row.get("match_status") or "").lower()
+        if comeback_source and match_status in {"win", "loss", "retired", "void"}:
+            outcome = match_status if match_status in {"win", "loss"} else "void"
+            save_live_radar_result({
+                "kind": "comeback", "outcome": outcome, "event_id": eid,
+                "title": comeback_source.get("title") or "Comeback LIVE",
+                "source_id": comeback_source.get("id") or f"live-comeback-{eid}",
+                "signal_at": comeback_source.get("created_at") or "",
+                "settled_at": settled_at,
+            }, result_id=f"live-result-comeback-{eid}"[:96])
+            saved += 1
+            comeback += 1
+
+        set2_source = load_insight_by_id(f"live-set2-{eid}"[:96])
+        second_status = str(row.get("second_set_status") or "").lower()
+        if set2_source and second_status in {"win", "loss"}:
+            save_live_radar_result({
+                "kind": "set2", "outcome": second_status, "event_id": eid,
+                "title": set2_source.get("title") or "2. set LIVE",
+                "source_id": set2_source.get("id") or f"live-set2-{eid}",
+                "signal_at": set2_source.get("created_at") or "",
+                "settled_at": settled_at,
+            }, result_id=f"live-result-set2-{eid}"[:96])
+            saved += 1
+            set2 += 1
+    return {"saved": saved, "comeback": comeback, "set2": set2}
