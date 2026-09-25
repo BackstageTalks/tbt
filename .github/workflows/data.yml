@@ -4,7 +4,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, top-audit, results-rebuild, deploy-current, train, backtest, refresh]
+        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, top-audit, market-audit, results-rebuild, deploy-current, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -202,6 +202,10 @@ jobs:
             python scripts/audit_top_reliability.py \
               --data-repository "$TBT_DATA_REPOSITORY" \
               --window-days 90
+          elif [[ "$MODE" == market-audit ]]; then
+            python scripts/audit_market_reliability.py \
+              --data-repository "$TBT_DATA_REPOSITORY" \
+              --window-days 90
           elif [[ "$MODE" == results-rebuild ]]; then
             python scripts/rebuild_results_history.py \
               --data-repository "$TBT_DATA_REPOSITORY"
@@ -290,6 +294,16 @@ jobs:
           name: blinq-top-audit-${{ github.run_id }}
           path: .cache/tbt/top-accuracy/audit.json
           if-no-files-found: error
+      - name: Upload TOP VALUE doubles quality and overlap audit
+        if: ${{ always() && env.MODE == 'market-audit' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-market-audit-${{ github.run_id }}
+          path: |
+            .cache/tbt/market-quality/audit.json
+            .cache/tbt/market-quality/audit.md
+          if-no-files-found: error
+
       - name: Upload Data Model v3 feature audit
         if: ${{ always() && env.MODE == 'feature-audit' }}
         uses: actions/upload-artifact@v4
