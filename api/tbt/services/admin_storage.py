@@ -1365,6 +1365,77 @@ def save_insight(payload: object, *, actor_id: str = "", insight_id: str = "") -
     return item
 
 
+def load_insight_by_id(insight_id: str) -> dict | None:
+    """Load one durable insight by deterministic id."""
+    insight_id = str(insight_id or "").strip()
+    if not _VALID_ID.fullmatch(insight_id):
+        return None
+    try:
+        entity = _table(INSIGHTS_TABLE).get_entity(partition_key="insights", row_key=insight_id)
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        name = type(exc).__name__.lower()
+        if status == 404 or "notfound" in name or isinstance(exc, KeyError):
+            return None
+        raise AdminStorageUnavailable("Unable to load insight") from exc
+    return _insight_from_entity(entity)
+
+
+def save_live_radar_result(payload: object, *, result_id: str) -> dict:
+    """Persist one settled LIVE Radar signal result idempotently."""
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid LIVE result")
+    result_id = str(result_id or "").strip()
+    if not _VALID_ID.fullmatch(result_id):
+        raise ValueError("Invalid LIVE result id")
+    kind = str(payload.get("kind") or "").strip().lower()
+    outcome = str(payload.get("outcome") or "").strip().lower()
+    if kind not in {"comeback", "set2"}:
+        raise ValueError("Invalid LIVE result kind")
+    if outcome not in {"win", "loss", "void"}:
+        raise ValueError("Invalid LIVE result outcome")
+    event_id = str(payload.get("event_id") or "").strip()[:64]
+    if not event_id:
+        raise ValueError("Missing LIVE result event")
+    entity = {
+        "PartitionKey": "live-results", "RowKey": result_id,
+        "kind": kind, "outcome": outcome, "event_id": event_id,
+        "title": str(payload.get("title") or "")[:160],
+        "source_id": str(payload.get("source_id") or "")[:96],
+        "signal_at": str(payload.get("signal_at") or "")[:64],
+        "settled_at": str(payload.get("settled_at") or datetime.now(timezone.utc).isoformat())[:64],
+    }
+    try:
+        _table(INSIGHTS_TABLE).upsert_entity(entity, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save LIVE result") from exc
+    return {
+        "id": result_id, "kind": kind, "outcome": outcome, "event_id": event_id,
+        "title": entity["title"], "source_id": entity["source_id"],
+        "signal_at": entity["signal_at"], "settled_at": entity["settled_at"],
+    }
+
+
+def list_live_radar_results(*, limit: int = 60) -> list[dict]:
+    """Newest settled confirmed comeback / Set-2 signals."""
+    try:
+        rows = list(_table(INSIGHTS_TABLE).query_entities(query_filter="PartitionKey eq 'live-results'"))
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to list LIVE results") from exc
+    items = [{
+        "id": str(row.get("RowKey") or ""),
+        "kind": str(row.get("kind") or ""),
+        "outcome": str(row.get("outcome") or ""),
+        "event_id": str(row.get("event_id") or ""),
+        "title": str(row.get("title") or ""),
+        "source_id": str(row.get("source_id") or ""),
+        "signal_at": str(row.get("signal_at") or ""),
+        "settled_at": str(row.get("settled_at") or ""),
+    } for row in rows]
+    items.sort(key=lambda row: row.get("settled_at") or "", reverse=True)
+    return items[:max(1, min(200, int(limit or 60)))]
+
+
 def save_automated_insight(payload: object, *, actor_id: str = "automation", insight_id: str) -> tuple[dict, bool]:
     """Create or refresh one deterministic system insight idempotently.
 
