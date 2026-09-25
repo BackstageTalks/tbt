@@ -1526,7 +1526,11 @@
   function firstDailyHubUnlockPlan(tab,index=0,forSeeAll=false){
     const cfg=dailyHubConfig()?.tabs?.[tab]||{};
     const plans=membershipHierarchy.filter(id=>state.ui?.plans?.[id]?.enabled!==false);
+    // A blurred random slot must never tell an active FREE user to buy FREE.
+    // The next unlock tier must be strictly above the actual membership.
+    const currentIndex=state.previewPlan?-1:membershipHierarchy.indexOf(accountPlan());
     for(const plan of plans){
+      if(currentIndex>=0&&membershipHierarchy.indexOf(plan)<=currentIndex)continue;
       const rule=cfg?.plans?.[plan]||{};const display=String(rule.display_state||((rule.tab_enabled===false)?'hidden':'active')).toLowerCase();
       if(cfg.enabled===false||rule.tab_enabled===false||display==='hidden'||display==='blurred')continue;
       // SEE ALL itself is governed by its own panel access. For normal tabs,
@@ -2128,7 +2132,8 @@
       let count='';
       if(coming)count='<em>COMING SOON</em>';
       else {const total=Number(ent.total);const rows=dailyHubRows(tab);const n=Number.isFinite(total)?total:rows.length;count=n?`<b>${n}</b>`:'';}
-      const locked=!coming&&ent.enabled!==false&&Number(ent.returned||0)===0&&(Number(ent.locked_count||0)>0||String(ent.display_state||'').toLowerCase()==='blurred'||(Array.isArray(ent.slot_states)&&ent.slot_states.some(value=>value==='blurred')));
+      const entitledButUnavailable=!state.previewPlan&&membershipHierarchy.includes(plan)&&ent.enabled!==false&&String(ent.display_state||'active').toLowerCase()==='active'&&(String(ent.visible_picks||'').toUpperCase()==='ALL'||Number(ent.visible_picks)>0)&&Number(ent.total||0)>0&&Number(ent.returned||0)===0;
+      const locked=!entitledButUnavailable&&!coming&&ent.enabled!==false&&Number(ent.returned||0)===0&&(Number(ent.locked_count||0)>0||String(ent.display_state||'').toLowerCase()==='blurred'||(Array.isArray(ent.slot_states)&&ent.slot_states.some(value=>value==='blurred')));
       const requiredPlan=locked?firstDailyHubUnlockPlan(tab,0,tab==='see_all'):'';
       const requiredLabel=requiredPlan?String(upgradePlanLabel(requiredPlan)||requiredPlan).replace(/^BlinQ\s+/i,'').toUpperCase():'';
       const accessAttrs=locked?` data-upgrade-plan="${escapeHtml(requiredPlan)}" data-upgrade-section="${escapeHtml(dailyHubTabLabel(tab))}" title="${escapeHtml(lcopy(`Available from ${requiredLabel}`,`Dostupné od ${requiredLabel}`,`Dostupné od ${requiredLabel}`))}"`:'';
@@ -2145,17 +2150,22 @@
     }
     if(tournamentSelect)tournamentSelect.parentElement.hidden=false;
     const sourceRows=dailyHubRows(tab),rows=dashboardFilteredRows(sourceRows),ent=dailyHubEntitlement(tab);
+    const includedButUnavailable=!state.previewPlan&&membershipHierarchy.includes(plan)&&ent.enabled!==false&&String(ent.display_state||'active').toLowerCase()==='active'&&(String(ent.visible_picks||'').toUpperCase()==='ALL'||Number(ent.visible_picks)>0)&&Number(ent.total||0)>0&&(Number(ent.returned||0)===0||sourceRows.length===0);
     const preview=Math.max(1,Number(cfg.preview_rows)||10);
     const allCount=tab==='see_all'?Math.max(Number(ent.total)||0,rows.length):Math.max(Number(ent.total)||0,rows.length);
     const canExpand=ent.see_all===true&&allCount>preview;
     let limit=(state.dailyHubExpanded&&canExpand)?allCount:preview;
-    limit=Math.min(limit,Math.max(rows.length,Number(ent.returned)||0));
+    // Stable-random FREE rows stay at their ORIGINAL server slot (e.g. #8).
+    // Only one authorized row is returned, but its slot may be anywhere in
+    // the first ten. Never truncate the rendering window to rows.length=1.
+    const slotCount=Array.isArray(ent.slot_states)?ent.slot_states.length:0;
+    limit=Math.min(limit,Math.max(rows.length,Number(ent.returned)||0,slotCount));
     const columnKeys=dailyHubColumnKeys(tab);
     head.innerHTML=`<tr>${dailyHubColumns(tab).map((c,i)=>`<th class="hub-head-${escapeHtml(columnKeys[i]||'generic')}">${escapeHtml(c)}</th>`).join('')}</tr>`;
     const out=[];
     {
       const slotStates=Array.isArray(ent.slot_states)?ent.slot_states:[];let dataIndex=0;
-      if(slotStates.length){
+      if(slotStates.length&&!includedButUnavailable){
         // Server-authorized rows carry their original source slot. Search,
         // surface and tournament filters must never compact slot 7 into slot 2.
         const bySlot=new Map(),unmapped=[];
@@ -2172,10 +2182,10 @@
             if(row)out.push(dailyHubRow(row,tab,false,slotIndex));
           }
         });
-      }else for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
+      }else if(!includedButUnavailable)for(let i=0;i<limit;i++){if(i<rows.length)out.push(dailyHubRow(rows[i],tab,false,i));}
       const nextIndex=Math.max(slotStates.length,rows.length);
-      if(!out.length&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
-      else if((Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
+      if(!out.length&&ent.blur_remaining!==false&&!includedButUnavailable)out.push(dailyHubLockedRow(tab,0,firstDailyHubUnlockPlan(tab,0,false)));
+      else if(out.length&&(Number(ent.total)||0)>nextIndex&&ent.blur_remaining!==false)out.push(dailyHubLockedRow(tab,nextIndex,firstDailyHubUnlockPlan(tab,nextIndex,false)));
     }
     body.innerHTML=out.join('');
     // r28: semantic cell labels let the same server-rendered table become a
@@ -2184,7 +2194,7 @@
     body.querySelectorAll('tr:not(.hub-row-locked)').forEach(row=>{
       [...row.children].forEach((cell,i)=>{cell.dataset.label=mobileLabels[i]||'';});
     });
-    if(empty){empty.hidden=Boolean(out.length);empty.textContent=lcopy('No predictions are available in this category yet.','V tejto kategórii zatiaľ nie sú dostupné predikcie.','V této kategorii zatím nejsou dostupné predikce.');}
+    if(empty){empty.hidden=Boolean(out.length);empty.textContent=includedButUnavailable?lcopy('Your included pick is temporarily unavailable in the current offer.','Tvoj zahrnutý tip momentálne nie je dostupný v aktuálnej ponuke.','Tvůj zahrnutý tip momentálně není dostupný v aktuální nabídce.'):lcopy('No predictions are available in this category yet.','V tejto kategórii zatiaľ nie sú dostupné predikcie.','V této kategorii zatím nejsou dostupné predikce.');}
     const first=rows[0]||sourceRows[0];const raw=first?.scheduled_at||first?.date||first?.start_time||first?.start_at||'';const d=raw?new Date(raw):new Date();const dateText=Number.isNaN(d.getTime())?lcopy('Today','Dnes','Dnes'):new Intl.DateTimeFormat(locale==='en'?'en-GB':locale==='cz'?'cs-CZ':'sk-SK',{weekday:'short',day:'numeric',month:'numeric'}).format(d);
     if($('dailyHubMetaDate'))$('dailyHubMetaDate').textContent=dateText;if($('dailyHubToolbarDate'))$('dailyHubToolbarDate').textContent=dateText;
     if(tournamentSelect){
