@@ -12,6 +12,7 @@ import json
 import math
 from pathlib import Path
 import subprocess
+from zoneinfo import ZoneInfo
 
 from _bootstrap import ROOT
 
@@ -47,7 +48,10 @@ def competition(row):
     return "unknown"
 
 
-def rank_band(row, selection_id):
+def rank_band(row, selection_id, cutoff=800):
+    """Descriptive cohort: never exclude a TOP bet because of ranking."""
+    if cutoff not in (500, 800, 1000):
+        raise ValueError("Unsupported ranking cutoff")
     players = [row.get("player1") or {}, row.get("player2") or {}]
     if not all(isinstance(p, dict) for p in players):
         return "rank_unknown"
@@ -56,14 +60,29 @@ def rank_band(row, selection_id):
     ranks = [number(p.get("rank")) if p else None for p in (selected, opponent)]
     if any(r is None or r <= 0 for r in ranks):
         return "rank_unknown"
-    a, b = ranks
-    if a <= 800 and b <= 800:
-        return "both_top_800"
-    if a <= 800 and b > 800:
-        return "pick_top_800_opponent_800_plus"
-    if a > 800 and b <= 800:
-        return "pick_800_plus_opponent_top_800"
-    return "both_800_plus"
+    pick, rival = ranks
+    if pick <= cutoff and rival <= cutoff:
+        return f"both_top_{cutoff}"
+    if pick <= cutoff and rival > cutoff:
+        return f"pick_top_{cutoff}_opponent_{cutoff}_plus"
+    if pick > cutoff and rival <= cutoff:
+        return f"pick_{cutoff}_plus_opponent_top_{cutoff}"
+    return f"both_{cutoff}_plus"
+
+
+def picked_player_rank_band(row, selection_id):
+    """Rank of the actual published selection; opponent need not be ranked."""
+    players = [row.get("player1") or {}, row.get("player2") or {}]
+    selected = next((p for p in players if isinstance(p, dict) and
+                     str(p.get("id")) == selection_id), None)
+    rank = number(selected.get("rank")) if selected else None
+    if rank is None or rank <= 0:
+        return "rank_unknown"
+    if rank <= 500:
+        return "pick_top_500"
+    if rank <= 1000:
+        return "pick_501_1000"
+    return "pick_1000_plus"
 
 
 def confidence(row, publication):
@@ -140,6 +159,7 @@ def analyze(ledger, *, now=None, window_days=90):
         raise ValueError("now must include timezone")
     start = now - timedelta(days=window_days)
     entries, used = [], set()
+    daily_publications = defaultdict(int)
     diagnostics = defaultdict(int)
     for row in ledger:
         if not isinstance(row, dict):
@@ -184,22 +204,53 @@ def analyze(ledger, *, now=None, window_days=90):
             left = quality.get("player1") if isinstance(quality.get("player1"), dict) else {}
             right = quality.get("player2") if isinstance(quality.get("player2"), dict) else {}
             surface = [number(left.get("surface_matches")), number(right.get("surface_matches"))]
+            surface_evidence = (
+                "both_10_plus" if all(n is not None and n >= 10 for n in surface)
+                else "both_5_plus" if all(n is not None and n >= 5 for n in surface)
+                else "low_or_unknown"
+            )
+            selected_id = str(pub.get("selection_id") or "")
+            picked_rank = picked_player_rank_band(row, selected_id)
+            stats = observed_stats(row)
+            # BlinQ betting day begins at 06:00 in Slovakia, including DST.
+            betting_day = (issued.astimezone(ZoneInfo("Europe/Bratislava")) -
+                           timedelta(hours=6)).date().isoformat()
+            daily_publications[betting_day] += 1
             entries.append({
                 "correct": correct, "odds": odds, "probability": p,
                 "competition": competition(row),
-                "ranking": rank_band(row, str(pub.get("selection_id") or "")),
-                "stats": observed_stats(row),
+                "ranking": rank_band(row, selected_id),  # legacy 800-band report
+                "ranking_500": rank_band(row, selected_id, cutoff=500),
+                "ranking_1000": rank_band(row, selected_id, cutoff=1000),
+                "picked_rank": picked_rank,
+                "stats": stats,
+                "rank_and_stats": f"{picked_rank}/{stats}",
                 "confidence_band": probability_band(p),
-                "surface_evidence": (
-                    "both_10_plus" if all(n is not None and n >= 10 for n in surface)
-                    else "both_5_plus" if all(n is not None and n >= 5 for n in surface)
-                    else "low_or_unknown"
-                ),
+                "surface_evidence": surface_evidence,
+                "rank_and_surface": f"{picked_rank}/{surface_evidence}",
+                "issued_at": issued.isoformat(),
+                "scheduled_at": scheduled.isoformat(),
             })
     report = {"window_days": window_days, "window_start": start.isoformat(),
               "window_end": now.isoformat(), "diagnostics": dict(diagnostics),
-              "overall": summarize(entries), "subgroups": {}}
-    for dimension in ("competition", "ranking", "stats", "confidence_band", "surface_evidence"):
+              "overall": summarize(entries), "subgroups": {},
+              "coverage": {
+                  "first_issued_at": min((e["issued_at"] for e in entries), default=None),
+                  "last_issued_at": max((e["issued_at"] for e in entries), default=None),
+                  "first_match_at": min((e["scheduled_at"] for e in entries), default=None),
+                  "last_match_at": max((e["scheduled_at"] for e in entries), default=None),
+                  "active_betting_days": len(daily_publications),
+                  "days_with_5_plus_published": sum(n >= 5 for n in daily_publications.values()),
+                  "days_with_below_5_published": sum(n < 5 for n in daily_publications.values()),
+                  "mean_published_per_active_day": (
+                      sum(daily_publications.values()) / len(daily_publications)
+                      if daily_publications else None
+                  ),
+                  "betting_day_counts": dict(sorted(daily_publications.items())),
+              }}
+    for dimension in ("competition", "ranking", "ranking_500", "ranking_1000",
+                      "picked_rank", "stats", "rank_and_stats", "confidence_band",
+                      "surface_evidence", "rank_and_surface"):
         groups = defaultdict(list)
         for entry in entries:
             groups[entry[dimension]].append(entry)
@@ -256,6 +307,9 @@ def main():
         "Missing or incompatible recorded public confidence is excluded from calibration.",
         "This is a descriptive production audit, not a replay of alternative historical selections.",
         "Subgroups below 100 settled picks are flagged as small samples.",
+        "Rank buckets describe stored ledger ranks; point-in-time ranking provenance must be confirmed separately.",
+        "Ranking and evidence are observational and may be confounded; no ranking exclusion is recommended by this audit.",
+        "Only days with at least one published TOP are counted as active; missing historical publications cannot be reconstructed.",
         "This report makes no automatic deployment or model-promotion decision.",
     ]
     path = Path(args.out)
@@ -265,6 +319,7 @@ def main():
         "report": str(path), "settled": report["overall"]["settled"],
         "calibration_n": report["overall"]["calibration_n"],
         "groups": {k: len(v) for k, v in report["subgroups"].items()},
+        "active_betting_days": report["coverage"]["active_betting_days"],
         "model_history_gap": report["production_model_vs_history"]["history_ahead_of_training"],
     }, ensure_ascii=False))
 
