@@ -225,7 +225,14 @@ class OpenMeteoClient:
             longitude=longitude,
             elevation_m=float(elevation) if elevation is not None else None,
             timezone=row.get("timezone"),
-            country=row.get("country"),
+            # Some Open-Meteo entries (e.g. Hong Kong) omit the display
+            # country but retain the authoritative GeoNames country_code.
+            # Never infer country from the requested query alone.
+            country=row.get("country") or (
+                row.get("country_code")
+                if normalize_country_code(row.get("country_code"))
+                else None
+            ),
         )
 
     @lru_cache(maxsize=4096)
