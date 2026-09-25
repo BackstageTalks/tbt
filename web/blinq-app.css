@@ -7690,3 +7690,14 @@ body#blinqPremium .admin-simple-user-list .admin-filter-empty{
     padding:0 6px!important;gap:4px!important;
   }
 }
+
+
+/* LIVE Radar settled-result cards */
+body#blinqPremium .live-radar-candidate.is-result{position:relative!important}
+body#blinqPremium .live-radar-candidate.is-result.is-win{border-color:rgba(72,201,126,.34)!important;background:rgba(72,201,126,.045)!important}
+body#blinqPremium .live-radar-candidate.is-result.is-loss{border-color:rgba(235,88,88,.34)!important;background:rgba(235,88,88,.045)!important}
+body#blinqPremium .live-radar-candidate.is-result.is-void{border-color:rgba(173,112,255,.34)!important;background:rgba(173,112,255,.045)!important}
+body#blinqPremium .live-radar-candidate.is-result.is-win header>b{color:#67d993!important}
+body#blinqPremium .live-radar-candidate.is-result.is-loss header>b{color:#f06f6f!important}
+body#blinqPremium .live-radar-candidate.is-result.is-void header>b{color:#bf8cff!important}
+body#blinqPremium .live-radar-result-time{margin-top:8px!important;color:#718b82!important;font-size:9px!important}
