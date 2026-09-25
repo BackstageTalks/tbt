@@ -313,65 +313,96 @@ def test_round_robin_checks_next_pending_id_on_next_run():
     assert second["next_due_id"] == "101"
 
 
-def test_recent_window_ignores_future_and_old_backlog():
+def test_four_hour_priority_does_not_drop_older_unfinished_today():
     now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
-    feed = {"upcoming": [
-        _row("future", "11", (now + timedelta(hours=2)).isoformat()),
-        _row("too_new", "11", (now - timedelta(minutes=20)).isoformat()),
-        _row("in_a", "11", (now - timedelta(minutes=30)).isoformat()),
-        _row("in_b", "11", (now - timedelta(minutes=149)).isoformat()),
-        _row("too_old", "11", (now - timedelta(minutes=151)).isoformat()),
-    ]}
-    client = _Provider()
-    snapshot = scan_match_statuses(
-        feed, client, now=now, max_checks=12,
-        min_age_minutes=30, max_age_minutes=150,
+    old_today = _row("old", "11", (now-timedelta(hours=5)).isoformat())
+    recent = _row("recent", "11", (now-timedelta(hours=1)).isoformat())
+    yesterday = _row("yesterday", "11", (now-timedelta(hours=30)).isoformat())
+    future = _row("future", "11", (now+timedelta(hours=2)).isoformat())
+    provider = _Provider()
+    result = scan_match_statuses(
+        {"upcoming": [old_today, recent, yesterday, future]},
+        provider, now=now, max_checks=1, lookback_hours=4,
     )
-    assert snapshot["due"] == 2
-    assert snapshot["window_candidates"] == 2
-    assert snapshot["checked"] == 2
-    assert snapshot["window_min_age_minutes"] == 30
-    assert snapshot["window_max_age_minutes"] == 150
+    assert result["due"] == 2
+    assert result["recent_candidates"] == 1
+    assert result["today_candidates"] == 2
+    assert result["checked"] == 1
+    assert result["pending_count"] == 2
+    assert result["next_due_id"] == "old"
 
 
-def test_recent_window_twelve_checks_cover_only_current_time_band():
+def test_thirty_checks_use_current_day_not_unseen_old_backlog():
     now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
     rows = []
-    for i in range(20):
+    for i in range(36):
         row = _row(
-            str(1000+i),
-            str(2000+i),
-            (now - timedelta(minutes=35+i*5)).isoformat(),
+            str(1000+i), str(2000+i),
+            (now-timedelta(minutes=30+i*5)).isoformat(),
         )
         row["player1"]["id"] = str(2000+i)
         rows.append(row)
-    # Add a large old backlog which must not consume the hourly quota.
     for i in range(40):
         rows.append(_row(
-            str(5000+i),
-            str(6000+i),
-            (now - timedelta(hours=5, minutes=i)).isoformat(),
+            str(5000+i), str(6000+i),
+            (now-timedelta(hours=30, minutes=i)).isoformat(),
         ))
-    client = _Provider()
-    snapshot = scan_match_statuses(
-        {"upcoming": rows}, client, now=now, max_checks=12,
-        min_age_minutes=30, max_age_minutes=150,
-    )
-    assert snapshot["due"] == 20
-    assert snapshot["checked"] == 12
-    assert len(client.previous_calls) == 12
-    assert all(str(call[0]).startswith("20") for call in client.previous_calls)
+    provider = _Provider()
+    result = scan_match_statuses({"upcoming": rows}, provider, now=now, max_checks=30)
+    assert result["due"] == 36
+    assert result["checked"] == 30
+    assert len(provider.previous_calls) == 30
+    assert all(str(call[0]).startswith("20") for call in provider.previous_calls)
 
 
-def test_recent_window_deduplicates_same_event_across_categories():
+def test_duplicate_markets_only_cost_one_match_result_lookup():
     now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
-    row = _row("101", "11", (now - timedelta(minutes=90)).isoformat())
-    client = _Provider()
-    snapshot = scan_match_statuses(
-        {"upcoming": [row], "daily_picks": [dict(row)], "value_picks": [dict(row)]},
-        client, now=now, max_checks=12,
-        min_age_minutes=30, max_age_minutes=150,
+    row = _row("101", "11", (now-timedelta(minutes=90)).isoformat())
+    provider = _Provider()
+    result = scan_match_statuses(
+        {"upcoming": [row], "daily_picks": [dict(row)],
+         "value_picks": [dict(row)]},
+        provider, now=now,
     )
-    assert snapshot["due"] == 1
-    assert snapshot["checked"] == 1
-    assert len(client.previous_calls) == 1
+    assert result["due"] == 1
+    assert result["checked"] == 1
+    assert len(provider.previous_calls) == 1
+
+
+def test_unfinished_previous_day_survives_new_feed_at_six():
+    night = datetime(2026, 9, 25, 21, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (night-timedelta(hours=5)).isoformat())
+    first = scan_match_statuses({"upcoming": [row]}, _Provider(), now=night)
+    assert first["checked"] == 1
+    assert "101" in first["pending"]
+    morning_provider = _Provider(previous={"11": [_event()]})
+    morning = scan_match_statuses(
+        {"upcoming": []}, morning_provider, first, now=night+timedelta(hours=7),
+    )
+    assert morning["carryover_candidates"] == 1
+    assert morning["checked"] == 1
+    assert morning["statuses"]["101"]["status"] == "win"
+    assert "101" not in morning["pending"]
+
+
+def test_live_api_settles_results_beyond_30_history_checks():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    feed = {"upcoming": [
+        _row(str(1000+i), "11", (now-timedelta(hours=1)).isoformat())
+        for i in range(32)
+    ]}
+    provider = _Provider(live=[_event("1031")])
+    result = scan_match_statuses(feed, provider, now=now, max_checks=30)
+    assert result["checked"] == 30
+    assert result["statuses"]["1031"]["status"] == "win"
+    assert result["newly_resolved"] == 1
+    assert result["provider_requests"] == 31
+
+
+def test_hourly_match_status_schedule_is_local_daytime_only():
+    from pathlib import Path
+    workflow = (Path(__file__).resolve().parents[1] /
+                ".github/workflows/match-status.yml").read_text()
+    assert "cron: '17 6-23 * * *'" in workflow
+    assert "timezone: Europe/Bratislava" in workflow
+    assert "workflow_dispatch:" in workflow
