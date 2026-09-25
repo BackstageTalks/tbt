@@ -5,6 +5,8 @@ import json
 import logging
 import os
 import time
+
+import httpx
 from collections import Counter, defaultdict
 from copy import deepcopy
 from dataclasses import asdict
@@ -340,6 +342,52 @@ def _verified_unique_environment(
     }, "resolved"
 
 
+_TRANSIENT_GEOCODE_EXCEPTIONS = (
+    httpx.ConnectTimeout,
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    httpx.PoolTimeout,
+    httpx.ConnectError,
+    httpx.ReadError,
+    httpx.WriteError,
+    httpx.RemoteProtocolError,
+)
+
+
+def _verified_unique_environment_with_retries(
+    client: OpenMeteoClient,
+    provider_payload: dict[str, Any],
+    tournament: str,
+    query: str,
+    *,
+    max_attempts: int = 3,
+    sleep_fn=time.sleep,
+) -> tuple[dict[str, Any] | None, str, int]:
+    """Retry only transient transport failures; never retry semantic misses.
+
+    The Open-Meteo request budget remains authoritative because every retry
+    passes through the same client and increments its request_count. Exhausted
+    budgets propagate immediately. After the final transient failure, callers
+    may skip just this query without terminating the whole grouped backfill.
+    """
+    attempts = max(1, int(max_attempts))
+    retries = 0
+    for attempt in range(1, attempts + 1):
+        try:
+            env, outcome = _verified_unique_environment(
+                client, provider_payload, tournament, query
+            )
+            return env, outcome, retries
+        except OpenMeteoBudgetExceeded:
+            raise
+        except _TRANSIENT_GEOCODE_EXCEPTIONS:
+            if attempt >= attempts:
+                raise
+            retries += 1
+            sleep_fn(float(attempt))
+    raise AssertionError("unreachable")
+
+
 def _probe_unique_geocoder(client: OpenMeteoClient) -> dict[str, Any]:
     """Verify real provider responses before touching any historical rows.
 
@@ -534,6 +582,8 @@ def main() -> None:
         "unique_queries_attempted": 0,
         "geocode_candidate_skipped": 0,
         "geocode_query_errors": 0,
+        "geocode_transient_retries": 0,
+        "geocode_transient_failures_skipped": 0,
         "geocode_no_result_skipped": 0,
         "geocode_no_result_unique": 0,
         "geocode_diagnostics": [],
@@ -777,11 +827,33 @@ def main() -> None:
                         continue
                     attempted_queries.add(query_key)
                     try:
-                        env, outcome = _verified_unique_environment(
+                        env, outcome, retry_count = _verified_unique_environment_with_retries(
                             client, payload, match.tournament, query
                         )
+                        report["geocode_transient_retries"] += retry_count
                     except OpenMeteoBudgetExceeded:
                         raise
+                    except _TRANSIENT_GEOCODE_EXCEPTIONS as exc:
+                        # A flaky network query must not terminate an otherwise
+                        # useful grouped run. Mark only this distinct query as
+                        # failed for the remainder of the job and continue.
+                        failed_queries.add(query_key)
+                        report["geocode_query_errors"] += 1
+                        report["geocode_transient_failures_skipped"] += 1
+                        report["errors"] += 1
+                        if len(report["error_details"]) < args.diagnostics_limit:
+                            report["error_details"].append(
+                                {**detail, "error": f"{type(exc).__name__}: {exc}"}
+                            )
+                        if query_key not in diagnostic_queries and len(report["geocode_diagnostics"]) < 60:
+                            diagnostic_queries.add(query_key)
+                            report["geocode_diagnostics"].append({
+                                "query": query,
+                                "outcome": "transient_error_skipped",
+                                "recoverable_matches": counts.get(query_key, 0),
+                                "error": f"{type(exc).__name__}: {exc}",
+                            })
+                        continue
                     except Exception:
                         failed_queries.add(query_key)
                         report["geocode_query_errors"] += 1
