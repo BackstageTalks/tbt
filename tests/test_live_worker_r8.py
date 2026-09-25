@@ -66,3 +66,8 @@ def test_live_drawer_has_separate_results_tab_for_settled_confirmed_signals():
     assert "Zatiaľ nie sú vyhodnotené žiadne LIVE signály." in WEB
     assert "settle_radar_results" in API
     assert "list_live_radar_results" in API
+
+
+def test_live_results_tab_spans_full_radar_width():
+    css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
+    assert '[data-live-radar-tab="results"]{grid-column:1/-1}' in css
