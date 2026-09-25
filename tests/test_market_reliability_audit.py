@@ -44,7 +44,7 @@ def test_three_separate_sections_no_short_odds_roi_or_reconstructed_bets():
     assert report["sections"]["top_daily"]["overall"]["losses"] == 1
     assert report["sections"]["value"]["overall"]["wins"] == 1
     assert report["sections"]["doubles"]["overall"]["wins"] == 1
-    assert report["sections"]["value"]["overall"]["yield_flat_stake"] == .9
+    assert abs(report["sections"]["value"]["overall"]["yield_flat_stake"] - .9) < 1e-12
     assert abs(report["sections"]["top_daily"]["overall"]["yield_flat_stake"] + 1) < 1e-12
     assert report["sections"]["top_daily"]["overall"]["calibration_n"] == 1
     assert report["sections"]["doubles"]["overall"]["calibration_n"] == 1
