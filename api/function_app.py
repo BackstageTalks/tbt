@@ -70,6 +70,7 @@ from tbt.services.admin_storage import (
     load_account_worker_status,
     live_min_level,
     membership_levels_from,
+    list_live_radar_results,
 )
 from tbt.services.content_news import news_pool
 from tbt.services.media_storage import (
@@ -92,6 +93,7 @@ from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnost
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
     attach_second_set_odds, set2_push_eligible, set2_push_thresholds,
+    settle_radar_results,
 )
 from tbt.services.match_status import event_ids_from_feed, scan_match_statuses
 from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_slot
@@ -1250,10 +1252,14 @@ def live_radar(req):
         # durable storage is temporarily unavailable, fall back to one cached
         # on-demand scan so eligible members/admin still get a usable service.
         snapshot=_live_worker_snapshot()
+        try:
+            results=list_live_radar_results(limit=60)
+        except AdminStorageUnavailable:
+            results=[]
         if snapshot is not None:
-            return response({**_public_live_radar_payload(snapshot),"autonomous":True})
+            return response({**_public_live_radar_payload(snapshot),"results":results,"autonomous":True})
         r=_run_live_radar(force=False,publish=True)
-        return response({**_public_live_radar_payload(r),"autonomous":False,"fallback_scan":True})
+        return response({**_public_live_radar_payload(r),"results":results,"autonomous":False,"fallback_scan":True})
     except AuthUnavailable:return response({"error":"auth_unavailable"},503)
     except AdminStorageUnavailable:return response({"error":"live_radar_storage_unavailable"},503)
     except Exception as exc:
@@ -1325,6 +1331,13 @@ def internal_match_status_worker(req):
             except Exception:
                 pass
         saved = save_match_status_snapshot(snapshot)
+        live_results = {"saved": 0, "comeback": 0, "set2": 0}
+        try:
+            live_results = settle_radar_results(snapshot.get("settled_events") or [])
+        except AdminStorageUnavailable:
+            logging.warning("LIVE Radar result storage unavailable during match settlement")
+        except Exception:
+            logging.exception("LIVE Radar result settlement failed")
         if saved.get("degraded"):
             logging.warning(
                 "Hourly match status provider failed: checked=%s requests=%s codes=%s",
@@ -1341,7 +1354,7 @@ def internal_match_status_worker(req):
                 "provider_errors": saved.get("provider_errors"),
                 "newly_resolved": saved.get("newly_resolved"),
             }, 503)
-        return response({**saved, "autonomous": True})
+        return response({**saved, "autonomous": True, "live_results": live_results})
     except AdminStorageUnavailable:
         return response({"error": "match_status_storage_unavailable"}, 503)
     except Exception as exc:
