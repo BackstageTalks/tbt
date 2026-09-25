@@ -1400,6 +1400,7 @@ def save_live_radar_result(payload: object, *, result_id: str) -> dict:
     entity = {
         "PartitionKey": "live-results", "RowKey": result_id,
         "kind": kind, "outcome": outcome, "event_id": event_id,
+        "reason": str(payload.get("reason") or "")[:40],
         "title": str(payload.get("title") or "")[:160],
         "source_id": str(payload.get("source_id") or "")[:96],
         "signal_at": str(payload.get("signal_at") or "")[:64],
@@ -1411,7 +1412,7 @@ def save_live_radar_result(payload: object, *, result_id: str) -> dict:
         raise AdminStorageUnavailable("Unable to save LIVE result") from exc
     return {
         "id": result_id, "kind": kind, "outcome": outcome, "event_id": event_id,
-        "title": entity["title"], "source_id": entity["source_id"],
+        "title": entity["title"], "reason": entity["reason"], "source_id": entity["source_id"],
         "signal_at": entity["signal_at"], "settled_at": entity["settled_at"],
     }
 
@@ -1426,6 +1427,7 @@ def list_live_radar_results(*, limit: int = 60) -> list[dict]:
         "id": str(row.get("RowKey") or ""),
         "kind": str(row.get("kind") or ""),
         "outcome": str(row.get("outcome") or ""),
+        "reason": str(row.get("reason") or ""),
         "event_id": str(row.get("event_id") or ""),
         "title": str(row.get("title") or ""),
         "source_id": str(row.get("source_id") or ""),
