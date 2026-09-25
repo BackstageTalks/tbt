@@ -41,6 +41,8 @@ def test_locked_rows_and_expand_hints_derive_required_tier_from_config():
     block=APP.split('function firstDailyHubUnlockPlan',1)[1].split('function dailyHubEntitlement',1)[0]
     assert "row_overrides" in block
     assert "rule.see_all===true" in block
+    assert "idx>currentIndex" in block
+    assert "currentIndex<0" in block
 
 
 def test_info_push_can_reach_lower_active_tiers_while_live_stays_dynamic():
