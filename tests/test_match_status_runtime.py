@@ -466,3 +466,21 @@ def test_hourly_match_status_schedule_is_24_7():
     assert "cron: '17 * * * *'" in workflow
     assert "timezone:" not in workflow
     assert "workflow_dispatch:" in workflow
+
+
+def test_settled_event_exposes_match_and_second_set_outcome_for_radar_results():
+    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
+    event = _event("101", winner_code=1)
+    event["homeScore"] = {"period1": 4, "period2": 6, "period3": 6}
+    event["awayScore"] = {"period1": 6, "period2": 3, "period3": 2}
+    provider = _Provider(previous={"11": [event]})
+    result = scan_match_statuses(
+        {"upcoming": [_row("101", "11", (now-timedelta(hours=3)).isoformat())]},
+        provider, now=now,
+    )
+    assert result["settled_events"] == [{
+        "event_id": "101",
+        "match_status": "win",
+        "second_set_status": "win",
+        "checked_at": now.isoformat(),
+    }]
