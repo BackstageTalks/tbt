@@ -311,3 +311,100 @@ def test_round_robin_checks_next_pending_id_on_next_run():
     second = scan_match_statuses(feed, provider, first, now=now, max_checks=1)
     assert second["checked"] == 1
     assert second["next_due_id"] == "101"
+
+
+
+def _published_row(eid, at, first="11", second="22"):
+    return {
+        "event_id": str(eid), "scheduled_at": at.isoformat(),
+        "winner_id": str(first),
+        "player1": {"id": str(first), "name": "P1"},
+        "player2": {"id": str(second), "name": "P2"},
+    }
+
+
+def test_today_published_fixture_checked_before_older_pending_match():
+    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
+    old = _published_row("101", now-timedelta(hours=26), "11", "22")
+    today = _published_row("202", now-timedelta(hours=2), "33", "44")
+    provider = _Provider(previous={
+        "33": [{
+            "id": "202", "winnerCode": 1,
+            "status": {"type": "finished", "description": "Ended"},
+            "homeTeam": {"id": "33"}, "awayTeam": {"id": "44"},
+        }]
+    })
+    result = scan_match_statuses(
+        {"upcoming": [old, today], "daily_picks": [today]},
+        provider, now=now, max_checks=1,
+    )
+    assert provider.previous_calls == [("33", 0)]
+    assert result["focused_due"] == 1
+    assert result["backlog_due"] == 1
+    assert result["focused_checked"] == 1
+    assert result["backlog_checked"] == 0
+    assert result["statuses"]["202"]["status"] == "win"
+
+
+def test_near_lookup_reserves_backlog_capacity_and_rotates_today():
+    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
+    today = [
+        _published_row(f"t{i}", now-timedelta(hours=2), str(100+i), str(200+i))
+        for i in range(14)
+    ]
+    older = [
+        _published_row(f"o{i}", now-timedelta(hours=26), str(300+i), str(400+i))
+        for i in range(3)
+    ]
+    feed = {"upcoming": older + today, "daily_picks": today}
+    provider = _NearFallbackProvider()
+    prior = {"preferred_route": "near"}
+    first = scan_match_statuses(feed, provider, prior, now=now)
+    assert first["tracked"] == 17
+    assert first["focused_due"] == 14
+    assert first["backlog_due"] == 3
+    assert first["checked"] == 12
+    assert first["focused_checked"] == 9
+    assert first["backlog_checked"] == 3
+    assert provider.near_calls[:9] == [str(100+i) for i in range(9)]
+    assert provider.near_calls[9:] == [str(300+i) for i in range(3)]
+    assert first["next_focus_id"] == "t9"
+    second_provider = _NearFallbackProvider()
+    second = scan_match_statuses(feed, second_provider, first, now=now)
+    assert second_provider.near_calls[:5] == [str(109+i) for i in range(5)]
+    assert second["focused_checked"] == 9
+    assert second["backlog_checked"] == 3
+
+
+def test_kpi_multiple_market_picks_share_one_status_event_check():
+    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
+    today = _published_row("101", now-timedelta(hours=2))
+    # Multiple bets at this event count toward KPI, but use ONE provider lookup.
+    feed = {
+        "upcoming": [today],
+        "daily_picks": [today],
+        "prime_picks": [dict(today, market="match_winner")],
+        "value_picks": [dict(today, market="match_winner")],
+        "ace_picks": [dict(today, market="aces")],
+        "sg_picks": [dict(today, market="sets")],
+    }
+    provider = _Provider()
+    result = scan_match_statuses(feed, provider, now=now)
+    assert result["tracked"] == 1
+    assert result["focused_due"] == 1
+    assert result["checked"] == 1
+    assert provider.previous_calls == [("11", 0)]
+
+
+def test_no_daily_offer_falls_back_to_old_pending_row():
+    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
+    yesterday = _published_row("101", now-timedelta(hours=26))
+    provider = _Provider()
+    result = scan_match_statuses(
+        {"upcoming": [yesterday], "daily_picks": []},
+        provider, now=now, max_checks=1,
+    )
+    assert result["focused_due"] == 0
+    assert result["backlog_due"] == 1
+    assert result["checked"] == 1
+    assert provider.previous_calls == [("11", 0)]
