@@ -144,7 +144,7 @@ def test_broken_player_endpoint_fails_fast_with_safe_diagnostics():
     from tbt.errors import ProviderError
     now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
     feed = {"upcoming": [
-        _row(str(100+i), "11", (now - timedelta(hours=2+i)).isoformat())
+        _row(str(100+i), "11", (now - timedelta(minutes=45+10*i)).isoformat())
         for i in range(8)
     ]}
     client = _BrokenProvider(ProviderError("RapidAPI HTTP 403: secrets must not leak"))
@@ -182,7 +182,7 @@ def test_finished_live_event_can_resolve_without_history_request():
 
 def test_valid_but_not_yet_in_previous_matches_is_not_a_provider_failure():
     now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
-    row = _row("101", "11", (now - timedelta(minutes=10)).isoformat())
+    row = _row("101", "11", (now - timedelta(minutes=60)).isoformat())
     client = _Provider()
     snapshot = scan_match_statuses({"upcoming": [row]}, client, now=now)
     assert snapshot["checked"] == 1
@@ -265,7 +265,7 @@ def test_near_404_fails_fast_without_fabricating_any_result():
     from tbt.errors import ProviderError
     now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
     feed = {"upcoming": [
-        _row(str(101+i), "11", (now-timedelta(hours=i+1)).isoformat())
+        _row(str(101+i), "11", (now-timedelta(minutes=45+10*i)).isoformat())
         for i in range(8)
     ]}
     provider = _NearFallbackProvider(
@@ -338,11 +338,13 @@ def test_recent_window_twelve_checks_cover_only_current_time_band():
     now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
     rows = []
     for i in range(20):
-        rows.append(_row(
+        row = _row(
             str(1000+i),
             str(2000+i),
             (now - timedelta(minutes=35+i*5)).isoformat(),
-        ))
+        )
+        row["player1"]["id"] = str(2000+i)
+        rows.append(row)
     # Add a large old backlog which must not consume the hourly quota.
     for i in range(40):
         rows.append(_row(
