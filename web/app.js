@@ -2078,26 +2078,15 @@
   function dailyHubRow(row,tab,active=false,index=0){
     const sourceTab=tab==='see_all'?String(row?._hub_source||''):tab;
     const scheduled=row?.scheduled_at||row?.date;
-    const eventId=eventKey(row),tournament=dailyHubTournament(row),key=escapeHtml(eventId);
+    const tournament=dailyHubTournament(row),key=escapeHtml(eventKey(row));
     const startsAt=Date.parse(String(scheduled||''));
     const started=Number.isFinite(startsAt)&&startsAt<=Date.now();
-    const runtimeStatus=String(state.feed?.match_statuses?.[eventId]?.status||'').toLowerCase();
-    const matchWinnerTab=['daily','prime','value','doubles'].includes(sourceTab);
-    const terminal=matchWinnerTab&&['win','loss','retired','void'].includes(runtimeStatus)?runtimeStatus:'';
-    const statusLabel=terminal==='win'
-      ?lcopy('WIN','VÝHRA','VÝHRA')
-      :terminal==='loss'
-        ?lcopy('LOSS','PREHRA','PROHRA')
-        :terminal==='retired'
-          ?lcopy('RETIREMENT','SKREČ','SKREČ')
-          :terminal==='void'
-            ?lcopy('VOID','VOID','VOID')
-            :lcopy('STARTED','ZAČATÉ','ZAHÁJENO');
-    const statusClass=terminal?` is-${terminal}`:' is-started';
-    const classes=[active?'hub-row-active':'',(started||terminal)?'hub-row-started':'',terminal?'hub-row-settled':''].filter(Boolean).join(' ');
+    // Daily offers keep only the yellow STARTED marker. Settlement is visible
+    // exclusively in Results, not on the homepage or SEE ALL.
+    const classes=[active?'hub-row-active':'',started?'hub-row-started':''].filter(Boolean).join(' ');
     const rowClass=classes?` class="${classes}"`:'';
-    const timeHtml=(started||terminal)
-      ?`<span class="hub-time-stack"><strong>${escapeHtml(fmtTime(scheduled))}</strong><small>${escapeHtml(fmtCompactDate(scheduled))}</small><em class="hub-offer-status${statusClass}">${escapeHtml(statusLabel)}</em></span>`
+    const timeHtml=started
+      ?`<span class="hub-time-stack"><strong>${escapeHtml(fmtTime(scheduled))}</strong><small>${escapeHtml(fmtCompactDate(scheduled))}</small><em class="hub-offer-status is-started">${escapeHtml(lcopy('STARTED','ZAČATÉ','ZAHÁJENO'))}</em></span>`
       :timeDateHtml(scheduled);
     const leading=`<td class="hub-rank">${index+1}</td><td class="hub-time">${timeHtml}</td><td class="hub-tournament-cell">${tournament}</td><td class="hub-match-cell">${dailyHubMatch(row)}</td>`;
     if(sourceTab==='games'||sourceTab==='sets'){
