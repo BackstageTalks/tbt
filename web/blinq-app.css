@@ -7669,3 +7669,24 @@ body#blinqPremium .admin-simple-user-list .admin-filter-empty{
   body#blinqPremium.blinq-admin .admin-simple-user-head{padding:0 10px!important}
   body#blinqPremium.blinq-admin .admin-simple-user-row{padding:6px 10px!important}
 }
+
+
+/* FREE / PRO: keep the locked Detail button fully inside the desktop hub.
+   Previous column percentages exceeded 100%, clipping the rightmost button. */
+@media (min-width:901px){
+  body#blinqPremium #dailyHub:is([data-plan="rookie"],[data-plan="pro"]):is([data-tab="daily"],[data-tab="prime"],[data-tab="value"],[data-tab="doubles"]) .daily-hub-table :is(.hub-head-tournament,.hub-tournament-cell){width:23%!important}
+  body#blinqPremium #dailyHub:is([data-plan="rookie"],[data-plan="pro"]):is([data-tab="daily"],[data-tab="prime"],[data-tab="value"],[data-tab="doubles"]) .daily-hub-table :is(.hub-head-match,.hub-match-cell){width:27%!important}
+  body#blinqPremium #dailyHub:is([data-plan="rookie"],[data-plan="pro"]):is([data-tab="daily"],[data-tab="prime"],[data-tab="value"],[data-tab="doubles"]) .daily-hub-table :is(.hub-head-pick,.hub-pick){width:14%!important}
+  body#blinqPremium #dailyHub:is([data-plan="rookie"],[data-plan="pro"]):is([data-tab="daily"],[data-tab="prime"],[data-tab="value"],[data-tab="doubles"]) .daily-hub-table :is(.hub-head-confidence,.hub-confidence-cell){width:8%!important}
+  body#blinqPremium #dailyHub:is([data-plan="rookie"],[data-plan="pro"]):is([data-tab="daily"],[data-tab="prime"],[data-tab="value"],[data-tab="doubles"]) .daily-hub-table :is(.hub-head-action,.hub-action-cell){width:9%!important}
+  body#blinqPremium #dailyHub:is([data-plan="rookie"],[data-plan="pro"]) .daily-hub-table .hub-action-cell{
+    padding-left:6px!important;padding-right:10px!important;
+    text-align:right!important;
+  }
+  body#blinqPremium #dailyHub:is([data-plan="rookie"],[data-plan="pro"]) .daily-hub-table .hub-action-cell .hub-detail.is-locked{
+    box-sizing:border-box!important;
+    width:min(100%,88px)!important;
+    min-width:0!important;max-width:100%!important;
+    padding:0 6px!important;gap:4px!important;
+  }
+}
