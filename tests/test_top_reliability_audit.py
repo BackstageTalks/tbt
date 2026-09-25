@@ -51,7 +51,7 @@ def test_exact_published_top_only_and_segment_calibration():
     assert audit["overall"]["losses"] == 1
     assert audit["overall"]["void_or_unsettled"] == 1
     assert audit["overall"]["average_odds"] == 1.55
-    assert abs(audit["overall"]["yield_flat_stake"] - .05) < 1e-12
+    assert abs(audit["overall"]["yield_flat_stake"] + .20) < 1e-12
     assert audit["overall"]["calibration_n"] == 2
     assert abs(audit["overall"]["mean_confidence"] - .81) < 1e-12
     assert set(audit["subgroups"]["competition"]) == {"ATP", "Challenger", "ITF"}
