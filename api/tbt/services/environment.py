@@ -52,6 +52,11 @@ _CITY_CANONICAL = {
     "sharm el-sheikh": "sharm el sheikh",
     "s. margherita di pula": "santa margherita di pula",
     "s margherita di pula": "santa margherita di pula",
+    # Open-Meteo and tennis feeds disagree about the Dutch city's apostrophe.
+    "'s-hertogenbosch": "s-hertogenbosch",
+    "'s hertogenbosch": "s-hertogenbosch",
+    "s hertogenbosch": "s-hertogenbosch",
+    "den bosch": "s-hertogenbosch",
 }
 
 
