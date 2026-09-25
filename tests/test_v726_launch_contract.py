@@ -111,7 +111,10 @@ def test_results_ui_calls_esa_a_projection_not_prediction():
     assert 'projectionResultTypeLabel' in app
     assert '<th>Predikcia</th>' in app and '<th>Kurz</th>' in app
     assert 'DATA DEPTH' in app
-    assert '✓ HIT' in app and '× MISS' in app
+    # ESA still settles internally as hit/miss, but users now see the same
+    # visible VÝHRA / PREHRA labels as every other published market.
+    assert "lcopy('WIN','VÝHRA','VÝHRA')" in app
+    assert "lcopy('LOSS','PREHRA','PREHRA')" in app
     assert 'MODEL 2. SETU · samostatný podporný signál' in app
 
 
