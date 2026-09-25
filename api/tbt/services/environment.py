@@ -101,6 +101,8 @@ class OpenMeteoClient:
         *,
         request_limit: int | None = None,
         min_interval_seconds: float = 0.75,
+        transient_retries: int = 2,
+        retry_backoff_seconds: float = 0.75,
         client: httpx.Client | None = None,
     ) -> None:
         if request_limit is not None and request_limit < 1:
@@ -112,25 +114,39 @@ class OpenMeteoClient:
         self.request_limit = int(request_limit) if request_limit is not None else None
         self.request_count = 0
         self.min_interval_seconds = max(0.0, float(min_interval_seconds))
+        self.transient_retries = max(0, int(transient_retries))
+        self.retry_backoff_seconds = max(0.0, float(retry_backoff_seconds))
         self._last_request = 0.0
 
     def close(self) -> None:
         self.client.close()
 
     def _get(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
-        if self.request_limit is not None and self.request_count >= self.request_limit:
-            raise OpenMeteoBudgetExceeded("Open-Meteo request cap reached")
-        delay = self.min_interval_seconds - (time.monotonic() - self._last_request)
-        if delay > 0:
-            time.sleep(delay)
-        self._last_request = time.monotonic()
-        self.request_count += 1
-        response = self.client.get(url, params=params)
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict) or payload.get("error"):
-            raise ValueError("Invalid Open-Meteo response")
-        return payload
+        last_exc: Exception | None = None
+        for attempt in range(self.transient_retries + 1):
+            if self.request_limit is not None and self.request_count >= self.request_limit:
+                raise OpenMeteoBudgetExceeded("Open-Meteo request cap reached")
+            delay = self.min_interval_seconds - (time.monotonic() - self._last_request)
+            if delay > 0:
+                time.sleep(delay)
+            self._last_request = time.monotonic()
+            self.request_count += 1
+            try:
+                response = self.client.get(url, params=params)
+                response.raise_for_status()
+                payload = response.json()
+                if not isinstance(payload, dict) or payload.get("error"):
+                    raise ValueError("Invalid Open-Meteo response")
+                return payload
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError) as exc:
+                last_exc = exc
+                if attempt >= self.transient_retries:
+                    raise
+                backoff = self.retry_backoff_seconds * (2 ** attempt)
+                if backoff > 0:
+                    time.sleep(backoff)
+        assert last_exc is not None
+        raise last_exc
 
     # Retain positive AND negative queries throughout a full history pass.
     # 4k evicted common ITF city misses and repeated paid geocodes.
