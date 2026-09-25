@@ -189,9 +189,19 @@ class OpenMeteoClient:
                     continue
             exact.append(row)
 
-        # Fail closed on ambiguity. We never pick "the first" city silently.
+        # Open-Meteo can return BOTH a populated city and an administrative
+        # region with the same name (e.g. Antalya). Prefer the populated place
+        # only when the response identifies one unambiguous settlement. Two
+        # different settlements with the same name remain unresolved.
         if len(exact) != 1:
-            return None
+            populated = [
+                item for item in exact
+                if str(item.get("feature_code") or "").upper().startswith("PPL")
+            ]
+            if len(populated) == 1:
+                exact = populated
+            else:
+                return None
         row = exact[0]
 
         latitude = float(row["latitude"])
@@ -389,6 +399,8 @@ _LOCATION_ALIASES = {
     "rotterdam": "Rotterdam, NL",
     "little rock": "Little Rock, Arkansas, US",
     "s-hertogenbosch": "'s-Hertogenbosch, NL",
+    "'s-hertogenbosch": "'s-Hertogenbosch, NL",
+    "'s hertogenbosch": "'s-Hertogenbosch, NL",
     "hertogenbosch": "'s-Hertogenbosch, NL",
     "antwerp": "Antwerp, BE",
     "brussels": "Brussels, BE",

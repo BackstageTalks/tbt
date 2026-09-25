@@ -178,6 +178,80 @@ class BulkEnvironmentSafetyTests(unittest.TestCase):
         self.assertTrue(should_retry)
         self.assertEqual(reason, "retry_unresolved")
 
+    def test_populated_city_preferred_over_same_name_region(self):
+        class CityAndRegionResponse:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"results": [
+                    {
+                        "name": "Antalya", "latitude": 36.8969,
+                        "longitude": 30.7133, "elevation": 35,
+                        "country": "Turkey", "country_code": "TR",
+                        "feature_code": "PPLA", "timezone": "Europe/Istanbul",
+                    },
+                    {
+                        "name": "Antalya", "latitude": 37.05,
+                        "longitude": 30.3, "elevation": 60,
+                        "country": "Turkey", "country_code": "TR",
+                        "feature_code": "ADM1", "timezone": "Europe/Istanbul",
+                    },
+                ]}
+
+        class CityAndRegionNetwork:
+            def get(self, url, params):
+                self_params = params
+                if url != GEOCODE_URL or self_params.get("countryCode") != "TR":
+                    raise AssertionError("Country-scoped city query expected")
+                return CityAndRegionResponse()
+
+            def close(self):
+                pass
+
+        client = OpenMeteoClient(
+            request_limit=1, min_interval_seconds=0, client=CityAndRegionNetwork()
+        )
+        venue = client.geocode("Antalya, TR")
+        self.assertIsNotNone(venue)
+        self.assertEqual(venue.name, "Antalya")
+        self.assertEqual(venue.latitude, 36.8969)
+        self.assertEqual(client.request_count, 1)
+
+    def test_distinct_same_named_cities_still_rejected(self):
+        class AmbiguousResponse:
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"results": [
+                    {
+                        "name": "Springfield", "latitude": 39.78,
+                        "longitude": -89.65, "elevation": 180,
+                        "country": "United States", "country_code": "US",
+                        "feature_code": "PPLA",
+                    },
+                    {
+                        "name": "Springfield", "latitude": 37.21,
+                        "longitude": -93.29, "elevation": 390,
+                        "country": "United States", "country_code": "US",
+                        "feature_code": "PPLA2",
+                    },
+                ]}
+
+        class AmbiguousNetwork:
+            def get(self, url, params):
+                return AmbiguousResponse()
+
+            def close(self):
+                pass
+
+        client = OpenMeteoClient(
+            request_limit=1, min_interval_seconds=0, client=AmbiguousNetwork()
+        )
+        self.assertIsNone(client.geocode("Springfield, US"))
+        self.assertEqual(client.request_count, 1)
+
     def test_identical_preferred_query_is_single_request(self):
         network = RecordingNetwork()
         client = OpenMeteoClient(request_limit=1, min_interval_seconds=0, client=network)
