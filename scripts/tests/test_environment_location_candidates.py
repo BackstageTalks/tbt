@@ -82,6 +82,24 @@ class LocationCandidatesTest(unittest.TestCase):
         q = location_candidates(payload, "S. Margherita Di Pula, Singles Main, W-ITF-ITA-27A")
         self.assertEqual(q[0], "santa margherita di pula, IT")
 
+    def test_hertogenbosch_tournament_alias_is_country_scoped(self):
+        self.assertIn(
+            "'s-Hertogenbosch, NL",
+            location_candidates({}, "'s-Hertogenbosch"),
+        )
+
+    def test_monte_carlo_alias_accepts_monaco_but_rejects_wrong_country(self):
+        q = location_candidates({}, "Monte Carlo")
+        self.assertIn("Monaco, MC", q)
+        self.assertTrue(venue_context_compatible({}, "Monte Carlo", {
+            "query": "Monaco, MC", "name": "Monaco",
+            "country": "Monaco", "latitude": 43.73, "longitude": 7.42,
+        })[0])
+        self.assertFalse(venue_context_compatible({}, "Monte Carlo", {
+            "query": "Monaco, IT", "name": "Monaco",
+            "country": "Italy", "latitude": 43.73, "longitude": 7.42,
+        })[0])
+
     def test_resolver_version_invalidates_old_negative_cache(self):
         self.assertGreaterEqual(ENVIRONMENT_RESOLVER_VERSION, 6)
 
