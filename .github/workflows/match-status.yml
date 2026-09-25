@@ -2,9 +2,8 @@ name: Hourly prediction match status
 
 on:
   schedule:
-    # Once hourly from 06:17 through 23:17 in Bratislava (CET/CEST).
-    - cron: '17 6-23 * * *'
-      timezone: Europe/Bratislava
+    # Every hour, 24/7; time zones do not affect hourly cadence.
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
