@@ -30,6 +30,14 @@ def test_classifies_predicted_winner_and_loser():
     assert classify_finished_event(row, _event(winner_code=2))["status"] == "loss"
 
 
+def test_walkover_w_o_is_terminal_void_even_if_provider_lists_winner():
+    row = _row()
+    result = classify_finished_event(
+        row, _event(winner_code=1, status_type="finished", description="W/O"),
+    )
+    assert result["status"] == "void"
+
+
 def test_retirement_has_priority_over_win_loss():
     row = _row()
     result = classify_finished_event(
