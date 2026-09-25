@@ -292,3 +292,23 @@ def test_pro_daily_allocation_only_fills_missing_slots_and_keeps_existing_pick()
     assert changed2 is True
     assert len(full_state["sections"]["prime"]) == 3
     assert full_state["sections"]["prime"][:1] == original
+
+
+def test_rookie_storage_fallback_still_gets_one_deterministic_free_pick():
+    cfg = _stable_random_cfg("rookie", 1)
+    payload = feed(10)
+    access = {
+        "status": "active",
+        "plan": "rookie",
+        "id": "free-storage-fallback-user",
+        "_daily_allocations_fail_closed": True,
+    }
+
+    first, first_manifest = filter_feed_for_access(payload, access, cfg)
+    second, second_manifest = filter_feed_for_access(payload, access, cfg)
+
+    assert first_manifest["plan"] == "rookie"
+    assert first_manifest["sections"]["prime"]["returned"] == 1
+    assert len(first["prime_picks"]) == 1
+    assert second["prime_picks"][0]["event_id"] == first["prime_picks"][0]["event_id"]
+    assert second_manifest["sections"]["prime"]["slot_states"] == first_manifest["sections"]["prime"]["slot_states"]
