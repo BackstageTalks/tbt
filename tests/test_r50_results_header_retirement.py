@@ -105,3 +105,13 @@ def test_void_match_winner_does_not_enter_betting_hit_rate_denominator():
     assert metrics["losses"] == 0
     assert metrics["voids"] == 1
     assert metrics["hit_rate"] == 1.0
+
+
+def test_results_use_consistent_win_loss_void_labels_and_keep_retirement_separate():
+    assert "return 'VOID';" in APP
+    assert "✓ VÝHRA" in APP
+    assert "× PREHRA" in APP
+    assert "✓ HIT" not in APP
+    assert "× MISS" not in APP
+    assert "VÝHRA - PREHRA" in APP
+    assert "SKREČ" in APP
