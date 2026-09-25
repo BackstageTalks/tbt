@@ -240,11 +240,11 @@ class BulkEnvironmentSafetyTests(unittest.TestCase):
                             "country": country, "country_code": country_code,
                         }]}
 
+                testcase = self
                 class Network:
                     def get(self, url, params):
-                        self_params = params
-                        self.assertEqual(url, GEOCODE_URL)
-                        self.assertEqual(self_params["countryCode"], country_code)
+                        testcase.assertEqual(url, GEOCODE_URL)
+                        testcase.assertEqual(params["countryCode"], country_code)
                         return Response()
 
                     def close(self):
