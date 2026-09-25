@@ -351,6 +351,11 @@ def _daily_rows(payload: dict) -> list[dict]:
     removed from the TOP board. PRIME is intentionally *not* merged into TOP. It is published separately as
     the Short Odds category while the same raw pool remains available to the
     internal Comeback LIVE Radar.
+
+    Fallback rows below the core TOP probability floor are public only while the
+    board has fewer than the configured minimum number of core picks. Once the
+    core board is full, already-published fallback rows stay in the immutable
+    publication/result history but are no longer shown in TOP.
     """
     value_ids={_row_id(row) for row in payload.get("value_picks", []) if isinstance(row, dict)}
     out=[]; seen=set()
@@ -366,6 +371,19 @@ def _daily_rows(payload: dict) -> list[dict]:
             continue
         seen.add(ident)
         out.append(row)
+
+    rule=(payload.get("market_selection") or {}).get("top_daily_rule") or {}
+    try:
+        core_floor=float(rule.get("core_min_probability",0.68))
+        core_floor=core_floor/100 if core_floor>1 else core_floor
+        core_minimum=max(1,int(rule.get("fallback_only_if_core_count_below",5)))
+    except (TypeError,ValueError):
+        core_floor,core_minimum=0.68,5
+
+    core=[row for row in out if _row_probability(row)+1e-12>=core_floor]
+    if len(core)>=core_minimum:
+        out=core
+
     out.sort(key=lambda row: (-_row_probability(row), str(row.get("scheduled_at") or row.get("date") or "")))
     return out
 
