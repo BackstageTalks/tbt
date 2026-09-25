@@ -1525,7 +1525,9 @@
   }
   function firstDailyHubUnlockPlan(tab,index=0,forSeeAll=false){
     const cfg=dailyHubConfig()?.tabs?.[tab]||{};
-    const plans=membershipHierarchy.filter(id=>state.ui?.plans?.[id]?.enabled!==false);
+    const current=accountPlan()==='trial'?'rookie':accountPlan();
+    const currentIndex=membershipHierarchy.indexOf(current);
+    const plans=membershipHierarchy.filter((id,idx)=>state.ui?.plans?.[id]?.enabled!==false&&(currentIndex<0||idx>currentIndex));
     for(const plan of plans){
       const rule=cfg?.plans?.[plan]||{};const display=String(rule.display_state||((rule.tab_enabled===false)?'hidden':'active')).toLowerCase();
       if(cfg.enabled===false||rule.tab_enabled===false||display==='hidden'||display==='blurred')continue;
