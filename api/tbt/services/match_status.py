@@ -244,6 +244,29 @@ def classify_finished_event(
     }
 
 
+def _second_set_outcome(row: dict[str, Any], event: dict[str, Any]) -> str:
+    """Return win/loss for the predicted player once set 2 is complete."""
+    home_score = event.get("homeScore") if isinstance(event.get("homeScore"), dict) else {}
+    away_score = event.get("awayScore") if isinstance(event.get("awayScore"), dict) else {}
+    try:
+        home = int(home_score.get("period2"))
+        away = int(away_score.get("period2"))
+    except (TypeError, ValueError):
+        return ""
+    hi, lo = max(home, away), min(home, away)
+    if not ((hi == 6 and lo <= 4) or (hi == 7 and lo in {5, 6})):
+        return ""
+    home_team = event.get("homeTeam") if isinstance(event.get("homeTeam"), dict) else {}
+    away_team = event.get("awayTeam") if isinstance(event.get("awayTeam"), dict) else {}
+    home_id = str(home_team.get("id") or "").strip()
+    away_id = str(away_team.get("id") or "").strip()
+    predicted = _selection_id(row)
+    if not predicted or predicted not in {home_id, away_id}:
+        return ""
+    set_winner = home_id if home > away else away_id
+    return "win" if predicted == set_winner else "loss"
+
+
 def _provider_error_code(error: Exception) -> str:
     """Only report a safe exception class and HTTP status, never URLs or payloads."""
     kind = type(error).__name__[:48]
@@ -352,6 +375,7 @@ def scan_match_statuses(
     checked = skipped_live = successful_history = matched_events = 0
     newly_resolved = consecutive_errors = near_attempts = unmatched = 0
     next_due_id = ""
+    settled_events: dict[str, dict[str, str]] = {}
     max_checks = max(0, min(120, int(max_checks)))
     cursor = str(prior.get("next_due_id") or "")
     offset = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), 0)
@@ -368,6 +392,12 @@ def scan_match_statuses(
             statuses[eid] = result
             pending.pop(eid, None)
             newly_resolved += 1
+            settled_events[eid] = {
+                "event_id": eid,
+                "match_status": str(result.get("status") or ""),
+                "second_set_status": _second_set_outcome(row, live_event),
+                "checked_at": now.isoformat(),
+            }
         else:
             skipped_live += 1
 
@@ -450,6 +480,12 @@ def scan_match_statuses(
             statuses[eid] = result
             pending.pop(eid, None)
             newly_resolved += 1
+            settled_events[eid] = {
+                "event_id": eid,
+                "match_status": str(result.get("status") or ""),
+                "second_set_status": _second_set_outcome(row, event),
+                "checked_at": now.isoformat(),
+            }
 
     request_count_after = getattr(provider, "request_count", None)
     if isinstance(request_count_before, int) and isinstance(request_count_after, int):
@@ -486,4 +522,5 @@ def scan_match_statuses(
         "near_attempts": near_attempts,
         "unmatched": unmatched,
         "next_due_id": next_due_id if len(due) > 1 else "",
+        "settled_events": list(settled_events.values()),
     }
