@@ -142,3 +142,44 @@ def test_ranking_audit_reports_active_day_coverage_without_invented_zero_days():
     empty = analyze([], now=NOW)
     assert empty["coverage"]["active_betting_days"] == 0
     assert empty["coverage"]["mean_published_per_active_day"] is None
+
+
+def test_issuance_snapshot_recovers_calibration_and_ranking_after_model_drift():
+    row = fixture("issued", raw=.90, adjusted=.82, pick_rank=50, rival_rank=100)
+    pub = row["market_publications"][0]
+    pub["model_probability"] = .75  # different from frozen first prediction
+    pub["issued_snapshot"] = {
+        "schema": 1, "source": "deployed_feed_at_issuance",
+        "captured_at": pub["issued_at"], "model_probability": .75,
+        "blinq_probability": .71,
+        "rank_provenance": "public_card_snapshot_not_verified_historical_rank",
+        "ranks": {"player1": {"id": "a", "rank": 820},
+                  "player2": {"id": "b", "rank": 1150}},
+        "stats_available": False,
+        "quality": {"player1": {"surface_matches": 6},
+                    "player2": {"surface_matches": 5}},
+    }
+    audit = analyze([row], now=NOW)
+    assert audit["overall"]["calibration_n"] == 1
+    assert abs(audit["overall"]["mean_confidence"] - .71) < 1e-12
+    assert audit["subgroups"]["picked_rank"]["pick_501_1000"]["wins"] == 1
+    assert audit["subgroups"]["ranking_1000"]["pick_top_1000_opponent_1000_plus"]["wins"] == 1
+    assert audit["subgroups"]["stats"]["no"]["wins"] == 1
+    assert audit["subgroups"]["surface_evidence"]["both_5_plus"]["wins"] == 1
+    assert audit["diagnostics"]["exact_issued_evidence"] == 1
+    assert audit["diagnostics"]["issued_rank_available"] == 1
+
+
+def test_issuance_snapshot_refuses_rewritten_or_mismatched_public_evidence():
+    row = fixture("changed")
+    pub = row["market_publications"][0]
+    pub["issued_snapshot"] = {
+        "source": "deployed_feed_at_issuance", "captured_at": NOW.isoformat(),
+        "model_probability": .88, "blinq_probability": .99,
+        "ranks": {"player1": {"id": "a", "rank": 1},
+                  "player2": {"id": "b", "rank": 2}},
+    }
+    audit = analyze([row], now=NOW)
+    assert audit["diagnostics"].get("exact_issued_evidence", 0) == 0
+    assert abs(audit["overall"]["mean_confidence"] - .82) < 1e-12
+    assert audit["subgroups"]["picked_rank"]["pick_top_500"]["wins"] == 1
