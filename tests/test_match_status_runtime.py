@@ -311,3 +311,110 @@ def test_round_robin_checks_next_pending_id_on_next_run():
     second = scan_match_statuses(feed, provider, first, now=now, max_checks=1)
     assert second["checked"] == 1
     assert second["next_due_id"] == "101"
+
+
+
+def test_scheduled_time_defers_near_lookup_until_ninety_minutes():
+    now = datetime(2026, 9, 25, 10, 0, tzinfo=timezone.utc)
+    provider = _NearFallbackProvider({"11": _event()})
+    pending = _row("101", "11", (now - timedelta(minutes=40)).isoformat())
+    early = scan_match_statuses(
+        {"upcoming": [pending]}, provider, {"preferred_route": "near"},
+        now=now, min_start_age_minutes=90,
+    )
+    assert early["due"] == 1
+    assert early["checkable_now"] == 0
+    assert early["deferred_recent"] == 1
+    assert early["checked"] == 0
+    assert provider.near_calls == []
+    assert early["newly_resolved"] == 0
+
+    later = scan_match_statuses(
+        {"upcoming": [pending]}, provider, early,
+        now=now + timedelta(minutes=60), min_start_age_minutes=90,
+    )
+    assert later["checkable_now"] == 1
+    assert provider.near_calls == ["11"]
+    assert later["statuses"]["101"]["status"] == "win"
+
+
+def test_completed_live_match_can_resolve_before_scheduled_wait():
+    now = datetime(2026, 9, 25, 10, 0, tzinfo=timezone.utc)
+    provider = _Provider(live=[_event()])
+    feed = {"upcoming": [_row(scheduled_at=(now-timedelta(minutes=15)).isoformat())]}
+    snapshot = scan_match_statuses(feed, provider, now=now, min_start_age_minutes=90)
+    assert snapshot["newly_resolved"] == 1
+    assert snapshot["statuses"]["101"]["status"] == "win"
+    assert provider.previous_calls == []
+
+
+def test_today_top_unique_match_is_checked_before_yesterdays_backlog():
+    now = datetime(2026, 9, 25, 10, 0, tzinfo=timezone.utc)
+    old = _row("101", "11", (now-timedelta(hours=19)).isoformat())
+    top = {
+        **_row("202", "33", (now-timedelta(hours=3)).isoformat()),
+        "player1": {"id": "33", "name": "Gamma"},
+        "player2": {"id": "44", "name": "Delta"},
+    }
+    top_result = {
+        **_event("202", winner_code=1),
+        "homeTeam": {"id": "33"},
+        "awayTeam": {"id": "44"},
+    }
+    provider = _NearFallbackProvider({"11": _event(), "33": top_result})
+    feed = {"upcoming": [old, top], "daily_picks": [top, dict(top)]}
+    snap = scan_match_statuses(
+        feed, provider, {"preferred_route": "near"},
+        now=now, max_near_checks=1, min_start_age_minutes=90,
+    )
+    assert snap["tracked"] == 2  # duplicate TOP bet never causes duplicate lookup
+    assert snap["focus_due"] == 1
+    assert provider.near_calls == ["33"]
+    assert snap["statuses"]["202"]["status"] == "win"
+    assert "101" not in snap["statuses"]
+
+
+def test_unfinished_near_event_waits_for_retry_window():
+    now = datetime(2026, 9, 25, 10, 0, tzinfo=timezone.utc)
+    pending = _row(scheduled_at=(now-timedelta(hours=3)).isoformat())
+    provider = _NearFallbackProvider()
+    feed = {"upcoming": [pending]}
+    first = scan_match_statuses(
+        feed, provider, {"preferred_route": "near"}, now=now,
+        min_start_age_minutes=90, retry_after_minutes=120,
+    )
+    assert first["checked"] == 1
+    assert first["unmatched"] == 1
+    assert first["last_checked_at"]["101"] == now.isoformat()
+    second = scan_match_statuses(
+        feed, provider, first, now=now+timedelta(hours=1),
+        min_start_age_minutes=90, retry_after_minutes=120,
+    )
+    assert second["checked"] == 0
+    assert second["deferred_cooldown"] == 1
+    assert provider.near_calls == ["11"]
+    third = scan_match_statuses(
+        feed, provider, second, now=now+timedelta(hours=2, minutes=1),
+        min_start_age_minutes=90, retry_after_minutes=120,
+    )
+    assert third["checked"] == 1
+    assert provider.near_calls == ["11", "11"]
+
+
+def test_cursor_rotates_within_todays_priority_not_into_old_backlog():
+    now = datetime(2026, 9, 25, 10, 0, tzinfo=timezone.utc)
+    first = _row("101", scheduled_at=(now-timedelta(hours=3)).isoformat())
+    second = _row("202", scheduled_at=(now-timedelta(hours=2)).isoformat())
+    older = _row("303", scheduled_at=(now-timedelta(hours=20)).isoformat())
+    feed = {"upcoming": [older, first, second], "daily_picks": [first, second]}
+    provider = _NearFallbackProvider()
+    a = scan_match_statuses(
+        feed, provider, {"preferred_route": "near"}, now=now,
+        max_checks=1, max_near_checks=1, min_start_age_minutes=90,
+    )
+    assert a["next_due_id"] == "202"
+    b = scan_match_statuses(
+        feed, provider, a, now=now, max_checks=1, max_near_checks=1,
+        min_start_age_minutes=90,
+    )
+    assert b["next_due_id"] == "101"

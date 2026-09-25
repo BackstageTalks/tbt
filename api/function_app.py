@@ -1315,7 +1315,15 @@ def internal_match_status_worker(req):
                 ),
                 lookback_hours=max(
                     6,
-                    min(72, int(os.getenv("BLINQ_MATCH_STATUS_LOOKBACK_HOURS", "36"))),
+                    min(72, int(os.getenv("BLINQ_MATCH_STATUS_LOOKBACK_HOURS", "72"))),
+                ),
+                min_start_age_minutes=max(
+                    0,
+                    min(360, int(os.getenv("BLINQ_MATCH_STATUS_MIN_START_AGE_MINUTES", "90"))),
+                ),
+                retry_after_minutes=max(
+                    0,
+                    min(360, int(os.getenv("BLINQ_MATCH_STATUS_RETRY_AFTER_MINUTES", "120"))),
                 ),
                 max_near_checks=max(
                     1,

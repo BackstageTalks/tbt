@@ -15,6 +15,7 @@ are changed here.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 import re
 from typing import Any
 
@@ -255,6 +256,8 @@ def scan_match_statuses(
     max_checks: int = 30,
     lookback_hours: int = 36,
     max_near_checks: int = 12,
+    min_start_age_minutes: int = 0,
+    retry_after_minutes: int = 0,
 ) -> dict[str, Any]:
     """Settle verified events without trusting a consistently 404ing history route.
 
@@ -286,7 +289,58 @@ def scan_match_statuses(
         if not _player_id(row, "player1"):
             continue
         due.append((scheduled, eid, row))
-    due.sort(key=lambda item: item[0])
+    # The dashboard KPI counts picks, not distinct fixtures. Prioritize
+    # today's unique TOP/winner-market event IDs, then yesterday's remaining
+    # picks, then older/unfeatured fixtures. The provider is queried only
+    # once per event, even when the same match appears in multiple sections.
+    today = now.astimezone(ZoneInfo("Europe/Bratislava")).date()
+    top_ids = {
+        _event_id(row)
+        for key in ("daily_picks", "top_daily_picks")
+        for row in (feed.get(key) or [])
+        if isinstance(row, dict) and _event_id(row)
+    }
+    focus_ids = top_ids | {
+        _event_id(row)
+        for key in ("prime_picks", "value_picks", "doubles_picks")
+        for row in (feed.get(key) or [])
+        if isinstance(row, dict) and _event_id(row)
+    }
+
+    def priority(item: tuple[datetime, str, dict[str, Any]]) -> int:
+        scheduled, eid, _ = item
+        day_delta = (today - scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date()).days
+        if eid in top_ids and day_delta == 0:
+            return 0
+        if eid in focus_ids and day_delta == 0:
+            return 1
+        if eid in top_ids and day_delta == 1:
+            return 2
+        if eid in focus_ids and day_delta == 1:
+            return 3
+        if eid in focus_ids:
+            return 4
+        if day_delta == 0:
+            return 5
+        return 6
+
+    due.sort(key=lambda item: (priority(item), item[0], item[1]))
+    recent_checks = prior.get("last_checked_at")
+    recent_checks = recent_checks if isinstance(recent_checks, dict) else {}
+    last_checked_at: dict[str, str] = {
+        eid: str(recent_checks[eid])
+        for _, eid, _ in due
+        if eid in recent_checks and _parse_time(recent_checks[eid]) is not None
+    }
+    wait = timedelta(minutes=max(0, min(360, int(min_start_age_minutes))))
+    cooldown = timedelta(minutes=max(0, min(360, int(retry_after_minutes))))
+    checkable_now = sum(
+        now >= scheduled + wait
+        and (not cooldown or
+             now >= (_parse_time(last_checked_at.get(eid)) or scheduled) + cooldown)
+        for scheduled, eid, _ in due
+    )
+    focus_due = sum(eid in focus_ids for _, eid, _ in due)
 
     prior_errors = prior.get("provider_errors")
     prior_errors = prior_errors if isinstance(prior_errors, dict) else {}
@@ -317,19 +371,27 @@ def scan_match_statuses(
 
     checked = skipped_live = successful_history = matched_events = 0
     newly_resolved = consecutive_errors = near_attempts = unmatched = 0
+    deferred_recent = deferred_cooldown = 0
     next_due_id = ""
-    last_checked_eid = ""
     max_checks = max(0, min(120, int(max_checks)))
     cursor = str(prior.get("next_due_id") or "")
-    offset = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), 0)
-    ordered = due[offset:] + due[:offset]
+    # Rotate only inside a matching priority bucket. A cursor pointing to an
+    # old background match must never jump ahead of today's fresh TOP picks.
+    cursor_idx = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), -1)
+    if cursor_idx >= 0:
+        bucket = priority(due[cursor_idx])
+        lo = next(i for i, item in enumerate(due) if priority(item) == bucket)
+        hi = next((i for i in range(cursor_idx + 1, len(due))
+                   if priority(due[i]) != bucket), len(due))
+        ordered = due[:lo] + due[cursor_idx:hi] + due[lo:cursor_idx] + due[hi:]
+    else:
+        ordered = due
 
     for position, (_, eid, row) in enumerate(ordered):
         if checked >= max_checks:
             break
         if prefer_near and near_attempts >= max_near_checks:
             break
-        last_checked_eid = eid
         next_due_id = ordered[(position + 1) % len(ordered)][1]
 
         live_event = live_by_id.get(eid)
@@ -340,6 +402,20 @@ def scan_match_statuses(
                 newly_resolved += 1
             else:
                 skipped_live += 1
+            continue
+
+        # The scheduled time is not proof that play has finished: defer the
+        # first near lookup until the likely completion window. If the match
+        # was absent or unfinished last time, back off before trying again.
+        scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
+        if scheduled is None:
+            continue
+        if now < scheduled + wait:
+            deferred_recent += 1
+            continue
+        previous_check = _parse_time(last_checked_at.get(eid))
+        if previous_check is not None and cooldown and now < previous_check + cooldown:
+            deferred_cooldown += 1
             continue
 
         player_id = _player_id(row, "player1")
@@ -396,6 +472,7 @@ def scan_match_statuses(
 
         consecutive_errors = 0
         successful_history += 1
+        last_checked_at[eid] = now.isoformat()
         event = next(
             (candidate for candidate in _provider_rows(payload)
              if _provider_event_id(candidate) == eid),
@@ -440,4 +517,9 @@ def scan_match_statuses(
         "near_attempts": near_attempts,
         "unmatched": unmatched,
         "next_due_id": next_due_id if len(due) > 1 else "",
+        "focus_due": focus_due,
+        "checkable_now": checkable_now,
+        "deferred_recent": deferred_recent,
+        "deferred_cooldown": deferred_cooldown,
+        "last_checked_at": last_checked_at,
     }
