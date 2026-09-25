@@ -26,6 +26,8 @@ from tbt.services.environment import (
     location_candidates,
     venue_learning_keys,
     venue_context_compatible,
+    explicit_country_hints,
+    strong_location_name_hints,
 )
 
 logger = logging.getLogger("tbt.enrich_environment_snapshot")
@@ -786,12 +788,35 @@ def main() -> None:
                         raise
                     if query_key not in diagnostic_queries and len(report["geocode_diagnostics"]) < 60:
                         diagnostic_queries.add(query_key)
-                        report["geocode_diagnostics"].append({
+                        diagnostic = {
                             "query": query,
                             "outcome": outcome,
                             "recoverable_matches": counts.get(query_key, 0),
                             "venue": (_as_dict(env.get("venue")).get("name") if env else None),
-                        })
+                        }
+                        if outcome == "incompatible":
+                            # geocode() is LRU cached: inspect the exact returned
+                            # city without another provider request or any writes.
+                            rejected = client.geocode(query)
+                            if rejected is not None:
+                                rejected_data = asdict(rejected)
+                                _, mismatch = venue_context_compatible(
+                                    payload, match.tournament, rejected_data
+                                )
+                                diagnostic.update({
+                                    "mismatch": mismatch,
+                                    "geocoder_name": rejected.name,
+                                    "geocoder_country": rejected.country,
+                                    "provider_country_hints": sorted(
+                                        explicit_country_hints(payload, match.tournament)
+                                    ),
+                                    "provider_city_hints": sorted(
+                                        strong_location_name_hints(payload, match.tournament)
+                                    ),
+                                })
+                        elif outcome == "no_result":
+                            diagnostic["alternative_candidates"] = detail["location_candidates"][1:4]
+                        report["geocode_diagnostics"].append(diagnostic)
                     if outcome == "no_result":
                         no_result_queries.add(query_key)
                         report["geocode_no_result_unique"] += 1

@@ -52,6 +52,11 @@ _CITY_CANONICAL = {
     "sharm el-sheikh": "sharm el sheikh",
     "s. margherita di pula": "santa margherita di pula",
     "s margherita di pula": "santa margherita di pula",
+    # Open-Meteo and tennis feeds disagree about the Dutch city's apostrophe.
+    "'s-hertogenbosch": "s-hertogenbosch",
+    "'s hertogenbosch": "s-hertogenbosch",
+    "s hertogenbosch": "s-hertogenbosch",
+    "den bosch": "s-hertogenbosch",
 }
 
 
@@ -748,14 +753,29 @@ def venue_context_compatible(
     if country_hints and venue_country not in country_hints:
         return False, "country_mismatch"
 
-    city_hints = strong_location_name_hints(provider_payload, tournament)
-    if city_hints:
-        venue_names = {
-            _normal(venue.get("name")),
-            _normal(str(venue.get("query") or "").split(",", 1)[0]),
-        }
-        venue_names.discard("")
-        if not venue_names.intersection(city_hints):
+    venue_names = {
+        _normal(venue.get("name")),
+        _normal(str(venue.get("query") or "").split(",", 1)[0]),
+    }
+    venue_names.discard("")
+    raw = _as_dict(provider_payload)
+    tournament_obj = _as_dict(raw.get("tournament"))
+    direct_cities = {
+        _normal(value) for value in (
+            _as_dict(raw.get("venue")).get("city"),
+            tournament_obj.get("city"),
+            _as_dict(tournament_obj.get("uniqueTournament")).get("city"),
+            raw.get("city"), raw.get("venueCity"),
+        ) if _normal(value)
+    }
+    # Provider-supplied city is authoritative even when a broader tournament
+    # alias names a nearby but different place (Antalya vs Belek).
+    if direct_cities:
+        if not venue_names.intersection(direct_cities):
+            return False, "provider_city_mismatch"
+    else:
+        city_hints = strong_location_name_hints(provider_payload, tournament)
+        if city_hints and not venue_names.intersection(city_hints):
             return False, "city_mismatch"
     return True, "compatible"
 
