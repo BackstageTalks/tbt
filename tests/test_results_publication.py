@@ -78,6 +78,41 @@ def test_market_section_publication_is_confirmed_only_from_matching_deployed_fee
     assert all(p['publication_status'] == 'published' for p in confirmed[0]['market_publications'])
 
 
+def test_market_issuance_freezes_deployed_rank_and_adjusted_probability():
+    from copy import deepcopy
+
+    candidate = annotate_market_publication_candidates([_market_row()])[0]
+    ledger = [{**candidate, "market_publications": candidate["market_publication_candidates"]}]
+    ledger[0].pop("market_publication_candidates", None)
+    sections = select_market_sections([candidate])
+    public = deepcopy(sections["top_daily_picks"][0])
+    public["player1"]["rank"] = 420  # presentation enrichment after candidate
+    public["player2"]["rank"] = 1120
+    public["stats_available"] = False
+    feed = {"top_daily_picks": [public], "prime_picks": [], "value_picks": []}
+    when = datetime(2026, 9, 7, 9, tzinfo=timezone.utc)
+    confirmed, count = confirm_market_publications(ledger, feed, when)
+    assert count == 1
+    pub = confirmed[0]["market_publications"][0]
+    snapshot = pub["issued_snapshot"]
+    assert snapshot["source"] == "deployed_feed_at_issuance"
+    assert snapshot["captured_at"] == pub["issued_at"]
+    assert snapshot["model_probability"] == pub["model_probability"] == .80
+    assert abs(snapshot["blinq_probability"] - .74) < 1e-12
+    assert snapshot["ranks"]["player1"] == {"id": "A", "rank": 420}
+    assert snapshot["ranks"]["player2"] == {"id": "B", "rank": 1120}
+    assert snapshot["rank_provenance"] == "public_card_snapshot_not_verified_historical_rank"
+    assert snapshot["stats_available"] is False
+    assert snapshot["quality"]["player1"]["surface_matches"] == 20
+
+    # A later card with updated ranking does not rewrite issued evidence.
+    changed_feed = deepcopy(feed)
+    changed_feed["top_daily_picks"][0]["player1"]["rank"] = 200
+    repeated, added = confirm_market_publications(confirmed, changed_feed, when + timedelta(minutes=2))
+    assert added == 0
+    assert repeated[0]["market_publications"][0]["issued_snapshot"] == snapshot
+
+
 def test_settled_market_publications_produce_real_flat_unit_roi(match_factory):
     row = _market_row()
     annotated = annotate_market_publication_candidates([row])[0]

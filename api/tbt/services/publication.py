@@ -790,10 +790,14 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
     validate_market_publication_candidate(deployed_feed, ledger)
 
     deployed = set()
+    deployed_rows = {}
     for section, key in _MARKET_SECTION_KEYS.items():
         for row in _section_feed_rows(deployed_feed, section, key):
             commitment = _market_commitment_from_feed_row(row, section)
             deployed.add(commitment)
+            # Presentation-only ranking may be added after private candidate creation.
+            # Record the exact card displayed at the first confirmed issuance.
+            deployed_rows.setdefault(commitment, []).append(row)
 
     confirmed = []
     newly_confirmed = 0
@@ -821,6 +825,42 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
                 continue
             publication["issued_at"] = now.isoformat()
             publication["publication_status"] = "published"
+            if section in {"top_daily", "prime", "value"} and publication.get("market") == "match_winner":
+                candidates = deployed_rows.get(commitment) or []
+                if len(candidates) == 1:
+                    card = candidates[0]
+                    betting = card.get("betting") if isinstance(card.get("betting"), dict) else {}
+                    players = {}
+                    for side in ("player1", "player2"):
+                        player = card.get(side) if isinstance(card.get(side), dict) else {}
+                        rank = player.get("rank")
+                        try:
+                            rank_number = float(rank) if rank is not None else None
+                        except (ValueError, TypeError):
+                            rank_number = None
+                        if rank_number is not None and not 0 < rank_number < float("inf"):
+                            rank_number = None
+                        players[side] = {
+                            "id": str(player.get("id") or ""),
+                            "rank": int(rank_number) if rank_number is not None else None,
+                        }
+                    evidence = {
+                        "schema": 1,
+                        "source": "deployed_feed_at_issuance",
+                        "captured_at": now.isoformat(),
+                        "model_probability": betting.get("model_probability"),
+                        "blinq_probability": _top_display_probability(card),
+                        "model_version": card.get("model_version"),
+                        "ranks": players,
+                        "rank_provenance": "public_card_snapshot_not_verified_historical_rank",
+                        "quality": deepcopy(card.get("quality")) if isinstance(card.get("quality"), dict) else None,
+                        "stats_available": card.get("stats_available") if isinstance(card.get("stats_available"), bool) else None,
+                        "data_depth": card.get("data_depth"),
+                    }
+                    # The market commitment matches exactly. Historical ranking
+                    # provenance is NOT implied by this presentation snapshot.
+                    if evidence["model_probability"] == publication.get("model_probability"):
+                        publication["issued_snapshot"] = evidence
             newly_confirmed += 1
         row["market_publications"] = publications
         confirmed.append(row)
