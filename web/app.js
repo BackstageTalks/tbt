@@ -1307,8 +1307,8 @@
     const drawer=$('insightDrawer'),list=$('insightDrawerList'),status=$('insightDrawerStatus'),toolbar=$('insightDrawerToolbar');if(!drawer||!list||!status)return;
     const channel=state.insightChannel==='live'?'live':'info';
     const filter=state.insightFilter||'all';
-    const liveTab=state.liveRadarTab==='set2'?'set2':'comeback';
-    const channelRows=state.insights.filter(item=>channel==='live'?isLiveInsight(item):!isLiveInsight(item)).filter(item=>channel!=='live'||(liveTab==='set2'?String(item?.type||'').toLowerCase()==='set2':String(item?.type||'').toLowerCase()!=='set2'));
+    const liveTab=['set2','results'].includes(state.liveRadarTab)?state.liveRadarTab:'comeback';
+    const channelRows=state.insights.filter(item=>channel==='live'?isLiveInsight(item):!isLiveInsight(item)).filter(item=>channel!=='live'||liveTab==='results'?false:(liveTab==='set2'?String(item?.type||'').toLowerCase()==='set2':String(item?.type||'').toLowerCase()!=='set2'));
     const rows=channelRows.filter(item=>filter==='unread'?!item.read:filter==='pinned'?Boolean(item.pinned):true);
     const channelUnread=channelRows.filter(item=>!item.read).length;
     const title=$('insightDrawerTitle'),eyebrow=$('insightDrawerEyebrow');
@@ -1340,10 +1340,23 @@
       }
       return `<article class="live-radar-candidate"><header><div><small>${escapeHtml(status)}</small><strong>${escapeHtml(String(item?.favorite||'—'))} <span>vs</span> ${escapeHtml(String(item?.opponent||'—'))}</strong></div><b>${escapeHtml(String(item?.second_set||'—'))}</b></header><div class="live-radar-status-grid"><span><small>${escapeHtml(lcopy('Comeback status','Comeback stav','Comeback stav'))}</small><strong>${escapeHtml(String(item?.first_set||'—'))} → ${escapeHtml(String(item?.second_set||'—'))}</strong></span><span><small>${escapeHtml(lcopy('Signal','Signál','Signál'))}</small><strong>${escapeHtml(stage==='second_set_won'?lcopy('Won set 2','Vyhral 2. set','Vyhrál 2. set'):stage==='break_lead'?lcopy('Break lead in set 2','Break náskok v 2. sete','Break náskok ve 2. setu'):lcopy('Watching after lost set 1','Sledujeme po prehratom 1. sete','Sledujeme po prohraném 1. setu'))}</strong></span></div></article>`;
     }).join(''):'';
-    const radarTabs=channel==='live'&&liveEligible?`<div class="live-radar-tabs"><button type="button" data-live-radar-tab="comeback" class="${state.liveRadarTab!=='set2'?'is-active':''}">Comeback</button><button type="button" data-live-radar-tab="set2" class="${state.liveRadarTab==='set2'?'is-active':''}">2. set</button></div>`:'';
-    const set2Strip=channel==='live'&&liveEligible&&state.liveRadarTab==='set2'?`<div class="insight-live-strip set2-summary ${set2Stats.eligible>0?'is-confirmed':set2Stats.priced>0?'is-watching':''}"><span class="insight-live-dot"></span><div><strong>${escapeHtml(lcopy('Set 2 model','Model 2. setu','Model 2. setu'))}</strong><small>${escapeHtml(`${set2Stats.candidates} ${lcopy('candidates','kandidátov','kandidátů')} · ${set2Stats.priced} ${lcopy('with live price','s LIVE kurzom','s LIVE kurzem')} · ${set2Stats.eligible} ${lcopy('value signals','value signálov','value signálů')}`)}</small></div></div>`:'';
-    const radarPanel=radarTabs+(state.liveRadarTab==='set2'?set2Strip+radarCandidateCards:radarStrip+radarCandidateCards);
+    const radarResults=Array.isArray(radar.results)?radar.results:[];
+    const radarResultCards=channel==='live'&&liveEligible&&liveTab==='results'?radarResults.map(item=>{
+      const kind=String(item?.kind||'')==='set2'?'2. SET':'COMEBACK';
+      const outcome=String(item?.outcome||'').toLowerCase();
+      const outcomeLabel=outcome==='win'?lcopy('WIN','VÝHRA','VÝHRA'):outcome==='loss'?lcopy('LOSS','PREHRA','PROHRA'):'VOID';
+      const title=String(item?.title||'').replace(/^Comeback LIVE\s*·\s*/i,'').replace(/^2\. set LIVE\s*·\s*/i,'')||'—';
+      const when=item?.settled_at?fmtDate(item.settled_at)+' · '+fmtTime(item.settled_at):'';
+      return `<article class="live-radar-candidate is-result is-${escapeHtml(outcome)}"><header><div><small>${escapeHtml(kind)} · ${escapeHtml(outcomeLabel)}</small><strong>${escapeHtml(title)}</strong></div><b>${escapeHtml(outcomeLabel)}</b></header>${when?`<div class="live-radar-result-time">${escapeHtml(when)}</div>`:''}</article>`;
+    }).join(''):'';
+    const radarTabs=channel==='live'&&liveEligible?`<div class="live-radar-tabs"><button type="button" data-live-radar-tab="comeback" class="${liveTab==='comeback'?'is-active':''}">Comeback</button><button type="button" data-live-radar-tab="set2" class="${liveTab==='set2'?'is-active':''}">2. set</button><button type="button" data-live-radar-tab="results" class="${liveTab==='results'?'is-active':''}">${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}</button></div>`:'';
+    const set2Strip=channel==='live'&&liveEligible&&liveTab==='set2'?`<div class="insight-live-strip set2-summary ${set2Stats.eligible>0?'is-confirmed':set2Stats.priced>0?'is-watching':''}"><span class="insight-live-dot"></span><div><strong>${escapeHtml(lcopy('Set 2 model','Model 2. setu','Model 2. setu'))}</strong><small>${escapeHtml(`${set2Stats.candidates} ${lcopy('candidates','kandidátov','kandidátů')} · ${set2Stats.priced} ${lcopy('with live price','s LIVE kurzom','s LIVE kurzem')} · ${set2Stats.eligible} ${lcopy('value signals','value signálov','value signálů')}`)}</small></div></div>`:'';
+    const radarPanel=radarTabs+(liveTab==='results'?radarResultCards:liveTab==='set2'?set2Strip+radarCandidateCards:radarStrip+radarCandidateCards);
     if(state.insightsLoading){list.innerHTML=radarPanel+'<div class="insight-feed-empty insight-feed-loading"><span></span><strong>Načítavam…</strong></div>';return;}
+    if(channel==='live'&&liveTab==='results'){
+      if(radarResults.length){list.innerHTML=radarPanel;return;}
+      list.innerHTML=radarTabs+`<div class="insight-feed-empty"><i>✓</i><strong>${escapeHtml(lcopy('No evaluated LIVE signals yet.','Zatiaľ nie sú vyhodnotené žiadne LIVE signály.','Zatím nejsou vyhodnocené žádné LIVE signály.'))}</strong><p>${escapeHtml(lcopy('Only confirmed comeback signals and confirmed Set-2 signals appear here after settlement.','Sem sa po dohraní zapíšu iba potvrdené comeback signály a potvrdené signály 2. setu.','Sem se po dohrání zapíšou pouze potvrzené comeback signály a potvrzené signály 2. setu.'))}</p></div>`;return;
+    }
     if(state.insightsStorageUnavailable){
       const liveCopy=uiCopy('private_feed.history_unavailable',lcopy('Alert history is temporarily unavailable. LIVE radar continues to work.','História upozornení je dočasne nedostupná. LIVE radar ďalej funguje.','Historie upozornění je dočasně nedostupná. LIVE radar dále funguje.'));
       const infoCopy=uiCopy('private_feed.info_unavailable',lcopy('Premium Info needs persistent storage. Messages will return automatically when storage is restored.','Premium Info potrebuje trvalé úložisko. Po obnovení sa správy zobrazia automaticky.','Premium Info potřebuje trvalé úložiště. Po obnovení se zprávy zobrazí automaticky.'));
@@ -3847,7 +3860,7 @@
     if($('insightBackdrop'))$('insightBackdrop').onclick=()=>setInsightDrawer(false);
     if($('insightDrawerToolbar'))$('insightDrawerToolbar').onclick=async event=>{const filter=event.target.closest('[data-insight-filter]');if(filter){state.insightFilter=filter.dataset.insightFilter||'all';renderInsightDrawer();return;}if(event.target.closest('[data-insight-read-all]')){const unread=state.insights.filter(item=>!item.read&&(state.insightChannel==='live'?isLiveInsight(item):!isLiveInsight(item)));for(const item of unread){await markInsightRead(item.id);}renderInsightDrawer();}};
     if($('insightDrawerList'))$('insightDrawerList').onclick=event=>{
-      const liveTab=event.target.closest('[data-live-radar-tab]');if(liveTab){state.liveRadarTab=liveTab.dataset.liveRadarTab==='set2'?'set2':'comeback';state.insightFilter='all';renderInsightDrawer();return;}
+      const liveTab=event.target.closest('[data-live-radar-tab]');if(liveTab){const tab=String(liveTab.dataset.liveRadarTab||'');state.liveRadarTab=['set2','results'].includes(tab)?tab:'comeback';state.insightFilter='all';renderInsightDrawer();return;}
       const article=event.target.closest('[data-insight-id]');if(article)markInsightRead(article.dataset.insightId);
       const matchButton=event.target.closest('[data-insight-match]');if(matchButton){const found=findRowByEventId(matchButton.dataset.insightMatch);if(found){setInsightDrawer(false);setRoute('predictions');openMatch(normalize(found.row),found.tab,found.row);}else showStatus(lcopy('This match is not on the current board.','Tento zápas už nie je v aktuálnej ponuke.','Tento zápas už není v aktuální nabídce.'));}
     };
