@@ -56,6 +56,9 @@ def test_exact_published_top_only_and_segment_calibration():
     assert abs(audit["overall"]["mean_confidence"] - .81) < 1e-12
     assert set(audit["subgroups"]["competition"]) == {"ATP", "Challenger", "ITF"}
     assert audit["subgroups"]["ranking"]["both_800_plus"]["losses"] == 1
+    assert audit["subgroups"]["ranking_500"]["both_500_plus"]["losses"] == 1
+    assert audit["subgroups"]["ranking_1000"]["both_1000_plus"]["losses"] == 1
+    assert audit["subgroups"]["picked_rank"]["pick_1000_plus"]["losses"] == 1
     assert audit["subgroups"]["stats"]["yes"]["wins"] == 1
     assert audit["diagnostics"]["duplicate_publication_skipped"] == 1
     assert audit["diagnostics"]["invalid_or_excluded_publication"] == 1
@@ -94,3 +97,48 @@ def test_model_history_gap_and_backfill_limit():
 def test_no_missing_training_date_claim():
     report = model_freshness({"data": {}}, {"years": {}})
     assert report["history_ahead_of_training"] is None
+
+
+def test_ranking_cohorts_do_not_exclude_outside_top_1000():
+    matches = [
+        fixture("both500", pick_rank=250, rival_rank=420, stats=True),
+        fixture("pick500", pick_rank=490, rival_rank=1250, result=False, stats=False),
+        fixture("pick800", pick_rank=800, rival_rank=1100, stats=True),
+        fixture("rival600", pick_rank=1100, rival_rank=600, stats=False),
+        fixture("bothoutside", pick_rank=1400, rival_rank=1600, result=False),
+        fixture("missing", pick_rank=None, rival_rank=200),
+    ]
+    report = analyze(matches, now=NOW)
+    assert report["overall"]["settled"] == 6
+    assert report["subgroups"]["ranking_500"]["both_top_500"]["settled"] == 1
+    assert report["subgroups"]["ranking_500"]["pick_top_500_opponent_500_plus"]["settled"] == 1
+    assert report["subgroups"]["ranking_500"]["both_500_plus"]["settled"] == 3
+    assert report["subgroups"]["ranking_1000"]["both_top_1000"]["settled"] == 1
+    assert report["subgroups"]["ranking_1000"]["pick_top_1000_opponent_1000_plus"]["settled"] == 2
+    assert report["subgroups"]["ranking_1000"]["pick_1000_plus_opponent_top_1000"]["settled"] == 1
+    assert report["subgroups"]["ranking_1000"]["both_1000_plus"]["settled"] == 1
+    assert report["subgroups"]["picked_rank"]["pick_top_500"]["settled"] == 2
+    assert report["subgroups"]["picked_rank"]["pick_501_1000"]["settled"] == 1
+    assert report["subgroups"]["picked_rank"]["pick_1000_plus"]["settled"] == 2
+    assert report["subgroups"]["picked_rank"]["rank_unknown"]["settled"] == 1
+    assert report["subgroups"]["rank_and_stats"]["pick_top_500/no"]["losses"] == 1
+    assert report["coverage"]["active_betting_days"] == 1
+    assert report["coverage"]["days_with_5_plus_published"] == 1
+
+
+def test_ranking_audit_reports_active_day_coverage_without_invented_zero_days():
+    recent = fixture("recent")
+    earlier = fixture("earlier", result=False)
+    earlier["scheduled_at"] = (NOW - timedelta(days=5)).isoformat()
+    earlier["market_publications"][0]["result"]["scheduled_at"] = earlier["scheduled_at"]
+    earlier["market_publications"][0]["issued_at"] = (NOW - timedelta(days=6)).isoformat()
+    report = analyze([recent, earlier], now=NOW)
+    coverage = report["coverage"]
+    assert coverage["active_betting_days"] == 2
+    assert coverage["days_with_5_plus_published"] == 0
+    assert coverage["days_with_below_5_published"] == 2
+    assert coverage["mean_published_per_active_day"] == 1
+    assert len(coverage["betting_day_counts"]) == 2
+    empty = analyze([], now=NOW)
+    assert empty["coverage"]["active_betting_days"] == 0
+    assert empty["coverage"]["mean_published_per_active_day"] is None
