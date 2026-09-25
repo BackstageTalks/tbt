@@ -529,6 +529,21 @@ def _market_row_before_cutoff(row, now, cutoff_minutes=PUBLICATION_CUTOFF_MINUTE
     return now < scheduled - timedelta(minutes=max(0, int(cutoff_minutes)))
 
 
+def _top_display_probability(row):
+    """Use the same adjusted confidence as the public TOP card."""
+    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+    for value in (row.get("blinq_probability"), betting.get("blinq_probability"), row.get("probability")):
+        if value is None:
+            continue
+        try:
+            probability = float(value)
+        except (ValueError, TypeError):
+            continue
+        if 0 <= probability <= 100:
+            return probability / 100 if probability > 1 else probability
+    return None
+
+
 def carry_forward_betting_day_market_rows(
     feed,
     prior_feed,
@@ -568,6 +583,8 @@ def carry_forward_betting_day_market_rows(
         "carried": {},
         "new": {},
         "skipped_cutoff": {},
+        "skipped_top_fallback": {},
+        "top_core_available": {},
         "total": {},
     }
     processed_keys = set()
@@ -609,8 +626,38 @@ def carry_forward_betting_day_market_rows(
             seen.add(ident)
             carried += 1
 
+        # Later refreshes preserve issued morning picks, but the fresh selector
+        # can see fewer core picks after those morning matches have started.
+        # Before admitting NEW 65–67% fallbacks, count all eligible core picks
+        # across both the immutable daily offer and current discovery.
+        core_floor, core_minimum = 0.68, 5
+        core_ids = set()
+        if key == "top_daily_picks":
+            config = (result.get("market_selection") or {}).get("top_daily_rule") or {}
+            if isinstance(config, dict):
+                try:
+                    core_floor = float(config.get("core_min_probability", 0.68))
+                    core_minimum = max(1, int(config.get("fallback_only_if_core_count_below", 5)))
+                except (ValueError, TypeError):
+                    core_floor, core_minimum = 0.68, 5
+            for row in kept:
+                if (_top_display_probability(row) or 0) + 1e-12 >= core_floor:
+                    core_ids.add(_market_row_identity(row, key, timezone_name=timezone_name, start_hour=start_hour))
+            for row in current_rows:
+                if not isinstance(row, dict) or _row_betting_day(row, timezone_name=timezone_name, start_hour=start_hour) != day:
+                    continue
+                ident = _market_row_identity(row, key, timezone_name=timezone_name, start_hour=start_hour)
+                if not ident or ident in seen:
+                    continue
+                if not (_issued_exact_market_row(row, key, ledger_index)
+                        or _market_row_before_cutoff(row, now, publication_cutoff_minutes)):
+                    continue
+                if (_top_display_probability(row) or 0) + 1e-12 >= core_floor:
+                    core_ids.add(ident)
+
         new_count = 0
         skipped_cutoff = 0
+        skipped_top_fallback = 0
         for row in current_rows:
             if not isinstance(row, dict):
                 continue
@@ -637,6 +684,13 @@ def carry_forward_betting_day_market_rows(
             ):
                 skipped_cutoff += 1
                 continue
+            if (key == "top_daily_picks" and not already_published
+                    and len(core_ids) >= core_minimum
+                    and (_top_display_probability(row) or 0) + 1e-12 < core_floor):
+                # A never-issued weak pick can be skipped. A previously issued
+                # one is immutable and must remain visible and settle normally.
+                skipped_top_fallback += 1
+                continue
 
             kept.append(deepcopy(row))
             seen.add(ident)
@@ -646,6 +700,9 @@ def carry_forward_betting_day_market_rows(
         report["carried"][key] = carried
         report["new"][key] = new_count
         report["skipped_cutoff"][key] = skipped_cutoff
+        report["skipped_top_fallback"][key] = skipped_top_fallback
+        if key == "top_daily_picks":
+            report["top_core_available"][key] = len(core_ids)
         report["total"][key] = len(kept)
 
     result["market_selection"] = {

@@ -69,3 +69,19 @@ def test_watch_only_candidate_never_enters_results(monkeypatch):
     }])
     assert out["saved"] == 0
     assert saved == []
+
+
+def test_confirmed_retirement_is_void_with_separate_public_skrec_reason(monkeypatch):
+    from tbt.services import live_comeback as live
+    saved = []
+    monkeypatch.setattr(live, "load_insight_by_id", lambda insight_id:
+                        {"id": insight_id, "title": "Comeback LIVE"} if insight_id == "live-comeback-123" else None)
+    monkeypatch.setattr(live, "save_live_radar_result",
+                        lambda payload, result_id: saved.append(payload))
+    out = settle_radar_results([{
+        "event_id": "123", "match_status": "retired",
+        "second_set_status": "",
+    }])
+    assert out["comeback"] == 1
+    assert saved[0]["outcome"] == "void"
+    assert saved[0]["reason"] == "retired"

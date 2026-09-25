@@ -534,6 +534,7 @@ def settle_radar_results(settled_events: list[dict[str, Any]]) -> dict[str, int]
             outcome = match_status if match_status in {"win", "loss"} else "void"
             save_live_radar_result({
                 "kind": "comeback", "outcome": outcome, "event_id": eid,
+                "reason": "retired" if match_status == "retired" else "",
                 "title": comeback_source.get("title") or "Comeback LIVE",
                 "source_id": comeback_source.get("id") or f"live-comeback-{eid}",
                 "signal_at": comeback_source.get("created_at") or "",

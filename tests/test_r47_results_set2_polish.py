@@ -52,3 +52,14 @@ def test_shared_background_watermarks_and_free_membership_contract_survive_r47()
     assert "if(id==='rookie')return 'FREE'" in APP
     assert 'data-reactivate-free' in APP
     assert "detail=String(p.description||'').trim()" in APP
+
+
+def test_uniform_visible_results_labels_without_rewriting_settlement_data():
+    assert "if(value.includes('walkover')" not in APP
+    assert "function resultVoidLabel(reason='')" in APP
+    assert "return 'VOID';" in APP
+    assert "lcopy('WIN','VÝHRA','VÝHRA')" in APP
+    assert "lcopy('LOSS','PREHRA','PREHRA')" in APP
+    assert "lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')" in APP
+    assert 'voidLabel===\'SKREČ\'?\'retired\':\'void\'' in APP
+    assert ".results-table .retired{color:#bf8cff" in CSS
