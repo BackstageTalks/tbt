@@ -7702,3 +7702,8 @@ body#blinqPremium .live-radar-candidate.is-result.is-win header>b{color:#67d993!
 body#blinqPremium .live-radar-candidate.is-result.is-loss header>b{color:#f06f6f!important}
 body#blinqPremium .live-radar-candidate.is-result.is-void header>b{color:#bf8cff!important}
 body#blinqPremium .live-radar-result-time{margin-top:8px!important;color:#718b82!important;font-size:9px!important}
+
+
+/* Results: retirement is a separate terminal state, other voids stay neutral. */
+body#blinqPremium.blinq-route .results-table .retired{color:#bf8cff!important}
+body#blinqPremium.blinq-route .results-table .void{color:#e1c56a!important}
