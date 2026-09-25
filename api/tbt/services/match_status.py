@@ -15,12 +15,11 @@ are changed here.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
-from zoneinfo import ZoneInfo
 import re
 from typing import Any
 
 
-TERMINAL_STATUSES = {"win", "loss", "retired"}
+TERMINAL_STATUSES = {"win", "loss", "retired", "void"}
 
 _FEED_ROW_KEYS = (
     "upcoming",
@@ -191,6 +190,9 @@ def classify_finished_event(
         "abandoned due to injury",
     )
     retired = any(marker in status_text for marker in retirement_markers)
+    void = any(marker in status_text for marker in (
+        "cancelled", "canceled", "walkover", "walk over",
+    ))
 
     winner_code = event.get("winnerCode")
     try:
@@ -203,7 +205,7 @@ def classify_finished_event(
         for marker in ("finished", "ended", "completed", "full time")
     ) or winner_code in {1, 2}
 
-    if not finished and not retired:
+    if not finished and not retired and not void:
         return None
 
     base = {
@@ -220,6 +222,8 @@ def classify_finished_event(
         return None
     if retired:
         return {**base, "status": "retired"}
+    if void:
+        return {**base, "status": "void"}
 
     provider_winner = ""
     if winner_code == 1:
@@ -254,7 +258,6 @@ def scan_match_statuses(
     *,
     now: datetime | None = None,
     max_checks: int = 30,
-    lookback_hours: int = 4,
     max_near_checks: int = 30,
 ) -> dict[str, Any]:
     """Settle verified events without trusting a consistently 404ing history route.
@@ -264,16 +267,13 @@ def scan_match_statuses(
     historical match, so a missing event is left pending, never scored.
     """
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
-    local_today = now.astimezone(ZoneInfo("Europe/Bratislava")).date()
-    # Four hours sets PRIORITY; an unfinished match never expires at four hours.
-    recent_hours = max(1, min(12, int(lookback_hours)))
-    recent_cutoff = now - timedelta(hours=recent_hours)
     rows = prediction_rows(feed)
     prior = previous_snapshot if isinstance(previous_snapshot, dict) else {}
     prior_pending = prior.get("pending")
     prior_pending = prior_pending if isinstance(prior_pending, dict) else {}
 
-    # The morning feed may no longer list yesterday's delayed fixtures.
+    # Keep unfinished fixtures even when a fresh feed replaces yesterday's rows.
+    # Pending fixtures do not expire after any fixed number of hours or days.
     for eid, saved in prior_pending.items():
         if eid in rows or not isinstance(saved, dict):
             continue
@@ -290,7 +290,7 @@ def scan_match_statuses(
     statuses: dict[str, dict[str, Any]] = {
         str(eid): dict(value)
         for eid, value in existing.items()
-        if eid in rows and isinstance(value, dict)
+        if isinstance(value, dict)
         and str(value.get("status") or "") in TERMINAL_STATUSES
     }
 
@@ -308,36 +308,19 @@ def scan_match_statuses(
         old = prior_pending.get(eid)
         old = old if isinstance(old, dict) else {}
         compact = {
-            "t": scheduled.isoformat(), "s": selection, "a": player1,
-            "b": player2, "c": str(old.get("c") or "")[:64],
+            "t": scheduled.isoformat(), "s": selection,
+            "a": player1, "b": player2, "c": str(old.get("c") or "")[:64],
         }
-        # Keep existing delayed entries even when their start time moves.
+        # Keep postponed fixtures in the queue, without querying future starts.
         if eid in prior_pending:
             pending[eid] = compact
-        if scheduled > now:
-            continue
-        if not (
-            scheduled >= recent_cutoff
-            or scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date() == local_today
-            or eid in prior_pending
-        ):
-            # No expensive scan of the unvisited historical backlog.
+        if scheduled >= now:
             continue
         due.append((scheduled, eid, row))
         pending[eid] = compact
 
-    def priority(item: tuple[datetime, str, dict[str, Any]]) -> int:
-        scheduled, _, _ = item
-        if scheduled >= recent_cutoff:
-            return 0
-        if scheduled.astimezone(ZoneInfo("Europe/Bratislava")).date() == local_today:
-            return 1
-        return 2  # Persisted unfinished fixture from the prior betting day.
-
-    due.sort(key=lambda item: (priority(item), item[0], item[1]))
-    recent_candidates = sum(priority(item) == 0 for item in due)
-    today_candidates = sum(priority(item) <= 1 for item in due)
-    carryover_candidates = len(due) - today_candidates
+    # Single chronological queue; no priority bands and no age cutoff.
+    due.sort(key=lambda item: (item[0], item[1]))
 
     prior_errors = prior.get("provider_errors")
     prior_errors = prior_errors if isinstance(prior_errors, dict) else {}
@@ -371,16 +354,8 @@ def scan_match_statuses(
     next_due_id = ""
     max_checks = max(0, min(120, int(max_checks)))
     cursor = str(prior.get("next_due_id") or "")
-    cursor_idx = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), -1)
-    if cursor_idx >= 0:
-        # Rotate inside a priority bucket; older backlog cannot skip new picks.
-        bucket = priority(due[cursor_idx])
-        lo = next(i for i, item in enumerate(due) if priority(item) == bucket)
-        hi = next((i for i in range(cursor_idx + 1, len(due))
-                   if priority(due[i]) != bucket), len(due))
-        ordered = due[:lo] + due[cursor_idx:hi] + due[lo:cursor_idx] + due[hi:]
-    else:
-        ordered = due
+    offset = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), 0)
+    ordered = due[offset:] + due[:offset]
 
     # One live request can settle every due fixture, including those beyond
     # the per-event request budget of thirty.
@@ -492,12 +467,9 @@ def scan_match_statuses(
         "statuses": statuses,
         "tracked": len(rows),
         "due": len(due),
-        "window_candidates": recent_candidates,
+        "window_candidates": len(due),  # Legacy diagnostic, no window cutoff.
         "window_min_age_minutes": 0,
-        "window_max_age_minutes": recent_hours * 60,
-        "recent_candidates": recent_candidates,
-        "today_candidates": today_candidates,
-        "carryover_candidates": carryover_candidates,
+        "window_max_age_minutes": 0,
         "pending_count": len(pending),
         "pending": pending,
         "checked": checked,
