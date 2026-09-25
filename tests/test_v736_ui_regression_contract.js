@@ -48,6 +48,17 @@ const daily = app.split('function dailyHubRow')[1].split('function dailyHubLocke
 assert.equal(daily.includes('aria-hidden="true">→</span>'),false);
 assert.match(css,/hub-action-cell \.hub-detail/);
 
+// Homepage statuses must stay yellow STARTED; final outcomes belong only in Results.
+const homepage = app.split('function dailyHubRow(', 2)[1]?.split('function dailyHubLockedRow(', 1)[0];
+assert.ok(homepage, 'daily hub renderer exists');
+assert.ok(homepage.includes("lcopy('STARTED','ZAČATÉ','ZAHÁJENO')"));
+assert.ok(homepage.includes('hub-offer-status is-started'));
+for (const forbidden of ['match_statuses', 'runtimeStatus', 'hub-row-settled', 'is-win', 'is-loss', 'is-retired', 'is-void']) {
+  assert.equal(homepage.includes(forbidden), false, 'homepage must not contain settlement state: ' + forbidden);
+}
+assert.match(html, /\\/app\\.js\\?[^"\\s]*started-only=2/);
+assert.match(html, /\\/blinq-app\\.css\\?[^"\\s]*started-only=2/);
+
 // Admin health cards expose the concrete runtime checks requested for launch.
 for (const label of ['PLAYER IMAGES','TOURNAMENT LOGOS','INFO STORAGE','LIVE DATA']) assert.ok(app.includes(label), label);
 
