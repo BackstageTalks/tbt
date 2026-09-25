@@ -129,3 +129,24 @@ def test_info_audience_is_per_message_while_live_keeps_global_minimum(monkeypatc
         assert 'ELITE' in str(exc)
     else:
         raise AssertionError('LIVE must respect the published LIVE minimum')
+
+def test_homepage_only_marks_started_and_results_keep_win_loss_void_retirement():
+    app = (ROOT / 'web/app.js').read_text()
+    css = (ROOT / 'web/blinq-app.css').read_text()
+    hub = app.split('  function dailyHubRow(', 1)[1].split('  function dailyHubLockedRow(', 1)[0]
+    results = app.split('  function resultVoidLabel(', 1)[1].split('  function primeDetailCard(', 1)[0]
+
+    assert "lcopy('STARTED','ZAČATÉ','ZAHÁJENO')" in hub
+    assert 'hub-offer-status is-started' in hub
+    assert "started?'hub-row-started':" in hub
+    assert 'match_statuses' not in hub
+    assert 'hub-row-settled' not in hub
+    for old_class in ('.hub-offer-status.is-win', '.hub-offer-status.is-loss',
+                      '.hub-offer-status.is-retired', '.hub-offer-status.is-void'):
+        assert old_class not in css
+
+    # Outcome labels remain in the dedicated Results page.
+    assert "lcopy('WIN','VÝHRA','VÝHRA')" in results
+    assert "lcopy('LOSS','PREHRA','PREHRA')" in results
+    assert "lcopy('RETIREMENT','SKREČ','SKREČ')" in results
+    assert "return 'VOID';" in results
