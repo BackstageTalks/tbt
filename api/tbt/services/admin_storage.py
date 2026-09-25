@@ -582,11 +582,11 @@ def save_match_status_snapshot(payload: object) -> dict:
     raw_statuses = data.get("statuses")
     raw_statuses = raw_statuses if isinstance(raw_statuses, dict) else {}
     statuses = {}
-    for event_id, value in list(raw_statuses.items())[:240]:
+    for event_id, value in raw_statuses.items():
         if not isinstance(value, dict):
             continue
         status = str(value.get("status") or "").strip().lower()
-        if status not in {"win", "loss", "retired"}:
+        if status not in {"win", "loss", "retired", "void"}:
             continue
         eid = str(event_id or "").strip()[:64]
         if not eid:
@@ -601,7 +601,7 @@ def save_match_status_snapshot(payload: object) -> dict:
     raw_pending = data.get("pending")
     raw_pending = raw_pending if isinstance(raw_pending, dict) else {}
     pending = {}
-    for eid, item in list(raw_pending.items())[:150]:
+    for eid, item in raw_pending.items():
         if not isinstance(item, dict):
             continue
         key = str(eid or "").strip()[:64]
@@ -615,9 +615,6 @@ def save_match_status_snapshot(payload: object) -> dict:
         "statuses": statuses,
         "pending": pending,
         "pending_count": len(pending),
-        "recent_candidates": max(0, int(data.get("recent_candidates") or 0)),
-        "today_candidates": max(0, int(data.get("today_candidates") or 0)),
-        "carryover_candidates": max(0, int(data.get("carryover_candidates") or 0)),
         "tracked": max(0, int(data.get("tracked") or 0)),
         "due": max(0, int(data.get("due") or 0)),
         "window_candidates": max(0, int(data.get("window_candidates") or 0)),
@@ -647,6 +644,9 @@ def save_match_status_snapshot(payload: object) -> dict:
     payload_text = (_encode_runtime_ui_payload(safe)
                     if len(payload_json.encode("utf-16-le")) > 40_000
                     else payload_json)
+    if len(payload_text.encode("utf-16-le")) > 60_000:
+        # Fail loudly: never silently truncate unfinished matches or results.
+        raise AdminStorageUnavailable("Match status snapshot exceeds storage property limit")
     entity = {
         "PartitionKey": "runtime",
         "RowKey": "match-status-worker",
