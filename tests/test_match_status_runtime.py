@@ -311,3 +311,65 @@ def test_round_robin_checks_next_pending_id_on_next_run():
     second = scan_match_statuses(feed, provider, first, now=now, max_checks=1)
     assert second["checked"] == 1
     assert second["next_due_id"] == "101"
+
+
+def test_recent_window_ignores_future_and_old_backlog():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    feed = {"upcoming": [
+        _row("future", "11", (now + timedelta(hours=2)).isoformat()),
+        _row("too_new", "11", (now - timedelta(minutes=20)).isoformat()),
+        _row("in_a", "11", (now - timedelta(minutes=30)).isoformat()),
+        _row("in_b", "11", (now - timedelta(minutes=149)).isoformat()),
+        _row("too_old", "11", (now - timedelta(minutes=151)).isoformat()),
+    ]}
+    client = _Provider()
+    snapshot = scan_match_statuses(
+        feed, client, now=now, max_checks=12,
+        min_age_minutes=30, max_age_minutes=150,
+    )
+    assert snapshot["due"] == 2
+    assert snapshot["window_candidates"] == 2
+    assert snapshot["checked"] == 2
+    assert snapshot["window_min_age_minutes"] == 30
+    assert snapshot["window_max_age_minutes"] == 150
+
+
+def test_recent_window_twelve_checks_cover_only_current_time_band():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    rows = []
+    for i in range(20):
+        rows.append(_row(
+            str(1000+i),
+            str(2000+i),
+            (now - timedelta(minutes=35+i*5)).isoformat(),
+        ))
+    # Add a large old backlog which must not consume the hourly quota.
+    for i in range(40):
+        rows.append(_row(
+            str(5000+i),
+            str(6000+i),
+            (now - timedelta(hours=5, minutes=i)).isoformat(),
+        ))
+    client = _Provider()
+    snapshot = scan_match_statuses(
+        {"upcoming": rows}, client, now=now, max_checks=12,
+        min_age_minutes=30, max_age_minutes=150,
+    )
+    assert snapshot["due"] == 20
+    assert snapshot["checked"] == 12
+    assert len(client.previous_calls) == 12
+    assert all(str(call[0]).startswith("20") for call in client.previous_calls)
+
+
+def test_recent_window_deduplicates_same_event_across_categories():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    row = _row("101", "11", (now - timedelta(minutes=90)).isoformat())
+    client = _Provider()
+    snapshot = scan_match_statuses(
+        {"upcoming": [row], "daily_picks": [dict(row)], "value_picks": [dict(row)]},
+        client, now=now, max_checks=12,
+        min_age_minutes=30, max_age_minutes=150,
+    )
+    assert snapshot["due"] == 1
+    assert snapshot["checked"] == 1
+    assert len(client.previous_calls) == 1

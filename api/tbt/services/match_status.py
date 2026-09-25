@@ -252,9 +252,11 @@ def scan_match_statuses(
     previous_snapshot: dict[str, Any] | None = None,
     *,
     now: datetime | None = None,
-    max_checks: int = 30,
+    max_checks: int = 12,
     lookback_hours: int = 36,
     max_near_checks: int = 12,
+    min_age_minutes: int = 30,
+    max_age_minutes: int = 150,
 ) -> dict[str, Any]:
     """Settle verified events without trusting a consistently 404ing history route.
 
@@ -275,17 +277,25 @@ def scan_match_statuses(
         and str(value.get("status") or "") in TERMINAL_STATUSES
     }
 
-    cutoff = now - timedelta(hours=max(1, int(lookback_hours)))
+    # This hourly overlay is deliberately a RECENT-results worker, not a backfill.
+    # Example: at 09:30 it checks matches scheduled roughly 07:00–09:00.
+    # Older unresolved rows are left for the normal results/history pipeline.
+    min_age = max(0, min(240, int(min_age_minutes)))
+    max_age = max(min_age + 30, min(720, int(max_age_minutes)))
+    newest_start = now - timedelta(minutes=min_age)
+    oldest_start = now - timedelta(minutes=max_age)
     due: list[tuple[datetime, str, dict[str, Any]]] = []
     for eid, row in rows.items():
         if eid in statuses:
             continue
         scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
-        if scheduled is None or scheduled > now or scheduled < cutoff:
+        if scheduled is None or scheduled > newest_start or scheduled < oldest_start:
             continue
         if not _player_id(row, "player1"):
             continue
         due.append((scheduled, eid, row))
+    # One event id is already deduplicated by prediction_rows(); oldest recent
+    # starts go first so a 12-match budget naturally covers the current window.
     due.sort(key=lambda item: item[0])
 
     prior_errors = prior.get("provider_errors")
@@ -426,6 +436,9 @@ def scan_match_statuses(
         "statuses": statuses,
         "tracked": len(rows),
         "due": len(due),
+        "window_candidates": len(due),
+        "window_min_age_minutes": min_age,
+        "window_max_age_minutes": max_age,
         "checked": checked,
         "skipped_live": skipped_live,
         "provider_requests": provider_requests,
