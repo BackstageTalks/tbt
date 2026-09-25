@@ -341,3 +341,24 @@ def test_paid_plan_does_not_gain_unpersisted_rows_on_read_outage():
     data, manifest = filter_feed_for_access(payload, account, cfg)
     assert data["prime_picks"] == []
     assert manifest["sections"]["prime"]["returned"] == 0
+
+
+def test_failed_allocation_write_still_serves_the_computed_free_pick(monkeypatch):
+    import function_app
+
+    cfg = _stable_random_cfg("rookie", 1)
+    payload = feed(10)
+    account = {"id": "free-write-outage", "plan": "rookie", "status": "active"}
+
+    def unavailable(*_args, **_kwargs):
+        raise function_app.AdminStorageUnavailable("test storage outage")
+
+    monkeypatch.setattr(function_app, "save_daily_access_allocations", unavailable)
+    context = function_app._access_context_with_daily_allocation(
+        {"id": "free-write-outage"}, account, {"storage_fallback": False}, payload, cfg,
+    )
+    assert context.get("_daily_allocations_fail_closed") is not True
+    assert len(context["_daily_allocations"]["prime"]) == 1
+    data, manifest = filter_feed_for_access(payload, context, cfg)
+    assert len(data["prime_picks"]) == 1
+    assert manifest["sections"]["prime"]["returned"] == 1
