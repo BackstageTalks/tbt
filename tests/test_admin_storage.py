@@ -167,11 +167,23 @@ def test_match_status_pending_roundtrip_and_compressed_large_snapshot(monkeypatc
         str(i): {"status": "win", "checked_at": "2026-09-25T23:00:00+00:00",
                  "winner_id": "123", "provider_status": "finished ended " +
                  str(i).zfill(110)}
-        for i in range(220)
+        for i in range(260)
+    }
+    huge["statuses"]["void_event"] = {
+        "status": "void", "checked_at": "2026-09-25T23:00:00+00:00",
+    }
+    huge["pending"] = {
+        str(i): {"t": "2026-09-25T21:00:00+00:00",
+                 "s": "11", "a": "11", "b": "22",
+                 "c": "2026-09-25T23:00:00+00:00"}
+        for i in range(170)
     }
     admin_storage.save_match_status_snapshot(huge)
     assert table.single["payload"].startswith("gzip:")
     assert len(table.single["payload"].encode("utf-16-le")) < 60_000
     restored = admin_storage.load_match_status_snapshot()
     assert restored["statuses"]["100"]["status"] == "win"
-    assert restored["pending"]["101"]["s"] == "11"
+    assert restored["statuses"]["259"]["status"] == "win"
+    assert restored["statuses"]["void_event"]["status"] == "void"
+    assert restored["pending"]["169"]["s"] == "11"
+    assert restored["pending_count"] == 170
