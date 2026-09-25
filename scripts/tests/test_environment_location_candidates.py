@@ -120,7 +120,7 @@ class LocationCandidatesTest(unittest.TestCase):
             {"name": "Antalya", "query": "Antalya, TR", "country": "Turkey"},
         )
         self.assertFalse(accepted)
-        self.assertEqual(reason, "city_mismatch")
+        self.assertEqual(reason, "provider_city_mismatch")
 
     def test_resolver_version_invalidates_old_negative_cache(self):
         self.assertGreaterEqual(ENVIRONMENT_RESOLVER_VERSION, 6)
