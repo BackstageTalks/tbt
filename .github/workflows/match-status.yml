@@ -2,6 +2,7 @@ name: Hourly prediction match status
 
 on:
   schedule:
+    # Every hour, 24/7; time zones do not affect hourly cadence.
     - cron: '17 * * * *'
   workflow_dispatch:
 

@@ -17,10 +17,9 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import re
 from typing import Any
-from zoneinfo import ZoneInfo
 
 
-TERMINAL_STATUSES = {"win", "loss", "retired"}
+TERMINAL_STATUSES = {"win", "loss", "retired", "void"}
 
 _FEED_ROW_KEYS = (
     "upcoming",
@@ -41,36 +40,6 @@ _FEED_ROW_KEYS = (
     "board_upcoming",
     "board_results",
 )
-
-# These are the published Match Winner sections. Aces/DF/Games/Sets count
-# toward the dashboard KPI, but a match winner alone cannot settle their bets.
-_MATCH_WINNER_OFFER_KEYS = (
-    "daily_picks",
-    "top_daily_picks",  # legacy alias of daily, never counted twice
-    "prime_picks",
-    "value_picks",
-    "doubles_picks",
-)
-
-
-def _published_winner_event_ids(feed: dict[str, Any]) -> set[str]:
-    published: set[str] = set()
-    for key in _MATCH_WINNER_OFFER_KEYS:
-        rows = feed.get(key)
-        if not isinstance(rows, list):
-            continue
-        for row in rows:
-            eid = _event_id(row)
-            if eid:
-                published.add(eid)
-    # Some feed revisions only expose their published sections under markets.
-    markets = feed.get("markets")
-    if isinstance(markets, dict):
-        for key in ("daily", "top_daily", "prime", "value", "doubles"):
-            rows = markets.get(key)
-            if isinstance(rows, list):
-                published.update(eid for row in rows if (eid := _event_id(row)))
-    return published
 
 
 def _event_id(row: Any) -> str:
@@ -221,6 +190,9 @@ def classify_finished_event(
         "abandoned due to injury",
     )
     retired = any(marker in status_text for marker in retirement_markers)
+    void = any(marker in status_text for marker in (
+        "cancelled", "canceled", "walkover", "walk over",
+    ))
 
     winner_code = event.get("winnerCode")
     try:
@@ -233,7 +205,7 @@ def classify_finished_event(
         for marker in ("finished", "ended", "completed", "full time")
     ) or winner_code in {1, 2}
 
-    if not finished and not retired:
+    if not finished and not retired and not void:
         return None
 
     base = {
@@ -250,6 +222,8 @@ def classify_finished_event(
         return None
     if retired:
         return {**base, "status": "retired"}
+    if void:
+        return {**base, "status": "void"}
 
     provider_winner = ""
     if winner_code == 1:
@@ -284,8 +258,7 @@ def scan_match_statuses(
     *,
     now: datetime | None = None,
     max_checks: int = 30,
-    lookback_hours: int = 36,
-    max_near_checks: int = 12,
+    max_near_checks: int = 30,
 ) -> dict[str, Any]:
     """Settle verified events without trusting a consistently 404ing history route.
 
@@ -296,63 +269,58 @@ def scan_match_statuses(
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     rows = prediction_rows(feed)
     prior = previous_snapshot if isinstance(previous_snapshot, dict) else {}
+    prior_pending = prior.get("pending")
+    prior_pending = prior_pending if isinstance(prior_pending, dict) else {}
+
+    # Keep unfinished fixtures even when a fresh feed replaces yesterday's rows.
+    # Pending fixtures do not expire after any fixed number of hours or days.
+    for eid, saved in prior_pending.items():
+        if eid in rows or not isinstance(saved, dict):
+            continue
+        if not (_parse_time(saved.get("t")) and saved.get("s")
+                and saved.get("a") and saved.get("b")):
+            continue
+        rows[eid] = {
+            "event_id": eid, "scheduled_at": saved["t"], "winner_id": saved["s"],
+            "player1": {"id": saved["a"]}, "player2": {"id": saved["b"]},
+        }
+
     existing = prior.get("statuses")
     existing = existing if isinstance(existing, dict) else {}
     statuses: dict[str, dict[str, Any]] = {
         str(eid): dict(value)
         for eid, value in existing.items()
-        if eid in rows
-        and isinstance(value, dict)
+        if isinstance(value, dict)
         and str(value.get("status") or "") in TERMINAL_STATUSES
     }
 
-    cutoff = now - timedelta(hours=max(1, int(lookback_hours)))
     due: list[tuple[datetime, str, dict[str, Any]]] = []
+    pending: dict[str, dict[str, str]] = {}
     for eid, row in rows.items():
         if eid in statuses:
             continue
         scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
-        if scheduled is None or scheduled > now or scheduled < cutoff:
+        player1 = _player_id(row, "player1")
+        player2 = _player_id(row, "player2")
+        selection = _selection_id(row)
+        if scheduled is None or not (player1 and player2 and selection):
             continue
-        if not _player_id(row, "player1"):
+        old = prior_pending.get(eid)
+        old = old if isinstance(old, dict) else {}
+        compact = {
+            "t": scheduled.isoformat(), "s": selection,
+            "a": player1, "b": player2, "c": str(old.get("c") or "")[:64],
+        }
+        # Keep postponed fixtures in the queue, without querying future starts.
+        if eid in prior_pending:
+            pending[eid] = compact
+        if scheduled >= now:
             continue
         due.append((scheduled, eid, row))
-    due.sort(key=lambda item: item[0])
+        pending[eid] = compact
 
-    # Prioritize only distinct, published Match Winner fixtures on the local
-    # tennis offer day. The KPI counts event + market + selection across EIGHT
-    # markets, so 72 bets do not mean 72 different match-result API lookups.
-    # Keep a small independent backlog lane to prevent yesterday's incomplete
-    # matches from being stranded when a new offer arrives.
-    local_day = now.astimezone(ZoneInfo("Europe/Bratislava")).date()
-    published_ids = _published_winner_event_ids(feed)
-    focused = [
-        entry for entry in due
-        if entry[1] in published_ids
-        and entry[0].astimezone(ZoneInfo("Europe/Bratislava")).date() == local_day
-    ]
-    if not focused and published_ids:
-        # Overnight: finish unresolved fixtures from the latest published
-        # offer until the next day's offer becomes available.
-        focused = [entry for entry in due if entry[1] in published_ids]
-    if not focused and not published_ids:
-        # Backwards-compatible fallback for older feed fixtures.
-        focused = [
-            entry for entry in due
-            if entry[0].astimezone(ZoneInfo("Europe/Bratislava")).date() == local_day
-        ]
-    focus_ids = {entry[1] for entry in focused}
-    backlog = [entry for entry in due if entry[1] not in focus_ids]
-
-    def rotated(items: list[tuple[datetime, str, dict[str, Any]]], cursor: Any):
-        if not items:
-            return []
-        token = str(cursor or "")
-        start = next((i for i, (_, eid, _) in enumerate(items) if eid == token), 0)
-        return items[start:] + items[:start]
-
-    focused = rotated(focused, prior.get("next_focus_id"))
-    backlog = rotated(backlog, prior.get("next_backlog_id") or prior.get("next_due_id"))
+    # Single chronological queue; no priority bands and no age cutoff.
+    due.sort(key=lambda item: (item[0], item[1]))
 
     prior_errors = prior.get("provider_errors")
     prior_errors = prior_errors if isinstance(prior_errors, dict) else {}
@@ -384,50 +352,38 @@ def scan_match_statuses(
     checked = skipped_live = successful_history = matched_events = 0
     newly_resolved = consecutive_errors = near_attempts = unmatched = 0
     next_due_id = ""
-    last_checked_eid = ""
     max_checks = max(0, min(120, int(max_checks)))
-    # Nine priority checks + three older checks under the default 12-call
-    # near-route limit. Unused capacity always rolls into the other lane.
-    backlog_reserve = min(3, max_near_checks // 4) if focused and backlog else 0
-    focus_first = max(0, max_near_checks - backlog_reserve)
-    ordered = (
-        focused[:focus_first] + backlog[:backlog_reserve]
-        + focused[focus_first:] + backlog[backlog_reserve:]
-    )
-    focus_next = str(prior.get("next_focus_id") or "")
-    backlog_next = str(prior.get("next_backlog_id") or "")
-    focus_positions = {eid: i for i, (_, eid, _) in enumerate(focused)}
-    backlog_positions = {eid: i for i, (_, eid, _) in enumerate(backlog)}
-    focused_checked = backlog_checked = 0
+    cursor = str(prior.get("next_due_id") or "")
+    offset = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), 0)
+    ordered = due[offset:] + due[:offset]
+
+    # One live request can settle every due fixture, including those beyond
+    # the per-event request budget of thirty.
+    for _, eid, row in due:
+        live_event = live_by_id.get(eid)
+        if live_event is None:
+            continue
+        result = classify_finished_event(row, live_event, checked_at=now)
+        if result:
+            statuses[eid] = result
+            pending.pop(eid, None)
+            newly_resolved += 1
+        else:
+            skipped_live += 1
 
     for position, (_, eid, row) in enumerate(ordered):
+        if eid in statuses or eid in live_by_id:
+            continue
         if checked >= max_checks:
             break
         if prefer_near and near_attempts >= max_near_checks:
             break
-        last_checked_eid = eid
         next_due_id = ordered[(position + 1) % len(ordered)][1]
-        if eid in focus_positions:
-            focus_next = focused[(focus_positions[eid] + 1) % len(focused)][1]
-        elif eid in backlog_positions:
-            backlog_next = backlog[(backlog_positions[eid] + 1) % len(backlog)][1]
-
-        live_event = live_by_id.get(eid)
-        if live_event is not None:
-            result = classify_finished_event(row, live_event, checked_at=now)
-            if result:
-                statuses[eid] = result
-                newly_resolved += 1
-            else:
-                skipped_live += 1
-            continue
 
         player_id = _player_id(row, "player1")
         checked += 1
-        if eid in focus_positions:
-            focused_checked += 1
-        else:
-            backlog_checked += 1
+        if eid in pending:
+            pending[eid]["c"] = now.isoformat()
         payload = None
         near_used = False
         try:
@@ -492,6 +448,7 @@ def scan_match_statuses(
         result = classify_finished_event(row, event, checked_at=now)
         if result:
             statuses[eid] = result
+            pending.pop(eid, None)
             newly_resolved += 1
 
     request_count_after = getattr(provider, "request_count", None)
@@ -510,6 +467,11 @@ def scan_match_statuses(
         "statuses": statuses,
         "tracked": len(rows),
         "due": len(due),
+        "window_candidates": len(due),  # Legacy diagnostic, no window cutoff.
+        "window_min_age_minutes": 0,
+        "window_max_age_minutes": 0,
+        "pending_count": len(pending),
+        "pending": pending,
         "checked": checked,
         "skipped_live": skipped_live,
         "provider_requests": provider_requests,
@@ -524,10 +486,4 @@ def scan_match_statuses(
         "near_attempts": near_attempts,
         "unmatched": unmatched,
         "next_due_id": next_due_id if len(due) > 1 else "",
-        "focused_due": len(focused),
-        "backlog_due": len(backlog),
-        "focused_checked": focused_checked,
-        "backlog_checked": backlog_checked,
-        "next_focus_id": focus_next if len(focused) > 1 else "",
-        "next_backlog_id": backlog_next if len(backlog) > 1 else "",
     }

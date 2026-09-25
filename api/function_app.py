@@ -1302,8 +1302,8 @@ def internal_match_status_worker(req):
         feed_payload = read_feed(FEED)
         previous = load_match_status_snapshot() or {}
         client = RapidTennisClient(settings)
-        # This is a small hourly read-only worker, not a history backfill.
-        client.request_limit = max(2, min(80, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT", "40"))))
+        # Thirty hourly lookups plus live feed and one fallback request.
+        client.request_limit = max(32, min(90, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT", "70"))))
         try:
             snapshot = scan_match_statuses(
                 feed_payload,
@@ -1311,15 +1311,11 @@ def internal_match_status_worker(req):
                 previous,
                 max_checks=max(
                     1,
-                    min(120, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS", "30"))),
-                ),
-                lookback_hours=max(
-                    6,
-                    min(72, int(os.getenv("BLINQ_MATCH_STATUS_LOOKBACK_HOURS", "36"))),
+                    min(30, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS", "30"))),
                 ),
                 max_near_checks=max(
                     1,
-                    min(30, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "12"))),
+                    min(30, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "30"))),
                 ),
             )
         finally:

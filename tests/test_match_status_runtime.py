@@ -144,7 +144,7 @@ def test_broken_player_endpoint_fails_fast_with_safe_diagnostics():
     from tbt.errors import ProviderError
     now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
     feed = {"upcoming": [
-        _row(str(100+i), "11", (now - timedelta(hours=2+i)).isoformat())
+        _row(str(100+i), "11", (now - timedelta(minutes=45+10*i)).isoformat())
         for i in range(8)
     ]}
     client = _BrokenProvider(ProviderError("RapidAPI HTTP 403: secrets must not leak"))
@@ -182,7 +182,7 @@ def test_finished_live_event_can_resolve_without_history_request():
 
 def test_valid_but_not_yet_in_previous_matches_is_not_a_provider_failure():
     now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
-    row = _row("101", "11", (now - timedelta(minutes=10)).isoformat())
+    row = _row("101", "11", (now - timedelta(minutes=60)).isoformat())
     client = _Provider()
     snapshot = scan_match_statuses({"upcoming": [row]}, client, now=now)
     assert snapshot["checked"] == 1
@@ -265,7 +265,7 @@ def test_near_404_fails_fast_without_fabricating_any_result():
     from tbt.errors import ProviderError
     now = datetime(2026, 9, 24, 19, 0, tzinfo=timezone.utc)
     feed = {"upcoming": [
-        _row(str(101+i), "11", (now-timedelta(hours=i+1)).isoformat())
+        _row(str(101+i), "11", (now-timedelta(minutes=45+10*i)).isoformat())
         for i in range(8)
     ]}
     provider = _NearFallbackProvider(
@@ -313,98 +313,156 @@ def test_round_robin_checks_next_pending_id_on_next_run():
     assert second["next_due_id"] == "101"
 
 
-
-def _published_row(eid, at, first="11", second="22"):
-    return {
-        "event_id": str(eid), "scheduled_at": at.isoformat(),
-        "winner_id": str(first),
-        "player1": {"id": str(first), "name": "P1"},
-        "player2": {"id": str(second), "name": "P2"},
-    }
-
-
-def test_today_published_fixture_checked_before_older_pending_match():
-    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
-    old = _published_row("101", now-timedelta(hours=26), "11", "22")
-    today = _published_row("202", now-timedelta(hours=2), "33", "44")
-    provider = _Provider(previous={
-        "33": [{
-            "id": "202", "winnerCode": 1,
-            "status": {"type": "finished", "description": "Ended"},
-            "homeTeam": {"id": "33"}, "awayTeam": {"id": "44"},
-        }]
-    })
-    result = scan_match_statuses(
-        {"upcoming": [old, today], "daily_picks": [today]},
-        provider, now=now, max_checks=1,
-    )
-    assert provider.previous_calls == [("33", 0)]
-    assert result["focused_due"] == 1
-    assert result["backlog_due"] == 1
-    assert result["focused_checked"] == 1
-    assert result["backlog_checked"] == 0
-    assert result["statuses"]["202"]["status"] == "win"
-
-
-def test_near_lookup_reserves_backlog_capacity_and_rotates_today():
-    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
-    today = [
-        _published_row(f"t{i}", now-timedelta(hours=2), str(100+i), str(200+i))
-        for i in range(14)
-    ]
-    older = [
-        _published_row(f"o{i}", now-timedelta(hours=26), str(300+i), str(400+i))
-        for i in range(3)
-    ]
-    feed = {"upcoming": older + today, "daily_picks": today}
-    provider = _NearFallbackProvider()
-    prior = {"preferred_route": "near"}
-    first = scan_match_statuses(feed, provider, prior, now=now)
-    assert first["tracked"] == 17
-    assert first["focused_due"] == 14
-    assert first["backlog_due"] == 3
-    assert first["checked"] == 12
-    assert first["focused_checked"] == 9
-    assert first["backlog_checked"] == 3
-    assert provider.near_calls[:9] == [str(100+i) for i in range(9)]
-    assert provider.near_calls[9:] == [str(300+i) for i in range(3)]
-    assert first["next_focus_id"] == "t9"
-    second_provider = _NearFallbackProvider()
-    second = scan_match_statuses(feed, second_provider, first, now=now)
-    assert second_provider.near_calls[:5] == [str(109+i) for i in range(5)]
-    assert second["focused_checked"] == 9
-    assert second["backlog_checked"] == 3
-
-
-def test_kpi_multiple_market_picks_share_one_status_event_check():
-    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
-    today = _published_row("101", now-timedelta(hours=2))
-    # Multiple bets at this event count toward KPI, but use ONE provider lookup.
-    feed = {
-        "upcoming": [today],
-        "daily_picks": [today],
-        "prime_picks": [dict(today, market="match_winner")],
-        "value_picks": [dict(today, market="match_winner")],
-        "ace_picks": [dict(today, market="aces")],
-        "sg_picks": [dict(today, market="sets")],
-    }
-    provider = _Provider()
-    result = scan_match_statuses(feed, provider, now=now)
-    assert result["tracked"] == 1
-    assert result["focused_due"] == 1
-    assert result["checked"] == 1
-    assert provider.previous_calls == [("11", 0)]
-
-
-def test_no_daily_offer_falls_back_to_old_pending_row():
-    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
-    yesterday = _published_row("101", now-timedelta(hours=26))
+def test_all_unfinished_past_start_matches_are_eligible_without_any_time_window():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    old_today = _row("old", "11", (now-timedelta(hours=5)).isoformat())
+    recent = _row("recent", "11", (now-timedelta(hours=1)).isoformat())
+    yesterday = _row("yesterday", "11", (now-timedelta(hours=30)).isoformat())
+    last_week = _row("last_week", "11", (now-timedelta(days=8)).isoformat())
+    future = _row("future", "11", (now+timedelta(hours=2)).isoformat())
+    same_time = _row("now", "11", now.isoformat())
     provider = _Provider()
     result = scan_match_statuses(
-        {"upcoming": [yesterday], "daily_picks": []},
-        provider, now=now, max_checks=1,
+        {"upcoming": [old_today, recent, yesterday, last_week, future, same_time]},
+        provider, now=now, max_checks=30,
     )
-    assert result["focused_due"] == 0
-    assert result["backlog_due"] == 1
+    assert result["due"] == 4
+    assert result["checked"] == 4
+    assert result["pending_count"] == 4
+    assert result["window_candidates"] == 4
+    assert "future" not in result["pending"]
+    assert "now" not in result["pending"]
+
+
+def test_seventy_unfinished_matches_continue_thirty_at_a_time():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    rows = []
+    for i in range(70):
+        row = _row(
+            str(1000+i), str(2000+i),
+            (now-timedelta(hours=70-i)).isoformat(),
+        )
+        row["player1"]["id"] = str(2000+i)
+        rows.append(row)
+    first = scan_match_statuses({"upcoming": rows}, _Provider(), now=now)
+    assert first["due"] == 70
+    assert first["checked"] == 30
+    assert first["pending_count"] == 70
+    assert first["next_due_id"] == "1030"
+    second_provider = _Provider()
+    second = scan_match_statuses(
+        {"upcoming": rows}, second_provider, first, now=now+timedelta(hours=1),
+    )
+    assert second["checked"] == 30
+    assert second_provider.previous_calls[0][0] == "2030"
+    assert second["next_due_id"] == "1060"
+    third_provider = _Provider()
+    third = scan_match_statuses(
+        {"upcoming": rows}, third_provider, second, now=now+timedelta(hours=2),
+    )
+    assert third["checked"] == 30
+    assert third_provider.previous_calls[0][0] == "2060"
+    assert third["next_due_id"] == "1020"
+
+
+def test_thirty_two_completed_matches_are_settled_across_two_hourly_runs():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    rows, finished = [], {}
+    for i in range(32):
+        row = _row(
+            str(1000+i), str(2000+i), (now-timedelta(hours=1)).isoformat(),
+        )
+        row["player1"]["id"] = str(2000+i)
+        rows.append(row)
+        event = _event(str(1000+i))
+        event["homeTeam"]["id"] = str(2000+i)
+        finished[str(2000+i)] = [event]
+    feed = {"upcoming": rows}
+    first = scan_match_statuses(feed, _Provider(previous=finished), now=now)
+    assert first["checked"] == 30
+    assert first["newly_resolved"] == 30
+    assert first["pending_count"] == 2
+    second = scan_match_statuses(
+        feed, _Provider(previous=finished), first, now=now+timedelta(hours=1),
+    )
+    assert second["due"] == 2
+    assert second["checked"] == 2
+    assert second["newly_resolved"] == 2
+    assert second["terminal"] == 32
+    assert second["pending_count"] == 0
+
+
+def test_started_is_provisional_and_does_not_prevent_followup():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    row = _row("101", "11", (now-timedelta(hours=4)).isoformat())
+    previous = {"statuses": {"101": {"status": "started", "checked_at": now.isoformat()}}}
+    result = scan_match_statuses(
+        {"upcoming": [row]}, _Provider(previous={"11": [_event()]}),
+        previous, now=now,
+    )
+    assert result["statuses"]["101"]["status"] == "win"
+    assert result["newly_resolved"] == 1
+
+
+def test_verified_cancelation_sets_void_and_ends_checking():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    row = _row("101", "11", (now-timedelta(hours=1)).isoformat())
+    canceled = _event(status_type="canceled", description="Canceled", winner_code=0)
+    provider = _Provider(previous={"11": [canceled]})
+    first = scan_match_statuses({"upcoming": [row]}, provider, now=now)
+    assert first["statuses"]["101"]["status"] == "void"
+    second = scan_match_statuses({"upcoming": [row]}, _Provider(), first, now=now)
+    assert second["checked"] == 0
+
+
+def test_duplicate_markets_only_cost_one_match_result_lookup():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    row = _row("101", "11", (now-timedelta(minutes=90)).isoformat())
+    provider = _Provider()
+    result = scan_match_statuses(
+        {"upcoming": [row], "daily_picks": [dict(row)],
+         "value_picks": [dict(row)]},
+        provider, now=now,
+    )
+    assert result["due"] == 1
     assert result["checked"] == 1
-    assert provider.previous_calls == [("11", 0)]
+    assert len(provider.previous_calls) == 1
+
+
+def test_unfinished_previous_day_survives_new_feed_at_six():
+    night = datetime(2026, 9, 25, 21, 0, tzinfo=timezone.utc)
+    row = _row("101", "11", (night-timedelta(hours=5)).isoformat())
+    first = scan_match_statuses({"upcoming": [row]}, _Provider(), now=night)
+    assert first["checked"] == 1
+    assert "101" in first["pending"]
+    morning_provider = _Provider(previous={"11": [_event()]})
+    morning = scan_match_statuses(
+        {"upcoming": []}, morning_provider, first, now=night+timedelta(hours=7),
+    )
+    assert morning["due"] == 1
+    assert morning["checked"] == 1
+    assert morning["statuses"]["101"]["status"] == "win"
+    assert "101" not in morning["pending"]
+
+
+def test_live_api_settles_results_beyond_30_history_checks():
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    feed = {"upcoming": [
+        _row(str(1000+i), "11", (now-timedelta(hours=1)).isoformat())
+        for i in range(32)
+    ]}
+    provider = _Provider(live=[_event("1031")])
+    result = scan_match_statuses(feed, provider, now=now, max_checks=30)
+    assert result["checked"] == 30
+    assert result["statuses"]["1031"]["status"] == "win"
+    assert result["newly_resolved"] == 1
+    assert result["provider_requests"] == 31
+
+
+def test_hourly_match_status_schedule_is_24_7():
+    from pathlib import Path
+    workflow = (Path(__file__).resolve().parents[1] /
+                ".github/workflows/match-status.yml").read_text()
+    assert "cron: '17 * * * *'" in workflow
+    assert "timezone:" not in workflow
+    assert "workflow_dispatch:" in workflow

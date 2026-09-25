@@ -582,11 +582,11 @@ def save_match_status_snapshot(payload: object) -> dict:
     raw_statuses = data.get("statuses")
     raw_statuses = raw_statuses if isinstance(raw_statuses, dict) else {}
     statuses = {}
-    for event_id, value in list(raw_statuses.items())[:240]:
+    for event_id, value in raw_statuses.items():
         if not isinstance(value, dict):
             continue
         status = str(value.get("status") or "").strip().lower()
-        if status not in {"win", "loss", "retired"}:
+        if status not in {"win", "loss", "retired", "void"}:
             continue
         eid = str(event_id or "").strip()[:64]
         if not eid:
@@ -597,12 +597,29 @@ def save_match_status_snapshot(payload: object) -> dict:
             "winner_id": str(value.get("winner_id") or "")[:64],
             "provider_status": str(value.get("provider_status") or "")[:120],
         }
+    # Compact pending identities survive the next morning's feed rollover.
+    raw_pending = data.get("pending")
+    raw_pending = raw_pending if isinstance(raw_pending, dict) else {}
+    pending = {}
+    for eid, item in raw_pending.items():
+        if not isinstance(item, dict):
+            continue
+        key = str(eid or "").strip()[:64]
+        entry = {field: str(item.get(field) or "").strip()[:64]
+                 for field in ("t", "s", "a", "b", "c")}
+        if key and all(entry[field] for field in ("t", "s", "a", "b")):
+            pending[key] = entry
     safe = {
         "schema": 1,
         "updated_at": str(data.get("updated_at") or now)[:64],
         "statuses": statuses,
+        "pending": pending,
+        "pending_count": len(pending),
         "tracked": max(0, int(data.get("tracked") or 0)),
         "due": max(0, int(data.get("due") or 0)),
+        "window_candidates": max(0, int(data.get("window_candidates") or 0)),
+        "window_min_age_minutes": max(0, int(data.get("window_min_age_minutes") or 0)),
+        "window_max_age_minutes": max(0, int(data.get("window_max_age_minutes") or 0)),
         "checked": max(0, int(data.get("checked") or 0)),
         "skipped_live": max(0, int(data.get("skipped_live") or 0)),
         "provider_requests": max(0, int(data.get("provider_requests") or 0)),
@@ -614,12 +631,6 @@ def save_match_status_snapshot(payload: object) -> dict:
         "near_attempts": max(0, int(data.get("near_attempts") or 0)),
         "unmatched": max(0, int(data.get("unmatched") or 0)),
         "next_due_id": str(data.get("next_due_id") or "")[:64],
-        "focused_due": max(0, int(data.get("focused_due") or 0)),
-        "backlog_due": max(0, int(data.get("backlog_due") or 0)),
-        "focused_checked": max(0, int(data.get("focused_checked") or 0)),
-        "backlog_checked": max(0, int(data.get("backlog_checked") or 0)),
-        "next_focus_id": str(data.get("next_focus_id") or "")[:64],
-        "next_backlog_id": str(data.get("next_backlog_id") or "")[:64],
         "provider_errors": {
             str(k)[:64]: max(0, int(v))
             for k, v in list((data.get("provider_errors") or {}).items())[:8]
@@ -628,10 +639,18 @@ def save_match_status_snapshot(payload: object) -> dict:
         "degraded": bool(data.get("degraded")),
         "terminal": len(statuses),
     }
+    payload_json = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
+    # Azure Table limits string properties to 64 KiB (UTF-16).
+    payload_text = (_encode_runtime_ui_payload(safe)
+                    if len(payload_json.encode("utf-16-le")) > 40_000
+                    else payload_json)
+    if len(payload_text.encode("utf-16-le")) > 60_000:
+        # Fail loudly: never silently truncate unfinished matches or results.
+        raise AdminStorageUnavailable("Match status snapshot exceeds storage property limit")
     entity = {
         "PartitionKey": "runtime",
         "RowKey": "match-status-worker",
-        "payload": json.dumps(safe, ensure_ascii=False, separators=(",", ":")),
+        "payload": payload_text,
         "updated_at": now,
     }
     try:
@@ -651,11 +670,8 @@ def load_match_status_snapshot() -> dict | None:
         if _storage_not_found(exc):
             return None
         raise AdminStorageUnavailable("Unable to load match status snapshot") from exc
-    try:
-        payload = json.loads(str(entity.get("payload") or "{}"))
-    except ValueError:
-        return None
-    return payload if isinstance(payload, dict) else None
+    # Accept both legacy JSON and gzip-encoded large snapshots.
+    return _decode_runtime_ui_payload(str(entity.get("payload") or "{}"))
 
 
 def save_account_worker_status(payload: object) -> dict:

@@ -146,3 +146,44 @@ def test_live_worker_status_tracks_last_success_separately_from_failed_attempt(m
     assert failed["scanned_at"] == "2026-09-20T11:47:00+00:00"
     assert failed["last_success_at"] == "2026-09-20T11:42:00+00:00"
     assert failed["last_error"] == "ProviderError"
+
+
+def test_match_status_pending_roundtrip_and_compressed_large_snapshot(monkeypatch):
+    table = FakeTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    first = {
+        "statuses": {},
+        "pending": {"101": {"t": "2026-09-25T21:00:00+00:00",
+                            "s": "11", "a": "11", "b": "22",
+                            "c": "2026-09-25T23:00:00+00:00"}},
+        "recent_candidates": 1,
+        "today_candidates": 1,
+    }
+    saved = admin_storage.save_match_status_snapshot(first)
+    assert saved["pending_count"] == 1
+    assert admin_storage.load_match_status_snapshot()["pending"]["101"]["s"] == "11"
+    huge = dict(first)
+    huge["statuses"] = {
+        str(i): {"status": "win", "checked_at": "2026-09-25T23:00:00+00:00",
+                 "winner_id": "123", "provider_status": "finished ended " +
+                 str(i).zfill(110)}
+        for i in range(260)
+    }
+    huge["statuses"]["void_event"] = {
+        "status": "void", "checked_at": "2026-09-25T23:00:00+00:00",
+    }
+    huge["pending"] = {
+        str(i): {"t": "2026-09-25T21:00:00+00:00",
+                 "s": "11", "a": "11", "b": "22",
+                 "c": "2026-09-25T23:00:00+00:00"}
+        for i in range(170)
+    }
+    admin_storage.save_match_status_snapshot(huge)
+    assert table.single["payload"].startswith("gzip:")
+    assert len(table.single["payload"].encode("utf-16-le")) < 60_000
+    restored = admin_storage.load_match_status_snapshot()
+    assert restored["statuses"]["100"]["status"] == "win"
+    assert restored["statuses"]["259"]["status"] == "win"
+    assert restored["statuses"]["void_event"]["status"] == "void"
+    assert restored["pending"]["169"]["s"] == "11"
+    assert restored["pending_count"] == 170
