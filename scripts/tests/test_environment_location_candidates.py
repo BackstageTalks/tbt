@@ -100,6 +100,28 @@ class LocationCandidatesTest(unittest.TestCase):
             "country": "Italy", "latitude": 43.73, "longitude": 7.42,
         })[0])
 
+    def test_dutch_city_spelling_variants_are_equivalent(self):
+        for spelling in ("s-Hertogenbosch", "'s-Hertogenbosch", "Den Bosch"):
+            with self.subTest(spelling=spelling):
+                self.assertTrue(venue_context_compatible(
+                    {}, "'s-Hertogenbosch",
+                    {"name": spelling, "query": spelling + ", NL", "country": "Netherlands"},
+                )[0])
+
+    def test_antalya_does_not_override_explicit_different_provider_city(self):
+        payload = {
+            "tournament": {
+                "city": "Belek",
+                "country": {"alpha2": "TR"},
+            }
+        }
+        accepted, reason = venue_context_compatible(
+            payload, "Antalya, Singles Qualifying, M-ITF-TUR-29A",
+            {"name": "Antalya", "query": "Antalya, TR", "country": "Turkey"},
+        )
+        self.assertFalse(accepted)
+        self.assertEqual(reason, "city_mismatch")
+
     def test_resolver_version_invalidates_old_negative_cache(self):
         self.assertGreaterEqual(ENVIRONMENT_RESOLVER_VERSION, 6)
 
