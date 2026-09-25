@@ -292,3 +292,73 @@ def test_pro_daily_allocation_only_fills_missing_slots_and_keeps_existing_pick()
     assert changed2 is True
     assert len(full_state["sections"]["prime"]) == 3
     assert full_state["sections"]["prime"][:1] == original
+
+
+def test_free_pick_remains_visible_and_stable_during_metadata_read_failure():
+    cfg = _stable_random_cfg("rookie", 1)
+    payload = feed(10)
+    account = {
+        "id": "free-outage-account", "plan": "rookie", "status": "active",
+        "_daily_allocations_fail_closed": True,
+    }
+    first, first_manifest = filter_feed_for_access(payload, account, cfg)
+    second, second_manifest = filter_feed_for_access(payload, account, cfg)
+    assert len(first["prime_picks"]) == 1
+    assert [r["event_id"] for r in first["prime_picks"]] == [
+        r["event_id"] for r in second["prime_picks"]
+    ]
+    assert first_manifest["sections"]["prime"]["returned"] == 1
+    assert first_manifest["sections"]["prime"]["slot_states"] == second_manifest["sections"]["prime"]["slot_states"]
+
+
+def test_known_allocated_free_pick_is_never_replaced_by_fallback():
+    from tbt.services.entitlements import _row_access_key
+    cfg = _stable_random_cfg("rookie", 1)
+    payload = feed(10)
+    chosen = payload["prime_picks"][8]
+    account = {
+        "id": "already-allocated-account", "plan": "rookie", "status": "active",
+        "_daily_allocations_fail_closed": True,
+        "_daily_allocations": {"prime": [_row_access_key(chosen)]},
+    }
+    data, manifest = filter_feed_for_access(payload, account, cfg)
+    assert [item["event_id"] for item in data["prime_picks"]] == [chosen["event_id"]]
+    assert manifest["sections"]["prime"]["returned"] == 1
+    # If the selected event disappears, never silently allocate a second.
+    payload["prime_picks"] = payload["prime_picks"][:8]
+    missing, missing_manifest = filter_feed_for_access(payload, account, cfg)
+    assert missing["prime_picks"] == []
+    assert missing_manifest["sections"]["prime"]["returned"] == 0
+
+
+def test_paid_plan_does_not_gain_unpersisted_rows_on_read_outage():
+    cfg = _stable_random_cfg("pro", 3)
+    payload = feed(10)
+    account = {
+        "id": "pro-outage-account", "plan": "pro", "status": "active",
+        "_daily_allocations_fail_closed": True,
+    }
+    data, manifest = filter_feed_for_access(payload, account, cfg)
+    assert data["prime_picks"] == []
+    assert manifest["sections"]["prime"]["returned"] == 0
+
+
+def test_failed_allocation_write_still_serves_the_computed_free_pick(monkeypatch):
+    import function_app
+
+    cfg = _stable_random_cfg("rookie", 1)
+    payload = feed(10)
+    account = {"id": "free-write-outage", "plan": "rookie", "status": "active"}
+
+    def unavailable(*_args, **_kwargs):
+        raise function_app.AdminStorageUnavailable("test storage outage")
+
+    monkeypatch.setattr(function_app, "save_daily_access_allocations", unavailable)
+    context = function_app._access_context_with_daily_allocation(
+        {"id": "free-write-outage"}, account, {"storage_fallback": False}, payload, cfg,
+    )
+    assert context.get("_daily_allocations_fail_closed") is not True
+    assert len(context["_daily_allocations"]["prime"]) == 1
+    data, manifest = filter_feed_for_access(payload, context, cfg)
+    assert len(data["prime_picks"]) == 1
+    assert manifest["sections"]["prime"]["returned"] == 1

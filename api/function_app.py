@@ -252,10 +252,11 @@ def _access_context_with_daily_allocation(user, account_data: dict, profile: dic
         try:
             save_daily_access_allocations(user.get("id"), day=state["day"], allocations=state["sections"])
         except AdminStorageUnavailable:
-            # Fail closed for stable-random rows rather than revealing a second
-            # pick if allocation persistence becomes unavailable mid-request.
-            context["_daily_allocations_fail_closed"] = True
-            return context
+            # The profile was read successfully. Reuse its existing assignment
+            # and the deterministic additions computed from it for this request;
+            # do not drop a FREE pick solely because the write was unavailable.
+            # The next successful request persists the same allocation.
+            logging.warning("Daily pick allocation write unavailable; serving the current computed assignment")
     context["_daily_allocations"] = state["sections"]
     context["_access_day"] = state["day"]
     return context

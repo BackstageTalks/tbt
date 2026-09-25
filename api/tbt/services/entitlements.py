@@ -533,8 +533,17 @@ def _select_authorized_rows(
             # event later starts/disappears, do not replace it with another pick.
             allocated_keys=set(allocated[:visible_count])
         elif bool(access.get("_daily_allocations_fail_closed")):
-            # Storage outage must not expand a low-tier entitlement surface.
-            allocated_keys=set()
+            if str(access.get("plan") or "").lower() in {"rookie", "trial"} and visible_count > 0 and source:
+                # Keep the FREE sample visible during a metadata read outage.
+                # Existing known allocations above always take precedence.
+                # Identical account/day/section and offer yield the same row.
+                pool=source[:min(len(source),10)]
+                ordered=_stable_order(pool,access=access,section=section)
+                allocated_keys={_row_access_key(row) for row in ordered[:min(visible_count,len(pool))]}
+            else:
+                # Do not invent additional paid-plan allocations while storage
+                # is unavailable and their prior assignments are unknown.
+                allocated_keys=set()
         elif visible_count > 0 and source:
             # Pure-function fallback for tests/legacy callers. Production feed
             # requests persist the allocation in account metadata first.
