@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import re
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 TERMINAL_STATUSES = {"win", "loss", "retired"}
@@ -40,6 +41,36 @@ _FEED_ROW_KEYS = (
     "board_upcoming",
     "board_results",
 )
+
+# These are the published Match Winner sections. Aces/DF/Games/Sets count
+# toward the dashboard KPI, but a match winner alone cannot settle their bets.
+_MATCH_WINNER_OFFER_KEYS = (
+    "daily_picks",
+    "top_daily_picks",  # legacy alias of daily, never counted twice
+    "prime_picks",
+    "value_picks",
+    "doubles_picks",
+)
+
+
+def _published_winner_event_ids(feed: dict[str, Any]) -> set[str]:
+    published: set[str] = set()
+    for key in _MATCH_WINNER_OFFER_KEYS:
+        rows = feed.get(key)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            eid = _event_id(row)
+            if eid:
+                published.add(eid)
+    # Some feed revisions only expose their published sections under markets.
+    markets = feed.get("markets")
+    if isinstance(markets, dict):
+        for key in ("daily", "top_daily", "prime", "value", "doubles"):
+            rows = markets.get(key)
+            if isinstance(rows, list):
+                published.update(eid for row in rows if (eid := _event_id(row)))
+    return published
 
 
 def _event_id(row: Any) -> str:
@@ -288,6 +319,41 @@ def scan_match_statuses(
         due.append((scheduled, eid, row))
     due.sort(key=lambda item: item[0])
 
+    # Prioritize only distinct, published Match Winner fixtures on the local
+    # tennis offer day. The KPI counts event + market + selection across EIGHT
+    # markets, so 72 bets do not mean 72 different match-result API lookups.
+    # Keep a small independent backlog lane to prevent yesterday's incomplete
+    # matches from being stranded when a new offer arrives.
+    local_day = now.astimezone(ZoneInfo("Europe/Bratislava")).date()
+    published_ids = _published_winner_event_ids(feed)
+    focused = [
+        entry for entry in due
+        if entry[1] in published_ids
+        and entry[0].astimezone(ZoneInfo("Europe/Bratislava")).date() == local_day
+    ]
+    if not focused and published_ids:
+        # Overnight: finish unresolved fixtures from the latest published
+        # offer until the next day's offer becomes available.
+        focused = [entry for entry in due if entry[1] in published_ids]
+    if not focused and not published_ids:
+        # Backwards-compatible fallback for older feed fixtures.
+        focused = [
+            entry for entry in due
+            if entry[0].astimezone(ZoneInfo("Europe/Bratislava")).date() == local_day
+        ]
+    focus_ids = {entry[1] for entry in focused}
+    backlog = [entry for entry in due if entry[1] not in focus_ids]
+
+    def rotated(items: list[tuple[datetime, str, dict[str, Any]]], cursor: Any):
+        if not items:
+            return []
+        token = str(cursor or "")
+        start = next((i for i, (_, eid, _) in enumerate(items) if eid == token), 0)
+        return items[start:] + items[:start]
+
+    focused = rotated(focused, prior.get("next_focus_id"))
+    backlog = rotated(backlog, prior.get("next_backlog_id") or prior.get("next_due_id"))
+
     prior_errors = prior.get("provider_errors")
     prior_errors = prior_errors if isinstance(prior_errors, dict) else {}
     known_history_404 = int(prior_errors.get("ProviderError_HTTP_404") or 0) >= 2
@@ -320,9 +386,19 @@ def scan_match_statuses(
     next_due_id = ""
     last_checked_eid = ""
     max_checks = max(0, min(120, int(max_checks)))
-    cursor = str(prior.get("next_due_id") or "")
-    offset = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), 0)
-    ordered = due[offset:] + due[:offset]
+    # Nine priority checks + three older checks under the default 12-call
+    # near-route limit. Unused capacity always rolls into the other lane.
+    backlog_reserve = min(3, max_near_checks // 4) if focused and backlog else 0
+    focus_first = max(0, max_near_checks - backlog_reserve)
+    ordered = (
+        focused[:focus_first] + backlog[:backlog_reserve]
+        + focused[focus_first:] + backlog[backlog_reserve:]
+    )
+    focus_next = str(prior.get("next_focus_id") or "")
+    backlog_next = str(prior.get("next_backlog_id") or "")
+    focus_positions = {eid: i for i, (_, eid, _) in enumerate(focused)}
+    backlog_positions = {eid: i for i, (_, eid, _) in enumerate(backlog)}
+    focused_checked = backlog_checked = 0
 
     for position, (_, eid, row) in enumerate(ordered):
         if checked >= max_checks:
@@ -331,6 +407,10 @@ def scan_match_statuses(
             break
         last_checked_eid = eid
         next_due_id = ordered[(position + 1) % len(ordered)][1]
+        if eid in focus_positions:
+            focus_next = focused[(focus_positions[eid] + 1) % len(focused)][1]
+        elif eid in backlog_positions:
+            backlog_next = backlog[(backlog_positions[eid] + 1) % len(backlog)][1]
 
         live_event = live_by_id.get(eid)
         if live_event is not None:
@@ -344,6 +424,10 @@ def scan_match_statuses(
 
         player_id = _player_id(row, "player1")
         checked += 1
+        if eid in focus_positions:
+            focused_checked += 1
+        else:
+            backlog_checked += 1
         payload = None
         near_used = False
         try:
@@ -440,4 +524,10 @@ def scan_match_statuses(
         "near_attempts": near_attempts,
         "unmatched": unmatched,
         "next_due_id": next_due_id if len(due) > 1 else "",
+        "focused_due": len(focused),
+        "backlog_due": len(backlog),
+        "focused_checked": focused_checked,
+        "backlog_checked": backlog_checked,
+        "next_focus_id": focus_next if len(focused) > 1 else "",
+        "next_backlog_id": backlog_next if len(backlog) > 1 else "",
     }

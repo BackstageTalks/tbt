@@ -614,6 +614,12 @@ def save_match_status_snapshot(payload: object) -> dict:
         "near_attempts": max(0, int(data.get("near_attempts") or 0)),
         "unmatched": max(0, int(data.get("unmatched") or 0)),
         "next_due_id": str(data.get("next_due_id") or "")[:64],
+        "focused_due": max(0, int(data.get("focused_due") or 0)),
+        "backlog_due": max(0, int(data.get("backlog_due") or 0)),
+        "focused_checked": max(0, int(data.get("focused_checked") or 0)),
+        "backlog_checked": max(0, int(data.get("backlog_checked") or 0)),
+        "next_focus_id": str(data.get("next_focus_id") or "")[:64],
+        "next_backlog_id": str(data.get("next_backlog_id") or "")[:64],
         "provider_errors": {
             str(k)[:64]: max(0, int(v))
             for k, v in list((data.get("provider_errors") or {}).items())[:8]
