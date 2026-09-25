@@ -218,6 +218,50 @@ class BulkEnvironmentSafetyTests(unittest.TestCase):
         self.assertEqual(venue.latitude, 36.8969)
         self.assertEqual(client.request_count, 1)
 
+    def test_open_meteo_country_labels_are_compatible(self):
+        from tbt.services.countries import normalize_country_code
+        cases = [
+            ("Antalya, TR", "Antalya", "Republic of Türkiye", "TR"),
+            ("Istanbul, TR", "Istanbul", "Republic of Türkiye", "TR"),
+            ("'s-Hertogenbosch, NL", "'s-Hertogenbosch", "The Netherlands", "NL"),
+            ("Oldenzaal, NL", "Oldenzaal", "The Netherlands", "NL"),
+            ("Hong Kong, HK", "Hong Kong", None, "HK"),
+        ]
+        for query, name, country, country_code in cases:
+            with self.subTest(query=query):
+                class Response:
+                    def raise_for_status(self):
+                        pass
+
+                    def json(self):
+                        return {"results": [{
+                            "name": name, "latitude": 22.3,
+                            "longitude": 114.2, "elevation": 25,
+                            "country": country, "country_code": country_code,
+                        }]}
+
+                class Network:
+                    def get(self, url, params):
+                        self_params = params
+                        self.assertEqual(url, GEOCODE_URL)
+                        self.assertEqual(self_params["countryCode"], country_code)
+                        return Response()
+
+                    def close(self):
+                        pass
+
+                client = OpenMeteoClient(
+                    request_limit=1, min_interval_seconds=0, client=Network()
+                )
+                result = client.geocode(query)
+                self.assertIsNotNone(result)
+                self.assertEqual(normalize_country_code(result.country), country_code)
+                self.assertTrue(venue_context_compatible(
+                    {}, name,
+                    {"query": query, "name": result.name, "country": result.country},
+                )[0])
+                self.assertEqual(client.request_count, 1)
+
     def test_distinct_same_named_cities_still_rejected(self):
         class AmbiguousResponse:
             def raise_for_status(self):
