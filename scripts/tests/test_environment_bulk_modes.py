@@ -156,6 +156,79 @@ class BulkEnvironmentSafetyTests(unittest.TestCase):
         self.assertNotIn("weather", env)
         self.assertEqual(client.request_count, 1)
 
+    def test_transient_connect_timeout_is_retried_within_budget(self):
+        class FlakyNetwork:
+            def __init__(self):
+                self.calls = 0
+
+            def get(self, url, params):
+                self.calls += 1
+                if self.calls == 1:
+                    import httpx
+                    raise httpx.ConnectTimeout("temporary handshake timeout")
+                return FakeResponse()
+
+            def close(self):
+                pass
+
+        network = FlakyNetwork()
+        client = OpenMeteoClient(
+            request_limit=3,
+            min_interval_seconds=0,
+            transient_retries=2,
+            retry_backoff_seconds=0,
+            client=network,
+        )
+        venue = client.geocode("Saitama, JP")
+        self.assertIsNotNone(venue)
+        self.assertEqual(network.calls, 2)
+        self.assertEqual(client.request_count, 2)
+
+    def test_transient_retries_cannot_exceed_global_request_cap(self):
+        class AlwaysTimeout:
+            def get(self, url, params):
+                import httpx
+                raise httpx.ConnectTimeout("temporary handshake timeout")
+
+            def close(self):
+                pass
+
+        client = OpenMeteoClient(
+            request_limit=2,
+            min_interval_seconds=0,
+            transient_retries=5,
+            retry_backoff_seconds=0,
+            client=AlwaysTimeout(),
+        )
+        with self.assertRaises(OpenMeteoBudgetExceeded):
+            client.geocode("Saitama, JP")
+        self.assertEqual(client.request_count, 2)
+
+    def test_non_transient_error_is_not_retried(self):
+        class BadResponseNetwork:
+            def __init__(self):
+                self.calls = 0
+
+            def get(self, url, params):
+                self.calls += 1
+                raise ValueError("invalid local response")
+
+            def close(self):
+                pass
+
+        network = BadResponseNetwork()
+        client = OpenMeteoClient(
+            request_limit=5,
+            min_interval_seconds=0,
+            transient_retries=2,
+            retry_backoff_seconds=0,
+            client=network,
+        )
+        with self.assertRaisesRegex(ValueError, "invalid local response"):
+            client.geocode("Saitama, JP")
+        self.assertEqual(network.calls, 1)
+        self.assertEqual(client.request_count, 1)
+
     def test_probe_fails_closed_on_empty_provider(self):
         class EmptyClient:
             def geocode(self, query):
