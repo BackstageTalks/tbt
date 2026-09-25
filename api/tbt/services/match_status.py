@@ -191,7 +191,7 @@ def classify_finished_event(
     )
     retired = any(marker in status_text for marker in retirement_markers)
     void = any(marker in status_text for marker in (
-        "cancelled", "canceled", "walkover", "walk over",
+        "cancelled", "canceled", "walkover", "walk over", "w/o",
     ))
 
     winner_code = event.get("winnerCode")
