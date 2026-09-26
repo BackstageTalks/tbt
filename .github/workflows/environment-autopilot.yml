@@ -76,9 +76,15 @@ jobs:
               print("Another data/Environment job is active; waiting:", busy[:10])
               sys.exit(0)
 
-          cache = [r for r in runs["environment-cache-only.yml"] if started_today(r)]
-          geocode = [r for r in runs["environment-overnight.yml"] if started_today(r)]
-          audits = [r for r in runs["environment-joint.yml"] if started_today(r)]
+          # Only autopilot-dispatched runs count as today's stages.
+          # Manual dry-runs (including pre-fix failures) must not permanently
+          # block autonomous recovery. Every manual run still blocks while active.
+          def ours(run):
+              actor = (run.get("actor") or {}).get("login", "").casefold()
+              return actor in ("github-actions[bot]", "github-actions")
+          cache = [r for r in runs["environment-cache-only.yml"] if started_today(r) and ours(r)]
+          geocode = [r for r in runs["environment-overnight.yml"] if started_today(r) and ours(r)]
+          audits = [r for r in runs["environment-joint.yml"] if started_today(r) and ours(r)]
           # Never endlessly requeue a broken workflow or pay for repeated
           # provider failures. Failed stages require operator investigation.
           for name, records in [
