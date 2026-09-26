@@ -528,20 +528,46 @@ def _settle_projection_publications(row, match, now):
         stat_suffix = "aces" if market == "aces" else "double_faults"
         try:
             actual = float(stats.get(f"{selected_side}_{stat_suffix}"))
-            opponent_actual = float(stats.get(f"{opponent_side}_{stat_suffix}"))
         except (TypeError, ValueError):
             publication["excluded_reason"] = "projection_result_unavailable"
             continue
-        if not np.isfinite(actual) or not np.isfinite(opponent_actual) or actual < 0 or opponent_actual < 0:
+        if not np.isfinite(actual) or actual < 0:
             publication["excluded_reason"] = "projection_result_unavailable"
             continue
-        publication.pop("excluded_reason", None)
-        if actual == opponent_actual:
-            status = "void"
-            correct = None
+        try:
+            opponent_actual = float(stats.get(f"{opponent_side}_{stat_suffix}"))
+        except (TypeError, ValueError):
+            opponent_actual = float("nan")
+        contract = str(publication.get("price_contract") or "").strip().lower()
+        if contract == "player_total_ou":
+            # The new player-total contract is graded against its *published*
+            # bookmaker line, never against the opponent's actual count.
+            direction = str(publication.get("ou_side") or "").strip().lower()
+            try:
+                line = float(publication.get("market_line"))
+            except (TypeError, ValueError):
+                line = float("nan")
+            if direction not in {"over", "under"} or not np.isfinite(line) or line < 0:
+                publication["excluded_reason"] = "invalid_published_ou_contract"
+                continue
+            if actual == line:
+                status, correct = "void", None
+            else:
+                correct = (actual > line) if direction == "over" else (actual < line)
+                status = "hit" if correct else "miss"
+        elif contract in {"", "player_superiority"}:
+            if not np.isfinite(opponent_actual) or opponent_actual < 0:
+                publication["excluded_reason"] = "projection_result_unavailable"
+                continue
+            if actual == opponent_actual:
+                status, correct = "void", None
+            else:
+                correct = actual > opponent_actual
+                status = "hit" if correct else "miss"
         else:
-            correct = actual > opponent_actual
-            status = "hit" if correct else "miss"
+            publication["excluded_reason"] = "unknown_price_contract"
+            continue
+        publication.pop("excluded_reason", None)
         existing = publication.get("result") if isinstance(publication.get("result"), dict) else None
         price_units = _projection_price_units(publication, correct)
         settled = {
