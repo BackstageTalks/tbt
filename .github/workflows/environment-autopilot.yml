@@ -10,6 +10,10 @@ on:
       - Environment overnight - safe geocoding
       - Environment joint run - cache, coverage, preflight, ablation
       - Environment nightly 10-run backfill (no Tennis API)
+      # A user-started Tennis pipeline may be holding the history writer lock.
+      # Immediately request the already-authorized read-only research audit
+      # after it completes, if the overnight run has finished.
+      - Tennis data and predictions
     types: [completed]
   schedule:
     # GitHub's scheduler may start late; completion events advance faster.
