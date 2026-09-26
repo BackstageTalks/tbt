@@ -27,7 +27,7 @@ def contract(pub):
     if market == "double_faults":
         return "most_double_faults", "selected_player_more_than_opponent", None, "exact_market_type"
     if market == "sets":
-        match = re.fullmatch(r"sets:(over|under):([0-9]+(?:\\.[0-9]+)?)", selection)
+        match = re.fullmatch(r"sets:(over|under):([0-9]+(?:\.[0-9]+)?)", selection)
         if match:
             return "total_sets", match.group(1), float(match.group(2)), "exact_market_and_line"
         return "total_sets", None, None, "incomplete_market"
