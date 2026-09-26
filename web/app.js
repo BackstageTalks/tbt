@@ -87,12 +87,12 @@
     if(String(row?.prediction_family||'').toLowerCase()==='doubles')return true;
     if(/doubles/i.test(String(row?.market_type||row?.category||'')))return true;
     if([row?.player1,row?.player2].some(p=>Array.isArray(p?.members)&&p.members.length>=2))return true;
-    return [row?.player1?.name,row?.player2?.name].every(n=>/\\s[\\/&]\\s/.test(String(n||'')));
+    return [row?.player1?.name,row?.player2?.name].every(n=>/\s[\/&]\s/.test(String(n||'')));
   }
   function doublesMembers(player){
     const members=Array.isArray(player?.members)?player.members.filter(m=>m&&typeof m==='object').slice(0,2):[];
     if(members.length===2)return members;
-    const names=String(player?.name||'').split(/\\s+[\\/&]\\s+/).map(n=>n.trim()).filter(Boolean);
+    const names=String(player?.name||'').split(/\s+[\/&]\s+/).map(n=>n.trim()).filter(Boolean);
     return names.length===2?names.map(name=>({name})):members;
   }
   function sideAvatarHtml(row,player,side,wrapperClass='hub-avatar'){
