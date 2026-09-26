@@ -838,7 +838,7 @@ def main() -> None:
                     # An offline country-scoped gazetteer handles Open-Meteo
                     # misses. Keep the same strict positive-only write policy.
                     fallback_outcome = None
-                    if outcome == "no_result" and fallback is not None:
+                    if outcome in ("no_result", "incompatible") and fallback is not None:
                         fallback_env, fallback_outcome = _verified_geonames_environment(
                             fallback, payload, match.tournament, query
                         )
