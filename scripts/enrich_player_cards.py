@@ -348,7 +348,7 @@ def _current_players(feed: dict[str, Any]) -> list[dict[str, Any]]:
                 confidence = 0.0
             # Prefer actually published picks when photo-budget is limited.
             priority = confidence + (2.0 if section not in ("upcoming", "results") else
-                                     1.0 if section == "upcoming" else 0.0)
+                                     0.0 if section == "upcoming" else -1.0)
             tour = str(row.get("tour") or "").upper()
             for key in ("player1", "player2"):
                 player = row.get(key)
