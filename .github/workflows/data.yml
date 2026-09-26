@@ -91,7 +91,7 @@ jobs:
       END_DATE: ${{ inputs.end }}
       MAX_REQUESTS: ${{ inputs.max_requests || (github.event.schedule == '40 22 * * *' && 4000 || 750) }}
       MARKET_ODDS_MAX_EVENTS: ${{ inputs.market_odds_max_events || 120 }}
-      PROPLINE_MAX_EVENTS: ${{ inputs.propline_max_events == 0 && '0' || inputs.propline_max_events || 24 }}
+      PROPLINE_MAX_EVENTS: ${{ github.event_name == 'workflow_dispatch' && inputs.propline_max_events == 0 && '0' || inputs.propline_max_events || 24 }}
       DOUBLES_ODDS_MAX_EVENTS: ${{ inputs.doubles_odds_max_events || 40 }}
       BETTING_DAY_START_HOUR: ${{ inputs.betting_day_start_hour || 6 }}
       ACE_TARGET_SAMPLES: ${{ inputs.ace_target_samples || 18 }}
