@@ -107,9 +107,19 @@ jobs:
           print("updated=", report.get("updated"))
           print("open_meteo_requests=", report.get("open_meteo_requests"))
           print("stopped_reason=", report.get("stopped_reason"))
-          print("geocode_diagnostics=", json.dumps(report.get("geocode_diagnostics", []), ensure_ascii=False))
+          print("geocode_diagnostics=", json.dumps(report.get("geocode_diagnostics", [])[:10], ensure_ascii=False))
           assert report.get("positive_only") is True
-          assert report.get("updated", 0) == report.get("resolved", 0), "Negative record write detected"
+          resolved = int(report.get("resolved", 0))
+          updated = int(report.get("updated", 0))
+          if report.get("dry_run"):
+              # Dry runs intentionally find positive candidates without persisting.
+              assert updated == 0, "Dry-run unexpectedly wrote history"
+              print(f"DRY-RUN: {resolved} potential positives, 0 history writes")
+          else:
+              # Both counters include verified history-cache and geocoder positives.
+              assert updated == resolved, "A nonpositive Environment record was written"
+          if report.get("stopped_reason") == "low_geocoder_yield":
+              print("::warning::Low geocoder yield; stopped early to avoid wasting Open-Meteo calls.")
           PY
       - name: Save geocoding summary
         if: always()
