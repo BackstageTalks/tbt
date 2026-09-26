@@ -323,7 +323,82 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
     })
     return out, True, "priced_player_total_ou"
 
-def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_picks: list[dict[str, Any]], *, max_events: int = 40, provider_id: int = 1) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+def prefetch_projection_market_board(
+    provider: Any, predictions: list[dict[str, Any]], *, now: datetime,
+    max_events: int, provider_id: int = 1,
+) -> tuple[dict[str, Any], dict[str, set[str]], dict[str, Any]]:
+    """Discover REAL available projection contracts BEFORE running projection models.
+
+    One request per eligible upcoming event. Market names alone never qualify:
+    require a complete two-sided GAMES/SETS market or complete Most Aces/DF
+    or player-specific O/U for ACES/DF. The returned payloads are reused by
+    Match Winner and projection pricing; no second request is necessary.
+    """
+    eligible = []
+    seen = set()
+    for row in predictions:
+        event_id = str(row.get("event_id") or "").strip()
+        if not event_id or event_id in seen:
+            continue
+        scheduled = row.get("scheduled_at") or row.get("date")
+        try:
+            when = datetime.fromisoformat(str(scheduled).replace("Z", "+00:00"))
+            if when.tzinfo is None:
+                when = when.replace(tzinfo=timezone.utc)
+            when = when.astimezone(timezone.utc)
+        except (TypeError, ValueError):
+            continue
+        if when <= now:
+            continue
+        seen.add(event_id)
+        eligible.append((when, event_id, row))
+    # Soonest upcoming eligible matches first; no provider calls for past rows.
+    eligible.sort(key=lambda item: (item[0], item[1]))
+    requested = eligible[:max(0, int(max_events))]
+    payloads: dict[str, Any] = {}
+    markets_by_event: dict[str, set[str]] = {}
+    errors = 0
+    counts = {key: 0 for key in ("aces", "double_faults", "games", "sets")}
+    for _scheduled, event_id, row in requested:
+        try:
+            payload = provider.event_odds(event_id, provider_id=provider_id)
+        except Exception:
+            errors += 1
+            payloads[event_id] = None
+            continue
+        payloads[event_id] = payload
+        supported = set()
+        for metric in ("games", "sets"):
+            if extract_match_total_odds(payload, metric):
+                supported.add(metric)
+        p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+        p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+        name1, name2 = str(p1.get("name") or ""), str(p2.get("name") or "")
+        for metric in ("aces", "double_faults"):
+            if ((name1 and name2 and extract_player_superiority_odds(
+                    payload, metric, name1, name2))
+                or (name1 and extract_player_total_ou(
+                    payload, metric, name1, player_slot=1))
+                or (name2 and extract_player_total_ou(
+                    payload, metric, name2, player_slot=2))):
+                supported.add(metric)
+        if supported:
+            markets_by_event[event_id] = supported
+            for metric in supported:
+                counts[metric] += 1
+    return payloads, markets_by_event, {
+        "schema": 1, "strategy": "odds_first_exact_two_sided_then_model",
+        "eligible_upcoming": len(eligible), "events_requested": len(requested),
+        "events_limited_out": max(0, len(eligible) - len(requested)),
+        "events_with_projection_markets": len(markets_by_event),
+        "events_without_projection_markets": len(requested) - len(markets_by_event) - errors,
+        "request_errors": errors, "complete_markets_by_type": counts,
+        "provider_id": int(provider_id),
+        "policy": "exact_pre_match_two_sided_only_no_synthetic_prices",
+    }
+
+
+def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_picks: list[dict[str, Any]], *, max_events: int = 40, provider_id: int = 1, prefetched_payloads: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Attach exact provider prices to already-selected projection cards.
 
     Cards remain projection-only when no exact market is available.  This is a
@@ -340,9 +415,16 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
             if event:
                 by_event.setdefault(event, []).append((kind, index))
     event_ids = list(by_event)[:max(0, int(max_events))]
-    payloads: dict[str, Any] = {}
+    payloads: dict[str, Any] = dict(prefetched_payloads) if prefetched_payloads is not None else {}
     errors = 0
     for event_id in event_ids:
+        if event_id in payloads:
+            continue
+        # Odds-first mode never spends additional calls on cards from an
+        # unprobed event. The prefetch budget is the single source of truth.
+        if prefetched_payloads is not None:
+            payloads[event_id] = None
+            continue
         try:
             payloads[event_id] = provider.event_odds(event_id, provider_id=provider_id)
         except Exception:
