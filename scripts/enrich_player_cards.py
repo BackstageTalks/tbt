@@ -356,9 +356,11 @@ def _current_players(feed: dict[str, Any]) -> list[dict[str, Any]]:
                     continue
                 members = player.get("members")
                 members = [m for m in members if isinstance(m, dict)] if isinstance(members, list) else []
+                other = row.get("player2" if key == "player1" else "player1")
+                other = other if isinstance(other, dict) else {}
                 doubles = (row.get("prediction_family") == "doubles" or len(members) >= 2 or
                            (" / " in str(player.get("name") or "") and
-                            " / " in str((row.get("player2") if key == "player1" else row.get("player1") or {}).get("name") or "")))
+                            " / " in str(other.get("name") or "")))
                 # No member IDs means no safe player-image lookup for a team.
                 candidates = members if doubles else [player]
                 for candidate in candidates:
