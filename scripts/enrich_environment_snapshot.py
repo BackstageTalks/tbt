@@ -13,6 +13,8 @@ from pathlib import Path
 from typing import Any
 
 from _bootstrap import ROOT
+from geonames_fallback import GeoNamesFallback
+from tbt.services.countries import normalize_country_code
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions, write_year_partition
 from tbt.data.history_safety import sanitize_history_identities
@@ -340,6 +342,48 @@ def _verified_unique_environment(
     }, "resolved"
 
 
+def _verified_geonames_environment(
+    fallback: GeoNamesFallback,
+    provider_payload: dict[str, Any],
+    tournament: str,
+    query: str,
+) -> tuple[dict[str, Any] | None, str]:
+    """Require a unique GeoNames name, a known country and provider compatibility."""
+    parts = [part.strip() for part in query.split(",") if part.strip()]
+    provider_countries = explicit_country_hints(provider_payload, tournament)
+    query_country = normalize_country_code(parts[-1]) if len(parts) > 1 else ""
+    if query_country and provider_countries and query_country not in provider_countries:
+        return None, "fallback_country_conflict"
+    country = query_country or (
+        next(iter(provider_countries)) if len(provider_countries) == 1 else ""
+    )
+    if not country:
+        return None, "fallback_no_country"
+    venue = fallback.resolve(query, country)
+    if venue is None:
+        return None, "fallback_no_result"
+    compatible, reason = venue_context_compatible(
+        provider_payload, tournament, asdict(venue)
+    )
+    if not compatible:
+        return None, "fallback_" + reason
+    return {
+        "schema_version": ENVIRONMENT_SCHEMA_VERSION,
+        "resolver_version": ENVIRONMENT_RESOLVER_VERSION,
+        "venue_resolved": True,
+        "location_query": query,
+        "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
+        "source": "geonames-gazetteer",
+        "source_attribution": (
+            "GeoNames CC BY 4.0; "
+            "https://download.geonames.org/export/dump/cities500.zip"
+        ),
+        "weather_provenance": "not_requested_static_only",
+        "training_eligible_weather": False,
+        "venue": asdict(venue),
+    }, "resolved_geonames"
+
+
 def _probe_unique_geocoder(client: OpenMeteoClient) -> dict[str, Any]:
     """Verify real provider responses before touching any historical rows.
 
@@ -515,6 +559,10 @@ def main() -> None:
         "resolved": 0,
         "resolved_from_history_cache": 0,
         "resolved_from_geocoder": 0,
+        "resolved_from_geonames": 0,
+        "geonames_archive_downloads": 0,
+        "geonames_archive_error": None,
+        "geonames_source": "GeoNames cities500.zip, CC BY 4.0; verified small-feature exceptions",
         "unresolved": 0,
         "updated": 0,
         "errors": 0,
@@ -656,6 +704,7 @@ def main() -> None:
     ))
 
     client = OpenMeteoClient(request_limit=args.max_requests)
+    fallback = GeoNamesFallback(wanted_names=set(counts)) if args.unique_geocode else None
     if args.unique_geocode:
         # Stop BEFORE processing history if the provider is unavailable or
         # returns an empty/malformed response to a known unambiguous city.
@@ -786,11 +835,25 @@ def main() -> None:
                         failed_queries.add(query_key)
                         report["geocode_query_errors"] += 1
                         raise
+                    # An offline country-scoped gazetteer handles Open-Meteo
+                    # misses. Keep the same strict positive-only write policy.
+                    fallback_outcome = None
+                    if outcome == "no_result" and fallback is not None:
+                        fallback_env, fallback_outcome = _verified_geonames_environment(
+                            fallback, payload, match.tournament, query
+                        )
+                        if fallback_env is not None:
+                            env, outcome = fallback_env, "resolved_geonames"
+                            report["resolved_from_geonames"] += 1
+                        report["geonames_archive_downloads"] = fallback.archive_downloads
+                        report["geonames_archive_error"] = fallback.load_error
+
                     if query_key not in diagnostic_queries and len(report["geocode_diagnostics"]) < 60:
                         diagnostic_queries.add(query_key)
                         diagnostic = {
                             "query": query,
                             "outcome": outcome,
+                            "fallback_outcome": fallback_outcome,
                             "recoverable_matches": counts.get(query_key, 0),
                             "venue": (_as_dict(env.get("venue")).get("name") if env else None),
                         }
@@ -827,7 +890,8 @@ def main() -> None:
                         continue
                     # Only positives can reach the persistence path.
                     assert env is not None and env["venue_resolved"] is True
-                    report["resolved_from_geocoder"] += 1
+                    if outcome == "resolved":
+                        report["resolved_from_geocoder"] += 1
                 else:
                     env = environment_payload(
                         client,
@@ -897,8 +961,8 @@ def main() -> None:
                 and args.min_geocoder_success_rate > 0
                 and client.request_count >= args.yield_guard_after_requests
                 and (
-                    report["resolved_from_geocoder"] / max(1, client.request_count)
-                    < args.min_geocoder_success_rate
+                    (report["resolved_from_geocoder"] + report["resolved_from_geonames"])
+                    / max(1, client.request_count) < args.min_geocoder_success_rate
                 )
             ):
                 report["low_geocoder_yield_stopped"] = True
