@@ -65,7 +65,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   pipeline:
-    if: github.event_name == 'workflow_dispatch' || (github.event.schedule == '40 22 * * *' && vars.TBT_AUTO_HISTORY == 'true') || (github.event.schedule == '20 1,7,13,19 * * *' && vars.TBT_AUTO_REFRESH == 'true')
+    if: github.event_name == 'workflow_dispatch' || (github.event.schedule == '40 22 * * *' && (vars.TBT_AUTO_HISTORY == 'true' && vars.TBT_PAID_API_AUTOMATION_APPROVED == 'true')) || (github.event.schedule == '20 1,7,13,19 * * *' && (vars.TBT_AUTO_REFRESH == 'true' && vars.TBT_PAID_API_AUTOMATION_APPROVED == 'true'))
     # Refresh/results publication mutates tbt-predictions-v1, so it must also
     # share the exact production publication lock used by CI/player deploys.
     # History/statistics modes receive a run-unique job group and therefore do
