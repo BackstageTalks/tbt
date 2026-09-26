@@ -1,0 +1,54 @@
+name: PropLine all-board one-time audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - scripts/propline_full_board_audit.py
+  workflow_dispatch:
+    inputs:
+      max_calls:
+        description: Hard request cap for this one-time read-only board audit
+        type: choice
+        options: ["100", "200", "400"]
+        default: "400"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: propline-full-board-one-time
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[prop-full-board-once]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      PROPL: ${{ secrets.PROPL }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      MAX_CALLS: ${{ inputs.max_calls || '400' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Require existing configured secrets
+        run: |
+          test -n "$PROPL" || { echo "Missing PROPL"; exit 1; }
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+      - name: Audit entire PropLine future tennis board (no Tennis API)
+        run: python scripts/propline_full_board_audit.py --max-calls "$MAX_CALLS"
+      - name: Save full bookmaker coverage and per-match report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: propline-full-board-audit
+          path: reports/propline_full_board_audit.json
+          if-no-files-found: warn
+          retention-days: 7
