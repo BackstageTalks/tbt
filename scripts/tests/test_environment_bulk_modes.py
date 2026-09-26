@@ -279,7 +279,7 @@ class BulkEnvironmentSafetyTests(unittest.TestCase):
                 "P", "PPL", country, "", "", "", "", "", "20000",
                 "12", "", "America/Cancun", "2025-01-01",
             ]
-            return "\\t".join(fields)
+            return "\t".join(fields)
 
         rows = [
             row("1", "Cancún", "MX", 21.16, -86.85, "Cancun"),
@@ -289,7 +289,7 @@ class BulkEnvironmentSafetyTests(unittest.TestCase):
         ]
         buffer = BytesIO()
         with ZipFile(buffer, "w", ZIP_DEFLATED) as zipped:
-            zipped.writestr("cities500.txt", "\\n".join(rows) + "\\n")
+            zipped.writestr("cities500.txt", "\n".join(rows) + "\n")
         fallback = GeoNamesFallback(
             wanted_names={"Cancún", "Hillcrest"},
             archive_bytes=buffer.getvalue(),
