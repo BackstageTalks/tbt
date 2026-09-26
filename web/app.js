@@ -2789,9 +2789,18 @@
           ?` title="${escapeHtml(illustrativeHint)}"`
           :Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
         const depthText=Number.isFinite(depth)?pct(depth):'—';
-        const unitsText=outcome.kind==='void'?'0.00u':Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0?`${projectionUnits>0?'+':''}${projectionUnits.toFixed(2)}u`:'—';
+        // Historical display-only prices can fill the visible Units cell,
+        // but never become a settled stake, ledger profit, or genuine ROI.
+        const hasSettledUnits=Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0;
+        const displayOnlyOdds=illustrativeOnly?placeholderOdds:
+          Number.isFinite(estimatedProjectionOdds)&&estimatedProjectionOdds>1?estimatedProjectionOdds:NaN;
+        const displayUnits=outcome.kind==='void'?0:hasSettledUnits?projectionUnits:
+          Number.isFinite(displayOnlyOdds)&&['win','loss'].includes(outcome.kind)?
+            (outcome.kind==='win'?displayOnlyOdds-1:-1):NaN;
+        const unitsText=Number.isFinite(displayUnits)?
+          `${displayUnits>0?'+':''}${displayUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
-        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${escapeHtml(projectionText)}</td><td${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td><span class="results-units-depth"><b class="${Number.isFinite(projectionUnits)&&projectionUnits>0?'correct':Number.isFinite(projectionUnits)&&projectionUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b><small>${escapeHtml(depthText)}</small></span></td></tr>`;
+        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${escapeHtml(projectionText)}</td><td${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td><span class="results-units-depth"><b${!hasSettledUnits?projectionOddsTitle:''} class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b><small>${escapeHtml(depthText)}</small></span></td></tr>`;
       }
       return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(pickName)}</strong></td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>${resultHtml}</td><td class="${outcome.kind==='void'?'void':Number.isFinite(units)&&units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');

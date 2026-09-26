@@ -70,3 +70,19 @@ def test_ui_never_renders_filler_as_a_real_quote():
     assert "not an archived bookmaker price or model estimate" in APP
     assert "Nie je historický kurz" not in APP  # check actual wording instead
     assert "nie historický kurz ani odhad modelu" in APP
+
+
+def test_results_units_are_displayed_from_visible_price_without_real_roi_backfill():
+    # Original booked/settled 1u stays authoritative whenever present.
+    assert "const hasSettledUnits=Number.isFinite(projectionUnits)" in APP
+    assert "hasSettledUnits?projectionUnits:" in APP
+    # Synthetic 1.50–1.70 prices fill the per-row units cell only.
+    assert "const displayOnlyOdds=illustrativeOnly?placeholderOdds:" in APP
+    assert "(outcome.kind==='win'?displayOnlyOdds-1:-1):NaN" in APP
+    assert "const unitsText=Number.isFinite(displayUnits)?" in APP
+    assert "Number.isFinite(displayUnits)&&displayUnits>0?'correct'" in APP
+    assert "Number.isFinite(displayUnits)&&displayUnits<0?'wrong'" in APP
+    assert "+Number(p.result?.profit_units||0)" in APP  # KPI still reads actual ledger units.
+    # Flat 1u illustrations for the actual example shown in Results.
+    assert round(1.66 - 1, 2) == .66
+    assert round(1.52 - 1, 2) == .52
