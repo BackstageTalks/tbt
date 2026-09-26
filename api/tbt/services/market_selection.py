@@ -575,6 +575,7 @@ def enrich_current_betting_day_odds(
     candidate_min_probability: float = VALUE_MIN_PROBABILITY,
     candidate_min_data_depth: float = VALUE_MIN_DATA_DEPTH,
     candidate_min_surface_matches: int = VALUE_MIN_SURFACE_MATCHES,
+    prefetched_payloads: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Fetch provider-1 odds only for plausible published betting candidates.
 
@@ -633,7 +634,14 @@ def enrich_current_betting_day_odds(
         p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
         try:
             report["odds_requested"] += 1
-            payload = provider.event_odds(event_id, provider_id=provider_id)
+            # Share the initial odds-first provider response with Match Winner
+            # to avoid querying the same event twice in a refresh.
+            if prefetched_payloads is not None and event_id in prefetched_payloads:
+                payload = prefetched_payloads[event_id]
+            else:
+                payload = provider.event_odds(event_id, provider_id=provider_id)
+                if prefetched_payloads is not None:
+                    prefetched_payloads[event_id] = payload
             market = extract_match_winner_odds(
                 payload,
                 str(p1.get("name") or ""),

@@ -30,7 +30,10 @@ from tbt.services.publication import (
 )
 from tbt.services.ace_selection import select_ace_picks
 from tbt.services.sg_selection import select_sg_picks
-from tbt.services.projection_odds import enrich_projection_odds
+from tbt.services.projection_odds import (
+    enrich_projection_odds, prefetch_projection_market_board,
+    extract_match_total_odds,
+)
 from tbt.services.indicative_odds import annotate_feed_indicative_odds
 from tbt.services.doubles_selection import (
     build_predictions as build_doubles_predictions,
@@ -608,53 +611,101 @@ def main():
             "selection": doubles_selection_report,
         }
 
-        # Generate the singles model probabilities first, then spend additional provider
-        # calls only on the current BlinQ betting day. The odds layer now powers
-        # Prime / Top Bets / Value discovery with mutually exclusive public assignment.
+        # Odds-first for ACES/DF/GAMES/SETS: obtain actual available offers
+        # BEFORE evaluating their projection models. Match Winner continues to
+        # use its independent qualification rules and shares cached payloads.
         predictions = predict(model, matches, upcoming)
-        if args.market_odds_max_events:
-            predictions, odds_report = enrich_current_betting_day_odds(
-                provider,
-                predictions,
-                now=now,
-                max_events=args.market_odds_max_events,
+        projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        projection_odds_report = {}
+        projection_market_cache = {}
+        available_projection_markets = {}
+        projection_discovery_report = {}
+        bookmaker_lines_by_event = {}
+        if projection_odds_cap:
+            # Both market discovery and Match Winner share the SAME global
+            # RapidAPI limit. Reserve a third of the available quota (up to 40
+            # requests) for otherwise-unpriced Match Winner candidates; the
+            # prefetch cache already covers overlapping events at zero cost.
+            remaining_total = (max(0, int(provider.request_limit) - int(provider.request_count))
+                               if provider.request_limit is not None else 2 * projection_odds_cap)
+            reserved_match_winner = min(40, remaining_total // 3)
+            remaining = max(0, remaining_total - reserved_match_winner)
+            available_odds_calls = min(projection_odds_cap, remaining)
+            (projection_market_cache, available_projection_markets,
+             projection_discovery_report) = prefetch_projection_market_board(
+                provider, predictions, now=now, max_events=available_odds_calls,
                 provider_id=1,
+            )
+            projection_discovery_report["remaining_request_budget_at_start"] = remaining_total
+            projection_discovery_report["reserved_match_winner_requests"] = reserved_match_winner
+            projection_discovery_report["requested_event_cap"] = projection_odds_cap
+            for event_id, markets in available_projection_markets.items():
+                payload = projection_market_cache.get(event_id)
+                bookmaker_lines_by_event[event_id] = {
+                    market: [float(quote["line"]) for quote in
+                             extract_match_total_odds(payload, market)]
+                    for market in ("sets", "games") if market in markets
+                }
+            # No re-query for events already visited by odds-first discovery.
+            predictions, odds_report = enrich_current_betting_day_odds(
+                provider, predictions, now=now,
+                max_events=projection_odds_cap, provider_id=1,
                 timezone_name="Europe/Bratislava",
                 start_hour=args.betting_day_start_hour,
+                prefetched_payloads=projection_market_cache,
             )
-        # Projection models are selected from history first. A separate strict
-        # provider-odds pass may attach a real price only when the exact market
-        # can be identified; confidence is never displayed as a synthetic odd.
-        # The provider exposes markets on only a subset of upcoming events.
-        # Pick a broader *pre-match* projection pool before the odds lookup,
-        # then publish the usual maximum of ten selections per market, preferring
-        # cards with a genuine frozen provider price. The earlier top-ten-only
-        # pass missed markets available on other upcoming events.
-        projection_pool_per_market = 30 if args.market_odds_max_events else 10
+        # In odds-first mode the projection models operate only on events
+        # that have a complete matching market from the provider. Keep an
+        # expanded *eligible* pool so publication can independently rank each
+        # of the four categories without one consuming the others' slots.
+        projection_pool_per_market = (
+            max(30, min(200, projection_odds_cap)) if projection_odds_cap else 10
+        )
         ace_picks, ace_report = select_ace_picks(
             matches, predictions, now=now,
             per_market_limit=projection_pool_per_market,
             total_limit=2 * projection_pool_per_market,
             target_count=projection_pool_per_market,
+            available_markets_by_event=(
+                available_projection_markets if projection_odds_cap else None
+            ),
         )
         sg_picks, sg_report = select_sg_picks(
             matches, predictions, now=now,
             per_market_limit=projection_pool_per_market,
             total_limit=2 * projection_pool_per_market,
             target_count=projection_pool_per_market,
+            available_markets_by_event=(
+                available_projection_markets if projection_odds_cap else None
+            ),
+            bookmaker_lines_by_event=(
+                bookmaker_lines_by_event if projection_odds_cap else None
+            ),
         )
-        projection_odds_report = {}
-        # Projection prices are part of the public ACES/DF/GAMES/SETS rows.
-        # Reuse the configured market-odds budget instead of silently truncating
-        # projection lookup to the first 40 events (which disproportionately
-        # starved Sets/Games after Aces/DF were inserted first).
-        projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        projection_odds_report["discovery"] = projection_discovery_report
         if projection_odds_cap and (ace_picks or sg_picks):
-            ace_picks, sg_picks, projection_odds_report = enrich_projection_odds(
-                provider, ace_picks, sg_picks, max_events=projection_odds_cap, provider_id=1
+            ace_picks, sg_picks, attachment_report = enrich_projection_odds(
+                provider, ace_picks, sg_picks,
+                max_events=projection_odds_cap, provider_id=1,
+                prefetched_payloads=projection_market_cache,
             )
-        # Keep existing UI capacity and the independent category balances.
-        # A model-only card is still available when no real quote exists.
+            projection_odds_report.update(attachment_report)
+            projection_odds_report["discovery"] = projection_discovery_report
+        # Market-first publication is strict: an unmatched card remains an
+        # internal model diagnostic, never a bookmaker-looking bet.
+        if projection_odds_cap:
+            projection_odds_report["unpriced_model_candidates"] = {
+                market: sum(row.get("market") == market and
+                            row.get("price_status") != "priced_projection"
+                            for row in ace_picks + sg_picks)
+                for market in ("aces", "double_faults", "games", "sets")
+            }
+            ace_picks = [row for row in ace_picks
+                         if row.get("price_status") == "priced_projection"]
+            sg_picks = [row for row in sg_picks
+                        if row.get("price_status") == "priced_projection"]
+        # Ten per independent category, sorted by validated projection
+        # confidence and evidence, NOT simply by the highest bookmaker price.
         def priced_first_ten(rows):
             indexed = list(enumerate(rows))
             chosen = []
@@ -682,13 +733,13 @@ def main():
             ace_report = {
                 **ace_report, "odds_attachment": projection_odds_report,
                 "published_selected": len(ace_picks),
-                "priced_selection_policy": "broaden_candidates_price_first_then_limit_10",
+                "priced_selection_policy": "odds_first_exact_market_then_model_independent_top10",
             }
         if isinstance(sg_report, dict):
             sg_report = {
                 **sg_report, "odds_attachment": projection_odds_report,
                 "published_selected": len(sg_picks),
-                "priced_selection_policy": "broaden_candidates_price_first_then_limit_10",
+                "priced_selection_policy": "odds_first_exact_market_then_model_independent_top10",
             }
     except Exception as exc:
         refresh_error = exc
