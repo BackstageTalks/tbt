@@ -16,7 +16,7 @@ concurrency:
 jobs:
   match-status:
     # Hourly worker may call the Tennis provider: only enable after explicit approval.
-    if: github.event_name == 'workflow_dispatch' || vars.TBT_MATCH_STATUS_AUTO_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' || (vars.TBT_MATCH_STATUS_AUTO_ENABLED == 'true' && vars.TBT_PAID_API_AUTOMATION_APPROVED == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
