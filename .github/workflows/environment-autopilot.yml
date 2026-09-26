@@ -85,8 +85,8 @@ jobs:
               ("cache-only", cache), ("geocoding", geocode), ("audit", audits)
           ]:
               if records and records[0].get("conclusion") != "success":
-                  print(f"STOP: latest {name} stage failed; investigate workflow run {records[0]['html_url']}")
-                  sys.exit(0)
+                  print(f"::error::Latest {name} stage failed: {records[0]['html_url']}")
+                  sys.exit(1)
 
           if not cache:
               dispatch("environment-cache-only.yml", {
