@@ -109,8 +109,8 @@ def compare(frame: pd.DataFrame) -> dict:
     for name, features in (("baseline", base), ("plus_static_environment", base + extra)):
         # Both arms use exactly the same training rows, holdout rows, model
         # family and hyperparameters. Only the static input group differs.
-        xtrain = frame.loc[train, features].apply(pd.to_numeric, errors="coerce")
-        xtest = frame.loc[test, features].apply(pd.to_numeric, errors="coerce")
+        xtrain = frame.loc[train, features].apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
+        xtest = frame.loc[test, features].apply(pd.to_numeric, errors="coerce").replace([np.inf, -np.inf], np.nan)
         model = make_pipeline(
             SimpleImputer(strategy="constant", fill_value=0),
             StandardScaler(),
