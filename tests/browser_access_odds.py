@@ -83,7 +83,8 @@ def main():
                       table.innerHTML=accessTest.dailyHubRow({...base,_hub_source:'sets',...data},tab);
                       const cell=table.querySelector('.hub-odds');
                       if(!cell.textContent.includes('~1.05'))throw new Error('Unpriced model pick must show indicative ~ odds: '+JSON.stringify(data));
-                      if(!cell.querySelector('[title*="bookmaker"]')&&!cell.querySelector('[title*="bookmakera"]'))throw new Error('Indicative quote needs a source explanation');
+                      const hint=cell.querySelector('[title]')?.getAttribute('title')||'';
+                      if(!/(bookmaker|bookmakera|stávkovej kancelárie|sázkové kanceláře)/i.test(hint))throw new Error('Indicative quote needs a localized source explanation: '+hint);
                     }
                     for(const data of [{odds:1.87},{betting:{odds:1.87}},{odds:0,betting:{odds:1.87}}]){
                       const table=document.createElement('table');table.innerHTML=accessTest.dailyHubRow({...base,_hub_source:'sets',...data},tab);
