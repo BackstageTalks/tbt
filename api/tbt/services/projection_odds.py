@@ -414,7 +414,7 @@ def prefetch_projection_market_board(
     }
 
 
-def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_picks: list[dict[str, Any]], *, max_events: int = 40, provider_id: int = 1, prefetched_payloads: dict[str, Any] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
+def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_picks: list[dict[str, Any]], *, max_events: int = 40, provider_id: int = 1, prefetched_payloads: dict[str, Any] | None = None, alternate_market_payloads: dict[str, dict[str, dict]] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Attach exact provider prices to already-selected projection cards.
 
     Cards remain projection-only when no exact market is available.  This is a
@@ -451,6 +451,7 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
     eligible = {"aces": 0, "double_faults": 0, "sets": 0, "games": 0}
     reasons: dict[str, dict[str, int]] = {key: {} for key in eligible}
     observed_market_names: dict[str, int] = {}
+    attached_by_provider = {"rapidapi": 0, "propline": 0}
 
     # Record what the provider actually exposed on the exact projection events.
     # This makes missing Sets/Aces/DF prices diagnosable without guessing market
@@ -470,12 +471,26 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
             metric = str(row.get("market") or "").strip().lower()
             if metric in eligible:
                 eligible[metric] += 1
-            if payload is None:
+            if payload is None and not (alternate_market_payloads or {}).get(event_id, {}).get(metric):
                 reason = "odds_payload_unavailable_or_request_failed"
                 if metric in reasons:
                     reasons[metric][reason] = reasons[metric].get(reason, 0) + 1
                 continue
-            updated, ok, reason = (_attach_ace(row, payload, captured_at, provider_id) if kind == "ace" else _attach_sg(row, payload, captured_at, provider_id))
+            alternate = (alternate_market_payloads or {}).get(event_id, {}).get(metric)
+            actual_payload = alternate["payload"] if alternate else payload
+            actual_provider = int(alternate["provider_id"]) if alternate else provider_id
+            actual_captured = str(alternate.get("captured_at") or captured_at) if alternate else captured_at
+            updated, ok, reason = (
+                _attach_ace(row, actual_payload, actual_captured, actual_provider)
+                if kind == "ace" else
+                _attach_sg(row, actual_payload, actual_captured, actual_provider)
+            )
+            if ok:
+                updated["odds_source"] = "propline" if alternate else "rapidapi"
+                if alternate:
+                    updated["odds_bookmaker"] = alternate.get("bookmaker")
+                    updated["odds_provider_event_id"] = alternate.get("provider_event_id")
+                attached_by_provider[updated["odds_source"]] += 1
             if kind == "ace":
                 ace[index] = updated
             else:
@@ -524,6 +539,7 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
         "events_considered": len(by_event),
         "events_requested": len(event_ids),
         "errors": errors,
+        "attached_by_provider": attached_by_provider,
         "eligible_cards": eligible,
         "priced_cards": priced,
         "fail_closed_unpriced": {key: max(0, eligible[key] - priced[key]) for key in eligible},
