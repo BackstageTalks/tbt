@@ -50,7 +50,10 @@ def test_event_match_is_exact_unaccented_both_players_and_time():
     assert len(_match_board([MATCH], [PROP], NOW)) == 1
     wrong = {**PROP, "away_team": "Somebody Else"}
     assert _match_board([MATCH], [wrong], NOW) == []
-    wrong = {**PROP, "commence_time": (NOW + timedelta(hours=9)).isoformat()}
+    # Same complete player identities tolerate a moderate postponed kickoff.
+    delayed = {**PROP, "commence_time": (NOW + timedelta(hours=9)).isoformat()}
+    assert len(_match_board([MATCH], [delayed], NOW)) == 1
+    wrong = {**PROP, "commence_time": (NOW + timedelta(hours=12)).isoformat()}
     assert _match_board([MATCH], [wrong], NOW) == []
     assert _match_board([MATCH], [PROP, PROP], NOW) == _match_board([MATCH], [PROP], NOW)
 
@@ -178,3 +181,48 @@ def test_shared_free_tier_quota_budget_and_explicit_wider_workflow_defaults():
     assert "contains(github.event.head_commit.message, '[propline-audit-once]')" in diagnostic
     assert "scripts/propline_wide_audit.py --max-events" in diagnostic
     assert 4 * (1 + 2 * 75) + 250 == 854 < 1000
+
+
+def test_unambiguous_name_variations_rescue_real_upcoming_fixtures():
+    # The provider sometimes reverses complete first/last names.
+    reversed_names = {**PROP, "home_team": "Struff Jan-Lennard",
+                      "away_team": "de Minaur Alex"}
+    # Reversed compound surnames need exact corroboration; never guess them.
+    assert _match_board([MATCH], [reversed_names], NOW) == []
+    simple = {**MATCH, "player1": {"id": "1", "name": "Alexander Zverev"},
+              "player2": {"id": "2", "name": "Taylor Fritz"}}
+    prop = {**PROP, "home_team": "Zverev Alexander",
+            "away_team": "Taylor Fritz"}
+    assert len(_match_board([simple], [prop], NOW)) == 1
+    short = {**MATCH, "player1": {"id": "1", "name": "Guiomar Maristany"},
+             "player2": {"id": "2", "name": "Jessica Pieri"}}
+    prop = {**PROP, "home_team": "Guiomar Maristany Zuleta de Reales",
+            "away_team": "Jessica Pieri"}
+    assert len(_match_board([short], [prop], NOW)) == 1
+    abbreviated = {**MATCH, "player1": {"id": "1", "name": "A Zverev"},
+                   "player2": {"id": "2", "name": "Taylor Fritz"}}
+    prop = {**PROP, "home_team": "Alexander Zverev",
+            "away_team": "Taylor Fritz"}
+    assert len(_match_board([abbreviated], [prop], NOW)) == 1
+
+
+def test_no_doubles_future_tournament_or_fake_participant_matching():
+    doubles = {**PROP, "home_team": "A / B", "away_team": "C / D"}
+    future = {**PROP, "home_team": "ATP Chengdu", "away_team": ""}
+    assert _match_board([MATCH], [doubles, future], NOW) == []
+
+
+def test_ambiguous_shared_names_cannot_cross_pair_or_double_publish():
+    from copy import deepcopy
+    # Two BlinQ matches with matching names, but distinct event IDs.
+    row2 = deepcopy(MATCH)
+    row2["event_id"] = "rapid-134"
+    assert _match_board([MATCH, row2], [PROP], NOW) == []
+    # Two distinct PropLine events for one BlinQ fixture.
+    second_prop = {**PROP, "id": "98765"}
+    assert _match_board([MATCH], [PROP, second_prop], NOW) == []
+    # An exact match outranks a loose alias, but never a second exact match.
+    approximate = {**MATCH, "event_id": "rapid-135",
+                   "player1": {"id": "3", "name": "Alex de Minaur"},
+                   "player2": {"id": "4", "name": "J Struff"}}
+    assert len(_match_board([MATCH, approximate], [PROP], NOW)) == 1
