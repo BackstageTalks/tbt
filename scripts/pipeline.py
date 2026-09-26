@@ -284,7 +284,8 @@ def _save_doubles_history(store, rows, *, extra_report=None):
     return report
 
 
-def _projection_presentation_integrity(feed, *, ace_picks=None, sg_picks=None):
+def _projection_presentation_integrity(feed, *, ace_picks=None, sg_picks=None,
+                                       quarantined=None):
     expected = {
         "aces": sum(1 for row in (ace_picks or []) if str(row.get("market") or "").lower() == "aces"),
         "double_faults": sum(1 for row in (ace_picks or []) if str(row.get("market") or "").lower() == "double_faults"),
@@ -297,12 +298,28 @@ def _projection_presentation_integrity(feed, *, ace_picks=None, sg_picks=None):
         "sets": sum(1 for row in (feed.get("sg_picks") or []) if str(row.get("market") or "").lower() == "sets"),
         "games": sum(1 for row in (feed.get("sg_picks") or []) if str(row.get("market") or "").lower() == "games"),
     }
-    mismatches = {market: {"selected": expected[market], "published": actual[market]}
-                  for market in expected if expected[market] != actual[market]}
-    report = {"ok": not mismatches, "selected": expected, "published": actual, "mismatches": mismatches}
+    # Only restore_published_market_snapshots may suppress a projection:
+    # it first checks the immutable ledger and drops ambiguous/legacy snapshots
+    # individually. An unaccounted loss still aborts the entire deployment.
+    quarantined = list(quarantined or [])
+    withheld = {market: sum(item.get("market") == market for item in quarantined)
+                for market in expected}
+    mismatches = {
+        market: {
+            "selected": expected[market], "published": actual[market],
+            "ledger_quarantined": withheld[market],
+        }
+        for market in expected
+        if expected[market] != actual[market] + withheld[market]
+    }
+    report = {
+        "ok": not mismatches, "selected": expected, "published": actual,
+        "ledger_quarantined": withheld, "quarantine_details": quarantined,
+        "mismatches": mismatches,
+    }
     if mismatches:
         raise RuntimeError(
-            "Projection presentation integrity failure: selector output was lost before publication: "
+            "Projection presentation integrity failure: unexplained selector output loss: "
             + json.dumps(mismatches, sort_keys=True)
         )
     return report
@@ -349,8 +366,17 @@ def _publish_predictions(
     # betting-day snapshot is merged, the final public feed is intentionally a
     # superset because already-issued morning rows remain visible after start.
     feed = clean(feed)
-    feed = restore_published_market_snapshots(feed, records)
-    integrity = _projection_presentation_integrity(feed, ace_picks=ace_picks, sg_picks=sg_picks)
+    projection_quarantine = []
+    feed = restore_published_market_snapshots(
+        feed, records, quarantine_report=projection_quarantine,
+    )
+    integrity = _projection_presentation_integrity(
+        feed, ace_picks=ace_picks, sg_picks=sg_picks,
+        quarantined=projection_quarantine,
+    )
+    if projection_quarantine:
+        print(json.dumps({"projection_publication_quarantine": integrity},
+                         sort_keys=True), flush=True)
     feed["market_selection"] = {
         **(feed.get("market_selection") or {}),
         "presentation_integrity": integrity,

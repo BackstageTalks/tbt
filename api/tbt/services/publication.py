@@ -287,7 +287,7 @@ def validate_market_publication_candidate(feed, ledger):
     return validated
 
 
-def restore_published_market_snapshots(feed, ledger):
+def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
     """Reuse a uniquely identified issued snapshot; never rewrite the ledger.
 
     Current predictions may drift after an offer was issued. Only a published
@@ -353,9 +353,20 @@ def restore_published_market_snapshots(feed, ledger):
 
             if len(matches) != 1:
                 if section in {"ace", "double_faults", "sets", "games"}:
-                    # Fail closed at card granularity for legacy projection
-                    # corruption. The rest of the site remains deployable and a
-                    # subsequent refresh regenerates a clean publication row.
+                    # Legacy conflicting publications must never be guessed.
+                    # Make deliberate card-level suppression explicit so the
+                    # pipeline integrity check can distinguish it from a
+                    # serialization or market-section regression.
+                    if quarantine_report is not None:
+                        quarantine_report.append({
+                            "event_id": commitment[0],
+                            "market": "aces" if section == "ace" else section,
+                            "reason": (
+                                "ambiguous_issued_legacy_snapshots"
+                                if len(matches) > 1 else
+                                "no_compatible_issued_snapshot"
+                            ),
+                        })
                     continue
                 raise RuntimeError(f"Market feed/ledger mismatch for {section} event {commitment[0]}; no unique issued snapshot")
 
