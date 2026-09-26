@@ -1,9 +1,13 @@
 """Bulk Environment safety regression tests; no live API access."""
 import unittest
+from io import BytesIO
+from zipfile import ZIP_DEFLATED, ZipFile
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+from geonames_fallback import GeoNamesFallback
 from enrich_environment_snapshot import (
+    _verified_geonames_environment,
     _build_venue_knowledge, _learned_environment, _needs_work,
     _verified_unique_environment, _probe_unique_geocoder,
 )
@@ -228,6 +232,88 @@ class BulkEnvironmentSafetyTests(unittest.TestCase):
             client.geocode("Saitama, JP")
         self.assertEqual(network.calls, 1)
         self.assertEqual(client.request_count, 1)
+
+
+    def test_verified_geonames_small_spa_exact_country(self):
+        fallback = GeoNamesFallback(wanted_names={"Kuršumlijska Banja"})
+        payload = {"tournament": {
+            "city": "Kuršumlijska Banja",
+            "country": {"alpha2": "RS"},
+        }}
+        env, reason = _verified_geonames_environment(
+            fallback, payload, "Kuršumlijska Banja", "Kuršumlijska Banja, RS"
+        )
+        self.assertEqual(reason, "resolved_geonames")
+        self.assertEqual(env["source"], "geonames-gazetteer")
+        self.assertEqual(env["venue"]["latitude"], 43.057862)
+        self.assertEqual(env["venue"]["longitude"], 21.252555)
+        self.assertEqual(fallback.archive_downloads, 0)
+        self.assertFalse(env["training_eligible_weather"])
+
+    def test_geonames_country_mismatch_never_written(self):
+        fallback = GeoNamesFallback(wanted_names={"Kuršumlijska Banja"})
+        payload = {"tournament": {
+            "city": "Kuršumlijska Banja",
+            "country": {"alpha2": "NL"},
+        }}
+        env, reason = _verified_geonames_environment(
+            fallback, payload, "Kuršumlijska Banja", "Kuršumlijska Banja, RS"
+        )
+        self.assertIsNone(env)
+        self.assertEqual(reason, "fallback_country_conflict")
+        self.assertEqual(fallback.archive_downloads, 0)
+
+    def test_geonames_countryless_place_is_not_guessed(self):
+        fallback = GeoNamesFallback(wanted_names={"Maanshan"}, archive_bytes=b"")
+        env, reason = _verified_geonames_environment(
+            fallback, {}, "ITF China 09A, Women", "Maanshan"
+        )
+        self.assertIsNone(env)
+        self.assertEqual(reason, "fallback_no_country")
+        self.assertEqual(fallback.archive_downloads, 0)
+
+    def test_geonames_unique_country_scoped_city_from_offline_archive(self):
+        def row(geoid, name, country, lat, lon, aliases=""):
+            fields = [
+                geoid, name, name, aliases, str(lat), str(lon),
+                "P", "PPL", country, "", "", "", "", "", "20000",
+                "12", "", "America/Cancun", "2025-01-01",
+            ]
+            return "\\t".join(fields)
+
+        rows = [
+            row("1", "Cancún", "MX", 21.16, -86.85, "Cancun"),
+            row("2", "Cancun", "US", 33.0, -86.0),
+            row("3", "Hillcrest", "ZA", -29.7, 30.8),
+            row("4", "Hillcrest", "ZA", -25.9, 28.1),
+        ]
+        buffer = BytesIO()
+        with ZipFile(buffer, "w", ZIP_DEFLATED) as zipped:
+            zipped.writestr("cities500.txt", "\\n".join(rows) + "\\n")
+        fallback = GeoNamesFallback(
+            wanted_names={"Cancún", "Hillcrest"},
+            archive_bytes=buffer.getvalue(),
+        )
+        payload = {"tournament": {
+            "city": "Cancún", "country": {"alpha2": "MX"}
+        }}
+        env, reason = _verified_geonames_environment(
+            fallback, payload, "Cancún", "Cancún, MX"
+        )
+        self.assertEqual(reason, "resolved_geonames")
+        self.assertEqual(env["venue"]["country"], "MX")
+        self.assertEqual(env["venue"]["elevation_m"], 12)
+        self.assertEqual(fallback.archive_downloads, 0)
+        self.assertIsNone(fallback.resolve("Hillcrest, ZA", "ZA"))
+        self.assertIsNone(fallback.resolve("Cancún, MX", "JP"))
+
+    def test_corrupt_geonames_archive_fails_closed(self):
+        fallback = GeoNamesFallback(
+            wanted_names={"Cancún"}, archive_bytes=b"corrupted zip"
+        )
+        self.assertIsNone(fallback.resolve("Cancún, MX", "MX"))
+        self.assertIsNotNone(fallback.load_error)
+        self.assertEqual(fallback.archive_downloads, 0)
 
     def test_probe_fails_closed_on_empty_provider(self):
         class EmptyClient:
