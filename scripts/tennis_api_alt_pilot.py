@@ -14,7 +14,7 @@ from pathlib import Path
 
 HOST = "tennis-api-atp-wta-itf.p.rapidapi.com"
 BASE = "https://" + HOST + "/tennis/v2/extend/api"
-MAX_REQUESTS = 8   # single experiment <= 8 out of 50 daily requests
+MAX_REQUESTS = 8   # explicit single test <= 8 / 50 daily requests
 MAX_EVENTS = 6
 # Only exact market contracts, do not infer ACES or DF from unknown labels.
 INTEREST = ("ace", "double fault", "total game", "total set", "over under", "most ace")
@@ -96,6 +96,7 @@ def _time(row):
 def run(client, *, now=None):
     now = now or datetime.now(timezone.utc)
     report = {"schema": 1, "audit_time": now.isoformat(), "read_only": True,
+              "odds_plan_requirement": "ULTRA_or_MEGA",
               "quota": "50 requests/day", "request_cap": client.limit,
               "requests_used": 0, "provider_remaining": None,
               "upcoming": {}, "checked_events": [], "status": "ok"}
@@ -104,7 +105,7 @@ def run(client, *, now=None):
     board = []
     for tour in ("atp", "wta"):
         try:
-            result = client.get(f"/events/upcoming/{tour}?page=1")
+            result = client.get(f"/upcoming/matches/{tour}?group=singles&limit=30&page=1")
             candidates = _events(result)
             report["upcoming"][tour] = {
                 "count_on_first_page": len(candidates),
@@ -114,7 +115,7 @@ def run(client, *, now=None):
             for row in candidates:
                 if not isinstance(row, dict):
                     continue
-                eid = str(row.get("id") or "")
+                eid = str(row.get("liveEventId") or row.get("live_event_id") or "")
                 start = _time(row)
                 if re.fullmatch(r"[0-9]+", eid) and (start is None or start > now):
                     board.append((tour, eid, row, start))
@@ -128,6 +129,10 @@ def run(client, *, now=None):
             report["status"] = "provider_daily_reserve"
             break
 
+    # Only query odds if the schedule gives an explicit LIVE event ID. Core
+    # fixture IDs must never be sent to live-odds endpoints. Under the BASIC
+    # 50/day tier, provider docs restrict odds to ULTRA/MEGA, so a 403 is
+    # expected; stop rather than consuming more calls.
     # Scope down to one event per tour first, then fill up to max 6. Do not
     # fetch duplicate IDs or use unrelated fixture IDs from the other API.
     board.sort(key=lambda x: (x[3] or now, x[0], x[1]))
@@ -166,6 +171,11 @@ def run(client, *, now=None):
                 report["checked_events"].append({
                     "id": event_id, "tour": tour, "error": str(err),
                 })
+                if "403" in str(err) or "401" in str(err):
+                    report["status"] = "odds_not_in_current_subscription"
+                    break
+    if report["status"] == "ok" and not selected:
+        report["status"] = "no_explicit_live_event_ids_from_schedule"
     report["requests_used"] = client.count
     report["provider_remaining"] = client.provider_remaining
     return report
