@@ -386,6 +386,7 @@ def restore_published_market_snapshots(feed, ledger):
                     "projection_unit", "best_of", "data_depth", "price_status",
                     "price_contract", "ou_side", "model_probability", "expected_value",
                     "provider_id", "captured_at", "odds_market_name",
+                    "odds_source", "odds_bookmaker", "odds_provider_event_id",
                 ):
                     if field in snapshot:
                         row[field] = deepcopy(snapshot.get(field))
