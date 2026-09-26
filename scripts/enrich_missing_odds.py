@@ -13,6 +13,7 @@ from pathlib import Path
 
 from _bootstrap import ROOT  # noqa: F401
 from export_missing_market_odds import OUT, export
+from tbt.services.indicative_odds import indicative_price
 from release_store import ReleaseStore
 
 REPO = "BackstageTalks/tbt-data"
@@ -91,6 +92,14 @@ def enrich(ledger):
             "best_of": pub.get("best_of"),
             "projection_direction": pub.get("projection_direction"),
         })
+        estimated = indicative_price({
+            "market": enriched["market"],
+            "projection_confidence": enriched.get("model_confidence"),
+        })
+        enriched.update(estimated or {
+            "indicative_odds": None,
+            "indicative_odds_method": "insufficient_frozen_pre_match_confidence",
+        })
         output.append(enriched)
     counts = dict(Counter(row["contract_precision"] for row in output))
     audit = {
@@ -98,12 +107,19 @@ def enrich(ledger):
         "by_market": dict(Counter(row["market"] for row in output)),
         "contract_precision": counts,
         "authentic_priced_by_market": dict(authentic),
+        "indicative_estimates": sum(item["indicative_odds"] is not None for item in output),
+        "without_frozen_confidence": sum(item["indicative_odds"] is None for item in output),
+        "indicative_estimates_by_market": dict(Counter(
+            item["market"] for item in output if item["indicative_odds"] is not None
+        )),
         "authentic_priced_examples": authentic_samples,
         "notes": [
             "Most Aces and Most Double Faults select the player with more "
             "of that statistic, not an individual player O/U.",
             "The games model reference is NOT a bookmaker O/U line.",
             "Never derive price from the match result.",
+            "Indicative prices are display-only, model-confidence based, "
+            "NOT historic bookmaker prices and NOT eligible for real ROI.",
         ],
     }
     return output, audit
