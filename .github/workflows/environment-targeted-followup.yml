@@ -21,11 +21,11 @@ concurrency:
 jobs:
   fill-and-audit:
     if: >-
-      ${ { github.event_name == 'workflow_dispatch' ||
+      ${{ github.event_name == 'workflow_dispatch' ||
         (github.event.workflow_run.conclusion == 'success' &&
           (github.event.workflow_run.name == 'Player card enrichment' ||
             (github.event.workflow_run.name == 'Tennis data and predictions' &&
-              github.event.workflow_run.id == 36251061946))) } }
+              github.event.workflow_run.id == 36251061946))) }}
     runs-on: ubuntu-latest
     timeout-minutes: 355
     env:
