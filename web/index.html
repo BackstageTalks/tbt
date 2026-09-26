@@ -10,10 +10,10 @@
   <title>BlinQ · Tennis Intelligence</title>
   <link rel="icon" href="/assets/blinq_favi.png" type="image/png" />
   <link rel="manifest" href="/manifest.webmanifest" />
-  <link rel="stylesheet" href="/blinq-app.css?v=7360&p=61&market-trend=1&loader=2&visual=green-login-loader-20260924&backdrop=2&editor=1&accounts=1&profile=1&started-only=1&columns=2" />
+  <link rel="stylesheet" href="/blinq-app.css?v=7360&p=61&mobile-logout=1&market-trend=1&loader=2&visual=green-login-loader-20260924&backdrop=2&editor=1&accounts=1&profile=1&started-only=1&columns=2" />
   <script defer src="/auth.js?v=7360&p=61"></script>
   <script defer src="/responsive.js?v=7360&p=61"></script>
-  <script defer src="/app.js?v=7360&p=61&market-trend=1&visual=green-login-loader-20260924&backdrop=2&editor=1&accounts=1&started-only=1&indicative-odds=2&results-units=1&result-kpis=1&real-api-only=1"></script>
+  <script defer src="/app.js?v=7360&p=61&mobile-logout=1&market-trend=1&visual=green-login-loader-20260924&backdrop=2&editor=1&accounts=1&started-only=1&indicative-odds=2&results-units=1&result-kpis=1&real-api-only=1"></script>
 </head>
 <body id="blinqPremium" class="blinq-home" data-web-release="7.3.6">
   <a class="skip-link" href="#mainContent">Preskočiť na obsah</a>
@@ -58,12 +58,13 @@
           <button id="insightShortcut" class="insight-shortcut insight-live-button" type="button" hidden aria-controls="insightDrawer" aria-expanded="false"><span class="insight-shortcut-live">LIVE</span><b id="insightShortcutCount" hidden>0</b><span id="insightShortcutLabel">RADAR</span></button>
           <button id="insightBell" class="insight-bell insight-info-button" type="button" aria-label="Premium Info" aria-controls="insightDrawer" aria-expanded="false"><span aria-hidden="true" class="insight-bell-icon"><svg viewBox="0 0 24 24" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="insight-info-label">INFO</span><b id="insightUnread" hidden>0</b></button>
           <div id="profileShell" class="profile-shell">
-            <button id="profileButton" class="profile-button" type="button" aria-label="Účet">
+            <button id="profileButton" class="profile-button" type="button" aria-label="Účet" aria-controls="profileMenu" aria-expanded="false">
               <span class="avatar" id="avatar">B</span>
               <span class="profile-copy"><strong id="profileName">BlinQ User</strong><small class="profile-meta-primary"><span id="profilePlan">Člen</span><span id="profileTelegram" hidden>TG —</span></small><small class="profile-meta-secondary" hidden><span id="profileRegisteredEmail">—</span><span id="profileRemaining">—</span></small><span id="profilePlanIcon" hidden>◇</span><span id="memberStatus" hidden>Aktívne</span></span>
             </button>
             <button id="profileMenuToggle" class="profile-toggle" type="button" aria-controls="profileMenu" aria-expanded="false" aria-label="Otvoriť menu účtu"><svg viewBox="0 0 20 20" focusable="false" aria-hidden="true"><path d="m5.5 7.5 4.5 4.5 4.5-4.5"></path></svg></button>
             <div id="profileMenu" class="profile-menu" hidden>
+              <button id="profileAccountLink" type="button"><span class="profile-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"></circle><path d="M4 21v-2a8 8 0 0 1 16 0v2"></path></svg></span><span><strong>Môj účet</strong><small>Profil a členstvo</small></span></button>
               <button id="profileAdminLink" data-route="admin" type="button" hidden><span class="profile-admin-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06-2.86 2.86-.06-.06A1.7 1.7 0 0 0 15 19.4a1.7 1.7 0 0 0-1 .6 1.7 1.7 0 0 0-.4 1.1V21H9.6v-.1A1.7 1.7 0 0 0 8.2 19.3a1.7 1.7 0 0 0-1.88.34l-.06.06-2.86-2.86.06-.06A1.7 1.7 0 0 0 3.8 15a1.7 1.7 0 0 0-.6-1 1.7 1.7 0 0 0-1.1-.4H2V9.6h.1A1.7 1.7 0 0 0 3.7 8.2a1.7 1.7 0 0 0-.34-1.88l-.06-.06L6.16 3.4l.06.06A1.7 1.7 0 0 0 8.1 3.8a1.7 1.7 0 0 0 1-.6 1.7 1.7 0 0 0 .4-1.1V2h4v.1A1.7 1.7 0 0 0 14.9 3.7a1.7 1.7 0 0 0 1.88-.34l.06-.06 2.86 2.86-.06.06A1.7 1.7 0 0 0 19.3 8.1a1.7 1.7 0 0 0 .6 1 1.7 1.7 0 0 0 1.1.4h.1v4H21a1.7 1.7 0 0 0-1.6 1.5Z"></path></svg></span><span><strong >Admin</strong><small>Admin centrum</small></span></button>
               <button id="headerLogoutButton" type="button"><span class="profile-logout-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M10 5H5v14h5"></path><path d="M13 8l4 4-4 4M17 12H9"></path></svg></span><span><strong>Odhlásiť sa</strong><small>Ukončiť reláciu</small></span></button>
             </div>
