@@ -107,9 +107,9 @@ jobs:
               dispatch("environment-cache-only.yml", {
                   "start": "2021-01-01", "end": "", "mode": "write", "limit": "0"
               })
-          elif len(geocode) < 2:
+          elif len(geocode) < 1:
               # Open-Meteo / geocoding only, never the paid Tennis RapidAPI.
-              # At most 2 x 300 Open-Meteo requests per UTC day.
+              # At most 1 x 300 Open-Meteo requests per UTC day; audit before retrying low-yield candidates.
               dispatch("environment-overnight.yml", {
                   "start": "2021-01-01", "end": "", "mode": "write",
                   "limit": "0", "max_requests": "300",
