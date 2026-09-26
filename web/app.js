@@ -2091,7 +2091,8 @@
   }
   function projectionOddsHtml(row){
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
-    if(Number.isFinite(odds))return hubNumberHtml(odds.toFixed(2),lcopy('odds','kurz','kurz'));
+    const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
+    if(realOddsText!=='—')return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
     const approx=projectionIndicativeOdds(row);
     if(Number.isFinite(approx))return `<span title="${escapeHtml(indicativeOddsHint())}">${hubNumberHtml('~'+approx.toFixed(2),lcopy('estimate','odhad','odhad'))}</span>`;
     const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
