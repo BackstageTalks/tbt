@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
+      PYTHONPATH: api:scripts
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
     steps:
