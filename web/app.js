@@ -2067,11 +2067,33 @@
     dialog.classList.remove('ace-projection-dialog');dialog.classList.add('sg-projection-dialog');
     if(!dialog.open)dialog.showModal();
   }
+  // Indicative display quote on the EXACT published projection contract,
+  // never a historical bookmaker price and never included in actual ROI.
+  // Client fallback also covers older public feeds before the next refresh.
+  function projectionIndicativeOdds(row){
+    const market=String(row?.market||row?.projection_metric||'').toLowerCase();
+    if(!['aces','double_faults','sets','games'].includes(market))return NaN;
+    if(row?.odds!=null&&Number.isFinite(Number(row.odds))&&Number(row.odds)>1)return NaN;
+    const saved=row?.indicative_odds==null?NaN:Number(row.indicative_odds);
+    if(Number.isFinite(saved)&&saved>1)return saved;
+    if(row?.projection_confidence==null)return NaN;
+    const confidence=Number(row.projection_confidence);
+    if(!Number.isFinite(confidence)||confidence<0.5||confidence>1)return NaN;
+    const p=Math.min(0.94,Math.max(0.5,confidence));
+    return Math.round(Math.max(1.05,Math.min(2.50,1/(p*1.055)))*100)/100;
+  }
+  function indicativeOddsHint(){
+    return lcopy(
+      'Approximate model-derived odds, not a bookmaker quote. Excluded from real betting ROI.',
+      'Orientačný kurz podľa modelu, nie ponuka stávkovej kancelárie. Nezapočítava sa do skutočného ROI.',
+      'Orientační kurz podle modelu, nikoli nabídka sázkové kanceláře. Nezapočítává se do skutečného ROI.'
+    );
+  }
   function projectionOddsHtml(row){
-    // Only prices attached to this selection are eligible; never use model
-    // confidence, projected totals, or the match-winner market as a price.
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     if(Number.isFinite(odds))return hubNumberHtml(odds.toFixed(2),lcopy('odds','kurz','kurz'));
+    const approx=projectionIndicativeOdds(row);
+    if(Number.isFinite(approx))return `<span title="${escapeHtml(indicativeOddsHint())}">${hubNumberHtml('~'+approx.toFixed(2),lcopy('estimate','odhad','odhad'))}</span>`;
     const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
     return `<span title="${escapeHtml(reason)}">${hubNumberHtml('N/A',reason)}</span>`;
   }
@@ -2102,11 +2124,11 @@
     if(sourceTab==='ace'||sourceTab==='double_faults'){
       const confidence=Number(row?.projection_confidence),projection=Number(row?.projection),pick=projectionPickText(row,sourceTab),market=aceMarketName(row);
       const action=aceProjectionDetailAvailable(row)?`<button class="hub-detail hub-projection-detail" type="button" data-ace-projection aria-label="${escapeHtml(lcopy('Aces projection','Projekcia Aces','Projekce Aces'))}">${escapeHtml(lcopy('Detail','Detail','Detail'))}</button>`:'';
-      const odds=firstFinite(row?.odds,row?.betting?.odds),projectionText=Number.isFinite(projection)?projection.toFixed(2):'—',projectionUnit=lcopy('projection','projekcia','projekce');
+      const oddsHtml=projectionOddsHtml(row),projectionText=Number.isFinite(projection)?projection.toFixed(2):'—',projectionUnit=lcopy('projection','projekcia','projekce');
       if(tab==='see_all'){
-        return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-seeall-model-cell">${hubSeeAllProjectionHtml(projectionText,projectionUnit,confidence,row)}</td><td class="hub-action-cell hub-optional-action">${action}</td></tr>`;
+        return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-seeall-model-cell">${hubSeeAllProjectionHtml(projectionText,projectionUnit,confidence,row)}</td><td class="hub-action-cell hub-optional-action">${action}</td></tr>`;
       }
-      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td></tr>`;
+      return `<tr${rowClass} data-hub-event="${key}" data-hub-market="${escapeHtml(sourceTab)}">${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick,market||(sourceTab==='double_faults'?'DVOJCHYBY':'ACES'))}</td><td class="hub-odds hub-number-cell">${oddsHtml}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(projectionText,projectionUnit)}</td><td class="hub-confidence-cell">${hubConfidenceHtml(confidence,row)}</td></tr>`;
     }
     const probability=marketProbability(row),odds=Number(row?.odds??row?.betting?.odds),pick=modelPickName(row);
     const base=`${leading}<td class="hub-pick">${hubPredictionHtml(sourceTab,pick)}</td><td class="hub-odds hub-number-cell">${hubNumberHtml(Number.isFinite(odds)?odds.toFixed(2):'—',lcopy('odds','kurz','kurz'))}</td><td class="hub-confidence-cell">${hubConfidenceHtml(probability,row)}</td>`;
@@ -2746,10 +2768,13 @@
       if(projection){
         const depth=Number(publication?.data_depth??publication?.result?.data_depth),displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
         const projectionOdds=publication?.odds==null?NaN:Number(publication?.odds),projectionUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units);
+        const estimatedProjectionOdds=Number.isFinite(projectionOdds)&&projectionOdds>1?NaN:projectionIndicativeOdds(publication);
+        const displayedProjectionOdds=Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):Number.isFinite(estimatedProjectionOdds)?'~'+estimatedProjectionOdds.toFixed(2):'—';
+        const projectionOddsTitle=Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
         const depthText=Number.isFinite(depth)?pct(depth):'—';
         const unitsText=outcome.kind==='void'?'0.00u':Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0?`${projectionUnits>0?'+':''}${projectionUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
-        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${escapeHtml(projectionText)}</td><td>${Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—'}</td><td><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td><span class="results-units-depth"><b class="${Number.isFinite(projectionUnits)&&projectionUnits>0?'correct':Number.isFinite(projectionUnits)&&projectionUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b><small>${escapeHtml(depthText)}</small></span></td></tr>`;
+        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${escapeHtml(projectionText)}</td><td${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td><span class="results-units-depth"><b class="${Number.isFinite(projectionUnits)&&projectionUnits>0?'correct':Number.isFinite(projectionUnits)&&projectionUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b><small>${escapeHtml(depthText)}</small></span></td></tr>`;
       }
       return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(pickName)}</strong></td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>${resultHtml}</td><td class="${outcome.kind==='void'?'void':Number.isFinite(units)&&units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
