@@ -72,17 +72,21 @@ def test_ui_never_renders_filler_as_a_real_quote():
     assert "nie historický kurz ani odhad modelu" in APP
 
 
-def test_results_units_are_displayed_from_visible_price_without_real_roi_backfill():
-    # Original booked/settled 1u stays authoritative whenever present.
-    assert "const hasSettledUnits=Number.isFinite(projectionUnits)" in APP
-    assert "hasSettledUnits?projectionUnits:" in APP
-    # Synthetic 1.50–1.70 prices fill the per-row units cell only.
-    assert "const displayOnlyOdds=illustrativeOnly?placeholderOdds:" in APP
-    assert "(outcome.kind==='win'?displayOnlyOdds-1:-1):NaN" in APP
+def test_results_units_and_kpis_share_visible_price_without_changing_ledger():
+    assert "function resultVisibleOdds(publication)" in APP
+    assert "function resultVisibleUnits(publication,outcome,odds)" in APP
+    assert "const displayUnits=resultVisibleUnits(publication,outcome,resultVisibleOdds(publication))" in APP
     assert "const unitsText=Number.isFinite(displayUnits)?" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits>0?'correct'" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits<0?'wrong'" in APP
-    assert "+Number(p.result?.profit_units||0)" in APP  # KPI still reads actual ledger units.
-    # Flat 1u illustrations for the actual example shown in Results.
+    assert "const entries=settledPublishedEntries(rows,category)" in APP
+    assert "const odds=resultVisibleOdds(publication)" in APP
+    assert "const units=resultVisibleUnits(publication,outcome,odds)" in APP
+    assert "function localResultMetrics(rows,category)" in APP
+    assert "return metricCards([" in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
+    assert "projectionCategory" not in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
+    assert "+Number(p.result?.profit_units||0)" not in APP[APP.index("function localResultMetrics("):APP.index("function renderResults()")]
+    # Historical display-only prices still do not change actual real-money ROI.
+    assert "historical_display_placeholder_scope" in historical_display_placeholder(publication(), event_id="1001")
     assert round(1.66 - 1, 2) == .66
     assert round(1.52 - 1, 2) == .52
