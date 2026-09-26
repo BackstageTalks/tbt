@@ -352,7 +352,7 @@ def _verified_geonames_environment(
     parts = [part.strip() for part in query.split(",") if part.strip()]
     provider_countries = explicit_country_hints(provider_payload, tournament)
     query_country = normalize_country_code(parts[-1]) if len(parts) > 1 else ""
-    if query_country and provider_countries and query_country not in provider_countries:
+    if query_country and provider_countries and provider_countries != {query_country}:
         return None, "fallback_country_conflict"
     country = query_country or (
         next(iter(provider_countries)) if len(provider_countries) == 1 else ""
