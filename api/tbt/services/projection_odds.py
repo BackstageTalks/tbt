@@ -387,6 +387,39 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
             if ok and metric in priced:
                 priced[metric] += 1
     top_markets = dict(sorted(observed_market_names.items(), key=lambda item: (-item[1], item[0]))[:40])
+    # Compact diagnostic on the *same events* as the projections. A provider
+    # market name alone does not prove a complete pair of O/U prices exists.
+    market_debug = []
+    for event_id, refs in by_event.items():
+        if len(market_debug) >= 80:
+            break
+        payload = payloads.get(event_id)
+        if payload is None:
+            continue
+        requested_metrics = sorted({
+            str((ace[i] if kind == "ace" else sg[i]).get("market") or "")
+            for kind, i in refs
+        })
+        if not any(metric in {"games", "sets"} for metric in requested_metrics):
+            continue
+        total_rows = []
+        for raw, name in _walk_market_rows(payload):
+            if _is_match_total_market(name, "games") or _is_match_total_market(name, "sets"):
+                total_rows.append({
+                    "market": str(name)[:90],
+                    "side": _over_under(_outcome_text(raw), raw),
+                    "line": _explicit_line(raw, _outcome_text(raw)),
+                    "priced": _price(raw) is not None,
+                })
+                if len(total_rows) >= 6:
+                    break
+        market_debug.append({
+            "event_id": event_id,
+            "projected_markets": requested_metrics,
+            "total_market_sample": total_rows,
+            "complete_games_lines": len(extract_match_total_odds(payload, "games")),
+            "complete_sets_lines": len(extract_match_total_odds(payload, "sets")),
+        })
     return ace, sg, {
         "schema": 2,
         "provider_id": int(provider_id),
@@ -398,6 +431,7 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
         "fail_closed_unpriced": {key: max(0, eligible[key] - priced[key]) for key in eligible},
         "unpriced_reasons": reasons,
         "observed_market_names_top40": top_markets,
+        "match_total_market_debug": market_debug,
         "policy": "exact_provider_market_only_no_confidence_as_odds",
     }
 
