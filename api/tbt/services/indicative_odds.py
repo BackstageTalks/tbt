@@ -7,6 +7,7 @@ actual result, realized win rate and match outcome are never consulted.
 from __future__ import annotations
 
 import math
+import hashlib
 from typing import Any
 
 PROJECTION_MARKETS = {"aces", "double_faults", "games", "sets"}
@@ -52,6 +53,40 @@ def indicative_price(record: dict) -> dict | None:
     }
 
 
+
+def historical_display_placeholder(publication: dict, *, event_id: str = "") -> dict | None:
+    """Stable, obviously illustrative 1.50–1.70 table filler, NEVER a quote.
+
+    Historical public result view only. Stored under a dedicated display field,
+    not publication.odds, never under price_status=priced_projection, never
+    considered by ROI or settlement. Hashing avoids reshuffling on every refresh
+    and is strictly independent of win/loss, profit, and model confidence.
+    """
+    if not isinstance(publication, dict):
+        return None
+    market = str(publication.get("market") or "").strip().lower()
+    if market not in PROJECTION_MARKETS or not publication.get("issued_at"):
+        return None
+    actual = _number(publication.get("odds"))
+    if actual is not None and actual > 1:
+        return None
+    identity = "|".join((
+        str(event_id),
+        market,
+        str(publication.get("publication_key") or publication.get("selection_key") or ""),
+        str(publication.get("selection_id") or publication.get("selection") or ""),
+        str(publication["issued_at"]),
+    ))
+    if not identity.replace("|", ""):
+        return None
+    step = int.from_bytes(hashlib.sha256(identity.encode("utf-8")).digest()[:4], "big") % 21
+    return {
+        "historical_display_placeholder_odds": round(1.50 + step / 100, 2),
+        "historical_display_placeholder_source": "synthetic_illustrative_not_bookmaker",
+        "historical_display_placeholder_scope": "results_table_only_excluded_from_roi",
+    }
+
+
 def annotate_feed_indicative_odds(feed: dict) -> tuple[dict, dict]:
     """Decorate current picks and historical public results, never the ledger."""
     counts = {"aces": 0, "double_faults": 0, "games": 0, "sets": 0}
@@ -60,8 +95,25 @@ def annotate_feed_indicative_odds(feed: dict) -> tuple[dict, dict]:
             estimate = indicative_price(card)
             if estimate is not None:
                 card.update(estimate)
+    historical_placeholder_counts = {market: 0 for market in PROJECTION_MARKETS}
     for row in feed.get("results", []) or []:
+        if not isinstance(row, dict):
+            continue
+        event_id = str(row.get("event_id") or row.get("match_id") or row.get("id") or "")
         for publication in row.get("market_publications", []) or []:
+            if not isinstance(publication, dict):
+                continue
+            placeholder = historical_display_placeholder(publication, event_id=event_id)
+            if placeholder is not None:
+                publication.update(placeholder)
+                # Do not attach the uncalibrated confidence-derived estimate to
+                # an illustrative historical placeholder.
+                for key in ("indicative_odds", "indicative_odds_method",
+                            "indicative_odds_probability", "indicative_odds_scope"):
+                    publication.pop(key, None)
+                market = str(publication.get("market") or "").lower()
+                historical_placeholder_counts[market] += 1
+                continue
             estimate = indicative_price(publication)
             if estimate is None:
                 continue
@@ -69,9 +121,14 @@ def annotate_feed_indicative_odds(feed: dict) -> tuple[dict, dict]:
             market = str(publication.get("market") or "").lower()
             counts[market] += 1
     return feed, {
-        "schema": 1, "method": ESTIMATE_MODEL,
+        "schema": 2, "method": ESTIMATE_MODEL,
         "display_overround": DISPLAY_OVERROUND,
         "historic_estimates_by_market": counts,
         "historic_estimates_total": sum(counts.values()),
+        "historical_illustrative_only_by_market": historical_placeholder_counts,
+        "historical_illustrative_only_total": sum(historical_placeholder_counts.values()),
+        "historical_illustrative_policy": (
+            "synthetic_visible_label_not_historical_quote_never_used_for_roi"
+        ),
         "real_bookmaker_roi_unmodified": True,
     }
