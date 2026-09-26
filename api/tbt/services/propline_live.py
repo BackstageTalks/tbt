@@ -128,39 +128,119 @@ class PropLineClient:
             raise RuntimeError("PropLine request failed") from None
 
 
-def _match_board(predictions: list[dict], board: list[dict], now: datetime) -> list[tuple[dict, dict]]:
-    """Unique two-player identity + scheduled time; fail closed on ambiguity."""
+def _initial_last(name: str) -> tuple[str, str] | None:
+    """Conservative abbreviated tennis name: 'N. Djokovic' == 'Novak Djokovic'.
+
+    An initial and a surname alone are never enough to match an event: the
+    opposing player and tightly compatible scheduled time must also agree.
+    """
+    words = _name(name).split()
+    if len(words) < 2 or len(words[-1]) < 3:
+        return None
+    if words[0] in {"tbd", "unknown", "winner", "qualifier"}:
+        return None
+    return words[0][0], words[-1]
+
+
+def _pair_key(names: tuple[str, str], *, abbreviated: bool = False) -> frozenset | None:
+    clean = tuple(_initial_last(name) if abbreviated else _name(name) for name in names)
+    if any(not key for key in clean) or clean[0] == clean[1]:
+        return None
+    return frozenset(clean)
+
+
+def _match_board_with_diagnostics(
+    predictions: list[dict], board: list[dict], now: datetime,
+) -> tuple[list[tuple[dict, dict]], dict]:
+    """One-to-one, two-player and time-constrained fixture matching.
+
+    Exact full-name matches take precedence. The only fallback is a shared
+    initial+last-name key for BOTH players, with a tighter 45-minute start
+    tolerance. Ambiguous records on EITHER feed are dropped rather than
+    guessed. No bookmaker event can be assigned to two RapidAPI matches.
+    """
     singles = []
     for row in predictions:
         p1, p2 = _players(row)
         start = _when(row.get("scheduled_at") or row.get("date"))
-        if not row.get("event_id") or not p1 or not p2 or not start or start <= now:
+        exact = _pair_key((p1, p2))
+        if not row.get("event_id") or not exact or not start or start <= now:
             continue
-        singles.append((row, frozenset((_name(p1), _name(p2))), start))
-    chosen: list[tuple[dict, dict]] = []
-    used = set()
+        singles.append((row, exact, _pair_key((p1, p2), abbreviated=True), start))
+    targets = []
+    invalid = 0
+    seen_identical = set()
     for prop in board:
         eid = str(prop.get("id") or "")
         start = _when(prop.get("commence_time"))
-        pair = frozenset((_name(prop.get("home_team")), _name(prop.get("away_team"))))
-        if not eid.isdigit() or not start or start <= now or len(pair) != 2 or not all(pair):
+        pnames = (str(prop.get("home_team") or ""), str(prop.get("away_team") or ""))
+        exact = _pair_key(pnames)
+        if not eid.isdigit() or not start or start <= now or not exact:
+            invalid += 1
             continue
-        candidates = [(row, when) for row, names, when in singles
-                      if names == pair and abs((start - when).total_seconds()) <= 7200]
-        if len(candidates) != 1:
+        signature = (eid, start, exact)
+        if signature in seen_identical:
             continue
-        row, when = candidates[0]
-        rapid_id = str(row["event_id"])
-        if rapid_id in used:
+        seen_identical.add(signature)
+        targets.append((prop, exact, _pair_key(pnames, abbreviated=True), start))
+    # Resolve against all candidates first so a duplicated event on either
+    # provider cannot be accepted based on input order.
+    proposals = []
+    ambiguous = 0
+    unmatched = 0
+    matched_full = 0
+    matched_abbrev = 0
+    for prop, exact, abbreviated, start in targets:
+        full = [(row, when) for row, key, _short, when in singles
+                if key == exact and abs((start - when).total_seconds()) <= 7200]
+        if full:
+            candidates = full
+            method = "full"
+        else:
+            candidates = [(row, when) for row, _key, short, when in singles
+                          if abbreviated is not None and short == abbreviated
+                          and abs((start - when).total_seconds()) <= 2700]
+            method = "abbreviated"
+        identities = {str(row["event_id"]) for row, _when in candidates}
+        if len(identities) != 1:
+            if identities:
+                ambiguous += 1
+            else:
+                unmatched += 1
             continue
-        used.add(rapid_id)
+        row = candidates[0][0]
+        proposals.append((row, prop, method))
+    rapid_counts: dict[str, int] = {}
+    prop_counts: dict[str, int] = {}
+    for row, prop, _ in proposals:
+        rapid = str(row["event_id"])
+        prop_id = str(prop["id"])
+        rapid_counts[rapid] = rapid_counts.get(rapid, 0) + 1
+        prop_counts[prop_id] = prop_counts.get(prop_id, 0) + 1
+    chosen = []
+    for row, prop, method in proposals:
+        if rapid_counts[str(row["event_id"])] != 1 or prop_counts[str(prop["id"])] != 1:
+            ambiguous += 1
+            continue
         chosen.append((row, prop))
-    # Prioritize tour-level matches without excluding challenger/ITF.
+        if method == "full":
+            matched_full += 1
+        else:
+            matched_abbrev += 1
     chosen.sort(key=lambda pair: (
         0 if str(pair[0].get("tour") or "").upper() in ("ATP", "WTA") else 1,
         _when(pair[0].get("scheduled_at") or pair[0].get("date")),
     ))
-    return chosen
+    return chosen, {
+        "model_upcoming": len(singles), "provider_future_events": len(targets),
+        "unusable_provider_events": invalid, "matched_exact": matched_full,
+        "matched_abbreviated": matched_abbrev, "unmatched_provider": unmatched,
+        "ambiguous_rejected": ambiguous,
+    }
+
+
+def _match_board(predictions: list[dict], board: list[dict], now: datetime) -> list[tuple[dict, dict]]:
+    return _match_board_with_diagnostics(predictions, board, now)[0]
 
 
 def _normalize_book(book: dict, row: dict, missing: set[str]) -> dict[str, dict]:
@@ -259,8 +339,9 @@ def discover_propline_fallback(
         report["calls"] = client.calls
         return {}, report
     report["events_on_board"] = len(board)
-    matched = _match_board(predictions, board, now)
+    matched, match_diagnostics = _match_board_with_diagnostics(predictions, board, now)
     report["matched_events"] = len(matched)
+    report["fixture_match_diagnostics"] = match_diagnostics
     report["events_limited_out"] = max(0, len(matched) - max(0, min(MAX_EVENTS_PER_REFRESH, int(max_events))))
     for row, event in matched[:max(0, min(MAX_EVENTS_PER_REFRESH, int(max_events)))]:
         rapid_id, prop_id = str(row["event_id"]), str(event["id"])
