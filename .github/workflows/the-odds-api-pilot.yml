@@ -1,0 +1,39 @@
+name: The Odds API free-plan tennis pilot
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Twice daily, max 3 tournament-level requests per run: <=186 credits
+    # during a 31-day month. Avoid running more often on the free plan.
+    - cron: '25 6,18 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: the-odds-api-free-monthly-pilot
+  cancel-in-progress: false
+
+jobs:
+  coverage:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    env:
+      THE_ODDS_API_KEY: ${{ secrets.THE_ODDS_API_KEY }}
+      THE_ODDS_MAX_SPORTS: "3"
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Audit current tennis totals with bounded free credits
+        run: python scripts/the_odds_api_pilot.py
+      - name: Save 7-day report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: odds-api-tennis-pilot
+          path: reports/the_odds_api_pilot.json
+          if-no-files-found: warn
+          retention-days: 7
