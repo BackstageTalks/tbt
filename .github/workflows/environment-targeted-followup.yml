@@ -1,0 +1,113 @@
+name: Environment targeted follow-up after player enrichment
+
+on:
+  workflow_run:
+    workflows: ["Player card enrichment"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# The player-assets writer is independent, but wait until that entire workflow
+# completes as requested. Never overlap other history writers.
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  fill-and-audit:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install and check targeted resolver
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+          python -m unittest discover -s scripts/tests -p 'test_environment_location_candidates.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_environment_bulk_modes.py' -v
+          test -n "$GH_TOKEN" || { echo 'Missing private data token'; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+          mkdir -p .cache/tbt/targeted
+      - name: Reuse verified historical venues (no Open-Meteo calls)
+        run: |
+          set -euo pipefail
+          python scripts/enrich_environment_snapshot.py \
+            --start 2021-01-01 --end "$(date -u +%F)" --limit 0 \
+            --cache-only --static-only --complete-static \
+            --max-requests 1 --max-runtime-minutes 120 \
+            --data-repository "$TBT_DATA_REPOSITORY"
+          cp .cache/tbt/history/environment_enrichment_report.json .cache/tbt/targeted/cache_report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('.cache/tbt/targeted/cache_report.json').read_text())
+          assert r['open_meteo_requests'] == 0
+          assert r['updated'] == r['resolved']
+          PY
+      - name: Targeted positive-only geocoding with stricter offline fallback
+        run: |
+          set -euo pipefail
+          python scripts/enrich_environment_snapshot.py \
+            --start 2021-01-01 --end "$(date -u +%F)" --limit 0 \
+            --unique-geocode --static-only --complete-static \
+            --max-requests 150 --max-runtime-minutes 150 \
+            --yield-guard-after-requests 80 --min-geocoder-success-rate 0.005 \
+            --data-repository "$TBT_DATA_REPOSITORY"
+          cp .cache/tbt/history/environment_enrichment_report.json .cache/tbt/targeted/geocode_report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('.cache/tbt/targeted/geocode_report.json').read_text())
+          assert r['positive_only'] is True
+          assert r['updated'] == r['resolved'], 'Refuse negative venue writes'
+          assert r['open_meteo_requests'] <= 150, 'Exceeded Open-Meteo cap'
+          print('New verified venues:',r['updated'])
+          print('Stop reason:',r.get('stopped_reason'))
+          PY
+      - name: Re-audit all completed matches
+        run: |
+          set -euo pipefail
+          python scripts/audit_environment_release.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --report .cache/tbt/targeted/coverage_after.json \
+            > .cache/tbt/targeted/coverage.log
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          p=Path('.cache/tbt/targeted')
+          cache=json.loads((p/'cache_report.json').read_text())
+          geo=json.loads((p/'geocode_report.json').read_text())
+          audit=json.loads((p/'coverage_after.json').read_text())['overall']
+          print('## Environment targeted follow-up')
+          print(f"- Positive historical cache writes: {cache['updated']:,}")
+          print(f"- Positive new geocoding writes: {geo['updated']:,}")
+          print(f"- Open-Meteo requests: {geo['open_meteo_requests']:,}")
+          print(f"- Geocoder stop reason: {geo.get('stopped_reason')}")
+          print(f"- Environment: {audit['coverage']['environment']:.2%}")
+          print(f"- Verified venues: {audit['coverage']['venue_resolved']:.2%}")
+          print(f"- Unresolved venues: {audit.get('unresolved',0):,}")
+          print(f"- Entirely missing Environment: {audit.get('missing_environment',0):,}")
+          PY
+      - name: Save partial reports even after a failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-environment-targeted-${{ github.run_id }}
+          path: .cache/tbt/targeted/
+          if-no-files-found: warn
+          retention-days: 30
