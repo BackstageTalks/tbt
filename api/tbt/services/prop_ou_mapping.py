@@ -25,9 +25,9 @@ def _normalize(value: Any) -> str:
 
 def _selection_side(value: Any) -> str | None:
     text = _normalize(value)
-    if re.search(r"\\bover\\b", text):
+    if re.search(r"\bover\b", text):
         return "over"
-    if re.search(r"\\bunder\\b", text):
+    if re.search(r"\bunder\b", text):
         return "under"
     return None
 
@@ -38,7 +38,7 @@ def _line(outcome: dict, market: dict) -> float | None:
         if parsed is not None and parsed >= 0:
             return parsed
     for value in (outcome.get("name"), market.get("name")):
-        match = re.search(r"\\b(?:over|under)\\s+(\\d+(?:\\.\\d+)?)", str(value or ""), re.I)
+        match = re.search(r"\b(?:over|under)\s+(\d+(?:\.\d+)?)", str(value or ""), re.I)
         if match:
             return float(match.group(1))
     return None
