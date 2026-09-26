@@ -622,11 +622,19 @@ def main():
         projection_discovery_report = {}
         bookmaker_lines_by_event = {}
         if projection_odds_cap:
+            # Respect the *remaining* overall RapidAPI request cap; discovery
+            # follows doubles/history enrichment in the same refresh. Leave
+            # one request for unrelated match-winner candidates when possible.
+            remaining = (max(0, int(provider.request_limit) - int(provider.request_count) - 1)
+                         if provider.request_limit is not None else projection_odds_cap)
+            available_odds_calls = min(projection_odds_cap, remaining)
             (projection_market_cache, available_projection_markets,
              projection_discovery_report) = prefetch_projection_market_board(
-                provider, predictions, now=now, max_events=projection_odds_cap,
+                provider, predictions, now=now, max_events=available_odds_calls,
                 provider_id=1,
             )
+            projection_discovery_report["remaining_request_budget_at_start"] = remaining
+            projection_discovery_report["requested_event_cap"] = projection_odds_cap
             for event_id, markets in available_projection_markets.items():
                 payload = projection_market_cache.get(event_id)
                 bookmaker_lines_by_event[event_id] = {
