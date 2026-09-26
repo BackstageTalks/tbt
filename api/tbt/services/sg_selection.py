@@ -274,9 +274,13 @@ def _games_card(
     *,
     best_of: int,
     baseline: float,
+    bookmaker_line: float | None = None,
 ) -> dict[str, Any] | None:
     estimate = (p1["estimate"] + p2["estimate"]) / 2.0
-    deviation = estimate - baseline
+    # Odds-first: the probability must refer to the real offered O/U line,
+    # never to a historical mean that no bookmaker is offering.
+    reference = float(bookmaker_line) if bookmaker_line is not None else baseline
+    deviation = estimate - reference
     min_deviation = 1.4 if best_of == 3 else 2.2
     if abs(deviation) < min_deviation:
         return None
@@ -313,7 +317,7 @@ def _games_card(
         "projection_kind": "match_total_games", "projection_label": "Zápas · Gamy",
         "pick": selection, "selection": selection, "selection_id": f"games:{direction.lower()}",
         "projection": round(float(estimate), 2), "projection_unit": "games",
-        "reference_projection": round(float(baseline), 2),
+        "reference_projection": round(float(reference), 2),
         "projection_gap": round(abs(float(deviation)), 2),
         "projection_direction": direction.lower(),
         "projection_confidence": round(confidence, 4),
@@ -328,6 +332,7 @@ def _games_card(
             "player1_surface": int(p1["surface_samples"]), "player2_surface": int(p2["surface_samples"]),
         },
         "baseline_projection": round(float(baseline), 2),
+        "market_line": round(float(bookmaker_line), 2) if bookmaker_line is not None else None,
         "best_of": best_of, "data_depth": round(depth, 4),
         "projection_score": confidence * (1.0 + min(2.0, abs(deviation) / (4.0 if best_of == 3 else 6.0))),
     })
@@ -374,6 +379,8 @@ def select_sg_picks(
     per_market_limit: int = 10,
     total_limit: int = 20,
     target_count: int = 10,
+    available_markets_by_event: dict[str, set[str]] | None = None,
+    bookmaker_lines_by_event: dict[str, dict[str, list[float]]] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if now.tzinfo is None:
         raise ValueError("select_sg_picks requires timezone-aware now")
@@ -419,6 +426,9 @@ def select_sg_picks(
             missing_baseline += 1
             continue
         eligible += 1
+        event_id = str(row.get("event_id") or "")
+        offered = (available_markets_by_event.get(event_id, set())
+                   if available_markets_by_event is not None else {"games", "sets"})
 
         p1_sets_total = _player_estimate(
             p1_id, histories, "total_sets", now,
@@ -440,14 +450,21 @@ def select_sg_picks(
             tour=tour, surface=surface, best_of=best_of,
             baseline=float(baseline["long"]),
         )
-        if p1_sets_total and p2_sets_total and p1_sets_long and p2_sets_long:
+        if "sets" in offered and p1_sets_total and p2_sets_total and p1_sets_long and p2_sets_long:
             card = _sets_card(
                 effective_row, p1_sets_total, p2_sets_total, p1_sets_long, p2_sets_long,
                 best_of=best_of, baseline_sets=float(baseline["sets"]),
                 baseline_long=float(baseline["long"]),
             )
             if card:
-                by_market["sets"].append(card)
+                # SETS needs the exact published O/U line, typically 2.5 or
+                # 3.5, to exist on the bookmaker's two-sided board.
+                offered_lines = (bookmaker_lines_by_event or {}).get(event_id, {}).get("sets", [])
+                if bookmaker_lines_by_event is None or any(
+                    abs(float(line) - float(card["reference_projection"])) < .01
+                    for line in offered_lines
+                ):
+                    by_market["sets"].append(card)
 
         p1_games = _player_estimate(
             p1_id, histories, "total_games", now,
@@ -459,13 +476,23 @@ def select_sg_picks(
             tour=tour, surface=surface, best_of=best_of,
             baseline=float(baseline["games"]),
         )
-        if p1_games and p2_games:
-            card = _games_card(
-                effective_row, p1_games, p2_games, best_of=best_of,
-                baseline=float(baseline["games"]),
-            )
-            if card:
-                by_market["games"].append(card)
+        if "games" in offered and p1_games and p2_games:
+            # Evaluate the *actual bookmaker lines* first. An older model-only
+            # run still evaluates its historical baseline as before.
+            market_lines = ((bookmaker_lines_by_event or {}).get(event_id, {}).get("games", [])
+                            if bookmaker_lines_by_event is not None else [None])
+            # Closest to the model's projection, rather than an extreme
+            # alternate low-price line. Require the existing hard signal and
+            # predictive-variance floors for every possible offered line.
+            estimated_total = (float(p1_games["estimate"]) + float(p2_games["estimate"])) / 2
+            for line in sorted(market_lines, key=lambda x: abs(float(x) - estimated_total)):
+                card = _games_card(
+                    effective_row, p1_games, p2_games, best_of=best_of,
+                    baseline=float(baseline["games"]), bookmaker_line=line,
+                )
+                if card:
+                    by_market["games"].append(card)
+                    break
 
     for market in by_market:
         by_market[market].sort(
