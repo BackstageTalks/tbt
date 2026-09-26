@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   live-radar:
-    if: github.event_name == 'workflow_dispatch' || vars.TBT_LIVE_RADAR_ENABLED == 'true'
+    if: github.event_name == 'workflow_dispatch' || (vars.TBT_LIVE_RADAR_ENABLED == 'true' && vars.TBT_PAID_API_AUTOMATION_APPROVED == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:

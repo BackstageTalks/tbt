@@ -1,0 +1,110 @@
+name: BlinQ Environment autopilot (no Tennis API)
+
+on:
+  schedule:
+    # GitHub's scheduler may start late; every tick checks actual job state.
+    - cron: '13 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: blinq-environment-autopilot-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch-next:
+    # Explicit kill switch. No Tennis RapidAPI requests are made by this workflow
+    # or by any of the three environment workflows it dispatches.
+    if: vars.TBT_ENV_AUTOPILOT_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Advance safe Environment pipeline only after previous run finishes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import datetime
+          import json
+          import os
+          import subprocess
+          import sys
+
+          repo = os.environ["GH_REPO"]
+          now = datetime.datetime.now(datetime.timezone.utc)
+          today = now.date()
+          workflows = [
+              "environment-cache-only.yml",
+              "environment-overnight.yml",
+              "environment-joint.yml",
+              # Also check manual Environment jobs using the SAME history writer lock.
+              "environment-enrichment.yml",
+              "environment-unique-geocoding.yml",
+              "environment-audit.yml",
+              "data.yml",
+          ]
+          def recent(workflow):
+              url = f"repos/{repo}/actions/workflows/{workflow}/runs?per_page=35"
+              output = subprocess.check_output(["gh", "api", url], text=True)
+              return json.loads(output).get("workflow_runs", [])
+          def started_today(run):
+              return datetime.datetime.fromisoformat(
+                  run["created_at"].replace("Z", "+00:00")
+              ).date() == today
+          def dispatch(workflow, inputs):
+              command = ["gh", "workflow", "run", workflow, "--repo", repo, "--ref", "main"]
+              for key, value in inputs.items():
+                  command += ["-f", f"{key}={value}"]
+              subprocess.run(command, check=True)
+              print(f"Dispatched {workflow}: {inputs}")
+          runs = {workflow: recent(workflow) for workflow in workflows}
+          # No speculative parallel dispatches. Both shared writers and ad hoc
+          # manual Environment audits get to finish before the next stage.
+          busy = [
+              (workflow, run["id"], run["status"])
+              for workflow, items in runs.items()
+              for run in items
+              if run["status"] not in ("completed",)
+          ]
+          if busy:
+              print("Another data/Environment job is active; waiting:", busy[:10])
+              sys.exit(0)
+
+          cache = [r for r in runs["environment-cache-only.yml"] if started_today(r)]
+          geocode = [r for r in runs["environment-overnight.yml"] if started_today(r)]
+          audits = [r for r in runs["environment-joint.yml"] if started_today(r)]
+          # Never endlessly requeue a broken workflow or pay for repeated
+          # provider failures. Failed stages require operator investigation.
+          for name, records in [
+              ("cache-only", cache), ("geocoding", geocode), ("audit", audits)
+          ]:
+              if records and records[0].get("conclusion") != "success":
+                  print(f"STOP: latest {name} stage failed; investigate workflow run {records[0]['html_url']}")
+                  sys.exit(0)
+
+          if not cache:
+              dispatch("environment-cache-only.yml", {
+                  "start": "2021-01-01", "end": "", "mode": "write", "limit": "0"
+              })
+          elif len(geocode) < 2:
+              # Open-Meteo / geocoding only, never the paid Tennis RapidAPI.
+              # At most 2 x 300 Open-Meteo requests per UTC day.
+              dispatch("environment-overnight.yml", {
+                  "start": "2021-01-01", "end": "", "mode": "write",
+                  "limit": "0", "max_requests": "300",
+                  "retry_unresolved": "false"
+              })
+          elif not audits:
+              dispatch("environment-joint.yml", {
+                  "mode": "audit-only", "start": "2021-01-01", "end": ""
+              })
+          else:
+              print("Today's cache, geocoding and coverage/preflight audit all completed.")
+              print("Next cycle begins tomorrow UTC; no Tennis RapidAPI requests.")
+          PY
