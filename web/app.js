@@ -2769,7 +2769,8 @@
         const depth=Number(publication?.data_depth??publication?.result?.data_depth),displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
         const projectionOdds=publication?.odds==null?NaN:Number(publication?.odds),projectionUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units);
         const estimatedProjectionOdds=Number.isFinite(projectionOdds)&&projectionOdds>1?NaN:projectionIndicativeOdds(publication);
-        const displayedProjectionOdds=Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):Number.isFinite(estimatedProjectionOdds)?'~'+estimatedProjectionOdds.toFixed(2):'—';
+        const realProjectionOddsText=Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—';
+        const displayedProjectionOdds=realProjectionOddsText!=='—'?realProjectionOddsText:Number.isFinite(estimatedProjectionOdds)?'~'+estimatedProjectionOdds.toFixed(2):'—';
         const projectionOddsTitle=Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
         const depthText=Number.isFinite(depth)?pct(depth):'—';
         const unitsText=outcome.kind==='void'?'0.00u':Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0?`${projectionUnits>0?'+':''}${projectionUnits.toFixed(2)}u`:'—';
@@ -2780,7 +2781,7 @@
     }).join('');
     const pager=`<div class="results-pagination"><div class="results-pagination-meta"><strong>${startIndex+1}–${endIndex}</strong><span>z ${entries.length}</span></div><label><span>Riadkov</span><select id="resultsPageSize">${allowedSizes.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><div class="results-pagination-nav"><button type="button" id="resultsPrevPage" ${state.resultsPage<=0?'disabled':''}>←</button><span>Strana <strong>${state.resultsPage+1}</strong> / ${pages}</span><button type="button" id="resultsNextPage" ${state.resultsPage>=pages-1?'disabled':''}>→</button></div></div>`;
     const head='<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia</th><th>Model / BlinQ %</th><th>Kurz</th><th>Výsledok</th><th>Jednotky / DATA DEPTH</th></tr>';
-    return `<div class="admin-table-wrap results-table-wrap"><table class="admin-analytics-table results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>${pager}`;
+    return `<div class="admin-table-wrap results-table-wrap"><table class="admin-analytics-table results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div><div class="results-limit-note">${escapeHtml(lcopy('~ is a model-derived indicative price, not a bookmaker quote. Real ROI counts only verified odds.','~ označuje orientačný kurz vypočítaný modelom, nie kurz bookmakera. Skutočný ROI počítame len z overených kurzov.','~ označuje orientační kurz vypočítaný modelem, nikoli kurz bookmakera. Skutečné ROI počítáme jen z ověřených kurzů.'))}</div>${pager}`;
   }
 
   function wireResultsFilters(){
