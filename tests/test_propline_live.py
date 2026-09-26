@@ -89,7 +89,7 @@ class FakeProp:
         if path.endswith("/markets"):
             return [{"key": item["key"]} for item in PRICE_MARKETS]
         if path.endswith("/odds"):
-            assert "total_games" in params["markets"]
+            assert any(key in params["markets"] for key in ("total_games", "player_double_faults"))
             return {"bookmakers": [{"key": "draftkings", "markets": PRICE_MARKETS}]}
         raise AssertionError(path)
 
