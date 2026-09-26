@@ -9,6 +9,7 @@ on:
       - Environment 1 - cache-only bulk backfill
       - Environment overnight - safe geocoding
       - Environment joint run - cache, coverage, preflight, ablation
+      - Environment nightly 10-run backfill (no Tennis API)
     types: [completed]
   schedule:
     # GitHub's scheduler may start late; completion events advance faster.
@@ -80,7 +81,7 @@ jobs:
           # cancel accidental duplicate push runs, restart one failed batch once,
           # and repair a missing handoff without starting any Tennis API job.
           nightly_runs = runs["environment-nightly-ten.yml"]
-          night_end = datetime.datetime(2026, 9, 27, 6, tzinfo=datetime.timezone.utc)
+          night_end = datetime.datetime(2026, 9, 27, 11, tzinfo=datetime.timezone.utc)
           first_nightly_id = 36259199600
           if nightly_runs and now < night_end:
               for run in nightly_runs:
@@ -122,6 +123,40 @@ jobs:
                   if last.get("conclusion") == "success":
                       if batch == 9:
                           print("All ten nightly Environment batches finished successfully.")
+                          # Follow with one FULL audit on the latest committed
+                          # release: Environment + production preflight and
+                          # statistics coverage + leakage checks + static ablation.
+                          # GitHub schedule retries the trigger if workflow_run
+                          # from a bot dispatch does not produce a new event.
+                          final_finished = completed_at
+                          audits_after_final = [
+                              r for r in runs["environment-joint.yml"]
+                              if datetime.datetime.fromisoformat(
+                                  r["created_at"].replace("Z", "+00:00")
+                              ) > final_finished
+                          ]
+                          if audits_after_final:
+                              print("Post-nightly full audit already triggered:",
+                                    audits_after_final[0]["html_url"],
+                                    audits_after_final[0]["status"],
+                                    audits_after_final[0].get("conclusion"))
+                              sys.exit(0)
+                          other_busy = [
+                              (w, r["id"], r["status"])
+                              for w, items in runs.items()
+                              if w != "environment-nightly-ten.yml"
+                              for r in items if r["status"] != "completed"
+                          ]
+                          if other_busy:
+                              print("Waiting before full audit:", other_busy[:8])
+                              sys.exit(0)
+                          dispatch("environment-joint.yml", {
+                              "mode": "audit-only",
+                              "start": "2021-01-01",
+                              "end": ""
+                          })
+                          print("Dispatched full read-only Environment/Preflight/"
+                                "statistics/ablation audit after 10/10 batches.")
                           sys.exit(0)
                       if age_minutes >= 15:
                           # A completed batch normally self-dispatches its successor.
