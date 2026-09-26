@@ -1,0 +1,160 @@
+name: Environment nightly 10-run backfill (no Tennis API)
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/environment-nightly-ten.yml']
+  workflow_dispatch:
+    inputs:
+      batch:
+        description: Nightly backfill batch, 0 through 9. Batches chain automatically.
+        type: number
+        default: 0
+        required: true
+
+permissions:
+  contents: read
+  actions: write
+
+# All Environment and MegaData history writes use this exact lock. Never cancel
+# a writer halfway through a checkpoint or compete over tbt-data release assets.
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  environment-batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 105
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      DISPATCH_TOKEN: ${{ github.token }}
+      REPOSITORY: ${{ github.repository }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      BATCH: ${{ inputs.batch || '0' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install and validate Environment collector
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+          python -m unittest discover -s scripts/tests -p 'test_environment_location_candidates.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_environment_bulk_modes.py' -v
+          test -n "$GH_TOKEN" || { echo "::error::Missing private history token"; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+          case "$BATCH" in 0|1|2|3|4|5|6|7|8|9) ;; *) echo "::error::Invalid batch"; exit 1;; esac
+          mkdir -p .cache/tbt/environment-nightly
+      - name: Write verified Environment cache and safely geocode selected windows
+        run: |
+          set -euo pipefail
+          case "$BATCH" in
+            0) START=2021-01-01; END=2022-01-01;;
+            1) START=2022-01-01; END=2022-07-01;;
+            2) START=2022-07-01; END=2023-01-01;;
+            3) START=2023-01-01; END=2023-07-01;;
+            4) START=2023-07-01; END=2024-01-01;;
+            5) START=2024-01-01; END=2024-07-01;;
+            6) START=2024-07-01; END=2025-01-01;;
+            7) START=2025-01-01; END=2025-07-01;;
+            8) START=2025-07-01; END=2026-01-01;;
+            9) START=2026-01-01; END="$(date -u -d '+1 day' +%F)";;
+          esac
+          echo "Batch $BATCH / 9: $START .. $END"
+          printf '{"batch": %s, "start": "%s", "end": "%s"}\n' "$BATCH" "$START" "$END" > .cache/tbt/environment-nightly/window.json
+          python scripts/enrich_environment_snapshot.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --start "$START" --end "$END" --limit 0 \
+            --cache-only --static-only --complete-static \
+            --max-requests 1 --max-runtime-minutes 25 \
+            > .cache/tbt/environment-nightly/cache.log
+          cp .cache/tbt/history/environment_enrichment_report.json .cache/tbt/environment-nightly/cache.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('.cache/tbt/environment-nightly/cache.json').read_text())
+          assert r['open_meteo_requests']==0, 'Cache job used Open-Meteo'
+          assert r['updated']==r['resolved'], 'Cache job wrote unresolved records'
+          print('Positive cache writes:',r['updated'])
+          PY
+          # Four deliberately separate year windows receive tiny targeted
+          # geocode trials; six others use only pre-verified offline knowledge.
+          # Prior full-corpus runs showed zero new positives from 150 calls.
+          # No repeated unbounded query sweep or historical weather downloads.
+          case "$BATCH" in 0|3|6|9)
+            python scripts/enrich_environment_snapshot.py \
+              --data-repository "$TBT_DATA_REPOSITORY" \
+              --start "$START" --end "$END" --limit 0 \
+              --unique-geocode --static-only --complete-static \
+              --max-requests 30 --max-runtime-minutes 25 \
+              --yield-guard-after-requests 15 \
+              --min-geocoder-success-rate 0.025 \
+              > .cache/tbt/environment-nightly/geocode.log
+            cp .cache/tbt/history/environment_enrichment_report.json .cache/tbt/environment-nightly/geocode.json
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path('.cache/tbt/environment-nightly/geocode.json').read_text())
+          assert r.get('positive_only') is True
+          assert r['updated']==r['resolved'], 'Refuse negative writes'
+          assert r['open_meteo_requests']<=30
+          print('Positive geocoder writes:',r['updated'])
+          print('Open-Meteo calls:',r['open_meteo_requests'])
+          print('Geocoder stopped:',r.get('stopped_reason'))
+          PY
+            ;;
+            *) echo '{"updated":0,"resolved":0,"open_meteo_requests":0,"stopped_reason":"offline_only"}' > .cache/tbt/environment-nightly/geocode.json;;
+          esac
+          # Read the latest committed release after each write. Snapshot windows
+          # reveal remaining gaps without confusing coverage with weather eligibility.
+          python scripts/audit_environment_release.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --start "$START" --end "$END" \
+            --report .cache/tbt/environment-nightly/coverage.json \
+            > .cache/tbt/environment-nightly/coverage.log
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          p=Path('.cache/tbt/environment-nightly')
+          b=json.loads((p/'window.json').read_text())
+          a=json.loads((p/'cache.json').read_text())
+          g=json.loads((p/'geocode.json').read_text())
+          q=json.loads((p/'coverage.json').read_text())['overall']
+          print(f"## Nightly Environment batch {b['batch']+1}/10")
+          print(f"Window: {b['start']} through {b['end']} (exclusive)")
+          print(f"- Positive verified cache writes: {a['updated']:,}")
+          print(f"- Positive targeted geocoding writes: {g['updated']:,}")
+          print(f"- Open-Meteo requests: {g['open_meteo_requests']:,} (batch limit 30)")
+          print(f"- Geocoding status: {g.get('stopped_reason')}")
+          for k,v in q.get('coverage',{}).items(): print(f"- {k}: {v:.2%}")
+          print("- Paid Tennis API requests: **0**")
+          PY
+      - name: Preserve window reports even on failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-environment-nightly-${{ github.run_id }}-${{ env.BATCH }}
+          path: .cache/tbt/environment-nightly/
+          if-no-files-found: warn
+          retention-days: 30
+      - name: Dispatch the next of ten sequential jobs
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if (( BATCH < 9 )); then
+            NEXT=$((BATCH+1))
+            gh workflow run environment-nightly-ten.yml --repo "$REPOSITORY" --ref main -f batch="$NEXT"
+            echo "Queued nightly Environment batch $((NEXT+1))/10" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Completed all 10 nightly Environment batches." >> "$GITHUB_STEP_SUMMARY"
+          fi
