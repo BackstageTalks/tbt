@@ -266,7 +266,7 @@ class BulkEnvironmentSafetyTests(unittest.TestCase):
     def test_geonames_countryless_place_is_not_guessed(self):
         fallback = GeoNamesFallback(wanted_names={"Maanshan"}, archive_bytes=b"")
         env, reason = _verified_geonames_environment(
-            fallback, {}, "ITF China 09A, Women", "Maanshan"
+            fallback, {}, "Maanshan", "Maanshan"
         )
         self.assertIsNone(env)
         self.assertEqual(reason, "fallback_no_country")
