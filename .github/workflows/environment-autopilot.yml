@@ -75,6 +75,89 @@ jobs:
               subprocess.run(command, check=True)
               print(f"Dispatched {workflow}: {inputs}")
           runs = {workflow: recent(workflow) for workflow in workflows}
+          # Nightly backfill already chains completed batches immediately. Every
+          # 15-minute scheduled autopilot run is its independent progress watchdog:
+          # cancel accidental duplicate push runs, restart one failed batch once,
+          # and repair a missing handoff without starting any Tennis API job.
+          nightly_runs = runs["environment-nightly-ten.yml"]
+          night_end = datetime.datetime(2026, 9, 27, 6, tzinfo=datetime.timezone.utc)
+          first_nightly_id = 36259199600
+          if nightly_runs and now < night_end:
+              for run in nightly_runs:
+                  # A workflow-file update briefly enabled a second push batch zero.
+                  # Cancel the accidental pending run; leave the original initial
+                  # push run untouched and keep all legitimate dispatch runs.
+                  if (run["event"] == "push" and run["id"] != first_nightly_id
+                          and run["status"] not in ("completed",)):
+                      subprocess.run(
+                          ["gh", "api", "-X", "POST",
+                           f"repos/{repo}/actions/runs/{run['id']}/cancel"],
+                          check=True,
+                      )
+                      print(f"Cancelled unintended duplicate overnight push run {run['id']}")
+              legitimate = sorted(
+                  (r for r in nightly_runs
+                   if r["id"] == first_nightly_id or r["event"] == "workflow_dispatch"),
+                  key=lambda r: r["created_at"],
+              )
+              if legitimate:
+                  import re
+                  last = legitimate[-1]
+                  match = re.search(r"batch ([0-9]) / 9", last.get("display_title") or "")
+                  batch = int(match.group(1)) if match else len(legitimate) - 1
+                  print(f"Nightly Environment progress: batch {batch+1}/10, "
+                        f"run {last['id']}, status={last['status']}, "
+                        f"conclusion={last.get('conclusion')}, "
+                        f"attempt={last.get('run_attempt', 1)}.")
+                  if not 0 <= batch <= 9:
+                      print("::error::Unrecognized nightly batch. No speculative dispatch.")
+                      sys.exit(1)
+                  if last["status"] != "completed":
+                      print("Nightly writer active or queued; 15-minute watchdog healthy.")
+                      sys.exit(0)
+                  completed_at = datetime.datetime.fromisoformat(
+                      last["updated_at"].replace("Z", "+00:00")
+                  )
+                  age_minutes = (now - completed_at).total_seconds() / 60
+                  if last.get("conclusion") == "success":
+                      if batch == 9:
+                          print("All ten nightly Environment batches finished successfully.")
+                          sys.exit(0)
+                      if age_minutes >= 15:
+                          # A completed batch normally self-dispatches its successor.
+                          # Re-read before repairing a possibly delayed GitHub handoff.
+                          fresh = recent("environment-nightly-ten.yml")
+                          newer = any(
+                              r["id"] != last["id"] and
+                              r["event"] == "workflow_dispatch" and
+                              r["created_at"] > last["created_at"]
+                              for r in fresh
+                          )
+                          if not newer:
+                              dispatch("environment-nightly-ten.yml", {"batch": str(batch+1)})
+                              print(f"Repaired missing handoff; launched batch {batch+2}/10.")
+                          else:
+                              print("Successor run appeared after the initial scan.")
+                      else:
+                          print("Batch completed; allowing GitHub up to 15 minutes to queue the successor.")
+                      sys.exit(0)
+                  if last.get("conclusion") == "failure":
+                      if int(last.get("run_attempt") or 1) == 1 and age_minutes >= 3:
+                          subprocess.run(
+                              ["gh", "run", "rerun", str(last["id"]),
+                               "--failed", "--repo", repo], check=True
+                          )
+                          print(f"Retried failed nightly batch {batch+1}/10 once.")
+                          sys.exit(0)
+                      if int(last.get("run_attempt") or 1) >= 2:
+                          print(f"::error::Nightly batch {batch+1}/10 failed after retry: "
+                                f"{last['html_url']}")
+                          sys.exit(1)
+                      print("Failed batch is in a brief recovery grace period.")
+                      sys.exit(0)
+                  print(f"::warning::Nightly run ended as {last.get('conclusion')}; "
+                        "not restarting a cancelled/skipped run.")
+                  sys.exit(0)
           # No speculative parallel dispatches. Both shared writers and ad hoc
           # manual Environment audits get to finish before the next stage.
           busy = [
