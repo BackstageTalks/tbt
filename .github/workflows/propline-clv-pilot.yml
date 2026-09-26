@@ -1,0 +1,66 @@
+name: PropLine CLV research pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      events_per_run:
+        description: "Max matches per hourly snapshot (1–12)"
+        type: choice
+        options: ["3", "6", "12"]
+        default: "12"
+  schedule:
+    - cron: '17 * * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: propline-clv-research
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROPL: ${{ secrets.PROPL }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      CLV_EVENTS_PER_RUN: ${{ inputs.events_per_run || '12' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Collect pre-match CLV research snapshots
+        run: python scripts/propline_clv_collect.py
+      - name: Upload snapshot report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: propline-clv-snapshot
+          path: reports/propline_clv_snapshot.json
+          if-no-files-found: warn
+          retention-days: 14
+
+  report:
+    if: github.event_name == 'workflow_dispatch'
+    needs: collect
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      CLV_LOOKBACK_DAYS: "3"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Generate line-movement research report
+        run: python scripts/propline_clv_report.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: propline-clv-research-report
+          path: reports/propline_clv_report.json
+          retention-days: 14
