@@ -23,7 +23,7 @@ def test_six_event_requests_plus_two_board_requests_max_eight():
         calls.append(req.full_url)
         if "upcoming/" in req.full_url:
             return Response({"success": True, "results": [
-                {"id": str(100+i), "startTimestamp": 1791000000}
+                {"id": str(100+i), "liveEventId": str(100+i), "startTimestamp": 1791000000}
                 for i in range(6)
             ], "pagination": {"total": 6}}, 44)
         return Response({"success": True, "result": {
@@ -41,8 +41,7 @@ def test_six_event_requests_plus_two_board_requests_max_eight():
     assert len(report["checked_events"]) <= 6
     assert len(calls) == report["requests_used"]
     assert report["read_only"] is True
-    assert all("latest-all" in e["odds"]["market_names"][0] or
-               "Total games" in e["odds"]["market_names"]
+    assert all("Total games" in e["odds"]["market_names"]
                for e in report["checked_events"])
     assert report["provider_remaining"] == 39
 
@@ -72,4 +71,4 @@ def test_no_cron_and_existing_secret_only():
     assert "secrets.RAPIDAPI_KEY" in flow
     source = (root / "scripts/tennis_api_alt_pilot.py").read_text()
     assert "MAX_REQUESTS = 8" in source
-    assert "published" not in source
+    assert "odds_plan_requirement" in source
