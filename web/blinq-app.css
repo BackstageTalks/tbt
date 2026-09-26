@@ -7715,3 +7715,17 @@ body#blinqPremium.blinq-route .results-table .void{color:#e1c56a!important}
 .market-trend-chart{display:block;width:100%;max-height:255px;margin:8px 0 3px;overflow:visible}.market-trend-empty{padding:33px 14px;text-align:center;color:#a1b7aa;border:1px dashed #355c4d;border-radius:11px;margin-top:13px;font-size:13px}
 .market-trend-source{color:#96b3a5;font-size:11px}.market-trend-note{margin:12px 0 0;color:#7f9f90;font-size:11px;line-height:1.5}
 @media(max-width:650px){.market-trend-panel{padding:13px}.market-trend-chart{max-height:210px}.market-trend-summary{gap:8px}}
+
+/* Mobile account/logout visibility: dropdown is portaled outside the clipped app shell. */
+@media(max-width:900px){
+  body#blinqPremium > #profileMenu{position:fixed!important;top:calc(64px + env(safe-area-inset-top,0px))!important;right:8px!important;left:auto!important;width:min(280px,calc(100vw - 16px))!important;max-height:calc(100dvh - 88px)!important;overflow-y:auto!important;z-index:1002!important;padding:9px!important;border:1px solid rgba(89,228,162,.48)!important;box-shadow:0 16px 48px rgba(0,0,0,.55)!important}
+  body#blinqPremium > #profileMenu[hidden]{display:none!important}
+  body#blinqPremium > #profileMenu button{min-height:48px!important;font-size:13px!important;touch-action:manipulation!important}
+  body#blinqPremium > #profileMenu #headerLogoutButton{color:#ffd0d0!important;border-top:1px solid rgba(255,255,255,.10)!important;border-radius:0!important;margin-top:4px!important}
+  body#blinqPremium .reference-topbar #profileButton[aria-expanded="true"]{outline:2px solid #4aeba9!important;outline-offset:1px!important}
+  body#blinqPremium .account-dialog{max-height:calc(100dvh - 20px)!important;overflow-y:auto!important;overscroll-behavior:contain!important}
+  body#blinqPremium .account-modal-security{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:9px!important;margin:12px 0!important}
+  body#blinqPremium .account-modal-security>div{display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:8px!important}
+  body#blinqPremium .account-modal-security .btn{min-height:44px!important;font-size:12px!important;white-space:nowrap!important}
+}
+body#blinqPremium .profile-account-icon svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
