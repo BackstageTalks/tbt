@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 HOST = "tennis-api-atp-wta-itf.p.rapidapi.com"
-BASE = "https://" + HOST + "/tennis/v2/extend/api"
+BASE = "https://" + HOST + "/tennis/v2"
 MAX_REQUESTS = 8   # explicit single test <= 8 / 50 daily requests
 MAX_EVENTS = 6
 # Only exact market contracts, do not infer ACES or DF from unknown labels.
@@ -157,7 +157,7 @@ def run(client, *, now=None):
                 report["status"] = "provider_daily_reserve"
                 break
             try:
-                data = client.get("/event/odds/latest-all/" + event_id)
+                data = client.get("/extend/api/event/odds/latest-all/" + event_id)
                 report["checked_events"].append({
                     "id": event_id, "tour": tour,
                     "start": start.isoformat() if start else None,
