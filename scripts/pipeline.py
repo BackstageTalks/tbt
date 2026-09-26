@@ -620,8 +620,24 @@ def main():
         # Projection models are selected from history first. A separate strict
         # provider-odds pass may attach a real price only when the exact market
         # can be identified; confidence is never displayed as a synthetic odd.
-        ace_picks, ace_report = select_ace_picks(matches, predictions, now=now)
-        sg_picks, sg_report = select_sg_picks(matches, predictions, now=now)
+        # The provider exposes markets on only a subset of upcoming events.
+        # Pick a broader *pre-match* projection pool before the odds lookup,
+        # then publish the usual maximum of ten selections per market, preferring
+        # cards with a genuine frozen provider price. The earlier top-ten-only
+        # pass missed markets available on other upcoming events.
+        projection_pool_per_market = 30 if args.market_odds_max_events else 10
+        ace_picks, ace_report = select_ace_picks(
+            matches, predictions, now=now,
+            per_market_limit=projection_pool_per_market,
+            total_limit=2 * projection_pool_per_market,
+            target_count=projection_pool_per_market,
+        )
+        sg_picks, sg_report = select_sg_picks(
+            matches, predictions, now=now,
+            per_market_limit=projection_pool_per_market,
+            total_limit=2 * projection_pool_per_market,
+            target_count=projection_pool_per_market,
+        )
         projection_odds_report = {}
         # Projection prices are part of the public ACES/DF/GAMES/SETS rows.
         # Reuse the configured market-odds budget instead of silently truncating
@@ -632,10 +648,43 @@ def main():
             ace_picks, sg_picks, projection_odds_report = enrich_projection_odds(
                 provider, ace_picks, sg_picks, max_events=projection_odds_cap, provider_id=1
             )
+        # Keep existing UI capacity and the independent category balances.
+        # A model-only card is still available when no real quote exists.
+        def priced_first_ten(rows):
+            indexed = list(enumerate(rows))
+            chosen = []
+            for metric in ("aces", "double_faults", "sets", "games"):
+                group = [(i, row) for i, row in indexed if row.get("market") == metric]
+                group.sort(key=lambda pair: (
+                    str(pair[1].get("price_status") or "") == "priced_projection",
+                    -pair[0],
+                ), reverse=True)
+                chosen.extend(group[:10])
+            chosen.sort(key=lambda pair: pair[0])
+            return [row for _, row in chosen]
+
+        ace_picks = priced_first_ten(ace_picks)
+        sg_picks = priced_first_ten(sg_picks)
+        projection_odds_report["published_priced_cards"] = {
+            metric: sum(
+                row.get("market") == metric
+                and row.get("price_status") == "priced_projection"
+                for row in ace_picks + sg_picks
+            )
+            for metric in ("aces", "double_faults", "sets", "games")
+        }
         if isinstance(ace_report, dict):
-            ace_report = {**ace_report, "odds_attachment": projection_odds_report}
+            ace_report = {
+                **ace_report, "odds_attachment": projection_odds_report,
+                "published_selected": len(ace_picks),
+                "priced_selection_policy": "broaden_candidates_price_first_then_limit_10",
+            }
         if isinstance(sg_report, dict):
-            sg_report = {**sg_report, "odds_attachment": projection_odds_report}
+            sg_report = {
+                **sg_report, "odds_attachment": projection_odds_report,
+                "published_selected": len(sg_picks),
+                "priced_selection_policy": "broaden_candidates_price_first_then_limit_10",
+            }
     except Exception as exc:
         refresh_error = exc
     finally:
