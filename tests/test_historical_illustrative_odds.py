@@ -86,4 +86,3 @@ def test_results_units_are_displayed_from_visible_price_without_real_roi_backfil
     # Flat 1u illustrations for the actual example shown in Results.
     assert round(1.66 - 1, 2) == .66
     assert round(1.52 - 1, 2) == .52
-    assert -1 == -1  # a lost synthetic 1u stake; VOID is always zero.
