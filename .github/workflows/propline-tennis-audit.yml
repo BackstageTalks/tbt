@@ -1,0 +1,42 @@
+name: PropLine tennis market audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_events:
+        description: "Upcoming tennis events to audit (1–20)"
+        required: false
+        default: "10"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROPL: ${{ secrets.PROPL }}
+      PROPLINE_MAX_EVENTS: ${{ inputs.max_events || '10' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check secret is configured
+        shell: bash
+        run: |
+          if [ -z "$PROPL" ]; then
+            echo "Missing repository secret PROPL" >&2
+            exit 1
+          fi
+      - name: Audit tennis markets (read-only)
+        run: python scripts/propline_tennis_audit.py
+      - name: Upload JSON report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: propline-tennis-audit
+          path: reports/propline_tennis_audit.json
+          if-no-files-found: warn
+          retention-days: 7
