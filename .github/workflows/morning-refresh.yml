@@ -25,9 +25,9 @@ concurrency:
 
 jobs:
   dispatch:
-    # Set TBT_MORNING_REFRESH_ENABLED=false to pause automatic mornings.
+    # Paid Tennis RapidAPI: explicit TBT_MORNING_REFRESH_ENABLED=true required for automatic mornings.
     # Manual Run workflow still works when automatic mornings are paused.
-    if: github.event_name == 'workflow_dispatch' || vars.TBT_MORNING_REFRESH_ENABLED != 'false'
+    if: github.event_name == 'workflow_dispatch' || vars.TBT_MORNING_REFRESH_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
