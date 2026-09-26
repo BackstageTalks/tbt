@@ -700,10 +700,21 @@ def main():
                             for row in ace_picks + sg_picks)
                 for market in ("aces", "double_faults", "games", "sets")
             }
-            ace_picks = [row for row in ace_picks
-                         if row.get("price_status") == "priced_projection"]
-            sg_picks = [row for row in sg_picks
-                        if row.get("price_status") == "priced_projection"]
+            # Do not publish penny-price bets or a confidence-derived estimate:
+            # the bookmaker quote must belong to this exact market contract.
+            def publishable_api_price(row):
+                try:
+                    odds = float(row.get("odds") or 0)
+                    provider = int(row.get("provider_id") or 0)
+                except (TypeError, ValueError, OverflowError):
+                    return False
+                return (
+                    row.get("price_status") == "priced_projection"
+                    and provider > 0 and bool(row.get("captured_at"))
+                    and 1.50 <= odds < float("inf")
+                )
+            ace_picks = [row for row in ace_picks if publishable_api_price(row)]
+            sg_picks = [row for row in sg_picks if publishable_api_price(row)]
         # Ten per independent category, sorted by validated projection
         # confidence and evidence, NOT simply by the highest bookmaker price.
         def priced_first_ten(rows):

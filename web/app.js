@@ -1079,10 +1079,20 @@
   }
   function filtered(){ const rows=rankedPredictions(),tour=$('tourFilter')?.value||'',tournament=$('tournamentFilter')?.value||'',surface=$('surfaceFilter')?.value||'',confidence=$('confidenceFilter')?.value||'',q=($('searchInput')?.value||'').trim().toLowerCase(); return rows.filter(m=>{ if(tour&&m.tour!==tour)return false;if(tournament&&m.tournament!==tournament)return false;if(surface&&m.surface!==surface)return false;if(confidence&&m.confidence!==confidence)return false;if(q&&!`${m.p1} ${m.p2} ${m.tournament}`.toLowerCase().includes(q))return false;return true; }); }
 
+  function authenticLiveProjection(row){
+    // An upcoming projection is a bet only if a corresponding bookmaker
+    // market was actually priced and frozen before publication. Historical
+    // result illustrations and confidence-derived estimates are NOT quotes.
+    const odds=row?.odds==null?NaN:Number(row.odds);
+    return row?.price_status==='priced_projection'
+      &&Number.isFinite(odds)&&odds>=1.50
+      &&Number.isInteger(Number(row?.provider_id))&&Number(row.provider_id)>0
+      &&Boolean(row?.captured_at);
+  }
   function marketRows(key){
     const candidates={prime:['prime_picks','prime'],top_daily:['top_daily_picks','daily_picks','top_daily'],value:['value_picks','value'],doubles:['doubles_picks','doubles'],ace:['ace_picks','aces','ace_markets'],sg:['sg_picks','sets_games','set_game_picks']}[key]||[];
-    for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return value;}
-    const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return markets[key];
+    for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return ['ace','sg'].includes(key)?value.filter(authenticLiveProjection):value;}
+    const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return ['ace','sg'].includes(key)?markets[key].filter(authenticLiveProjection):markets[key];
     return [];
   }
   function marketProbability(row){const raw=row?.blinq_probability??row?.probability??row?.win_probability??row?.model_probability??row?.confidence_probability;const value=Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;}
@@ -2092,9 +2102,8 @@
   function projectionOddsHtml(row){
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
-    if(realOddsText!=='—')return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
-    const approx=projectionIndicativeOdds(row);
-    if(Number.isFinite(approx))return `<span title="${escapeHtml(indicativeOddsHint())}">${hubNumberHtml(approx.toFixed(2),lcopy('odds','kurz','kurz'))}</span>`;
+    if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
+    // Never show a guessed odds number on the live ACES/DF/GAMES/SETS board.
     const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
     return `<span title="${escapeHtml(reason)}">${hubNumberHtml('N/A',reason)}</span>`;
   }
