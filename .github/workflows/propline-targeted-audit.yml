@@ -1,0 +1,46 @@
+name: PropLine targeted tennis audit
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_events:
+        description: "Upcoming events to inspect (1-30)"
+        type: choice
+        options: ["10", "20", "30"]
+        default: "20"
+      window_hours:
+        description: "Only matches starting in the next N hours"
+        type: choice
+        options: ["24", "72", "168"]
+        default: "72"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PROPL: ${{ secrets.PROPL }}
+      PROPLINE_MAX_EVENTS: ${{ inputs.max_events || '20' }}
+      PROPLINE_WINDOW_HOURS: ${{ inputs.window_hours || '72' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify PropLine secret
+        shell: bash
+        run: |
+          test -n "$PROPL" || { echo 'Missing secret PROPL'; exit 1; }
+      - name: Audit upcoming tennis markets
+        run: python scripts/propline_targeted_audit.py
+      - name: Save JSON results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: propline-targeted-audit
+          path: reports/propline_targeted_audit.json
+          retention-days: 7
+          if-no-files-found: warn
