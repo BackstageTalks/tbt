@@ -2771,8 +2771,23 @@
         const projectionOdds=publication?.odds==null?NaN:Number(publication?.odds),projectionUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units);
         const estimatedProjectionOdds=Number.isFinite(projectionOdds)&&projectionOdds>1?NaN:projectionIndicativeOdds(publication);
         const realProjectionOddsText=Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—';
-        const displayedProjectionOdds=realProjectionOddsText!=='—'?realProjectionOddsText:Number.isFinite(estimatedProjectionOdds)?'~'+estimatedProjectionOdds.toFixed(2):'—';
-        const projectionOddsTitle=Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
+        // Historic backfills are deliberately NON-QUOTE illustrations. Never
+        // mistake the unrelated 1.50–1.70 filler for model EV or bookmaker odds.
+        const placeholderRaw=publication?.historical_display_placeholder_odds;
+        const placeholderOdds=placeholderRaw==null?NaN:Number(placeholderRaw);
+        const illustrativeOnly=publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
+          &&Number.isFinite(placeholderOdds)&&placeholderOdds>=1.50&&placeholderOdds<=1.70;
+        const displayedProjectionOdds=realProjectionOddsText!=='—'?realProjectionOddsText:
+          illustrativeOnly?'IL. '+placeholderOdds.toFixed(2):
+          Number.isFinite(estimatedProjectionOdds)?'~'+estimatedProjectionOdds.toFixed(2):'—';
+        const illustrativeHint=lcopy(
+          'ILLUSTRATIVE ONLY: generated placeholder, not an archived bookmaker price or model estimate. Never used for betting ROI.',
+          'IBA ILUSTRAČNÁ HODNOTA: generovaná náhrada, nie historický kurz ani odhad modelu. Nepoužíva sa na výpočet ROI.',
+          'POUZE ILUSTRAČNÍ HODNOTA: generovaná náhrada, nikoli historický kurz ani odhad modelu. Nepoužívá se pro výpočet ROI.'
+        );
+        const projectionOddsTitle=realProjectionOddsText==='—'&&illustrativeOnly
+          ?` title="${escapeHtml(illustrativeHint)}"`
+          :Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
         const depthText=Number.isFinite(depth)?pct(depth):'—';
         const unitsText=outcome.kind==='void'?'0.00u':Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0?`${projectionUnits>0?'+':''}${projectionUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
