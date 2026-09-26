@@ -3620,7 +3620,7 @@
     const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category);
     // Identical six-card Results KPI layout for ALL, ACES, DF, GAMES & SETS.
     return metricCards([
-      [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('wins - losses','výhry - prehry','výhry - prohry')],
+      [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
       ['ROI',m.roi==null?'—':pct(m.roi),lcopy('flat 1u on displayed odds','výpočet pri 1u na zobrazených kurzoch','výpočet při 1u na zobrazených kurzech')],
