@@ -2,9 +2,6 @@ name: Environment nightly 10-run backfill (no Tennis API)
 run-name: "Environment nightly batch ${{ inputs.batch || '0' }} / 9"
 
 on:
-  push:
-    branches: [main]
-    paths: ['.github/workflows/environment-nightly-ten.yml']
   workflow_dispatch:
     inputs:
       batch:
