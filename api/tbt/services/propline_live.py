@@ -128,34 +128,104 @@ class PropLineClient:
             raise RuntimeError("PropLine request failed") from None
 
 
+def _player_identity_strength(provider_name: str, blinq_name: str) -> int | None:
+    """0=exact, 1=reversed full name, 2=unambiguous minor abbreviation.
+
+    Reject mere surname similarity, nickname guesses and different players.
+    Every alias must subsequently match one unique full fixture on both sides.
+    """
+    left, right = _name(provider_name), _name(blinq_name)
+    if not left or not right:
+        return None
+    if left == right:
+        return 0
+    a, b = left.split(), right.split()
+    # Some odds boards publish two-token names as 'Surname Firstname'.
+    if len(a) == len(b) == 2 and a == b[::-1]:
+        return 1
+    # Common long compound surnames are sometimes cut after a first surname.
+    short, long = (a, b) if len(a) < len(b) else (b, a)
+    if len(short) >= 2 and long[:len(short)] == short and len(long) > len(short):
+        return 2
+    # Initial + SAME FULL surname, but not a fuzzy Levenshtein guess.
+    if len(a) == len(b) == 2 and a[1] == b[1] and len(a[1]) >= 4:
+        if len(a[0]) == 1 and b[0].startswith(a[0]):
+            return 2
+        if len(b[0]) == 1 and a[0].startswith(b[0]):
+            return 2
+    return None
+
+
+def _fixture_identity_strength(row: dict, prop: dict) -> int | None:
+    p1, p2 = _players(row)
+    home = str(prop.get("home_team") or "")
+    away = str(prop.get("away_team") or "")
+    # Doubles and future-tournament winner markets cannot be matched to a
+    # singles projection, even when one participant name looks familiar.
+    if any("/" in name or not name.strip() for name in (p1, p2, home, away)):
+        return None
+    forward = (_player_identity_strength(home, p1),
+               _player_identity_strength(away, p2))
+    reverse = (_player_identity_strength(home, p2),
+               _player_identity_strength(away, p1))
+    valid = [pair for pair in (forward, reverse)
+             if all(score is not None for score in pair)
+             and (0 in pair or pair == (1, 1))]
+    return min((sum(pair) for pair in valid), default=None)
+
+
 def _match_board(predictions: list[dict], board: list[dict], now: datetime) -> list[tuple[dict, dict]]:
-    """Unique two-player identity + scheduled time; fail closed on ambiguity."""
+    """Link ONLY uniquely identifiable singles matches across providers.
+
+    Match both players (either order), then require a unique matching kickoff.
+    A short-name alias must be within two hours. Six-hour postponements are
+    accepted only when BOTH full player names are exact and neither provider
+    has another competing fixture. Never synthesize missing BlinQ fixtures.
+    """
     singles = []
     for row in predictions:
         p1, p2 = _players(row)
         start = _when(row.get("scheduled_at") or row.get("date"))
-        if not row.get("event_id") or not p1 or not p2 or not start or start <= now:
+        if (not row.get("event_id") or not start or start <= now
+            or not p1 or not p2 or p1 == p2 or "/" in p1 or "/" in p2):
             continue
-        singles.append((row, frozenset((_name(p1), _name(p2))), start))
-    chosen: list[tuple[dict, dict]] = []
-    used = set()
+        singles.append((row, start))
+    proposals: dict[str, list[tuple[dict, dict]]] = {}
+    seen_prop = set()
     for prop in board:
         eid = str(prop.get("id") or "")
         start = _when(prop.get("commence_time"))
-        pair = frozenset((_name(prop.get("home_team")), _name(prop.get("away_team"))))
-        if not eid.isdigit() or not start or start <= now or len(pair) != 2 or not all(pair):
+        if not eid.isdigit() or eid in seen_prop or not start or start <= now:
             continue
-        candidates = [(row, when) for row, names, when in singles
-                      if names == pair and abs((start - when).total_seconds()) <= 7200]
-        if len(candidates) != 1:
-            continue
-        row, when = candidates[0]
-        rapid_id = str(row["event_id"])
-        if rapid_id in used:
-            continue
-        used.add(rapid_id)
-        chosen.append((row, prop))
-    # Prioritize tour-level matches without excluding challenger/ITF.
+        seen_prop.add(eid)
+        matches = []
+        for row, when in singles:
+            strength = _fixture_identity_strength(row, prop)
+            if strength is None:
+                continue
+            hours = abs((start - when).total_seconds()) / 3600
+            if hours <= (6 if strength == 0 else 2):
+                matches.append((strength, hours, row))
+        # Exact full-name + <=2h beats extended-time and any alias.
+        # If more than one fixture qualifies in that priority class, do not
+        # guess between rescheduled double-headers or ambiguous initials.
+        for predicate in (
+            lambda strength, hours: strength == 0 and hours <= 2,
+            lambda strength, hours: strength in (1, 2) and hours <= 2,
+            lambda strength, hours: strength == 0 and hours <= 6,
+        ):
+            bucket = [(strength, row) for strength, hours, row in matches
+                      if predicate(strength, hours)]
+            if not bucket:
+                continue
+            best_strength = min(strength for strength, _ in bucket)
+            finalists = [row for strength, row in bucket if strength == best_strength]
+            if len(finalists) == 1:
+                rapid_id = str(finalists[0]["event_id"])
+                proposals.setdefault(rapid_id, []).append((finalists[0], prop))
+            break
+    # Distinct PropLine events claiming the same BlinQ event are unsafe.
+    chosen = [offers[0] for offers in proposals.values() if len(offers) == 1]
     chosen.sort(key=lambda pair: (
         0 if str(pair[0].get("tour") or "").upper() in ("ATP", "WTA") else 1,
         _when(pair[0].get("scheduled_at") or pair[0].get("date")),
