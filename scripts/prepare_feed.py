@@ -375,8 +375,11 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
             "generated_at": profile_payload.get("generated_at"),
             "profiles_cached": len(profiles),
             "photos_deployed": len(photos),
+            "player_ids_requested": len(player_ids),
+            "photo_coverage": round(len({Path(name).stem for name in photos}) / len(player_ids), 4) if player_ids else 0.0,
+            "photos_missing": max(0, len(player_ids) - len({Path(name).stem for name in photos})),
             "presentation_only": True,
-            "fallback": "initials_or_feed_fields",
+            "fallback": "local_atp_wta_artwork_then_initials",
         }
         if {TOURNAMENT_PROFILE_ASSET, TOURNAMENT_LOGO_ASSET} <= assets:
             tournament_profiles, tournament_payload = _load_tournament_profiles(cache / TOURNAMENT_PROFILE_ASSET)
@@ -393,6 +396,8 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
                 "fallback": "local_tournament_type_assets",
             }
     except Exception as exc:
+        # Keep the release deployable but preserve why real photos were absent.
+        payload["player_assets"]["error_type"] = type(exc).__name__
         print(f"Optional player assets skipped: {type(exc).__name__}: {exc}")
     return payload
 
