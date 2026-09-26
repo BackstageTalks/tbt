@@ -1,63 +1,49 @@
 #!/usr/bin/env python3
-"""Bounded read-only pilot of a SECOND RapidAPI tennis provider (50/day plan).
+"""Bounded read-only pilot of Tennis API - ATP WTA ITF (50/day BASIC).
 
-Deliberately independent of BlinQ's existing 15k-request Tennis API. No
-production odds, ledger, picks or data are modified. Manual dispatch only.
+Use only pre-match/upcoming endpoints documented for the product. No live
+Socket.IO routes, no production writes, no schedule. Hard cap: 8 requests.
 """
 import json
 import os
-import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
 
 HOST = "tennis-api-atp-wta-itf.p.rapidapi.com"
 BASE = "https://" + HOST + "/tennis/v2"
-MAX_REQUESTS = 8   # explicit single test <= 8 / 50 daily requests
-MAX_EVENTS = 6
-# Only exact market contracts, do not infer ACES or DF from unknown labels.
-INTEREST = ("ace", "double fault", "total game", "total set", "over under", "most ace")
-
-
-def preview(payload):
-    """Summarize only metadata and market names, never guess contract meaning."""
-    if not isinstance(payload, dict):
-        return {"response_type": type(payload).__name__}
-    body = payload.get("results", payload.get("result", {}))
-    markets = list(body.keys()) if isinstance(body, dict) else []
-    if isinstance(body, list):
-        markets = sorted({str(m.get("market") or m.get("name") or "")
-                          for m in body if isinstance(m, dict)})
-    focused = [str(m) for m in markets if any(term in str(m).lower() for term in INTEREST)]
-    return {"success": payload.get("success"), "market_count": len(markets),
-            "market_names": [str(m)[:100] for m in markets[:70]],
-            "relevant_markets": focused[:45],
-            "error_message": str(payload.get("message") or "")[:100]}
+MAX_REQUESTS = 8
+MAX_MATCH_ODDS = 6
+RESERVE = 5
 
 
 class Client:
     def __init__(self, key, limit=MAX_REQUESTS, opener=urllib.request.urlopen):
         self.key = key
         self.limit = min(MAX_REQUESTS, max(0, int(limit)))
-        self.count = 0
         self.opener = opener
+        self.count = 0
         self.provider_remaining = None
 
-    def get(self, path):
+    def get(self, path, params=None):
         if self.count >= self.limit:
             raise RuntimeError("local_request_limit")
-        self.count += 1   # failed attempts still count
-        req = urllib.request.Request(BASE + path, headers={
-            "X-RapidAPI-Key": self.key, "X-RapidAPI-Host": HOST,
-            "Accept": "application/json", "User-Agent": "BlinQ-tennis-api-50day-pilot/1",
+        query = ("?" + urllib.parse.urlencode(params)) if params else ""
+        req = urllib.request.Request(BASE + path + query, headers={
+            "X-RapidAPI-Key": self.key,
+            "X-RapidAPI-Host": HOST,
+            "Accept": "application/json",
+            "User-Agent": "BlinQ-tennis-api-50day-pilot/2",
         })
+        self.count += 1
         try:
             with self.opener(req, timeout=16) as res:
-                remaining = res.headers.get("x-ratelimit-requests-remaining")
-                if remaining is not None:
+                raw = res.headers.get("x-ratelimit-requests-remaining")
+                if raw is not None:
                     try:
-                        self.provider_remaining = int(remaining)
+                        self.provider_remaining = int(raw)
                     except ValueError:
                         pass
                 return json.load(res)
@@ -67,126 +53,151 @@ class Client:
             raise RuntimeError("RapidAPI network request failed") from None
 
 
-def _events(data):
-    if not isinstance(data, dict):
+def _rows(payload):
+    if not isinstance(payload, dict):
         return []
-    result = data.get("results", data.get("result", []))
-    if isinstance(result, list):
-        return result
-    if isinstance(result, dict):
-        for k in ("events", "data", "results"):
-            if isinstance(result.get(k), list):
-                return result[k]
+    for key in ("data", "results", "result"):
+        value = payload.get(key)
+        if isinstance(value, list):
+            return value
+        if isinstance(value, dict):
+            for sub in ("data", "results", "matches"):
+                if isinstance(value.get(sub), list):
+                    return value[sub]
     return []
 
 
-def _time(row):
+def _num(value):
     try:
-        ts = row.get("startTimestamp")
-        if ts:
-            return datetime.fromtimestamp(int(ts), timezone.utc)
-        raw = str(row.get("startTime") or row.get("start") or
-                  row.get("commence_time") or "").replace("Z", "+00:00")
-        result = datetime.fromisoformat(raw)
-        return result if result.tzinfo else result.replace(tzinfo=timezone.utc)
-    except (ValueError, TypeError, OverflowError):
+        return int(value)
+    except (TypeError, ValueError):
         return None
+
+
+def _match_contract(row, tour):
+    p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+    p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+    tournament = row.get("tournament") if isinstance(row.get("tournament"), dict) else {}
+    return {
+        "tour": tour,
+        "match_id": _num(row.get("matchId") or row.get("id")),
+        "player1_id": _num(row.get("player1Id") or p1.get("id")),
+        "player2_id": _num(row.get("player2Id") or p2.get("id")),
+        "tournament_id": _num(row.get("tournamentId") or tournament.get("id")),
+        "round_id": _num(row.get("roundId")),
+        "players": [str(p1.get("name") or row.get("player1Name") or "")[:80],
+                    str(p2.get("name") or row.get("player2Name") or "")[:80]],
+        "start": row.get("startTime") or row.get("date"),
+        "embedded_pre_match_odds": row.get("preMatchOdds"),
+    }
+
+
+def _odds_summary(payload):
+    if not isinstance(payload, dict):
+        return {"valid": False}
+    odds = payload.get("odds")
+    if odds is None and isinstance(payload.get("result"), dict):
+        odds = payload["result"].get("odds")
+    rows = odds if isinstance(odds, list) else []
+    samples = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        try:
+            line = float(item.get("total"))
+            over = float(item.get("ktb"))
+            under = float(item.get("ktm"))
+        except (TypeError, ValueError):
+            line = over = under = None
+        if line is not None and over and under and 1.01 < over < 100 and 1.01 < under < 100:
+            samples.append({
+                "bookmaker_id": item.get("id_b_o"),
+                "line_games": line, "over": over, "under": under,
+            })
+    return {
+        "valid": True,
+        "bookmaker_rows": len(rows),
+        "game_total_samples": samples[:6],
+        "has_game_total": bool(samples),
+    }
 
 
 def run(client, *, now=None):
     now = now or datetime.now(timezone.utc)
-    report = {"schema": 1, "audit_time": now.isoformat(), "read_only": True,
-              "odds_plan_requirement": "ULTRA_or_MEGA",
-              "quota": "50 requests/day", "request_cap": client.limit,
-              "requests_used": 0, "provider_remaining": None,
-              "upcoming": {}, "checked_events": [], "status": "ok"}
-    # ATP and WTA board discovery: 2 calls, 50 rows per page; sample only the
-    # first page on each tour rather than spending on broad pagination.
-    board = []
+    report = {
+        "schema": 2, "captured_at": now.isoformat(), "read_only": True,
+        "plan": "BASIC 50 requests/day", "request_cap": client.limit,
+        "requests_used": 0, "provider_remaining": None,
+        "board": {}, "checked_matches": [], "status": "ok",
+    }
+    candidates = []
     for tour in ("atp", "wta"):
-        try:
-            result = client.get(f"/upcoming/matches/{tour}?group=singles&limit=30&page=1")
-            candidates = _events(result)
-            report["upcoming"][tour] = {
-                "count_on_first_page": len(candidates),
-                "total": (result.get("pagination") or {}).get("total") if isinstance(result, dict) else None,
-                "success": result.get("success") if isinstance(result, dict) else None,
-            }
-            for row in candidates:
-                if not isinstance(row, dict):
-                    continue
-                eid = str(row.get("liveEventId") or row.get("live_event_id") or "")
-                start = _time(row)
-                if re.fullmatch(r"[0-9]+", eid) and (start is None or start > now):
-                    board.append((tour, eid, row, start))
-        except RuntimeError as err:
-            report["upcoming"][tour] = {"error": str(err)}
-            # 401/403 is a subscription issue; no point burning the rest.
-            if "401" in str(err) or "403" in str(err):
-                report["status"] = "key_or_subscription_required"
-                break
-        if client.provider_remaining is not None and client.provider_remaining <= 5:
+        if client.provider_remaining is not None and client.provider_remaining <= RESERVE:
             report["status"] = "provider_daily_reserve"
             break
+        try:
+            payload = client.get(f"/upcoming/matches/{tour}", {
+                "group": "singles", "limit": 30, "page": 1,
+                "include": "preMatchOdds",
+            })
+            rows = _rows(payload)
+            report["board"][tour] = {
+                "rows": len(rows),
+                "has_embedded_pre_match_odds": sum(
+                    bool(r.get("preMatchOdds")) for r in rows if isinstance(r, dict)
+                ),
+            }
+            candidates.extend(
+                _match_contract(row, tour) for row in rows if isinstance(row, dict)
+            )
+        except RuntimeError as exc:
+            report["board"][tour] = {"error": str(exc)}
+            if "401" in str(exc) or "403" in str(exc):
+                report["status"] = "key_or_plan_not_subscribed"
+                break
 
-    # Only query odds if the schedule gives an explicit LIVE event ID. Core
-    # fixture IDs must never be sent to live-odds endpoints. Under the BASIC
-    # 50/day tier, provider docs restrict odds to ULTRA/MEGA, so a 403 is
-    # expected; stop rather than consuming more calls.
-    # Scope down to one event per tour first, then fill up to max 6. Do not
-    # fetch duplicate IDs or use unrelated fixture IDs from the other API.
-    board.sort(key=lambda x: (x[3] or now, x[0], x[1]))
-    selected = []
-    used = set()
-    for tour in ("atp", "wta"):
-        choice = next((x for x in board if x[0] == tour and x[1] not in used), None)
-        if choice:
-            selected.append(choice)
-            used.add(choice[1])
-    for row in board:
-        if len(selected) >= MAX_EVENTS:
+    # Prefer rows with all exact identifiers needed by /upcoming/matchodds/{tour}.
+    valid = [m for m in candidates if all(
+        m[k] is not None for k in ("player1_id", "player2_id", "tournament_id", "round_id")
+    )]
+    valid.sort(key=lambda m: (m["start"] or "", m["tour"], m["match_id"] or 0))
+    for match in valid[:MAX_MATCH_ODDS]:
+        if client.count >= client.limit:
             break
-        if row[1] not in used:
-            selected.append(row)
-            used.add(row[1])
-    if report["status"] == "ok":
-        for tour, event_id, row, start in selected:
-            if client.count >= client.limit:
+        if client.provider_remaining is not None and client.provider_remaining <= RESERVE:
+            report["status"] = "provider_daily_reserve"
+            break
+        try:
+            payload = client.get(f"/upcoming/matchodds/{match['tour']}", {
+                "tournamentId": match["tournament_id"],
+                "roundId": match["round_id"],
+                "player1Id": match["player1_id"],
+                "player2Id": match["player2_id"],
+            })
+            report["checked_matches"].append({
+                **match, "odds": _odds_summary(payload)
+            })
+        except RuntimeError as exc:
+            report["checked_matches"].append({**match, "error": str(exc)})
+            if "401" in str(exc) or "403" in str(exc):
+                report["status"] = "match_odds_not_in_basic_plan"
                 break
-            if client.provider_remaining is not None and client.provider_remaining <= 5:
-                report["status"] = "provider_daily_reserve"
-                break
-            try:
-                data = client.get("/extend/api/event/odds/latest-all/" + event_id)
-                report["checked_events"].append({
-                    "id": event_id, "tour": tour,
-                    "start": start.isoformat() if start else None,
-                    "player_names": [
-                        str(row.get(k) or "")[:80]
-                        for k in ("home_team", "away_team")
-                    ],
-                    "odds": preview(data),
-                })
-            except RuntimeError as err:
-                report["checked_events"].append({
-                    "id": event_id, "tour": tour, "error": str(err),
-                })
-                if "403" in str(err) or "401" in str(err):
-                    report["status"] = "odds_not_in_current_subscription"
-                    break
-    if report["status"] == "ok" and not selected:
-        report["status"] = "no_explicit_live_event_ids_from_schedule"
+
     report["requests_used"] = client.count
     report["provider_remaining"] = client.provider_remaining
+    report["game_total_matches_found"] = sum(
+        bool(row.get("odds", {}).get("has_game_total"))
+        for row in report["checked_matches"]
+    )
     return report
 
 
 if __name__ == "__main__":
-    secret = os.getenv("RAPIDAPI_KEY", "").strip()
-    if not secret:
+    key = os.getenv("RAPIDAPI_KEY", "").strip()
+    if not key:
         raise SystemExit("RAPIDAPI_KEY secret missing")
-    result = run(Client(secret))
-    out = Path("reports/tennis_api_alt_50day.json")
-    out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
+    result = run(Client(key))
+    target = Path("reports/tennis_api_alt_50day.json")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(result, ensure_ascii=False))
