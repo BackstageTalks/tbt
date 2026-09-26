@@ -80,7 +80,7 @@ def test_results_units_and_kpis_share_visible_price_without_changing_ledger():
     assert "Number.isFinite(displayUnits)&&displayUnits>0?'correct'" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits<0?'wrong'" in APP
     assert "const entries=settledPublishedEntries(rows,category)" in APP
-    assert "const odds=resultVisibleOdds(publication)" in APP
+    assert "odds=resultVisibleOdds(publication)" in APP
     assert "const units=resultVisibleUnits(publication,outcome,odds)" in APP
     assert "function localResultMetrics(rows,category)" in APP
     assert "return metricCards([" in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
