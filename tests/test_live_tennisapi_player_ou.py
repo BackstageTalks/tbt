@@ -73,7 +73,7 @@ def test_player_ou_settlement_uses_line_not_opponent():
     result = pub["result"]
     assert result["status"] == "hit"
     assert result["correct"] is True
-    assert result["profit_units"] == 0.92
+    assert round(result["profit_units"], 6) == 0.92
 
 
 def test_legacy_most_aces_grading_unchanged():
