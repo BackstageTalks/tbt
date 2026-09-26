@@ -7704,3 +7704,14 @@ body#blinqPremium .live-radar-result-time{margin-top:8px!important;color:#718b82
 /* Results: retirement is a separate terminal state, other voids stay neutral. */
 body#blinqPremium.blinq-route .results-table .retired{color:#bf8cff!important}
 body#blinqPremium.blinq-route .results-table .void{color:#e1c56a!important}
+
+/* Verified market movement — informational panel below match readiness. */
+.market-trend-panel{margin-top:16px;padding:16px;border:1px solid #245744;border-radius:16px;background:rgba(8,32,25,.82);min-width:0}
+.market-trend-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}.market-trend-heading small{font-size:10px;font-weight:800;letter-spacing:.11em;color:#87dcb3}.market-trend-heading h3{margin:3px 0 0;font-size:17px;color:#f4fbf7}
+.market-trend-summary{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:15px 0 12px;color:#c9d9d0;font-size:12px}
+.market-trend-status{border-radius:99px;padding:5px 9px;font-weight:800;border:1px solid #426056}.market-trend-status.against{color:#ffb17c;border-color:#ad633a}.market-trend-status.toward{color:#80f0bd;border-color:#34865e}.market-trend-status.neutral{color:#b2c7bc}
+.market-trend-change{font-weight:900}.market-trend-change.against{color:#ffb17c}.market-trend-change.toward{color:#80f0bd}
+.market-trend-legend{display:flex;flex-wrap:wrap;gap:18px;color:#d4e7db;font-size:12px}.market-trend-legend span{display:inline-flex;align-items:center;gap:7px}.market-trend-legend i{width:16px;height:3px;border-radius:3px;background:#7cf2bc}.market-trend-legend i.opponent{background:#f8b16f}
+.market-trend-chart{display:block;width:100%;max-height:255px;margin:8px 0 3px;overflow:visible}.market-trend-empty{padding:33px 14px;text-align:center;color:#a1b7aa;border:1px dashed #355c4d;border-radius:11px;margin-top:13px;font-size:13px}
+.market-trend-source{color:#96b3a5;font-size:11px}.market-trend-note{margin:12px 0 0;color:#7f9f90;font-size:11px;line-height:1.5}
+@media(max-width:650px){.market-trend-panel{padding:13px}.market-trend-chart{max-height:210px}.market-trend-summary{gap:8px}}
