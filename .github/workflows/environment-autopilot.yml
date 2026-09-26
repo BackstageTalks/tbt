@@ -4,8 +4,14 @@ on:
   push:
     branches: [main]
     paths: ['.github/workflows/environment-autopilot.yml']
+  workflow_run:
+    workflows:
+      - Environment 1 - cache-only bulk backfill
+      - Environment overnight - safe geocoding
+      - Environment joint run - cache, coverage, preflight, ablation
+    types: [completed]
   schedule:
-    # GitHub's scheduler may start late; every tick checks actual job state.
+    # GitHub's scheduler may start late; completion events advance faster.
     - cron: '*/15 * * * *'
   workflow_dispatch:
 
