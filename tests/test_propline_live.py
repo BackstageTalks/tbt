@@ -178,3 +178,36 @@ def test_shared_free_tier_quota_budget_and_explicit_wider_workflow_defaults():
     assert "contains(github.event.head_commit.message, '[propline-audit-once]')" in diagnostic
     assert "scripts/propline_wide_audit.py --max-events" in diagnostic
     assert 4 * (1 + 2 * 75) + 250 == 854 < 1000
+
+
+def test_propline_abbreviated_names_match_both_players_without_spending_api():
+    from tbt.services.propline_live import _match_board_with_diagnostics
+    short = {**PROP, "home_team": "J. Struff", "away_team": "A. de Minaur"}
+    pairs, report = _match_board_with_diagnostics([MATCH], [short], NOW)
+    assert len(pairs) == 1
+    assert report["matched_exact"] == 0
+    assert report["matched_abbreviated"] == 1
+    assert report["ambiguous_rejected"] == 0
+
+
+def test_abbreviated_names_fail_closed_on_shared_initial_surname_or_time():
+    from tbt.services.propline_live import _match_board_with_diagnostics
+    other = {**MATCH, "event_id": "other-9", "player1": {"name": "Anna de Minaur"}}
+    short = {**PROP, "home_team": "J. Struff", "away_team": "A. de Minaur"}
+    found, report = _match_board_with_diagnostics([MATCH, other], [short], NOW)
+    assert not found
+    assert report["ambiguous_rejected"] == 1
+    later = {**short, "commence_time": (NOW + timedelta(hours=8)).isoformat()}
+    assert not _match_board([MATCH], [later], NOW)
+    one_player_wrong = {**short, "home_team": "J. Someone"}
+    assert not _match_board([MATCH], [one_player_wrong], NOW)
+
+
+def test_conflicting_prop_fixture_identity_and_identical_duplicate_handling():
+    from tbt.services.propline_live import _match_board_with_diagnostics
+    found, _ = _match_board_with_diagnostics([MATCH], [PROP, PROP], NOW)
+    assert len(found) == 1
+    conflicting = {**PROP, "id": "5678"}
+    found, report = _match_board_with_diagnostics([MATCH], [PROP, conflicting], NOW)
+    assert not found
+    assert report["ambiguous_rejected"] == 2
