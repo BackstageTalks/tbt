@@ -1,6 +1,9 @@
 name: BlinQ Environment autopilot (no Tennis API)
 
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/environment-autopilot.yml']
   schedule:
     # GitHub's scheduler may start late; every tick checks actual job state.
     - cron: '*/15 * * * *'
