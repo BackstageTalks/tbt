@@ -3549,6 +3549,7 @@
       return `<article class="account-modal-plan plan-${escapeHtml(id)}${current?' is-current':''}${unavailable?' is-unavailable-plan':''}"${unavailable?' aria-disabled="true"':''}>${planAvatarPairHtml(id,p)}<div class="account-modal-plan-copy">${planEyebrowHtml(p)}<strong>${escapeHtml(publicPlanLabel(id,p.card_title||p.label||id.toUpperCase()))}</strong>${detail?`<span>${escapeHtml(detail)}</span>`:''}</div>${action}</article>`;
     }).join('');
     return `<div class="account-modal-head"><div><small>BLINQ ÚČET</small><h2 id="accountDialogTitle">Tvoj BlinQ účet</h2><p>Spravuj profil, prístup a členskú úroveň na jednom mieste.</p></div></div>
+      <div class="account-modal-security" aria-label="Zabezpečenie účtu"><span>Správa prihlásenia</span><div><button id="accountModalPassword" type="button" class="btn btn-ghost">Obnoviť heslo</button><button id="accountModalSignOut" type="button" class="btn btn-ghost account-signout-button">Odhlásiť sa</button></div></div>
       <form id="accountModalProfileForm" class="account-modal-main-card account-modal-main-card-v3">
         <div class="account-modal-access"><div class="account-modal-avatar" id="accountModalAvatar">${escapeHtml(accountAvatarFallback(a))}</div><div class="account-access-copy"><small>AKTUÁLNY PRÍSTUP</small><strong>${escapeHtml(planLabel)}</strong><span class="account-access-status"><i></i>${escapeHtml(status==='lifetime'?'Aktívny · doživotne':status==='active'?'Aktívny':expiry)}</span></div></div>
         <div class="account-profile-facts account-profile-facts-v3"><span class="account-email-fact"><small>Registrovaný e-mail</small><strong>${escapeHtml(a.email||'—')}</strong><b class="account-verified ${verified?'is-verified':'needs-verification'}">${verified?'✓ E-mail overený':'! E-mail neoverený'}</b></span><span><small>Telegram nick</small><strong>${escapeHtml(tg||'Nenastavený')}</strong></span><span><small>Úroveň</small><strong>${escapeHtml(planLabel)}</strong></span><span><small>Platnosť prístupu</small><strong>${escapeHtml(expiry)}</strong></span></div>
@@ -3905,7 +3906,25 @@
     feedGeneration++;clearPrivateWorkspaceState();feedLoading=false;
     try{await BlinqAuth.signOut();}finally{auth('login');}
   }
-  function closeProfileMenu(){const menu=$('profileMenu'),toggle=$('profileMenuToggle');if(menu)menu.hidden=true;if(toggle)toggle.setAttribute('aria-expanded','false');}
+  function closeProfileMenu(){
+    const menu=$('profileMenu'),toggle=$('profileMenuToggle'),button=$('profileButton');
+    if(menu)menu.hidden=true;
+    if(toggle)toggle.setAttribute('aria-expanded','false');
+    if(button)button.setAttribute('aria-expanded','false');
+  }
+  function toggleProfileMenu(){
+    const menu=$('profileMenu'),shell=$('profileShell');
+    if(!menu||!shell)return;
+    const opening=menu.hidden;
+    if(opening){
+      // Mobile app shells clip overflow. Portal the dropdown so sign-out remains visible.
+      const parent=window.matchMedia('(max-width:900px)').matches?document.body:shell;
+      if(menu.parentElement!==parent)parent.appendChild(menu);
+    }
+    menu.hidden=!opening;
+    $('profileMenuToggle')?.setAttribute('aria-expanded',opening?'true':'false');
+    $('profileButton')?.setAttribute('aria-expanded',opening?'true':'false');
+  }
 
   let feedLoading=false,feedGeneration=0,externalSessionTimer=null;
   async function syncExternalSession(){
@@ -3981,8 +4000,12 @@
     $('resendVerification').onclick=async()=>{const node=$('authMessage');node.textContent=publicText('Sending verification email…');try{await BlinqAuth.resendVerification();node.textContent=publicText('Verification email sent again. Check your inbox and spam folder.');}catch(error){node.textContent=error.message;}};
     $('authPasswordToggle').onclick=()=>{const input=$('authPassword'),button=$('authPasswordToggle'),show=input.type==='password';input.type=show?'text':'password';button.textContent=publicText(show?'Hide':'Show');button.setAttribute('aria-pressed',show?'true':'false');button.setAttribute('aria-label',publicText(show?'Hide password':'Show password'));};
     $('refreshButton').onclick=()=>refreshWorkspace(true).catch(()=>{});$('syncRefresh').onclick=()=>refreshWorkspace(false).catch(()=>{}); ['tourFilter','tournamentFilter','surfaceFilter','confidenceFilter'].forEach(id=>$(id).addEventListener('change',()=>{state.page=0;state.showAll=false;renderPredictions()})); $('searchInput').addEventListener('input',()=>{state.page=0;state.showAll=false;renderPredictions()}); const headerSearch=$('headerSearchInput'); if(headerSearch)headerSearch.addEventListener('input',()=>{$('searchInput').value=headerSearch.value;state.page=0;state.showAll=false;renderPredictions();renderDailyHub();});
-    $('prevPick').onclick=()=>{state.page=Math.max(0,state.page-1);renderPredictions()}; $('nextPick').onclick=()=>{state.page+=1;renderPredictions()}; $('dialogClose').onclick=()=>$('matchDialog').close(); $('matchDialog').addEventListener('click',e=>{if(e.target===$('matchDialog'))$('matchDialog').close()}); const accountDialog=$('accountDialog'); if($('accountDialogClose'))$('accountDialogClose').onclick=()=>accountDialog.close(); if(accountDialog)accountDialog.addEventListener('click',e=>{if(e.target===accountDialog)accountDialog.close()}); $('profileButton').onclick=()=>{closeProfileMenu();openAccountDialog()};
-    $('profileMenuToggle').onclick=e=>{e.stopPropagation();const menu=$('profileMenu'),toggle=$('profileMenuToggle'),open=menu.hidden;menu.hidden=!open;toggle.setAttribute('aria-expanded',open?'true':'false');};
+    $('prevPick').onclick=()=>{state.page=Math.max(0,state.page-1);renderPredictions()}; $('nextPick').onclick=()=>{state.page+=1;renderPredictions()}; $('dialogClose').onclick=()=>$('matchDialog').close(); $('matchDialog').addEventListener('click',e=>{if(e.target===$('matchDialog'))$('matchDialog').close()}); const accountDialog=$('accountDialog'); if($('accountDialogClose'))$('accountDialogClose').onclick=()=>accountDialog.close(); if(accountDialog)accountDialog.addEventListener('click',e=>{if(e.target===accountDialog)accountDialog.close()}); $('profileButton').onclick=e=>{e.stopPropagation();if(window.matchMedia('(max-width:900px)').matches){toggleProfileMenu();return;}closeProfileMenu();openAccountDialog();};
+    $('profileMenuToggle').onclick=e=>{e.stopPropagation();toggleProfileMenu();};
+    $('profileAccountLink').onclick=()=>{closeProfileMenu();openAccountDialog();};
+    $('profileAdminLink').onclick=()=>closeProfileMenu();
+    document.addEventListener('click',e=>{const menu=$('profileMenu');if(menu&&!menu.hidden&&!menu.contains(e.target)&&!$('profileShell')?.contains(e.target))closeProfileMenu();});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('profileMenu')?.hidden){closeProfileMenu();$('profileButton')?.focus();}});
     $('headerLogoutButton').onclick=signOutCurrentSession;$('upgradeDialogClose').onclick=()=>$('upgradeDialog').close();$('upgradeDialog').addEventListener('click',e=>{if(e.target===$('upgradeDialog'))$('upgradeDialog').close()});
     if($('insightBell'))$('insightBell').onclick=()=>{const node=$('insightBell');if(node?.dataset.upgradePlan){showAccessHint(node,node.dataset.upgradePlan,node.dataset.upgradeSection||'Premium Info',true);return;}toggleInsightChannel('info');};
     if($('insightShortcut'))$('insightShortcut').onclick=event=>{const node=$('insightShortcut');if(node?.dataset.upgradePlan){showAccessHint(node,node.dataset.upgradePlan,node.dataset.upgradeSection||'Comeback LIVE',true);return;}toggleInsightChannel('live');};
