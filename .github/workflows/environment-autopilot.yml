@@ -56,6 +56,8 @@ jobs:
               "environment-enrichment.yml",
               "environment-unique-geocoding.yml",
               "environment-audit.yml",
+              # Nightly ten-stage batch holds the same history writer lock.
+              "environment-nightly-ten.yml",
               "data.yml",
           ]
           def recent(workflow):
