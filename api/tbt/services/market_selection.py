@@ -1207,7 +1207,22 @@ def annotate_market_publication_candidates(
             market = str(card.get("market") or "").strip()
             selection_id = str(card.get("selection_id") or "").strip()
             scope = str(card.get("projection_scope") or "player").strip() or "player"
+            # A newly priced player O/U is a DIFFERENT bet from the original
+            # "Most Aces / Most DF" superiority projection on the same player.
+            # Old publication keys omitted the contract, causing immutable
+            # issued legacy snapshots to consume the new O/U candidate's key
+            # and silently quarantine the only real-price ACES rows.
+            # Retain historic identity for older/superiority publications.
             selection_key = f"projection:{market}:{scope}:{event_id}:{selection_id}"
+            if card.get("price_contract") == "player_total_ou":
+                side = str(card.get("ou_side") or "").strip().lower()
+                try:
+                    line = float(card.get("market_line"))
+                except (TypeError, ValueError):
+                    raise ValueError("Priced player total missing exact O/U line")
+                if side not in {"over", "under"} or not 0 <= line <= 100:
+                    raise ValueError("Priced player total missing valid O/U contract")
+                selection_key += f":total:{side}:{line:.1f}"
             projection_section = "ace" if market == "aces" else "double_faults"
             publications.append({
                 "schema": 3,
