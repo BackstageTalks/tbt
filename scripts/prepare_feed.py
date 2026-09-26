@@ -103,9 +103,11 @@ def _feed_player_ids(payload: dict) -> set[str]:
                 player = row.get(player_key)
                 if isinstance(player, dict):
                     player_id = str(player.get("id") or "").strip()
-                    if player_id:
-                        ids.add(player_id)
                     members = player.get("members") if isinstance(player.get("members"), list) else []
+                    # Team IDs are not player photo IDs; only member IDs belong
+                    # in the image bundle for doubles.
+                    if player_id and not (row.get("prediction_family") == "doubles" or len(members) >= 2):
+                        ids.add(player_id)
                     for member in members:
                         if not isinstance(member, dict):
                             continue
@@ -124,9 +126,10 @@ def _feed_player_ids(payload: dict) -> set[str]:
                     player = row.get(player_key)
                     if isinstance(player, dict):
                         player_id = str(player.get("id") or "").strip()
-                        if player_id:
+                        members = player.get("members") if isinstance(player.get("members"), list) else []
+                        if player_id and not (row.get("prediction_family") == "doubles" or len(members) >= 2):
                             ids.add(player_id)
-                        for member in player.get("members", []) or []:
+                        for member in members:
                             if isinstance(member, dict) and member.get("id"):
                                 ids.add(str(member["id"]).strip())
     return ids
@@ -375,8 +378,11 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
             "generated_at": profile_payload.get("generated_at"),
             "profiles_cached": len(profiles),
             "photos_deployed": len(photos),
+            "player_ids_requested": len(player_ids),
+            "photo_coverage": round(len({Path(name).stem for name in photos}) / len(player_ids), 4) if player_ids else 0.0,
+            "photos_missing": max(0, len(player_ids) - len({Path(name).stem for name in photos})),
             "presentation_only": True,
-            "fallback": "initials_or_feed_fields",
+            "fallback": "local_atp_wta_artwork_then_initials",
         }
         if {TOURNAMENT_PROFILE_ASSET, TOURNAMENT_LOGO_ASSET} <= assets:
             tournament_profiles, tournament_payload = _load_tournament_profiles(cache / TOURNAMENT_PROFILE_ASSET)
@@ -393,6 +399,8 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
                 "fallback": "local_tournament_type_assets",
             }
     except Exception as exc:
+        # Keep the release deployable but preserve why real photos were absent.
+        payload["player_assets"]["error_type"] = type(exc).__name__
         print(f"Optional player assets skipped: {type(exc).__name__}: {exc}")
     return payload
 
