@@ -2823,11 +2823,7 @@
         // Historical display-only prices can fill the visible Units cell,
         // but never become a settled stake, ledger profit, or genuine ROI.
         const hasSettledUnits=Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0;
-        const displayOnlyOdds=illustrativeOnly?placeholderOdds:
-          Number.isFinite(estimatedProjectionOdds)&&estimatedProjectionOdds>1?estimatedProjectionOdds:NaN;
-        const displayUnits=outcome.kind==='void'?0:hasSettledUnits?projectionUnits:
-          Number.isFinite(displayOnlyOdds)&&['win','loss'].includes(outcome.kind)?
-            (outcome.kind==='win'?displayOnlyOdds-1:-1):NaN;
+        const displayUnits=resultVisibleUnits(publication,outcome,resultVisibleOdds(publication));
         const unitsText=Number.isFinite(displayUnits)?
           `${displayUnits>0?'+':''}${displayUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
