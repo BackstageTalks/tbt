@@ -21,7 +21,9 @@ jobs:
       - name: Export exact missing market odds from published ledger
         run: |
           test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          python -m unittest discover -s tests -p 'test_enrich_missing_odds.py'
           python scripts/export_missing_market_odds.py
+          python scripts/enrich_missing_odds.py
       - name: Downloadable exact-match manifest
         if: always()
         uses: actions/upload-artifact@v4
