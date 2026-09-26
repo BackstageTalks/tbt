@@ -141,3 +141,40 @@ def test_zero_budget_does_not_use_propline_event_endpoints():
                                                now=NOW, max_events=0)
     assert not found
     assert client.calls == 1
+
+
+def test_wide_market_discovery_reports_advertised_versus_genuine_two_sided_quotes():
+    from tbt.services.propline_live import MAX_EVENTS_PER_REFRESH, MIN_PROVIDER_REMAINING
+    assert MAX_EVENTS_PER_REFRESH == 75
+    assert MIN_PROVIDER_REMAINING == 150
+    client = FakeProp()
+    found, audit = discover_propline_fallback(client, [MATCH], {},
+                                               now=NOW, max_events=75)
+    assert audit["events_on_board"] == 1
+    assert audit["matched_events"] == 1
+    assert audit["events_limited_out"] == 0
+    assert audit["events_with_any_target_market"] == 1
+    assert audit["events_skipped_no_target_market"] == 0
+    assert audit["odds_payload_events"] == 1
+    assert audit["markets_advertised_by_type"] == {
+        "aces": 1, "double_faults": 1, "games": 1, "sets": 1
+    }
+    assert audit["bookmakers_priced_by_market"]["aces"]["draftkings"] == 1
+    assert audit["sample_offers"]["games"][0]["line"] == 22.5
+    assert abs(audit["sample_offers"]["games"][0]["over"] - 1.90909) < .0001
+    assert audit["sample_offers"]["aces"][0]["player"] == "Álex de Miñaur"
+    assert set(found["rapid-133"]) == {"aces", "double_faults", "games", "sets"}
+
+
+def test_shared_free_tier_quota_budget_and_explicit_wider_workflow_defaults():
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    refresh = (root / ".github/workflows/data.yml").read_text(encoding="utf-8")
+    clv = (root / "scripts/propline_clv_collect.py").read_text(encoding="utf-8")
+    diagnostic = (root / ".github/workflows/propline-wider-market-audit.yml").read_text(encoding="utf-8")
+    assert "default: 75" in refresh
+    assert "DAILY_LIMIT = 250" in clv
+    assert "MIN_PROVIDER_REMAINING = 150" in clv
+    assert "contains(github.event.head_commit.message, '[propline-audit-once]')" in diagnostic
+    assert "scripts/propline_wide_audit.py --max-events" in diagnostic
+    assert 4 * (1 + 2 * 75) + 250 == 854 < 1000

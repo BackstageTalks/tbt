@@ -1,0 +1,56 @@
+name: PropLine expanded 75-match audit
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - api/tbt/services/propline_live.py
+  workflow_dispatch:
+    inputs:
+      max_events:
+        description: Matched fixtures to inspect (read-only, max 75)
+        type: choice
+        options: ["25", "50", "75"]
+        default: "75"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: propline-wider-market-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    # The push-triggered run happens only for the explicitly tagged rollout.
+    # Later changes to the provider do not silently consume paid API quota.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      contains(github.event.head_commit.message, '[propline-audit-once]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      PROPL: ${{ secrets.PROPL }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      AUDIT_EVENTS: ${{ inputs.max_events || '75' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify existing secrets
+        run: |
+          test -n "$PROPL" || { echo "Missing PROPL"; exit 1; }
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+      - name: Read-only current-feed PropLine coverage discovery
+        run: python scripts/propline_wide_audit.py --max-events "$AUDIT_EVENTS"
+      - name: Save coverage and genuine-price examples
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: propline-expanded-market-audit
+          path: reports/propline_wide_market_audit.json
+          if-no-files-found: warn
+          retention-days: 7

@@ -24,10 +24,10 @@ BASE = "https://api.prop-line.com/v1"
 KEYS = ("totals", "total_games", "total_sets", "player_aces", "player_double_faults")
 METRIC = {"totals": "games", "total_games": "games", "total_sets": "sets",
           "player_aces": "aces", "player_double_faults": "double_faults"}
-# Shares the 1000/day PROPL secret with the hourly CLV pilot (cap 650/day).
-# Four scheduled refreshes x (1 board + 2x24 events) = 196 calls/day.
-MAX_EVENTS_PER_REFRESH = 24
-MIN_PROVIDER_REMAINING = 205
+# Shared 1000/day PROPL: four refreshes x (1 board + 2x75) <= 604 calls.
+# CLV pilot is capped at 250/day; reserve >=146 for variable/manual demand.
+MAX_EVENTS_PER_REFRESH = 75
+MIN_PROVIDER_REMAINING = 150
 
 
 def _name(value: Any) -> str:
@@ -240,7 +240,17 @@ def discover_propline_fallback(
     report: dict[str, Any] = {"enabled": True, "calls": 0, "matched_events": 0,
                               "events_queried": 0, "priced_by_market": {
                                   "aces": 0, "double_faults": 0, "sets": 0, "games": 0},
-                              "missing_secret": False, "errors": 0}
+                              "missing_secret": False, "errors": 0,
+                              "events_on_board": 0, "events_skipped_no_target_market": 0,
+                              "events_with_any_target_market": 0,
+                              "advertised_market_keys": {}, "markets_advertised_by_type": {
+                                  "aces": 0, "double_faults": 0, "sets": 0, "games": 0},
+                              "odds_payload_events": 0, "bookmakers_with_target_market": 0,
+                              "events_limited_out": 0,
+                              "bookmakers_priced_by_market": {
+                                  "aces": {}, "double_faults": {}, "sets": {}, "games": {}},
+                              "sample_offers": {
+                                  "aces": [], "double_faults": [], "sets": [], "games": []}}
     fetched: dict[str, dict[str, dict]] = {}
     try:
         board = _events(client.get("/sports/tennis/events"))
@@ -248,8 +258,10 @@ def discover_propline_fallback(
         report["errors"] += 1
         report["calls"] = client.calls
         return {}, report
+    report["events_on_board"] = len(board)
     matched = _match_board(predictions, board, now)
     report["matched_events"] = len(matched)
+    report["events_limited_out"] = max(0, len(matched) - max(0, min(MAX_EVENTS_PER_REFRESH, int(max_events))))
     for row, event in matched[:max(0, min(MAX_EVENTS_PER_REFRESH, int(max_events)))]:
         rapid_id, prop_id = str(row["event_id"]), str(event["id"])
         missing = set(("aces", "double_faults", "games", "sets")) - existing.get(rapid_id, set())
@@ -258,17 +270,29 @@ def discover_propline_fallback(
         report["events_queried"] += 1
         try:
             available = _markets(client.get(f"/sports/tennis/events/{prop_id}/markets"))
+            for market_key in available:
+                report["advertised_market_keys"][market_key] = (
+                    report["advertised_market_keys"].get(market_key, 0) + 1
+                )
+            advertised = {METRIC[key] for key in KEYS if key in available and METRIC[key] in missing}
+            for market_name in advertised:
+                report["markets_advertised_by_type"][market_name] += 1
             wanted = [key for key in KEYS if key in available and METRIC[key] in missing]
             if not wanted:
+                report["events_skipped_no_target_market"] += 1
                 continue
+            report["events_with_any_target_market"] += 1
             payload = client.get(f"/sports/tennis/events/{prop_id}/odds",
                                  {"markets": ",".join(wanted)})
             if not isinstance(payload, dict):
                 continue
+            report["odds_payload_events"] += 1
             for book in payload.get("bookmakers") or []:
                 if not isinstance(book, dict):
                     continue
                 parsed = _normalize_book(book, row, missing)
+                if parsed:
+                    report["bookmakers_with_target_market"] += 1
                 for metric, normalized in parsed.items():
                     if metric in fetched.get(rapid_id, {}):
                         continue
@@ -280,6 +304,24 @@ def discover_propline_fallback(
                         "captured_at": datetime.now(timezone.utc).isoformat(),
                     }
                     report["priced_by_market"][metric] += 1
+                    book_name = fetched[rapid_id][metric]["bookmaker"]
+                    by_book = report["bookmakers_priced_by_market"][metric]
+                    by_book[book_name] = by_book.get(book_name, 0) + 1
+                    samples = report["sample_offers"][metric]
+                    if len(samples) < 8:
+                        p1, p2 = _players(row)
+                        offers = (extract_match_total_odds(normalized, metric)
+                                  if metric in ("games", "sets") else
+                                  extract_player_total_ou(normalized, metric, p1, player_slot=1)
+                                  + extract_player_total_ou(normalized, metric, p2, player_slot=2))
+                        if offers:
+                            offer = offers[0]
+                            samples.append({
+                                "provider_event_id": prop_id, "bookmaker": book_name,
+                                "player": offer.get("player_name"),
+                                "line": offer["line"], "over": offer["over"],
+                                "under": offer["under"],
+                            })
         except (RuntimeError, ValueError):
             report["errors"] += 1
         if client.remaining is not None and client.remaining < client.min_remaining:
