@@ -14,6 +14,7 @@ on:
       # Immediately request the already-authorized read-only research audit
       # after it completes, if the overnight run has finished.
       - Tennis data and predictions
+      - BlinQ one-night adaptive data backfill (Sep 26)
     types: [completed]
   schedule:
     # GitHub's scheduler may start late; completion events advance faster.
@@ -64,6 +65,7 @@ jobs:
               # Nightly ten-stage batch holds the same history writer lock.
               "environment-nightly-ten.yml",
               "data.yml",
+              "overnight-data-20260926.yml",
           ]
           def recent(workflow):
               url = f"repos/{repo}/actions/workflows/{workflow}/runs?per_page=35"
@@ -80,6 +82,21 @@ jobs:
               subprocess.run(command, check=True)
               print(f"Dispatched {workflow}: {inputs}")
           runs = {workflow: recent(workflow) for workflow in workflows}
+          # Read-only 15-minute watcher for the bounded night collector.
+          # It never dispatches or retries a paid job; a partial run may
+          # have spent provider quota even if GitHub reports failure.
+          overnight = runs["overnight-data-20260926.yml"]
+          if overnight:
+              current = sorted(overnight, key=lambda r: r["created_at"])[-1]
+              print("Nightly data monitor:", current["html_url"],
+                    current["status"], current.get("conclusion"),
+                    "updated:", current.get("updated_at"))
+              if (current["status"] == "completed"
+                      and current.get("conclusion") != "success"
+                      and now.date() <= datetime.date(2026, 9, 27)):
+                  print("::error::Overnight backfill did not complete; "
+                        "inspect partial checkpoints before any paid retry.")
+                  sys.exit(1)
           # Nightly backfill already chains completed batches immediately. Every
           # 15-minute scheduled autopilot run is its independent progress watchdog:
           # cancel accidental duplicate push runs, restart one failed batch once,
