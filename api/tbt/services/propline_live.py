@@ -169,6 +169,7 @@ def _match_board_with_diagnostics(
         singles.append((row, exact, _pair_key((p1, p2), abbreviated=True), start))
     targets = []
     invalid = 0
+    seen_identical = set()
     for prop in board:
         eid = str(prop.get("id") or "")
         start = _when(prop.get("commence_time"))
@@ -177,6 +178,10 @@ def _match_board_with_diagnostics(
         if not eid.isdigit() or not start or start <= now or not exact:
             invalid += 1
             continue
+        signature = (eid, start, exact)
+        if signature in seen_identical:
+            continue
+        seen_identical.add(signature)
         targets.append((prop, exact, _pair_key(pnames, abbreviated=True), start))
     # Resolve against all candidates first so a duplicated event on either
     # provider cannot be accepted based on input order.
