@@ -1462,10 +1462,18 @@
     if(!match)return null;const value=Number(match[1].replace(',','.'));return Number.isFinite(value)?value:null;
   }
   function projectionReferenceLine(row,sourceTab=''){
-    const direct=apiMarketLine(row);if(Number.isFinite(direct))return direct;
-    const parsed=selectionLineFromText(row);if(Number.isFinite(parsed))return parsed;
-    if(sourceTab==='games'){const ref=Number(row?.reference_projection??row?.baseline_projection);if(Number.isFinite(ref))return ref;}
-    return null;
+    // Never present the historical GAMES baseline as an actionable market.
+    if(sourceTab==='games'){
+      if(row?.price_status!=='priced_projection')return null;
+      const line=row?.market_line==null?NaN:Number(row.market_line);
+      return Number.isFinite(line)&&line>=8&&line<=80?line:null;
+    }
+    if(row?.price_status==='priced_projection'&&row?.market_line!=null){
+      const line=Number(row.market_line);
+      if(Number.isFinite(line)&&line>0)return line;
+    }
+    const parsed=selectionLineFromText(row);
+    return Number.isFinite(parsed)&&parsed>0?parsed:null;
   }
   function setsTotalProjectionValue(row){
     const projection=Number(row?.projection),unit=String(row?.projection_unit||'').trim().toLowerCase();
@@ -1490,7 +1498,7 @@
     if(market==='games'){
       const side=projectionDirectionLabel(row),line=projectionReferenceLine(row,'games');
       if(side&&Number.isFinite(line))return `${side} ${line.toFixed(1)} Games`;
-      return String(row?.selection||row?.pick||'—').replace(/^High\s+Total\s+Games$/i,'Over total games').replace(/^Low\s+Total\s+Games$/i,'Under total games');
+      return lcopy('Projected match total (not a priced bet)','Projekcia gemov (bez trhového kurzu)','Projekce gemů (bez tržního kurzu)');
     }
     if(market==='ace'||market==='double_faults'||market==='aces'){
       const subject=String(row?.projection_subject||modelPickName(row)||'').trim();
@@ -2071,16 +2079,9 @@
   // never a historical bookmaker price and never included in actual ROI.
   // Client fallback also covers older public feeds before the next refresh.
   function projectionIndicativeOdds(row){
-    const market=String(row?.market||row?.projection_metric||'').toLowerCase();
-    if(!['aces','double_faults','sets','games'].includes(market))return NaN;
-    if(row?.odds!=null&&Number.isFinite(Number(row.odds))&&Number(row.odds)>1)return NaN;
-    const saved=row?.indicative_odds==null?NaN:Number(row.indicative_odds);
-    if(Number.isFinite(saved)&&saved>1)return saved;
-    if(row?.projection_confidence==null)return NaN;
-    const confidence=Number(row.projection_confidence);
-    if(!Number.isFinite(confidence)||confidence<0.5||confidence>1)return NaN;
-    const p=Math.min(0.94,Math.max(0.5,confidence));
-    return Math.round(Math.max(1.05,Math.min(2.50,1/(p*1.055)))*100)/100;
+    // Old model-confidence price guesses were never calibrated to bookmaker
+    // lines; ignore them even when stale values survive in cached feeds.
+    return NaN;
   }
   function indicativeOddsHint(){
     return lcopy(
@@ -2089,13 +2090,22 @@
       'Orientační kurz podle modelu, nikoli nabídka sázkové kanceláře. Nezapočítává se do skutečného ROI.'
     );
   }
+  function verifiedProjectionOdds(row){
+    if(row?.price_status!=='priced_projection')return NaN;
+    const market=String(row?.market||row?.projection_metric||'').toLowerCase();
+    if(market==='games'||market==='sets'){
+      const line=row?.market_line==null?NaN:Number(row.market_line);
+      if(!Number.isFinite(line)||(market==='games'?line<8||line>80:line<1.5||line>5.5))return NaN;
+    }else if(!['player_superiority','player_total_ou'].includes(String(row?.price_contract||''))){
+      return NaN;
+    }
+    const odds=row?.odds==null?NaN:Number(row.odds);
+    return Number.isFinite(odds)&&odds>1&&odds<100?odds:NaN;
+  }
   function projectionOddsHtml(row){
-    const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
-    const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
-    if(realOddsText!=='—')return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
-    const approx=projectionIndicativeOdds(row);
-    if(Number.isFinite(approx))return `<span title="${escapeHtml(indicativeOddsHint())}">${hubNumberHtml('~'+approx.toFixed(2),lcopy('estimate','odhad','odhad'))}</span>`;
-    const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
+    const odds=verifiedProjectionOdds(row);
+    if(Number.isFinite(odds))return hubNumberHtml(odds.toFixed(2),lcopy('verified provider odds','overený trhový kurz','ověřený tržní kurz'));
+    const reason=lcopy('No verified odds for this exact projection','Bez overeného kurzu pre túto projekciu','Bez ověřeného kurzu pro tuto projekci');
     return `<span title="${escapeHtml(reason)}">${hubNumberHtml('N/A',reason)}</span>`;
   }
   function dailyHubRow(row,tab,active=false,index=0){
@@ -2769,10 +2779,10 @@
       if(projection){
         const depth=Number(publication?.data_depth??publication?.result?.data_depth),displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
         const projectionOdds=publication?.odds==null?NaN:Number(publication?.odds),projectionUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units);
-        const estimatedProjectionOdds=Number.isFinite(projectionOdds)&&projectionOdds>1?NaN:projectionIndicativeOdds(publication);
-        const realProjectionOddsText=Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—';
-        const displayedProjectionOdds=realProjectionOddsText!=='—'?realProjectionOddsText:Number.isFinite(estimatedProjectionOdds)?'~'+estimatedProjectionOdds.toFixed(2):'—';
-        const projectionOddsTitle=Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
+        const estimatedProjectionOdds=projectionIndicativeOdds(publication);
+        const realProjectionOddsText=publication?.price_status==='priced_projection'&&Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—';
+        const displayedProjectionOdds=realProjectionOddsText;
+        const projectionOddsTitle=realProjectionOddsText==='—'?` title="${escapeHtml(lcopy('No verified market price','Bez overeného trhového kurzu','Bez ověřeného tržního kurzu'))}"`:'';
         const depthText=Number.isFinite(depth)?pct(depth):'—';
         const unitsText=outcome.kind==='void'?'0.00u':Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0?`${projectionUnits>0?'+':''}${projectionUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
