@@ -81,7 +81,10 @@ def main():
                     for(const data of [{}, {odds:null}, {odds:0}, {odds:1}, {odds:'bad'}, {odds:Infinity}, {odds:true}, {betting:{odds:null}}, {match_winner_market:{player1_odds:1.8}}]){
                       const table=document.createElement('table');
                       table.innerHTML=accessTest.dailyHubRow({...base,_hub_source:'sets',...data},tab);
-                      if(!table.querySelector('.hub-odds').textContent.includes('N/A'))throw new Error('Missing price must be N/A: '+JSON.stringify(data));
+                      const cell=table.querySelector('.hub-odds');
+                      if(!cell.textContent.includes('~1.05'))throw new Error('Unpriced model pick must show indicative ~ odds: '+JSON.stringify(data));
+                      const hint=cell.querySelector('[title]')?.getAttribute('title')||'';
+                      if(!/(bookmaker|bookmakera|stávkovej kancelárie|sázkové kanceláře)/i.test(hint))throw new Error('Indicative quote needs a localized source explanation: '+hint);
                     }
                     for(const data of [{odds:1.87},{betting:{odds:1.87}},{odds:0,betting:{odds:1.87}}]){
                       const table=document.createElement('table');table.innerHTML=accessTest.dailyHubRow({...base,_hub_source:'sets',...data},tab);
