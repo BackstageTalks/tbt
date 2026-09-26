@@ -81,6 +81,36 @@
     const hasImage=Boolean(parts.fallback||parts.actual);
     return `<span class="${escapeHtml(wrapperClass)} layered-player-avatar ${parts.fallbackClass}${hasImage?' has-photo':''}">${playerAvatarInnerHtml(parts)}</span>`;
   }
+  // Doubles teams are not individual players. Never use a team ID as an
+  // individual portrait, and show both real member photos when available.
+  function isDoublesRow(row){
+    if(String(row?.prediction_family||'').toLowerCase()==='doubles')return true;
+    if(/doubles/i.test(String(row?.market_type||row?.category||'')))return true;
+    if([row?.player1,row?.player2].some(p=>Array.isArray(p?.members)&&p.members.length>=2))return true;
+    return [row?.player1?.name,row?.player2?.name].every(n=>/\\s[\\/&]\\s/.test(String(n||'')));
+  }
+  function doublesMembers(player){
+    const members=Array.isArray(player?.members)?player.members.filter(m=>m&&typeof m==='object').slice(0,2):[];
+    if(members.length===2)return members;
+    const names=String(player?.name||'').split(/\\s+[\\/&]\\s+/).map(n=>n.trim()).filter(Boolean);
+    return names.length===2?names.map(name=>({name})):members;
+  }
+  function sideAvatarHtml(row,player,side,wrapperClass='hub-avatar'){
+    const name=String(player?.name||'');
+    if(!isDoublesRow(row)){
+      return playerAvatarHtml(playerPhotoSource(row,player,side),name,row?.tour,player?.gender||player?.sex||'',wrapperClass);
+    }
+    const members=doublesMembers(player);
+    const personHtml=members.length===2?members.map(member=>{
+      const photo=playerPhotoSource(null,member,'');
+      const memberName=String(member.name||'');
+      return '<span class="doubles-member-slot">'+
+        (photo?playerAvatarHtml(photo,memberName,row?.tour,member?.gender||member?.sex||'','doubles-member-avatar')
+              :'<span class="doubles-member-initials">'+escapeHtml(initials(memberName))+'</span>')+
+        '</span>';
+    }).join(''):'<span class="doubles-team-glyph" aria-hidden="true">2</span>';
+    return '<span class="'+escapeHtml(wrapperClass)+' doubles-pair-avatar" role="img" aria-label="'+escapeHtml(name)+'">'+personHtml+'</span>';
+  }
   function applyPlayerAvatarHost(host,photo,name,tour,gender=''){
     if(!host)return;
     const parts=playerAvatarParts(photo,name,tour,gender);
@@ -1870,7 +1900,7 @@
     const r1=firstFinite(p1.rank,p1.ranking,p1.current_rank,row?.player1_rank,row?.p1_rank),r2=firstFinite(p2.rank,p2.ranking,p2.current_rank,row?.player2_rank,row?.p2_rank);
     const photoFor=(player,side)=>playerPhotoSource(row,player,side);
     const selected=String(row?.pick||row?.selection||row?.prediction||'').trim().toLocaleLowerCase();
-    const line=(player,side,name,country,rank)=>`<span class="hub-match-player${selected&&selected===String(name).toLocaleLowerCase()?' is-pick':''}"><span class="hub-match-player-main">${smallAvatar(photoFor(player,side),name,row?.tour,player?.gender||player?.sex||'')}${flagIconHtml(country,true)}<b title="${escapeHtml(name)}">${escapeHtml(name)}</b></span>${Number.isFinite(Number(rank))&&Number(rank)>0?`<small>#${Math.trunc(Number(rank))}</small>`:''}</span>`;
+    const line=(player,side,name,country,rank)=>`<span class="hub-match-player${selected&&selected===String(name).toLocaleLowerCase()?' is-pick':''}"><span class="hub-match-player-main">${sideAvatarHtml(row,player,side,'hub-avatar')}${flagIconHtml(country,true)}<b title="${escapeHtml(name)}">${escapeHtml(name)}</b></span>${Number.isFinite(Number(rank))&&Number(rank)>0?`<small>#${Math.trunc(Number(rank))}</small>`:''}</span>`;
     return `<span class="hub-match hub-match-pro">${line(p1,'player1',n1,c1,r1)}<i class="hub-match-divider" aria-hidden="true"></i>${line(p2,'player2',n2,c2,r2)}</span>`;
   }
   function recentFormData(source,key){
@@ -2320,12 +2350,12 @@
       else{metrics=[[publicText('Odds'),Number.isFinite(odds)?odds.toFixed(2):'—'],[lcopy('Data','Dáta','Data'),dataDepthMetric(row)],[publicText('Surface'),surfaceSampleLabel(row)]];}
       badge=probability==null?publicText('MODEL'):confidenceLabel(confidenceBand(probability));mainValue=probability==null?'—':pct(probability);confidenceClass=probability==null?'low':confidenceBand(probability);
     }
-    const p1Photo=playerPhotoSource(row,p1,'player1'),p2Photo=playerPhotoSource(row,p2,'player2');const avatar=(photo,name,gender='')=>playerAvatarHtml(photo,name,row?.tour,gender,'player-avatar');const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
+    const p1Photo=playerPhotoSource(row,p1,'player1'),p2Photo=playerPhotoSource(row,p2,'player2');const avatar=(player,side)=>sideAvatarHtml(row,player,side,'player-avatar');const p1Name=p1.name||row?.player1_name||'Player 1',p2Name=p2.name||row?.player2_name||'Player 2';
     const metricHtml=metrics.map(([label,value])=>{const raw=String(value??'');const tone=raw.trim().startsWith('+')?' metric-positive':raw.trim().startsWith('-')?' metric-negative':'';return `<span class="card-metric${tone}"><small>${escapeHtml(label)}</small><strong>${escapeHtml(raw)}</strong></span>`}).join('');
     const footer=`<div class="card-metrics-bar match-kpi-bar">${metricHtml}</div><div class="card-link-row"><button class="card-more-link" type="button" data-route="${escapeHtml(key)}">${escapeHtml(publicText('See more →'))}</button></div>`;
     const optionalNote=note&&!compact?`<div class="market-card-note">${escapeHtml(note)}</div>`:'';
     const tournamentMeta=tournamentDisplayMeta(row);
-    return `<article class="prediction-card featured market-card match-card-v3${projectionOnly?' projection-card':''}${compact?' dashboard-preview-card':''}"><div class="card-meta match-card-meta"><span class="tour match-card-tournament">${tournamentVisual(row)}<span class="match-card-tournament-copy"><b>${escapeHtml(tournamentMeta.name)}</b>${tournamentMeta.location?`<small>${escapeHtml(tournamentMeta.location)}</small>`:''}</span></span><span class="time">${timeDateHtml(row?.scheduled_at||row?.date,'card-time-stack')}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(p1Photo,p1Name,p1?.gender||p1?.sex||'')}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${playerMetaHtml(p1.rank,p1.country_code,row?.tour)}</small></div><div class="vs match-vs">VS</div><div class="player">${avatar(p2Photo,p2Name,p2?.gender||p2?.sex||'')}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${playerMetaHtml(p2.rank,p2.country_code,row?.tour)}</small></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="pick-score"><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div></div>${optionalNote}${footer}</article>`;
+    return `<article class="prediction-card featured market-card match-card-v3${projectionOnly?' projection-card':''}${compact?' dashboard-preview-card':''}"><div class="card-meta match-card-meta"><span class="tour match-card-tournament">${tournamentVisual(row)}<span class="match-card-tournament-copy"><b>${escapeHtml(tournamentMeta.name)}</b>${tournamentMeta.location?`<small>${escapeHtml(tournamentMeta.location)}</small>`:''}</span></span><span class="time">${timeDateHtml(row?.scheduled_at||row?.date,'card-time-stack')}</span><span class="surface">${escapeHtml(String(row?.surface||key).replaceAll('_',' ').toUpperCase())}</span></div><div class="players-row match-players-row"><div class="player">${avatar(p1,'player1')}<strong class="player-name">${escapeHtml(p1Name)}</strong><small class="player-rank">${playerMetaHtml(p1.rank,p1.country_code,row?.tour)}</small></div><div class="vs match-vs">VS</div><div class="player">${avatar(p2,'player2')}<strong class="player-name">${escapeHtml(p2Name)}</strong><small class="player-rank">${playerMetaHtml(p2.rank,p2.country_code,row?.tour)}</small></div></div><div class="pick-row match-pick-row"><div class="pick-copy"><small>${escapeHtml(pickLabel)}</small><strong class="pick-name">${escapeHtml(pick)}</strong></div><div class="pick-score"><div class="probability">${mainValue}</div><span class="confidence ${confidenceClass}">${escapeHtml(badge)}</span></div></div>${optionalNote}${footer}</article>`;
   }
 
   function renderMarketSection(key,hostId,emptyText){
@@ -2854,7 +2884,7 @@
       const p1Class=p1Selected?' is-pick':p2Selected?' is-opponent':'';
       const p2Class=p2Selected?' is-pick':p1Selected?' is-opponent':'';
       const tipBadge='<i class="results-pick-mark" aria-label="Predikovaný hráč">TIP</i>';
-      const match=`<div class="results-match-player${p1Class}">${smallAvatar(p1Photo,p1Name,r?.tour,p1?.gender||p1?.sex||'')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${smallAvatar(p2Photo,p2Name,r?.tour,p2?.gender||p2?.sex||'')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${p2Selected?tipBadge:''}</span></div>`;
+      const match=`<div class="results-match-player${p1Class}">${sideAvatarHtml(r,p1,'player1','hub-avatar')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${sideAvatarHtml(r,p2,'player2','hub-avatar')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${p2Selected?tipBadge:''}</span></div>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
         const depth=Number(publication?.data_depth??publication?.result?.data_depth),displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
