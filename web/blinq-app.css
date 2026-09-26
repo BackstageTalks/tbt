@@ -7729,3 +7729,55 @@ body#blinqPremium.blinq-route .results-table .void{color:#e1c56a!important}
   body#blinqPremium .account-modal-security .btn{min-height:44px!important;font-size:12px!important;white-space:nowrap!important}
 }
 body#blinqPremium .profile-account-icon svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linecap:round;stroke-linejoin:round}
+
+
+/* Published-player portraits and doubles teams — pair identity is not a player. */
+body#blinqPremium .hub-avatar.doubles-pair-avatar,
+body#blinqPremium .player-avatar.doubles-pair-avatar{
+  display:inline-flex!important;align-items:center!important;justify-content:center!important;
+  gap:0!important;width:46px!important;min-width:46px!important;height:32px!important;
+  flex:0 0 46px!important;overflow:visible!important;background:transparent!important;
+  border:0!important;box-shadow:none!important;isolation:isolate!important;
+}
+body#blinqPremium .player-avatar.doubles-pair-avatar{
+  width:72px!important;min-width:72px!important;height:46px!important;flex-basis:72px!important;
+}
+body#blinqPremium .doubles-pair-avatar .doubles-member-slot{
+  width:29px!important;height:29px!important;min-width:29px!important;flex:0 0 29px!important;
+  border-radius:50%!important;border:2px solid #237b67!important;overflow:hidden!important;
+  display:grid!important;place-items:center!important;position:relative!important;
+  background:#233e38!important;color:#f4fff9!important;
+}
+body#blinqPremium .doubles-pair-avatar .doubles-member-slot+ .doubles-member-slot{
+  margin-left:-10px!important;border-color:#b6dfd1!important;
+}
+body#blinqPremium .player-avatar.doubles-pair-avatar .doubles-member-slot{
+  width:43px!important;height:43px!important;min-width:43px!important;flex-basis:43px!important;
+}
+body#blinqPremium .player-avatar.doubles-pair-avatar .doubles-member-slot+ .doubles-member-slot{
+  margin-left:-14px!important;
+}
+body#blinqPremium .doubles-pair-avatar .doubles-member-avatar{
+  display:block!important;width:100%!important;height:100%!important;position:relative!important;
+  overflow:hidden!important;border-radius:50%!important;
+}
+body#blinqPremium .doubles-pair-avatar .doubles-member-avatar>img{
+  position:absolute!important;inset:0!important;display:block!important;width:100%!important;
+  height:100%!important;object-fit:cover!important;border:0!important;padding:0!important;
+}
+body#blinqPremium .doubles-pair-avatar .doubles-member-avatar>img[hidden]{
+  display:none!important;
+}
+body#blinqPremium .doubles-pair-avatar .doubles-member-initials,
+body#blinqPremium .doubles-pair-avatar .doubles-team-glyph{
+  display:grid!important;place-items:center!important;width:100%!important;height:100%!important;
+  font-size:9px!important;line-height:1!important;font-weight:800!important;color:#ecfff5!important;
+}
+body#blinqPremium .doubles-pair-avatar .doubles-team-glyph{
+  width:31px!important;height:31px!important;border:1px solid #509983!important;
+  border-radius:50%!important;background:#254339!important;font-size:13px!important;
+}
+/* A failed optional image may never make the initials layer transparent. */
+body#blinqPremium .layered-player-avatar.using-initials .player-avatar-initials{
+  color:#f5fff9!important;background:#263934!important;opacity:1!important;z-index:4!important;
+}
