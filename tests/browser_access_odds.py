@@ -82,14 +82,16 @@ def main():
                       const table=document.createElement('table');
                       table.innerHTML=accessTest.dailyHubRow({...base,_hub_source:'sets',...data},tab);
                       const cell=table.querySelector('.hub-odds');
-                      if(!cell.textContent.includes('~1.05'))throw new Error('Unpriced model pick must show indicative ~ odds: '+JSON.stringify(data));
-                      const hint=cell.querySelector('[title]')?.getAttribute('title')||'';
-                      if(!/(bookmaker|bookmakera|stávkovej kancelárie|sázkové kanceláře)/i.test(hint))throw new Error('Indicative quote needs a localized source explanation: '+hint);
+                      if(!cell.textContent.includes('N/A'))throw new Error('Unpriced projection must show N/A, not synthetic odds: '+JSON.stringify(data));
                     }
-                    for(const data of [{odds:1.87},{betting:{odds:1.87}},{odds:0,betting:{odds:1.87}}]){
+                    for(const data of [{odds:1.87},{betting:{odds:1.87}},{odds:0,betting:{odds:1.87}},{odds:1.87,price_status:'priced_projection'}]){
                       const table=document.createElement('table');table.innerHTML=accessTest.dailyHubRow({...base,_hub_source:'sets',...data},tab);
-                      if(!table.querySelector('.hub-odds').textContent.includes('1.87'))throw new Error('Real selection odds must remain visible');
+                      if(!table.querySelector('.hub-odds').textContent.includes('N/A'))throw new Error('Unverified or cross-market odds must stay hidden');
                     }
+                    const confirmed={...base,price_status:'priced_projection',market_line:2.5,odds:1.87};
+                    const table=document.createElement('table');
+                    table.innerHTML=accessTest.dailyHubRow({...confirmed,_hub_source:'sets'},tab);
+                    if(!table.querySelector('.hub-odds').textContent.includes('1.87'))throw new Error('Exact verified SG odds must remain visible');
                   }
                 }''')
                 # Reproduce the FREE regression: the API returns one random
