@@ -416,8 +416,8 @@ def main():
         help="Maximum provider-1 odds calls for the current BlinQ betting day",
     )
     parser.add_argument(
-        "--propline-max-events", type=int, default=24,
-        help="Max PropLine fallback events per refresh (0 disables, max 24)",
+        "--propline-max-events", type=int, default=75,
+        help="Max PropLine fallback events per refresh (0 disables, max 75)",
     )
     parser.add_argument(
         "--doubles-odds-max-events",
@@ -437,8 +437,8 @@ def main():
         parser.error("refresh allowance must be 1..3000")
     if args.market_odds_max_events < 0:
         parser.error("market-odds-max-events must be >= 0")
-    if not 0 <= args.propline_max_events <= 24:
-        parser.error("propline-max-events must be 0..24")
+    if not 0 <= args.propline_max_events <= 75:
+        parser.error("propline-max-events must be 0..75")
     if args.doubles_odds_max_events < 0:
         parser.error("doubles-odds-max-events must be >= 0")
     if not 0 <= args.betting_day_start_hour <= 23:
@@ -657,13 +657,14 @@ def main():
             # Paid/API requests only run as part of an explicitly authorized
             # refresh (the existing workflow auto-refresh gate is unchanged).
             # This secret already powers the separate research-only CLV job.
-            # Budget: max 24 events x 2 calls + 1 board, 4 scheduled refreshes
-            # = 196 calls/day; existing CLV pilot caps at 650/day.
+            # Budget upper bound: 4 x (1 board + 2 x 75 fixtures) = 604
+            # calls/day. The separate hourly CLV pilot is capped at 250/day,
+            # leaving >=146 of the shared 1000/day budget unallocated.
             prop_key = os.getenv("PROPL", "").strip()
             if prop_key and args.propline_max_events:
                 prop_client = PropLineClient(
                     prop_key, max_calls=1 + 2 * args.propline_max_events,
-                    min_remaining=205,
+                    min_remaining=150,
                 )
                 prop_market_payloads, prop_report = discover_propline_fallback(
                     prop_client, predictions, available_projection_markets,
@@ -678,6 +679,7 @@ def main():
                                 extract_match_total_odds(quote["payload"], metric)
                             ]
                 projection_discovery_report["propline"] = prop_report
+                print(json.dumps({"propline_market_audit": prop_report}, ensure_ascii=False), flush=True)
             else:
                 projection_discovery_report["propline"] = {
                     "enabled": False, "reason": (
