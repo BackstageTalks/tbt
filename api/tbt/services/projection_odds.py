@@ -143,6 +143,65 @@ def extract_player_superiority_odds(payload: Any, metric: str, player1: str, pla
     return {"player1_odds": prices[1], "player2_odds": prices[2], "market_name": market_used}
 
 
+
+def extract_player_total_ou(payload: Any, metric: str, player_name: str, *, player_slot: int | None = None) -> list[dict[str, Any]]:
+    """Extract two-sided individual player Aces / Double Faults O/U markets.
+
+    Only the named player's complete markets count. A match-total or Most Aces
+    market is never a substitute; both sides must have prices for one line.
+    """
+    metric = str(metric or "").strip().lower()
+    if metric not in {"aces", "double_faults"} or not player_name:
+        return []
+    subject = _normal(player_name)
+    candidates: dict[tuple[str, float], dict[str, Any]] = {}
+    for row, market_name in _walk_market_rows(payload):
+        text = _normal(market_name)
+        if metric == "aces":
+            metric_matches = re.search(r"\baces?\b", text)
+        else:
+            metric_matches = "double fault" in text or "doublefault" in text
+        if not metric_matches or any(token in text for token in (
+            "most", "winner", "who", "more than", "set 1", "1st set",
+            "first set", "set 2", "second set", "tiebreak", "tie break",
+        )):
+            continue
+        # The market must explicitly identify this player's total. Generic
+        # match totals contain no player identity and are excluded.
+        player_field = _normal(row.get("playerName") or row.get("player_name") or
+                               row.get("participantName") or row.get("participant_name"))
+        named = subject in text or player_field == subject
+        numbered = player_slot in {1, 2} and (
+            f"player {player_slot}" in text or f"player{player_slot}" in text
+        )
+        if not (named or numbered):
+            continue
+        choice = _outcome_text(row)
+        side = _over_under(choice, row)
+        line = _explicit_line(row, choice)
+        price = _price(row)
+        if side not in {"over", "under"} or line is None or price is None:
+            continue
+        if not (0.5 <= line <= (40.5 if metric == "aces" else 20.5)):
+            continue
+        key = (text, float(line))
+        item = candidates.setdefault(key, {
+            "line": float(line), "market_name": market_name,
+            "player_name": player_name,
+        })
+        item.setdefault(side, float(price))
+    return [item for item in candidates.values() if "over" in item and "under" in item]
+
+
+def _player_ou_probability(mean: float, metric: str, line: float) -> float:
+    """Provisional single-player count model; backtest before EV-led rollout."""
+    floor = 1.20 ** 2 if metric == "aces" else 0.95 ** 2
+    variance = max(floor, mean * (0.90 if metric == "aces" else 1.10))
+    # Count is integer: Over N.5 corresponds to X >= floor(N.5)+1.
+    threshold = math.floor(line) + 0.5
+    return 0.5 * math.erfc((threshold - mean) / math.sqrt(2.0 * variance))
+
+
 def _card_players(card: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     p1 = card.get("player1") if isinstance(card.get("player1"), dict) else {}
     p2 = card.get("player2") if isinstance(card.get("player2"), dict) else {}
@@ -205,24 +264,64 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
     out = deepcopy(card)
     metric = str(out.get("market") or "").strip().lower()
     p1, p2 = _card_players(out)
-    market = extract_player_superiority_odds(payload, metric, str(p1.get("name") or ""), str(p2.get("name") or ""))
-    if not market:
-        return out, False, "no_exact_player_superiority_market"
+    name1, name2 = str(p1.get("name") or ""), str(p2.get("name") or "")
     selected_id = str(out.get("selection_id") or "")
     if selected_id and selected_id == str(p1.get("id") or ""):
-        odds = market["player1_odds"]
+        slot, selected_name = 1, name1
     elif selected_id and selected_id == str(p2.get("id") or ""):
-        odds = market["player2_odds"]
+        slot, selected_name = 2, name2
     else:
         return out, False, "selection_not_resolved_to_market_side"
+
+    # Keep the identical Most Aces / Most DF wager where the bookmaker offers it.
+    superiority = extract_player_superiority_odds(payload, metric, name1, name2)
+    if superiority:
+        odds = superiority["player1_odds"] if slot == 1 else superiority["player2_odds"]
+        out.update({
+            "odds": round(float(odds), 3), "price_status": "priced_projection",
+            "provider_id": int(provider_id), "captured_at": captured_at,
+            "odds_market_name": superiority.get("market_name"),
+            "price_contract": "player_superiority",
+        })
+        return out, True, "priced"
+
+    # Otherwise convert the COUNT prediction, not the superiority confidence,
+    # to a new player-specific O/U contract with a REAL provider price.
+    options = extract_player_total_ou(payload, metric, selected_name, player_slot=slot)
+    mean = _number(out.get("projection"))
+    if mean is None or mean < 0:
+        return out, False, "missing_player_count_projection"
+    priced = []
+    for option in options:
+        p_over = _player_ou_probability(mean, metric, option["line"])
+        for direction in ("over", "under"):
+            probability = p_over if direction == "over" else 1 - p_over
+            odds = float(option[direction])
+            ev = probability * odds - 1
+            if probability >= 0.60 and ev >= 0:
+                priced.append((ev, probability, odds, direction, option))
+    if not priced:
+        return out, False, ("no_exact_player_total_ou_market" if not options
+                            else "player_total_ou_not_qualified")
+    _ev, probability, odds, direction, choice = max(priced, key=lambda x: (x[0], x[1]))
+    line = float(choice["line"])
+    stat = "Aces" if metric == "aces" else "Double Faults"
     out.update({
-        "odds": round(float(odds), 3),
-        "price_status": "priced_projection",
-        "provider_id": int(provider_id),
-        "captured_at": captured_at,
-        "odds_market_name": market.get("market_name"),
+        "selection": f"{selected_name} {direction.title()} {line:.1f} {stat}",
+        "pick": f"{selected_name} {direction.title()} {line:.1f} {stat}",
+        "market_type": f"Player {stat} Over/Under",
+        "projection_label": f"Hráč · {stat} O/U",
+        # Preserve player ID as the selection identity and use explicit
+        # contract fields for settlement; no retroactive changes to old picks.
+        "price_contract": "player_total_ou",
+        "ou_side": direction, "market_line": line,
+        "model_probability": round(probability, 4),
+        "expected_value": round(_ev, 4),
+        "odds": round(odds, 3), "price_status": "priced_projection",
+        "provider_id": int(provider_id), "captured_at": captured_at,
+        "odds_market_name": choice["market_name"],
     })
-    return out, True, "priced"
+    return out, True, "priced_player_total_ou"
 
 def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_picks: list[dict[str, Any]], *, max_events: int = 40, provider_id: int = 1) -> tuple[list[dict[str, Any]], list[dict[str, Any]], dict[str, Any]]:
     """Attach exact provider prices to already-selected projection cards.

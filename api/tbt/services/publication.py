@@ -384,6 +384,7 @@ def restore_published_market_snapshots(feed, ledger):
                     "projection_direction", "projection_confidence", "projection_label",
                     "projection_kind", "projection_subject", "projection_samples",
                     "projection_unit", "best_of", "data_depth", "price_status",
+                    "price_contract", "ou_side", "model_probability", "expected_value",
                     "provider_id", "captured_at", "odds_market_name",
                 ):
                     if field in snapshot:
