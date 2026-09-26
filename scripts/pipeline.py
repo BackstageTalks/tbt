@@ -616,6 +616,7 @@ def main():
         # use its independent qualification rules and shares cached payloads.
         predictions = predict(model, matches, upcoming)
         projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        projection_odds_report = {}
         projection_market_cache = {}
         available_projection_markets = {}
         projection_discovery_report = {}
@@ -669,7 +670,7 @@ def main():
                 bookmaker_lines_by_event if projection_odds_cap else None
             ),
         )
-        projection_odds_report = {"discovery": projection_discovery_report}
+        projection_odds_report["discovery"] = projection_discovery_report
         if projection_odds_cap and (ace_picks or sg_picks):
             ace_picks, sg_picks, attachment_report = enrich_projection_odds(
                 provider, ace_picks, sg_picks,
