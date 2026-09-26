@@ -64,7 +64,7 @@ jobs:
             6) START=2024-07-01; END=2025-01-01;;
             7) START=2025-01-01; END=2025-07-01;;
             8) START=2025-07-01; END=2026-01-01;;
-            9) START=2026-01-01; END="$(date -u -d '+1 day' +%F)";;
+            9) START=2026-01-01; END="$(date -u -d '-1 minute' +%Y-%m-%dT%H:%M:%SZ)";;
           esac
           echo "Batch $BATCH / 9: $START .. $END"
           printf '{"batch": %s, "start": "%s", "end": "%s"}\n' "$BATCH" "$START" "$END" > .cache/tbt/environment-nightly/window.json
