@@ -1,0 +1,32 @@
+name: Export missing odds for recovery
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Export exact missing market odds from published ledger
+        run: |
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          python scripts/export_missing_market_odds.py
+      - name: Downloadable exact-match manifest
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-missing-odds-manifest
+          path: reports/missing_market_odds/
+          if-no-files-found: warn
+          retention-days: 7
