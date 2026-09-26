@@ -158,7 +158,7 @@ def extract_player_total_ou(payload: Any, metric: str, player_name: str, *, play
     for row, market_name in _walk_market_rows(payload):
         text = _normal(market_name)
         if metric == "aces":
-            metric_matches = re.search(r"\\baces?\\b", text)
+            metric_matches = re.search(r"\baces?\b", text)
         else:
             metric_matches = "double fault" in text or "doublefault" in text
         if not metric_matches or any(token in text for token in (
