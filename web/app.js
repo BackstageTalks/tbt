@@ -1142,6 +1142,56 @@
     const known=signals.filter(item=>item.key!=='stakes').length;
     return {motivation,label:motivation>=3?lcopy('High','Vysoká','Vysoká'):motivation>=1?lcopy('Elevated','Zvýšená','Zvýšená'):lcopy('Neutral','Neutrálna','Neutrální'),signals,known};
   }
+  // Purely informational market trend: never changes BlinQ probability, pick or TOP order.
+  // Only verified, timestamped odds for the same bookmaker/event are plotted.
+  function renderMatchMarketTrend(row){
+    const label=(en,sk,cz)=>escapeHtml(lcopy(en,sk,cz));
+    const noData=label('Verified odds history is not available for this match.','Overená história kurzov pre tento zápas nie je dostupná.','Ověřená historie kurzů pro tento zápas není dostupná.');
+    const betting=row?.betting&&typeof row.betting==='object'?row.betting:{};
+    const market=row?.market_movement||betting.market_movement||row?.marq||betting.marq||{};
+    const src=market&&typeof market==='object'?market:{};
+    const raw=[src.history,src.points,src.odds_history,betting.odds_history,row?.odds_history,row?.market_odds_history].find(Array.isArray);
+    const source=src.bookmaker||src.provider||src.source||betting.bookmaker||'';
+    const exact=src.exact_event_id_used===true||src.marq_exact_event_id_used===true||row?.marq_exact_event_id_used===true||src.verified===true||betting.odds_history_verified===true;
+    const selected=String(row?.winner_id||row?.pick_id||'');
+    const side=selected&&selected===String(row?.player1?.id)?1:selected&&selected===String(row?.player2?.id)?2:0;
+    const number=value=>{if(value==null||value==='')return null;const n=Number(value);return Number.isFinite(n)&&n>1&&n<1000?n:null;};
+    const eventId=String(row?.event_id||row?.id||'');
+    const points=[];
+    if(exact&&Array.isArray(raw)&&side){
+      for(const item of raw){
+        if(!item||typeof item!=='object')continue;
+        const rawEvent=item.event_id??item.eventId;
+        if(rawEvent!=null&&String(rawEvent)!==eventId)continue;
+        const book=String(item.bookmaker||item.provider||source||'').trim();
+        if(source&&book&&String(source).toLowerCase()!==book.toLowerCase())continue;
+        const timestamp=Date.parse(item.captured_at||item.timestamp||item.sourceAddTime||item.time||'');
+        const pick=number(item.pick_odds??item.selected_odds??(side===1?item.odds1??item.od1:item.odds2??item.od2));
+        const opponent=number(item.opponent_odds??(side===1?item.odds2??item.od2:item.odds1??item.od1));
+        if(Number.isFinite(timestamp)&&pick!=null&&opponent!=null)points.push({timestamp,pick,opponent,book});
+      }
+    }
+    points.sort((a,b)=>a.timestamp-b.timestamp);
+    const book=points[0]?.book||'';
+    const series=points.filter((p,i)=>p.book===book&&(!i||p.timestamp!==points[i-1].timestamp));
+    const pickName=String(row?.winner_id)===String(row?.player1?.id)?row?.player1?.name:row?.player2?.name;
+    const opponentName=String(row?.winner_id)===String(row?.player1?.id)?row?.player2?.name:row?.player1?.name;
+    const heading='<div class="market-trend-heading"><div><small>MARKET INTELLIGENCE</small><h3>'+label('Market trend','Trend trhu','Trend trhu')+'</h3></div></div>';
+    const caveat='<p class="market-trend-note">'+label('Information only · market movement does not change the BlinQ prediction. CLV is final only after market close.','Iba informatívne · pohyb trhu nemení predikciu BlinQ. Finálne CLV poznáme až po uzavretí trhu.','Pouze informativně · pohyb trhu nemění predikci BlinQ. Finální CLV známe až po uzavření trhu.')+'</p>';
+    if(series.length<2)return '<section class="market-trend-panel">'+heading+'<div class="market-trend-empty">'+noData+'</div>'+caveat+'</section>';
+    const first=series[0],last=series[series.length-1];
+    const pctMove=(last.pick/first.pick-1)*100;
+    const direction=pctMove>3?'against':pctMove< -3?'toward':'neutral';
+    const status=direction==='against'?label('Market moving against pick','Trh ide proti picku','Trh jde proti tipu'):direction==='toward'?label('Market supporting pick','Trh podporuje pick','Trh podporuje tip'):label('No significant movement','Bez výrazného pohybu','Bez výrazného pohybu');
+    const all=series.flatMap(p=>[p.pick,p.opponent]),min=Math.min(...all),max=Math.max(...all),pad=Math.max(.08,(max-min)*.16),lo=Math.max(1.01,min-pad),hi=max+pad;
+    const x=p=>32+(p.timestamp-first.timestamp)/Math.max(1,last.timestamp-first.timestamp)*666;
+    const y=v=>160-(v-lo)/(hi-lo)*126;
+    const path=key=>series.map((p,i)=>(i?'L':'M')+x(p).toFixed(1)+' '+y(p[key]).toFixed(1)).join(' ');
+    const date=ts=>new Date(ts).toLocaleString(contentLocale()==='en'?'en-GB':contentLocale()==='cs'?'cs-CZ':'sk-SK',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    const chart='<svg class="market-trend-chart" role="img" aria-label="'+label('Verified bookmaker odds over time','Overený vývoj kurzov v čase','Ověřený vývoj kurzů v čase')+'" viewBox="0 0 730 194" preserveAspectRatio="xMidYMid meet"><path d="M32 18V160H698" fill="none" stroke="#416158" stroke-width="1"/><path d="'+path('pick')+'" fill="none" stroke="#7cf2bc" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="'+path('opponent')+'" fill="none" stroke="#f8b16f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="'+x(last).toFixed(1)+'" cy="'+y(last.pick).toFixed(1)+'" r="4" fill="#7cf2bc"/><circle cx="'+x(last).toFixed(1)+'" cy="'+y(last.opponent).toFixed(1)+'" r="4" fill="#f8b16f"/><text x="32" y="182" fill="#91aea4" font-size="12">'+escapeHtml(date(first.timestamp))+'</text><text x="698" y="182" text-anchor="end" fill="#91aea4" font-size="12">'+escapeHtml(date(last.timestamp))+'</text></svg>';
+    const odds=v=>v.toFixed(2);
+    return '<section class="market-trend-panel">'+heading+'<div class="market-trend-summary"><span class="market-trend-status '+direction+'">'+status+'</span><span>'+label('Pick odds','Kurz picku','Kurz tipu')+': <strong>'+odds(first.pick)+' → '+odds(last.pick)+'</strong></span><span class="market-trend-change '+direction+'">'+(pctMove>0?'+':'')+pctMove.toFixed(1)+'%</span></div><div class="market-trend-legend"><span><i class="pick"></i>'+escapeHtml(pickName||'Pick')+'</span><span><i class="opponent"></i>'+escapeHtml(opponentName||'Opponent')+'</span></div>'+chart+'<div class="market-trend-source">'+escapeHtml(book||source||'')+' · '+series.length+' '+label('observations','meraní','měření')+'</div>'+caveat+'</section>';
+  }
   function renderMotivationPanel(row){
     const match=normalize(row),m1=motivationContext(row,1),m2=motivationContext(row,2);
     const card=(name,m)=>`<article class="motivation-card context-card"><header><div><small>${escapeHtml(lcopy('PRE-MATCH CONTEXT','PREDZÁPASOVÝ KONTEXT','PŘEDZÁPASOVÝ KONTEXT'))}</small><strong>${escapeHtml(name)}</strong></div><b class="motivation-score ${m.motivation>=1?'is-positive':''}">${escapeHtml(m.label)}</b></header><div class="context-signal-grid">${m.signals.slice(0,8).map(item=>`<span class="context-signal tone-${escapeHtml(item.tone||'neutral')}"><small>${escapeHtml(item.label)}</small><strong>${escapeHtml(item.value)}</strong>${item.note?`<em>${escapeHtml(item.note)}</em>`:''}</span>`).join('')}</div></article>`;
@@ -2407,7 +2457,7 @@
       radar:lcopy('Winner model','Model víťaza','Model vítěze'),
       history:lcopy('History / H2H','História / H2H','Historie / H2H')
     };
-    const overview=`<div class="match-detail-overview">${winnerWhyBlinqHtml(row,tab)}<div class="dialog-duel-grid">${insightPlayerCard(row,1)}${insightPlayerCard(row,2)}</div><div class="match-overview-context">${renderMotivationPanel(row)}</div></div>`;
+    const overview=`<div class="match-detail-overview">${winnerWhyBlinqHtml(row,tab)}<div class="dialog-duel-grid">${insightPlayerCard(row,1)}${insightPlayerCard(row,2)}</div><div class="match-overview-context">${renderMotivationPanel(row)}${renderMatchMarketTrend(row)}</div></div>`;
     const statistics=matchDetailSectionAllowed('statistics')?`<div class="match-detail-statistics">${renderMatchStatsPanel(row)}</div>`:matchDetailLockHtml('statistics',labels.statistics);
     const radar=matchDetailSectionAllowed('radar')?`<div class="match-detail-radar"><div class="dialog-section dialog-radar-wrap">${renderRadarComparison(row)}</div><div class="dialog-section match-model-signals"><h3>${escapeHtml(lcopy('Winner model signals','Signály modelu víťaza','Signály modelu vítěze'))}</h3>${signalRows}</div></div>`:matchDetailLockHtml('radar',labels.radar);
     const history=matchDetailSectionAllowed('history')?`<div class="match-detail-history">${renderMatchHistoryPanel(row)}</div>`:matchDetailLockHtml('history',labels.history);
