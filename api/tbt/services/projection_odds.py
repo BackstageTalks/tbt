@@ -14,6 +14,7 @@ import re
 from typing import Any
 
 from tbt.services.market_selection import _walk_market_rows, _outcome_text, _price, _match_side
+from tbt.providers.budget import RequestBudgetExceeded
 
 
 def _normal(value: Any) -> str:
@@ -358,10 +359,22 @@ def prefetch_projection_market_board(
     payloads: dict[str, Any] = {}
     markets_by_event: dict[str, set[str]] = {}
     errors = 0
+    stopped_on_budget = False
     counts = {key: 0 for key in ("aces", "double_faults", "games", "sets")}
     for _scheduled, event_id, row in requested:
+        # One exhausted quota must not turn the rest of the board into a storm
+        # of retries or falsely report unavailable bookmaker markets.
+        limit = getattr(provider, "request_limit", None)
+        spent = getattr(provider, "request_count", 0)
+        if ((limit is not None and spent >= limit)
+            or getattr(provider, "rate_limit_remaining", None) == 0):
+            stopped_on_budget = True
+            break
         try:
             payload = provider.event_odds(event_id, provider_id=provider_id)
+        except RequestBudgetExceeded:
+            stopped_on_budget = True
+            break
         except Exception:
             errors += 1
             payloads[event_id] = None
@@ -391,8 +404,11 @@ def prefetch_projection_market_board(
         "eligible_upcoming": len(eligible), "events_requested": len(requested),
         "events_limited_out": max(0, len(eligible) - len(requested)),
         "events_with_projection_markets": len(markets_by_event),
-        "events_without_projection_markets": len(requested) - len(markets_by_event) - errors,
-        "request_errors": errors, "complete_markets_by_type": counts,
+        "events_without_projection_markets": max(
+            0, len(payloads) - len(markets_by_event) - errors),
+        "request_errors": errors, "stopped_on_budget": stopped_on_budget,
+        "provider_payloads_fetched": len(payloads) - errors,
+        "complete_markets_by_type": counts,
         "provider_id": int(provider_id),
         "policy": "exact_pre_match_two_sided_only_no_synthetic_prices",
     }
