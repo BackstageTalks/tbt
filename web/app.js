@@ -2719,17 +2719,48 @@
     });
     return [...unique.values()].sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
   }
+  function resultVisibleOdds(publication){
+    const actual=publication?.odds==null?NaN:Number(publication.odds);
+    if(Number.isFinite(actual)&&actual>1)return actual;
+    const synthetic=publication?.historical_display_placeholder_odds==null?NaN:Number(publication.historical_display_placeholder_odds);
+    if(publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
+      &&Number.isFinite(synthetic)&&synthetic>=1.50&&synthetic<=1.70)return synthetic;
+    return projectionIndicativeOdds(publication);
+  }
+  function resultVisibleUnits(publication,outcome,odds){
+    if(outcome.kind==='void')return 0;
+    const stake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
+    const profit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
+    if(Number.isFinite(stake)&&stake>0&&Number.isFinite(profit))return profit;
+    if(Number.isFinite(odds)&&odds>1&&['win','loss'].includes(outcome.kind))
+      return outcome.kind==='win'?odds-1:-1;
+    return NaN;
+  }
   function localResultMetrics(rows,category){
+    // Use exactly the same deduplication, odds and flat-1u result as the table,
+    // for all four projection tabs and ALL. Verified backend ROI is untouched.
     const entries=settledPublishedEntries(rows,category);
-    const pubs=entries.map(entry=>entry.publication);
-    const graded=pubs.filter(p=>publicationOutcome(p).kind==='win'||publicationOutcome(p).kind==='loss');
-    const wins=graded.filter(p=>publicationOutcome(p).kind==='win').length;
-    const voids=pubs.filter(p=>publicationOutcome(p).kind==='void').length;
-    const profit=graded.reduce((sum,p)=>sum+Number(p.result?.profit_units||0),0);
-    const stake=graded.reduce((sum,p)=>sum+Number(p.result?.staked_units||0),0);
-    const odds=graded.filter(p=>p.odds!=null).map(p=>Number(p.odds)).filter(v=>Number.isFinite(v)&&v>1);
+    const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
+    const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
+    const voids=entries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
+    let stake=0,profit=0,oddsTotal=0,oddsSample=0;
+    for(const {publication} of graded){
+      const outcome=publicationOutcome(publication),odds=resultVisibleOdds(publication);
+      if(!Number.isFinite(odds)||odds<=1)continue;
+      const units=resultVisibleUnits(publication,outcome,odds);
+      if(!Number.isFinite(units))continue;
+      const realStake=Number(publication?.result?.staked_units);
+      stake+=Number.isFinite(realStake)&&realStake>0?realStake:1;
+      profit+=units;
+      oddsTotal+=odds;
+      oddsSample++;
+    }
     const sample=graded.length;
-    return {wins,losses:Math.max(0,sample-wins),voids,sample,hit:sample?wins/sample:null,avgOdds:odds.length?odds.reduce((a,b)=>a+b,0)/odds.length:null,roi:stake?profit/stake:null,profit,oddsSample:odds.length};
+    return {
+      wins,losses:Math.max(0,sample-wins),voids,sample,
+      hit:sample?wins/sample:null,avgOdds:oddsSample?oddsTotal/oddsSample:null,
+      roi:stake?profit/stake:null,profit,oddsSample,
+    };
   }
   function renderResults(){
     const rows=filteredResults(),category=state.resultsFilters?.category||'all',entries=settledPublishedEntries(rows,category);
@@ -2792,11 +2823,7 @@
         // Historical display-only prices can fill the visible Units cell,
         // but never become a settled stake, ledger profit, or genuine ROI.
         const hasSettledUnits=Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0;
-        const displayOnlyOdds=illustrativeOnly?placeholderOdds:
-          Number.isFinite(estimatedProjectionOdds)&&estimatedProjectionOdds>1?estimatedProjectionOdds:NaN;
-        const displayUnits=outcome.kind==='void'?0:hasSettledUnits?projectionUnits:
-          Number.isFinite(displayOnlyOdds)&&['win','loss'].includes(outcome.kind)?
-            (outcome.kind==='win'?displayOnlyOdds-1:-1):NaN;
+        const displayUnits=resultVisibleUnits(publication,outcome,resultVisibleOdds(publication));
         const unitsText=Number.isFinite(displayUnits)?
           `${displayUnits>0?'+':''}${displayUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
@@ -3590,14 +3617,17 @@
   }
 
   function resultsSummary(){
-    const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category),projectionCategory=['ace','double_faults','sg','sets','games'].includes(category);
-    if(projectionCategory){
-      const typeLabel=category==='ace'?lcopy('ACES','ESÁ','ESA'):category==='double_faults'?lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'):category==='sets'?lcopy('SETS','SETY','SETY'):category==='games'?lcopy('GAMES','GAMY','GEMY'):lcopy('SETS & GAMES','SETY & GAMY','SETY & GEMY');
-      return metricCards([[lcopy('Result','Výsledok','Výsledek'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('settled projection sample','vyhodnotená vzorka projekcií','vyhodnocený vzorek projekcí')],[lcopy('Projection type','Typ projekcie','Typ projekce'),typeLabel,lcopy('Projection only · no invented odds or ROI','Iba projekcia · bez vymysleného kurzu a ROI','Pouze projekce · bez vymyšleného kurzu a ROI')],[publicText('Sample'),String(m.sample),lcopy('published projections','publikované projekcie','publikované projekce')]]);
-    }
-    return metricCards([[publicText('Record'),`${m.wins}-${m.losses}`,lcopy('wins - losses','výhry - prehry','výhry - prohry')],[publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],[publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} odds-backed picks`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no issued odds')],['ROI',m.roi==null?'—':pct(m.roi),publicText('flat 1u on issued odds')],[publicText('Units'),m.oddsSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',publicText('profit · flat 1u stake')],[publicText('Sample'),String(m.sample),publicText('settled published rows')]]);
+    const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category);
+    // Identical six-card Results KPI layout for ALL, ACES, DF, GAMES & SETS.
+    return metricCards([
+      [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
+      [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
+      [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
+      ['ROI',m.roi==null?'—':pct(m.roi),lcopy('flat 1u on displayed odds','výpočet pri 1u na zobrazených kurzoch','výpočet při 1u na zobrazených kurzech')],
+      [publicText('Units'),m.oddsSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',lcopy('profit at flat 1u','zisk pri 1u','zisk při 1u')],
+      [publicText('Sample'),String(m.sample),lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')],
+    ]);
   }
-
   function primeDetailCard(m,index=0){
     const photo1=playerPhotoSource(m.raw||{},m.raw?.player1||{},'player1')||safePhotoUrl(m.p1Photo),photo2=playerPhotoSource(m.raw||{},m.raw?.player2||{},'player2')||safePhotoUrl(m.p2Photo);
     const avatar=(src,name)=>playerAvatarHtml(src,name,m.tour,'','player-avatar');

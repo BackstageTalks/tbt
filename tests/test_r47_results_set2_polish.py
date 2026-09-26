@@ -23,7 +23,9 @@ def test_projection_results_are_human_readable_and_projection_only_categories_sh
     assert 'function projectionResultProjectionText' in APP
     assert 'function projectionResultActualText' in APP
     assert 'class="results-outcome-stack"' in APP
-    assert "projectionCategory=['ace','double_faults','sg','sets','games'].includes(category)" in APP
+    assert "function resultsSummary()" in APP
+    assert "return metricCards([" in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
+    assert "projectionCategory" not in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
     assert "High\\s+Total\\s+Games" in APP
     assert "projectionResultNumber(opponent,publication,1)" in APP
 
