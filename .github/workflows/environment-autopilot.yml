@@ -3,7 +3,7 @@ name: BlinQ Environment autopilot (no Tennis API)
 on:
   schedule:
     # GitHub's scheduler may start late; every tick checks actual job state.
-    - cron: '13 * * * *'
+    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
