@@ -23,8 +23,8 @@ ROOT = "research/propline_clv"
 PROPL = os.getenv("PROPL", "").strip()
 GH_TOKEN = os.getenv("TBT_DATA_GH_TOKEN", "").strip()
 MAX_EVENTS = max(1, min(12, int(os.getenv("CLV_EVENTS_PER_RUN", "12"))))
-DAILY_LIMIT = 650  # local conservative calls/day; free tier is 1000
-MIN_PROVIDER_REMAINING = 200
+DAILY_LIMIT = 250  # shared 1000/day: reserve up to 604 for 4x75 live refreshes
+MIN_PROVIDER_REMAINING = 150
 MARKETS = ("h2h", "spreads", "totals", "total_games", "total_sets",
            "total_tiebreaks", "player_aces", "player_double_faults",
            "total_aces", "player_games_won")
