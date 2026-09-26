@@ -66,7 +66,7 @@ def test_illustrative_feed_backfill_does_not_change_original_ledger_or_result():
 
 def test_ui_never_renders_filler_as_a_real_quote():
     assert "historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'" in APP
-    assert "'IL. '+placeholderOdds.toFixed(2)" in APP
+    assert "illustrativeOnly?placeholderOdds.toFixed(2)" in APP
     assert "not an archived bookmaker price or model estimate" in APP
     assert "Nie je historický kurz" not in APP  # check actual wording instead
     assert "nie historický kurz ani odhad modelu" in APP
