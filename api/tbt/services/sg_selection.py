@@ -485,7 +485,9 @@ def select_sg_picks(
             # alternate low-price line. Require the existing hard signal and
             # predictive-variance floors for every possible offered line.
             estimated_total = (float(p1_games["estimate"]) + float(p2_games["estimate"])) / 2
-            for line in sorted(market_lines, key=lambda x: abs(float(x) - estimated_total)):
+            for line in sorted(market_lines, key=lambda x: abs(
+                (float(x) if x is not None else float(baseline["games"])) - estimated_total
+            )):
                 card = _games_card(
                     effective_row, p1_games, p2_games, best_of=best_of,
                     baseline=float(baseline["games"]), bookmaker_line=line,
