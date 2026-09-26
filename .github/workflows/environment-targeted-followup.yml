@@ -2,22 +2,30 @@ name: Environment targeted follow-up after player enrichment
 
 on:
   workflow_run:
-    workflows: ["Player card enrichment"]
+    workflows:
+      - Player card enrichment
+      - Tennis data and predictions
     types: [completed]
   workflow_dispatch:
 
 permissions:
   contents: read
 
-# The player-assets writer is independent, but wait until that entire workflow
-# completes as requested. Never overlap other history writers.
+# A one-time follow-up for MegaData run 36251061946 is allowed after completion.
+# Environment and MegaData share the same history writer lock, so no concurrent
+# history writes can overwrite each other. No paid Tennis API calls here.
 concurrency:
   group: tbt-history-data-writer
   cancel-in-progress: false
 
 jobs:
   fill-and-audit:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: >-
+      ${ { github.event_name == 'workflow_dispatch' ||
+        (github.event.workflow_run.conclusion == 'success' &&
+          (github.event.workflow_run.name == 'Player card enrichment' ||
+            (github.event.workflow_run.name == 'Tennis data and predictions' &&
+              github.event.workflow_run.id == 36251061946))) } }
     runs-on: ubuntu-latest
     timeout-minutes: 355
     env:
