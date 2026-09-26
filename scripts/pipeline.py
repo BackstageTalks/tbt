@@ -31,6 +31,7 @@ from tbt.services.publication import (
 from tbt.services.ace_selection import select_ace_picks
 from tbt.services.sg_selection import select_sg_picks
 from tbt.services.projection_odds import enrich_projection_odds
+from tbt.services.indicative_odds import annotate_feed_indicative_odds
 from tbt.services.doubles_selection import (
     build_predictions as build_doubles_predictions,
     select_picks as select_doubles_picks,
@@ -384,6 +385,10 @@ def _publish_predictions(
         now=now,
         start_hour=betting_day_start_hour,
     )
+    # Decorate only the serving feed, after all immutable issuance checks.
+    # Historical ledger, snapshots and REAL betting ROI stay untouched.
+    feed, indicative_audit = annotate_feed_indicative_odds(feed)
+    feed["indicative_odds_audit"] = indicative_audit
     write_json(store.directory / "ledger.json", records)
     write_json(store.directory / "feed.json", feed)
     write_json(store.directory / "daily_offer_snapshot.json", snapshot)
