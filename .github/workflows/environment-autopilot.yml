@@ -142,18 +142,37 @@ jobs:
                           print("Batch completed; allowing GitHub up to 15 minutes to queue the successor.")
                       sys.exit(0)
                   if last.get("conclusion") == "failure":
-                      if int(last.get("run_attempt") or 1) == 1 and age_minutes >= 3:
-                          subprocess.run(
-                              ["gh", "run", "rerun", str(last["id"]),
-                               "--failed", "--repo", repo], check=True
-                          )
-                          print(f"Retried failed nightly batch {batch+1}/10 once.")
+                      # Dispatch current main, not GitHub "rerun", which would
+                      # replay the old buggy checkout. At most one repaired
+                      # dispatch is permitted for each numbered batch.
+                      prior_failures = [
+                          r for r in legitimate
+                          if re.search(
+                              rf"batch {batch} / 9",
+                              r.get("display_title") or "",
+                          ) and r.get("conclusion") == "failure"
+                      ]
+                      if len(prior_failures) == 1 and age_minutes >= 3:
+                          # No other data/Environment history writer may overlap.
+                          other_busy = [
+                              (w, x["id"]) for w, items in runs.items()
+                              if w != "environment-nightly-ten.yml"
+                              for x in items
+                              if x["status"] != "completed"
+                          ]
+                          if other_busy:
+                              print("Waiting for active writer:", other_busy[:6])
+                              sys.exit(0)
+                          dispatch("environment-nightly-ten.yml", {
+                              "batch": str(batch)
+                          })
+                          print(f"Restarted repaired nightly batch {batch+1}/10 on main.")
                           sys.exit(0)
-                      if int(last.get("run_attempt") or 1) >= 2:
-                          print(f"::error::Nightly batch {batch+1}/10 failed after retry: "
+                      if len(prior_failures) >= 2:
+                          print(f"::error::Nightly batch {batch+1}/10 failed twice: "
                                 f"{last['html_url']}")
                           sys.exit(1)
-                      print("Failed batch is in a brief recovery grace period.")
+                      print("Failed batch in brief recovery grace period.")
                       sys.exit(0)
                   print(f"::warning::Nightly run ended as {last.get('conclusion')}; "
                         "not restarting a cancelled/skipped run.")
