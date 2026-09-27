@@ -7961,9 +7961,9 @@ body#blinqPremium .admin-health-ok-details .admin-system-cards{margin:0;padding:
   }
   /* Old desktop nth-child widths and minimums made the tournament cell
      175px even when the mobile grid gave it less than that. */
-  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table tbody td,
-  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table tbody td:nth-child(3),
-  body#blinqPremium.blinq-route:not(.blinq-admin) .results-table tbody td:nth-child(4){
+  body#blinqPremium#blinqPremium.blinq-route:not(.blinq-admin) .results-table tbody td,
+  body#blinqPremium#blinqPremium.blinq-route:not(.blinq-admin) .results-table tbody td:nth-child(3),
+  body#blinqPremium#blinqPremium.blinq-route:not(.blinq-admin) .results-table tbody td:nth-child(4){
     box-sizing:border-box!important;display:block!important;
     width:auto!important;min-width:0!important;max-width:100%!important;
     padding:0!important;margin:0!important;border:0!important;overflow:visible!important;
