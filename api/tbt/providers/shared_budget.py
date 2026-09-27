@@ -151,6 +151,25 @@ def reserve(purpose: str, requested: int = 1, *, now: datetime | None = None,
                     updated, mode="merge", etag=etag,
                     match_condition=MatchConditions.IfNotModified,
                 )
+            # Threshold events are emitted after the durable reservation commits.
+            # Failed monitoring must never refund or duplicate an API allowance.
+            try:
+                from ..services.ops_storage import record_system_event
+                for key, spent, limit in (
+                    ("global", result["global_spent"], GLOBAL_CEILING),
+                    (purpose, result["spent"][purpose], PURPOSE_CAPS[purpose]),
+                ):
+                    for percent in (80, 95):
+                        if (spent - requested) * 100 < percent * limit <= spent * 100:
+                            record_system_event(
+                                "warning" if percent == 80 else "error",
+                                "api-budget",
+                                f"TennisAPI {key} budget reached {percent}%",
+                                details={"purpose": key, "spent": spent,
+                                         "limit": limit, "threshold": percent},
+                            )
+            except Exception:
+                pass
             return result
         except SharedBudgetExhausted:
             raise
