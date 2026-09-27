@@ -82,3 +82,25 @@ def test_no_stale_cache_on_spa_alias_and_cms_configs():
     # A /follow-the-data and /follow-the-data/ pair fails the actual SWA upload.
     normalized = [route.rstrip("/") or "/" for route in routes]
     assert len(normalized) == len(set(normalized)), "Azure rejects duplicate normalized routes"
+
+
+def test_admin_published_ui_history_is_auth_bound_and_restore_is_preview_only():
+    auth = (ROOT / "web" / "auth.js").read_text(encoding="utf-8")
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    api = (ROOT / "api" / "function_app.py").read_text(encoding="utf-8")
+    storage = (ROOT / "api" / "tbt" / "services" / "admin_storage.py").read_text(encoding="utf-8")
+    assert 'async function adminUiSnapshots()' in auth
+    assert 'async function adminUiSnapshot(snapshotId)' in auth
+    assert 'adminUiSnapshots, adminUiSnapshot' in auth
+    assert 'data-admin-action="load-ui-snapshots"' in app
+    assert 'data-admin-action="preview-ui-snapshot"' in app
+    assert 'function previewAdminUiSnapshot(snapshotId)' in app
+    assert 'state.adminPreRestorePreview=current' in app
+    assert "const current=clone(state.ui),next=clone(state.ui);" in app
+    assert "next.hero_banner=mergeConfig" in app
+    assert "marketing.forEach(" in app
+    assert "@app.route(route=\"v1/admin/ui-config/snapshots\", methods=[\"GET\"])" in api
+    assert "@app.route(route=\"v1/admin/ui-config/snapshots/{snapshot_id}\", methods=[\"GET\"])" in api
+    assert api.count("actor, denied = _admin_user(req)") >= 2
+    assert "client.create_entity({" in storage
+    assert 'previous_snapshot_id' in storage
