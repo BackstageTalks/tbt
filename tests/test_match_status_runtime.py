@@ -621,8 +621,7 @@ def test_runtime_provider_fast_fail_configuration_is_bounded():
     from tbt.providers.rapidapi import RapidTennisClient
     from tbt.config import Settings
 
-    cfg = Settings()
-    cfg.rapidapi_key = "test"
+    cfg = Settings(rapidapi_key="test")
     client = RapidTennisClient(cfg)
     try:
         client.configure_runtime_fast_fail(timeout_seconds=4, attempts=1)
