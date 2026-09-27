@@ -3360,7 +3360,7 @@
     const hint=form.querySelector('[data-insight-audience-hint]');
     if(hint){
       const minimum=live?cfg.live_min_level:cfg.info_min_level;
-      const minLabel=String(upgradePlanLabel(minimum)||minimum).replace(/^BlinQ\\s+/i,'').toUpperCase();
+      const minLabel=String(upgradePlanLabel(minimum)||minimum).replace(/^BlinQ\s+/i,'').toUpperCase();
       hint.textContent=live
         ?`LIVE rešpektuje globálne minimum ${minLabel}. Pre konkrétnu správu môžeš publikum iba zúžiť.`
         :`INFO môžeš poslať iba zvoleným levelom od ${minLabel}. Publikum si môžeš zúžiť pri každej správe.`;
