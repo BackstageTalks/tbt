@@ -12,7 +12,7 @@ def route_request(route):
         marker = "  boot();"
         assert source.count(marker) == 1
         injected = (
-            "  window.infoHarness={state,renderAdminRoute,wireAdmin,dailyHubRow,wireDailyHub};\n"
+            "  window.infoHarness={state,renderAdminRoute,wireAdmin,dailyHubRow,wireDailyHub,renderInsightDrawer,renderInsightBell,setInsightDrawer,loadInsights};\n"
             + marker
         )
         route.fulfill(content_type="application/javascript", body=source.replace(marker, injected))
@@ -96,6 +96,70 @@ def main():
                 page.wait_for_function("window.__infoSent.length===2")
                 assert "rookie" not in page.evaluate("window.__infoSent[1].levels")
 
+                # End-to-end offline contract: one newly published VIP/INFO
+                # message for ROOKIE must appear BOTH in the unread bell and
+                # inside the INFO drawer after its own authenticated refresh.
+                # This caught the ternary that filtered out every INFO item.
+                page.evaluate("""async () => {
+                    const h=infoHarness;
+                    h.state.feed.account={
+                      ...(h.state.feed.account||{}),
+                      plan:'rookie',role:'user',is_admin:false,status:'active'
+                    };
+                    h.state.previewPlan=null;
+                    h.state.insightChannel='info';
+                    h.state.insightFilter='all';
+                    h.state.insights=[];
+                    window.BlinqAuth.insights=async()=>({
+                      items:[{
+                        id:'new-rookie-message',
+                        ...window.__infoSent[0],
+                        created_at:new Date().toISOString(),
+                        read:false,pinned:false
+                      }],
+                      unread:1
+                    });
+                    await h.loadInsights(true);
+                    h.setInsightDrawer(true,'info');
+                }""")
+                page.wait_for_function("infoHarness.state.insights?.length===1&&!infoHarness.state.insightsLoading")
+                assert page.locator("#insightUnread").inner_text()=="1"
+                assert page.locator("#insightDrawerStatus").inner_text().find("1 správ")>=0
+                assert page.locator("#insightDrawerStatus").inner_text().find("1 neprečítaných")>=0
+                rows=page.locator("#insightDrawerList .insight-feed-item")
+                assert rows.count()==1
+                assert "Krátka správa pre členov" in rows.first.inner_text()
+                assert "Test zobrazenia a API kontraktu." in rows.first.inner_text()
+                assert page.locator("#insightDrawerList .insight-feed-empty").count()==0
+                # LIVE subtab rules must not hide INFO, even when LIVE data
+                # or an unrelated message type is present in local state.
+                page.evaluate("""() => {
+                    const h=infoHarness;
+                    h.state.liveRadarTab='results';
+                    h.state.insights.push({
+                      id:'live-for-elite',type:'alert',title:'LIVE only',
+                      body:'should not appear in INFO',
+                      levels:['elite'],read:false
+                    });
+                    h.renderInsightDrawer();
+                }""")
+                assert rows.count()==1
+                assert "LIVE only" not in page.locator("#insightDrawerList").inner_text()
+                page.locator('[data-insight-filter="unread"]').first.dispatch_event("click")
+                assert rows.count()==1
+                page.locator('[data-insight-filter="pinned"]').first.dispatch_event("click")
+                assert rows.count()==0
+                page.locator('[data-insight-filter="all"]').first.dispatch_event("click")
+                assert rows.count()==1
+                assert not errors, (width, errors)
+                page.evaluate("""() => {
+                    infoHarness.setInsightDrawer(false);
+                    infoHarness.state.feed.account={
+                      ...infoHarness.state.feed.account,role:'admin',is_admin:true,
+                      plan:'admin'
+                    };
+                }""")
+
                 # Sets/Games have a real detail modal. Verify that SEE ALL has
                 # a working Detail button, not a static MODEL chip in its place.
                 page.evaluate("""() => {
@@ -124,7 +188,7 @@ def main():
                 assert page.locator('#matchDialog .sg-detail-shell').count()==1
                 assert not errors, (width, errors)
                 page.close()
-            print("INFO send flow, audience minima, and SG Detail button: PASS")
+            print("INFO ROOKIE bell/drawer, send flow, audience minima and SG Detail: PASS")
         finally:
             browser.close()
 

@@ -1473,7 +1473,18 @@
     const channel=state.insightChannel==='live'?'live':'info';
     const filter=state.insightFilter||'all';
     const liveTab=['set2','results'].includes(state.liveRadarTab)?state.liveRadarTab:'comeback';
-    const channelRows=state.insights.filter(item=>channel==='live'?isLiveInsight(item):!isLiveInsight(item)).filter(item=>channel!=='live'||liveTab==='results'?false:(liveTab==='set2'?String(item?.type||'').toLowerCase()==='set2':String(item?.type||'').toLowerCase()!=='set2'));
+    // INFO messages are not subject to the LIVE-only subtab filter. The old
+    // "channel !== 'live' || ... ? false : ..." ternary accidentally removed
+    // every INFO item, even when the header badge correctly counted it.
+    const channelRows=state.insights
+      .filter(item=>channel==='live'?isLiveInsight(item):!isLiveInsight(item))
+      .filter(item=>channel!=='live'
+        ?true
+        :liveTab==='results'
+          ?false
+          :liveTab==='set2'
+            ?String(item?.type||'').toLowerCase()==='set2'
+            :String(item?.type||'').toLowerCase()!=='set2');
     const rows=channelRows.filter(item=>filter==='unread'?!item.read:filter==='pinned'?Boolean(item.pinned):true);
     const channelUnread=channelRows.filter(item=>!item.read).length;
     const title=$('insightDrawerTitle'),eyebrow=$('insightDrawerEyebrow');
