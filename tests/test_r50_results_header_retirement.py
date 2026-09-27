@@ -105,3 +105,46 @@ def test_void_match_winner_does_not_enter_betting_hit_rate_denominator():
     assert metrics["losses"] == 0
     assert metrics["voids"] == 1
     assert metrics["hit_rate"] == 1.0
+
+
+def test_refunded_retirement_never_dilutes_roi_even_for_legacy_settlements():
+    """Older ledgers may retain a stale loss while marking an actual refund."""
+    from copy import deepcopy
+    from tbt.services.engine import betting_performance, performance_windows
+
+    issued = (datetime(2026, 9, 26, tzinfo=timezone.utc) - timedelta(hours=2)).isoformat()
+    scheduled = datetime(2026, 9, 26, tzinfo=timezone.utc).isoformat()
+    win = {
+        "market": "match_winner", "section": "top_daily",
+        "issued_at": issued, "selection_id": "p1", "odds": 1.83,
+        "result": {"status": "hit", "correct": True, "staked_units": 1.0, "profit_units": .83},
+    }
+    refunded = {
+        "market": "match_winner", "section": "top_daily",
+        "issued_at": issued, "selection_id": "p2", "odds": 1.68,
+        # Stale settlement fields must lose to the explicit retirement status.
+        "result": {"status": "retired", "correct": False, "staked_units": 1.0,
+                   "profit_units": -1.0, "reason": "retired"},
+    }
+    boolean_void = {
+        "market": "match_winner", "section": "top_daily",
+        "issued_at": issued, "selection_id": "p3", "odds": 1.70,
+        "result": {"status": "miss", "correct": False, "void": True,
+                   "staked_units": 1.0, "profit_units": -1.0},
+    }
+    before = deepcopy([win, refunded, boolean_void])
+    summary = _betting_metrics([win, refunded, boolean_void])
+    assert (summary["n"], summary["wins"], summary["losses"], summary["voids"]) == (1, 1, 0, 2)
+    assert summary["staked_units"] == 1.0
+    assert summary["profit_units"] == .83
+    assert summary["roi"] == .83
+    rows = [
+        {"event_id": f"event-{i}", "scheduled_at": scheduled, "market_publications": [pub]}
+        for i, pub in enumerate([win, refunded, boolean_void])
+    ]
+    overall = betting_performance(rows)["overall"]
+    assert (overall["wins"], overall["losses"], overall["voids"]) == (1, 0, 2)
+    assert overall["roi"] == .83
+    windows, _ = performance_windows([], rows, now=datetime(2026, 9, 27, tzinfo=timezone.utc))
+    assert windows["3"]["betting"]["overall"]["roi"] == .83
+    assert [win, refunded, boolean_void] == before  # ledger is immutable
