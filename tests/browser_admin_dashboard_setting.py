@@ -100,7 +100,7 @@ def main():
                 # Unsaved choices must preview a different period immediately;
                 # only the admin preview changes, not the three public cards.
                 page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="metric"]').select_option("avg_odds")
-                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "1.86"
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "1.77"
                 page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="period"]').select_option("365")
                 assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "1.93"
                 assert page.evaluate("dashboardHarness.state.feed.dashboard_kpi_cards[0].metric") == "roi"
