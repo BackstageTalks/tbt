@@ -88,6 +88,25 @@ def main():
                         {metric:'yield_units',period:'365',value:5.75}
                       ],
                     };
+                    const settled=(event,section,market,correct,odds,status,days=1)=>({
+                      event_id:event,
+                      scheduled_at:new Date(Date.now()-days*86400000).toISOString(),
+                      market_publications:[{
+                        issued_at:new Date(Date.now()-(days+1)*86400000).toISOString(),
+                        section,market,selection_id:event,correct,
+                        price_status:status,odds,
+                        result:{correct,staked_units:1,profit_units:correct?.8:-1}
+                      }]
+                    });
+                    h.state.feed.results=[
+                      settled('topwin','top_daily','match_winner',true,1.8,'priced'),
+                      settled('ace','ace','aces',true,null,'projection_only'),
+                      settled('df','double_faults','double_faults',false,null,'projection_only'),
+                      settled('sets','sets','sets',true,1.9,'priced_projection'),
+                      settled('old-top-loss','top_daily','match_winner',false,2,'priced',10),
+                      settled('retired','top_daily','match_winner',false,1.9,'priced')
+                    ];
+                    h.state.feed.results[5].market_publications[0].result.status='retired';
                     const host=document.getElementById('routePanel');
                     host.innerHTML=h.renderAdminRoute();
                     h.wireAdmin();
@@ -107,6 +126,57 @@ def main():
                 page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="metric"]').select_option("roi")
                 page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="period"]').select_option("30")
                 assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "12.5%"
+                # Results previews use exactly the browser's Results W/L and
+                # real-price sample, including unpriced statistical projections.
+                choice = page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="metric"]')
+                period = page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="period"]')
+                choice.select_option("results_success")
+                period.select_option("3")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "75.0%"
+                period.select_option("all")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "60.0%"
+                choice.select_option("results_top_success")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "50.0%"
+                period.select_option("3")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "100.0%"
+                choice.select_option("results_avg_odds")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "1.85"
+                # Simulated publication affects only the existing three cards.
+                page.evaluate("""() => {
+                  const h=dashboardHarness;
+                  h.state.ui.dashboard.kpi_cards=[
+                    {metric:'results_success',period:'3'},
+                    {metric:'results_top_success',period:'3'},
+                    {metric:'results_avg_odds',period:'3'}
+                  ];
+                  h.state.feed.dashboard_kpi_cards=[
+                    {metric:'results_success',period:'3',value:.75},
+                    {metric:'results_top_success',period:'3',value:1},
+                    {metric:'results_avg_odds',period:'3',value:1.85}
+                  ];
+                  h.renderDashboardKpis();
+                }""")
+                cards = page.locator("#dashboardKpis .dashboard-kpi")
+                assert [c.locator("strong").inner_text() for c in cards.all()] == [
+                    "75.0%", "100.0%", "1.85"
+                ]
+                assert page.locator("#dashboardKpis .dashboard-kpi p").count() == 0
+                assert page.locator("#dashboardKpis .dashboard-kpi[title]").count() == 0
+                # Restore original published settings: unsaved draft was inert.
+                page.evaluate("""() => {
+                  const h=dashboardHarness;
+                  h.state.ui.dashboard.kpi_cards=[
+                    {metric:'roi',period:'30'},
+                    {metric:'model_success',period:'180'},
+                    {metric:'yield_units',period:'365'}
+                  ];
+                  h.state.feed.dashboard_kpi_cards=[
+                    {metric:'roi',period:'30',value:.125},
+                    {metric:'model_success',period:'180',value:.703},
+                    {metric:'yield_units',period:'365',value:5.75}
+                  ];
+                  h.renderDashboardKpis();
+                }""")
                 cards = page.locator("#dashboardKpis .dashboard-kpi")
                 assert cards.count() == 3
                 assert [c.locator("strong").inner_text() for c in cards.all()] == [
