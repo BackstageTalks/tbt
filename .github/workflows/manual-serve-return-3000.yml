@@ -10,6 +10,7 @@ on:
         options: ['3000', '2000', '1000', '500', '100']
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: tbt-manual-serve-return-paid
   cancel-in-progress: false
@@ -41,6 +42,23 @@ jobs:
           test -n "$TENNISAPI_RAPIDAPI_HOST"
           test -n "$TENNISAPI_STATS_URL_TEMPLATE"
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+      - name: Recover latest private staging artifact (deduplicate across runs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/manual-serve-return/previous
+          artifact_name=$(gh api "repos/$GH_REPO/actions/artifacts?per_page=100" --jq '[.artifacts[] | select(.name | startswith("manual-serve-return-")) | select(.expired == false)] | sort_by(.created_at) | reverse | .[0].name // empty')
+          if [ -n "$artifact_name" ]; then
+            previous_run="${artifact_name#manual-serve-return-}"
+            gh run download "$previous_run" --repo "$GH_REPO" --name "$artifact_name" --dir .cache/tbt/manual-serve-return/previous
+            test -s .cache/tbt/manual-serve-return/previous/provider_responses.jsonl
+            echo "Recovered previous staging: $artifact_name"
+          else
+            echo "No previous artifact found; refusing paid calls without recovery."
+            exit 1
+          fi
       - name: Stage provider statistics (no production writes)
         run: |
           set -euo pipefail

@@ -33,6 +33,7 @@ def main():
     ap.add_argument("--limit", type=int, default=3000)
     ap.add_argument("--history-dir", default=".cache/tbt/manual-serve-return/history")
     ap.add_argument("--out-dir", default=".cache/tbt/manual-serve-return/output")
+    ap.add_argument("--previous-dir", default=".cache/tbt/manual-serve-return/previous")
     args = ap.parse_args()
     if not 1 <= args.limit <= 3000:
         raise SystemExit("Request cap must be between 1 and 3000")
@@ -70,12 +71,32 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     raw = out / "provider_responses.jsonl"
     summary = out / "summary.json"
+    # Previous artifacts are cumulative. Reuse raw responses privately and skip paid re-fetches.
+    previous_files = sorted(Path(args.previous_dir).rglob("provider_responses.jsonl"))
+    previous = {}
+    for previous_file in previous_files:
+        for line in previous_file.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            row = json.loads(line)
+            eid = str(row.get("event_id", "")).strip()
+            if not eid or "provider_response" not in row:
+                raise SystemExit(f"Invalid previous staging row in {previous_file}; refusing paid calls")
+            previous.setdefault(eid, row)
+    counts["reused_previous_responses"] = len(previous)
+    candidates = [(m, eid) for m, eid in candidates if eid not in previous]
     calls = 0
     session = requests.Session()
     headers = {"X-RapidAPI-Key": token, "X-RapidAPI-Host": host, "Accept": "application/json"}
-    # Stay below the provider limit of 6 requests/second.\n    min_interval = 0.25  # 4 requests/second\n    last_request_at = 0.0\n    # Paid cap includes retries.
+    # Stay below the provider limit of 6 requests/second.
+    min_interval = 0.25  # 4 requests/second
+    last_request_at = 0.0
+    # Paid cap includes retries.
     try:
         with raw.open("w", encoding="utf-8") as stream:
+            for row in previous.values():
+                stream.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+            stream.flush()
             for match, eid in candidates:
                 if calls >= args.limit:
                     break
@@ -137,7 +158,9 @@ def main():
         report = {
             "schema": 1, "production_mutated": False, "import_ready": False,
             "hard_cap": args.limit, "paid_requests_attempted": calls,
-            "candidate_count": len(candidates), "identity_safety": safety,
+            "candidate_count": len(candidates), "reused_previous_responses": len(previous),
+            "total_staged_responses": len(previous) + counts["staged_nonempty_responses"],
+            "identity_safety": safety,
             "counts": dict(counts), "generated_at_utc": datetime.now(timezone.utc).isoformat(),
             "note": "Raw provider responses require schema validation and canonical matching before private history import.",
         }
