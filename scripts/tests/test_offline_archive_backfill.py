@@ -32,10 +32,10 @@ class StaticGazetteer:
             return None
         if query.startswith("Saitama"):
             return Venue(query=query, name="Saitama", latitude=35.86,
-                         longitude=139.64, country="JP")
+                         longitude=139.64, country="JP", elevation_m=None, timezone="Asia/Tokyo")
         if query.startswith("Other") and self.ambiguous:
             return Venue(query=query, name="Other", latitude=36.9,
-                         longitude=140.7, country="JP")
+                         longitude=140.7, country="JP", elevation_m=None, timezone="Asia/Tokyo")
         return None
 
 
