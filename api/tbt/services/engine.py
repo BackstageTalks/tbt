@@ -716,6 +716,28 @@ def _projection_metrics(publications):
     }
 
 
+def _genuine_publication_odds(publication):
+    """A financial quote must be an actual bookmaker snapshot, never a display
+    filler or projection-only/model-only price. Legacy winner publications may
+    omit price_status; their immutable issued odds remain authoritative.
+    """
+    status = str(publication.get("price_status") or "").strip().lower()
+    market = str(publication.get("market") or "").strip().lower()
+    if status in {"projection_only", "model_only"}:
+        return None
+    if market in {"aces", "double_faults", "sets", "games"} and status != "priced_projection":
+        return None
+    if market not in {"aces", "double_faults", "sets", "games"} and status not in {"", "priced", "priced_projection"}:
+        return None
+    if publication.get("historical_display_placeholder_source") == "synthetic_illustrative_not_bookmaker" and publication.get("odds") is None:
+        return None
+    try:
+        odds = float(publication.get("odds"))
+    except (TypeError, ValueError):
+        return None
+    return odds if math.isfinite(odds) and odds > 1 else None
+
+
 def _betting_metrics(publications):
     rows = [
         p for p in publications
@@ -737,25 +759,24 @@ def _betting_metrics(publications):
         }
     wins = sum(1 for p in graded if p["result"].get("correct") is True)
     losses = sum(1 for p in graded if p["result"].get("correct") is False)
-    odds = [float(p.get("odds")) for p in graded if p.get("odds") is not None]
-    # Short Odds count towards the actual W/L record and average quote, but
-    # turnover-sized short prices (often 1.06) must not distort 1u ROI/units.
-    # The ledger remains immutable; this exclusion affects aggregates only.
-    unit_eligible = []
-    for publication in graded:
-        if str(publication.get("section") or "").strip().lower() == "prime":
+    # W/L covers every genuinely issued graded publication. Actual financial
+    # ROI includes only bookmaker-priced, staked bets outside Short Odds.
+    quotes = [_genuine_publication_odds(p) for p in graded]
+    odds = [quote for quote in quotes if quote is not None]
+    stakes = []
+    for publication, quote in zip(graded, quotes):
+        if str(publication.get("section") or "").strip().lower() == "prime" or quote is None:
             continue
+        result = publication["result"]
         try:
-            stake = float(publication["result"]["staked_units"])
-            profit_units = float(publication["result"]["profit_units"])
-            actual_odds = float(publication["odds"])
+            stake = float(result["staked_units"])
+            profit_units = float(result["profit_units"])
         except (KeyError, TypeError, ValueError):
             continue
-        if (math.isfinite(stake) and stake > 0 and math.isfinite(profit_units)
-                and math.isfinite(actual_odds) and actual_odds > 1):
-            unit_eligible.append((stake, profit_units))
-    staked = sum(stake for stake, _ in unit_eligible)
-    profit = sum(net for _, net in unit_eligible)
+        if math.isfinite(stake) and stake > 0 and math.isfinite(profit_units):
+            stakes.append((stake, profit_units))
+    staked = sum(stake for stake, _ in stakes)
+    profit = sum(net for _, net in stakes)
     return {
         "n": len(graded),
         "wins": wins,
@@ -767,7 +788,6 @@ def _betting_metrics(publications):
         "profit_units": profit,
         "roi": profit / staked if staked > 0 else None,
     }
-
 
 def _result_publication_semantic_key(row, publication):
     """Stable identity for one public result, independent of lifecycle schema.
