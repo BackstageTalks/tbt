@@ -3391,6 +3391,66 @@
     return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>COMMUNITY</small><h2>Telegram skupiny</h2><p>Panel pod predikciami. Zmeny sa publikujú spolu s ostatnou UI konfiguráciou.</p></div><button class="btn btn-primary" type="button" data-admin-action="tg-add">+ Pridať skupinu</button></div><div class="admin-runtime-note"><strong>Bezpečnostná poznámka</strong><span>Pri súkromnej VIP skupine nevkladaj trvalý tajný invite link. Použi radšej verejný request/contact odkaz alebo bot link.</span></div><div class="admin-form-section admin-tg-panel-settings"><div class="admin-form-section-title"><strong>Panel</strong><span>Defaulty sú v <code>web/config/telegram-groups.json</code>. Admin zmeny sa ukladajú cez existujúce UI storage.</span></div><div class="admin-tg-grid"><label><span>Popiska nad nadpisom <small>(prázdne = skryť)</small></span><input data-tg-field="eyebrow" value="${escapeHtml(Object.prototype.hasOwnProperty.call(cfg,'eyebrow')?cfg.eyebrow:'')}"></label><label><span>Nadpis</span><input data-tg-field="title" value="${escapeHtml(cfg.title||'')}"></label><label class="admin-tg-wide"><span>Popis</span><input data-tg-field="description" value="${escapeHtml(cfg.description||'')}"></label><label class="admin-tg-check"><input data-tg-field="enabled" type="checkbox" ${cfg.enabled!==false?'checked':''}> Zobraziť panel na domovskej stránke</label></div></div><div class="admin-tg-list">${rows||'<div class="admin-note"><strong>Žiadna Telegram skupina</strong><span>Pridaj prvú skupinu tlačidlom hore.</span></div>'}</div></section>`;
   }
 
+  // Admin-only draft preview. Full rolling windows are present only in the
+  // authorized admin feed; ordinary accounts still receive only the three
+  // already-published KPI scalars. This never changes public dashboard markup.
+  function adminDashboardKpiPreview(card,index){
+    const feed=state.feed||{},period=String(card.period||'');
+    const valueOf=value=>typeof value==='number'&&Number.isFinite(value)?value:null;
+    const published=Array.isArray(feed.dashboard_kpi_cards)?feed.dashboard_kpi_cards[index]:null;
+    const publishedValue=published?.metric===card.metric&&String(published?.period||'')===period
+      ?valueOf(published.value):null;
+    const windows=feed.performance_windows||{};
+    const currentWindow=windows?.[period]||{};
+    const betting=currentWindow?.betting||{},overall=betting?.overall||{};
+    let result=null;
+    if(card.metric==='today_picks'){
+      if(!feed.entitlements&&!Array.isArray(feed.daily_picks)&&!feed.generated_at){
+        return {text:'—',available:false};
+      }
+      // Match the actual first public card: use the authorized daily unique
+      // total, never sum SEE ALL a second time.
+      const supplied=Number(feed.entitlements?.daily_pick_count);
+      const total=Number.isSafeInteger(supplied)&&supplied>=0?supplied:
+        Math.max(dailyHubRows('see_all').length,
+          ['daily','prime','value','ace','double_faults','doubles','games','sets']
+            .reduce((sum,tab)=>sum+Math.max(0,Number(dailyHubEntitlement(tab)?.total)||0),0));
+      return {text:String(total),available:true};
+    }
+    if(card.metric==='avg_odds'&&period==='today'){
+      const odds=dashboardDailyRows()
+        .map(row=>Number(row?.odds??row?.betting?.odds))
+        .filter(odd=>Number.isFinite(odd)&&odd>1);
+      result=odds.length?odds.reduce((sum,odd)=>sum+odd,0)/odds.length:null;
+    }else if(card.metric==='model_success'&&period==='auto'){
+      result=publishedValue??valueOf(feed.dashboard_model_success?.accuracy);
+      if(result===null){
+        const best=String(feed.performance_window_summary?.best_days||'');
+        result=valueOf(windows?.[best]?.model?.accuracy);
+      }
+    }else{
+      // Draft choices are evaluated against the admin-only full feed before
+      // publishing, even if the three currently served public cards differ.
+      if(card.metric==='model_success'&&(currentWindow?.model?.n||0)>0){
+        result=valueOf(currentWindow.model.accuracy);
+      }else if(card.metric==='avg_odds'){
+        const top=betting?.sections?.top_daily||{};
+        if((top.n||0)>0)result=valueOf(top.avg_odds);
+      }else if((card.metric==='roi'||card.metric==='yield_units')&&
+        valueOf(overall.staked_units)>0){
+        result=valueOf(card.metric==='roi'?overall.roi:overall.profit_units);
+      }
+      result=result??publishedValue;
+    }
+    if(result===null)return {text:'—',available:false};
+    if(card.metric==='model_success')return {text:pct(result),available:true};
+    if(card.metric==='roi')return {text:`${(result*100).toFixed(1)}%`,available:true};
+    if(card.metric==='yield_units')return {
+      text:`${result>0?'+':''}${result.toFixed(2)}u`,available:true
+    };
+    return {text:result.toFixed(2),available:true};
+  }
+
   function renderAdminDashboardSettings(){
     const metrics=[
       ['today_picks','Dnešné predikcie'],
@@ -3404,10 +3464,16 @@
       const metricOptions=metrics.map(([id,label])=>`<option value="${id}"${card.metric===id?' selected':''}>${escapeHtml(label)}</option>`).join('');
       const periods=dashboardKpiAllowed[card.metric]||['today'];
       const periodOptions=periods.map(id=>`<option value="${id}"${card.period===id?' selected':''}>${escapeHtml(periodNames[id]||id+' dní')}</option>`).join('');
+      const preview=adminDashboardKpiPreview(card,index);
       return `<div class="admin-dashboard-slot">
         <strong>Karta ${index+1}</strong>
         <label><span>Ukazovateľ</span><select data-admin-kpi-index="${index}" data-admin-kpi-field="metric">${metricOptions}</select></label>
         <label><span>Obdobie</span><select data-admin-kpi-index="${index}" data-admin-kpi-field="period" ${periods.length===1?'disabled':''}>${periodOptions}</select></label>
+        <div class="admin-dashboard-slot-preview" aria-live="polite">
+          <span>Náhľad hodnoty</span>
+          <strong data-admin-kpi-preview="${index}">${escapeHtml(preview.text)}</strong>
+          ${preview.available?'':'<small>Zatiaľ bez údajov</small>'}
+        </div>
       </div>`;
     }).join('');
     return `<section class="admin-ux-section admin-dashboard-setting">
