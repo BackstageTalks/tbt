@@ -1231,6 +1231,30 @@
     const rows=dailyHubRows('daily');
     return Array.isArray(rows)?rows:[];
   }
+  // Three globally admin-managed KPI slots. Old Azure UI configs keep the
+  // existing public cards unchanged until the admin explicitly publishes.
+  const dashboardKpiDefaults=[
+    {metric:'today_picks',period:'today'},
+    {metric:'model_success',period:'auto'},
+    {metric:'avg_odds',period:'today'}
+  ];
+  const dashboardKpiPeriodChoices=['3','7','14','30','180','365'];
+  const dashboardKpiAllowed={
+    today_picks:['today'],
+    model_success:['auto',...dashboardKpiPeriodChoices],
+    avg_odds:['today',...dashboardKpiPeriodChoices],
+    roi:[...dashboardKpiPeriodChoices],
+    yield_units:[...dashboardKpiPeriodChoices]
+  };
+  function dashboardKpiSettings(){
+    const values=state.ui?.dashboard?.kpi_cards;
+    return dashboardKpiDefaults.map((original,index)=>{
+      const row=Array.isArray(values)?values[index]:null;
+      const metric=String(row?.metric||'');
+      const period=String(row?.period||'');
+      return dashboardKpiAllowed[metric]?.includes(period)?{metric,period}:{...original};
+    });
+  }
   function renderDashboardKpis(){
     const host=$('dashboardKpis');if(!host)return;
     const rows=dashboardDailyRows();
@@ -1258,11 +1282,39 @@
       target:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#35efa0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/><path d="M17 7l3-3M17 4h3v3"/></svg>',
       chart:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#35efa0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18l5-5 4 3 7-9"/><path d="M15 7h5v5"/></svg>'
     };
-    const cards=[
-      [icons.board,lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(totalToday),'',''],
-      [icons.target,lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—','',''],
-      [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'','']
-    ];
+    // The server releases only the three admin-selected historical scalars,
+    // not the private rolling windows of accounts with limited Results access.
+    // TODAY is always derived from this user's current authorized feed.
+    const served=state.feed?.dashboard_kpi_cards;
+    const cards=dashboardKpiSettings().map((config,index)=>{
+      const {metric,period}=config;
+      const snapshot=Array.isArray(served)?served[index]:null;
+      const matching=snapshot?.metric===metric&&String(snapshot?.period||'')===period;
+      const historical=matching&&typeof snapshot.value==='number'&&Number.isFinite(snapshot.value)?snapshot.value:null;
+      let icon=icons.chart,label='',value='—';
+      if(metric==='today_picks'){
+        icon=icons.board;
+        label=lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE');
+        value=String(totalToday);
+      }else if(metric==='model_success'){
+        icon=icons.target;
+        label=lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU');
+        const legacy=period==='auto'&&!Array.isArray(served)&&Number.isFinite(accuracy)?accuracy:null;
+        const result=historical??legacy;
+        value=result==null?'—':pct(result);
+      }else if(metric==='avg_odds'){
+        label=lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ');
+        const result=period==='today'?avgOdds:historical;
+        value=result==null?'—':result.toFixed(2);
+      }else if(metric==='roi'){
+        label='ROI';
+        value=historical==null?'—':`${(historical*100).toFixed(1)}%`;
+      }else if(metric==='yield_units'){
+        label='YIELD';
+        value=historical==null?'—':`${historical>0?'+':''}${historical.toFixed(2)}u`;
+      }
+      return [icon,label,value,'',''];
+    });
     host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
   }
   function highlightRow(){
