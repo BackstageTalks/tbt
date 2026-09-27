@@ -71,6 +71,7 @@ from tbt.services.admin_storage import (
     live_min_level,
     membership_levels_from,
     list_live_radar_results,
+    delete_live_radar_result,
 )
 from tbt.services.content_news import news_pool
 from tbt.services.media_storage import (
@@ -1526,6 +1527,42 @@ def admin_live_radar(req):
         logging.exception("Admin LIVE Radar scan failed");return response({"error":"live_radar_unavailable","detail":exc.__class__.__name__},503)
 
 
+@app.route(route="v1/admin/live-radar/results", methods=["GET"])
+def admin_live_radar_results(req):
+    admin, denied = _admin_user(req)
+    if denied:
+        return denied
+    try:
+        return response({"items": list_live_radar_results(limit=200)})
+    except AdminStorageUnavailable:
+        return response({"error": "live_results_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/live-radar/results/{result_id}", methods=["DELETE"])
+def admin_live_radar_result_item(req):
+    admin, denied = _admin_user(req)
+    if denied:
+        return denied
+    result_id = str((req.route_params or {}).get("result_id") or "")
+    try:
+        result = delete_live_radar_result(
+            result_id, actor_id=str(admin.get("id") or "")
+        )
+        if result.get("deleted"):
+            record_system_event("info", "live-radar", "Admin removed LIVE result",
+                                details={"id": result_id, "kind": result.get("kind"),
+                                         "actor": str(admin.get("id") or "")})
+        return response(result)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "live_results_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
 @app.route(route="v1/push/config", methods=["GET"])
 def push_config(req):
     try:
@@ -2161,7 +2198,13 @@ def admin_insight_item(req):
             return failure
         insight_id = str((req.route_params or {}).get("insight_id") or "")
         if req.method == "DELETE":
-            return response(delete_insight(insight_id))
+            result = delete_insight(insight_id, actor_id=str(admin.get("id") or ""))
+            if result.get("deleted"):
+                record_system_event("info", "insights", "Admin removed insight",
+                                    details={"id": insight_id,
+                                             "automated_live": bool(result.get("suppressed")),
+                                             "actor": str(admin.get("id") or "")})
+            return response(result)
         try:
             payload = req.get_json()
         except ValueError:
