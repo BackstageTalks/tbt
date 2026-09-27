@@ -1313,8 +1313,12 @@ def internal_match_status_worker(req):
         feed_payload = read_feed(FEED)
         previous = load_match_status_snapshot() or {}
         client = RapidTennisClient(settings)
-        # Thirty hourly lookups plus live feed and one fallback request.
-        client.request_limit = max(32, min(90, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT", "70"))))
+        # An earlier run hit the HTTP gateway after ~45s. This worker uses
+        # short batches and a bounded latency/request budget; all other users
+        # of RapidTennisClient retain their existing retry policy.
+        client.request_limit = max(4, min(12, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT", "8"))))
+        client.retry_attempts = 1
+        client.client.timeout = 4.0
         try:
             snapshot = scan_match_statuses(
                 feed_payload,
@@ -1322,12 +1326,13 @@ def internal_match_status_worker(req):
                 previous,
                 max_checks=max(
                     1,
-                    min(30, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS", "30"))),
+                    min(5, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS", "5"))),
                 ),
                 max_near_checks=max(
                     1,
-                    min(30, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "30"))),
+                    min(5, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "5"))),
                 ),
+                max_wall_seconds=22.0,
             )
         finally:
             try:

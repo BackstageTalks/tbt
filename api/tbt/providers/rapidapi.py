@@ -73,6 +73,8 @@ class RapidTennisClient:
         self._last_request_at = 0.0
         self.request_count = 0
         self.request_limit = 15000
+        # Latency-sensitive workers may opt out of retries without affecting batch jobs.
+        self.retry_attempts = 5
         self.rate_limit_remaining = None
         self._category_cache: dict[str, list[dict[str, Any]]] = {}
         self._event_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
@@ -152,8 +154,9 @@ class RapidTennisClient:
         )
 
         last_error: Exception | None = None
+        attempts = max(1, min(5, int(self.retry_attempts)))
 
-        for attempt in range(5):
+        for attempt in range(attempts):
             self._throttle()
 
             # Reserve outside the retry block: budget/storage failures fail closed.
@@ -178,6 +181,8 @@ class RapidTennisClient:
                     self.rate_limit_remaining = safe_int(remaining)
 
                 if response.status_code == 429:
+                    if attempt + 1 >= attempts:
+                        raise ProviderError(f"RapidAPI HTTP 429 for {path}")
                     delay = self._retry_after_seconds(
                         response.headers.get("Retry-After")
                     )
@@ -193,6 +198,8 @@ class RapidTennisClient:
                     continue
 
                 if response.status_code >= 500:
+                    if attempt + 1 >= attempts:
+                        raise ProviderError(f"RapidAPI HTTP {response.status_code} for {path}")
                     time.sleep(
                         min(
                             2**attempt,
@@ -219,13 +226,8 @@ class RapidTennisClient:
                 ValueError,
             ) as exc:
                 last_error = exc
-
-                time.sleep(
-                    min(
-                        2**attempt,
-                        10,
-                    )
-                )
+                if attempt + 1 < attempts:
+                    time.sleep(min(2**attempt, 10))
 
         raise ProviderError(
             f"RapidAPI request failed: "

@@ -625,6 +625,7 @@ def save_match_status_snapshot(payload: object) -> dict:
         "checked": max(0, int(data.get("checked") or 0)),
         "skipped_live": max(0, int(data.get("skipped_live") or 0)),
         "provider_requests": max(0, int(data.get("provider_requests") or 0)),
+        "time_budget_exhausted": bool(data.get("time_budget_exhausted", False)),
         "newly_resolved": max(0, int(data.get("newly_resolved") or 0)),
         "successful_history": max(0, int(data.get("successful_history") or 0)),
         "failed_history": max(0, int(data.get("failed_history") or 0)),
