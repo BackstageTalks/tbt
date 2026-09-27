@@ -840,7 +840,7 @@ def betting_performance(results):
 
 PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 
-PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30, 365)
+PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30, 180, 365)
 PERFORMANCE_BEST_MIN_SAMPLE = 30
 
 
