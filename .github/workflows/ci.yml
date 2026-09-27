@@ -49,6 +49,29 @@ jobs:
             api/requirements.txt
             api/requirements-train.txt
 
+      - name: Inspect live Azure UI configuration (read-only)
+        env:
+          BLINQ_PUBLIC_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          url="${BLINQ_PUBLIC_URL%/}/api/v1/ui-config"
+          if ! curl -fsSL --connect-timeout 4 --max-time 18 -H 'Cache-Control: no-cache' "$url?restore_audit=$GITHUB_SHA" -o /tmp/blinq-live-ui.json; then
+            echo "::warning::Live UI storage could not be inspected. Preserve existing published settings."
+          else
+            python - <<'PYUI'
+          import json
+          p=json.load(open('/tmp/blinq-live-ui.json',encoding='utf-8'))
+          cfg=p.get('config') or {}
+          els=cfg.get('elements') or {}
+          banners=[els.get(f'HERO_BANNER_{i}') or {} for i in range(1,6)]
+          enabled=sum(bool((b.get('content') or {}).get('enabled')) for b in banners)
+          print(f"Live UI: storage_available={p.get('storage_available')}, runtime_configured={p.get('runtime_configured')}, banner_slots={enabled}")
+          if p.get('storage_available') is not True or p.get('runtime_configured') is not True:
+              print("::warning::Live Azure UI config is not confirmed; do not overwrite it with the release fallback.")
+          PYUI
+          fi
+
       - name: Audit repository/release contract
         run: |
           echo "Commit: $GITHUB_SHA"
