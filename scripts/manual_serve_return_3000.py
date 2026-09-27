@@ -73,19 +73,40 @@ def main():
     calls = 0
     session = requests.Session()
     headers = {"X-RapidAPI-Key": token, "X-RapidAPI-Host": host, "Accept": "application/json"}
-    # Write a durable count BEFORE every request. On rerun this workflow starts a fresh cap.
+    # Stay below the provider limit of 6 requests/second.\n    min_interval = 0.25  # 4 requests/second\n    last_request_at = 0.0\n    # Paid cap includes retries.
     try:
         with raw.open("w", encoding="utf-8") as stream:
             for match, eid in candidates:
                 if calls >= args.limit:
                     break
                 url = template.replace("{event_id}", quote(eid, safe=""))
-                calls += 1
-                counts["paid_requests_attempted"] = calls
                 try:
-                    response = session.get(url, headers=headers, timeout=25)
+                    response = None
+                    for retry in range(3):
+                        if calls >= args.limit:
+                            break
+                        delay = min_interval - (time.monotonic() - last_request_at)
+                        if delay > 0:
+                            time.sleep(delay)
+                        last_request_at = time.monotonic()
+                        calls += 1
+                        counts["paid_requests_attempted"] = calls
+                        response = session.get(url, headers=headers, timeout=25)
+                        counts[f"http_{response.status_code}"] += 1
+                        if response.status_code != 429:
+                            break
+                        counts["rate_limit_retries"] += 1
+                        if retry < 2 and calls < args.limit:
+                            retry_after = response.headers.get("Retry-After", "")
+                            try:
+                                wait = max(1.0, min(float(retry_after), 120.0))
+                            except ValueError:
+                                wait = min(15.0 * (2 ** retry), 60.0)
+                            print(f"HTTP 429: waiting {wait:g}s before retry", flush=True)
+                            time.sleep(wait)
+                    if response is None:
+                        break
                     status = response.status_code
-                    counts[f"http_{status}"] += 1
                     if status in (401, 403, 429):
                         counts["stopped_on_auth_or_rate_limit"] += 1
                         break
