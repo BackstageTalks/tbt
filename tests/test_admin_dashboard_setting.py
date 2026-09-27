@@ -80,10 +80,11 @@ def test_model_selected_window_and_auto_do_not_misrepresent_historical_bets():
         {"metric": "today_picks", "period": "today"},
     ]}}
     values = selected_dashboard_cards(feed, ui)
-    assert values[0]["value"] == .703 and values[1]["value"] == .763
+    assert values[0]["value"] == .763 and values[1]["value"] == .763
+    assert values[0]["selected_period"] == "180"  # auto compares ALL six offered periods
     assert values[2]["value"] is None  # per-account count is calculated from authorized rows
     assert 180 in PERFORMANCE_WINDOWS_DAYS
-    assert 180 not in PERFORMANCE_AUTO_WINDOWS_DAYS  # legacy automatic KPI unaffected
+    assert 180 not in PERFORMANCE_AUTO_WINDOWS_DAYS  # legacy feed metadata is still unchanged
 
 
 def test_new_180_horizon_and_missing_periods_do_not_fabricate_values():
@@ -134,4 +135,4 @@ def test_public_markup_unchanged_and_admin_config_is_scoped():
     assert "body#blinqPremium.blinq-admin .admin-dashboard-slot" in css
     assert "body#blinqPremium.blinq-admin .admin-dashboard-slot-preview" in css
     assert "body#blinqPremium.blinq-admin .admin-dashboard-slot-preview>strong" in css
-    assert ALLOWED_PERIODS["roi"] == {"3", "7", "14", "30", "180", "365"}
+    assert ALLOWED_PERIODS["roi"] == {"auto", "3", "7", "14", "30", "180", "365"}
