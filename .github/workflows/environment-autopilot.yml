@@ -17,6 +17,9 @@ on:
       - BlinQ one-night adaptive data backfill (Sep 26)
     types: [completed]
   workflow_dispatch:
+  schedule:
+    # Read-only check every 15 minutes; scheduled runs never dispatch collectors.
+    - cron: '*/15 * * * *'
 
 permissions:
   actions: write
@@ -36,6 +39,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
+      GH_EVENT_NAME: ${{ github.event_name }}
     steps:
       - name: Advance safe Environment pipeline only after previous run finishes
         shell: bash
@@ -79,6 +83,16 @@ jobs:
               subprocess.run(command, check=True)
               print(f"Dispatched {workflow}: {inputs}")
           runs = {workflow: recent(workflow) for workflow in workflows}
+          if os.environ.get("GH_EVENT_NAME") == "schedule":
+              # Zero API-provider calls, zero writer dispatches on the 15-min timer.
+              active = [(w, x["id"], x["status"]) for w, items in runs.items()
+                        for x in items if x["status"] != "completed"]
+              print("15-minute read-only monitor; active workflows:", active[:20])
+              for w, items in runs.items():
+                  if items:
+                      latest = max(items, key=lambda x: x["created_at"])
+                      print(w, latest["id"], latest["status"], latest.get("conclusion"))
+              sys.exit(0)
           # Read-only 15-minute watcher for the bounded night collector.
           # It never dispatches or retries a paid job; a partial run may
           # have spent provider quota even if GitHub reports failure.
