@@ -24,6 +24,11 @@ ALLOWED_PERIODS = {
     "today_picks": {"today"},
     "model_success": {"auto", *(str(day) for day in WINDOW_DAYS)},
     "avg_odds": {"today", "auto", *(str(day) for day in WINDOW_DAYS)},
+    "winner_avg_odds": {"auto", *(str(day) for day in WINDOW_DAYS)},
+    "auto_success": {"auto"},
+    "auto_avg_odds": {"auto"},
+    "auto_roi": {"auto"},
+    "auto_yield_units": {"auto"},
     "roi": {"auto", *(str(day) for day in WINDOW_DAYS)},
     "yield_units": {"auto", *(str(day) for day in WINDOW_DAYS)},
     "winner_roi": {"auto", *(str(day) for day in WINDOW_DAYS)},
@@ -218,10 +223,18 @@ RESULTS_METRICS = {
     "results_success": ("all", "hit_rate"),
     "results_top_success": ("top_daily", "hit_rate"),
     "results_avg_odds": ("all", "avg_odds"),
+    "winner_avg_odds": ("winners", "avg_odds"),
     "results_roi": ("all", "roi"),
     "results_yield_units": ("all", "profit_units"),
     "winner_roi": ("winners", "roi"),
     "winner_yield_units": ("winners", "profit_units"),
+}
+# Auto compares both independent source calculations (and all their periods).
+AUTO_COMPARISONS = {
+    "auto_success": ("model_success", "results_success"),
+    "auto_avg_odds": ("winner_avg_odds", "results_avg_odds"),
+    "auto_roi": ("winner_roi", "results_roi"),
+    "auto_yield_units": ("winner_yield_units", "results_yield_units"),
 }
 AUTO_DAYS = WINDOW_DAYS
 
@@ -277,6 +290,27 @@ def _auto_best(feed: dict, metric: str, cache: dict,
     return None, None, 0
 
 
+def _auto_across_sources(feed: dict, metric: str, cache: dict,
+                         *, now: datetime | None = None) -> tuple[float | None, str | None, str | None, int]:
+    """Choose maximum KPI value across the winner and Results sources and horizons."""
+    if metric not in AUTO_COMPARISONS:
+        return None, None, None, 0
+    candidates = []
+    for source in AUTO_COMPARISONS[metric]:
+        periods = [str(day) for day in AUTO_DAYS]
+        if source in RESULTS_METRICS and RESULTS_METRICS[source][0] == "all":
+            periods.append("all")
+        for period in periods:
+            value, sample = _metric_window_value(feed, source, period, cache, now=now)
+            if value is not None and sample > 0:
+                duration = 9999 if period == "all" else int(period)
+                candidates.append((value, sample, duration, source, period))
+    if not candidates:
+        return None, None, None, 0
+    value, sample, _, source, period = max(candidates)
+    return value, source, period, sample
+
+
 def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetime | None = None) -> list[dict]:
     """Return only three configured scalar values; auto selects each metric's
     highest valid time-window value without mixing winner and Results samples."""
@@ -288,9 +322,14 @@ def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetim
         value = None
         selected_period = None
         sample = 0
+        selected_source = None
         if metric == "today_picks" or metric == "avg_odds" and period == "today":
             # Always calculated from the authorized current offer on the client.
             pass
+        elif metric in AUTO_COMPARISONS:
+            value, selected_source, selected_period, sample = _auto_across_sources(
+                feed, metric, cache, now=now
+            )
         elif period == "auto":
             value, selected_period, sample = _auto_best(feed, metric, cache, now=now)
             # Compatibility with old feeds where the aggregate auto sample is
@@ -300,5 +339,6 @@ def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetim
         else:
             value, sample = _metric_window_value(feed, metric, period, cache, now=now)
         output.append({**card, "value": value, **({"selected_period": selected_period,
-            "sample": sample} if period == "auto" else {})})
+            "sample": sample, **({"selected_source": selected_source} if selected_source else {})}
+            if period == "auto" else {})})
     return output

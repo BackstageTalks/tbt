@@ -1243,6 +1243,11 @@
     today_picks:['today'],
     model_success:['auto',...dashboardKpiPeriodChoices],
     avg_odds:['today','auto',...dashboardKpiPeriodChoices],
+    winner_avg_odds:['auto',...dashboardKpiPeriodChoices],
+    auto_success:['auto'],
+    auto_avg_odds:['auto'],
+    auto_roi:['auto'],
+    auto_yield_units:['auto'],
     roi:['auto',...dashboardKpiPeriodChoices],
     yield_units:['auto',...dashboardKpiPeriodChoices],
     winner_roi:['auto',...dashboardKpiPeriodChoices],
@@ -1303,10 +1308,12 @@
         icon=icons.board;
         label=lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE');
         value=String(totalToday);
-      }else if(metric==='model_success'){
+      }else if(['model_success','auto_success'].includes(metric)){
         icon=icons.target;
-        label=lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU');
-        const legacy=period==='auto'&&!Array.isArray(served)&&Number.isFinite(accuracy)?accuracy:null;
+        label=metric==='auto_success'
+          ?lcopy('HIT RATE','ÚSPEŠNOSŤ','ÚSPĚŠNOST')
+          :lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU');
+        const legacy=metric==='model_success'&&period==='auto'&&!Array.isArray(served)&&Number.isFinite(accuracy)?accuracy:null;
         const result=historical??legacy;
         value=result==null?'—':pct(result);
       }else if(metric==='results_success'||metric==='results_top_success'){
@@ -1315,17 +1322,17 @@
         // or a renamed public banner. Only the underlying calculation changes.
         label=lcopy('HIT RATE','ÚSPEŠNOSŤ','ÚSPĚŠNOST');
         value=historical==null?'—':pct(historical);
-      }else if(metric==='results_avg_odds'){
+      }else if(['results_avg_odds','winner_avg_odds','auto_avg_odds'].includes(metric)){
         label=lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ');
         value=historical==null?'—':historical.toFixed(2);
       }else if(metric==='avg_odds'){
         label=lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ');
         const result=period==='today'?avgOdds:historical;
         value=result==null?'—':result.toFixed(2);
-      }else if(['roi','winner_roi','results_roi'].includes(metric)){
+      }else if(['roi','winner_roi','results_roi','auto_roi'].includes(metric)){
         label='ROI';
         value=historical==null?'—':`${(historical*100).toFixed(1)}%`;
-      }else if(['yield_units','winner_yield_units','results_yield_units'].includes(metric)){
+      }else if(['yield_units','winner_yield_units','results_yield_units','auto_yield_units'].includes(metric)){
         label='YIELD';
         value=historical==null?'—':`${historical>0?'+':''}${historical.toFixed(2)}u`;
       }
@@ -3425,7 +3432,8 @@
     const valueOf=v=>typeof v==='number'&&Number.isFinite(v)?v:null;
     const results={
       results_success:['all','hit'],results_top_success:['top_daily','hit'],
-      results_avg_odds:['all','avgOdds'],results_roi:['all','roi'],
+      results_avg_odds:['all','avgOdds'],winner_avg_odds:['winners','avgOdds'],
+      results_roi:['all','roi'],
       results_yield_units:['all','profit'],winner_roi:['winners','roi'],
       winner_yield_units:['winners','profit']
     };
@@ -3467,13 +3475,38 @@
       (b.period==='all'?9999:Number(b.period))-(a.period==='all'?9999:Number(a.period)));
     return candidates[0]||{value:null,period:null,sample:0};
   }
+  // The four AUTO selector entries evaluate *both* independent calculation
+  // sources. Time windows are checked per source; only actual populated
+  // samples are eligible. Display source/window detail in Admin only.
+  const dashboardAutoSources={
+    auto_success:['model_success','results_success'],
+    auto_avg_odds:['winner_avg_odds','results_avg_odds'],
+    auto_roi:['winner_roi','results_roi'],
+    auto_yield_units:['winner_yield_units','results_yield_units']
+  };
+  function adminKpiBestOfBoth(metric){
+    const candidates=[];
+    for(const source of dashboardAutoSources[metric]||[]){
+      const periods=[...dashboardKpiPeriodChoices];
+      if(source.startsWith('results_'))periods.push('all');
+      for(const period of periods){
+        const result=adminKpiWindowMetric({metric:source},period);
+        if(result.value!==null&&result.sample>0)
+          candidates.push({...result,source,period});
+      }
+    }
+    candidates.sort((a,b)=>b.value-a.value||b.sample-a.sample||
+      (b.period==='all'?9999:Number(b.period))-(a.period==='all'?9999:Number(a.period))||
+      b.source.localeCompare(a.source));
+    return candidates[0]||{value:null,source:null,period:null,sample:0};
+  }
   function adminDashboardKpiPreview(card,index){
     const feed=state.feed||{},period=String(card.period||'');
     const valueOf=value=>typeof value==='number'&&Number.isFinite(value)?value:null;
     const published=Array.isArray(feed.dashboard_kpi_cards)?feed.dashboard_kpi_cards[index]:null;
     const samePublication=published?.metric===card.metric&&String(published?.period||'')===period;
     const publishedValue=samePublication?valueOf(published.value):null;
-    let result=null,selectedPeriod=null,sample=0;
+    let result=null,selectedPeriod=null,selectedSource=null,sample=0;
     if(card.metric==='today_picks'){
       if(!feed.entitlements&&!Array.isArray(feed.daily_picks)&&!feed.generated_at)
         return {text:'—',available:false};
@@ -3489,14 +3522,17 @@
         .filter(odd=>Number.isFinite(odd)&&odd>1);
       result=odds.length?odds.reduce((sum,odd)=>sum+odd,0)/odds.length:null;
     }else if(period==='auto'){
-      const best=adminKpiAutoBest(card);
+      const best=dashboardAutoSources[card.metric]
+        ?adminKpiBestOfBoth(card.metric):adminKpiAutoBest(card);
       result=best.value;
       selectedPeriod=best.period;
+      selectedSource=best.source||null;
       sample=best.sample;
-      if(samePublication&&publishedValue!==null){
+      if(result===null&&samePublication&&publishedValue!==null){
         result=publishedValue;
-        selectedPeriod=published.selected_period||selectedPeriod;
-        sample=published.sample||sample;
+        selectedPeriod=published.selected_period||null;
+        selectedSource=published.selected_source||null;
+        sample=published.sample||0;
       }
       if(card.metric==='model_success'&&result===null)
         result=publishedValue??valueOf(feed.dashboard_model_success?.accuracy);
@@ -3505,14 +3541,16 @@
       result=m.value??publishedValue;sample=m.sample;
     }
     if(result===null)return {text:'—',available:false};
+    const sourceText=selectedSource?
+      (selectedSource==='model_success'||selectedSource.startsWith('winner_')?'víťazi':'výsledky'):null;
     const meta=period==='auto'&&selectedPeriod
-      ?`Najvyššia hodnota: ${selectedPeriod==='all'?'celé obdobie':selectedPeriod+' dní'} · vzorka ${sample}`
+      ?`Vybrané: ${sourceText?sourceText+' · ':''}${selectedPeriod==='all'?'celé obdobie':selectedPeriod+' dní'} · vzorka ${sample}`
       :null;
-    if(['model_success','results_success','results_top_success'].includes(card.metric))
+    if(['model_success','results_success','results_top_success','auto_success'].includes(card.metric))
       return {text:pct(result),available:true,meta};
-    if(['roi','winner_roi','results_roi'].includes(card.metric))
+    if(['roi','winner_roi','results_roi','auto_roi'].includes(card.metric))
       return {text:`${(result*100).toFixed(1)}%`,available:true,meta};
-    if(['yield_units','winner_yield_units','results_yield_units'].includes(card.metric))
+    if(['yield_units','winner_yield_units','results_yield_units','auto_yield_units'].includes(card.metric))
       return {text:`${result>0?'+':''}${result.toFixed(2)}u`,available:true,meta};
     return {text:result.toFixed(2),available:true,meta};
   }
@@ -3551,25 +3589,47 @@
   }
 
   function renderAdminDashboardSettings(){
-    // A separate selectable metric for EVERY method. The original winner
-    // model and TOP-odds values must never be relabeled into Results values.
+    // Exactly the requested four families x three sources. Today remains
+    // available as the existing live card. Legacy IDs are accepted by API
+    // for previously published configs but are not offered for new choices.
     const metrics=[
       ['today_picks','Dnešné predikcie'],
-      ['model_success','Modelová úspešnosť (iba víťaz zápasu)'],
-      ['results_success','Úspešnosť – Výsledky (všetky tipy)'],
-      ['results_top_success','Úspešnosť TOP – Výsledky'],
-      ['avg_odds','Priemerný kurz (pôvodný TOP)'],
-      ['results_avg_odds','Kurz – Výsledky (všetky tipy)'],
-      ['winner_roi','ROI – víťazi (dvojhry)'],
-      ['results_roi','ROI – Výsledky'],
-      ['winner_yield_units','Yield – víťazi (dvojhry)'],
-      ['results_yield_units','Yield – Výsledky'],
-      ['roi','ROI – pôvodný historický súhrn'],
-      ['yield_units','Yield – pôvodný historický súhrn']
+      ['model_success','Úspešnosť (víťazi)'],
+      ['results_success','Úspešnosť (výsledky)'],
+      ['auto_success','Úspešnosť (auto)'],
+      ['winner_avg_odds','Priemerný kurz (víťazi)'],
+      ['results_avg_odds','Priemerný kurz (výsledky)'],
+      ['auto_avg_odds','Priemerný kurz (auto)'],
+      ['winner_roi','ROI (víťazi)'],
+      ['results_roi','ROI (výsledky)'],
+      ['auto_roi','ROI (auto)'],
+      ['winner_yield_units','Yield (víťazi)'],
+      ['results_yield_units','Yield (výsledky)'],
+      ['auto_yield_units','Yield (auto)']
     ];
+    const legacyLabel={
+      avg_odds:'Aktuálne predvolené nastavenie kurzu (do zmeny)',
+      roi:'Doterajšie nastavenie ROI – vyber zdroj',
+      yield_units:'Doterajšie nastavenie Yield – vyber zdroj',
+      results_top_success:'Doterajšie nastavenie TOP úspešnosti – vyber zdroj'
+    };
+    // Legacy IDs stay programmatically selectable for old saved configs and
+    // regression tests, but they are hidden from the new 12-choice menu.
+    const legacyCompatibilityOptions={
+      avg_odds:'Priemerný kurz (pôvodný TOP)',
+      roi:'ROI – doterajšie nastavenie',
+      yield_units:'Yield – doterajšie nastavenie',
+      results_top_success:'Úspešnosť TOP – doterajšie nastavenie'
+    };
     const periodNames={today:'Dnes – aktuálne',auto:'Automaticky – najvyššia hodnota',all:'Celé dostupné obdobie'};
     const slots=dashboardKpiSettings().map((card,index)=>{
-      const metricOptions=metrics.map(([id,label])=>`<option value="${id}"${card.metric===id?' selected':''}>${escapeHtml(label)}</option>`).join('');
+      const legacy=legacyLabel[card.metric];
+      const metricOptions=(legacy
+        ?`<option value="${escapeHtml(card.metric)}" selected>${escapeHtml(legacy)}</option>`:'')
+        +metrics.map(([id,label])=>`<option value="${id}"${card.metric===id?' selected':''}>${escapeHtml(label)}</option>`).join('')
+        +Object.entries(legacyCompatibilityOptions)
+          .filter(([id])=>id!==card.metric)
+          .map(([id,label])=>`<option value="${id}" hidden>${escapeHtml(label)}</option>`).join('');
       const periods=dashboardKpiAllowed[card.metric]||['today'];
       const periodOptions=periods.map(id=>`<option value="${id}"${card.period===id?' selected':''}>${escapeHtml(periodNames[id]||id+' dní')}</option>`).join('');
       const preview=adminDashboardKpiPreview(card,index);
@@ -3589,7 +3649,7 @@
         <header><div><small>DASHBOARD</small><h3>Dashboard setting</h3><p>Vyber nezávisle obsah troch existujúcich kariet a obdobie výpočtu. Verejný vzhľad, rozloženie a model zostávajú bez zmeny.</p></div></header>
         <div class="admin-dashboard-slot-list">${slots}</div>
         ${adminResultsRoiAudit()}
-        <small class="admin-detail-help">Dnešné predikcie sú vždy živé. Každý ďalší ukazovateľ má samostatný zdroj a obdobie. Automaticky vyberá najvyššiu skutočne vypočítanú hodnotu spomedzi 3, 7, 14, 30, 180 a 365 dní (pri Výsledkoch aj celé dostupné obdobie). Najvyššia hodnota môže pochádzať z krátkej malej vzorky; konkrétne obdobie a počet vidíš v náhľade vyššie. ROI / Yield – víťazi počítajú iba reálne stávky na víťaza dvojhry; ROI / Yield – Výsledky používajú rovnakú vyhodnotenú vzorku ako karta Výsledky vrátane štatistických tipov iba ak majú skutočný kurz a vklad. Pôvodné historické ukazovatele zostávajú kvôli kompatibilite. Vrátený SKREČ a VOID nevstupujú do finančného súčtu. Zmeny sa zverejnia až po kliknutí na Publikovať.</small>
+        <small class="admin-detail-help">Štyri ukazovatele majú vždy oddelený výpočet pre víťazov dvojhry a všetky publikované Výsledky. Priemerný kurz víťazov zahŕňa skutočné kurzy vyhodnotených tipov na víťaza dvojhry. Automatické položky porovnajú obe tieto metódy v obdobiach 3, 7, 14, 30, 180 a 365 dní (pri Výsledkoch aj celé dostupné obdobie) a vyberú najvyššiu dostupnú hodnotu. V administrátorskom náhľade vidíš zdroj, obdobie a počet záznamov. Aj krátka vzorka môže mať najvyššiu hodnotu. ROI a Yield zahŕňajú iba reálne vyhodnotené vklady bez Short Odds; vrátené SKREČ/VOID sú neutrálne. Pôvodné publikované nastavenia zostanú zachované, kým nezvolíš nové a neklikneš na Publikovať. </small>
       </div>
     </section>`;
   }
