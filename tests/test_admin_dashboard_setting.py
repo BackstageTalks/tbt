@@ -49,6 +49,7 @@ def test_three_defaults_preserve_existing_public_dashboard():
     assert normalize_cards({"dashboard": {"kpi_cards": [1, {"metric": "roi", "period": "30"}, {}]}}) == [
         DEFAULT_CARDS[0], {"metric": "roi", "period": "30"}, DEFAULT_CARDS[2],
     ]
+    assert normalize_cards({"dashboard": {"kpi_cards": [{"metric": [], "period": "7"}, {}, {}]}}) == list(DEFAULT_CARDS)
     assert validate_ui_config(deepcopy(ui)) is not None
 
 
