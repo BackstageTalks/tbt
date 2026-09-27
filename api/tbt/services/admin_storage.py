@@ -1552,7 +1552,7 @@ def save_automated_insight(payload: object, *, actor_id: str = "automation", ins
     """
     insight_id=str(insight_id or '').strip()
     if not _VALID_ID.fullmatch(insight_id): raise ValueError("Invalid automated insight id")
-    if _live_deleted(insight_id, "insight"):
+    if insight_id.startswith(_LIVE_AUTO_PREFIXES) and _live_deleted(insight_id, "insight"):
         return {"id": insight_id, "suppressed": True}, False
     client=_table(INSIGHTS_TABLE)
     try: existing_entity=client.get_entity(partition_key="insights",row_key=insight_id)
