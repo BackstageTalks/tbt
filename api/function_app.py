@@ -81,6 +81,7 @@ from tbt.services.push_notifications import (
 )
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
+from tbt.services.dashboard_kpis import selected_dashboard_cards
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.services.entitlements import (
     filter_feed_for_access,
@@ -1015,11 +1016,14 @@ def feed(req):
             return response({"error": "email_not_verified"}, 403)
         profile = _profile_for(user)
         account_data = public_account(user, cfg=settings, profile=profile)
-        data = visible_feed(read_feed(FEED))
+        source_feed = visible_feed(read_feed(FEED))
         try:
             runtime_ui, _, _ = load_effective_ui_config()
-            access_context = _access_context_with_daily_allocation(user, account_data, profile, data, runtime_ui)
-            data, entitlements = filter_feed_for_access(data, access_context, runtime_ui)
+            access_context = _access_context_with_daily_allocation(user, account_data, profile, source_feed, runtime_ui)
+            data, entitlements = filter_feed_for_access(source_feed, access_context, runtime_ui)
+            # Global admin-selected KPI scalars only. Never return unrestricted
+            # raw performance windows to accounts with limited Results access.
+            data["dashboard_kpi_cards"] = selected_dashboard_cards(source_feed, runtime_ui)
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
         data["account"] = account_data
