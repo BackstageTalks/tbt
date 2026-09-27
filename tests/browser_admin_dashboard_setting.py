@@ -66,7 +66,7 @@ def main():
                 page.evaluate("""() => {
                     const h=dashboardHarness;
                     h.state.feed={
-                      entitlements:{daily_pick_count:58},daily_picks:[{odds:1.86}],
+                      entitlements:{daily_pick_count:58},daily_picks:[{odds:1.86,surface:'hard'}],
                       dashboard_kpi_cards:[
                         {metric:'roi',period:'30',value:.125},
                         {metric:'model_success',period:'180',value:.703},
