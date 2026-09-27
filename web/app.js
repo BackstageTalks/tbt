@@ -1263,7 +1263,12 @@
       [icons.target,lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—','',''],
       [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'','']
     ];
-    host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
+    const averageOddsHelp=lcopy(
+      'Arithmetic mean of valid current TOP quotes visible in your plan; not historical ROI or all-market odds.',
+      'Aritmetický priemer platných kurzov aktuálnych TOP tipov dostupných tvojej úrovni. Nejde o historické ROI ani priemer všetkých trhov.',
+      'Aritmetický průměr platných kurzů aktuálních TOP tipů dostupných tvé úrovni. Nejde o historické ROI ani průměr všech trhů.'
+    );
+    host.innerHTML=cards.map(([icon,label,value,note,trend],index)=>`<article class="dashboard-kpi"${index===2?` title="${escapeHtml(averageOddsHelp)}"`:''}><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
   }
   function highlightRow(){
     return dashboardDailyRows()[0]||dailyHubRows('top')[0]||dailyHubRows('value')[0]||null;
@@ -2826,8 +2831,9 @@
     return NaN;
   }
   function localResultMetrics(rows,category){
-    // Use exactly the same deduplication, odds and flat-1u result as the table,
-    // for all four projection tabs and ALL. Verified backend ROI is untouched.
+    // Keep the deduped settled W/L record intact. ROI and Units count only
+    // genuinely priced, staked publications outside Short Odds; placeholders
+    // displayed in historical projection rows never enter financial totals.
     const entries=settledPublishedEntries(rows,category);
     const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
