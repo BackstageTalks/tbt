@@ -16,6 +16,7 @@ from audit_statistics_inventory import _quality_ready
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
+from tbt.providers.shared_budget import from_environment, SharedBudgetExhausted
 
 def event_id(match):
     payload = match.provider_payload if isinstance(match.provider_payload, dict) else {}
@@ -86,6 +87,9 @@ def main():
     counts["reused_previous_responses"] = len(previous)
     candidates = [(m, eid) for m, eid in candidates if eid not in previous]
     calls = 0
+    budget = from_environment()
+    if os.getenv("GITHUB_ACTIONS") == "true" and budget is None:
+        raise SystemExit("Shared Tennis API budget must be configured for paid Actions")
     session = requests.Session()
     headers = {"X-RapidAPI-Key": token, "X-RapidAPI-Host": host, "Accept": "application/json"}
     # Stay below the provider limit of 6 requests/second.
@@ -109,6 +113,13 @@ def main():
                         delay = min_interval - (time.monotonic() - last_request_at)
                         if delay > 0:
                             time.sleep(delay)
+                        if budget is not None:
+                            try:
+                                budget()
+                            except SharedBudgetExhausted:
+                                counts["shared_budget_exhausted"] += 1
+                                print("Shared Tennis API budget reached; no further requests", flush=True)
+                                return
                         last_request_at = time.monotonic()
                         calls += 1
                         counts["paid_requests_attempted"] = calls

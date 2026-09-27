@@ -83,6 +83,12 @@ from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
 from tbt.services.dashboard_kpis import selected_dashboard_cards
 from tbt.providers.rapidapi import RapidTennisClient
+from tbt.providers.shared_budget import (
+    reserve as reserve_shared_api_budget,
+    status as shared_api_budget_status,
+    SharedBudgetExhausted,
+    SharedBudgetUnavailable,
+)
 from tbt.services.entitlements import (
     filter_feed_for_access,
     match_detail_entitlements,
@@ -137,6 +143,9 @@ _LIVE_RADAR_CACHE: tuple[float, dict] | None = None
 _LIVE_RADAR_CACHE_LOCK = Lock()
 _LIVE_RADAR_TTL_SECONDS = 45
 _LIVE_RADAR_LAST_PUBLISHED_SCAN: str | None = None
+_LIVE_ODDS_CACHE: dict[str, tuple[float, object]] = {}
+_LIVE_ODDS_CACHE_LOCK = Lock()
+_LIVE_ODDS_CACHE_SECONDS = 120.0
 
 
 def _banner_event_allowed(payload):
@@ -804,6 +813,12 @@ def match_intelligence(req):
             return response({**public_feed_result, "cached": False, "live_provider": False})
         try:
             client = RapidTennisClient(settings)
+            # Preserve a preconfigured remote ledger if one is present; Azure
+            # otherwise uses the same durable quota via its direct store.
+            if client.request_budget is None:
+                client.request_budget = (
+                    lambda *args, **kwargs: reserve_shared_api_budget("history")
+                )
             # Explicit opt-in still has a strict per-request ceiling. The default
             # production path above consumes zero online Tennis RapidAPI calls.
             client.request_limit = min(getattr(client, "request_limit", 9) or 9, 9)
@@ -1098,6 +1113,7 @@ def _public_live_radar_payload(result: dict) -> dict:
         "prime_total": int(result.get("prime_total") or 0),
         "prime_eligible": int(result.get("prime_eligible") or 0),
         "provider_skipped_reason": result.get("provider_skipped_reason"),
+        "budget_paused": bool(result.get("budget_paused")),
         "cached": bool(result.get("cached")),
         "alert_storage_unavailable": bool(result.get("alert_storage_unavailable")),
         "thresholds": result.get("thresholds") or {},
@@ -1161,15 +1177,12 @@ def _public_live_worker_heartbeat() -> dict:
         "updated_at": snapshot.get("updated_at"),
         "fresh": fresh,
         "age_seconds": age_seconds,
+        "budget_paused": bool(snapshot.get("budget_paused")),
     }
 
 
 def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
-    """Run/cached LIVE scan and publish idempotent alerts.
-
-    Production scheduling is handled by the autonomous LIVE worker workflow.
-    Browser polling is only a freshness fallback when the worker heartbeat is stale.
-    """
+    """One independently metered LIVE scan; odds cache never bypasses the quota."""
     global _LIVE_RADAR_CACHE, _LIVE_RADAR_LAST_PUBLISHED_SCAN
     now=time.monotonic(); fresh=False
     with _LIVE_RADAR_CACHE_LOCK:
@@ -1182,36 +1195,74 @@ def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
         prime_pool=feed_payload.get("prime_picks") if isinstance(feed_payload.get("prime_picks"),list) else []
         eligible_pool=[row for row in prime_pool if isinstance(row,dict) and prime_radar_eligible(row)]
         if not eligible_pool:
-            # Do not spend a provider request when there is no pre-match PRIME
-            # candidate that could possibly qualify for Comeback LIVE.
             scan=scan_comeback_radar(feed_payload,[])
             scan["provider_skipped_reason"]="no_eligible_prime_candidates"
         else:
-            client=RapidTennisClient(settings)
+            client=RapidTennisClient(
+                settings,
+                request_budget=lambda *args, **kwargs: reserve_shared_api_budget("live"),
+            )
+            # A single slow provider request must not exceed the SWA HTTP window.
+            client.configure_runtime_fast_fail(timeout_seconds=5,attempts=1)
+            client.request_limit=7  # 1 LIVE request + up to six eligible odds.
             try:
-                live_events=client.live_events()
-                scan=scan_comeback_radar(feed_payload,live_events)
-                odds_payloads={}
-                max_odds_events=max(0,min(12,int(os.getenv("BLINQ_LIVE_SET2_ODDS_MAX_EVENTS","6"))))
-                for candidate in (scan.get("candidates") or [])[:max_odds_events]:
-                    eid=str(candidate.get("event_id") or "").strip() if isinstance(candidate,dict) else ""
-                    if not eid:continue
-                    try:odds_payloads[eid]=client.event_odds(eid,provider_id=1)
-                    except Exception as exc:
-                        logging.info("Set-2 odds unavailable for %s: %s",eid,exc.__class__.__name__)
-                scan=attach_second_set_odds(scan,odds_payloads,live_events)
+                try:
+                    live_events=client.live_events()
+                except SharedBudgetExhausted:
+                    # Normal economic pause: no paid calls, no fabricated signals.
+                    scan=scan_comeback_radar(feed_payload,[])
+                    scan["provider_skipped_reason"]="shared_budget_exhausted"
+                    scan["budget_paused"]=True
+                else:
+                    scan=scan_comeback_radar(feed_payload,live_events)
+                    odds_payloads={}
+                    budget=shared_api_budget_status()
+                    scan["budget"]=budget
+                    remaining_live=int(budget["remaining"]["live"])
+                    remaining_global=int(budget["global_remaining"])
+                    default_odds=2  # Preserve LIVE feed headroom over optional odds.
+                    max_odds_events=max(0,min(6,int(os.getenv(
+                        "BLINQ_LIVE_SET2_ODDS_MAX_EVENTS",str(default_odds)))))
+                    if remaining_live < 200 or remaining_global < 500:
+                        max_odds_events=0
+                    with _LIVE_ODDS_CACHE_LOCK:
+                        stale=[key for key,(stamp,_) in _LIVE_ODDS_CACHE.items()
+                               if time.monotonic()-stamp >= _LIVE_ODDS_CACHE_SECONDS]
+                        for key in stale: _LIVE_ODDS_CACHE.pop(key,None)
+                    for candidate in (scan.get("candidates") or [])[:max_odds_events]:
+                        eid=str(candidate.get("event_id") or "").strip() if isinstance(candidate,dict) else ""
+                        if not eid:continue
+                        with _LIVE_ODDS_CACHE_LOCK:
+                            cached=_LIVE_ODDS_CACHE.get(eid)
+                            odds=cached[1] if cached and time.monotonic()-cached[0]<_LIVE_ODDS_CACHE_SECONDS else None
+                        if odds is not None:
+                            odds_payloads[eid]=odds
+                            continue
+                        try:
+                            odds=client.event_odds(eid,provider_id=1)
+                            odds_payloads[eid]=odds
+                            with _LIVE_ODDS_CACHE_LOCK:
+                                _LIVE_ODDS_CACHE[eid]=(time.monotonic(),odds)
+                        except SharedBudgetExhausted:
+                            scan["odds_paused_reason"]="shared_budget_exhausted"
+                            break
+                        except Exception as exc:
+                            logging.info("Set-2 odds unavailable for %s: %s",eid,exc.__class__.__name__)
+                    scan=attach_second_set_odds(scan,odds_payloads,live_events)
             finally:
                 try:client.close()
                 except Exception:pass
         scan["prime_total"]=len(prime_pool)
         scan["prime_eligible"]=len(eligible_pool)
         scan["cached"]=False; fresh=True
-        with _LIVE_RADAR_CACHE_LOCK:_LIVE_RADAR_CACHE=(time.monotonic(),dict(scan))
+        # A quota pause must not overwrite a successful cached LIVE snapshot.
+        if not scan.get("budget_paused"):
+            with _LIVE_RADAR_CACHE_LOCK:_LIVE_RADAR_CACHE=(time.monotonic(),dict(scan))
 
     pub={"published":[],"created":0,"watch_created":0,"confirmed_created":0}
     storage_unavailable=False
     scan_id=str(scan.get("scanned_at") or "")
-    should_publish=bool(publish and scan_id)
+    should_publish=bool(publish and scan_id and not scan.get("budget_paused"))
     with _LIVE_RADAR_CACHE_LOCK:
         if should_publish and not force and _LIVE_RADAR_LAST_PUBLISHED_SCAN==scan_id:
             should_publish=False
@@ -1224,9 +1275,10 @@ def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
             logging.warning("Comeback LIVE Radar alert storage unavailable")
         except Exception as exc:
             logging.exception("Comeback LIVE Radar alert publish failed")
-            return {**scan,**pub,"alert_storage_unavailable":False,"alert_publish_error":exc.__class__.__name__,"fresh_scan":fresh}
-    return {**scan,**pub,"alert_storage_unavailable":storage_unavailable,"fresh_scan":fresh}
-
+            return {**scan,**pub,"alert_storage_unavailable":False,
+                    "alert_publish_error":exc.__class__.__name__,"fresh_scan":fresh}
+    return {**scan,**pub,"alert_storage_unavailable":storage_unavailable,
+            "fresh_scan":fresh}
 
 def _insight_plan_for_user(user):
     """Resolve the membership level used by the private BlinQ Insights feed."""
@@ -1262,12 +1314,54 @@ def live_radar(req):
             results=[]
         if snapshot is not None:
             return response({**_public_live_radar_payload(snapshot),"results":results,"autonomous":True})
+        # On a deliberate quota pause, serve the last heartbeat instead of
+        # triggering paid browser fallback scans on every page view.
+        last_status=load_live_worker_status() or {}
+        if last_status.get("budget_paused"):
+            return response({**_public_live_radar_payload(last_status),
+                             "results":results,"autonomous":True,"stale":True})
         r=_run_live_radar(force=False,publish=True)
         return response({**_public_live_radar_payload(r),"results":results,"autonomous":False,"fallback_scan":True})
     except AuthUnavailable:return response({"error":"auth_unavailable"},503)
     except AdminStorageUnavailable:return response({"error":"live_radar_storage_unavailable"},503)
     except Exception as exc:
         logging.exception("Comeback LIVE Radar scan failed");return response({"error":"live_radar_unavailable"},503)
+
+
+@app.route(route="v1/internal/api-budget/reserve", methods=["POST"])
+def internal_api_budget_reserve(req):
+    """Secret-protected per-attempt reservation for external GitHub Actions."""
+    if not _live_worker_token_ok(req):
+        return response({"error":"forbidden"},403)
+    try:
+        data=req.get_json()
+        if not isinstance(data,dict):
+            return response({"error":"invalid_budget_request"},400)
+        purpose=str(data.get("purpose") or "").strip()
+        count=data.get("requests",1)
+        # External paid clients reserve exactly one attempt at a time.
+        if purpose not in {"live","match","refresh","history"} or type(count) is not int or count != 1:
+            return response({"error":"invalid_budget_request"},400)
+        result=reserve_shared_api_budget(purpose,count)
+        return response({"ok":True,"budget":result})
+    except SharedBudgetExhausted:
+        return response({"error":"api_budget_exhausted"},429)
+    except SharedBudgetUnavailable:
+        logging.exception("Shared API budget unavailable")
+        return response({"error":"api_budget_unavailable"},503)
+    except Exception:
+        logging.exception("Unexpected API budget reservation error")
+        return response({"error":"api_budget_unavailable"},503)
+
+
+@app.route(route="v1/admin/api-budget", methods=["GET"])
+def admin_api_budget(req):
+    admin,denied=_admin_user(req)
+    if denied:return denied
+    try:
+        return response({"ok":True,"budget":shared_api_budget_status()})
+    except SharedBudgetUnavailable:
+        return response({"error":"api_budget_unavailable"},503)
 
 
 @app.route(route="v1/internal/live-radar-worker", methods=["POST"])
@@ -1280,6 +1374,13 @@ def internal_live_radar_worker(req):
     try:
         result=_run_live_radar(force=True,publish=True)
         public=_public_live_radar_payload(result)
+        if public.get("budget_paused"):
+            previous=load_live_worker_status() or {}
+            public["last_error"]="api_budget_exhausted"
+            public["last_success_at"]=(
+                previous.get("last_success_at")
+                or (previous.get("scanned_at") if not previous.get("last_error") else None)
+            )
         persisted=True
         try:
             save_live_worker_status(public)
@@ -1312,7 +1413,9 @@ def internal_match_status_worker(req):
     try:
         feed_payload = read_feed(FEED)
         previous = load_match_status_snapshot() or {}
-        client = RapidTennisClient(settings)
+        client = RapidTennisClient(
+            settings, request_budget=lambda *args, **kwargs: reserve_shared_api_budget("match")
+        )
         # An earlier run hit the HTTP gateway after ~45s. This worker uses
         # short batches and a bounded latency/request budget; all other users
         # of RapidTennisClient retain their existing retry policy.
@@ -1679,6 +1782,21 @@ def admin_diagnostics(req):
             "configured": bool(str(getattr(settings, "rapidapi_key", "") or "").strip()),
             "host": str(getattr(settings, "rapidapi_host", "") or "")[:120],
         }
+        try:
+            api_budget = shared_api_budget_status()
+            api_budget["available"] = True
+            api_budget["alerts"] = [
+                {"name": name, "percent": int(100 * spent / cap)}
+                for name, spent, cap in (
+                    ("global", api_budget["global_spent"], api_budget["global_limit"]),
+                    *((kind, used, {"live": 2500, "match": 250,
+                                     "refresh": 750, "history": 8500}[kind])
+                      for kind, used in api_budget["spent"].items()),
+                )
+                if spent * 100 >= cap * 80
+            ]
+        except SharedBudgetUnavailable:
+            api_budget = {"available": False, "alerts": []}
         users_ok = False
         try:
             list_users(settings, page=1, per_page=1)
@@ -1701,6 +1819,8 @@ def admin_diagnostics(req):
             problems.append("firebase_admin_users_unavailable")
         if not storage_ok:
             problems.append("admin_storage_unavailable")
+        if not api_budget.get("available"):
+            problems.append("tennis_api_budget_unavailable")
         if not media.get("configured") or not media.get("available"):
             problems.append("media_storage_unavailable")
         if not worker_configured:
@@ -1766,6 +1886,7 @@ def admin_diagnostics(req):
             "assets": asset_health,
             "services": service_health,
             "provider": provider_health,
+            "api_budget": api_budget,
             "ops": ops,
             "problems": problems,
             "actor_id": actor.get("id"),

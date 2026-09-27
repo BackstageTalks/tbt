@@ -15,6 +15,7 @@ from audit_statistics_inventory import _quality_ready
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
+from tbt.providers.shared_budget import from_environment, SharedBudgetExhausted
 
 OUT = ROOT / ".cache/tbt/manual-statistics"
 API_HOST = "tennisapi1.p.rapidapi.com"
@@ -50,6 +51,9 @@ def main():
     gh_token = os.environ.get("GH_TOKEN", "").strip()
     if not token or not gh_token:
         raise SystemExit("RAPIDAPI_KEY and GH_TOKEN are required")
+    budget = from_environment()
+    if os.getenv("GITHUB_ACTIONS") == "true" and budget is None:
+        raise SystemExit("Shared Tennis API budget must be configured for paid Actions")
     OUT.mkdir(parents=True, exist_ok=True)
     repo = os.environ.get("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data")
     history = OUT / "history"
@@ -101,6 +105,13 @@ def main():
                     API_URL.format(event_id=eid),
                     headers={"X-RapidAPI-Key": token, "X-RapidAPI-Host": API_HOST, "Accept": "application/json"},
                 )
+                # Atomically reserve every billable attempt before touching TennisAPI.
+                if budget is not None:
+                    try:
+                        budget()
+                    except SharedBudgetExhausted:
+                        report["stop_reason"] = "shared_budget_exhausted"
+                        break
                 # Count before making the HTTP request; retries are intentionally disabled.
                 report["requests_attempted"] += 1
                 try:

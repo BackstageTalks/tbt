@@ -543,6 +543,8 @@ def save_live_worker_status(payload: object) -> dict:
         "signal_items": data.get("signal_items") if isinstance(data.get("signal_items"), list) else [],
         "thresholds": data.get("thresholds") if isinstance(data.get("thresholds"), dict) else {},
         "last_error": last_error,
+        "budget_paused": bool(data.get("budget_paused")),
+        "provider_skipped_reason": str(data.get("provider_skipped_reason") or "")[:64],
         "updated_at": now,
     }
     # Keep snapshots deliberately tiny; the durable insight table is the alert history.
