@@ -69,7 +69,7 @@ def run(matches, source):
         for row in metadata:
             match_id = row.get("match_id", "")
             date = match_id[:8]
-            if not re.fullmatch(r"\\d{8}", date):
+            if not re.fullmatch(r"\d{8}", date):
                 counters["bad_mcp_date"] += 1
                 continue
             try:
