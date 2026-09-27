@@ -127,6 +127,7 @@ jobs:
           python tests/browser_admin_account_filters.py
           python tests/browser_admin_dashboard_setting.py
           python tests/browser_info_sg_detail.py
+          python tests/browser_admin_live_delete.py
           python tests/browser_results_financial_audit.py
           python tests/browser_mobile_results_layout.py
           python tests/browser_profile_chip_fit.py
