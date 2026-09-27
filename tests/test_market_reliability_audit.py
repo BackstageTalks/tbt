@@ -148,3 +148,30 @@ def test_older_than_window_and_missing_evidence_do_not_become_zero_bet_days():
     assert report["sections"]["top_daily"]["overall"]["published"] == 0
     assert report["sections"]["top_daily"]["active_days"] == 0
     assert report["sections"]["top_daily"]["mean_published_per_active_day"] is None
+
+
+def test_historical_cross_section_issuance_counts_each_section_once():
+    """Historical TOP/Value overlap represents two independent issued sections.
+
+    Semantic-key migration duplicates still collapse inside each section.
+    The audit must not make historical Value disappear merely because TOP was
+    published for the same event, market and selected player.
+    """
+    shared = item("historical-overlap", "value", correct=False, odds=1.85)
+    top = deepcopy(shared["market_publications"][0])
+    top["section"] = "top_daily"
+    top["publication_key"] = "top_daily:historical-overlap"
+    shared["market_publications"].append(top)
+
+    # Different legacy publication keys for the same already-issued Value.
+    duplicate = deepcopy(shared["market_publications"][0])
+    duplicate["publication_key"] = "value:legacy-migrated"
+    shared["market_publications"].append(duplicate)
+
+    report = analyze([shared], now=NOW)
+    assert report["sections"]["value"]["overall"]["settled"] == 1
+    assert report["sections"]["top_daily"]["overall"]["settled"] == 1
+    assert report["sections"]["value"]["overall"]["losses"] == 1
+    assert report["diagnostics"]["duplicate_semantic_publication"] == 1
+    assert report["same_event_exposure"]["events_with_multiple_non_short_odds_publications"] == 1
+    assert report["value_audit"]["recent_losses"][0]["event_id"] == "historical-overlap"
