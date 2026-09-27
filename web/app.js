@@ -1243,7 +1243,7 @@
       :Math.max(dailyHubRows('see_all').length,
         ['daily','prime','value','ace','double_faults','doubles','games','sets']
           .reduce((sum,tab)=>sum+Math.max(0,Number(dailyHubEntitlement(tab)?.total)||0),0));
-    const odds=rows.map(r=>Number(r?.odds??r?.betting?.odds)).filter(Number.isFinite);
+    const odds=rows.map(r=>Number(r?.odds??r?.betting?.odds)).filter(v=>Number.isFinite(v)&&v>1);
     const perf=state.feed?.performance||{};
     const dashboardBest=state.feed?.dashboard_model_success||{};
     const performanceWindows=state.feed?.performance_windows||{};
@@ -2769,7 +2769,7 @@
     if(hours){state.resultsFilters.window=String(hours/24);state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}
     const fixedDays=hours?hours/24:null;
     const fixedLabel=hours?(hours===24?lcopy('Last 24 hours','Posledných 24 hodín','Posledních 24 hodin'):hours===48?lcopy('Last 48 hours','Posledných 48 hodín','Posledních 48 hodin'):lcopy(`Last ${fixedDays} days`,`Posledných ${fixedDays} dní`,`Posledních ${fixedDays} dní`)):'';
-    const periodOptions=hours?[[String(fixedDays),fixedLabel]]:[['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
+    const periodOptions=hours?[[String(fixedDays),fixedLabel]]:[['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
     return `<div class="results-filter-bar results-filter-bar-v683">
       <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
@@ -2832,23 +2832,30 @@
     const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
     const voids=entries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
-    let stake=0,profit=0,oddsTotal=0,oddsSample=0;
+    let stake=0,profit=0,oddsTotal=0,oddsSample=0,unitSample=0;
     for(const {publication} of graded){
-      const outcome=publicationOutcome(publication),odds=resultVisibleOdds(publication);
-      if(!Number.isFinite(odds)||odds<=1)continue;
-      const units=resultVisibleUnits(publication,outcome,odds);
-      if(!Number.isFinite(units))continue;
-      const realStake=Number(publication?.result?.staked_units);
-      stake+=Number.isFinite(realStake)&&realStake>0?realStake:1;
-      profit+=units;
-      oddsTotal+=odds;
+      // An average quote is descriptive and retains Short Odds; never include
+      // indicative/synthetic historical projection prices in real quote KPIs.
+      const actualOdds=publication?.odds==null?NaN:Number(publication.odds);
+      const priced=publication?.price_status!=='projection_only'&&publication?.price_status!=='model_only';
+      if(!priced||!Number.isFinite(actualOdds)||actualOdds<=1)continue;
+      oddsTotal+=actualOdds;
       oddsSample++;
+      // Prime / Short Odds still contribute their wins and losses above, but
+      // intentionally do not contribute stake, profit, or ROI.
+      if(String(publication?.section||'').toLowerCase()==='prime')continue;
+      const realStake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
+      const realProfit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
+      if(!Number.isFinite(realStake)||realStake<=0||!Number.isFinite(realProfit))continue;
+      stake+=realStake;
+      profit+=realProfit;
+      unitSample++;
     }
     const sample=graded.length;
     return {
       wins,losses:Math.max(0,sample-wins),voids,sample,
       hit:sample?wins/sample:null,avgOdds:oddsSample?oddsTotal/oddsSample:null,
-      roi:stake?profit/stake:null,profit,oddsSample,
+      roi:stake?profit/stake:null,profit,oddsSample,unitSample,
     };
   }
   function renderResults(){
@@ -2864,7 +2871,7 @@
       const pickIdentity=resultPickIdentity(publication,r);
       const pickName=projection?(publication?.selection||pickIdentity.name||'—'):pickIdentity.name;
       const probability=publication?.model_probability==null?NaN:Number(publication?.model_probability);
-      const odds=publication?.odds==null?NaN:Number(publication?.odds),rawUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units),units=outcome.kind==='void'?0:rawUnits;
+      const odds=publication?.odds==null?NaN:Number(publication?.odds),rawUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units);\n      const shortOddsUnitsExcluded=String(publication?.section||'').toLowerCase()==='prime';\n      const units=outcome.kind==='void'?0:shortOddsUnitsExcluded?NaN:rawUnits;
       const projectionMarket=String(publication?.market||publication?.projection_metric||'').toLowerCase();
       const tag=projection?({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'}[projectionMarket]||String(publication?.section||'projection')):String(publication?.section||'');
       const tags=`<span class="result-tag ${escapeHtml(tag)}">${escapeHtml(projection?projectionResultTypeLabel(publication):resultCategoryLabel(tag||'all'))}</span>`;
@@ -3713,8 +3720,8 @@
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
-      ['ROI',m.roi==null?'—':pct(m.roi),lcopy('flat 1u on displayed odds','výpočet pri 1u na zobrazených kurzoch','výpočet při 1u na zobrazených kurzech')],
-      [publicText('Units'),m.oddsSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',lcopy('profit at flat 1u','zisk pri 1u','zisk při 1u')],
+      ['ROI',m.roi==null?'—':pct(m.roi),lcopy('real settled stakes · excluding Short Odds','reálne vyhodnotené vklady · bez Short Odds','reálné vyhodnocené vklady · bez Short Odds')],
+      [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',lcopy('settled profit · Short Odds excluded','vyhodnotený zisk · bez Short Odds','vyhodnocený zisk · bez Short Odds')],
       [publicText('Sample'),String(m.sample),lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')],
     ]);
   }
