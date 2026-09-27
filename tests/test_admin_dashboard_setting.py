@@ -121,7 +121,7 @@ def test_public_markup_unchanged_and_admin_config_is_scoped():
     assert "data-admin-kpi-index" in app
     assert "Dashboard setting" in app
     assert "const cards=dashboardKpiSettings().map" in app
-    assert 'host.innerHTML=cards.map(([icon,label,value,note,trend])=>\`<article class="dashboard-kpi"' in app
+    assert 'host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"' in app
     assert "state.feed?.dashboard_kpi_cards" in app
     assert "source_feed = visible_feed(read_feed(FEED))" in api
     assert 'data["dashboard_kpi_cards"] = selected_dashboard_cards(source_feed, runtime_ui)' in api
