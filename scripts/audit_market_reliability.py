@@ -28,10 +28,14 @@ def _semantic_key(row, pub):
     scope = str(pub.get("projection_scope") or "").strip().lower()
     metric = str(pub.get("projection_metric") or "").strip().lower()
     selection = str(pub.get("selection_id") or pub.get("selection") or "").strip().lower()
+    # The same pick could historically be issued in both TOP and VALUE.
+    # Count it once *per section*; only collapse migrations/duplicates within
+    # that section. Overall staking can deduplicate independently.
+    section = str(pub.get("section") or "").strip().lower()
     if event and selection:
-        return event, market, scope, metric, selection
+        return section, event, market, scope, metric, selection
     key = str(pub.get("selection_key") or pub.get("publication_key") or "").strip()
-    return (key,) if key else None
+    return (section, key) if key else None
 
 
 def _betting_day(issued):
