@@ -69,8 +69,17 @@ def _direct_indoor(match) -> tuple[bool | None, str]:
         for key in ("indoor", "isIndoor", "is_indoor", "outdoor", "isOutdoor"):
             if key in source:
                 value = source[key]
-                if key.lower().endswith("outdoor") and isinstance(value, bool):
-                    value = not value
+                if key.lower().endswith("outdoor"):
+                    # An isOutdoor=true flag means indoor=false, including
+                    # serialized string booleans. Do not reinterpret unknown text.
+                    if isinstance(value, bool):
+                        value = not value
+                    elif isinstance(value, str) and value.strip().casefold() in {
+                        "true", "false", "1", "0"
+                    }:
+                        value = value.strip().casefold() in {"false", "0"}
+                    else:
+                        continue
                 parse(value, field=f"{label}.{key}")
         for key in ("groundType", "ground_type", "surface", "name", "type"):
             # A venue's name may contain "Indoor Arena" but does NOT prove
