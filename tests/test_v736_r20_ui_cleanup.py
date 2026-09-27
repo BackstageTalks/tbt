@@ -41,7 +41,8 @@ def test_system_diagnostics_is_single_read_only_action():
 
 def test_live_worker_setup_is_explained_in_system():
     assert 'BLINQ_LIVE_WORKER_TOKEN' in APP
-    assert 'TBT_LIVE_RADAR_ENABLED=true' in APP
+    assert 'Over externý cron' in APP
+    assert 'BLINQ_LIVE_WORKER_TOKEN' in APP
 
 def test_header_upgrade_cta_is_clear_and_compact():
     assert "label.textContent=lcopy('Upgrade','Upgrade','Upgrade')" in APP

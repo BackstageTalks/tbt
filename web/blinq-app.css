@@ -7931,4 +7931,3 @@ body#blinqPremium .admin-health-ok-details .admin-system-cards{margin:0;padding:
   body#blinqPremium .admin-health-attention .admin-system-cards{grid-template-columns:minmax(0,1fr)}
 }
 
-/* BlinQ runtime patch 7.3.6-r62: admin health priority layout */
