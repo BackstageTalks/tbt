@@ -36,7 +36,7 @@ def normalize_cards(ui_config: dict | None) -> list[dict[str, str]]:
     for slot, raw in enumerate(supplied):
         metric = raw.get("metric") if isinstance(raw, dict) else None
         period = str(raw.get("period") or "") if isinstance(raw, dict) else ""
-        if metric not in ALLOWED_PERIODS or period not in ALLOWED_PERIODS[metric]:
+        if not isinstance(metric, str) or metric not in ALLOWED_PERIODS or period not in ALLOWED_PERIODS[metric]:
             result.append(dict(DEFAULT_CARDS[slot]))
         else:
             result.append({"metric": metric, "period": period})
