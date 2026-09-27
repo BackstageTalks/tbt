@@ -405,7 +405,7 @@
     // optional endpoint must not serialize several timeout windows and hold an
     // authenticated user behind presentation configuration.
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
-      getJSON('/ui-config.json?v=7360&p=61',{timeoutMs:3000}),
+      getJSON('/ui-config.json?v=7360&p=61&dashboard-setting=1',{timeoutMs:3000}),
       getJSON('/config/telegram-groups.json?v=7360&p=61',{timeoutMs:3000}),
       getJSON('/api/v1/ui-config',{timeoutMs:3500}),
       getJSON('/membership-links.json',{timeoutMs:3000})
