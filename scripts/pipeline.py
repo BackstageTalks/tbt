@@ -4,10 +4,12 @@ import argparse
 import json
 import math
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from _bootstrap import ROOT
+from morning_clock import morning_selection_now, morning_publication_delay
 from download_tennis_history import read_json, write_json
 from history_download_budget import LocalRequestBudget, reserve_allocation
 from release_store import ReleaseStore
@@ -329,7 +331,8 @@ def _publish_predictions(
     store, ledger, predictions, matches, model, report, upcoming,
     *, odds_report=None, ace_picks=None, ace_report=None,
     sg_picks=None, sg_report=None, doubles_picks=None, doubles_report=None,
-    doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None, betting_day_start_hour=6,
+    doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None,
+    betting_day_start_hour=6, morning_refresh=False,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -394,7 +397,7 @@ def _publish_predictions(
         snapshot_sources.append(prior_snapshot)
     if isinstance(prior_feed, dict) and prior_feed:
         snapshot_sources.append(prior_feed)
-    if snapshot_sources:
+    if snapshot_sources or morning_refresh:
         feed, daily_snapshot_report = carry_forward_betting_day_market_rows(
             feed,
             snapshot_sources,
@@ -456,6 +459,10 @@ def main():
         type=int,
         default=6,
         help="Europe/Bratislava local hour that starts the BlinQ betting day",
+    )
+    parser.add_argument(
+        "--morning-refresh", action="store_true",
+        help="Prepare the upcoming local betting day before 06:00 and wait until 06:01 to publish",
     )
     parser.add_argument("--promote", action="store_true")
     args = parser.parse_args()
@@ -608,6 +615,16 @@ def main():
         for tour in ("atp", "wta"):
             upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
 
+        # Provider calls retain their actual timestamps. Before 06:00, evaluate
+        # eligibility against the upcoming local betting day; never backdate.
+        selection_now = (
+            morning_selection_now(
+                datetime.now(timezone.utc), start_hour=args.betting_day_start_hour
+            ) if args.morning_refresh else now
+        )
+        if args.morning_refresh:
+            print(json.dumps({"morning_selection_clock": selection_now.isoformat()}), flush=True)
+
         # Doubles uses a separate pair/member model. The raw daily event calls are
         # already cached by the singles refresh above, so maintaining the recent
         # doubles history adds very little discovery traffic.
@@ -630,7 +647,7 @@ def main():
         doubles_odds_report = {}
         if args.doubles_odds_max_events and doubles_predictions:
             doubles_predictions, doubles_odds_report = enrich_current_betting_day_odds(
-                provider, doubles_predictions, now=now,
+                provider, doubles_predictions, now=selection_now,
                 max_events=args.doubles_odds_max_events, provider_id=1,
                 timezone_name="Europe/Bratislava", start_hour=args.betting_day_start_hour,
                 candidate_min_probability=0.55, candidate_min_data_depth=0.35,
@@ -667,7 +684,7 @@ def main():
             available_odds_calls = min(projection_odds_cap, remaining)
             (projection_market_cache, available_projection_markets,
              projection_discovery_report) = prefetch_projection_market_board(
-                provider, predictions, now=now, max_events=available_odds_calls,
+                provider, predictions, now=selection_now, max_events=available_odds_calls,
                 provider_id=1,
             )
             projection_discovery_report["remaining_request_budget_at_start"] = remaining_total
@@ -714,7 +731,7 @@ def main():
                 }
             # No re-query for events already visited by odds-first discovery.
             predictions, odds_report = enrich_current_betting_day_odds(
-                provider, predictions, now=now,
+                provider, predictions, now=selection_now,
                 max_events=projection_odds_cap, provider_id=1,
                 timezone_name="Europe/Bratislava",
                 start_hour=args.betting_day_start_hour,
@@ -728,7 +745,7 @@ def main():
             max(30, min(200, projection_odds_cap)) if projection_odds_cap else 10
         )
         ace_picks, ace_report = select_ace_picks(
-            matches, predictions, now=now,
+            matches, predictions, now=selection_now,
             per_market_limit=projection_pool_per_market,
             total_limit=2 * projection_pool_per_market,
             target_count=projection_pool_per_market,
@@ -737,7 +754,7 @@ def main():
             ),
         )
         sg_picks, sg_report = select_sg_picks(
-            matches, predictions, now=now,
+            matches, predictions, now=selection_now,
             per_market_limit=projection_pool_per_market,
             total_limit=2 * projection_pool_per_market,
             target_count=projection_pool_per_market,
@@ -831,6 +848,14 @@ def main():
         # Partial completed history is checkpointed, but no new prediction
         # feed is published from an incomplete refresh.
         raise refresh_error
+    if args.morning_refresh:
+        # A single job waits without spending provider requests, then publishes.
+        delay = morning_publication_delay(
+            datetime.now(timezone.utc), start_hour=args.betting_day_start_hour
+        )
+        if delay:
+            print(json.dumps({"morning_publish_wait_seconds": round(delay, 1)}), flush=True)
+            time.sleep(delay)
     feed = _publish_predictions(
         prediction_store, prediction_ledger,
         predictions, matches, model, report, upcoming,
@@ -840,6 +865,7 @@ def main():
         doubles_matches=doubles_completed, doubles_upcoming=doubles_upcoming,
         prior_feed=prior_feed, prior_snapshot=prior_snapshot,
         betting_day_start_hour=args.betting_day_start_hour,
+        morning_refresh=args.morning_refresh,
     )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
