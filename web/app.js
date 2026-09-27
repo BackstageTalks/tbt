@@ -1310,7 +1310,9 @@
         value=String(totalToday);
       }else if(['model_success','auto_success'].includes(metric)){
         icon=icons.target;
-        label=lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU');
+        label=metric==='auto_success'
+          ?lcopy('HIT RATE','ÚSPEŠNOSŤ','ÚSPĚŠNOST')
+          :lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU');
         const legacy=metric==='model_success'&&period==='auto'&&!Array.isArray(served)&&Number.isFinite(accuracy)?accuracy:null;
         const result=historical??legacy;
         value=result==null?'—':pct(result);
