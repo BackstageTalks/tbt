@@ -299,6 +299,6 @@ def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetim
                 value = _finite(best.get("accuracy") if isinstance(best, dict) else None)
         else:
             value, sample = _metric_window_value(feed, metric, period, cache, now=now)
-        output.append({**card, "value": value, "selected_period": selected_period,
-                       "sample": sample})
+        output.append({**card, "value": value, **({"selected_period": selected_period,
+            "sample": sample} if period == "auto" else {})})
     return output
