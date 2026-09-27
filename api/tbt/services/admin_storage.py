@@ -28,6 +28,8 @@ class AdminStorageUnavailable(RuntimeError):
 
 
 UI_TABLE = "BlinQAdminConfig"
+UI_HISTORY_PARTITION = "ui-config-history"
+_UI_SNAPSHOT_ID = re.compile(r"^before-\d{8}T\d{12}Z-[a-f0-9]{8}$")
 ANALYTICS_TABLE = "BlinQBannerAnalytics"
 INSIGHTS_TABLE = "BlinQInsights"
 INSIGHT_READS_TABLE = "BlinQInsightReads"
@@ -1032,6 +1034,12 @@ def validate_ui_config(payload: object) -> dict:
 
 
 def save_runtime_ui_config(payload: object, *, actor_id: str = "") -> dict:
+    """Save published UI only after a durable snapshot of the previous version.
+
+    Release JSON and source-code ZIPs cannot restore Azure-published banner
+    images, links and text. Fail closed if snapshotting fails; never overwrite
+    the sole prior published version without a recoverable copy.
+    """
     config = validate_ui_config(payload)
     now = datetime.now(timezone.utc).isoformat()
     encoded = _encode_runtime_ui_payload(config)
@@ -1044,11 +1052,68 @@ def save_runtime_ui_config(payload: object, *, actor_id: str = "") -> dict:
         "updated_by": str(actor_id or "")[:256],
     }
     client = _table(UI_TABLE)
+    snapshot_id = None
     try:
+        try:
+            previous = client.get_entity(partition_key="runtime", row_key="ui-config")
+        except Exception as exc:
+            if not _storage_not_found(exc):
+                raise
+            previous = None
+        if previous and _decode_runtime_ui_payload(previous.get("payload")) is not None:
+            snapshot_id = "before-" + datetime.now(timezone.utc).strftime(
+                "%Y%m%dT%H%M%S%fZ"
+            ) + "-" + uuid.uuid4().hex[:8]
+            client.create_entity({
+                "PartitionKey": UI_HISTORY_PARTITION,
+                "RowKey": snapshot_id,
+                "payload": previous["payload"],
+                "payload_encoding": str(previous.get("payload_encoding") or ""),
+                "previous_updated_at": str(previous.get("updated_at") or "")[:64],
+                "previous_updated_by": str(previous.get("updated_by") or "")[:256],
+                "saved_at": now,
+                "saved_by": str(actor_id or "")[:256],
+            })
         client.upsert_entity(entity, mode="replace")
     except Exception as exc:
-        raise AdminStorageUnavailable("Unable to save runtime UI configuration") from exc
-    return {"saved": True, "updated_at": now}
+        raise AdminStorageUnavailable(
+            "Unable to snapshot previous UI configuration or save new configuration"
+        ) from exc
+    return {"saved": True, "updated_at": now, "previous_snapshot_id": snapshot_id}
+
+
+def list_runtime_ui_snapshots(*, limit: int = 25) -> list[dict]:
+    """Metadata only; accessible through the authenticated Admin endpoint."""
+    client = _table(UI_TABLE)
+    try:
+        rows = client.query_entities(
+            query_filter=f"PartitionKey eq '{UI_HISTORY_PARTITION}'"
+        )
+        items = [{
+            "id": str(row.get("RowKey") or ""),
+            "saved_at": str(row.get("saved_at") or ""),
+            "previous_updated_at": str(row.get("previous_updated_at") or ""),
+            "previous_updated_by": str(row.get("previous_updated_by") or ""),
+        } for row in rows if _UI_SNAPSHOT_ID.fullmatch(str(row.get("RowKey") or ""))]
+        return sorted(items, key=lambda row: row["id"], reverse=True)[:max(1, min(50, limit))]
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to list UI configuration snapshots") from exc
+
+
+def load_runtime_ui_snapshot(snapshot_id: str) -> dict | None:
+    """Read a past complete published config for explicit Admin preview."""
+    if not _UI_SNAPSHOT_ID.fullmatch(str(snapshot_id or "")):
+        raise ValueError("Invalid UI snapshot ID")
+    client = _table(UI_TABLE)
+    try:
+        row = client.get_entity(
+            partition_key=UI_HISTORY_PARTITION, row_key=snapshot_id
+        )
+    except Exception as exc:
+        if _storage_not_found(exc):
+            return None
+        raise AdminStorageUnavailable("Unable to load UI configuration snapshot") from exc
+    return _decode_runtime_ui_payload(row.get("payload"))
 
 
 def _clean_id(value: object, *, fallback: str = "") -> str:
