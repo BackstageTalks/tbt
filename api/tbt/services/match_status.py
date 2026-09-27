@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 import re
+import time
 from typing import Any
 
 
@@ -282,6 +283,7 @@ def scan_match_statuses(
     now: datetime | None = None,
     max_checks: int = 30,
     max_near_checks: int = 30,
+    max_wall_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Settle verified events without trusting a consistently 404ing history route.
 
@@ -290,6 +292,10 @@ def scan_match_statuses(
     historical match, so a missing event is left pending, never scored.
     """
     now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    # Stop before the Azure HTTP gateway deadline; defer, never discard, unfinished rows.
+    deadline = (time.monotonic() + max(0.0, max_wall_seconds)
+                if max_wall_seconds is not None else None)
+    time_budget_exhausted = False
     rows = prediction_rows(feed)
     prior = previous_snapshot if isinstance(previous_snapshot, dict) else {}
     prior_pending = prior.get("pending")
@@ -405,8 +411,15 @@ def scan_match_statuses(
         if eid in statuses or eid in live_by_id:
             continue
         if checked >= max_checks:
+            next_due_id = eid
             break
         if prefer_near and near_attempts >= max_near_checks:
+            next_due_id = eid
+            break
+        # Leave time for one provider call and durable snapshot persistence.
+        if deadline is not None and time.monotonic() + 5.0 >= deadline:
+            time_budget_exhausted = True
+            next_due_id = eid
             break
         next_due_id = ordered[(position + 1) % len(ordered)][1]
 
@@ -423,6 +436,7 @@ def scan_match_statuses(
                 else:
                     if near_attempts >= max_near_checks:
                         checked -= 1
+                        next_due_id = eid
                         break
                     if not callable(near_method):
                         raise RuntimeError("NearStatusRouteUnavailable")
@@ -441,6 +455,11 @@ def scan_match_statuses(
                 not prefer_near and error_code.endswith("_HTTP_404")
                 and callable(near_method) and near_attempts < max_near_checks
             ):
+                # Do not start a second slow provider call near the deadline.
+                if deadline is not None and time.monotonic() + 5.0 >= deadline:
+                    time_budget_exhausted = True
+                    next_due_id = eid
+                    break
                 # Stop repeating the known 404 route once the documented
                 # near-match endpoint succeeds for one real player.
                 try:
@@ -511,6 +530,7 @@ def scan_match_statuses(
         "checked": checked,
         "skipped_live": skipped_live,
         "provider_requests": provider_requests,
+        "time_budget_exhausted": time_budget_exhausted,
         "terminal": len(statuses),
         "newly_resolved": newly_resolved,
         "successful_history": successful_history,
