@@ -1243,7 +1243,7 @@
       :Math.max(dailyHubRows('see_all').length,
         ['daily','prime','value','ace','double_faults','doubles','games','sets']
           .reduce((sum,tab)=>sum+Math.max(0,Number(dailyHubEntitlement(tab)?.total)||0),0));
-    const odds=rows.map(r=>Number(r?.odds??r?.betting?.odds)).filter(Number.isFinite);
+    const odds=rows.map(r=>Number(r?.odds??r?.betting?.odds)).filter(v=>Number.isFinite(v)&&v>1);
     const perf=state.feed?.performance||{};
     const dashboardBest=state.feed?.dashboard_model_success||{};
     const performanceWindows=state.feed?.performance_windows||{};
@@ -1263,7 +1263,12 @@
       [icons.target,lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—','',''],
       [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'','']
     ];
-    host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
+    const averageOddsHelp=lcopy(
+      'Arithmetic mean of valid current TOP quotes visible in your plan; not historical ROI or all-market odds.',
+      'Aritmetický priemer platných kurzov aktuálnych TOP tipov dostupných tvojej úrovni. Nejde o historické ROI ani priemer všetkých trhov.',
+      'Aritmetický průměr platných kurzů aktuálních TOP tipů dostupných tvé úrovni. Nejde o historické ROI ani průměr všech trhů.'
+    );
+    host.innerHTML=cards.map(([icon,label,value,note,trend],index)=>`<article class="dashboard-kpi"${index===2?` title="${escapeHtml(averageOddsHelp)}"`:''}><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
   }
   function highlightRow(){
     return dashboardDailyRows()[0]||dailyHubRows('top')[0]||dailyHubRows('value')[0]||null;
@@ -2769,7 +2774,7 @@
     if(hours){state.resultsFilters.window=String(hours/24);state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}
     const fixedDays=hours?hours/24:null;
     const fixedLabel=hours?(hours===24?lcopy('Last 24 hours','Posledných 24 hodín','Posledních 24 hodin'):hours===48?lcopy('Last 48 hours','Posledných 48 hodín','Posledních 48 hodin'):lcopy(`Last ${fixedDays} days`,`Posledných ${fixedDays} dní`,`Posledních ${fixedDays} dní`)):'';
-    const periodOptions=hours?[[String(fixedDays),fixedLabel]]:[['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
+    const periodOptions=hours?[[String(fixedDays),fixedLabel]]:[['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
     return `<div class="results-filter-bar results-filter-bar-v683">
       <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
@@ -2826,29 +2831,37 @@
     return NaN;
   }
   function localResultMetrics(rows,category){
-    // Use exactly the same deduplication, odds and flat-1u result as the table,
-    // for all four projection tabs and ALL. Verified backend ROI is untouched.
+    // Keep the deduped settled W/L record intact. ROI and Units count only
+    // genuinely priced, staked publications outside Short Odds; placeholders
+    // displayed in historical projection rows never enter financial totals.
     const entries=settledPublishedEntries(rows,category);
     const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
     const voids=entries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
-    let stake=0,profit=0,oddsTotal=0,oddsSample=0;
+    let stake=0,profit=0,oddsTotal=0,oddsSample=0,unitSample=0;
     for(const {publication} of graded){
-      const outcome=publicationOutcome(publication),odds=resultVisibleOdds(publication);
-      if(!Number.isFinite(odds)||odds<=1)continue;
-      const units=resultVisibleUnits(publication,outcome,odds);
-      if(!Number.isFinite(units))continue;
-      const realStake=Number(publication?.result?.staked_units);
-      stake+=Number.isFinite(realStake)&&realStake>0?realStake:1;
-      profit+=units;
-      oddsTotal+=odds;
+      // An average quote is descriptive and retains Short Odds; never include
+      // indicative/synthetic historical projection prices in real quote KPIs.
+      const actualOdds=publication?.odds==null?NaN:Number(publication.odds);
+      const priced=publication?.price_status!=='projection_only'&&publication?.price_status!=='model_only';
+      if(!priced||!Number.isFinite(actualOdds)||actualOdds<=1)continue;
+      oddsTotal+=actualOdds;
       oddsSample++;
+      // Prime / Short Odds still contribute their wins and losses above, but
+      // intentionally do not contribute stake, profit, or ROI.
+      if(String(publication?.section||'').toLowerCase()==='prime')continue;
+      const realStake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
+      const realProfit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
+      if(!Number.isFinite(realStake)||realStake<=0||!Number.isFinite(realProfit))continue;
+      stake+=realStake;
+      profit+=realProfit;
+      unitSample++;
     }
     const sample=graded.length;
     return {
       wins,losses:Math.max(0,sample-wins),voids,sample,
       hit:sample?wins/sample:null,avgOdds:oddsSample?oddsTotal/oddsSample:null,
-      roi:stake?profit/stake:null,profit,oddsSample,
+      roi:stake?profit/stake:null,profit,oddsSample,unitSample,
     };
   }
   function renderResults(){
@@ -2864,7 +2877,9 @@
       const pickIdentity=resultPickIdentity(publication,r);
       const pickName=projection?(publication?.selection||pickIdentity.name||'—'):pickIdentity.name;
       const probability=publication?.model_probability==null?NaN:Number(publication?.model_probability);
-      const odds=publication?.odds==null?NaN:Number(publication?.odds),rawUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units),units=outcome.kind==='void'?0:rawUnits;
+      const odds=publication?.odds==null?NaN:Number(publication?.odds),rawUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units);
+      const shortOddsUnitsExcluded=String(publication?.section||'').toLowerCase()==='prime';
+      const units=outcome.kind==='void'?0:shortOddsUnitsExcluded?NaN:rawUnits;
       const projectionMarket=String(publication?.market||publication?.projection_metric||'').toLowerCase();
       const tag=projection?({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'}[projectionMarket]||String(publication?.section||'projection')):String(publication?.section||'');
       const tags=`<span class="result-tag ${escapeHtml(tag)}">${escapeHtml(projection?projectionResultTypeLabel(publication):resultCategoryLabel(tag||'all'))}</span>`;
@@ -2918,7 +2933,7 @@
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
         return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${escapeHtml(projectionText)}</td><td${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td><span class="results-units-depth"><b${!hasSettledUnits?projectionOddsTitle:''} class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b><small>${escapeHtml(depthText)}</small></span></td></tr>`;
       }
-      return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(pickName)}</strong></td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>${resultHtml}</td><td class="${outcome.kind==='void'?'void':Number.isFinite(units)&&units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
+      return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(pickName)}</strong></td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>${resultHtml}</td><td class="${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
     const pager=`<div class="results-pagination"><div class="results-pagination-meta"><strong>${startIndex+1}–${endIndex}</strong><span>z ${entries.length}</span></div><label><span>Riadkov</span><select id="resultsPageSize">${allowedSizes.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><div class="results-pagination-nav"><button type="button" id="resultsPrevPage" ${state.resultsPage<=0?'disabled':''}>←</button><span>Strana <strong>${state.resultsPage+1}</strong> / ${pages}</span><button type="button" id="resultsNextPage" ${state.resultsPage>=pages-1?'disabled':''}>→</button></div></div>`;
     const head='<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia</th><th>Model / BlinQ %</th><th>Kurz</th><th>Výsledok</th><th>Jednotky / DATA DEPTH</th></tr>';
@@ -3713,8 +3728,8 @@
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
-      ['ROI',m.roi==null?'—':pct(m.roi),lcopy('flat 1u on displayed odds','výpočet pri 1u na zobrazených kurzoch','výpočet při 1u na zobrazených kurzech')],
-      [publicText('Units'),m.oddsSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',lcopy('profit at flat 1u','zisk pri 1u','zisk při 1u')],
+      ['ROI',m.roi==null?'—':pct(m.roi),lcopy('real settled stakes · excluding Short Odds','reálne vyhodnotené vklady · bez Short Odds','reálné vyhodnocené vklady · bez Short Odds')],
+      [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',lcopy('settled profit · Short Odds excluded','vyhodnotený zisk · bez Short Odds','vyhodnocený zisk · bez Short Odds')],
       [publicText('Sample'),String(m.sample),lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')],
     ]);
   }

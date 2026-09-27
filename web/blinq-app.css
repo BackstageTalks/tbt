@@ -7783,3 +7783,15 @@ body#blinqPremium .layered-player-avatar.using-initials .player-avatar-initials{
 }
 
 /* BlinQ runtime patch 7.3.6-r61 photo-pairs hotfix: player coverage and doubles avatars. */
+
+
+/* Settled VOID and SKREČ share the same purple, including zero-unit values. */
+body#blinqPremium#blinqPremium.blinq-route .results-table b.void,
+body#blinqPremium#blinqPremium.blinq-route .results-table b.retired,
+body#blinqPremium#blinqPremium.blinq-route .results-table td.void,
+body#blinqPremium#blinqPremium.blinq-route .results-table .results-units-depth b.void {
+  color:#c99aff!important;
+}
+body#blinqPremium#blinqPremium.blinq-route .results-table td.unit-excluded {
+  color:#849b94!important;
+}
