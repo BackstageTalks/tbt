@@ -17,7 +17,6 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import re
 import time
-import time
 from typing import Any
 
 
@@ -414,6 +413,8 @@ def scan_match_statuses(
             continue
         if deadline is not None and time.monotonic() >= deadline:
             runtime_limited = True
+            time_budget_exhausted = True
+            next_due_id = eid
             break
         if checked >= max_checks:
             next_due_id = eid
@@ -423,6 +424,7 @@ def scan_match_statuses(
             break
         # Leave time for one provider call and durable snapshot persistence.
         if deadline is not None and time.monotonic() + 5.0 >= deadline:
+            runtime_limited = True
             time_budget_exhausted = True
             next_due_id = eid
             break
@@ -462,6 +464,7 @@ def scan_match_statuses(
             ):
                 # Do not start a second slow provider call near the deadline.
                 if deadline is not None and time.monotonic() + 5.0 >= deadline:
+                    runtime_limited = True
                     time_budget_exhausted = True
                     next_due_id = eid
                     break
