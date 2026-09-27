@@ -67,7 +67,7 @@ assert.match(allGood, /<b>11<\/b> v poriadku/);
 assert.match(allGood, /admin-health-ok-details" open/);
 assert.match(allGood, /API ROZPOČET · LIVE RADAR/);
 assert.match(allGood, /LIVE využité/);
-assert.match(allGood, /6 \/ 2\\s?500/);
+assert.match(allGood, /6 \/ 2\s?500/);
 assert.match(allGood, /Spolu rezervované/);
 assert.match(allGood, /Obnoviť diagnostiku/);
 assert.ok(!allGood.includes('Treba skontrolovať'));
