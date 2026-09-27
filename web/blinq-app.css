@@ -8052,3 +8052,40 @@ body#blinqPremium .admin-health-ok-details .admin-system-cards{margin:0;padding:
   body#blinqPremium:not(.blinq-admin) .reference-topbar .reference-navigation a{padding:0 8px!important}
   body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-meta-secondary{display:none!important}
 }
+
+
+/* Admin > INFO & LIVE: separate, individually removable LIVE posts and results. */
+body#blinqPremium.blinq-admin .admin-live-management{
+  margin:19px 0 0;padding:16px;border:1px solid rgba(74,173,137,.26);
+  border-radius:12px;background:rgba(5,25,24,.46);display:grid;gap:12px;
+}
+body#blinqPremium.blinq-admin .admin-live-management>.admin-subsection-heading{
+  margin:14px 0 0;padding-bottom:9px;border-bottom:1px solid rgba(94,164,144,.2);
+}
+body#blinqPremium.blinq-admin .admin-live-management>.admin-subsection-heading:first-child{margin-top:0}
+body#blinqPremium.blinq-admin .admin-live-delete-help{
+  margin:0;color:#a5c1b5;font-size:11px;line-height:1.55;
+}
+body#blinqPremium.blinq-admin .admin-live-results-columns{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;
+}
+body#blinqPremium.blinq-admin .admin-live-results-columns>div{
+  min-width:0;display:grid;gap:10px;align-content:start;
+}
+body#blinqPremium.blinq-admin .admin-live-results-columns h3{
+  font-size:13px;font-weight:800;color:#c4f6db;margin:0;padding:5px 0;
+}
+body#blinqPremium.blinq-admin .admin-live-result-row{
+  min-width:0;overflow-wrap:anywhere;margin:0;
+}
+body#blinqPremium.blinq-admin .admin-live-result-row .admin-insight-row-actions{
+  flex-shrink:0;
+}
+@media(max-width:740px){
+  body#blinqPremium.blinq-admin .admin-live-results-columns{grid-template-columns:minmax(0,1fr)}
+  body#blinqPremium.blinq-admin .admin-live-management{padding:11px}
+  body#blinqPremium.blinq-admin .admin-live-management .admin-insight-row{flex-wrap:wrap;gap:8px}
+  body#blinqPremium.blinq-admin .admin-live-management .admin-insight-row-actions{
+    width:100%;justify-content:flex-end;
+  }
+}

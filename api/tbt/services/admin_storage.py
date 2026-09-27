@@ -1389,6 +1389,8 @@ def load_insight_by_id(insight_id: str) -> dict | None:
     insight_id = str(insight_id or "").strip()
     if not _VALID_ID.fullmatch(insight_id):
         return None
+    if insight_id.startswith(_LIVE_AUTO_PREFIXES) and _live_deleted(insight_id, "insight"):
+        return None
     try:
         entity = _table(INSIGHTS_TABLE).get_entity(partition_key="insights", row_key=insight_id)
     except Exception as exc:
@@ -1400,6 +1402,86 @@ def load_insight_by_id(insight_id: str) -> dict | None:
     return _insight_from_entity(entity)
 
 
+
+# Autonomous scans use deterministic IDs. Tombstones prevent deleted rows from
+# reappearing on the next scan/settlement; LIVE posts and results are independent.
+_LIVE_AUTO_PREFIXES = ("live-watch-", "live-comeback-", "live-set2-")
+_LIVE_DELETION_PARTITION = "live-deletions"
+
+
+def _is_missing_entity(exc: Exception) -> bool:
+    return (getattr(exc, "status_code", None) == 404
+            or "notfound" in type(exc).__name__.lower()
+            or isinstance(exc, KeyError))
+
+
+def _live_deletion_key(record_id: str, kind: str) -> str:
+    if not _VALID_ID.fullmatch(str(record_id or "")) or kind not in {"insight", "result"}:
+        raise ValueError("Invalid LIVE record id")
+    return f"{kind}:{record_id}"
+
+
+def _live_deleted(record_id: str, kind: str) -> bool:
+    try:
+        _table(INSIGHTS_TABLE).get_entity(
+            partition_key=_LIVE_DELETION_PARTITION,
+            row_key=_live_deletion_key(record_id, kind),
+        )
+        return True
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            return False
+        raise AdminStorageUnavailable("Unable to verify LIVE deletion") from exc
+
+
+def _live_deletion_ids(kind: str) -> set[str]:
+    try:
+        rows = _table(INSIGHTS_TABLE).query_entities(
+            query_filter=f"PartitionKey eq '{_LIVE_DELETION_PARTITION}'"
+        )
+        return {str(row.get("record_id") or "")
+                for row in rows if row.get("kind") == kind}
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to read LIVE deletion history") from exc
+
+
+def _store_live_deletion(record_id: str, kind: str, *, actor_id: str = "") -> None:
+    try:
+        _table(INSIGHTS_TABLE).upsert_entity({
+            "PartitionKey": _LIVE_DELETION_PARTITION,
+            "RowKey": _live_deletion_key(record_id, kind),
+            "kind": kind, "record_id": record_id,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
+            "deleted_by": str(actor_id or "admin")[:256],
+        }, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to record LIVE deletion") from exc
+
+
+def delete_live_radar_result(result_id: str, *, actor_id: str = "") -> dict:
+    """Delete just the specified settled comeback or Set-2 result."""
+    result_id = str(result_id or "").strip()
+    if not _VALID_ID.fullmatch(result_id) or not result_id.startswith(
+            ("live-result-comeback-", "live-result-set2-")):
+        raise ValueError("Invalid LIVE result id")
+    client = _table(INSIGHTS_TABLE)
+    try:
+        existing = client.get_entity(partition_key="live-results", row_key=result_id)
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            return {"deleted": False, "id": result_id}
+        raise AdminStorageUnavailable("Unable to load LIVE result") from exc
+    if existing.get("kind") not in {"comeback", "set2"}:
+        raise ValueError("Unsupported LIVE result")
+    _store_live_deletion(result_id, "result", actor_id=actor_id)
+    try:
+        client.delete_entity(partition_key="live-results", row_key=result_id)
+    except Exception as exc:
+        if not _is_missing_entity(exc):
+            raise AdminStorageUnavailable("Unable to delete LIVE result") from exc
+    return {"deleted": True, "id": result_id, "kind": existing["kind"]}
+
+
 def save_live_radar_result(payload: object, *, result_id: str) -> dict:
     """Persist one settled LIVE Radar signal result idempotently."""
     if not isinstance(payload, dict):
@@ -1407,6 +1489,8 @@ def save_live_radar_result(payload: object, *, result_id: str) -> dict:
     result_id = str(result_id or "").strip()
     if not _VALID_ID.fullmatch(result_id):
         raise ValueError("Invalid LIVE result id")
+    if _live_deleted(result_id, "result"):
+        return {"id": result_id, "suppressed": True}
     kind = str(payload.get("kind") or "").strip().lower()
     outcome = str(payload.get("outcome") or "").strip().lower()
     if kind not in {"comeback", "set2"}:
@@ -1453,6 +1537,8 @@ def list_live_radar_results(*, limit: int = 60) -> list[dict]:
         "signal_at": str(row.get("signal_at") or ""),
         "settled_at": str(row.get("settled_at") or ""),
     } for row in rows]
+    deleted = _live_deletion_ids("result")
+    items = [row for row in items if row["id"] not in deleted]
     items.sort(key=lambda row: row.get("settled_at") or "", reverse=True)
     return items[:max(1, min(200, int(limit or 60)))]
 
@@ -1466,6 +1552,8 @@ def save_automated_insight(payload: object, *, actor_id: str = "automation", ins
     """
     insight_id=str(insight_id or '').strip()
     if not _VALID_ID.fullmatch(insight_id): raise ValueError("Invalid automated insight id")
+    if insight_id.startswith(_LIVE_AUTO_PREFIXES) and _live_deleted(insight_id, "insight"):
+        return {"id": insight_id, "suppressed": True}, False
     client=_table(INSIGHTS_TABLE)
     try: existing_entity=client.get_entity(partition_key="insights",row_key=insight_id)
     except Exception as exc:
@@ -1493,18 +1581,28 @@ def save_automated_insight(payload: object, *, actor_id: str = "automation", ins
     return item,True
 
 
-def delete_insight(insight_id: str) -> dict:
-    if not _VALID_ID.fullmatch(str(insight_id or "")):
+def delete_insight(insight_id: str, *, actor_id: str = "") -> dict:
+    insight_id = str(insight_id or "").strip()
+    if not _VALID_ID.fullmatch(insight_id):
         raise ValueError("Invalid insight id")
     client = _table(INSIGHTS_TABLE)
     try:
+        existing = client.get_entity(partition_key="insights", row_key=insight_id)
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            return {"deleted": False}
+        raise AdminStorageUnavailable("Unable to load insight") from exc
+    is_auto_live = (insight_id.startswith(_LIVE_AUTO_PREFIXES)
+                    and str(existing.get("type") or "").lower()
+                    in {"alert", "live_watch", "set2"})
+    if is_auto_live:
+        _store_live_deletion(insight_id, "insight", actor_id=actor_id)
+    try:
         client.delete_entity(partition_key="insights", row_key=insight_id)
     except Exception as exc:
-        status = getattr(exc, "status_code", None)
-        if status == 404 or "notfound" in exc.__class__.__name__.lower() or isinstance(exc, KeyError):
-            return {"deleted": False}
-        raise AdminStorageUnavailable("Unable to delete insight") from exc
-    return {"deleted": True}
+        if not _is_missing_entity(exc):
+            raise AdminStorageUnavailable("Unable to delete insight") from exc
+    return {"deleted": True, "suppressed": is_auto_live}
 
 
 def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool = False, limit: int = 100) -> dict:
@@ -1525,9 +1623,12 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
     # With a large history this used to multiply UI-config storage reads by N.
     live_levels = set(live_alert_levels()) if plan and not include_inactive else set()
     info_levels = set(info_alert_levels()) if plan and not include_inactive else set()
+    deleted_live = _live_deletion_ids("insight")
     items = []
     for entity in rows:
         item = _insight_from_entity(entity)
+        if item["id"] in deleted_live:
+            continue
         if not include_inactive:
             if not item["active"] or (plan and plan not in item["levels"]):
                 continue
