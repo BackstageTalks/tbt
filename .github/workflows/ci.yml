@@ -66,7 +66,17 @@ jobs:
           els=cfg.get('elements') or {}
           banners=[els.get(f'HERO_BANNER_{i}') or {} for i in range(1,6)]
           enabled=sum(bool((b.get('content') or {}).get('enabled')) for b in banners)
-          print(f"Live UI: storage_available={p.get('storage_available')}, runtime_configured={p.get('runtime_configured')}, banner_slots={enabled}")
+          hero=cfg.get('hero_banner') or {}
+          print(f"Live UI: storage_available={p.get('storage_available')}, runtime_configured={p.get('runtime_configured')}, banner_slots={enabled}, active_slots={hero.get('slot_count')}")
+          # Only expose marketing metadata, never the complete config or account secrets.
+          for i,b in enumerate(banners,1):
+              c=b.get('content') or {}
+              print("Live hero %s: %s" % (i,json.dumps({
+                  "enabled":c.get("enabled"),"headline":str(c.get("headline") or "")[:90],
+                  "image_url":str(c.get("image_url") or "")[:180],
+                  "mobile_image_url":str(c.get("mobile_image_url") or "")[:180],
+                  "has_link":bool(c.get("link") or c.get("route")),
+              },ensure_ascii=False)))
           if p.get('storage_available') is not True or p.get('runtime_configured') is not True:
               print("::warning::Live Azure UI config is not confirmed; do not overwrite it with the release fallback.")
           PYUI

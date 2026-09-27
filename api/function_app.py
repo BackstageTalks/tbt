@@ -56,6 +56,8 @@ from tbt.services.admin_storage import (
     banner_analytics_summary,
     load_runtime_ui_config,
     load_effective_ui_config,
+    list_runtime_ui_snapshots,
+    load_runtime_ui_snapshot,
     record_banner_event,
     save_runtime_ui_config,
     list_insights,
@@ -2216,6 +2218,38 @@ def admin_insight_item(req):
         return response({"error": "admin_storage_unavailable"}, 503)
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
+
+@app.route(route="v1/admin/ui-config/snapshots", methods=["GET"])
+def admin_ui_config_snapshots(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        return response({"snapshots": list_runtime_ui_snapshots()})
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/ui-config/snapshots/{snapshot_id}", methods=["GET"])
+def admin_ui_config_snapshot(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        snapshot_id = str(req.route_params.get("snapshot_id") or "")
+        item = load_runtime_ui_snapshot(snapshot_id)
+        if item is None:
+            return response({"error": "snapshot_not_found"}, 404)
+        return response({"id": snapshot_id, "config": item})
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
 
 @app.route(route="v1/admin/ui-config", methods=["PUT"])
 def admin_ui_config(req):

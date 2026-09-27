@@ -187,3 +187,72 @@ def test_match_status_pending_roundtrip_and_compressed_large_snapshot(monkeypatc
     assert restored["statuses"]["void_event"]["status"] == "void"
     assert restored["pending"]["169"]["s"] == "11"
     assert restored["pending_count"] == 170
+
+
+def test_runtime_ui_backup_preserves_previous_complete_published_version(monkeypatch):
+    import copy
+    table = FakeTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    original = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    first = copy.deepcopy(original)
+    first["elements"]["HERO_BANNER_1"]["content"]["headline"] = "Original live headline"
+    first["elements"]["HERO_BANNER_2"]["content"].update({
+        "enabled": True, "image_url": "/api/v1/media/older-banner.webp",
+        "link": "https://example.com/older-campaign",
+    })
+    admin_storage.save_runtime_ui_config(first, actor_id="original-editor")
+    assert admin_storage.list_runtime_ui_snapshots() == []
+    changed = copy.deepcopy(first)
+    changed["elements"]["HERO_BANNER_1"]["content"]["headline"] = "Newer headline"
+    result = admin_storage.save_runtime_ui_config(changed, actor_id="new-editor")
+    assert result["saved"] is True and result["previous_snapshot_id"]
+    snapshots = admin_storage.list_runtime_ui_snapshots()
+    assert len(snapshots) == 1
+    assert snapshots[0]["id"] == result["previous_snapshot_id"]
+    assert snapshots[0]["previous_updated_by"] == "original-editor"
+    # Azure stored the previous full compressed JSON, including unpublished
+    # banners and their media paths and campaign links.
+    previous_row = table.entities[0]
+    assert previous_row["PartitionKey"] == "ui-config-history"
+    previous = admin_storage._decode_runtime_ui_payload(previous_row["payload"])
+    assert previous == first
+    assert admin_storage.load_runtime_ui_config() == changed
+    # Both the version listing and the exact full version must be recoverable.
+    active_get = table.get_entity
+    def indexed_get(*, partition_key, row_key):
+        if partition_key == "ui-config-history":
+            return next(row for row in table.entities if row["RowKey"] == row_key)
+        return active_get(partition_key, row_key)
+    monkeypatch.setattr(table, "get_entity", indexed_get)
+    assert admin_storage.load_runtime_ui_snapshot(result["previous_snapshot_id"]) == first
+
+
+def test_runtime_ui_backup_failure_does_not_overwrite_published_version(monkeypatch):
+    import copy
+    table = FakeTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+    original = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    admin_storage.save_runtime_ui_config(copy.deepcopy(original))
+    earlier_payload = table.single["payload"]
+    def fail_create(_row):
+        raise RuntimeError("Azure snapshot write failed")
+    monkeypatch.setattr(table, "create_entity", fail_create)
+    changed = copy.deepcopy(original)
+    changed["hero_banner"]["slot_count"] = 2
+    try:
+        admin_storage.save_runtime_ui_config(changed)
+    except admin_storage.AdminStorageUnavailable:
+        pass
+    else:
+        raise AssertionError("Snapshot failure must block publishing")
+    assert table.single["payload"] == earlier_payload
+
+
+def test_ui_snapshot_id_validation_is_fail_closed():
+    for invalid in ("../ui-config", "ui-config", "", "before-20260928T010101000000Z-bad!"):
+        try:
+            admin_storage.load_runtime_ui_snapshot(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("An untrusted snapshot key must be rejected")
