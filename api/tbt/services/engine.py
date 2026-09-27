@@ -741,9 +741,21 @@ def _betting_metrics(publications):
     # Short Odds count towards the actual W/L record and average quote, but
     # turnover-sized short prices (often 1.06) must not distort 1u ROI/units.
     # The ledger remains immutable; this exclusion affects aggregates only.
-    unit_eligible = [p for p in graded if str(p.get("section") or "").strip().lower() != "prime"]
-    staked = sum(float(p["result"].get("staked_units") or 0.0) for p in unit_eligible)
-    profit = sum(float(p["result"].get("profit_units") or 0.0) for p in unit_eligible)
+    unit_eligible = []
+    for publication in graded:
+        if str(publication.get("section") or "").strip().lower() == "prime":
+            continue
+        try:
+            stake = float(publication["result"]["staked_units"])
+            profit_units = float(publication["result"]["profit_units"])
+            actual_odds = float(publication["odds"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        if (math.isfinite(stake) and stake > 0 and math.isfinite(profit_units)
+                and math.isfinite(actual_odds) and actual_odds > 1):
+            unit_eligible.append((stake, profit_units))
+    staked = sum(stake for stake, _ in unit_eligible)
+    profit = sum(net for _, net in unit_eligible)
     return {
         "n": len(graded),
         "wins": wins,
