@@ -268,6 +268,92 @@ def main():
                 }""")
                 assert "45.3%" in page.locator("[data-admin-roi-audit]").inner_text()
                 assert page.locator(".admin-roi-audit-alert").count() == 1
+                # Distinct winner and Results financial samples, plus maximum
+                # automatically selected windows. No extra public card/caption.
+                page.evaluate("""() => {
+                  const h=dashboardHarness,s=h.state,base=Date.now();
+                  s.feed.results=[
+                    {event_id:'single-win',scheduled_at:new Date(base-86400000).toISOString(),
+                     market_publications:[{section:'top_daily',market:'match_winner',
+                      selection_id:'single-win',issued_at:new Date(base-172800000).toISOString(),
+                      price_status:'priced',odds:2,
+                      result:{status:'hit',correct:true,staked_units:1,profit_units:1}}]},
+                    {event_id:'single-loss',scheduled_at:new Date(base-86400000).toISOString(),
+                     market_publications:[{section:'value',market:'match_winner',
+                      selection_id:'single-loss',issued_at:new Date(base-172800000).toISOString(),
+                      price_status:'priced',odds:1.8,
+                      result:{status:'miss',correct:false,staked_units:1,profit_units:-1}}]},
+                    {event_id:'double-win',scheduled_at:new Date(base-86400000).toISOString(),
+                     prediction_family:'doubles',
+                     market_publications:[{section:'doubles',market:'match_winner',
+                      selection_id:'double-win',issued_at:new Date(base-172800000).toISOString(),
+                      price_status:'priced',odds:3,
+                      result:{status:'hit',correct:true,staked_units:1,profit_units:2}}]},
+                    {event_id:'ace-win',scheduled_at:new Date(base-86400000).toISOString(),
+                     market_publications:[{section:'ace',market:'aces',selection_id:'ace-win',
+                      issued_at:new Date(base-172800000).toISOString(),
+                      price_status:'priced_projection',odds:2.2,
+                      result:{status:'hit',correct:true,staked_units:1,profit_units:1.2}}]},
+                    {event_id:'void',scheduled_at:new Date(base-86400000).toISOString(),
+                     market_publications:[{section:'top_daily',market:'match_winner',
+                      selection_id:'void',issued_at:new Date(base-172800000).toISOString(),
+                      price_status:'priced',odds:1.5,
+                      result:{status:'retired',correct:false,staked_units:1,profit_units:-1}}]}
+                  ];
+                  s.feed.performance_windows={
+                    '3':{model:{n:50,accuracy:.61},betting:{overall:{n:3,staked_units:3,roi:.22,profit_units:.66},sections:{top_daily:{n:2,avg_odds:1.7}}}},
+                    '7':{model:{n:55,accuracy:.62},betting:{overall:{n:3,staked_units:3,roi:.21,profit_units:.8},sections:{top_daily:{n:2,avg_odds:1.75}}}},
+                    '14':{model:{n:60,accuracy:.81},betting:{overall:{n:3,staked_units:3,roi:.20,profit_units:1.1},sections:{top_daily:{n:2,avg_odds:1.8}}}},
+                    '30':{model:{n:65,accuracy:.7},betting:{overall:{n:3,staked_units:3,roi:.19,profit_units:1.2},sections:{top_daily:{n:2,avg_odds:1.9}}}}
+                  };
+                  s.feed.dashboard_kpi_cards=[];
+                  s.ui.dashboard.kpi_cards=[
+                    {metric:'winner_roi',period:'3'},
+                    {metric:'results_roi',period:'3'},
+                    {metric:'results_yield_units',period:'3'}
+                  ];
+                  document.getElementById('routePanel').innerHTML=h.renderAdminRoute();
+                  h.wireAdmin();
+                }""")
+                assert [x.inner_text() for x in page.locator("[data-admin-kpi-preview]").all()] == [
+                    "0.0%", "80.0%", "+3.20u"
+                ]
+                choice = page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="metric"]')
+                period = page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="period"]')
+                choice.select_option('model_success')
+                period.select_option('auto')
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "81.0%"
+                assert "14 dní" in page.locator(".admin-dashboard-slot").first.inner_text()
+                choice.select_option('roi')
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "22.0%"
+                assert "3 dní" in page.locator(".admin-dashboard-slot").first.inner_text()
+                choice.select_option('yield_units')
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "+1.20u"
+                assert "30 dní" in page.locator(".admin-dashboard-slot").first.inner_text()
+                choice.select_option('winner_roi')
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "0.0%"
+                choice.select_option('results_roi')
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "80.0%"
+                page.evaluate("""() => {
+                  const h=dashboardHarness;
+                  h.state.ui.dashboard.kpi_cards=[
+                    {metric:'winner_roi',period:'auto'},
+                    {metric:'results_roi',period:'auto'},
+                    {metric:'results_yield_units',period:'auto'}
+                  ];
+                  h.state.feed.dashboard_kpi_cards=[
+                    {metric:'winner_roi',period:'auto',value:0,selected_period:'7',sample:2},
+                    {metric:'results_roi',period:'auto',value:.8,selected_period:'7',sample:4},
+                    {metric:'results_yield_units',period:'auto',value:3.2,selected_period:'7',sample:4}
+                  ];
+                  h.renderDashboardKpis();
+                }""")
+                assert page.locator("#dashboardKpis .dashboard-kpi").count() == 3
+                assert [c.locator("strong").inner_text() for c in page.locator("#dashboardKpis .dashboard-kpi").all()] == [
+                    "0.0%", "80.0%", "+3.20u"
+                ]
+                assert page.locator("#dashboardKpis .dashboard-kpi p").count() == 0
+                assert page.locator("#dashboardKpis .dashboard-kpi[title]").count() == 0
                 assert not errors, (width, errors)
                 page.close()
             print("Admin Dashboard setting and unchanged public three-card runtime: PASS")
