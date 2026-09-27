@@ -562,15 +562,27 @@
   }
 
   function loadAdminDraft(){
-    if(!isAdminAccount() || state.draftLoaded) return;
+    if(!isAdminAccount() || state.draftLoaded)return;
+    // The old auto-import silently overrode a published Azure configuration
+    // with a possibly days-old browser draft every time an admin signed in.
+    // Never mutate the live presentation on boot; recovery is explicit below.
     state.draftLoaded=true;
+  }
+  function restoreAdminDraft(){
     try{
       const saved=JSON.parse(localStorage.getItem(draftKey())||'null');
-      if(saved?.schema===2 && saved?.elements && saved?.plans){
-        if(String(saved.ui_revision||'')===String(state.uiSource?.ui_revision||'')){state.ui=mergeConfig(state.uiSource,saved);applyV6514AdminCleanup();}
-        else localStorage.removeItem(draftKey());
+      if(saved?.schema!==2||!saved?.elements||!saved?.plans){
+        showStatus('V tomto prehliadači nie je uložený koncept.');return;
       }
-    }catch{}
+      if(String(saved.ui_revision||'')!==String(state.uiSource?.ui_revision||'')){
+        showStatus('Koncept je z inej verzie BlinQ. Exportuj ho pred obnovou.');return;
+      }
+      // Explicit preview only: no backend write until a separate Publish click.
+      state.ui=mergeConfig(state.ui,saved);
+      applyV6514AdminCleanup();
+      renderAllUiContent();rerenderAdmin();
+      showStatus('Uložený koncept bol načítaný iba do editora; živý web sa nezmenil.');
+    }catch{showStatus('Uložený koncept sa nepodarilo načítať.');}
   }
 
   function dashboardSectionConfig(key){
@@ -3842,7 +3854,7 @@
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
     else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy sa publikujú okamžite</div>';
     else if(state.adminTab==='system')contextual='<div class="admin-account-direct-note"><span></span>Kontrola je len čítacia diagnostika</div>';
-    else contextual='<div class="admin-publish-hint"><span>Koncept</span><i></i><b>Live po publikovaní</b></div><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Uložiť koncept</button><button class="btn btn-primary" type="button" data-admin-action="publish-config" '+(state.uiStorageAvailable===true?'':'disabled title="Publikovanie je pozastavené, kým sa neoverí Azure konfigurácia"')+'>Publikovať</button>';
+    else contextual='<div class="admin-publish-hint"><span>Koncept</span><i></i><b>Live po publikovaní</b></div><button class="btn btn-ghost" type="button" data-admin-action="load-draft">Načítať koncept</button><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Uložiť koncept</button><button class="btn btn-primary" type="button" data-admin-action="publish-config" '+(state.uiStorageAvailable===true?'':'disabled title="Publikovanie je pozastavené, kým sa neoverí Azure konfigurácia"')+'>Publikovať</button>';
     const uiWarning=state.uiStorageAvailable===false
       ?'<div class="admin-runtime-note is-error" role="alert"><strong>Publikovanie konfigurácie je pozastavené</strong><span>'+escapeHtml(state.uiRuntimeNotice||'Azure konfigurácia je nedostupná.')+' Zobrazené nastavenia môžu byť iba posledná overená kópia alebo predvolené hodnoty. Nemeň živé bannery ani odkazy, kým sa spojenie neobnoví.</span></div>'
       :'';
@@ -4032,6 +4044,7 @@
         return;
       }
       if(action==='save-draft')saveDraft();
+      else if(action==='load-draft')restoreAdminDraft();
       else if(action==='publish-config')await publishUiConfig();
       else if(action==='export')exportUiConfig();
       else if(action==='reset'){localStorage.removeItem(draftKey());state.ui=clone(state.uiSource);state.selectedElement='HERO_BANNER_1';renderAllUiContent();rerenderAdmin();showStatus('Reset to repository defaults. Publish if you want this reset live.');}
