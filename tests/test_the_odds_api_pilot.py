@@ -92,4 +92,5 @@ def test_free_plan_budget_31_day_month():
     workflow = (Path(__file__).resolve().parents[1] /
                 ".github/workflows/the-odds-api-pilot.yml").read_text(encoding="utf-8")
     assert "THE_ODDS_API_KEY: ${{ secrets.THE_ODDS_API_KEY }}" in workflow
-    assert "25 6,18 * * *" in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "  schedule:" not in workflow

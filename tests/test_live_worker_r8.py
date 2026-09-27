@@ -25,12 +25,13 @@ def test_browser_prefers_worker_snapshot_and_only_falls_back_to_scan():
     assert '"fallback_scan":True' in block
 
 
-def test_worker_runs_roughly_once_per_minute_without_browser():
-    assert "cron: '*/5 * * * *'" in WORKFLOW
+def test_worker_remains_externally_dispatchable_without_github_cron():
+    assert 'workflow_dispatch:' in WORKFLOW
+    assert '  schedule:' not in WORKFLOW
     assert 'for scan in 1 2 3 4 5 6' in WORKFLOW
     assert 'sleep 50' in WORKFLOW
     assert 'X-Blinq-Worker-Token' in WORKFLOW
-    assert 'TBT_LIVE_RADAR_ENABLED' in WORKFLOW
+    assert "github.event_name == 'workflow_dispatch'" in WORKFLOW
 
 
 def test_worker_heartbeat_is_persistent_and_visible_in_admin_system():

@@ -7,13 +7,14 @@ MORNING = (ROOT / ".github/workflows/morning-refresh.yml").read_text(
 DATA = (ROOT / ".github/workflows/data.yml").read_text(encoding="utf-8")
 
 
-def test_morning_refresh_uses_local_betting_day_and_existing_pipeline():
-    assert "cron: '17 6 * * *'" in MORNING
-    assert "timezone: Europe/Bratislava" in MORNING
+def test_morning_refresh_uses_external_cron_and_existing_pipeline():
+    assert "workflow_dispatch:" in MORNING
+    assert "  schedule:" not in MORNING
+    assert "  schedule:" not in DATA
     assert "gh workflow run data.yml" in MORNING
     assert "-f mode=refresh" in MORNING
     assert "-f betting_day_start_hour=6" in MORNING
-    assert "TBT_MORNING_REFRESH_ENABLED" in MORNING
+    assert "github.event_name == 'workflow_dispatch'" in MORNING
 
 
 def test_morning_refresh_is_request_capped_and_reuses_data_deploy_locks():
