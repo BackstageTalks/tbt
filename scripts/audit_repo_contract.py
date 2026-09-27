@@ -306,78 +306,7 @@ if 'workflow_dispatch:' not in account_yml or 'BLINQ_ACCOUNT_WORKER_TOKEN' not i
 scheduled_workflows = [
     path.name for path in sorted((ROOT / '.github' / 'workflows').iterdir())
     if path.suffix in {'.yml', '.yaml'}
-    and re.search(r'(?m)^  schedule:\s*
-
-# 9. Production tree cleanliness.
-# In CI the checkout itself necessarily contains .git/.git metadata.  The audit must
-# inspect files tracked by Git, not every file present in the runner workspace.
-def tracked_repo_files() -> list[Path]:
-    try:
-        proc = subprocess.run(
-            ['git', '-C', str(ROOT), 'ls-files', '-z'],
-            check=True, capture_output=True, text=False,
-        )
-        return [ROOT / raw.decode('utf-8') for raw in proc.stdout.split(b'\0') if raw]
-    except (FileNotFoundError, subprocess.CalledProcessError):
-        # ZIP/local fallback: walk the shipped tree, but never treat VCS/runtime
-        # metadata as a production artifact.
-        out: list[Path] = []
-        for candidate in ROOT.rglob('*'):
-            if not candidate.is_file():
-                continue
-            rel = candidate.relative_to(ROOT)
-            if any(part in {'.git', '.pytest_cache', '__pycache__'} for part in rel.parts):
-                continue
-            out.append(candidate)
-        return out
-
-for path in tracked_repo_files():
-    # CI sanitizes compiled/cache artifacts before this audit. A file can still
-    # be listed in Git's index when it came from an older browser-uploaded ZIP,
-    # but if it no longer exists in the production working tree it cannot ship.
-    if not path.exists():
-        continue
-    rel = path.relative_to(ROOT)
-    if any(part in {'.pytest_cache', '__pycache__'} for part in rel.parts):
-        fail(f'cache/build artifact committed: {rel}')
-    if path.suffix in {'.pyc', '.pyo'} or path.name.endswith(('.bak', '.tmp')):
-        fail(f'temporary/compiled artifact committed: {rel}')
-root_legacy = sorted(p.name for p in ROOT.glob('BLINQ_*.md')) + sorted(p.name for p in ROOT.glob('AUDIT_*.md'))
-if root_legacy:
-    fail(f'historical release docs still clutter repository root: {root_legacy}')
-ok('production tree cleanliness checks complete')
-
-# 10. Release-specific runtime contracts that must be checked before PASS.
-_admin_storage = (ROOT / "api" / "tbt" / "services" / "admin_storage.py").read_text(encoding="utf-8")
-if "_normalize_membership_invariants(payload)" not in _admin_storage:
-    fail("r26 membership publish self-heal is missing")
-
-_app = app
-_ui = ui
-if not (((_ui.get("dashboard") or {}).get("daily_hub") or {}).get("tabs") or {}).get("prime", {}).get("enabled"):
-    fail("Short Odds public configuration is missing")
-if "Kopírovať nastavenie z iného levelu" in _app or "data-admin-action=\"copy-plan\"" in _app or "adminCopyFrom" in _app:
-    fail("retired copy-from-level admin tool is still present")
-if "admin-see-all-rule-note" in _app or "const rows=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].map" not in _app:
-    fail("unified SEE ALL controls are missing")
-if "BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract" not in css:
-    fail("r28 final responsive stability layer is missing")
-if "blinq-mobile-keyboard-open" not in responsive or "--bq-viewport-height" not in responsive:
-    fail("r28 dynamic mobile viewport/keyboard handling is missing")
-if "const mobileLabels=dailyHubColumns(tab);" not in _app:
-    fail("r28 semantic mobile table labels are missing")
-ok('r26-r29 publish, Short Odds, separate Double Faults, SEE ALL and mobile responsive contracts present')
-
-if errors:
-    print('BlinQ repository contract audit: FAIL', file=sys.stderr)
-    for item in errors:
-        print(f'  - {item}', file=sys.stderr)
-    sys.exit(1)
-
-print('BlinQ repository contract audit: PASS')
-for item in checks:
-    print(f'  ✓ {item}')
-, path.read_text(encoding='utf-8'))
+    and re.search(r'(?m)^  schedule:\s*$', path.read_text(encoding='utf-8'))
 ]
 if scheduled_workflows:
     fail('GitHub cron schedules must be external-only: ' + ', '.join(scheduled_workflows))
