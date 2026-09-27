@@ -23,7 +23,8 @@ def test_independent_live_and_morning_caps_preserve_emergency_headroom():
     ledger, result = shared_budget.calculate(ledger, "refresh", 750, now=NOW)
     assert result["remaining"]["refresh"] == 0
     assert result["global_remaining"] == 8750
-    ledger, result = shared_budget.calculate(ledger, "history", 8500, now=NOW)
+    for chunk in (3000, 3000, 2500):
+        ledger, result = shared_budget.calculate(ledger, "history", chunk, now=NOW)
     ledger, result = shared_budget.calculate(ledger, "match", 250, now=NOW)
     assert result["global_spent"] == 12000
     assert result["global_remaining"] == 0
