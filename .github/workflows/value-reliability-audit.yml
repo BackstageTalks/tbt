@@ -1,0 +1,86 @@
+name: Value reliability audit (read-only)
+
+on:
+  workflow_dispatch:
+    inputs:
+      window_days:
+        description: Issued pre-match Value history in days
+        required: true
+        default: '90'
+        type: choice
+        options:
+          - '30'
+          - '90'
+          - '180'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: value-reliability-audit
+  cancel-in-progress: false
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Verify private ledger access
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo 'Missing read token for private tbt-data release'; exit 1; }
+      - name: Audit existing issued bets, without API provider calls or writes
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          WINDOW_DAYS: ${{ inputs.window_days }}
+        run: |
+          python scripts/audit_market_reliability.py \
+            --window-days "$WINDOW_DAYS" \
+            --out "$RUNNER_TEMP/value_audit.json" \
+            --markdown "$RUNNER_TEMP/value_audit.md"
+      - name: Publish aggregate-only diagnostics in job summary
+        env:
+          REPORT: ${{ runner.temp }}/value_audit.json
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          report = json.loads(Path(os.environ["REPORT"]).read_text(encoding="utf-8"))
+          value = report["sections"]["value"]
+          audit = report["value_audit"]
+          lines = [
+              "# BlinQ Value audit (issued-only; no production changes)",
+              "",
+              f"Window: {report['window_days']} days",
+              f"Published Value: {value['overall']['published']}",
+              f"Settled Value: {value['overall']['settled']}",
+              f"Exact issuance evidence: {audit['exact_issue_snapshots']}",
+              f"Comparable with exact quality and both odds: {audit['comparable_published']}",
+              "",
+              "## Diagnostics",
+          ]
+          lines.extend(f"- {key}: {count}" for key, count in audit["diagnostic_flags"].items())
+          lines.extend(["", "## Shadow cohorts on same issued picks", "",
+                        "| Cohort | Settled | W | L | Flat-1u ROI | Small sample |",
+                        "|---|---:|---:|---:|---:|---|"])
+          for label, metric in audit["shadow_on_same_issued_population"].items():
+              roi = metric["yield_flat_stake"]
+              lines.append(
+                  f"| {label} | {metric['settled']} | {metric['wins']} | "
+                  f"{metric['losses']} | {roi:.1%} | {metric['small_sample']} |"
+                  if roi is not None else
+                  f"| {label} | {metric['settled']} | {metric['wins']} | "
+                  f"{metric['losses']} | n/a | {metric['small_sample']} |"
+              )
+          lines.extend([
+              "", "No player identities, private ledger, or detailed model inputs are uploaded.",
+              "Shadow cohorts are retrospective; do not change publication gates without forward validation.",
+          ])
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
+              out.write("\n".join(lines) + "\n")
+          print(f"VALUE audit: published={value['overall']['published']}, comparable={audit['comparable_published']}")
+          PY
