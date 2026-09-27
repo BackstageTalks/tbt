@@ -21,7 +21,7 @@ def stamp(web: Path, sha: str) -> dict:
     index = web / "index.html"
     html = index.read_text(encoding="utf-8")
     # Do not permit twice-stamped checkouts or silently missing dependencies.
-    html = re.sub(r'\s*<meta name="blinq-deployment-sha" content="[0-9a-f]+"\s*/>', "", html)
+    html = re.sub(r'^[ \t]*<meta name="blinq-deployment-sha" content="[0-9a-f]+"[ \t]*/>[ \t]*\n?', "", html, flags=re.MULTILINE)
     html = html.replace(
         '  <title>BlinQ · Tennis Intelligence</title>',
         f'  <meta name="blinq-deployment-sha" content="{sha}" />\n'
