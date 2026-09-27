@@ -212,6 +212,21 @@ def analyze(ledger, *, now=None, window_days=90):
         implied_source = "both_sides_no_vig" if fair is not None and 0 < fair < 1 else "one_side_raw_with_margin" if odds else "unknown"
         gap = probability - implied if probability is not None and implied is not None else None
         depth = _depth(row, pub)
+        # Value diagnostics use evidence that was frozen at the exact public
+        # issuance. Never substitute a subsequently enriched quality block.
+        snapshot = issued_snapshot(pub)
+        quality = snapshot.get("quality") if isinstance(snapshot, dict) and isinstance(snapshot.get("quality"), dict) else {}
+        sides = [quality.get(side) if isinstance(quality.get(side), dict) else {}
+                 for side in ("player1", "player2")]
+        surface_counts = [number(side.get("surface_matches")) for side in sides]
+        min_surface_at_issue = (
+            min(int(n) for n in surface_counts)
+            if snapshot is not None and all(n is not None and n >= 0 for n in surface_counts)
+            else None
+        )
+        no_vig_gap = gap if implied_source == "both_sides_no_vig" else None
+        public_ev = probability * odds - 1 if probability is not None and odds is not None else None
+        raw_recorded_ev = number(pub.get("expected_value"))
         version, version_source = _model_version(row, pub)
         bet_day = _betting_day(issued)
         entries.append({
@@ -221,6 +236,16 @@ def analyze(ledger, *, now=None, window_days=90):
             "implied_source": implied_source, "probability_market_gap": gap,
             "odds_gap_band": _gap_band(gap), "confidence_band": _confidence_band(probability),
             "data_depth_band": _depth_band(depth), "competition": competition(row),
+            "exact_issue_snapshot": snapshot is not None,
+            "min_surface_matches_at_issue": min_surface_at_issue,
+            "surface_depth_band": (
+                "unknown" if min_surface_at_issue is None
+                else "below_5" if min_surface_at_issue < 5 else "5_plus"
+            ),
+            "no_vig_gap": no_vig_gap,
+            "no_vig_gap_band": "unknown" if no_vig_gap is None else _gap_band(no_vig_gap),
+            "public_expected_value": public_ev,
+            "recorded_raw_expected_value": raw_recorded_ev,
             "model_version": version, "model_version_source": version_source,
             "betting_day": bet_day, "issued_at": issued.isoformat(),
             "scheduled_at": scheduled.isoformat(),
@@ -245,6 +270,83 @@ def analyze(ledger, *, now=None, window_days=90):
             "exact_probability_snapshots": sum(e["probability_source"] == "exact_displayed" for e in rows),
             "unverified_model_versions": sum(e["model_version_source"] == "unverified" for e in rows),
         }
+
+    # Shadow cohorts are evaluated only within the SAME historical population
+    # of actual issued Value picks with exact pre-match confidence/quality and
+    # both sides of the odds. These summaries are observational and must NOT
+    # be interpreted as results of an unissued strategy or used to tune gates.
+    value_rows = by_section["value"]
+    comparable_value = [
+        e for e in value_rows
+        if e["exact_issue_snapshot"]
+        and e["probability"] is not None
+        and e["odds"] is not None
+        and e["min_surface_matches_at_issue"] is not None
+        and e["no_vig_gap"] is not None
+    ]
+    value_shadows = {
+        "exact_evidence_baseline": comparable_value,
+        "public_probability_65_plus": [e for e in comparable_value if e["probability"] >= .65],
+        "surface_5_each": [e for e in comparable_value if e["min_surface_matches_at_issue"] >= 5],
+        "no_vig_gap_under_15pp": [e for e in comparable_value if e["no_vig_gap"] < .15],
+        "combined_65_surface5_gap15": [
+            e for e in comparable_value
+            if e["probability"] >= .65
+            and e["min_surface_matches_at_issue"] >= 5
+            and e["no_vig_gap"] < .15
+        ],
+    }
+    value_audit = {
+        "exact_issue_snapshots": sum(e["exact_issue_snapshot"] for e in value_rows),
+        "comparable_published": len(comparable_value),
+        "comparable_settled": sum(e["correct"] is not None for e in comparable_value),
+        "by_surface_samples_at_issue": _group(value_rows, "surface_depth_band"),
+        "by_no_vig_market_gap": _group(value_rows, "no_vig_gap_band"),
+        "shadow_on_same_issued_population": {
+            name: summarize(group) for name, group in value_shadows.items()
+        },
+        "diagnostic_flags": {
+            "raw_ev_positive_public_ev_nonpositive": sum(
+                e["recorded_raw_expected_value"] is not None
+                and e["recorded_raw_expected_value"] > 0
+                and e["public_expected_value"] is not None
+                and e["public_expected_value"] <= 0
+                for e in value_rows
+            ),
+            "no_vig_market_gap_15pp_plus": sum(
+                e["no_vig_gap"] is not None and e["no_vig_gap"] >= .15
+                for e in value_rows
+            ),
+            "exact_surface_history_below_5": sum(
+                e["min_surface_matches_at_issue"] is not None
+                and e["min_surface_matches_at_issue"] < 5
+                for e in value_rows
+            ),
+            "missing_exact_issued_evidence": sum(
+                not e["exact_issue_snapshot"] for e in value_rows
+            ),
+            "missing_two_sided_fair_probability": sum(
+                e["no_vig_gap"] is None for e in value_rows
+            ),
+        },
+        "recent_losses": [
+            {key: e[key] for key in (
+                "event_id", "selection", "competition", "odds", "probability",
+                "public_expected_value", "recorded_raw_expected_value",
+                "no_vig_gap", "min_surface_matches_at_issue", "model_version",
+                "issued_at", "scheduled_at",
+            )}
+            for e in sorted(
+                (e for e in value_rows if e["status"] == "loss"),
+                key=lambda e: e["scheduled_at"], reverse=True,
+            )[:12]
+        ],
+        "interpretation": (
+            "Shadow groups are subsets of already published picks with the same exact "
+            "pre-match evidence. They cannot establish that a changed production "
+            "selector would improve ROI. Samples below 100 are exploratory."
+        ),
+    }
 
     high_confidence_losses = sorted(
         [{
@@ -292,6 +394,7 @@ def analyze(ledger, *, now=None, window_days=90):
         "schema": 1, "window_days": window_days, "start": start.isoformat(), "end": now.isoformat(),
         "selection_scope": list(PRIMARY), "excluded_from_independent_betting_analysis": ["prime", "short_odds"],
         "sections": section_reports,
+        "value_audit": value_audit,
         "diagnostics": dict(sorted(diagnostics.items())),
         "high_confidence_top_losses": {
             "total": len(high_confidence_losses), "examples": high_confidence_losses[:30],
@@ -356,7 +459,30 @@ def main():
             f"Active betting days: {data['active_days']} · days with 5+ published: {data['days_with_at_least_5_publications']}",
             "",
         ])
+    va = report["value_audit"]
     lines.extend([
+        "## Value: evidence and shadow cohorts (no production changes)",
+        f"Exact issued snapshots: {va['exact_issue_snapshots']} · comparable: {va['comparable_published']} · settled comparable: {va['comparable_settled']}",
+        f"Market disagreement >=15pp (fair two-way): {va['diagnostic_flags']['no_vig_market_gap_15pp_plus']}",
+        f"Positive recorded raw EV but nonpositive displayed-probability EV: {va['diagnostic_flags']['raw_ev_positive_public_ev_nonpositive']}",
+        f"Exact snapshots with <5 surface matches on either side: {va['diagnostic_flags']['exact_surface_history_below_5']}",
+        f"Missing exact issuance evidence: {va['diagnostic_flags']['missing_exact_issued_evidence']}",
+        "",
+        "### Same-issuance shadow cohorts",
+    ])
+    for label, sample in va["shadow_on_same_issued_population"].items():
+        yield_text = (
+            f"{sample['yield_flat_stake']:.1%}"
+            if sample["yield_flat_stake"] is not None else "n/a"
+        )
+        lines.append(
+            f"- {label}: settled {sample['settled']}, W {sample['wins']} / L {sample['losses']}, "
+            f"flat-1u ROI {yield_text}, small_sample={sample['small_sample']}"
+        )
+    lines.extend([
+        "",
+        "Retrospective issued-only cohorts are NOT a backtest of unpublished candidate selections.",
+        "",
         "## Diagnostic candidates",
         f"High-confidence TOP losses (>=80%): {report['high_confidence_top_losses']['total']}",
         f"Public-probability versus fair/raw implied gap >=15pp: {report['probability_market_discrepancies']['total']}",
