@@ -72,6 +72,7 @@ class RapidTennisClient:
         # bypassing a partially configured shared budget.
         from .shared_budget import from_environment
         shared_reservation = from_environment()
+        self._shared_reservation = shared_reservation
         if shared_reservation is not None and request_budget is not None:
             def combined_reservation(client, cfg, *, enrichment=False):
                 request_budget(client, cfg, enrichment=enrichment)
@@ -97,6 +98,9 @@ class RapidTennisClient:
 
     def close(self) -> None:
         self.client.close()
+        shared = getattr(self, "_shared_reservation", None)
+        if shared is not None:
+            shared.close()
 
     def configure_runtime_fast_fail(
         self,
