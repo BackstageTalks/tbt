@@ -1171,6 +1171,7 @@ def _public_live_worker_heartbeat() -> dict:
         "updated_at": snapshot.get("updated_at"),
         "fresh": fresh,
         "age_seconds": age_seconds,
+        "budget_paused": bool(snapshot.get("budget_paused")),
     }
 
 
@@ -1307,6 +1308,12 @@ def live_radar(req):
             results=[]
         if snapshot is not None:
             return response({**_public_live_radar_payload(snapshot),"results":results,"autonomous":True})
+        # On a deliberate quota pause, serve the last heartbeat instead of
+        # triggering paid browser fallback scans on every page view.
+        last_status=load_live_worker_status() or {}
+        if last_status.get("budget_paused"):
+            return response({**_public_live_radar_payload(last_status),
+                             "results":results,"autonomous":True,"stale":True})
         r=_run_live_radar(force=False,publish=True)
         return response({**_public_live_radar_payload(r),"results":results,"autonomous":False,"fallback_scan":True})
     except AuthUnavailable:return response({"error":"auth_unavailable"},503)
@@ -1361,6 +1368,13 @@ def internal_live_radar_worker(req):
     try:
         result=_run_live_radar(force=True,publish=True)
         public=_public_live_radar_payload(result)
+        if public.get("budget_paused"):
+            previous=load_live_worker_status() or {}
+            public["last_error"]="api_budget_exhausted"
+            public["last_success_at"]=(
+                previous.get("last_success_at")
+                or (previous.get("scanned_at") if not previous.get("last_error") else None)
+            )
         persisted=True
         try:
             save_live_worker_status(public)
