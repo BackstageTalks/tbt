@@ -3857,7 +3857,7 @@
     return '<section class="admin-runtime-note" style="display:block" aria-label="História vzhľadu">'+
       '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><strong>Obnova publikovaného vzhľadu</strong>'+
       '<div><button class="btn btn-ghost" type="button" data-admin-action="load-ui-snapshots" '+(state.adminUiSnapshotsLoading?'disabled':'')+'>'+
-      (state.adminUiSnapshotsLoading?'Načítavam…':'História konfigurácie')+'</button>'+
+      (state.adminUiSnapshotsLoading?'Načítavam…':'História konfigurácie')+'</button>'+'<button class="btn btn-ghost" type="button" data-admin-action="preview-local-ui-draft">Bannery zo starého konceptu</button>'+
       (state.adminPreRestorePreview?'<button class="btn btn-ghost" type="button" data-admin-action="undo-ui-preview">Vrátiť predchádzajúci náhľad</button>':'')+
       '</div></div><small>Obnova je najprv iba v editore. Živú stránku zmení až samostatné Publikovať. Aktuálne prístupy a nové KPI zostanú zachované.</small>'+
       (state.adminUiSnapshotsError?'<div role="alert">'+escapeHtml(state.adminUiSnapshotsError)+'</div>':'')+
@@ -3872,31 +3872,45 @@
     }catch(error){state.adminUiSnapshotsError=error?.message||'História Azure nie je dostupná.';}
     finally{state.adminUiSnapshotsLoading=false;rerenderAdmin();}
   }
+
+  function applyAdminPresentationSnapshot(saved){
+    if(saved?.schema!==2||!saved?.elements||!saved?.hero_banner)throw new Error('Konfigurácia neobsahuje platné bannery.');
+    const current=clone(state.ui),next=clone(state.ui);
+    next.hero_banner=mergeConfig(next.hero_banner||{},saved.hero_banner);
+    Object.entries(saved.elements).forEach(([id,old])=>{
+      if(!next.elements?.[id]||!old||next.elements[id].kind!==old.kind)return;
+      if(old.content&&typeof old.content==='object')next.elements[id].content=mergeConfig(next.elements[id].content||{},old.content);
+      if(old.kind==='hero_banner'&&old.watermark)next.elements[id].watermark=mergeConfig(next.elements[id].watermark||{},old.watermark);
+    });
+    if(Array.isArray(saved.navigation?.learn)){
+      next.navigation=next.navigation||{};next.navigation.learn=clone(saved.navigation.learn);
+    }
+    const marketing=['label','eyebrow','description','short_description','card_title','cta_label','url','invite_url'];
+    Object.entries(saved.plans||{}).forEach(([id,old])=>{
+      const target=next.plans?.[id];if(!target||!old)return;
+      marketing.forEach(k=>{if(Object.prototype.hasOwnProperty.call(old,k))target[k]=clone(old[k]);});
+    });
+    if(!state.adminPreRestorePreview)state.adminPreRestorePreview=current;
+    state.ui=next;applyV6514AdminCleanup();renderAllUiContent();rerenderAdmin();
+  }
   async function previewAdminUiSnapshot(snapshotId){
-    if(!snapshotId||!window.confirm('Načítať uložený vzhľad do editora? Nezmení to živý web a neobnoví staré oprávnenia ani nastavenia modelu.'))return;
+    if(!snapshotId||!window.confirm('Načítať uložený vzhľad do editora? Živý web ani dnešné oprávnenia sa nezmenia.'))return;
     try{
-      const result=await BlinqAuth.adminUiSnapshot(snapshotId),saved=result?.config;
-      if(saved?.schema!==2||!saved?.elements||!saved?.hero_banner)throw new Error('Historická konfigurácia nie je platná.');
-      const current=clone(state.ui),next=clone(state.ui);
-      next.hero_banner=mergeConfig(next.hero_banner||{},saved.hero_banner);
-      Object.entries(saved.elements).forEach(([id,old])=>{
-        if(!next.elements?.[id]||!old||next.elements[id].kind!==old.kind)return;
-        if(old.content&&typeof old.content==='object')next.elements[id].content=mergeConfig(next.elements[id].content||{},old.content);
-        if(old.kind==='hero_banner'&&old.watermark)next.elements[id].watermark=mergeConfig(next.elements[id].watermark||{},old.watermark);
-      });
-      if(Array.isArray(saved.navigation?.learn)){
-        next.navigation=next.navigation||{};next.navigation.learn=clone(saved.navigation.learn);
-      }
-      const marketing=['label','eyebrow','description','short_description','card_title','cta_label','url','invite_url'];
-      Object.entries(saved.plans||{}).forEach(([id,old])=>{
-        const target=next.plans?.[id];if(!target||!old)return;
-        marketing.forEach(k=>{if(Object.prototype.hasOwnProperty.call(old,k))target[k]=clone(old[k]);});
-      });
-      state.adminPreRestorePreview=current;
-      state.ui=next;applyV6514AdminCleanup();renderAllUiContent();rerenderAdmin();
-      showStatus('Historický vzhľad je v náhľade. Over všetky bannery, obrázky a odkazy; živý web sa nezmenil.');
+      const result=await BlinqAuth.adminUiSnapshot(snapshotId);
+      applyAdminPresentationSnapshot(result?.config);
+      showStatus('Historický vzhľad je v náhľade. Over bannery a odkazy; na zverejnenie slúži samostatné Publikovať.');
     }catch(error){showStatus(error?.message||'Historickú konfiguráciu sa nepodarilo načítať.');}
   }
+  function previewLocalAdminUiDraft(){
+    try{
+      const saved=JSON.parse(localStorage.getItem(draftKey())||'null');
+      if(!saved?.elements||!saved?.hero_banner){showStatus('Starší koncept s bannermi nie je v tomto prehliadači uložený.');return;}
+      if(!window.confirm('Načítať iba bannery, popisy a odkazy zo staršieho konceptu? Oprávnenia, KPI a dnešné opravy zostanú zachované.'))return;
+      applyAdminPresentationSnapshot(saved);
+      showStatus('Bannery a marketingový obsah z lokálneho konceptu sú v náhľade. Skontroluj obrázky a odkazy pred publikovaním.');
+    }catch(error){showStatus(error?.message||'Lokálny koncept sa nepodarilo načítať.');}
+  }
+
   function renderAdminRoute(){
     const tabs=[['accounts','Účty','Prístup · platnosť'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
@@ -3936,6 +3950,7 @@
       try{localStorage.removeItem(draftKey());}catch{}
       state.runtimeConfigLoaded=true;
       state.uiStorageAvailable=true;
+      state.adminPreRestorePreview=null;state.adminUiSnapshots=null;
       try{localStorage.setItem(VERIFIED_RUNTIME_UI_KEY,JSON.stringify(state.ui));}catch{}
       state.uiSource=clone(state.ui);
       showStatus('Nastavenie bolo publikované na live web.');
@@ -4098,6 +4113,7 @@
       if(action==='save-draft')saveDraft();
       else if(action==='load-ui-snapshots')await loadAdminUiHistory();
       else if(action==='preview-ui-snapshot')await previewAdminUiSnapshot(String(actionNode.dataset.uiSnapshotId||''));
+      else if(action==='preview-local-ui-draft')previewLocalAdminUiDraft();
       else if(action==='undo-ui-preview'){
         if(state.adminPreRestorePreview){state.ui=clone(state.adminPreRestorePreview);state.adminPreRestorePreview=null;renderAllUiContent();rerenderAdmin();showStatus('Predchádzajúci náhľad bol obnovený.');}
       }
