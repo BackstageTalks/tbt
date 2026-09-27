@@ -14,12 +14,11 @@ on:
           - '180'
           - 'both'
 
-  # Validate the two historical windows on this follow-up branch and when
-  # the audit itself changes on main. No paid data-provider requests.
+  # Re-run both historical windows only when the audit changes on main.
+  # Manual dispatch remains available; never invoke paid data providers.
   push:
     branches:
       - main
-      - analysis/value-audit-followup-20260927
     paths:
       - '.github/workflows/value-reliability-audit.yml'
       - 'scripts/audit_market_reliability.py'
@@ -92,7 +91,11 @@ jobs:
                   f"- Exact snapshot evidence: {audit['exact_issue_snapshots']}; "
                   f"comparable with both players' surface history and fair odds: "
                   f"{audit['comparable_published']}",
-                  "- Sample size <100 should be treated as exploratory.",
+                  "- Exact snapshot coverage: "
+                  + f"{audit['exact_issue_snapshots']}/{metrics['published'] or 0} issued Value offers.",
+                  "- Incomplete issuance evidence: never backfill snapshots from later data.",
+                  "- Fewer than 100 comparable, settled observations: exploratory only; "
+                    "do NOT change production Value filters based on these cohorts.",
                   "",
                   "### Data/evidence flags",
               ])
@@ -136,6 +139,8 @@ jobs:
           lines.extend([
               "No player identities, detailed model inputs or the private ledger",
               "are uploaded. Never infer missing bets or reconstruct pre-match prices.",
+              "If 90- and 180-day results match, it may reflect a shorter stored issuance",
+              "history, not proof of stable six-month betting performance.",
           ])
           Path(os.environ["REPORT_DIR"], "value_aggregate_only.json").write_text(
               json.dumps(public_summary, indent=2), encoding="utf-8"
