@@ -738,6 +738,31 @@ def _genuine_publication_odds(publication):
     return odds if math.isfinite(odds) and odds > 1 else None
 
 
+_REFUNDED_RESULT_STATUSES = {
+    "void", "push", "retired", "ret", "cancelled", "canceled", "postponed",
+    "walkover", "walk over", "w/o", "abandoned", "interrupted",
+    "suspended", "no_action",
+}
+
+
+def _is_void_bet_result(result):
+    """Mirror the public Results status classifier for refunded/void bets.
+
+    Older provider settlements sometimes use "retired" or a void boolean
+    instead of the canonical "void" status. A stale correct=False/stake=1
+    from an older settlement must never reduce the live ROI of a refunded bet.
+    """
+    if not isinstance(result, dict):
+        return False
+    if result.get("void") is True or result.get("is_void") is True:
+        return True
+    status = str(
+        result.get("status") or result.get("outcome")
+        or result.get("settlement") or result.get("result") or ""
+    ).strip().lower()
+    return status in _REFUNDED_RESULT_STATUSES
+
+
 def _betting_metrics(publications):
     rows = [
         p for p in publications
@@ -749,7 +774,7 @@ def _betting_metrics(publications):
     graded = [
         p for p in rows
         if p["result"].get("correct") in {True, False}
-        and str(p["result"].get("status") or "").strip().lower() != "void"
+        and not _is_void_bet_result(p["result"])
     ]
     voids = len(rows) - len(graded)
     if not rows:
