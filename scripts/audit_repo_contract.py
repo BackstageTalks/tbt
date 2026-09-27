@@ -51,6 +51,22 @@ static = load_json(WEB / 'staticwebapp.config.json')
 site = load_json(WEB / 'config' / 'site-content.json')
 tiers = load_json(WEB / 'config' / 'membership-tiers.json')
 
+# Azure Static Web Apps treats /path and /path/ as the same route. Keep one
+# canonical SPA alias; this catches a deploy-breaking conflict before upload.
+route_rules = static.get('routes', []) if isinstance(static, dict) else []
+if isinstance(route_rules, list):
+    normalized_routes = [str(rule.get('route', '')).rstrip('/') or '/'
+                         for rule in route_rules if isinstance(rule, dict)]
+    duplicate_routes = sorted({r for r in normalized_routes if normalized_routes.count(r) > 1})
+    if duplicate_routes:
+        fail(f'Azure Static Web Apps duplicate normalized routes: {duplicate_routes}')
+    else:
+        ok('Azure Static Web Apps normalized routes are unique')
+    aliases = [r for r in route_rules if isinstance(r, dict) and
+               str(r.get('route', '')).rstrip('/') == '/follow-the-data']
+    if len(aliases) != 1 or aliases[0].get('rewrite') != '/index.html':
+        fail('follow-the-data SPA alias must have exactly one rewrite to /index.html')
+
 # 1. Release/cache identity is one source of truth.
 meta_release = re.search(r'<meta name="blinq-web-release" content="([^"]+)"', index)
 meta_patch = re.search(r'<meta name="blinq-web-patch" content="736-r(\d+)"', index)

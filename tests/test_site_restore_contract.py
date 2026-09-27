@@ -75,6 +75,10 @@ def test_runtime_config_never_treats_release_fallback_as_saved_admin_content():
 def test_no_stale_cache_on_spa_alias_and_cms_configs():
     cfg = json.loads((ROOT / "web" / "staticwebapp.config.json").read_text())
     routes = {entry["route"]: entry for entry in cfg["routes"]}
-    for route in ("/", "/index.html", "/follow-the-data/", "/deployment.json", "/config/*"):
+    for route in ("/", "/index.html", "/follow-the-data", "/deployment.json", "/config/*"):
         assert "no-store" in routes[route]["headers"]["Cache-Control"]
-    assert routes["/follow-the-data/"]["rewrite"] == "/index.html"
+    assert routes["/follow-the-data"]["rewrite"] == "/index.html"
+    # Azure normalizes the optional trailing slash when validating route rules.
+    # A /follow-the-data and /follow-the-data/ pair fails the actual SWA upload.
+    normalized = [route.rstrip("/") or "/" for route in routes]
+    assert len(normalized) == len(set(normalized)), "Azure rejects duplicate normalized routes"
