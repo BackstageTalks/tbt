@@ -1244,7 +1244,10 @@
     model_success:['auto',...dashboardKpiPeriodChoices],
     avg_odds:['today',...dashboardKpiPeriodChoices],
     roi:[...dashboardKpiPeriodChoices],
-    yield_units:[...dashboardKpiPeriodChoices]
+    yield_units:[...dashboardKpiPeriodChoices],
+    results_success:['all',...dashboardKpiPeriodChoices],
+    results_top_success:['all',...dashboardKpiPeriodChoices],
+    results_avg_odds:['all',...dashboardKpiPeriodChoices]
   };
   function dashboardKpiSettings(){
     const values=state.ui?.dashboard?.kpi_cards;
@@ -1302,6 +1305,15 @@
         const legacy=period==='auto'&&!Array.isArray(served)&&Number.isFinite(accuracy)?accuracy:null;
         const result=historical??legacy;
         value=result==null?'—':pct(result);
+      }else if(metric==='results_success'||metric==='results_top_success'){
+        icon=icons.target;
+        label=metric==='results_top_success'
+          ?lcopy('TOP – RESULTS','TOP – VÝSLEDKY','TOP – VÝSLEDKY')
+          :lcopy('RESULTS HIT RATE','ÚSPEŠNOSŤ – VÝSLEDKY','ÚSPĚŠNOST – VÝSLEDKY');
+        value=historical==null?'—':pct(historical);
+      }else if(metric==='results_avg_odds'){
+        label=lcopy('ODDS – RESULTS','KURZ – VÝSLEDKY','KURZ – VÝSLEDKY');
+        value=historical==null?'—':historical.toFixed(2);
       }else if(metric==='avg_odds'){
         label=lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ');
         const result=period==='today'?avgOdds:historical;
@@ -3422,6 +3434,17 @@
         .map(row=>Number(row?.odds??row?.betting?.odds))
         .filter(odd=>Number.isFinite(odd)&&odd>1);
       result=odds.length?odds.reduce((sum,odd)=>sum+odd,0)/odds.length:null;
+    }else if(['results_success','results_top_success','results_avg_odds'].includes(card.metric)){
+      // Draft reads exactly the same capped, deduped, settled rows as Results;
+      // projection-only Aces/DF/Sets/Games count in W/L even without real odds.
+      const cutoff=period==='all'?null:Date.now()-Number(period)*86400000;
+      const rows=(Array.isArray(feed.results)?feed.results:[]).filter(row=>{
+        if(cutoff===null)return true;
+        const date=new Date(row?.scheduled_at||0).getTime();
+        return Number.isFinite(date)&&date>=cutoff;
+      });
+      const m=localResultMetrics(rows,card.metric==='results_top_success'?'top_daily':'all');
+      result=valueOf(card.metric==='results_avg_odds'?m.avgOdds:m.hit)??publishedValue;
     }else if(card.metric==='model_success'&&period==='auto'){
       result=publishedValue??valueOf(feed.dashboard_model_success?.accuracy);
       if(result===null){
@@ -3443,7 +3466,7 @@
       result=result??publishedValue;
     }
     if(result===null)return {text:'—',available:false};
-    if(card.metric==='model_success')return {text:pct(result),available:true};
+    if(['model_success','results_success','results_top_success'].includes(card.metric))return {text:pct(result),available:true};
     if(card.metric==='roi')return {text:`${(result*100).toFixed(1)}%`,available:true};
     if(card.metric==='yield_units')return {
       text:`${result>0?'+':''}${result.toFixed(2)}u`,available:true
@@ -3457,9 +3480,12 @@
       ['model_success','Modelová úspešnosť'],
       ['avg_odds','Priemerný kurz'],
       ['roi','ROI'],
-      ['yield_units','Yield (jednotky)']
+      ['yield_units','Yield (jednotky)'],
+      ['results_success','Úspešnosť – Výsledky (všetky)'],
+      ['results_top_success','TOP – Výsledky'],
+      ['results_avg_odds','Kurz – Výsledky']
     ];
-    const periodNames={today:'Dnes – aktuálne',auto:'Automatický výber'};
+    const periodNames={today:'Dnes – aktuálne',auto:'Automatický výber',all:'Celé dostupné obdobie'};
     const slots=dashboardKpiSettings().map((card,index)=>{
       const metricOptions=metrics.map(([id,label])=>`<option value="${id}"${card.metric===id?' selected':''}>${escapeHtml(label)}</option>`).join('');
       const periods=dashboardKpiAllowed[card.metric]||['today'];
@@ -3480,7 +3506,7 @@
       <div class="admin-detail-access-card admin-dashboard-setting-card">
         <header><div><small>DASHBOARD</small><h3>Dashboard setting</h3><p>Vyber nezávisle obsah troch existujúcich kariet a obdobie výpočtu. Verejný vzhľad, rozloženie a model zostávajú bez zmeny.</p></div></header>
         <div class="admin-dashboard-slot-list">${slots}</div>
-        <small class="admin-detail-help">Dnešné predikcie sa vždy počítajú z aktuálnej ponuky účtu. Dnešný priemerný kurz je z aktuálneho TOP; historický z reálnych vyhodnotených TOP tipov. ROI a Yield vychádzajú z publikovaných vyhodnotených tipov bez Short Odds. Modelová úspešnosť vyhodnocuje vydané predikcie víťaza zápasu. Zmeny sa zverejnia až po kliknutí na Publikovať.</small>
+        <small class="admin-detail-help">Dnešné predikcie sa vždy počítajú z aktuálnej ponuky účtu. Dnešný priemerný kurz je z aktuálneho TOP; historický z reálnych vyhodnotených TOP tipov. ROI a Yield vychádzajú z publikovaných vyhodnotených tipov bez Short Odds. Modelová úspešnosť vyhodnocuje vydané predikcie víťaza zápasu. Úspešnosť – Výsledky vychádza z rovnakých vyhodnotených publikovaných záznamov ako karta Výsledky vrátane štatistických projekcií; TOP – Výsledky obmedzí vzorku na TOP. Kurz – Výsledky používa len skutočné kurzy. SKREČ a VOID nevstupujú do úspešnosti. Zmeny sa zverejnia až po kliknutí na Publikovať.</small>
       </div>
     </section>`;
   }
