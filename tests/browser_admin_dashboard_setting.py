@@ -67,14 +67,46 @@ def main():
                     const h=dashboardHarness;
                     h.state.feed={
                       entitlements:{daily_pick_count:58},daily_picks:[{odds:1.86,surface:'hard'}],
+                      dashboard_model_success:{accuracy:.703},
+                      performance_windows:{
+                        '30':{model:{n:51,accuracy:.67},betting:{
+                          overall:{staked_units:10,roi:.125,profit_units:1.25},
+                          sections:{top_daily:{n:5,avg_odds:1.77}}
+                        }},
+                        '180':{model:{n:101,accuracy:.703},betting:{
+                          overall:{staked_units:22,roi:.15,profit_units:3.3},
+                          sections:{top_daily:{n:7,avg_odds:1.84}}
+                        }},
+                        '365':{model:{n:141,accuracy:.68},betting:{
+                          overall:{staked_units:23,roi:.25,profit_units:5.75},
+                          sections:{top_daily:{n:8,avg_odds:1.93}}
+                        }}
+                      },
                       dashboard_kpi_cards:[
                         {metric:'roi',period:'30',value:.125},
                         {metric:'model_success',period:'180',value:.703},
                         {metric:'yield_units',period:'365',value:5.75}
                       ],
                     };
+                    const host=document.getElementById('routePanel');
+                    host.innerHTML=h.renderAdminRoute();
+                    h.wireAdmin();
                     h.renderDashboardKpis();
                 }""")
+                values = page.locator("[data-admin-kpi-preview]")
+                assert [v.inner_text() for v in values.all()] == [
+                    "12.5%", "70.3%", "+5.75u"
+                ]
+                # Unsaved choices must preview a different period immediately;
+                # only the admin preview changes, not the three public cards.
+                page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="metric"]').select_option("avg_odds")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "1.86"
+                page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="period"]').select_option("365")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "1.93"
+                assert page.evaluate("dashboardHarness.state.feed.dashboard_kpi_cards[0].metric") == "roi"
+                page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="metric"]').select_option("roi")
+                page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="period"]').select_option("30")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "12.5%"
                 cards = page.locator("#dashboardKpis .dashboard-kpi")
                 assert cards.count() == 3
                 assert [c.locator("strong").inner_text() for c in cards.all()] == [
@@ -96,8 +128,13 @@ def main():
                       {metric:'avg_odds',period:'today',value:null}
                     ];
                     h.renderDashboardKpis();
+                    const host=document.getElementById('routePanel');
+                    host.innerHTML=h.renderAdminRoute();h.wireAdmin();
                 }""")
                 assert [c.locator("strong").inner_text() for c in cards.all()] == [
+                    "58", "70.3%", "1.86"
+                ]
+                assert [v.inner_text() for v in page.locator("[data-admin-kpi-preview]").all()] == [
                     "58", "70.3%", "1.86"
                 ]
                 assert not errors, (width, errors)
