@@ -1489,7 +1489,9 @@
     const channelUnread=channelRows.filter(item=>!item.read).length;
     const title=$('insightDrawerTitle'),eyebrow=$('insightDrawerEyebrow');
     if(title)title.textContent=channel==='live'?'LIVE Radar':'BlinQ Info';
-    if(eyebrow)eyebrow.textContent=channel==='live'?'BLINQ LIVE':'BLINQ INFO';
+    // INFO already has the "BlinQ Info" title; avoid the duplicate green eyebrow.
+    // Keep the separate LIVE label when opening the LIVE Radar drawer.
+    if(eyebrow){eyebrow.hidden=channel!=='live';eyebrow.textContent=channel==='live'?'BLINQ LIVE':'';}
     drawer.dataset.channel=channel;
     if(state.insightsLoading) status.innerHTML=`<span class="insight-status-dot is-loading"></span><strong>${escapeHtml(lcopy('Loading private feed…','Načítavam súkromný feed…','Načítám soukromý feed…'))}</strong>`;
     else if(state.insightsStorageUnavailable) status.innerHTML=`<span class="insight-status-dot is-offline"></span><strong>${escapeHtml(lcopy('Private feed is temporarily unavailable.','Súkromný feed je dočasne nedostupný.','Soukromý feed je dočasně nedostupný.'))}</strong>`;
