@@ -7795,3 +7795,24 @@ body#blinqPremium#blinqPremium.blinq-route .results-table .results-units-depth b
 body#blinqPremium#blinqPremium.blinq-route .results-table td.unit-excluded {
   color:#849b94!important;
 }
+
+
+/* Admin-only Dashboard setting. No public dashboard style changes. */
+body#blinqPremium.blinq-admin .admin-dashboard-setting-card{width:100%;max-width:980px}
+body#blinqPremium.blinq-admin .admin-dashboard-slot-list{display:grid;gap:12px;margin:18px 0}
+body#blinqPremium.blinq-admin .admin-dashboard-slot{
+  display:grid;grid-template-columns:minmax(78px,.5fr) minmax(165px,1.5fr) minmax(150px,1fr);
+  align-items:end;gap:14px;padding:15px;border:1px solid #294941;
+  border-radius:10px;background:rgba(7,30,26,.52)
+}
+body#blinqPremium.blinq-admin .admin-dashboard-slot>strong{align-self:center;color:#c3e6d6;font-size:14px}
+body#blinqPremium.blinq-admin .admin-dashboard-slot label{display:grid;gap:7px;min-width:0}
+body#blinqPremium.blinq-admin .admin-dashboard-slot label>span{font-size:11px;color:#a2b9af;font-weight:700}
+body#blinqPremium.blinq-admin .admin-dashboard-slot select{
+  width:100%;min-width:0;min-height:40px;padding:7px 12px;border:1px solid #345a4e;
+  border-radius:7px;background:#112723;color:#e8f7ef;font-size:13px
+}
+body#blinqPremium.blinq-admin .admin-dashboard-slot select:disabled{opacity:.55}
+@media(max-width:700px){
+  body#blinqPremium.blinq-admin .admin-dashboard-slot{grid-template-columns:1fr;gap:12px}
+}
