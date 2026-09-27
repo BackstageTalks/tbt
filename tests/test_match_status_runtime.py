@@ -594,3 +594,38 @@ def test_short_retry_budget_never_sleeps_on_provider_429_or_500(monkeypatch):
             assert len(called) == 1
         finally:
             client.close()
+
+
+def test_runtime_deadline_stops_before_next_provider_lookup(monkeypatch):
+    now = datetime(2026, 9, 25, 7, 30, tzinfo=timezone.utc)
+    rows = [
+        _row("101", "11", (now-timedelta(hours=2)).isoformat()),
+        _row("102", "11", (now-timedelta(hours=1)).isoformat()),
+    ]
+    provider = _Provider()
+    ticks = iter([0.0, 0.5, 2.0])
+    monkeypatch.setattr("tbt.services.match_status.time.monotonic", lambda: next(ticks))
+    result = scan_match_statuses(
+        {"upcoming": rows},
+        provider,
+        now=now,
+        max_checks=30,
+        max_runtime_seconds=1.0,
+    )
+    assert result["runtime_limited"] is True
+    assert result["checked"] == 1
+    assert len(provider.previous_calls) == 1
+
+
+def test_runtime_provider_fast_fail_configuration_is_bounded():
+    from tbt.providers.rapidapi import RapidTennisClient
+    from tbt.config import Settings
+
+    cfg = Settings(rapidapi_key="test")
+    client = RapidTennisClient(cfg)
+    try:
+        client.configure_runtime_fast_fail(timeout_seconds=4, attempts=1)
+        assert client.request_attempts == 1
+        assert client.client.timeout.read == 4.0
+    finally:
+        client.close()

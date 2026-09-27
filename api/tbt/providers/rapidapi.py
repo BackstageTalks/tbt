@@ -73,6 +73,7 @@ class RapidTennisClient:
         self._last_request_at = 0.0
         self.request_count = 0
         self.request_limit = 15000
+        self.request_attempts = 5
         # Latency-sensitive workers may opt out of retries without affecting batch jobs.
         self.retry_attempts = 5
         self.rate_limit_remaining = None
@@ -85,6 +86,21 @@ class RapidTennisClient:
 
     def close(self) -> None:
         self.client.close()
+
+    def configure_runtime_fast_fail(
+        self,
+        *,
+        timeout_seconds: float = 4.0,
+        attempts: int = 1,
+    ) -> None:
+        """Bound latency for user-facing/serverless runtime workers.
+
+        Batch ingestion keeps the normal retry policy. Runtime workers instead
+        fail fast so a slow provider cannot outlive the HTTP gateway deadline.
+        """
+        timeout_seconds = max(1.0, min(15.0, float(timeout_seconds)))
+        self.client.timeout = httpx.Timeout(timeout_seconds)
+        self.request_attempts = max(1, min(3, int(attempts)))
 
     @property
     def headers(self) -> dict[str, str]:
@@ -250,7 +266,7 @@ class RapidTennisClient:
         url = f"{self.cfg.rapidapi_base_url}{path}"
         last_error: Exception | None = None
 
-        for attempt in range(5):
+        for attempt in range(self.request_attempts):
             self._throttle()
             if self.request_limit is not None and self.request_count >= self.request_limit:
                 raise RequestBudgetExceeded("Per-run request limit exhausted")
