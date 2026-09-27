@@ -6,12 +6,23 @@ on:
       window_days:
         description: Issued pre-match Value history in days
         required: true
-        default: '90'
+        default: 'both'
         type: choice
         options:
           - '30'
           - '90'
           - '180'
+          - 'both'
+
+  # Re-run both historical windows only when the audit changes on main.
+  # Manual dispatch remains available; never invoke paid data providers.
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/value-reliability-audit.yml'
+      - 'scripts/audit_market_reliability.py'
+      - 'tests/test_market_reliability_audit.py'
 
 permissions:
   contents: read
@@ -35,52 +46,112 @@ jobs:
       - name: Audit existing issued bets, without API provider calls or writes
         env:
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
-          WINDOW_DAYS: ${{ inputs.window_days }}
+          WINDOW_DAYS: ${{ inputs.window_days || 'both' }}
         run: |
-          python scripts/audit_market_reliability.py \
-            --window-days "$WINDOW_DAYS" \
-            --out "$RUNNER_TEMP/value_audit.json" \
-            --markdown "$RUNNER_TEMP/value_audit.md"
+          set -euo pipefail
+          case "$WINDOW_DAYS" in
+            both) set -- 90 180 ;;
+            30|90|180) set -- "$WINDOW_DAYS" ;;
+            *) echo "Unexpected window: $WINDOW_DAYS" >&2; exit 2 ;;
+          esac
+          for days in "$@"; do
+            python scripts/audit_market_reliability.py \
+              --window-days "$days" \
+              --out "$RUNNER_TEMP/value_audit_${days}.json" \
+              --markdown "$RUNNER_TEMP/value_audit_${days}.md"
+          done
       - name: Publish aggregate-only diagnostics in job summary
         env:
-          REPORT: ${{ runner.temp }}/value_audit.json
+          REPORT_DIR: ${{ runner.temp }}
         run: |
           python - <<'PY'
           import json, os
           from pathlib import Path
 
-          report = json.loads(Path(os.environ["REPORT"]).read_text(encoding="utf-8"))
-          value = report["sections"]["value"]
-          audit = report["value_audit"]
+          reports = sorted(Path(os.environ["REPORT_DIR"]).glob("value_audit_*.json"))
+          if not reports:
+              raise SystemExit("No audit windows were generated")
           lines = [
-              "# BlinQ Value audit (issued-only; no production changes)",
+              "# BlinQ Value — issued-only audit",
               "",
-              f"Window: {report['window_days']} days",
-              f"Published Value: {value['overall']['published']}",
-              f"Settled Value: {value['overall']['settled']}",
-              f"Exact issuance evidence: {audit['exact_issue_snapshots']}",
-              f"Comparable with exact quality and both odds: {audit['comparable_published']}",
+              "The cohorts below are retrospective subsets of ACTUALLY issued picks.",
+              "They are not a walk-forward validation or a reason to change production selectors.",
               "",
-              "## Diagnostics",
           ]
-          lines.extend(f"- {key}: {count}" for key, count in audit["diagnostic_flags"].items())
-          lines.extend(["", "## Shadow cohorts on same issued picks", "",
-                        "| Cohort | Settled | W | L | Flat-1u ROI | Small sample |",
-                        "|---|---:|---:|---:|---:|---|"])
-          for label, metric in audit["shadow_on_same_issued_population"].items():
-              roi = metric["yield_flat_stake"]
-              lines.append(
-                  f"| {label} | {metric['settled']} | {metric['wins']} | "
-                  f"{metric['losses']} | {roi:.1%} | {metric['small_sample']} |"
-                  if roi is not None else
-                  f"| {label} | {metric['settled']} | {metric['wins']} | "
-                  f"{metric['losses']} | n/a | {metric['small_sample']} |"
-              )
+          public_summary = []
+          for path in reports:
+              report = json.loads(path.read_text(encoding="utf-8"))
+              metrics = report["sections"]["value"]["overall"]
+              audit = report["value_audit"]
+              days = report["window_days"]
+              lines.extend([
+                  f"## Last {days} days",
+                  f"- Value issued: {metrics['published']}; settled: {metrics['settled']}; "
+                  f"W {metrics['wins']} / L {metrics['losses']}",
+                  f"- Exact snapshot evidence: {audit['exact_issue_snapshots']}; "
+                  f"comparable with both players' surface history and fair odds: "
+                  f"{audit['comparable_published']}",
+                  "- Exact snapshot coverage: "
+                  + f"{audit['exact_issue_snapshots']}/{metrics['published'] or 0} issued Value offers.",
+                  "- Incomplete issuance evidence: never backfill snapshots from later data.",
+                  "- Fewer than 100 comparable, settled observations: exploratory only; "
+                    "do NOT change production Value filters based on these cohorts.",
+                  "",
+                  "### Data/evidence flags",
+              ])
+              flags = audit["diagnostic_flags"]
+              lines.extend(f"- {k}: {v}" for k, v in flags.items())
+              lines.extend([
+                  "", "### Same-issuance shadow cohorts", "",
+                  "| Cohort | Settled | W | L | Flat-1u ROI | Small sample |",
+                  "|---|---:|---:|---:|---:|---|",
+              ])
+              safe_cohorts = {}
+              for label, cohort in audit["shadow_on_same_issued_population"].items():
+                  roi = cohort["yield_flat_stake"]
+                  lines.append((
+                      f"| {label} | {cohort['settled']} | {cohort['wins']} | "
+                      f"{cohort['losses']} | "
+                      f"{roi:.1%} | {cohort['small_sample']} |"
+                      if roi is not None else
+                      f"| {label} | {cohort['settled']} | {cohort['wins']} | "
+                      f"{cohort['losses']} | n/a | {cohort['small_sample']} |"
+                  ))
+                  safe_cohorts[label] = {
+                      k: cohort[k] for k in (
+                          "settled", "wins", "losses", "priced", "hit_rate",
+                          "yield_flat_stake", "small_sample"
+                      )
+                  }
+              lines.append("")
+              public_summary.append({
+                  "window_days": days,
+                  "value": {k: metrics[k] for k in (
+                      "published", "settled", "wins", "losses", "void_or_unsettled",
+                      "hit_rate", "priced", "average_odds", "yield_flat_stake"
+                  )},
+                  "exact_issue_snapshots": audit["exact_issue_snapshots"],
+                  "comparable_published": audit["comparable_published"],
+                  "comparable_settled": audit["comparable_settled"],
+                  "flags": flags,
+                  "shadow_on_same_issued_population": safe_cohorts,
+              })
           lines.extend([
-              "", "No player identities, private ledger, or detailed model inputs are uploaded.",
-              "Shadow cohorts are retrospective; do not change publication gates without forward validation.",
+              "No player identities, detailed model inputs or the private ledger",
+              "are uploaded. Never infer missing bets or reconstruct pre-match prices.",
+              "If 90- and 180-day results match, it may reflect a shorter stored issuance",
+              "history, not proof of stable six-month betting performance.",
           ])
+          Path(os.environ["REPORT_DIR"], "value_aggregate_only.json").write_text(
+              json.dumps(public_summary, indent=2), encoding="utf-8"
+          )
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as out:
               out.write("\n".join(lines) + "\n")
-          print(f"VALUE audit: published={value['overall']['published']}, comparable={audit['comparable_published']}")
+          print("Aggregate Value windows completed:", [r["window_days"] for r in public_summary])
           PY
+      - name: Save aggregate metrics only (no private ledger)
+        uses: actions/upload-artifact@v4
+        with:
+          name: value-issued-aggregate
+          path: ${{ runner.temp }}/value_aggregate_only.json
+          retention-days: 14
