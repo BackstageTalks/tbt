@@ -95,7 +95,7 @@ def main():
     try:
         with raw.open("w", encoding="utf-8") as stream:
             for row in previous.values():
-                stream.write(json.dumps(row, ensure_ascii=False, default=str) + "\\n")
+                stream.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
             stream.flush()
             for match, eid in candidates:
                 if calls >= args.limit:
