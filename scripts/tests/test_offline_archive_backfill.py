@@ -30,12 +30,12 @@ class StaticGazetteer:
         self.calls.append((query, country))
         if country != "JP":
             return None
+        if query.startswith("Saitama West") and self.ambiguous:
+            return Venue(query=query, name="Saitama", latitude=36.9,
+                         longitude=140.7, country="JP", elevation_m=None, timezone="Asia/Tokyo")
         if query.startswith("Saitama"):
             return Venue(query=query, name="Saitama", latitude=35.86,
                          longitude=139.64, country="JP", elevation_m=None, timezone="Asia/Tokyo")
-        if query.startswith("Other") and self.ambiguous:
-            return Venue(query=query, name="Other", latitude=36.9,
-                         longitude=140.7, country="JP", elevation_m=None, timezone="Asia/Tokyo")
         return None
 
 
@@ -124,7 +124,7 @@ class OfflineArchiveTests(unittest.TestCase):
         match = fixture(raw)
         gazetteer = StaticGazetteer(ambiguous=True)
         env, why = _verified_archive_venue(gazetteer, match,
-                                            ["Saitama, JP", "Other, JP"])
+                                            ["Saitama, JP", "Saitama West, JP"])
         self.assertIsNone(env)
         self.assertEqual(why, "ambiguous")
 
