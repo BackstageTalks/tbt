@@ -1,9 +1,6 @@
 name: Hourly prediction match status
 
 on:
-  schedule:
-    # Every hour, 24/7; time zones do not affect hourly cadence.
-    - cron: '17 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -16,7 +13,7 @@ concurrency:
 jobs:
   match-status:
     # Hourly worker may call the Tennis provider: only enable after explicit approval.
-    if: github.event_name == 'workflow_dispatch' || (vars.TBT_MATCH_STATUS_AUTO_ENABLED == 'true' && vars.TBT_PAID_API_AUTOMATION_APPROVED == 'true')
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

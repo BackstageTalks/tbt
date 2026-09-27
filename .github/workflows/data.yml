@@ -59,9 +59,6 @@ on:
         description: Publish trained model only if holdout gate passes
         type: boolean
         default: false
-  schedule:
-    - cron: '20 1,7,13,19 * * *'
-    - cron: '40 22 * * *'
 permissions:
   contents: read
 concurrency:
@@ -69,14 +66,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   pipeline:
-    if: github.event_name == 'workflow_dispatch' || (github.event.schedule == '40 22 * * *' && (vars.TBT_AUTO_HISTORY == 'true' && vars.TBT_PAID_API_AUTOMATION_APPROVED == 'true')) || (github.event.schedule == '20 1,7,13,19 * * *' && (vars.TBT_AUTO_REFRESH == 'true' && vars.TBT_PAID_API_AUTOMATION_APPROVED == 'true'))
+    if: github.event_name == 'workflow_dispatch'
     # Refresh/results publication mutates tbt-predictions-v1, so it must also
     # share the exact production publication lock used by CI/player deploys.
     # History/statistics modes receive a run-unique job group and therefore do
     # not block ordinary application deploys. The workflow-level history lock
     # still serializes all shared history writers.
     concurrency:
-      group: ${{ ((inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current' || github.event.schedule == '20 1,7,13,19 * * *') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
+      group: ${{ ((inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 210
@@ -85,11 +82,11 @@ jobs:
       RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
       PROPL: ${{ secrets.PROPL }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
-      MODE: ${{ inputs.mode || (github.event.schedule == '40 22 * * *' && 'history' || 'refresh') }}
+      MODE: ${{ inputs.mode }}
       START_DATE: ${{ inputs.start }}
       LOOKBACK_DAYS: ${{ inputs.lookback_days || 1095 }}
       END_DATE: ${{ inputs.end }}
-      MAX_REQUESTS: ${{ inputs.max_requests || (github.event.schedule == '40 22 * * *' && 4000 || 750) }}
+      MAX_REQUESTS: ${{ inputs.max_requests || 100 }}
       MARKET_ODDS_MAX_EVENTS: ${{ inputs.market_odds_max_events || 120 }}
       PROPLINE_MAX_EVENTS: ${{ github.event_name == 'workflow_dispatch' && inputs.propline_max_events == 0 && '0' || inputs.propline_max_events || 75 }}
       DOUBLES_ODDS_MAX_EVENTS: ${{ inputs.doubles_odds_max_events || 40 }}
@@ -467,8 +464,7 @@ jobs:
     needs: pipeline
     if: >-
       needs.pipeline.result == 'success' &&
-      (inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current' ||
-       (github.event.schedule == '20 1,7,13,19 * * *' && vars.TBT_AUTO_REFRESH == 'true'))
+      (inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     # Only the short public publication window shares the production lock.
