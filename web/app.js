@@ -1242,12 +1242,16 @@
   const dashboardKpiAllowed={
     today_picks:['today'],
     model_success:['auto',...dashboardKpiPeriodChoices],
-    avg_odds:['today',...dashboardKpiPeriodChoices],
-    roi:[...dashboardKpiPeriodChoices],
-    yield_units:[...dashboardKpiPeriodChoices],
-    results_success:['all',...dashboardKpiPeriodChoices],
-    results_top_success:['all',...dashboardKpiPeriodChoices],
-    results_avg_odds:['all',...dashboardKpiPeriodChoices]
+    avg_odds:['today','auto',...dashboardKpiPeriodChoices],
+    roi:['auto',...dashboardKpiPeriodChoices],
+    yield_units:['auto',...dashboardKpiPeriodChoices],
+    winner_roi:['auto',...dashboardKpiPeriodChoices],
+    winner_yield_units:['auto',...dashboardKpiPeriodChoices],
+    results_roi:['auto',...dashboardKpiPeriodChoices,'all'],
+    results_yield_units:['auto',...dashboardKpiPeriodChoices,'all'],
+    results_success:['auto',...dashboardKpiPeriodChoices,'all'],
+    results_top_success:['auto',...dashboardKpiPeriodChoices,'all'],
+    results_avg_odds:['auto',...dashboardKpiPeriodChoices,'all']
   };
   function dashboardKpiSettings(){
     const values=state.ui?.dashboard?.kpi_cards;
@@ -1318,10 +1322,10 @@
         label=lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ');
         const result=period==='today'?avgOdds:historical;
         value=result==null?'—':result.toFixed(2);
-      }else if(metric==='roi'){
+      }else if(['roi','winner_roi','results_roi'].includes(metric)){
         label='ROI';
         value=historical==null?'—':`${(historical*100).toFixed(1)}%`;
-      }else if(metric==='yield_units'){
+      }else if(['yield_units','winner_yield_units','results_yield_units'].includes(metric)){
         label='YIELD';
         value=historical==null?'—':`${historical>0?'+':''}${historical.toFixed(2)}u`;
       }
@@ -2685,6 +2689,7 @@
   function publicationMatchesResultCategory(publication,category='all'){
     if(category==='all')return true;
     if(category==='sg')return ['sets','games'].includes(String(publication?.section||''));
+    if(category==='winners')return String(publication?.market||'match_winner').toLowerCase()==='match_winner'&&String(publication?.section||'').toLowerCase()!=='doubles';
     if(category==='ace')return String(publication?.market||'')==='aces';
     if(category==='double_faults')return String(publication?.market||'')==='double_faults';
     return String(publication?.section||'')===category;
@@ -2860,10 +2865,10 @@
     return String(publication?.selection_key||publication?.publication_key||`${scheduled}::${players}::${publication?.section||''}::${selection||index}`);
   }
   function settledPublishedEntries(rows,category='all'){
-    const specific=['prime','top_daily','value','doubles','ace','double_faults','sets','games'].includes(category);
+    const specific=['prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
     (rows||[]).forEach(row=>{
-      const pubs=publicResultPublications(row).filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category)).filter(p=>publicationOutcome(p).kind!=='pending');
+      const pubs=publicResultPublications(row).filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category)).filter(p=>category!=='winners'||String(row?.prediction_family||'').toLowerCase()!=='doubles').filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
         const key=canonicalResultPublicationKey(row,publication,index);
         const current=unique.get(key);
@@ -3414,22 +3419,64 @@
   // Admin-only draft preview. Full rolling windows are present only in the
   // authorized admin feed; ordinary accounts still receive only the three
   // already-published KPI scalars. This never changes public dashboard markup.
+  function adminKpiWindowMetric(card, period){
+    const feed=state.feed||{}, windows=feed.performance_windows||{};
+    const window=windows?.[period]||{}, betting=window.betting||{}, overall=betting.overall||{};
+    const valueOf=v=>typeof v==='number'&&Number.isFinite(v)?v:null;
+    const results={
+      results_success:['all','hit'],results_top_success:['top_daily','hit'],
+      results_avg_odds:['all','avgOdds'],results_roi:['all','roi'],
+      results_yield_units:['all','profit'],winner_roi:['winners','roi'],
+      winner_yield_units:['winners','profit']
+    };
+    if(results[card.metric]){
+      const [category,field]=results[card.metric];
+      const cutoff=period==='all'?null:Date.now()-Number(period)*86400000;
+      const rows=(Array.isArray(feed.results)?feed.results:[]).filter(row=>{
+        if(cutoff===null)return true;
+        const stamp=new Date(row?.scheduled_at||0).getTime();
+        return Number.isFinite(stamp)&&stamp>=cutoff;
+      });
+      const m=localResultMetrics(rows,category);
+      const sample=['roi','profit'].includes(field)?m.unitSample:field==='avgOdds'?m.oddsSample:m.sample;
+      return {value:sample>0?valueOf(m[field]):null,sample};
+    }
+    if(card.metric==='model_success'){
+      const m=window.model||{},n=Number(m.n)||0;
+      return {value:n>0?valueOf(m.accuracy):null,sample:n};
+    }
+    if(card.metric==='avg_odds'){
+      const top=betting?.sections?.top_daily||{},n=Number(top.n)||0;
+      return {value:n>0?valueOf(top.avg_odds):null,sample:n};
+    }
+    if(['roi','yield_units'].includes(card.metric)){
+      const n=Number(overall.n)||0,stake=valueOf(overall.staked_units)||0;
+      const key=card.metric==='roi'?'roi':'profit_units';
+      return {value:stake>0?valueOf(overall[key]):null,sample:n};
+    }
+    return {value:null,sample:0};
+  }
+  function adminKpiAutoBest(card){
+    const periods=[...dashboardKpiPeriodChoices];
+    if(card.metric.startsWith('results_'))periods.push('all');
+    const candidates=periods.map(period=>({...adminKpiWindowMetric(card,period),period}))
+      .filter(item=>item.value!==null&&item.sample>0);
+    // Same tie breaks as backend: maximum value, then larger actual sample,
+    // then longer available window (ALL comes last).
+    candidates.sort((a,b)=>b.value-a.value||b.sample-a.sample||
+      (b.period==='all'?9999:Number(b.period))-(a.period==='all'?9999:Number(a.period)));
+    return candidates[0]||{value:null,period:null,sample:0};
+  }
   function adminDashboardKpiPreview(card,index){
     const feed=state.feed||{},period=String(card.period||'');
     const valueOf=value=>typeof value==='number'&&Number.isFinite(value)?value:null;
     const published=Array.isArray(feed.dashboard_kpi_cards)?feed.dashboard_kpi_cards[index]:null;
-    const publishedValue=published?.metric===card.metric&&String(published?.period||'')===period
-      ?valueOf(published.value):null;
-    const windows=feed.performance_windows||{};
-    const currentWindow=windows?.[period]||{};
-    const betting=currentWindow?.betting||{},overall=betting?.overall||{};
-    let result=null;
+    const samePublication=published?.metric===card.metric&&String(published?.period||'')===period;
+    const publishedValue=samePublication?valueOf(published.value):null;
+    let result=null,selectedPeriod=null,sample=0;
     if(card.metric==='today_picks'){
-      if(!feed.entitlements&&!Array.isArray(feed.daily_picks)&&!feed.generated_at){
+      if(!feed.entitlements&&!Array.isArray(feed.daily_picks)&&!feed.generated_at)
         return {text:'—',available:false};
-      }
-      // Match the actual first public card: use the authorized daily unique
-      // total, never sum SEE ALL a second time.
       const supplied=Number(feed.entitlements?.daily_pick_count);
       const total=Number.isSafeInteger(supplied)&&supplied>=0?supplied:
         Math.max(dailyHubRows('see_all').length,
@@ -3438,48 +3485,36 @@
       return {text:String(total),available:true};
     }
     if(card.metric==='avg_odds'&&period==='today'){
-      const odds=dashboardDailyRows()
-        .map(row=>Number(row?.odds??row?.betting?.odds))
+      const odds=dashboardDailyRows().map(row=>Number(row?.odds??row?.betting?.odds))
         .filter(odd=>Number.isFinite(odd)&&odd>1);
       result=odds.length?odds.reduce((sum,odd)=>sum+odd,0)/odds.length:null;
-    }else if(['results_success','results_top_success','results_avg_odds'].includes(card.metric)){
-      // Draft reads exactly the same capped, deduped, settled rows as Results;
-      // projection-only Aces/DF/Sets/Games count in W/L even without real odds.
-      const cutoff=period==='all'?null:Date.now()-Number(period)*86400000;
-      const rows=(Array.isArray(feed.results)?feed.results:[]).filter(row=>{
-        if(cutoff===null)return true;
-        const date=new Date(row?.scheduled_at||0).getTime();
-        return Number.isFinite(date)&&date>=cutoff;
-      });
-      const m=localResultMetrics(rows,card.metric==='results_top_success'?'top_daily':'all');
-      result=valueOf(card.metric==='results_avg_odds'?m.avgOdds:m.hit)??publishedValue;
-    }else if(card.metric==='model_success'&&period==='auto'){
-      result=publishedValue??valueOf(feed.dashboard_model_success?.accuracy);
-      if(result===null){
-        const best=String(feed.performance_window_summary?.best_days||'');
-        result=valueOf(windows?.[best]?.model?.accuracy);
+    }else if(period==='auto'){
+      const best=adminKpiAutoBest(card);
+      result=best.value;
+      selectedPeriod=best.period;
+      sample=best.sample;
+      if(samePublication&&publishedValue!==null){
+        result=publishedValue;
+        selectedPeriod=published.selected_period||selectedPeriod;
+        sample=published.sample||sample;
       }
+      if(card.metric==='model_success'&&result===null)
+        result=publishedValue??valueOf(feed.dashboard_model_success?.accuracy);
     }else{
-      // Draft choices are evaluated against the admin-only full feed before
-      // publishing, even if the three currently served public cards differ.
-      if(card.metric==='model_success'&&(currentWindow?.model?.n||0)>0){
-        result=valueOf(currentWindow.model.accuracy);
-      }else if(card.metric==='avg_odds'){
-        const top=betting?.sections?.top_daily||{};
-        if((top.n||0)>0)result=valueOf(top.avg_odds);
-      }else if((card.metric==='roi'||card.metric==='yield_units')&&
-        valueOf(overall.staked_units)>0){
-        result=valueOf(card.metric==='roi'?overall.roi:overall.profit_units);
-      }
-      result=result??publishedValue;
+      const m=adminKpiWindowMetric(card,period);
+      result=m.value??publishedValue;sample=m.sample;
     }
     if(result===null)return {text:'—',available:false};
-    if(['model_success','results_success','results_top_success'].includes(card.metric))return {text:pct(result),available:true};
-    if(card.metric==='roi')return {text:`${(result*100).toFixed(1)}%`,available:true};
-    if(card.metric==='yield_units')return {
-      text:`${result>0?'+':''}${result.toFixed(2)}u`,available:true
-    };
-    return {text:result.toFixed(2),available:true};
+    const meta=period==='auto'&&selectedPeriod
+      ?`Najvyššia hodnota: ${selectedPeriod==='all'?'celé obdobie':selectedPeriod+' dní'} · vzorka ${sample}`
+      :null;
+    if(['model_success','results_success','results_top_success'].includes(card.metric))
+      return {text:pct(result),available:true,meta};
+    if(['roi','winner_roi','results_roi'].includes(card.metric))
+      return {text:`${(result*100).toFixed(1)}%`,available:true,meta};
+    if(['yield_units','winner_yield_units','results_yield_units'].includes(card.metric))
+      return {text:`${result>0?'+':''}${result.toFixed(2)}u`,available:true,meta};
+    return {text:result.toFixed(2),available:true,meta};
   }
 
   function adminResultsRoiAudit(){
@@ -3525,10 +3560,14 @@
       ['results_top_success','Úspešnosť TOP – Výsledky'],
       ['avg_odds','Priemerný kurz (pôvodný TOP)'],
       ['results_avg_odds','Kurz – Výsledky (všetky tipy)'],
-      ['roi','ROI'],
-      ['yield_units','Yield (jednotky)']
+      ['winner_roi','ROI – víťazi (dvojhry)'],
+      ['results_roi','ROI – Výsledky'],
+      ['winner_yield_units','Yield – víťazi (dvojhry)'],
+      ['results_yield_units','Yield – Výsledky'],
+      ['roi','ROI – pôvodný historický súhrn'],
+      ['yield_units','Yield – pôvodný historický súhrn']
     ];
-    const periodNames={today:'Dnes – aktuálne',auto:'Automatický výber',all:'Celé dostupné obdobie'};
+    const periodNames={today:'Dnes – aktuálne',auto:'Automaticky – najvyššia hodnota',all:'Celé dostupné obdobie'};
     const slots=dashboardKpiSettings().map((card,index)=>{
       const metricOptions=metrics.map(([id,label])=>`<option value="${id}"${card.metric===id?' selected':''}>${escapeHtml(label)}</option>`).join('');
       const periods=dashboardKpiAllowed[card.metric]||['today'];
@@ -3541,7 +3580,7 @@
         <div class="admin-dashboard-slot-preview" aria-live="polite">
           <span>Náhľad hodnoty</span>
           <strong data-admin-kpi-preview="${index}">${escapeHtml(preview.text)}</strong>
-          ${preview.available?'':'<small>Zatiaľ bez údajov</small>'}
+          ${preview.meta?`<small>${escapeHtml(preview.meta)}</small>`:preview.available?'':'<small>Zatiaľ bez údajov</small>'}
         </div>
       </div>`;
     }).join('');
@@ -3550,7 +3589,7 @@
         <header><div><small>DASHBOARD</small><h3>Dashboard setting</h3><p>Vyber nezávisle obsah troch existujúcich kariet a obdobie výpočtu. Verejný vzhľad, rozloženie a model zostávajú bez zmeny.</p></div></header>
         <div class="admin-dashboard-slot-list">${slots}</div>
         ${adminResultsRoiAudit()}
-        <small class="admin-detail-help">Dnešné predikcie sa vždy počítajú z aktuálnej ponuky účtu. Dnešný priemerný kurz je z aktuálneho TOP; historický z reálnych vyhodnotených TOP tipov. ROI a Yield vychádzajú z publikovaných vyhodnotených tipov bez Short Odds. Modelová úspešnosť je pôvodný samostatný výpočet iba pre víťaza zápasu. Úspešnosť – Výsledky je iná samostatná metrika: zo všetkých publikovaných vyhodnotených tipov vrátane es, dvojchýb, setov, gemov a štvorhier; Úspešnosť TOP – Výsledky berie len TOP. Pôvodný priemerný kurz je z TOP, Kurz – Výsledky z reálnych kurzov všetkých vyhodnotených publikovaných tipov. Vrátený SKREČ a VOID nevstupujú do úspešnosti. Zmeny sa zverejnia až po kliknutí na Publikovať.</small>
+        <small class="admin-detail-help">Dnešné predikcie sú vždy živé. Každý ďalší ukazovateľ má samostatný zdroj a obdobie. Automaticky vyberá najvyššiu skutočne vypočítanú hodnotu spomedzi 3, 7, 14, 30, 180 a 365 dní (pri Výsledkoch aj celé dostupné obdobie). Najvyššia hodnota môže pochádzať z krátkej malej vzorky; konkrétne obdobie a počet vidíš v náhľade vyššie. ROI / Yield – víťazi počítajú iba reálne stávky na víťaza dvojhry; ROI / Yield – Výsledky používajú rovnakú vyhodnotenú vzorku ako karta Výsledky vrátane štatistických tipov iba ak majú skutočný kurz a vklad. Pôvodné historické ukazovatele zostávajú kvôli kompatibilite. Vrátený SKREČ a VOID nevstupujú do finančného súčtu. Zmeny sa zverejnia až po kliknutí na Publikovať.</small>
       </div>
     </section>`;
   }
