@@ -20,6 +20,8 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .dashboard_kpis import ALLOWED_PERIODS
+
 
 class AdminStorageUnavailable(RuntimeError):
     pass
@@ -790,6 +792,20 @@ def validate_ui_config(payload: object) -> dict:
     contexts = {"trial", "expired", "rookie", "pro", "elite", "goat", "legend"}
 
     dashboard = payload.get("dashboard") or {}
+    kpi_cards = dashboard.get("kpi_cards")
+    # Existing saved Azure configs may not have this field yet. New changes
+    # must be exactly three supported cards with individually valid periods.
+    if kpi_cards is not None:
+        if not isinstance(kpi_cards, list) or len(kpi_cards) != 3:
+            raise ValueError("Dashboard setting requires exactly three cards")
+        for index, card in enumerate(kpi_cards):
+            if not isinstance(card, dict) or set(card) != {"metric", "period"}:
+                raise ValueError(f"Invalid Dashboard setting card {index + 1}")
+            metric, period = card["metric"], card["period"]
+            if not isinstance(metric, str) or metric not in ALLOWED_PERIODS:
+                raise ValueError(f"Invalid Dashboard setting metric {index + 1}")
+            if not isinstance(period, str) or period not in ALLOWED_PERIODS[metric]:
+                raise ValueError(f"Invalid Dashboard setting period {index + 1}")
     sections = dashboard.get("sections") or {}
     pick_section_order = ["prime", "top_daily", "value", "doubles", "ace", "sg"]
     section_order = dashboard.get("section_order") or []
