@@ -101,9 +101,9 @@ def test_all_time_selector_no_data_and_reject_incompatible_periods():
         {"metric": "results_avg_odds", "period": "365"},
     ]
     assert validate_ui_config(deepcopy(ui)) is not None
-    assert ALLOWED_PERIODS["results_success"] == {"all", "3", "7", "14", "30", "180", "365"}
+    assert ALLOWED_PERIODS["results_success"] == {"auto", "all", "3", "7", "14", "30", "180", "365"}
     assert [row["value"] for row in selected_dashboard_cards({}, ui, now=NOW)] == [None] * 3
-    ui["dashboard"]["kpi_cards"][0]["period"] = "auto"
+    ui["dashboard"]["kpi_cards"][0]["period"] = "today"
     with pytest.raises(ValueError, match="Dashboard setting"):
         validate_ui_config(ui)
     with pytest.raises(ValueError):
