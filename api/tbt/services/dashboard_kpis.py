@@ -79,8 +79,14 @@ def selected_dashboard_cards(feed: dict, ui_config: dict | None) -> list[dict]:
             overall = betting.get("overall") or {}
             if metric == "model_success" and (model.get("n") or 0) > 0:
                 value = _finite(model.get("accuracy"))
-            elif metric == "avg_odds" and (overall.get("n") or 0) > 0:
-                value = _finite(overall.get("avg_odds"))
+            elif metric == "avg_odds":
+                # Current dashboard odds have always been TOP-only. Keep the
+                # historical definition consistent, using settled real TOP
+                # quotes rather than mixing in Short Odds/Value projections.
+                sections = betting.get("sections") or {}
+                top = sections.get("top_daily") or {}
+                if (top.get("n") or 0) > 0:
+                    value = _finite(top.get("avg_odds"))
             elif metric in ("roi", "yield_units") and (_finite(overall.get("staked_units")) or 0) > 0:
                 value = _finite(overall.get("roi" if metric == "roi" else "profit_units"))
         output.append({**card, "value": value})
