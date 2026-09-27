@@ -445,14 +445,14 @@
         // Merge the new release schema around the already-published settings.
         // User-managed order, hero images/links and rotation must survive an application update.
         state.ui.ui_revision=state.uiSource.ui_revision;
-        state.ui.dashboard=mergeConfig(state.uiSource.dashboard||{},runtime.config.dashboard||{});
+        state.ui.dashboard=mergeConfig(state.uiSource.dashboard||{},trustedRuntime.dashboard||{});
         if(['6.7.0','6.7.3','6.7.4','6.7.5','6.7.6','6.7.7'].includes(String(state.uiSource.ui_revision||''))){
           const primeTab=state.ui.dashboard?.daily_hub?.tabs?.prime;if(primeTab)primeTab.enabled=false;
           const primeSection=state.ui.dashboard?.sections?.prime;if(primeSection){primeSection.dashboard_enabled=false;primeSection.sidebar_enabled=false;}
         }
         state.ui.dashboard.user_switches=false;
         state.ui.dashboard.show_disabled_strip=false;
-        state.ui.hero_banner=mergeConfig(state.uiSource.hero_banner||{enabled:true,slot_count:1,rotation_seconds:10,auto_rotate:true,show_dots:true,pause_on_hover:true},runtime.config.hero_banner||{});
+        state.ui.hero_banner=mergeConfig(state.uiSource.hero_banner||{enabled:true,slot_count:1,rotation_seconds:10,auto_rotate:true,show_dots:true,pause_on_hover:true},trustedRuntime.hero_banner||{});
         // Admin-published hero text and assets remain authoritative across releases.
       }
     }
