@@ -141,6 +141,24 @@ def main():
                 assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "100.0%"
                 choice.select_option("results_avg_odds")
                 assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "1.85"
+                # The original and Results methods remain independent choices
+                # with different values for the SAME 30-day sample window.
+                options = choice.locator("option").evaluate_all(
+                    "(nodes) => Object.fromEntries(nodes.map(n=>[n.value,n.textContent]))"
+                )
+                assert options["model_success"] == "Modelová úspešnosť (iba víťaz zápasu)"
+                assert options["results_success"] == "Úspešnosť – Výsledky (všetky tipy)"
+                assert options["avg_odds"] == "Priemerný kurz (pôvodný TOP)"
+                assert options["results_avg_odds"] == "Kurz – Výsledky (všetky tipy)"
+                choice.select_option("model_success")
+                period.select_option("30")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "67.0%"
+                choice.select_option("results_success")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "60.0%"
+                choice.select_option("avg_odds")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "1.77"
+                choice.select_option("results_avg_odds")
+                assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "1.90"
                 # Simulated publication affects only the existing three cards.
                 page.evaluate("""() => {
                   const h=dashboardHarness;
@@ -159,6 +177,11 @@ def main():
                 cards = page.locator("#dashboardKpis .dashboard-kpi")
                 assert [c.locator("strong").inner_text() for c in cards.all()] == [
                     "75.0%", "100.0%", "1.85"
+                ]
+                # Admin differentiates sources; public banner retains simple
+                # labels without appending Results to its existing layout.
+                assert [c.locator("small").inner_text() for c in cards.all()] == [
+                    "ÚSPEŠNOSŤ", "ÚSPEŠNOSŤ", "PRIEMERNÝ KURZ"
                 ]
                 assert page.locator("#dashboardKpis .dashboard-kpi p").count() == 0
                 assert page.locator("#dashboardKpis .dashboard-kpi[title]").count() == 0

@@ -1307,12 +1307,12 @@
         value=result==null?'—':pct(result);
       }else if(metric==='results_success'||metric==='results_top_success'){
         icon=icons.target;
-        label=metric==='results_top_success'
-          ?lcopy('TOP – RESULTS','TOP – VÝSLEDKY','TOP – VÝSLEDKY')
-          :lcopy('RESULTS HIT RATE','ÚSPEŠNOSŤ – VÝSLEDKY','ÚSPĚŠNOST – VÝSLEDKY');
+        // The source is chosen in Admin, not advertised as an extra subtitle
+        // or a renamed public banner. Only the underlying calculation changes.
+        label=lcopy('HIT RATE','ÚSPEŠNOSŤ','ÚSPĚŠNOST');
         value=historical==null?'—':pct(historical);
       }else if(metric==='results_avg_odds'){
-        label=lcopy('ODDS – RESULTS','KURZ – VÝSLEDKY','KURZ – VÝSLEDKY');
+        label=lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ');
         value=historical==null?'—':historical.toFixed(2);
       }else if(metric==='avg_odds'){
         label=lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ');
@@ -3475,15 +3475,17 @@
   }
 
   function renderAdminDashboardSettings(){
+    // A separate selectable metric for EVERY method. The original winner
+    // model and TOP-odds values must never be relabeled into Results values.
     const metrics=[
       ['today_picks','Dnešné predikcie'],
-      ['model_success','Modelová úspešnosť'],
-      ['avg_odds','Priemerný kurz'],
+      ['model_success','Modelová úspešnosť (iba víťaz zápasu)'],
+      ['results_success','Úspešnosť – Výsledky (všetky tipy)'],
+      ['results_top_success','Úspešnosť TOP – Výsledky'],
+      ['avg_odds','Priemerný kurz (pôvodný TOP)'],
+      ['results_avg_odds','Kurz – Výsledky (všetky tipy)'],
       ['roi','ROI'],
-      ['yield_units','Yield (jednotky)'],
-      ['results_success','Úspešnosť – Výsledky (všetky)'],
-      ['results_top_success','TOP – Výsledky'],
-      ['results_avg_odds','Kurz – Výsledky']
+      ['yield_units','Yield (jednotky)']
     ];
     const periodNames={today:'Dnes – aktuálne',auto:'Automatický výber',all:'Celé dostupné obdobie'};
     const slots=dashboardKpiSettings().map((card,index)=>{
@@ -3506,7 +3508,7 @@
       <div class="admin-detail-access-card admin-dashboard-setting-card">
         <header><div><small>DASHBOARD</small><h3>Dashboard setting</h3><p>Vyber nezávisle obsah troch existujúcich kariet a obdobie výpočtu. Verejný vzhľad, rozloženie a model zostávajú bez zmeny.</p></div></header>
         <div class="admin-dashboard-slot-list">${slots}</div>
-        <small class="admin-detail-help">Dnešné predikcie sa vždy počítajú z aktuálnej ponuky účtu. Dnešný priemerný kurz je z aktuálneho TOP; historický z reálnych vyhodnotených TOP tipov. ROI a Yield vychádzajú z publikovaných vyhodnotených tipov bez Short Odds. Modelová úspešnosť vyhodnocuje vydané predikcie víťaza zápasu. Úspešnosť – Výsledky vychádza z rovnakých vyhodnotených publikovaných záznamov ako karta Výsledky vrátane štatistických projekcií; TOP – Výsledky obmedzí vzorku na TOP. Kurz – Výsledky používa len skutočné kurzy. SKREČ a VOID nevstupujú do úspešnosti. Zmeny sa zverejnia až po kliknutí na Publikovať.</small>
+        <small class="admin-detail-help">Dnešné predikcie sa vždy počítajú z aktuálnej ponuky účtu. Dnešný priemerný kurz je z aktuálneho TOP; historický z reálnych vyhodnotených TOP tipov. ROI a Yield vychádzajú z publikovaných vyhodnotených tipov bez Short Odds. Modelová úspešnosť je pôvodný samostatný výpočet iba pre víťaza zápasu. Úspešnosť – Výsledky je iná samostatná metrika: zo všetkých publikovaných vyhodnotených tipov vrátane es, dvojchýb, setov, gemov a štvorhier; Úspešnosť TOP – Výsledky berie len TOP. Pôvodný priemerný kurz je z TOP, Kurz – Výsledky z reálnych kurzov všetkých vyhodnotených publikovaných tipov. Vrátený SKREČ a VOID nevstupujú do úspešnosti. Zmeny sa zverejnia až po kliknutí na Publikovať.</small>
       </div>
     </section>`;
   }
