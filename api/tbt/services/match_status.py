@@ -17,6 +17,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 import re
 import time
+import time
 from typing import Any
 
 
@@ -407,9 +408,13 @@ def scan_match_statuses(
         else:
             skipped_live += 1
 
+    runtime_limited = False
     for position, (_, eid, row) in enumerate(ordered):
         if eid in statuses or eid in live_by_id:
             continue
+        if deadline is not None and time.monotonic() >= deadline:
+            runtime_limited = True
+            break
         if checked >= max_checks:
             next_due_id = eid
             break
@@ -542,5 +547,6 @@ def scan_match_statuses(
         "near_attempts": near_attempts,
         "unmatched": unmatched,
         "next_due_id": next_due_id if len(due) > 1 else "",
+        "runtime_limited": runtime_limited,
         "settled_events": list(settled_events.values()),
     }
