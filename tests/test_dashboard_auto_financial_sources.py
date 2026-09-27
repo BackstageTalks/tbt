@@ -127,3 +127,67 @@ def test_auto_excludes_empty_windows_and_tracks_full_results_period():
     )
     assert [item["value"] for item in no_data] == [None]*3
     assert all(item["selected_period"] is None for item in no_data)
+
+
+def test_requested_auto_metrics_compare_both_sources_not_legacy_one_source_auto():
+    feed = sample()
+    selected = selected_dashboard_cards(feed, cards(
+        ("auto_success", "auto"), ("auto_avg_odds", "auto"), ("auto_roi", "auto")
+    ), now=NOW)
+    assert selected[0]["value"] == pytest.approx(5 / 6)
+    assert selected[0]["selected_source"] == "results_success"
+    assert selected[0]["selected_period"] == "7"
+    assert selected[0]["sample"] == 6
+    assert selected[1]["value"] == pytest.approx((2 + 1.8 + 3 + 2.2 + 1.05) / 5)
+    assert selected[1]["selected_source"] == "results_avg_odds"
+    assert selected[2]["value"] == pytest.approx(.8)
+    assert selected[2]["selected_source"] == "results_roi"
+    assert selected[2]["selected_period"] == "7"
+    assert selected[2]["sample"] == 4
+    assert all(item["period"] == "auto" for item in selected)
+    assert not any("results" in item["metric"] for item in selected)
+
+
+def test_auto_yield_picks_actual_profit_across_winner_and_results():
+    feed = sample()
+    selected = selected_dashboard_cards(feed, cards(
+        ("auto_yield_units", "auto"),
+        ("winner_avg_odds", "3"),
+        ("results_avg_odds", "3"),
+    ), now=NOW)
+    assert selected[0]["selected_source"] == "results_yield_units"
+    assert selected[0]["value"] == pytest.approx(3.2)
+    assert selected[0]["selected_period"] == "7"
+    assert selected[1]["value"] == pytest.approx((2 + 1.8 + 1.05) / 3)
+    assert selected[2]["value"] == pytest.approx((2 + 1.8 + 3 + 2.2 + 1.05) / 5)
+    assert selected[1]["value"] < selected[2]["value"]
+
+
+def test_auto_can_choose_winners_when_winner_values_exceed_results():
+    feed = sample()
+    # Only real model winner accuracy is independent from the Results sample.
+    for day in (3, 7, 14, 30, 180, 365):
+        feed["performance_windows"][str(day)]["model"]["accuracy"] = .94 if day == 180 else .62
+    picked = selected_dashboard_cards(feed, cards(
+        ("auto_success", "auto"),
+        ("auto_roi", "auto"),
+        ("auto_yield_units", "auto"),
+    ), now=NOW)
+    assert picked[0]["value"] == pytest.approx(.94)
+    assert picked[0]["selected_source"] == "model_success"
+    assert picked[0]["selected_period"] == "180"
+    assert picked[1]["selected_source"] == "results_roi"
+    assert picked[2]["selected_source"] == "results_yield_units"
+
+
+def test_auto_no_invented_number_and_only_four_auto_choice_ids():
+    assert all(ALLOWED_PERIODS[metric] == {"auto"} for metric in (
+        "auto_success", "auto_avg_odds", "auto_roi", "auto_yield_units"
+    ))
+    feed = {"results": [], "performance_windows": {}}
+    selected = selected_dashboard_cards(feed, cards(
+        ("auto_success", "auto"), ("auto_avg_odds", "auto"), ("auto_roi", "auto")
+    ), now=NOW)
+    assert all(item["value"] is None and item["selected_period"] is None
+               and item["sample"] == 0 and "selected_source" not in item
+               for item in selected)
