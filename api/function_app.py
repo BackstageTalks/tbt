@@ -812,7 +812,9 @@ def match_intelligence(req):
             public_feed_result = redact_match_intelligence(feed_result, detail_access)
             return response({**public_feed_result, "cached": False, "live_provider": False})
         try:
-            client = RapidTennisClient(settings)
+            client = RapidTennisClient(
+                settings, request_budget=lambda *args, **kwargs: reserve_shared_api_budget("history")
+            )
             # Explicit opt-in still has a strict per-request ceiling. The default
             # production path above consumes zero online Tennis RapidAPI calls.
             client.request_limit = min(getattr(client, "request_limit", 9) or 9, 9)
