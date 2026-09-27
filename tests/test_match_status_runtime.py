@@ -492,3 +492,105 @@ def test_settled_event_exposes_match_and_second_set_outcome_for_radar_results():
         "second_set_status": "win",
         "checked_at": now.isoformat(),
     }]
+
+
+def test_time_budget_resumes_first_unchecked_event(monkeypatch):
+    from tbt.services import match_status as module
+
+    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
+    clock = [0.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+
+    class SlowProvider(_Provider):
+        def live_events(self):
+            clock[0] += 4.0
+            return []
+
+        def previous_player_matches(self, player_id, page=0):
+            clock[0] += 5.0
+            return super().previous_player_matches(player_id, page)
+
+    feed = {"upcoming": [
+        _row("101", scheduled_at=(now-timedelta(hours=2)).isoformat()),
+        _row("202", scheduled_at=(now-timedelta(hours=1)).isoformat()),
+    ]}
+    first = SlowProvider()
+    result = scan_match_statuses(feed, first, now=now, max_wall_seconds=12)
+    assert first.previous_calls == [("11", 0)]
+    assert result["checked"] == 1
+    assert result["next_due_id"] == "202"
+    assert result["pending_count"] == 2
+    assert result["time_budget_exhausted"] is True
+
+    clock[0] = 0.0
+    second = SlowProvider()
+    continued = scan_match_statuses(
+        feed, second, result, now=now+timedelta(hours=1), max_wall_seconds=12,
+    )
+    assert second.previous_calls == [("11", 0)]
+    assert continued["next_due_id"] == "101"
+
+
+def test_slow_404_skips_near_fallback_when_deadline_is_too_close(monkeypatch):
+    from tbt.errors import ProviderError
+    from tbt.services import match_status as module
+
+    now = datetime(2026, 9, 25, 12, 0, tzinfo=timezone.utc)
+    clock = [0.0]
+    monkeypatch.setattr(module.time, "monotonic", lambda: clock[0])
+
+    class Slow404Provider(_NearFallbackProvider):
+        def live_events(self):
+            return []
+
+        def previous_player_matches(self, player_id, page=0):
+            clock[0] += 18.0
+            raise ProviderError("RapidAPI HTTP 404 for previous route")
+
+    provider = Slow404Provider()
+    feed = {"upcoming": [_row(scheduled_at=(now-timedelta(hours=1)).isoformat())]}
+    result = scan_match_statuses(feed, provider, now=now, max_wall_seconds=22)
+    assert provider.near_calls == []
+    assert result["time_budget_exhausted"] is True
+    # The only due item remains pending, without fabricating any match outcome.
+    assert result["pending_count"] == 1
+    assert result["statuses"] == {}
+
+
+def test_short_retry_budget_never_sleeps_on_provider_429_or_500(monkeypatch):
+    import httpx
+    import pytest
+    from types import SimpleNamespace
+    from tbt.errors import ProviderError
+    from tbt.providers import rapidapi
+
+    for status in (429, 500):
+        called = []
+        client = rapidapi.RapidTennisClient.__new__(rapidapi.RapidTennisClient)
+        client.cfg = SimpleNamespace(
+            rapidapi_base_url="https://provider.invalid",
+            rapidapi_key="test",
+            rapidapi_host="provider.invalid",
+        )
+        client.client = httpx.Client(transport=httpx.MockTransport(
+            lambda request: (called.append(request) or httpx.Response(
+                status, headers={"Retry-After": "3600"}))
+        ))
+        client._last_request_at = 0.0
+        client.request_count = 0
+        client.request_limit = 8
+        client.rate_limit_remaining = None
+        client.request_budget = None
+        client.retry_attempts = 1
+        monkeypatch.setattr(
+            rapidapi.time, "sleep",
+            lambda seconds: (_ for _ in ()).throw(
+                AssertionError("worker must not sleep on its last attempt")),
+        )
+        try:
+            with pytest.raises(ProviderError, match=f"HTTP {status}"):
+                client._get("/api/tennis/events/live")
+            assert client.request_count == 1
+            assert len(called) == 1
+        finally:
+            client.close()
