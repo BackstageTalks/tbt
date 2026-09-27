@@ -59,6 +59,8 @@ def run(matches, source):
     counters = Counter()
     by_tour = defaultdict(Counter)
     examples = []
+    staged = []
+    seen_history_ids = set()
     for tour, gender in (("atp", "m"), ("wta", "w")):
         metadata = get_csv(f"charting-{gender}-matches.csv")
         overview = get_csv(f"charting-{gender}-stats-Overview.csv")
@@ -91,6 +93,11 @@ def run(matches, source):
             if not valid_pair(stats.get(match_id, [])):
                 counters["matched_without_complete_overview"] += 1
                 continue
+            # Reject duplicated MCP entries pointing at one canonical history row.
+            if str(m.match_id) in seen_history_ids:
+                counters["duplicate_mcp_history_target"] += 1
+                continue
+            seen_history_ids.add(str(m.match_id))
             counters["matched_complete_overview"] += 1
             by_tour[tour]["matched_complete_overview"] += 1
             already = _quality_ready(m.stats or {}, "p1") and _quality_ready(m.stats or {}, "p2")
@@ -98,7 +105,28 @@ def run(matches, source):
                 counters["already_ready"] += 1
                 by_tour[tour]["already_ready"] += 1
             else:
+                # Stage source facts only. Do not overwrite or promote model inputs.
+                mapped = {}
+                for record in stats[match_id]:
+                    name = normalize(record.get("player", ""))
+                    if name == normalize(m.player1_name):
+                        prefix = "p1"
+                    elif name == normalize(m.player2_name):
+                        prefix = "p2"
+                    else:
+                        mapped = {}
+                        break
+                    if prefix in mapped:
+                        mapped = {}
+                        break
+                    mapped[prefix] = {k: int(record[k]) for k in ("serve_pts", "first_won", "second_won", "return_pts", "return_pts_won")}
+                if set(mapped) != {"p1", "p2"}:
+                    counters["rejected_player_orientation"] += 1
+                    continue
                 counters["potential_new_complete"] += 1
+                staged.append({"history_match_id": str(m.match_id), "mcp_match_id": match_id,
+                               "tour": tour, "date": date, "players": mapped,
+                               "source": ATTRIBUTION, "status": "research_staging_not_imported"})
                 by_tour[tour]["potential_new_complete"] += 1
                 if len(examples) < 30:
                     examples.append({"history_match_id": str(m.match_id), "mcp_match_id": match_id,
@@ -111,7 +139,7 @@ def run(matches, source):
             "matching": "exact normalized player names + exact date + tour; unique matches only",
             "limitations": ["No production import", "Tournament and player ID verification required before import",
                             "CC BY-NC-SA 4.0 attribution and noncommercial terms apply"],
-            "examples": examples}
+            "examples": examples, "staged_candidates": staged}
 
 
 def main():
@@ -126,6 +154,11 @@ def main():
     report["identity_safety"] = safety
     path = Path(args.out)
     path.parent.mkdir(parents=True, exist_ok=True)
+    staged = report.pop("staged_candidates")
+    stage_path = path.with_name("mcp_staged_candidates.json")
+    stage_path.write_text(json.dumps({"source": ATTRIBUTION, "read_only": True, "candidates": staged}, ensure_ascii=False, indent=2), encoding="utf-8")
+    report["staged_candidates_count"] = len(staged)
+    report["staged_candidates_artifact"] = stage_path.name
     path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=False, indent=2))
 
