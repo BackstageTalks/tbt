@@ -1263,12 +1263,7 @@
       [icons.target,lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—','',''],
       [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'','']
     ];
-    const averageOddsHelp=lcopy(
-      'Arithmetic mean of valid current TOP quotes visible in your plan; not historical ROI or all-market odds.',
-      'Aritmetický priemer platných kurzov aktuálnych TOP tipov dostupných tvojej úrovni. Nejde o historické ROI ani priemer všetkých trhov.',
-      'Aritmetický průměr platných kurzů aktuálních TOP tipů dostupných tvé úrovni. Nejde o historické ROI ani průměr všech trhů.'
-    );
-    host.innerHTML=cards.map(([icon,label,value,note,trend],index)=>`<article class="dashboard-kpi"${index===2?` title="${escapeHtml(averageOddsHelp)}"`:''}><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
+    host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
   }
   function highlightRow(){
     return dashboardDailyRows()[0]||dailyHubRows('top')[0]||dailyHubRows('value')[0]||null;
@@ -2878,8 +2873,7 @@
       const pickName=projection?(publication?.selection||pickIdentity.name||'—'):pickIdentity.name;
       const probability=publication?.model_probability==null?NaN:Number(publication?.model_probability);
       const odds=publication?.odds==null?NaN:Number(publication?.odds),rawUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units);
-      const shortOddsUnitsExcluded=String(publication?.section||'').toLowerCase()==='prime';
-      const units=outcome.kind==='void'?0:shortOddsUnitsExcluded?NaN:rawUnits;
+      const units=outcome.kind==='void'?0:rawUnits;
       const projectionMarket=String(publication?.market||publication?.projection_metric||'').toLowerCase();
       const tag=projection?({aces:'ace',double_faults:'double_faults',sets:'sets',games:'games'}[projectionMarket]||String(publication?.section||'projection')):String(publication?.section||'');
       const tags=`<span class="result-tag ${escapeHtml(tag)}">${escapeHtml(projection?projectionResultTypeLabel(publication):resultCategoryLabel(tag||'all'))}</span>`;
