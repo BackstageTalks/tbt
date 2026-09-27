@@ -405,7 +405,7 @@
     // optional endpoint must not serialize several timeout windows and hold an
     // authenticated user behind presentation configuration.
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
-      getJSON('/ui-config.json?v=7360&p=61',{timeoutMs:3000}),
+      getJSON('/ui-config.json?v=7360&p=61&dashboard-setting=1',{timeoutMs:3000}),
       getJSON('/config/telegram-groups.json?v=7360&p=61',{timeoutMs:3000}),
       getJSON('/api/v1/ui-config',{timeoutMs:3500}),
       getJSON('/membership-links.json',{timeoutMs:3000})
@@ -1231,6 +1231,30 @@
     const rows=dailyHubRows('daily');
     return Array.isArray(rows)?rows:[];
   }
+  // Three globally admin-managed KPI slots. Old Azure UI configs keep the
+  // existing public cards unchanged until the admin explicitly publishes.
+  const dashboardKpiDefaults=[
+    {metric:'today_picks',period:'today'},
+    {metric:'model_success',period:'auto'},
+    {metric:'avg_odds',period:'today'}
+  ];
+  const dashboardKpiPeriodChoices=['3','7','14','30','180','365'];
+  const dashboardKpiAllowed={
+    today_picks:['today'],
+    model_success:['auto',...dashboardKpiPeriodChoices],
+    avg_odds:['today',...dashboardKpiPeriodChoices],
+    roi:[...dashboardKpiPeriodChoices],
+    yield_units:[...dashboardKpiPeriodChoices]
+  };
+  function dashboardKpiSettings(){
+    const values=state.ui?.dashboard?.kpi_cards;
+    return dashboardKpiDefaults.map((original,index)=>{
+      const row=Array.isArray(values)?values[index]:null;
+      const metric=String(row?.metric||'');
+      const period=String(row?.period||'');
+      return dashboardKpiAllowed[metric]?.includes(period)?{metric,period}:{...original};
+    });
+  }
   function renderDashboardKpis(){
     const host=$('dashboardKpis');if(!host)return;
     const rows=dashboardDailyRows();
@@ -1258,11 +1282,39 @@
       target:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#35efa0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="3"/><path d="M17 7l3-3M17 4h3v3"/></svg>',
       chart:'<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="#35efa0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 18l5-5 4 3 7-9"/><path d="M15 7h5v5"/></svg>'
     };
-    const cards=[
-      [icons.board,lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE'),String(totalToday),'',''],
-      [icons.target,lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU'),Number.isFinite(accuracy)?pct(accuracy):'—','',''],
-      [icons.chart,lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ'),avgOdds==null?'—':avgOdds.toFixed(2),'','']
-    ];
+    // The server releases only the three admin-selected historical scalars,
+    // not the private rolling windows of accounts with limited Results access.
+    // TODAY is always derived from this user's current authorized feed.
+    const served=state.feed?.dashboard_kpi_cards;
+    const cards=dashboardKpiSettings().map((config,index)=>{
+      const {metric,period}=config;
+      const snapshot=Array.isArray(served)?served[index]:null;
+      const matching=snapshot?.metric===metric&&String(snapshot?.period||'')===period;
+      const historical=matching&&typeof snapshot.value==='number'&&Number.isFinite(snapshot.value)?snapshot.value:null;
+      let icon=icons.chart,label='',value='—';
+      if(metric==='today_picks'){
+        icon=icons.board;
+        label=lcopy('TODAY PREDICTIONS','DNEŠNÉ PREDIKCIE','DNEŠNÍ PREDIKCE');
+        value=String(totalToday);
+      }else if(metric==='model_success'){
+        icon=icons.target;
+        label=lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU');
+        const legacy=period==='auto'&&!Array.isArray(served)&&Number.isFinite(accuracy)?accuracy:null;
+        const result=historical??legacy;
+        value=result==null?'—':pct(result);
+      }else if(metric==='avg_odds'){
+        label=lcopy('AVERAGE ODDS','PRIEMERNÝ KURZ','PRŮMĚRNÝ KURZ');
+        const result=period==='today'?avgOdds:historical;
+        value=result==null?'—':result.toFixed(2);
+      }else if(metric==='roi'){
+        label='ROI';
+        value=historical==null?'—':`${(historical*100).toFixed(1)}%`;
+      }else if(metric==='yield_units'){
+        label='YIELD';
+        value=historical==null?'—':`${historical>0?'+':''}${historical.toFixed(2)}u`;
+      }
+      return [icon,label,value,'',''];
+    });
     host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
   }
   function highlightRow(){
@@ -3335,11 +3387,39 @@
     return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>COMMUNITY</small><h2>Telegram skupiny</h2><p>Panel pod predikciami. Zmeny sa publikujú spolu s ostatnou UI konfiguráciou.</p></div><button class="btn btn-primary" type="button" data-admin-action="tg-add">+ Pridať skupinu</button></div><div class="admin-runtime-note"><strong>Bezpečnostná poznámka</strong><span>Pri súkromnej VIP skupine nevkladaj trvalý tajný invite link. Použi radšej verejný request/contact odkaz alebo bot link.</span></div><div class="admin-form-section admin-tg-panel-settings"><div class="admin-form-section-title"><strong>Panel</strong><span>Defaulty sú v <code>web/config/telegram-groups.json</code>. Admin zmeny sa ukladajú cez existujúce UI storage.</span></div><div class="admin-tg-grid"><label><span>Popiska nad nadpisom <small>(prázdne = skryť)</small></span><input data-tg-field="eyebrow" value="${escapeHtml(Object.prototype.hasOwnProperty.call(cfg,'eyebrow')?cfg.eyebrow:'')}"></label><label><span>Nadpis</span><input data-tg-field="title" value="${escapeHtml(cfg.title||'')}"></label><label class="admin-tg-wide"><span>Popis</span><input data-tg-field="description" value="${escapeHtml(cfg.description||'')}"></label><label class="admin-tg-check"><input data-tg-field="enabled" type="checkbox" ${cfg.enabled!==false?'checked':''}> Zobraziť panel na domovskej stránke</label></div></div><div class="admin-tg-list">${rows||'<div class="admin-note"><strong>Žiadna Telegram skupina</strong><span>Pridaj prvú skupinu tlačidlom hore.</span></div>'}</div></section>`;
   }
 
+  function renderAdminDashboardSettings(){
+    const metrics=[
+      ['today_picks','Dnešné predikcie'],
+      ['model_success','Modelová úspešnosť'],
+      ['avg_odds','Priemerný kurz'],
+      ['roi','ROI'],
+      ['yield_units','Yield (jednotky)']
+    ];
+    const periodNames={today:'Dnes – aktuálne',auto:'Automatický výber'};
+    const slots=dashboardKpiSettings().map((card,index)=>{
+      const metricOptions=metrics.map(([id,label])=>`<option value="${id}"${card.metric===id?' selected':''}>${escapeHtml(label)}</option>`).join('');
+      const periods=dashboardKpiAllowed[card.metric]||['today'];
+      const periodOptions=periods.map(id=>`<option value="${id}"${card.period===id?' selected':''}>${escapeHtml(periodNames[id]||id+' dní')}</option>`).join('');
+      return `<div class="admin-dashboard-slot">
+        <strong>Karta ${index+1}</strong>
+        <label><span>Ukazovateľ</span><select data-admin-kpi-index="${index}" data-admin-kpi-field="metric">${metricOptions}</select></label>
+        <label><span>Obdobie</span><select data-admin-kpi-index="${index}" data-admin-kpi-field="period" ${periods.length===1?'disabled':''}>${periodOptions}</select></label>
+      </div>`;
+    }).join('');
+    return `<section class="admin-ux-section admin-dashboard-setting">
+      <div class="admin-detail-access-card admin-dashboard-setting-card">
+        <header><div><small>DASHBOARD</small><h3>Dashboard setting</h3><p>Vyber nezávisle obsah troch existujúcich kariet a obdobie výpočtu. Verejný vzhľad, rozloženie a model zostávajú bez zmeny.</p></div></header>
+        <div class="admin-dashboard-slot-list">${slots}</div>
+        <small class="admin-detail-help">Dnešné predikcie sa vždy počítajú z aktuálnej ponuky účtu. Dnešný priemerný kurz je z aktuálneho TOP; historický z reálnych vyhodnotených TOP tipov. ROI a Yield vychádzajú z publikovaných vyhodnotených tipov bez Short Odds. Modelová úspešnosť vyhodnocuje vydané predikcie víťaza zápasu. Zmeny sa zverejnia až po kliknutí na Publikovať.</small>
+      </div>
+    </section>`;
+  }
+
   function renderAdminRoute(){
-    const tabs=[['accounts','Účty','Prístup · platnosť'],['levels','Členstvá','Levely · odkazy'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['system','Systém','Diagnostika']];
+    const tabs=[['accounts','Účty','Prístup · platnosť'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,levels:renderAdminLevels,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,system:renderAdminSystem};const panel=renderers[state.adminTab]();
-    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
+    const renderers={accounts:renderAdminAccounts,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,system:renderAdminSystem};const panel=renderers[state.adminTab]();
+    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard setting','Nastavenie troch hlavných metrík bez zmeny grafiky.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
     else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy sa publikujú okamžite</div>';
@@ -3365,6 +3445,11 @@
       showStatus('Nastavenie bolo publikované na live web.');
       renderAllUiContent();
       rerenderAdmin();
+      if(state.adminTab==='dashboard'){
+        // After publishing, re-read only the three server-approved KPI scalars.
+        // Do not derive restricted historical metrics from the browser's feed.
+        await loadFeed(false).catch(()=>showStatus('Nastavenia uložené. Obnov stránku, ak sa nové KPI ešte nenačítali.'));
+      }
     }catch(error){
       const message=error?.status===503?'Admin storage nie je dostupný. Skontroluj Admin → Systém.':(error?.message||'Nastavenie sa nepodarilo publikovať.');
       showStatus(message);
@@ -3512,6 +3597,23 @@
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
       if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/_size$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;renderAllUiContent();rerenderAdmin();}return;}
+      if(t.dataset.adminKpiIndex!==undefined&&t.dataset.adminKpiField){
+        const index=Number(t.dataset.adminKpiIndex),field=t.dataset.adminKpiField;
+        if(!Number.isInteger(index)||index<0||index>=3)return;
+        const cards=dashboardKpiSettings();
+        const current=cards[index];
+        if(field==='metric'&&dashboardKpiAllowed[t.value]){
+          const metric=t.value,valid=dashboardKpiAllowed[metric];
+          cards[index]={metric,period:valid.includes(current.period)?current.period:valid[0]};
+        }else if(field==='period'&&dashboardKpiAllowed[current.metric]?.includes(t.value)){
+          cards[index]={...current,period:t.value};
+        }else return;
+        state.ui.dashboard=state.ui.dashboard||{};
+        state.ui.dashboard.kpi_cards=cards;
+        rerenderAdmin();
+        showStatus('Dashboard setting · zmena je v koncepte. Klikni Publikovať.');
+        return;
+      }
       if(t.dataset.dashboardGlobalField){state.ui.dashboard=state.ui.dashboard||{};let value=t.type==='checkbox'?t.checked:Number(t.value);state.ui.dashboard[t.dataset.dashboardGlobalField]=value;state.dashboardVisibility=null;renderAllUiContent();rerenderAdmin();return;}
       if(t.dataset.adminHubGlobalField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc[t.dataset.adminHubGlobalField]=t.type==='checkbox'?t.checked:t.value;renderAllUiContent();rerenderAdmin();showStatus(`${dailyHubTabLabel(tab)} · ${tc.enabled===false?'vypnuté':'zapnuté'} globálne.`);return;}
       if(t.dataset.adminHubField){const tab=t.dataset.adminHubTab,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{visible_rows:0,blur_remaining:true,tab_enabled:true,see_all:false,selection_mode:'first',display_state:'active',row_overrides:{}};let value=t.type==='checkbox'?t.checked:t.value;if(t.dataset.adminHubField==='visible_rows'&&String(value).toUpperCase()!=='ALL')value=Number(value);rule[t.dataset.adminHubField]=value;rule.tab_enabled=rule.display_state!=='hidden';if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);renderAllUiContent();rerenderAdmin();return;}

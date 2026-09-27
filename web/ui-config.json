@@ -1088,6 +1088,11 @@
     "admin_avatar_plan": "goat"
   },
   "dashboard": {
+    "kpi_cards": [
+      {"metric": "today_picks", "period": "today"},
+      {"metric": "model_success", "period": "auto"},
+      {"metric": "avg_odds", "period": "today"}
+    ],
     "sections": {
       "prime": {
         "label": "Short Odds",
