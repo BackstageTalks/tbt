@@ -467,11 +467,11 @@ def test_live_api_settles_results_beyond_30_history_checks():
     assert result["provider_requests"] == 31
 
 
-def test_hourly_match_status_schedule_is_24_7():
+def test_match_status_accepts_external_24_7_scheduler():
     from pathlib import Path
     workflow = (Path(__file__).resolve().parents[1] /
                 ".github/workflows/match-status.yml").read_text()
-    assert "cron: '17 * * * *'" in workflow
+    assert "  schedule:" not in workflow
     assert "timezone:" not in workflow
     assert "workflow_dispatch:" in workflow
 

@@ -8,9 +8,6 @@ on:
         type: choice
         options: ["3", "6", "12"]
         default: "12"
-  schedule:
-    - cron: '17 * * * *'
-
 permissions:
   contents: read
 

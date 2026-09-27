@@ -16,9 +16,6 @@ on:
       - Tennis data and predictions
       - BlinQ one-night adaptive data backfill (Sep 26)
     types: [completed]
-  schedule:
-    # GitHub's scheduler may start late; completion events advance faster.
-    - cron: '*/15 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -98,7 +95,7 @@ jobs:
                         "inspect partial checkpoints before any paid retry.")
                   sys.exit(1)
           # Nightly backfill already chains completed batches immediately. Every
-          # 15-minute scheduled autopilot run is its independent progress watchdog:
+          # Event-driven/manual autopilot is its independent progress watchdog:
           # cancel accidental duplicate push runs, restart one failed batch once,
           # and repair a missing handoff without starting any Tennis API job.
           nightly_runs = runs["environment-nightly-ten.yml"]
@@ -135,7 +132,7 @@ jobs:
                       print("::error::Unrecognized nightly batch. No speculative dispatch.")
                       sys.exit(1)
                   if last["status"] != "completed":
-                      print("Nightly writer active or queued; 15-minute watchdog healthy.")
+                      print("Nightly writer active or queued; Event-driven watchdog healthy.")
                       sys.exit(0)
                   completed_at = datetime.datetime.fromisoformat(
                       last["updated_at"].replace("Z", "+00:00")
@@ -147,7 +144,7 @@ jobs:
                           # Follow with one FULL audit on the latest committed
                           # release: Environment + production preflight and
                           # statistics coverage + leakage checks + static ablation.
-                          # GitHub schedule retries the trigger if workflow_run
+                          # An explicit workflow_dispatch can recover the trigger if workflow_run
                           # from a bot dispatch does not produce a new event.
                           final_finished = completed_at
                           audits_after_final = [

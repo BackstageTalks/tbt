@@ -2,11 +2,6 @@ name: The Odds API free-plan tennis pilot
 
 on:
   workflow_dispatch:
-  schedule:
-    # Twice daily, max 3 tournament-level requests per run: <=186 credits
-    # during a 31-day month. Avoid running more often on the free plan.
-    - cron: '25 6,18 * * *'
-
 permissions:
   contents: read
 

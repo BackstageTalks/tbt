@@ -299,9 +299,18 @@ if 'Guard fresh main commit' not in ci_yml or 'origin/main' not in ci_yml or 'ST
     fail('CI stale re-run guard missing')
 if 'run-name: "BlinQ CI · ${{ github.sha }}"' not in ci_yml:
     fail('CI run name does not expose commit SHA')
-if 'TBT_ACCOUNT_INACTIVITY_ENABLED' not in account_yml or 'BLINQ_ACCOUNT_WORKER_TOKEN' not in account_yml or '/api/v1/internal/account-inactivity-worker' not in account_yml:
-    fail('daily account inactivity workflow contract missing')
-ok('workflow stale-deploy + stale-rerun + account-inactivity safeguards present')
+if 'workflow_dispatch:' not in account_yml or 'BLINQ_ACCOUNT_WORKER_TOKEN' not in account_yml or '/api/v1/internal/account-inactivity-worker' not in account_yml:
+    fail('externally dispatched account inactivity workflow contract missing')
+# All recurring timings now belong to the external cron scheduler. Preserve
+# GitHub push/PR checks and explicit workflow_dispatch without internal timers.
+scheduled_workflows = [
+    path.name for path in sorted((ROOT / '.github' / 'workflows').iterdir())
+    if path.suffix in {'.yml', '.yaml'}
+    and re.search(r'(?m)^  schedule:\s*$', path.read_text(encoding='utf-8'))
+]
+if scheduled_workflows:
+    fail('GitHub cron schedules must be external-only: ' + ', '.join(scheduled_workflows))
+ok('workflow stale-deploy + stale-rerun + externally dispatched worker safeguards present')
 
 # 9. Production tree cleanliness.
 # In CI the checkout itself necessarily contains .git/.git metadata.  The audit must

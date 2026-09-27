@@ -1,12 +1,6 @@
 name: BlinQ morning prediction refresh
 
 on:
-  # Tennis betting day starts at 06:00 Bratislava time. Schedule a few
-  # minutes after rollover so the refresh builds the *new* betting day.
-  # The IANA timezone handles CET/CEST changes without duplicate runs.
-  schedule:
-    - cron: '17 6 * * *'
-      timezone: Europe/Bratislava
   workflow_dispatch:
     inputs:
       max_requests:
@@ -25,9 +19,8 @@ concurrency:
 
 jobs:
   dispatch:
-    # Paid Tennis RapidAPI: explicit TBT_MORNING_REFRESH_ENABLED=true required for automatic mornings.
-    # Manual Run workflow still works when automatic mornings are paused.
-    if: github.event_name == 'workflow_dispatch' || (vars.TBT_MORNING_REFRESH_ENABLED == 'true' && vars.TBT_PAID_API_AUTOMATION_APPROVED == 'true')
+    # Only external/manual workflow_dispatch may start the paid refresh.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
