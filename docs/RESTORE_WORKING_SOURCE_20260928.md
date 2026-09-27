@@ -61,3 +61,22 @@ published custom links are recoverable from it.
 5. Keep a versioned server-side snapshot **before every future Admin Publish**.
    A source-code ZIP or a successful frontend deployment is not a backup of
    Azure-published marketing content.
+
+## Recovery tools added in PR #115
+
+- Each Admin Publish now **saves the previous entire compressed UI config**
+  under a separate Azure Table history partition *before* replacing the live row.
+  If that backup write fails, the publish fails without overwriting the live row.
+- The authenticated Admin API exposes a metadata-only version listing and a
+  version-details endpoint. Admin → Bannery → História konfigurácie previews
+  earlier versions; only banner, navigation labels and membership marketing copy
+  are applied. Access entitlements, dashboard KPI settings, model and LIVE data
+  stay current. Nothing is published until the admin clicks Publikovať.
+- Admin → Bannery → **Bannery zo starého konceptu** previews the old browser
+  draft from `blinq_admin_ui_config_v1` if one exists in the same browser. It
+  restores presentation only and offers Undo before publishing. This is the
+  one practical route to older customer-managed images, slogans and URLs if
+  an old local draft exists and Azure was previously overwritten.
+- The first deployment of this change cannot recover versions deleted before
+  server-side history existed. The verified Sept 27 production config had one
+  default banner and empty image slots 2–5, identical to this source ZIP.
