@@ -20,16 +20,38 @@ DEFAULT_CARDS = (
     {"metric": "model_success", "period": "auto"},
     {"metric": "avg_odds", "period": "today"},
 )
+PERIODS = {str(day) for day in WINDOW_DAYS}
+RESULT_PERIODS = {"auto", "all", *PERIODS}
 ALLOWED_PERIODS = {
     "today_picks": {"today"},
-    "model_success": {"auto", *(str(day) for day in WINDOW_DAYS)},
-    "avg_odds": {"today", *(str(day) for day in WINDOW_DAYS)},
-    "roi": {str(day) for day in WINDOW_DAYS},
-    "yield_units": {str(day) for day in WINDOW_DAYS},
-    "results_success": {"all", *(str(day) for day in WINDOW_DAYS)},
-    "results_top_success": {"all", *(str(day) for day in WINDOW_DAYS)},
-    "results_avg_odds": {"all", *(str(day) for day in WINDOW_DAYS)},
+    "model_success": {"auto", *PERIODS},  # legacy auto policy stays unchanged
+    "avg_odds": {"today", "auto", *PERIODS},
+    "roi": RESULT_PERIODS,  # existing published Results financial source
+    "yield_units": RESULT_PERIODS,
+    "winner_roi": RESULT_PERIODS,
+    "winner_yield_units": RESULT_PERIODS,
+    "results_success": RESULT_PERIODS,
+    "results_top_success": RESULT_PERIODS,
+    "results_avg_odds": RESULT_PERIODS,
+    "auto_success": {"auto"},
+    "auto_odds": {"auto"},
+    "auto_roi": {"auto"},
+    "auto_yield": {"auto"},
 }
+
+# "Automatic" family choices compare values ONLY within the same unit:
+# rates against rates, bookmaker odds against odds, net % against net %, and
+# units against units. Never compare a percentage against units or an odd.
+AUTO_FAMILIES = {
+    "auto_success": ("model_success", "results_success", "results_top_success"),
+    "auto_odds": ("avg_odds", "results_avg_odds"),
+    "auto_roi": ("winner_roi", "roi"),
+    "auto_yield": ("winner_yield_units", "yield_units"),
+}
+RESULT_METRICS = {"results_success", "results_top_success", "results_avg_odds",
+                  "roi", "yield_units", "winner_roi", "winner_yield_units"}
+AUTO_PERIODS = tuple(str(day) for day in WINDOW_DAYS)
+
 
 
 def normalize_cards(ui_config: dict | None) -> list[dict[str, str]]:
@@ -130,7 +152,7 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
     """
     if period != "all" and period not in {str(day) for day in WINDOW_DAYS}:
         raise ValueError("Unsupported Results dashboard period")
-    if category not in {"all", "top_daily"}:
+    if category not in {"all", "top_daily", "winner_singles"}:
         raise ValueError("Unsupported Results dashboard category")
     now = now or datetime.now(timezone.utc)
     if now.tzinfo is None:
@@ -152,6 +174,11 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
                 continue
             if category == "top_daily" and section != "top_daily":
                 continue
+            if category == "winner_singles" and (
+                market != "match_winner" or section == "doubles"
+                or str(row.get("prediction_family") or "").lower() == "doubles"
+            ):
+                continue
             if _result_outcome(p) == "pending":
                 continue
             key = _result_identity(row, p, index)
@@ -162,8 +189,8 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
                 (prior["_issued"] is None or issued < prior["_issued"])
             ):
                 unique[key] = {"publication": p, "_issued": issued}
-    wins = losses = odds_count = 0
-    odds_sum = 0.0
+    wins = losses = odds_count = unit_sample = 0
+    odds_sum = staked_units = profit_units = 0.0
     for entry in unique.values():
         p = entry["publication"]
         outcome = _result_outcome(p)
@@ -182,58 +209,130 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
         if priced and quote is not None and quote > 1:
             odds_sum += quote
             odds_count += 1
+            # Exactly the public Results ROI denominator: paid/settled genuine
+            # quotes only. Short Odds contributes W/L, but not stake or profit.
+            if str(p.get("section") or "").strip().lower() != "prime":
+                result = p.get("result") or {}
+                stake = _finite(result.get("staked_units"))
+                profit = _finite(result.get("profit_units"))
+                if stake is not None and stake > 0 and profit is not None:
+                    staked_units += stake
+                    profit_units += profit
+                    unit_sample += 1
     total = wins + losses
     return {
         "wins": wins, "losses": losses, "sample": total,
         "hit_rate": wins / total if total else None,
         "avg_odds": odds_sum / odds_count if odds_count else None,
         "odds_sample": odds_count,
+        "staked_units": staked_units, "profit_units": profit_units,
+        "unit_sample": unit_sample,
+        "roi": profit_units / staked_units if staked_units > 0 else None,
     }
 
 
-def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetime | None = None) -> list[dict]:
-    """Expose only admin-selected scalars, not the full rolling performance.
+def _metric_value(feed: dict, metric: str, period: str,
+                  results_cache: dict[tuple[str, str], dict],
+                  windows: dict, best: dict, *, now: datetime | None) -> tuple[float | None, int]:
+    """(Value, valid sample). A financial sample is actual, settled stakes."""
+    if metric in RESULT_METRICS and isinstance(feed.get("results"), list):
+        category = ("top_daily" if metric == "results_top_success" else
+                    "winner_singles" if metric in {"winner_roi", "winner_yield_units"} else "all")
+        key = (period, category)
+        if key not in results_cache:
+            results_cache[key] = published_results_metrics(feed, period, category, now=now)
+        summary = results_cache[key]
+        field = {
+            "results_success": "hit_rate", "results_top_success": "hit_rate",
+            "results_avg_odds": "avg_odds", "roi": "roi", "yield_units": "profit_units",
+            "winner_roi": "roi", "winner_yield_units": "profit_units",
+        }[metric]
+        sample_key = ("odds_sample" if metric == "results_avg_odds" else
+                      "unit_sample" if metric in {"roi", "yield_units", "winner_roi", "winner_yield_units"}
+                      else "sample")
+        n = int(summary[sample_key])
+        # 0u without a single financial stake is *not* a valid maximum.
+        return (_finite(summary[field]) if n > 0 else None), n
 
-    Results and betting metrics come from the immutable issued production feed.
-    ROI and unit yield retain the existing Short Odds exclusion in _betting_metrics.
+    if metric in {"winner_roi", "winner_yield_units"}:
+        # The old feed does not contain a separate singles-only financial
+        # summary. Never pretend the mixed Results ROI is winners-only.
+        return None, 0
+    if metric == "model_success" and period == "auto":
+        return _finite(best.get("accuracy")), int(best.get("n") or 0)
+    if metric == "today_picks" or (metric == "avg_odds" and period == "today"):
+        return None, 0  # calculated per account from today's authorized picks
+    window = windows.get(period) or {}
+    model = window.get("model") or {}
+    betting = window.get("betting") or {}
+    overall = betting.get("overall") or {}
+    if metric == "model_success":
+        n = int(model.get("n") or 0)
+        return (_finite(model.get("accuracy")) if n > 0 else None), n
+    if metric == "avg_odds":
+        top = (betting.get("sections") or {}).get("top_daily") or {}
+        n = int(top.get("n") or 0)
+        return (_finite(top.get("avg_odds")) if n > 0 else None), n
+    # Older feeds without a results array retain the original financial KPI
+    # windows; new feeds use the exact capped public Results sample above.
+    if metric in {"roi", "yield_units"}:
+        stake = _finite(overall.get("staked_units")) or 0
+        return (_finite(overall.get("roi" if metric == "roi" else "profit_units"))
+                if stake > 0 else None), int(overall.get("n") or 0)
+    return None, 0
+
+
+def _best_metric(feed: dict, metrics: tuple[str, ...], results_cache: dict,
+                 windows: dict, best: dict, *, now: datetime | None) -> dict | None:
+    """Highest finite value among all eligible windows and data sources.
+
+    Tie breaks prefer the larger measured sample; then shorter horizon. Auto
+    never invents a price/stake for projection-only or void publications.
+    """
+    chosen = None
+    for metric in metrics:
+        periods = (*AUTO_PERIODS, "all") if metric in RESULT_METRICS else AUTO_PERIODS
+        for period in periods:
+            value, sample = _metric_value(feed, metric, period, results_cache, windows, best, now=now)
+            if value is None or sample <= 0:
+                continue
+            candidate = {
+                "value": value, "sample": sample,
+                "selected_metric": metric, "selected_period": period,
+            }
+            score = (value, sample, -(366 if period == "all" else int(period)))
+            if chosen is None or score > chosen[0]:
+                chosen = (score, candidate)
+    return chosen[1] if chosen else None
+
+
+def selected_dashboard_cards(feed: dict, ui_config: dict | None, *, now: datetime | None = None) -> list[dict]:
+    """Only the three selected KPI scalars reach restricted user tiers.
+
+    Automatic mode compares all available 3/7/14/30/180/365-day candidates
+    and (for Results) the entire available public Results sample. Selected
+    source, period and sample accompany auto scalars for admin-only preview;
+    no extra cards or explanations are added to the public dashboard.
     """
     windows = feed.get("performance_windows") or {}
     if not isinstance(windows, dict):
         windows = {}
     best = feed.get("dashboard_model_success") or {}
+    results_cache: dict[tuple[str, str], dict] = {}
     output = []
-    result_cache: dict[tuple[str, str], dict] = {}
     for card in normalize_cards(ui_config):
         metric, period = card["metric"], card["period"]
-        value = None
-        if metric in {"results_success", "results_top_success", "results_avg_odds"}:
-            category = "top_daily" if metric == "results_top_success" else "all"
-            key = (period, category)
-            if key not in result_cache:
-                result_cache[key] = published_results_metrics(feed, period, category, now=now)
-            summary = result_cache[key]
-            value = _finite(summary["avg_odds"] if metric == "results_avg_odds" else summary["hit_rate"])
-        elif metric == "model_success" and period == "auto":
-            value = _finite(best.get("accuracy") if isinstance(best, dict) else None)
-        elif metric == "today_picks" or (metric == "avg_odds" and period == "today"):
-            # Account-specific figures must be calculated from authorized rows.
-            pass
+        if metric in AUTO_FAMILIES:
+            resolved = _best_metric(feed, AUTO_FAMILIES[metric], results_cache, windows, best, now=now)
+        elif period == "auto" and metric != "model_success":
+            resolved = _best_metric(feed, (metric,), results_cache, windows, best, now=now)
         else:
-            window = windows.get(period) or {}
-            model = window.get("model") or {}
-            betting = window.get("betting") or {}
-            overall = betting.get("overall") or {}
-            if metric == "model_success" and (model.get("n") or 0) > 0:
-                value = _finite(model.get("accuracy"))
-            elif metric == "avg_odds":
-                # Current dashboard odds have always been TOP-only. Keep the
-                # historical definition consistent, using settled real TOP
-                # quotes rather than mixing in Short Odds/Value projections.
-                sections = betting.get("sections") or {}
-                top = sections.get("top_daily") or {}
-                if (top.get("n") or 0) > 0:
-                    value = _finite(top.get("avg_odds"))
-            elif metric in ("roi", "yield_units") and (_finite(overall.get("staked_units")) or 0) > 0:
-                value = _finite(overall.get("roi" if metric == "roi" else "profit_units"))
-        output.append({**card, "value": value})
+            value, sample = _metric_value(feed, metric, period, results_cache, windows, best, now=now)
+            resolved = {"value": value, "sample": sample} if value is not None else None
+        if resolved is None:
+            output.append({**card, "value": None})
+        elif metric in AUTO_FAMILIES or (period == "auto" and metric != "model_success"):
+            output.append({**card, **resolved})
+        else:
+            output.append({**card, "value": resolved["value"]})
     return output
