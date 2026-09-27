@@ -3374,7 +3374,61 @@
     return changes.join(' · ')||item?.action||'zmena účtu';
   }
   function systemState(ok,warning=false){return ok?'ok':warning?'warning':'error';}
+  // Admin-only health triage. A missing diagnostics response is never shown as
+  // eleven broken services; warnings are separate from actual service outages.
+  function adminSystemHealthView(d, cards){
+    const criticalNames=new Set(['API / AUTH','ADMIN STORAGE','INFO STORAGE','LIVE DATA','DATA PROVIDER']);
+    const issues=cards.filter(item=>!item[1]).sort((a,b)=>Number(criticalNames.has(b[0]))-Number(criticalNames.has(a[0])));
+    const healthy=cards.filter(item=>item[1]);
+    const criticalCount=issues.filter(item=>criticalNames.has(item[0])).length;
+    const status=criticalCount?'error':issues.length?'warning':'ok';
+    const checked=Number(d.checked_at);
+    const checkedText=Number.isFinite(checked)&&checked>0
+      ? new Date(checked*1000).toLocaleString('sk-SK',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})
+      : 'Čas poslednej kontroly nie je dostupný';
+    const guidance={
+      'API / AUTH':'Skontroluj Firebase Admin konfiguráciu a dostupnosť používateľských účtov.',
+      'ADMIN STORAGE':'Over pripojenie a dostupnosť spoločného Azure úložiska pre admin, INFO a LIVE históriu.',
+      'INFO STORAGE':'INFO potrebuje funkčné trvalé úložisko. Skontroluj Admin Storage.',
+      'PLAYER IMAGES':'Zobrazujú sa náhradné fotografie. Neovplyvňuje to výpočet tipov.',
+      'TOURNAMENT LOGOS':'Chýbajúce logá majú náhradný obrázok; predikcie fungujú ďalej.',
+      'LIVE DATA':'Over dátový feed a posledný úspešný deploy. Obnovenie diagnostiky nič nespúšťa.',
+      'LIVE WORKER':d.live_worker&&d.live_worker.configured
+        ? 'Token v Azure je nastavený. Over externý cron, zhodný GitHub Secret a posledný beh LIVE Radar.'
+        : 'Nastav rovnaký BLINQ_LIVE_WORKER_TOKEN v Azure a GitHub Actions Secrets. Spúšťanie plánuje externý cron.',
+      'ACCOUNT CHECK':d.account_inactivity&&d.account_inactivity.worker&&d.account_inactivity.worker.configured
+        ? 'Over externý denný cron a posledný beh kontroly účtov.'
+        : 'Nastav zhodný BLINQ_ACCOUNT_WORKER_TOKEN v Azure a GitHub Actions Secrets.',
+      'EMAIL / SMTP':'Over SMTP konfiguráciu, BLINQ_ADMIN_EMAILS a administrátorského príjemcu upozornení.',
+      'DATA PROVIDER':'Over produkčné nastavenie dátového poskytovateľa a dostupnosť API.',
+      'ERRORS · 24H':'Pozri nižšie prevádzkový journal. Ak nie je dostupný, najskôr oprav úložisko.'
+    };
+    function card(item){
+      const name=item[0],ok=item[1],detail=item[2],severity=ok?'ok':criticalNames.has(name)?'error':'warning';
+      const note=ok?'':('<p class="admin-health-card-next">'+escapeHtml(guidance[name]||'Skontroluj posledný beh služby.')+'</p>');
+      return '<article class="admin-system-card is-'+severity+'"><span aria-hidden="true"></span><small>'+escapeHtml(name)+'</small><strong>'+(ok?'OK':severity==='error'?'PROBLÉM':'SKONTROLOVAŤ')+'</strong><em>'+escapeHtml(detail)+'</em>'+note+'</article>';
+    }
+    const summary='<div class="admin-health-overview is-'+status+'" role="status"><div class="admin-health-overview-main">'
+      +'<small>STAV SLUŽIEB · POSLEDNÁ KONTROLA '+escapeHtml(checkedText)+'</small>'
+      +'<strong>'+(criticalCount?'Služby potrebujú zásah':issues.length?'Funguje s upozorneniami':'Všetky kontroly v poriadku')+'</strong>'
+      +'<p>Diagnostika iba číta stav. Nespúšťa platený zber, LIVE sken ani odosielanie e-mailov.</p></div>'
+      +'<div class="admin-health-counts"><span class="is-ok"><b>'+healthy.length+'</b> v poriadku</span>'
+      +(issues.length?'<span class="is-warning"><b>'+issues.length+'</b> na kontrolu</span>':'')
+      +(criticalCount?'<span class="is-error"><b>'+criticalCount+'</b> dôležité</span>':'')+'</div></div>';
+    const attention=issues.length
+      ? '<section class="admin-health-attention" aria-label="Služby vyžadujúce pozornosť"><div class="admin-health-group-head"><strong>Treba skontrolovať</strong><span>'+issues.length+' z '+cards.length+' kontrol</span></div><div class="admin-system-cards">'+issues.map(card).join('')+'</div></section>'
+      : '';
+    const good='<details class="admin-health-ok-details"'+(issues.length?'':' open')+'><summary><span>Fungujúce služby</span><b>'+healthy.length+' OK</b><span aria-hidden="true">⌄</span></summary><div class="admin-system-cards">'+healthy.map(card).join('')+'</div></details>';
+    return {summary,sections:attention+good};
+  }
   function renderAdminSystem(){
+    if(!state.adminDiagnostics){
+      return '<section class="admin-ux-section"><div class="admin-health-empty" role="status"><strong>'+(state.adminDiagnosticsLoading?'Načítavam diagnostiku…':'Diagnostika ešte nebola načítaná')+'</strong><p>Kontroly služieb zobrazíme až po odpovedi produkčného API.</p></div></section>';
+    }
+    if(state.adminDiagnostics.error){
+      const error=state.adminDiagnostics;
+      return '<section class="admin-ux-section"><div class="admin-health-empty is-error" role="alert"><strong>Diagnostiku sa nepodarilo načítať</strong><p>'+escapeHtml(error.error||'Neznáma chyba')+(error.status?' · HTTP '+escapeHtml(error.status):'')+'</p><button class="btn btn-primary" type="button" data-admin-action="diagnostics">Skúsiť znova</button></div></section>';
+    }
     const d=state.adminDiagnostics||{},feed=d.feed||{},provider=d.provider||{},worker=d.live_worker||{},accountHealth=d.account_inactivity||{},accountWorker=accountHealth.worker||{},smtp=accountHealth.smtp||{},accountPolicy=accountHealth.policy||{},ops=d.ops||{},counts=ops.counts||{};
     const storage=d.storage||{},storageServices=storage.services||{},services=d.services||{},assets=d.assets||{};
     const playerImages=assets.player_images||{},tournamentLogos=assets.tournament_logos||{};
@@ -3391,10 +3445,11 @@
       ['ACCOUNT CHECK',accountPolicy.enabled===false||Boolean(accountWorker.healthy),accountPolicy.enabled===false?'OFF':(accountWorker.healthy?`DAILY · ${Number(accountWorker.inactive||0)} inactive · ${Number(accountWorker.subscription_7||0)}/${Number(accountWorker.subscription_3||0)} expiry mail`:(accountWorker.configured?'STALE':'TOKEN MISSING'))],
       ['EMAIL / SMTP',accountPolicy.enabled===false||Boolean(smtp.configured),accountPolicy.enabled===false?'NOT NEEDED':(smtp.configured?(smtp.admin_recipient_configured?`READY · ${Number(smtp.admin_recipient_count||1)} admin`:'ADMIN EMAIL MISSING'):'NOT CONFIGURED')],
       ['DATA PROVIDER',Boolean(provider.configured),provider.configured?'CONFIGURED':'MISSING KEY'],
-      ['ERRORS · 24H',Number(counts.error||0)===0,String(counts.error||0)],
+      ['ERRORS · 24H',ops.available!==false&&Number(counts.error||0)===0,ops.available===false?'NEDOSTUPNÉ':String(counts.error||0)],
     ];
+    const healthView=adminSystemHealthView(d,cards);
     const events=(ops.items||[]).map(item=>`<tr><td><span class="ops-level is-${escapeHtml(item.level||'info')}">${escapeHtml(String(item.level||'info').toUpperCase())}</span></td><td>${escapeHtml(item.component||'app')}</td><td>${escapeHtml(item.message||'')}</td><td>${escapeHtml(fmtDate(item.occurred_at))} · ${escapeHtml(fmtTime(item.occurred_at))}</td></tr>`).join('');
-    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>SYSTEM HEALTH</small><h2>Prevádzkový stav</h2><p>Diagnostika iba znovu načíta aktuálny stav API, úložiska, feedu, assetov, LIVE workeru a kontroly neaktívnych účtov. Nič neopravuje a nespúšťa data/enrichment run ani LIVE scan. Nespúšťa ani e-mailovú kontrolu účtov.</p></div><div class="admin-system-actions"><button class="btn btn-ghost" type="button" data-admin-action="copy-diagnostics">Kopírovať diagnostiku</button><button class="btn btn-primary" type="button" data-admin-action="diagnostics">Obnoviť diagnostiku</button></div></div><div class="admin-system-cards">${cards.map(([name,ok,detail])=>`<article class="admin-system-card is-${systemState(ok,false)}"><span></span><small>${name}</small><strong>${ok?'OK':'CHECK'}</strong><em>${escapeHtml(detail)}</em></article>`).join('')}</div><div class="admin-system-details"><div><small>Posledný feed</small><strong>${escapeHtml(feed.generated_at?`${fmtDate(feed.generated_at)} · ${fmtTime(feed.generated_at)}`:'—')}</strong></div><div><small>Model</small><strong>${escapeHtml(feed.model_version||state.feed?.model?.version||'—')}</strong></div><div><small>Upcoming / Results</small><strong>${Number(feed.upcoming||0)} / ${Number(feed.results||0)}</strong></div><div><small>Úložisko</small><strong>${escapeHtml(storageDetail)}</strong></div><div><small>Kontrola</small><strong>${d.checked_at?new Date(Number(d.checked_at)*1000).toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}):'—'}</strong></div></div>${!d.content_storage_ready?`<div class="admin-runtime-note is-error"><strong>Admin konfigurácia, INFO a história LIVE potrebujú trvalé úložisko</strong><span>Nastav jeden spoločný App Setting <code>${escapeHtml(storage.recommended_setting||'BLINQ_STORAGE_CONNECTION_STRING')}</code>. Stačí jeden existujúci Azure Storage účet; nie je potrebné vytvárať ďalší. Rovnaké úložisko používa admin konfigurácia, INFO a LIVE história.</span></div>`:''}${!worker.configured?`<div class="admin-runtime-note is-warning"><strong>Autonómny LIVE worker ešte nemá token</strong><span>Nastav rovnaký <code>BLINQ_LIVE_WORKER_TOKEN</code> v Azure Production environment variables aj v GitHub Actions Secrets a GitHub variable <code>TBT_LIVE_RADAR_ENABLED=true</code>. Až potom bude plánovaný LIVE Radar bežať autonómne.</span></div>`:''}${accountPolicy.enabled!==false&&!accountWorker.configured?`<div class="admin-runtime-note is-warning"><strong>Denná kontrola neaktívnych účtov ešte nemá token</strong><span>Nastav rovnaký <code>BLINQ_ACCOUNT_WORKER_TOKEN</code> v Azure Production environment variables aj v GitHub Actions Secrets a GitHub variable <code>TBT_ACCOUNT_INACTIVITY_ENABLED=true</code>. Kým token chýba, denný lifecycle worker účtov sa nespúšťa.</span></div>`:''}${accountPolicy.enabled!==false&&!smtp.configured?`<div class="admin-runtime-note is-warning"><strong>E-mailové upozornenia ešte nemajú SMTP</strong><span>Bez SMTP sa neposielajú inactivity ani 7/3-dňové subscription upozornenia a ROOKIE sa neoznačí ako EXPIRED. V Azure nastav <code>BLINQ_SMTP_HOST</code>, <code>BLINQ_SMTP_PORT</code>, <code>BLINQ_SMTP_FROM</code>${accountPolicy.notify_admin?' a <code>BLINQ_ADMIN_EMAILS</code>':''}. Ak server vyžaduje prihlásenie, pridaj aj <code>BLINQ_SMTP_USERNAME</code> a <code>BLINQ_SMTP_PASSWORD</code>.</span></div>`:''}<div class="admin-form-section"><div class="admin-form-section-title"><strong>Posledné udalosti</strong><span>Serverové chyby, ktoré zachytil BlinQ prevádzkový journal.</span></div><div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Level</th><th>Komponent</th><th>Správa</th><th>Čas</th></tr></thead><tbody>${events||'<tr><td colspan="4">Za posledných 24 hodín nie sú zaznamenané žiadne prevádzkové udalosti.</td></tr>'}</tbody></table></div></div></section>`;
+    return `<section class="admin-ux-section"><div class="admin-ux-heading"><div><small>SYSTEM HEALTH</small><h2>Prevádzkový stav</h2><p>Diagnostika iba znovu načíta aktuálny stav API, úložiska, feedu, assetov, LIVE workeru a kontroly neaktívnych účtov. Nič neopravuje a nespúšťa data/enrichment run ani LIVE scan. Nespúšťa ani e-mailovú kontrolu účtov.</p></div><div class="admin-system-actions"><button class="btn btn-ghost" type="button" data-admin-action="copy-diagnostics">Kopírovať diagnostiku</button><button class="btn btn-primary" type="button" data-admin-action="diagnostics">Obnoviť diagnostiku</button></div></div>${healthView.summary}${healthView.sections}<div class="admin-system-details"><div><small>Posledný feed</small><strong>${escapeHtml(feed.generated_at?`${fmtDate(feed.generated_at)} · ${fmtTime(feed.generated_at)}`:'—')}</strong></div><div><small>Model</small><strong>${escapeHtml(feed.model_version||state.feed?.model?.version||'—')}</strong></div><div><small>Upcoming / Results</small><strong>${Number(feed.upcoming||0)} / ${Number(feed.results||0)}</strong></div><div><small>Úložisko</small><strong>${escapeHtml(storageDetail)}</strong></div><div><small>Kontrola</small><strong>${d.checked_at?new Date(Number(d.checked_at)*1000).toLocaleTimeString('sk-SK',{hour:'2-digit',minute:'2-digit'}):'—'}</strong></div></div><div class="admin-form-section"><div class="admin-form-section-title"><strong>Posledné udalosti</strong><span>Serverové chyby, ktoré zachytil BlinQ prevádzkový journal.</span></div><div class="admin-table-wrap"><table class="admin-analytics-table"><thead><tr><th>Level</th><th>Komponent</th><th>Správa</th><th>Čas</th></tr></thead><tbody>${events||(ops.available===false?'<tr><td colspan="4">Prevádzkový journal nie je dostupný. Nulový počet udalostí nie je overený.</td></tr>':'<tr><td colspan="4">Za posledných 24 hodín nie sú zaznamenané žiadne prevádzkové udalosti.</td></tr>')}</tbody></table></div></div></section>`;
   }
   function renderAdminLevels(){
     const plans=membershipHierarchy.map((id,index)=>{
