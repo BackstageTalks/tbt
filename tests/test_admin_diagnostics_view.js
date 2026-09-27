@@ -48,6 +48,12 @@ const healthy = {
     smtp: { configured: true, admin_recipient_configured: true, admin_recipient_count: 1 },
   },
   provider: { configured: true },
+  api_budget: {
+    available: true, window: 'rolling_24h_conservative_5min',
+    global_spent: 18, global_limit: 12000, global_remaining: 11982,
+    spent: { live: 6, match: 12, refresh: 0, history: 0 },
+    remaining: { live: 2494, match: 238, refresh: 750, history: 8500 },
+  },
   feed: {
     ready: true, stale: false, generated_at: '2026-09-27T10:32:00Z',
     model_version: 'v201', upcoming: 489, results: 711,
@@ -59,6 +65,11 @@ const allGood = render(healthy);
 assert.match(allGood, /Všetky kontroly v poriadku/);
 assert.match(allGood, /<b>11<\/b> v poriadku/);
 assert.match(allGood, /admin-health-ok-details" open/);
+assert.match(allGood, /API ROZPOČET · LIVE RADAR/);
+assert.match(allGood, /LIVE využité/);
+assert.match(allGood, /6 \/ 2\\s?500/);
+assert.match(allGood, /Spolu rezervované/);
+assert.match(allGood, /Obnoviť diagnostiku/);
 assert.ok(!allGood.includes('Treba skontrolovať'));
 
 const warnings = structuredClone(healthy);
@@ -89,6 +100,12 @@ assert.ok(!authError.includes('admin-system-card is-error'), 'API failure is not
 
 const pending = render(null, true);
 assert.match(pending, /Načítavam diagnostiku/);
+const loading = render(healthy, true);
+assert.match(loading, /Obnovuje sa…/);
+assert.match(loading, /aria-busy="true"/);
+const noBudget = structuredClone(healthy);
+delete noBudget.api_budget;
+assert.match(render(noBudget), /Údaje o spoločnej API kvóte nie sú dostupné/);
 assert.ok(!pending.includes('admin-system-card is-error'), 'unloaded data is never red');
 
 console.log('PASS: admin health summary, triage, honest journal and diagnostic errors');
