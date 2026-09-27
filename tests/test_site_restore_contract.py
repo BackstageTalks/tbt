@@ -23,7 +23,7 @@ def test_deployment_stamps_current_git_sha_and_cache_busts_all_assets(tmp_path):
         encoding="utf-8",
     )
     (web / "index.html").write_text(
-        '<title>BlinQ · Tennis Intelligence</title>\n'
+        '  <title>BlinQ · Tennis Intelligence</title>\n'
         '<link rel="stylesheet" href="/blinq-app.css?v=7360&p=61">\n'
         '<script src="/auth.js?v=7360&p=61"></script>\n'
         '<script src="/responsive.js?v=7360&p=61"></script>\n'
