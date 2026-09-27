@@ -64,6 +64,12 @@ def test_runtime_config_never_treats_release_fallback_as_saved_admin_content():
     assert "blinq_last_verified_runtime_ui_v1" in app
     assert "if(state.uiStorageAvailable!==true)" in app
     assert "state.runtimeConfigLoaded&&status?.runtime_configured!==true" in app
+    automatic = app.split("function loadAdminDraft(){", 1)[1].split(
+        "function restoreAdminDraft(){", 1
+    )[0]
+    assert "mergeConfig" not in automatic
+    assert "data-admin-action=\"load-draft\"" in app
+    assert "else if(action==='load-draft')restoreAdminDraft()" in app
 
 
 def test_no_stale_cache_on_spa_alias_and_cms_configs():
