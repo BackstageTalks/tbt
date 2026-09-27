@@ -216,16 +216,19 @@ class HttpReservation:
         self.endpoint = endpoint
         self.token = token
         self.purpose = purpose
+        import httpx
+        self._http = httpx.Client(timeout=7.0)
+
+    def close(self) -> None:
+        self._http.close()
 
     def __call__(self, client=None, cfg=None, *, enrichment=False) -> None:
-        import httpx
         try:
-            with httpx.Client(timeout=7.0) as transport:
-                response = transport.post(
-                    self.endpoint,
-                    headers={"X-Blinq-Worker-Token": self.token},
-                    json={"purpose": self.purpose, "requests": 1},
-                )
+            response = self._http.post(
+                self.endpoint,
+                headers={"X-Blinq-Worker-Token": self.token},
+                json={"purpose": self.purpose, "requests": 1},
+            )
             if response.status_code == 429:
                 raise SharedBudgetExhausted("Shared Tennis API budget exhausted")
             if response.status_code != 200 or response.json().get("ok") is not True:
