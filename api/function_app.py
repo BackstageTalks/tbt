@@ -1778,6 +1778,21 @@ def admin_diagnostics(req):
             "configured": bool(str(getattr(settings, "rapidapi_key", "") or "").strip()),
             "host": str(getattr(settings, "rapidapi_host", "") or "")[:120],
         }
+        try:
+            api_budget = shared_api_budget_status()
+            api_budget["available"] = True
+            api_budget["alerts"] = [
+                {"name": name, "percent": int(100 * spent / cap)}
+                for name, spent, cap in (
+                    ("global", api_budget["global_spent"], api_budget["global_limit"]),
+                    *((kind, used, {"live": 2500, "match": 250,
+                                     "refresh": 750, "history": 8500}[kind])
+                      for kind, used in api_budget["spent"].items()),
+                )
+                if spent * 100 >= cap * 80
+            ]
+        except SharedBudgetUnavailable:
+            api_budget = {"available": False, "alerts": []}
         users_ok = False
         try:
             list_users(settings, page=1, per_page=1)
@@ -1800,6 +1815,8 @@ def admin_diagnostics(req):
             problems.append("firebase_admin_users_unavailable")
         if not storage_ok:
             problems.append("admin_storage_unavailable")
+        if not api_budget.get("available"):
+            problems.append("tennis_api_budget_unavailable")
         if not media.get("configured") or not media.get("available"):
             problems.append("media_storage_unavailable")
         if not worker_configured:
@@ -1865,6 +1882,7 @@ def admin_diagnostics(req):
             "assets": asset_health,
             "services": service_health,
             "provider": provider_health,
+            "api_budget": api_budget,
             "ops": ops,
             "problems": problems,
             "actor_id": actor.get("id"),
