@@ -1,5 +1,5 @@
 name: BlinQ offline archive recovery (ZERO provider API)
-# 2026-09-27: restart after complete Venue test-fixture repair; paid provider keys disabled.
+# 2026-09-27: restart after context-compatible ambiguity fixture repair; paid provider keys disabled.
 run-name: "Recover archived tennis facts and verified venues - no provider API"
 
 on:
