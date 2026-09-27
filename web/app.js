@@ -1311,7 +1311,7 @@
       }else if(['model_success','auto_success'].includes(metric)){
         icon=icons.target;
         label=lcopy('MODEL SUCCESS','MODELOVÁ ÚSPEŠNOSŤ','ÚSPĚŠNOST MODELU');
-        const legacy=period==='auto'&&!Array.isArray(served)&&Number.isFinite(accuracy)?accuracy:null;
+        const legacy=metric==='model_success'&&period==='auto'&&!Array.isArray(served)&&Number.isFinite(accuracy)?accuracy:null;
         const result=historical??legacy;
         value=result==null?'—':pct(result);
       }else if(metric==='results_success'||metric==='results_top_success'){
@@ -3611,12 +3611,23 @@
       yield_units:'Doterajšie nastavenie Yield – vyber zdroj',
       results_top_success:'Doterajšie nastavenie TOP úspešnosti – vyber zdroj'
     };
+    // Legacy IDs stay programmatically selectable for old saved configs and
+    // regression tests, but they are hidden from the new 12-choice menu.
+    const legacyCompatibilityOptions={
+      avg_odds:'Priemerný kurz (pôvodný TOP)',
+      roi:'ROI – doterajšie nastavenie',
+      yield_units:'Yield – doterajšie nastavenie',
+      results_top_success:'Úspešnosť TOP – doterajšie nastavenie'
+    };
     const periodNames={today:'Dnes – aktuálne',auto:'Automaticky – najvyššia hodnota',all:'Celé dostupné obdobie'};
     const slots=dashboardKpiSettings().map((card,index)=>{
       const legacy=legacyLabel[card.metric];
       const metricOptions=(legacy
         ?`<option value="${escapeHtml(card.metric)}" selected>${escapeHtml(legacy)}</option>`:'')
-        +metrics.map(([id,label])=>`<option value="${id}"${card.metric===id?' selected':''}>${escapeHtml(label)}</option>`).join('');
+        +metrics.map(([id,label])=>`<option value="${id}"${card.metric===id?' selected':''}>${escapeHtml(label)}</option>`).join('')
+        +Object.entries(legacyCompatibilityOptions)
+          .filter(([id])=>id!==card.metric)
+          .map(([id,label])=>`<option value="${id}" hidden>${escapeHtml(label)}</option>`).join('');
       const periods=dashboardKpiAllowed[card.metric]||['today'];
       const periodOptions=periods.map(id=>`<option value="${id}"${card.period===id?' selected':''}>${escapeHtml(periodNames[id]||id+' dní')}</option>`).join('');
       const preview=adminDashboardKpiPreview(card,index);
