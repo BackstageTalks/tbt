@@ -65,6 +65,31 @@
       "headers": {
         "Cache-Control": "no-store, max-age=0"
       }
+    },
+    {
+      "route": "/follow-the-data/",
+      "rewrite": "/index.html",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0"
+      }
+    },
+    {
+      "route": "/deployment.json",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "route": "/config/*",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "route": "/membership-links.json",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
     }
   ],
   "navigationFallback": {
