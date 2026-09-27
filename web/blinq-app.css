@@ -7877,3 +7877,58 @@ body#blinqPremium.blinq-admin .admin-roi-audit-alert{color:#f5b28a}
   body#blinqPremium.blinq-admin .admin-roi-audit-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
   body#blinqPremium.blinq-admin .admin-roi-audit-grid strong{font-size:17px}
 }
+
+
+/* Admin System: prioritize actionable faults and fold passing checks. */
+body#blinqPremium .admin-health-overview{
+  display:flex;align-items:center;justify-content:space-between;gap:20px;
+  padding:19px 20px;margin:18px 0 16px;border:1px solid rgba(42,209,154,.29);
+  border-radius:15px;background:radial-gradient(circle at 100% 0,rgba(39,198,145,.12),transparent 50%),rgba(7,30,36,.78)
+}
+body#blinqPremium .admin-health-overview.is-warning{border-color:rgba(251,196,93,.34);background:radial-gradient(circle at 100% 0,rgba(219,156,46,.11),transparent 54%),rgba(7,30,36,.78)}
+body#blinqPremium .admin-health-overview.is-error{border-color:rgba(255,106,129,.38);background:radial-gradient(circle at 100% 0,rgba(209,81,111,.11),transparent 54%),rgba(7,30,36,.78)}
+.admin-health-overview-main{display:grid;gap:7px;min-width:0}
+.admin-health-overview-main small{color:#84b5ad;letter-spacing:.12em;font-size:9px;font-weight:750}
+.admin-health-overview-main strong{color:#f0fbf8;font-size:clamp(17px,2vw,23px);line-height:1.2;letter-spacing:-.025em}
+.admin-health-overview-main p{margin:0;color:#9bb8b4;font-size:11px;line-height:1.5}
+.admin-health-counts{display:flex;align-items:center;justify-content:flex-end;gap:9px;flex-wrap:wrap;flex-shrink:0}
+.admin-health-counts>span{display:flex;align-items:baseline;gap:5px;padding:9px 11px;border-radius:10px;font-size:10px;font-weight:650;white-space:nowrap}
+.admin-health-counts>span b{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums}
+.admin-health-counts .is-ok{color:#93f1c9;background:rgba(26,165,111,.11);border:1px solid rgba(45,242,173,.18)}
+.admin-health-counts .is-warning{color:#f5d08c;background:rgba(217,159,43,.1);border:1px solid rgba(244,196,104,.23)}
+.admin-health-counts .is-error{color:#ffacb9;background:rgba(234,80,109,.1);border:1px solid rgba(249,113,135,.24)}
+.admin-health-attention{margin:15px 0}
+.admin-health-group-head{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:0 0 10px}
+.admin-health-group-head strong{color:#f3f9f9;font-size:13px}
+.admin-health-group-head span{font-size:10px;color:#9baeb6}
+body#blinqPremium .admin-health-attention .admin-system-cards{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,235px),1fr));gap:11px;margin:0
+}
+body#blinqPremium .admin-health-attention .admin-system-card{padding:16px 15px;border-color:rgba(239,177,85,.26);background:linear-gradient(130deg,rgba(45,35,22,.25),rgba(7,29,35,.7))}
+body#blinqPremium .admin-health-attention .admin-system-card.is-error{border-color:rgba(248,111,132,.4);background:linear-gradient(130deg,rgba(65,27,40,.24),rgba(7,29,35,.7))}
+body#blinqPremium .admin-health-attention .admin-system-card small{font-size:9px;color:#b4c9c9;white-space:normal}
+body#blinqPremium .admin-health-attention .admin-system-card strong{font-size:15px}
+body#blinqPremium .admin-health-attention .admin-system-card em{font-size:11px;white-space:normal;overflow-wrap:anywhere;color:#ccdbdc}
+.admin-health-card-next{margin:5px 0 0;padding-top:11px;border-top:1px solid rgba(139,175,170,.15);font-size:10px;line-height:1.55;color:#adc1c1}
+.admin-health-ok-details{margin:12px 0 18px;border:1px solid rgba(80,144,154,.23);border-radius:13px;background:rgba(5,25,33,.35);overflow:hidden}
+.admin-health-ok-details>summary{list-style:none;cursor:pointer;display:flex;align-items:center;gap:10px;padding:13px 15px;color:#d0e5e5;font-size:11px;font-weight:750}
+.admin-health-ok-details>summary::-webkit-details-marker{display:none}
+.admin-health-ok-details>summary b{font-size:10px;padding:4px 7px;border-radius:7px;background:rgba(40,185,128,.12);color:#95e9c0}
+.admin-health-ok-details>summary span:last-child{margin-left:auto;color:#82a5a9;font-size:16px;transition:transform .16s}
+.admin-health-ok-details[open]>summary span:last-child{transform:rotate(180deg)}
+body#blinqPremium .admin-health-ok-details .admin-system-cards{margin:0;padding:0 14px 14px}
+.admin-health-empty{margin:12px 0;padding:24px;display:grid;gap:9px;border:1px dashed rgba(87,162,165,.3);border-radius:14px;background:rgba(7,32,37,.35);color:#cce2dd}
+.admin-health-empty.is-error{border-color:rgba(246,108,133,.46)}
+.admin-health-empty strong{font-size:17px;color:#f1f8f7}
+.admin-health-empty p{font-size:11px;line-height:1.5;color:#abbfbe;margin:0}
+.admin-health-empty button{justify-self:start}
+@media(max-width:820px){
+  body#blinqPremium .admin-health-overview{align-items:flex-start;flex-direction:column;padding:15px}
+  .admin-health-counts{justify-content:flex-start}
+}
+@media(max-width:480px){
+  .admin-health-counts>span{padding:7px 9px}
+  body#blinqPremium .admin-health-attention .admin-system-cards{grid-template-columns:minmax(0,1fr)}
+}
+
+/* BlinQ runtime patch 7.3.6-r62: admin health priority layout */
