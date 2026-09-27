@@ -66,7 +66,19 @@ class RapidTennisClient:
             )
 
         self.cfg = cfg
-        self.request_budget = request_budget
+        # Preserve existing local caps and additionally enforce the shared,
+        # server-side quota when a GitHub job supplies its budget credentials.
+        # Missing/incomplete credentials fail closed rather than silently
+        # bypassing a partially configured shared budget.
+        from .shared_budget import from_environment
+        shared_reservation = from_environment()
+        if shared_reservation is not None and request_budget is not None:
+            def combined_reservation(client, cfg, *, enrichment=False):
+                request_budget(client, cfg, enrichment=enrichment)
+                shared_reservation(client, cfg, enrichment=enrichment)
+            self.request_budget = combined_reservation
+        else:
+            self.request_budget = shared_reservation or request_budget
         self.client = httpx.Client(
             timeout=cfg.request_timeout_seconds
         )
