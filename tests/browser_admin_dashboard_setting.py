@@ -230,6 +230,44 @@ def main():
                 assert [v.inner_text() for v in page.locator("[data-admin-kpi-preview]").all()] == [
                     "58", "70.3%", "1.86"
                 ]
+                # Reproduce the reported 3-0 / 100% / 1.52 / 52% ROI case
+                # through the same filtered Results calculations as production.
+                page.evaluate("""() => {
+                  const s=dashboardHarness.state;
+                  s.resultsFilters={category:'doubles',window:'all',tour:'',surface:''};
+                  s.feed.results=[1.40,1.80,1.36].map((odds,i)=>({
+                    event_id:'doubles-audit-'+i,
+                    scheduled_at:new Date(Date.now()-86400000).toISOString(),
+                    market_publications:[{
+                      section:'doubles',market:'match_winner',
+                      issued_at:new Date(Date.now()-172800000).toISOString(),
+                      selection_id:'team-'+i,price_status:'priced',odds,
+                      result:{status:'hit',correct:true,staked_units:1,profit_units:odds-1}
+                    }]
+                  }));
+                  document.getElementById('routePanel').innerHTML=
+                    dashboardHarness.renderAdminRoute();
+                }""")
+                audit = page.locator("[data-admin-roi-audit]")
+                assert audit.count() == 1
+                assert "52.0%" in audit.inner_text()
+                assert "100.0%" in audit.inner_text()
+                assert "1.52" in audit.inner_text()
+                assert "3.00u" in audit.inner_text()
+                assert "+1.56u" in audit.inner_text()
+                assert "3" in audit.locator(".admin-roi-audit-grid").inner_text()
+                assert audit.locator(".admin-roi-audit-alert").count() == 0
+                assert audit.evaluate("(el) => el.scrollWidth<=el.clientWidth+2")
+                # Corrupt one old settlement: the diagnostic flags the stale
+                # ledger mismatch without silently inventing a new payout.
+                page.evaluate("""() => {
+                  const s=dashboardHarness.state;
+                  s.feed.results[0].market_publications[0].result.profit_units=.20;
+                  document.getElementById('routePanel').innerHTML=
+                    dashboardHarness.renderAdminRoute();
+                }""")
+                assert "45.3%" in page.locator("[data-admin-roi-audit]").inner_text()
+                assert page.locator(".admin-roi-audit-alert").count() == 1
                 assert not errors, (width, errors)
                 page.close()
             print("Admin Dashboard setting and unchanged public three-card runtime: PASS")
