@@ -7835,3 +7835,45 @@ body#blinqPremium.blinq-admin .admin-dashboard-slot-preview>small{
 @media(max-width:700px){
   body#blinqPremium.blinq-admin .admin-dashboard-slot{grid-template-columns:1fr;gap:12px}
 }
+
+/* Admin-only ROI reconciliation: no changes to public dashboard or Results. */
+body#blinqPremium.blinq-admin .admin-roi-audit{
+  margin:18px 0;padding:18px;border:1px solid rgba(92,173,141,.28);
+  border-radius:12px;background:rgba(10,32,26,.47);display:grid;gap:16px
+}
+body#blinqPremium.blinq-admin .admin-roi-audit header h4{
+  font-size:16px;line-height:1.35;margin:4px 0 7px;color:#e1f5eb
+}
+body#blinqPremium.blinq-admin .admin-roi-audit header small{
+  color:#9cbeae;letter-spacing:.03em
+}
+body#blinqPremium.blinq-admin .admin-roi-audit header p{
+  margin:0 0 10px;color:#acc1b6;font-size:12px;line-height:1.5
+}
+body#blinqPremium.blinq-admin .admin-roi-audit-grid{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px
+}
+body#blinqPremium.blinq-admin .admin-roi-audit-grid>div{
+  min-width:0;display:grid;align-content:space-between;gap:8px;
+  padding:12px;border:1px solid rgba(100,177,145,.22);
+  background:rgba(12,28,25,.6);border-radius:9px
+}
+body#blinqPremium.blinq-admin .admin-roi-audit-grid span{
+  font-size:11px;line-height:1.45;color:#a0bbae
+}
+body#blinqPremium.blinq-admin .admin-roi-audit-grid strong{
+  font-size:20px;line-height:1.2;color:#f4fff8;white-space:nowrap
+}
+body#blinqPremium.blinq-admin .admin-roi-audit-alert,
+body#blinqPremium.blinq-admin .admin-roi-audit-ok{
+  font-size:11px;line-height:1.5;margin:0;color:#91c7a9
+}
+body#blinqPremium.blinq-admin .admin-roi-audit-alert{color:#f5b28a}
+@media(max-width:1100px){
+  body#blinqPremium.blinq-admin .admin-roi-audit-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:520px){
+  body#blinqPremium.blinq-admin .admin-roi-audit{padding:12px}
+  body#blinqPremium.blinq-admin .admin-roi-audit-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  body#blinqPremium.blinq-admin .admin-roi-audit-grid strong{font-size:17px}
+}
