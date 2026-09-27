@@ -841,6 +841,8 @@ def betting_performance(results):
 PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 
 PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30, 180, 365)
+# Explicit 180-day cards must not silently change the old auto-selected KPI.
+PERFORMANCE_AUTO_WINDOWS_DAYS = (3, 7, 10, 14, 30, 365)
 PERFORMANCE_BEST_MIN_SAMPLE = 30
 
 
@@ -889,7 +891,7 @@ def performance_windows(winner_results, public_results, *, now):
         }
 
     candidates = []
-    for days in PERFORMANCE_WINDOWS_DAYS:
+    for days in PERFORMANCE_AUTO_WINDOWS_DAYS:
         model = windows[str(days)]["model"]
         accuracy = model.get("accuracy") if isinstance(model, dict) else None
         n = int(model.get("n") or 0) if isinstance(model, dict) else 0
@@ -918,7 +920,7 @@ def performance_windows(winner_results, public_results, *, now):
     category_best = {}
     for category, path in category_map.items():
         category_candidates = []
-        for days in PERFORMANCE_WINDOWS_DAYS:
+        for days in PERFORMANCE_AUTO_WINDOWS_DAYS:
             metric = windows[str(days)]
             for key in path:
                 metric = metric.get(key, {}) if isinstance(metric, dict) else {}
