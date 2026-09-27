@@ -572,6 +572,12 @@
   async function adminSaveUiConfig(payload) {
     return apiWithSession('/api/v1/admin/ui-config', {method: 'PUT', body: JSON.stringify(payload || {})});
   }
+  async function adminUiSnapshots() {
+    return apiWithSession('/api/v1/admin/ui-config/snapshots');
+  }
+  async function adminUiSnapshot(snapshotId) {
+    return apiWithSession('/api/v1/admin/ui-config/snapshots/'+encodeURIComponent(String(snapshotId||'')));
+  }
   async function pushConfig() {
     return apiWithSession('/api/v1/push/config');
   }
@@ -607,7 +613,7 @@
     insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews,
-    bannerEvent, adminSaveUiConfig, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
+    bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
     sessionStorageKeys, sessionEpochKey,
   };
 })();
