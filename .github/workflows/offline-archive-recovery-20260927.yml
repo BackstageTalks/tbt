@@ -1,0 +1,111 @@
+name: BlinQ offline archive recovery (ZERO provider API)
+run-name: "Recover archived tennis facts and verified venues - no provider API"
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/offline-archive-recovery-20260927.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Same exclusive lock as MegaData, production refresh and Environment writes.
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  recover:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONPATH: api:scripts
+      RAPIDAPI_KEY: ''
+      PROPL: ''
+      TBT_WEATHER_RESEARCH: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install and pass strict offline fact/venue tests
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+          python -m unittest discover -s scripts/tests -p 'test_offline_archive_backfill.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_environment_bulk_modes.py' -v
+          python -m unittest discover -s scripts/tests -p 'test_environment_location_candidates.py' -v
+          test -n "$GH_TOKEN" || { echo "::error::Missing private GitHub release token"; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+          if grep -E 'RapidTennisClient\(|OpenMeteoClient\(' scripts/offline_archive_backfill.py; then
+            echo "::error::Offline script must not instantiate a provider API client"
+            exit 1
+          fi
+      - name: Recover archived facts + verified positive locations
+        timeout-minutes: 250
+        run: |
+          set -euo pipefail
+          python scripts/offline_archive_backfill.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --apply \
+            --report .cache/tbt/offline-archive/recovery.json
+      - name: Read-only final Environment and training audits
+        timeout-minutes: 65
+        run: |
+          set -euo pipefail
+          python scripts/audit_environment_release.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --report .cache/tbt/offline-archive/environment_after.json
+          python scripts/run_production_preflight.py
+          python scripts/audit_feature_v3_coverage.py \
+            --history-dir .cache/tbt/history \
+            --out .cache/tbt/offline-archive/feature_v3_after.json
+      - name: Summarize only verified committed gains
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          p=Path('.cache/tbt/offline-archive/recovery.json')
+          print('# BlinQ offline archive: results (no provider API)')
+          if not p.is_file():
+              print('No recovery report; do not claim completion.')
+          else:
+              r=json.loads(p.read_text())
+              print(f"- Private release updated: {r.get('writes')}")
+              print(f"- Source API calls (Tennis/Open-Meteo): 0 / 0")
+              print(f"- Static GeoNames archive: {r.get('gazetteer')}")
+              for k,v in (r.get('counts') or {}).items():
+                  print(f"- {k}: {v}")
+              before,after=r.get('before') or {},r.get('after') or {}
+              for key in ('verified_venues','known_indoor_outdoor','structured_scores'):
+                  print(f"- {key}: {before.get(key)} -> {after.get(key)}")
+              print(f"- Rewritten UTC years: {r.get('changed_years')}")
+          q=Path('.cache/tbt/production/readiness_report.json')
+          if q.is_file():
+              x=json.loads(q.read_text())
+              print(f"- Final preflight: {x.get('status')}, blockers: {x.get('blockers')}")
+          PY
+      - name: Keep audit and provenance if any stage fails
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-offline-archive-${{ github.run_id }}
+          path: |
+            .cache/tbt/offline-archive/recovery.json
+            .cache/tbt/offline-archive/environment_after.json
+            .cache/tbt/offline-archive/feature_v3_after.json
+            .cache/tbt/production/statistics_inventory_report.json
+            .cache/tbt/production/training_table_report.json
+            .cache/tbt/production/readiness_report.json
+            .cache/tbt/production/leakage_audit_report.json
+          if-no-files-found: warn
+          retention-days: 30
