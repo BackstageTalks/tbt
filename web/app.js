@@ -2897,7 +2897,7 @@
     const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
     const voids=entries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
-    let stake=0,profit=0,oddsTotal=0,oddsSample=0,unitSample=0;
+    let stake=0,profit=0,oddsTotal=0,oddsSample=0,unitSample=0,roiOddsSum=0,roiOddCount=0,ledgerDiscrepancies=0;
     for(const {publication} of graded){
       // An average quote is descriptive and retains Short Odds; never include
       // indicative/synthetic historical projection prices in real quote KPIs.
@@ -2920,12 +2920,20 @@
       stake+=realStake;
       profit+=realProfit;
       unitSample++;
+      roiOddsSum+=actualOdds;
+      roiOddCount++;
+      // An audit-only consistency signal: never silently overwrite an
+      // immutable settlement just because displayed bookmaker odds differ.
+      const expected=publicationOutcome(publication).kind==='win'
+        ?(actualOdds-1)*realStake:-realStake;
+      if(Math.abs(realProfit-expected)>.01)ledgerDiscrepancies++;
     }
     const sample=graded.length;
     return {
       wins,losses:Math.max(0,sample-wins),voids,sample,
       hit:sample?wins/sample:null,avgOdds:oddsSample?oddsTotal/oddsSample:null,
-      roi:stake?profit/stake:null,profit,oddsSample,unitSample,
+      roi:stake?profit/stake:null,profit,stake,oddsSample,unitSample,
+      roiAvgOdds:roiOddCount?roiOddsSum/roiOddCount:null,ledgerDiscrepancies,
     };
   }
   function renderResults(){
@@ -3474,6 +3482,39 @@
     return {text:result.toFixed(2),available:true};
   }
 
+  function adminResultsRoiAudit(){
+    // Uses the exact same filter, dedupe and ROI function as the visible
+    // Results page. This diagnostic never changes the public Results layout.
+    const filters=state.resultsFilters||{};
+    const m=localResultMetrics(filteredResults(),filters.category||'all');
+    const signed=value=>`${value>=0?'+':''}${value.toFixed(2)}u`;
+    const window=filters.window==='custom'
+      ?`${filters.dateFrom||'…'} – ${filters.dateTo||'…'}`
+      :filters.window==='all'?'Celé obdobie':`${filters.window||'all'} dní`;
+    const selection=[resultCategoryLabel(filters.category||'all'),window,
+      filters.tour||'',filters.surface||''].filter(Boolean).join(' · ');
+    const roi=m.roi==null?'—':pct(m.roi);
+    const odds=m.roiAvgOdds==null?'—':m.roiAvgOdds.toFixed(2);
+    const row=(title,value)=>`<div><span>${escapeHtml(title)}</span><strong>${escapeHtml(value)}</strong></div>`;
+    return `<section class="admin-roi-audit" data-admin-roi-audit>
+      <header><div><small>KONTROLA VÝPOČTU</small><h4>ROI podľa aktuálneho filtra Výsledkov</h4>
+        <p>Najprv nastav filter na stránke Výsledky, potom otvor Dashboard setting. Toto je len administrátorská kontrola.</p>
+        <small>${escapeHtml(selection)}</small></div></header>
+      <div class="admin-roi-audit-grid">
+        ${row('Výhry – prehry (všetky tipy)',`${m.wins} – ${m.losses}`)}
+        ${row('Úspešnosť všetkých tipov',m.hit==null?'—':pct(m.hit))}
+        ${row('Počet reálnych vkladov v ROI',String(m.unitSample))}
+        ${row('Priemerný kurz ROI vzorky',odds)}
+        ${row('Súčet vkladov',`${m.stake.toFixed(2)}u`)}
+        ${row('Čistý zisk',signed(m.profit))}
+        ${row('ROI = čistý zisk / vklady',roi)}
+      </div>
+      ${m.ledgerDiscrepancies
+        ?`<p class="admin-roi-audit-alert">Pozor: ${m.ledgerDiscrepancies} záznamov má rozdiel medzi uloženým ziskom a očakávaným ziskom z reálneho kurzu. História sa automaticky nemení; treba overiť pôvodné vyhodnotenie.</p>`
+        :'<p class="admin-roi-audit-ok">U vybraných reálnych vkladov nebol zistený nesúlad zisku a kurzu.</p>'}
+    </section>`;
+  }
+
   function renderAdminDashboardSettings(){
     // A separate selectable metric for EVERY method. The original winner
     // model and TOP-odds values must never be relabeled into Results values.
@@ -3508,6 +3549,7 @@
       <div class="admin-detail-access-card admin-dashboard-setting-card">
         <header><div><small>DASHBOARD</small><h3>Dashboard setting</h3><p>Vyber nezávisle obsah troch existujúcich kariet a obdobie výpočtu. Verejný vzhľad, rozloženie a model zostávajú bez zmeny.</p></div></header>
         <div class="admin-dashboard-slot-list">${slots}</div>
+        ${adminResultsRoiAudit()}
         <small class="admin-detail-help">Dnešné predikcie sa vždy počítajú z aktuálnej ponuky účtu. Dnešný priemerný kurz je z aktuálneho TOP; historický z reálnych vyhodnotených TOP tipov. ROI a Yield vychádzajú z publikovaných vyhodnotených tipov bez Short Odds. Modelová úspešnosť je pôvodný samostatný výpočet iba pre víťaza zápasu. Úspešnosť – Výsledky je iná samostatná metrika: zo všetkých publikovaných vyhodnotených tipov vrátane es, dvojchýb, setov, gemov a štvorhier; Úspešnosť TOP – Výsledky berie len TOP. Pôvodný priemerný kurz je z TOP, Kurz – Výsledky z reálnych kurzov všetkých vyhodnotených publikovaných tipov. Vrátený SKREČ a VOID nevstupujú do úspešnosti. Zmeny sa zverejnia až po kliknutí na Publikovať.</small>
       </div>
     </section>`;
