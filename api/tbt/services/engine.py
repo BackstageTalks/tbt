@@ -738,8 +738,12 @@ def _betting_metrics(publications):
     wins = sum(1 for p in graded if p["result"].get("correct") is True)
     losses = sum(1 for p in graded if p["result"].get("correct") is False)
     odds = [float(p.get("odds")) for p in graded if p.get("odds") is not None]
-    staked = sum(float(p["result"].get("staked_units") or 0.0) for p in graded)
-    profit = sum(float(p["result"].get("profit_units") or 0.0) for p in graded)
+    # Short Odds count towards the actual W/L record and average quote, but
+    # turnover-sized short prices (often 1.06) must not distort 1u ROI/units.
+    # The ledger remains immutable; this exclusion affects aggregates only.
+    unit_eligible = [p for p in graded if str(p.get("section") or "").strip().lower() != "prime"]
+    staked = sum(float(p["result"].get("staked_units") or 0.0) for p in unit_eligible)
+    profit = sum(float(p["result"].get("profit_units") or 0.0) for p in unit_eligible)
     return {
         "n": len(graded),
         "wins": wins,
@@ -809,6 +813,7 @@ def betting_performance(results):
     return {
         "schema": 2,
         "stake_model": "flat_1u",
+        "unit_excluded_sections": ["prime"],
         "overall": _betting_metrics(canonical_publications),
         "sections": sections,
         "markets": markets,
@@ -823,7 +828,7 @@ def betting_performance(results):
 
 PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 
-PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30)
+PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30, 365)
 PERFORMANCE_BEST_MIN_SAMPLE = 30
 
 
