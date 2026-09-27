@@ -62,6 +62,8 @@ def test_runtime_config_never_treats_release_fallback_as_saved_admin_content():
     assert "runtime?.runtime_configured===true" in app
     assert "runtime?.storage_available===true" in app
     assert "blinq_last_verified_runtime_ui_v1" in app
+    assert "trustedRuntime.dashboard||{}" in app
+    assert "trustedRuntime.hero_banner||{}" in app
     assert "if(state.uiStorageAvailable!==true)" in app
     assert "state.runtimeConfigLoaded&&status?.runtime_configured!==true" in app
     automatic = app.split("function loadAdminDraft(){", 1)[1].split(
@@ -104,3 +106,19 @@ def test_admin_published_ui_history_is_auth_bound_and_restore_is_preview_only():
     assert api.count("actor, denied = _admin_user(req)") >= 2
     assert "client.create_entity({" in storage
     assert 'previous_snapshot_id' in storage
+
+
+def test_local_draft_restores_marketing_only_without_reverting_new_entitlements():
+    app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
+    assert 'data-admin-action="preview-local-ui-draft"' in app
+    assert "function previewLocalAdminUiDraft(){" in app
+    assert "function applyAdminPresentationSnapshot(saved){" in app
+    presentation = app.split("function applyAdminPresentationSnapshot(saved){", 1)[1].split(
+        "async function previewAdminUiSnapshot(snapshotId){", 1
+    )[0]
+    assert "next.hero_banner=mergeConfig" in presentation
+    assert "marketing.forEach(" in presentation
+    assert "next.dashboard=" not in presentation
+    assert "next.access_contract_revision=" not in presentation
+    assert "next.notifications=" not in presentation
+    assert "if(!state.adminPreRestorePreview)" in presentation
