@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -3845,10 +3845,62 @@
     </section>`;
   }
 
+
+  function renderAdminUiHistory(){
+    const items=Array.isArray(state.adminUiSnapshots)?state.adminUiSnapshots:null;
+    const rows=items?.length?items.map(item=>
+      '<div style="display:flex;gap:10px;justify-content:space-between;align-items:center;flex-wrap:wrap;margin:9px 0">'+
+      '<span><strong>'+escapeHtml(item.previous_updated_at||item.saved_at||'Staršia verzia')+'</strong>'+
+      '<small style="display:block">Predchádzajúca publikácia · '+escapeHtml(item.previous_updated_by||'admin')+'</small></span>'+
+      '<button class="btn btn-ghost" type="button" data-admin-action="preview-ui-snapshot" data-ui-snapshot-id="'+escapeHtml(item.id)+'">Načítať vzhľad do náhľadu</button></div>'
+    ).join(''):(items?'<p>Zatiaľ žiadne historické verzie. Začnú sa ukladať pred ďalším publikovaním.</p>':'<p>Staršie publikované verzie Azure konfigurácie, ak sú dostupné.</p>');
+    return '<section class="admin-runtime-note" style="display:block" aria-label="História vzhľadu">'+
+      '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap"><strong>Obnova publikovaného vzhľadu</strong>'+
+      '<div><button class="btn btn-ghost" type="button" data-admin-action="load-ui-snapshots" '+(state.adminUiSnapshotsLoading?'disabled':'')+'>'+
+      (state.adminUiSnapshotsLoading?'Načítavam…':'História konfigurácie')+'</button>'+
+      (state.adminPreRestorePreview?'<button class="btn btn-ghost" type="button" data-admin-action="undo-ui-preview">Vrátiť predchádzajúci náhľad</button>':'')+
+      '</div></div><small>Obnova je najprv iba v editore. Živú stránku zmení až samostatné Publikovať. Aktuálne prístupy a nové KPI zostanú zachované.</small>'+
+      (state.adminUiSnapshotsError?'<div role="alert">'+escapeHtml(state.adminUiSnapshotsError)+'</div>':'')+
+      rows+'</section>';
+  }
+  async function loadAdminUiHistory(){
+    if(state.adminUiSnapshotsLoading)return;
+    state.adminUiSnapshotsLoading=true;state.adminUiSnapshotsError='';rerenderAdmin();
+    try{
+      const result=await BlinqAuth.adminUiSnapshots();
+      state.adminUiSnapshots=Array.isArray(result?.snapshots)?result.snapshots:[];
+    }catch(error){state.adminUiSnapshotsError=error?.message||'História Azure nie je dostupná.';}
+    finally{state.adminUiSnapshotsLoading=false;rerenderAdmin();}
+  }
+  async function previewAdminUiSnapshot(snapshotId){
+    if(!snapshotId||!window.confirm('Načítať uložený vzhľad do editora? Nezmení to živý web a neobnoví staré oprávnenia ani nastavenia modelu.'))return;
+    try{
+      const result=await BlinqAuth.adminUiSnapshot(snapshotId),saved=result?.config;
+      if(saved?.schema!==2||!saved?.elements||!saved?.hero_banner)throw new Error('Historická konfigurácia nie je platná.');
+      const current=clone(state.ui),next=clone(state.ui);
+      next.hero_banner=mergeConfig(next.hero_banner||{},saved.hero_banner);
+      Object.entries(saved.elements).forEach(([id,old])=>{
+        if(!next.elements?.[id]||!old||next.elements[id].kind!==old.kind)return;
+        if(old.content&&typeof old.content==='object')next.elements[id].content=mergeConfig(next.elements[id].content||{},old.content);
+        if(old.kind==='hero_banner'&&old.watermark)next.elements[id].watermark=mergeConfig(next.elements[id].watermark||{},old.watermark);
+      });
+      if(Array.isArray(saved.navigation?.learn)){
+        next.navigation=next.navigation||{};next.navigation.learn=clone(saved.navigation.learn);
+      }
+      const marketing=['label','eyebrow','description','short_description','card_title','cta_label','url','invite_url'];
+      Object.entries(saved.plans||{}).forEach(([id,old])=>{
+        const target=next.plans?.[id];if(!target||!old)return;
+        marketing.forEach(k=>{if(Object.prototype.hasOwnProperty.call(old,k))target[k]=clone(old[k]);});
+      });
+      state.adminPreRestorePreview=current;
+      state.ui=next;applyV6514AdminCleanup();renderAllUiContent();rerenderAdmin();
+      showStatus('Historický vzhľad je v náhľade. Over všetky bannery, obrázky a odkazy; živý web sa nezmenil.');
+    }catch(error){showStatus(error?.message||'Historickú konfiguráciu sa nepodarilo načítať.');}
+  }
   function renderAdminRoute(){
     const tabs=[['accounts','Účty','Prístup · platnosť'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,system:renderAdminSystem};const panel=renderers[state.adminTab]();
+    const renderers={accounts:renderAdminAccounts,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
     const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard setting','Nastavenie troch hlavných metrík bez zmeny grafiky.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
@@ -3859,7 +3911,7 @@
       ?'<div class="admin-runtime-note is-error" role="alert"><strong>Publikovanie konfigurácie je pozastavené</strong><span>'+escapeHtml(state.uiRuntimeNotice||'Azure konfigurácia je nedostupná.')+' Zobrazené nastavenia môžu byť iba posledná overená kópia alebo predvolené hodnoty. Nemeň živé bannery ani odkazy, kým sa spojenie neobnoví.</span></div>'
       :'';
     const nav=tabs.map(([id,label,hint])=>`<button type="button" class="${state.adminTab===id?'active':''}" data-admin-tab="${id}"><span class="admin-nav-mark"></span><span><strong>${escapeHtml(label)}</strong><small>${escapeHtml(hint)}</small></span></button>`).join('');
-    return `<div class="admin-console admin-console-v685 admin-console-v687 lean-admin-console"><aside class="admin-side-nav"><div class="admin-side-brand"><span>BLINQ CONTROL</span><strong>Admin</strong><small>Účty · obsah · LIVE</small></div><nav class="admin-tabs admin-tabs-v685" aria-label="Admin navigácia"><div class="admin-nav-group"><span>SPRÁVA</span>${nav}</div></nav><div class="admin-side-foot"><a href="#predictions" data-route="predictions"><svg viewBox="0 0 20 20"><path d="M4 10h12M9 5l-5 5 5 5"></path></svg><span>Späť na web</span></a></div></aside><section class="admin-workarea"><header class="admin-workarea-head admin-control-toolbar"><div><small>ADMIN / ${escapeHtml(state.adminTab.toUpperCase())}</small><h2>${escapeHtml(info[0])}</h2><p>${escapeHtml(info[1])}</p></div><div class="admin-global-actions">${contextual}</div></header><div class="admin-panel admin-panel-v685">${uiWarning}${panel}</div></section></div>`;
+    return `<div class="admin-console admin-console-v685 admin-console-v687 lean-admin-console"><aside class="admin-side-nav"><div class="admin-side-brand"><span>BLINQ CONTROL</span><strong>Admin</strong><small>Účty · obsah · LIVE</small></div><nav class="admin-tabs admin-tabs-v685" aria-label="Admin navigácia"><div class="admin-nav-group"><span>SPRÁVA</span>${nav}</div></nav><div class="admin-side-foot"><a href="#predictions" data-route="predictions"><svg viewBox="0 0 20 20"><path d="M4 10h12M9 5l-5 5 5 5"></path></svg><span>Späť na web</span></a></div></aside><section class="admin-workarea"><header class="admin-workarea-head admin-control-toolbar"><div><small>ADMIN / ${escapeHtml(state.adminTab.toUpperCase())}</small><h2>${escapeHtml(info[0])}</h2><p>${escapeHtml(info[1])}</p></div><div class="admin-global-actions">${contextual}</div></header><div class="admin-panel admin-panel-v685">${uiWarning}${uiHistoryPanel}${panel}</div></section></div>`;
   }
 
 
@@ -4044,6 +4096,11 @@
         return;
       }
       if(action==='save-draft')saveDraft();
+      else if(action==='load-ui-snapshots')await loadAdminUiHistory();
+      else if(action==='preview-ui-snapshot')await previewAdminUiSnapshot(String(actionNode.dataset.uiSnapshotId||''));
+      else if(action==='undo-ui-preview'){
+        if(state.adminPreRestorePreview){state.ui=clone(state.adminPreRestorePreview);state.adminPreRestorePreview=null;renderAllUiContent();rerenderAdmin();showStatus('Predchádzajúci náhľad bol obnovený.');}
+      }
       else if(action==='load-draft')restoreAdminDraft();
       else if(action==='publish-config')await publishUiConfig();
       else if(action==='export')exportUiConfig();
