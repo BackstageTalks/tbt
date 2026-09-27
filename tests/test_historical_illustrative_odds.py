@@ -72,7 +72,7 @@ def test_ui_never_renders_filler_as_a_real_quote():
     assert "nie historický kurz ani odhad modelu" in APP
 
 
-def test_results_units_and_kpis_share_visible_price_without_changing_ledger():
+def test_historical_display_stays_separate_from_verified_financial_kpis():
     assert "function resultVisibleOdds(publication)" in APP
     assert "function resultVisibleUnits(publication,outcome,odds)" in APP
     assert "const displayUnits=resultVisibleUnits(publication,outcome,resultVisibleOdds(publication))" in APP
@@ -80,8 +80,8 @@ def test_results_units_and_kpis_share_visible_price_without_changing_ledger():
     assert "Number.isFinite(displayUnits)&&displayUnits>0?'correct'" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits<0?'wrong'" in APP
     assert "const entries=settledPublishedEntries(rows,category)" in APP
-    assert "odds=resultVisibleOdds(publication)" in APP
-    assert "const units=resultVisibleUnits(publication,outcome,odds)" in APP
+    assert "const actualOdds=publication?.odds==null?NaN:Number(publication.odds)" in APP
+    assert "const realStake=publication?.result?.staked_units" in APP
     assert "function localResultMetrics(rows,category)" in APP
     assert "return metricCards([" in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
     assert "projectionCategory" not in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
