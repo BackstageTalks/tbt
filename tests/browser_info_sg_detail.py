@@ -123,6 +123,24 @@ def main():
                     h.setInsightDrawer(true,'info');
                 }""")
                 page.wait_for_function("infoHarness.state.insights?.length===1&&!infoHarness.state.insightsLoading")
+                # Header shows only the BlinQ Info title, not a duplicate
+                # green BLINQ INFO eyebrow. LIVE retains its own marker.
+                eyebrow=page.locator("#insightDrawerEyebrow")
+                assert eyebrow.is_hidden()
+                assert page.locator("#insightDrawerTitle").inner_text()=="BlinQ Info"
+                page.evaluate("""() => {
+                    const h=infoHarness;
+                    h.state.insightChannel='live';
+                    h.renderInsightDrawer();
+                }""")
+                assert eyebrow.is_visible()
+                assert eyebrow.inner_text()=="BLINQ LIVE"
+                page.evaluate("""() => {
+                    const h=infoHarness;
+                    h.state.insightChannel='info';
+                    h.renderInsightDrawer();
+                }""")
+                assert eyebrow.is_hidden()
                 assert page.locator("#insightUnread").inner_text()=="1"
                 assert page.locator("#insightDrawerStatus").inner_text().find("1 správ")>=0
                 assert page.locator("#insightDrawerStatus").inner_text().find("1 neprečítaných")>=0
