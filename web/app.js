@@ -2890,7 +2890,12 @@
       // An average quote is descriptive and retains Short Odds; never include
       // indicative/synthetic historical projection prices in real quote KPIs.
       const actualOdds=publication?.odds==null?NaN:Number(publication.odds);
-      const priced=publication?.price_status!=='projection_only'&&publication?.price_status!=='model_only';
+      const status=String(publication?.price_status||'').trim().toLowerCase();
+      const market=String(publication?.market||'').trim().toLowerCase();
+      const projectionMarket=['aces','double_faults','sets','games'].includes(market);
+      // Keep browser-filtered Results aligned with backend immutable ledger
+      // KPIs: projection-only and indicative prices are never real stakes.
+      const priced=projectionMarket?status==='priced_projection':['','priced','priced_projection'].includes(status);
       if(!priced||!Number.isFinite(actualOdds)||actualOdds<=1)continue;
       oddsTotal+=actualOdds;
       oddsSample++;
