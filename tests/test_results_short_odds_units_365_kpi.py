@@ -70,3 +70,11 @@ def test_results_ui_purple_void_units_and_longer_filter_are_explicit():
     assert ".results-table td.void" in css
     assert ".results-units-depth b.void" in css
     assert "color:#c99aff!important" in css
+
+
+def test_no_tennis_api_results_rebuild_updates_public_dashboard_accuracy():
+    rebuild = (ROOT / "scripts" / "rebuild_results_history.py").read_text(encoding="utf-8")
+    assert '"dashboard_model_success", "results_meta"' in rebuild
+    assert 'for key in (' in rebuild
+    assert 'feed[key] = derived[key]' in rebuild
+    assert '"immutable_issued_evidence_only"' in rebuild
