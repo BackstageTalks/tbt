@@ -85,6 +85,8 @@ def main():
     }
     deadline = time.monotonic() + args.max_runtime_minutes * 60
     error_counts = Counter()
+    consecutive_network_errors = 0
+    sample_checked = 0
     response_path = OUT / "responses.jsonl"
     try:
         with response_path.open("w", encoding="utf-8") as output:
@@ -115,28 +117,43 @@ def main():
                         report["stop_reason"] = "repeated_http_" + str(code)
                         break
                     continue
-                except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-                    error_counts["network_or_parse"] += 1
-                    if error_counts["network_or_parse"] >= 10:
-                        report["stop_reason"] = "repeated_network_or_parse_errors"
+                except (urllib.error.URLError, TimeoutError) as exc:
+                    error_counts["network"] += 1
+                    consecutive_network_errors += 1
+                    if consecutive_network_errors >= 10:
+                        report["stop_reason"] = "10_consecutive_network_errors"
+                        break
+                    continue
+                except (ValueError, UnicodeError):
+                    error_counts["parse"] += 1
+                    if error_counts["parse"] >= 10:
+                        report["stop_reason"] = "10_parse_errors"
                         break
                     continue
                 if code != 200:
                     error_counts[str(code)] += 1
                     continue
                 report["http_200"] += 1
+                consecutive_network_errors = 0
                 data = payload.get("data") if isinstance(payload, dict) else None
-                # Keep all successful payloads for schema-aware normalization after inspection.
-                if isinstance(data, dict) and (data.get("statistics") or data.get("periods")):
+                periods = payload.get("statistics") if isinstance(payload, dict) else None
+                if not periods and isinstance(data, dict):
+                    periods = data.get("statistics") or data.get("periods")
+                if isinstance(periods, list) and any(isinstance(p, dict) and p.get("period") == "ALL" and p.get("groups") for p in periods):
                     report["responses_with_statistics"] += 1
+                    items = [item for p in periods if isinstance(p, dict) and p.get("period") == "ALL" for group in p.get("groups", []) for item in group.get("statisticsItems", [])]
+                    keys = {item.get("key") for item in items if isinstance(item, dict)}
+                    if {"firstServeAccuracy", "firstServePointsAccuracy", "secondServePointsAccuracy"}.issubset(keys):
+                        report["responses_with_serve_quality_fields"] = report.get("responses_with_serve_quality_fields", 0) + 1
+                sample_checked += 1
                 output.write(json.dumps({
                     "provider": "tennisapi1", "event_id": eid, "match_id": match_id,
                     "tour": tour, "fetched_at_utc": datetime.now(timezone.utc).isoformat(),
                     "response": payload,
                 }, ensure_ascii=False) + "\n")
                 output.flush()
-                if report["requests_attempted"] <= 10 and report["http_200"] == 0:
-                    report["stop_reason"] = "no_successful_provider_responses"
+                if sample_checked == 30 and report.get("responses_with_serve_quality_fields", 0) == 0:
+                    report["stop_reason"] = "30_responses_without_serve_quality_fields"
                     break
             else:
                 report["stop_reason"] = "candidate_list_exhausted"
