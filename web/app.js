@@ -2948,7 +2948,7 @@
       const match=`<div class="results-match-player${p1Class}">${sideAvatarHtml(r,p1,'player1','hub-avatar')}${flagIconHtml(p1.country_code||p1.country_code2||p1.country_code3,true)}<strong>${escapeHtml(p1Name)}</strong>${p1Selected?tipBadge:''}</div><div class="results-match-sub"><span class="results-vs">vs</span><span class="results-opponent${p2Class}">${sideAvatarHtml(r,p2,'player2','hub-avatar')}${flagIconHtml(p2.country_code||p2.country_code2||p2.country_code3,true)}<strong>${escapeHtml(p2Name)}</strong>${p2Selected?tipBadge:''}</span></div>`;
       const tournamentCell=tournamentIdentityHtml(r);
       if(projection){
-        const depth=Number(publication?.data_depth??publication?.result?.data_depth),displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
+        const displayPick=projectionResultSelectionText(publication,pickName),projectionText=projectionResultProjectionText(publication),actualText=projectionResultActualText(publication);
         const projectionOdds=publication?.odds==null?NaN:Number(publication?.odds),projectionUnits=publication?.result?.profit_units==null?NaN:Number(publication?.result?.profit_units);
         const estimatedProjectionOdds=Number.isFinite(projectionOdds)&&projectionOdds>1?NaN:projectionIndicativeOdds(publication);
         const realProjectionOddsText=Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—';
@@ -2969,7 +2969,6 @@
         const projectionOddsTitle=realProjectionOddsText==='—'&&illustrativeOnly
           ?` title="${escapeHtml(illustrativeHint)}"`
           :Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
-        const depthText=Number.isFinite(depth)?pct(depth):'—';
         // Historical display-only prices can fill the visible Units cell,
         // but never become a settled stake, ledger profit, or genuine ROI.
         const hasSettledUnits=Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0;
@@ -2977,12 +2976,12 @@
         const unitsText=Number.isFinite(displayUnits)?
           `${displayUnits>0?'+':''}${displayUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
-        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${escapeHtml(projectionText)}</td><td${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td><span class="results-units-depth"><b${!hasSettledUnits?projectionOddsTitle:''} class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b><small>${escapeHtml(depthText)}</small></span></td></tr>`;
+        return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(displayPick)}</strong></td><td>${escapeHtml(projectionText)}</td><td${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td><span class="results-units-depth"><b${!hasSettledUnits?projectionOddsTitle:''} class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b></span></td></tr>`;
       }
       return `<tr><td>${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td>${tags}</td><td>${tournamentCell}</td><td>${match}</td><td><strong>${escapeHtml(pickName)}</strong></td><td>${Number.isFinite(probability)?pct(probability):'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td>${resultHtml}</td><td class="${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
     const pager=`<div class="results-pagination"><div class="results-pagination-meta"><strong>${startIndex+1}–${endIndex}</strong><span>z ${entries.length}</span></div><label><span>Riadkov</span><select id="resultsPageSize">${allowedSizes.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><div class="results-pagination-nav"><button type="button" id="resultsPrevPage" ${state.resultsPage<=0?'disabled':''}>←</button><span>Strana <strong>${state.resultsPage+1}</strong> / ${pages}</span><button type="button" id="resultsNextPage" ${state.resultsPage>=pages-1?'disabled':''}>→</button></div></div>`;
-    const head='<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia</th><th>Model / BlinQ %</th><th>Kurz</th><th>Výsledok</th><th>Jednotky / DATA DEPTH</th></tr>';
+    const head='<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia</th><th>Model / BlinQ %</th><th>Kurz</th><th>Výsledok</th><th>Jednotky</th></tr>';
     return `<div class="admin-table-wrap results-table-wrap"><table class="admin-analytics-table results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>${pager}`;
   }
 
@@ -3824,8 +3823,8 @@
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
-      ['ROI',m.roi==null?'—':pct(m.roi),lcopy('real settled stakes · excluding Short Odds','reálne vyhodnotené vklady · bez Short Odds','reálné vyhodnocené vklady · bez Short Odds')],
-      [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',lcopy('settled profit · Short Odds excluded','vyhodnotený zisk · bez Short Odds','vyhodnocený zisk · bez Short Odds')],
+      ['ROI',m.roi==null?'—':pct(m.roi),lcopy('real settled stakes','reálne vyhodnotené vklady','reálné vyhodnocené vklady')],
+      [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',lcopy('settled profit','vyhodnotený zisk','vyhodnocený zisk')],
       [publicText('Sample'),String(m.sample),lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')],
     ]);
   }
