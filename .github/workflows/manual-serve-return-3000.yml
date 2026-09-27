@@ -10,6 +10,7 @@ on:
         options: ['3000', '2000', '1000', '500', '100']
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: tbt-manual-serve-return-paid
   cancel-in-progress: false
@@ -41,6 +42,35 @@ jobs:
           test -n "$TENNISAPI_RAPIDAPI_HOST"
           test -n "$TENNISAPI_STATS_URL_TEMPLATE"
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+      - name: Recover latest private staging artifact (deduplicate across runs)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/manual-serve-return/previous
+          artifact=$(gh api "repos/$GH_REPO/actions/artifacts?per_page=100" --jq '[.artifacts[] | select(.name | startswith("manual-serve-return-")) | select(.expired == false)] | sort_by(.created_at) | reverse | .[0] // empty | [.workflow_run.id, .name] | @tsv')
+          if [ -n "$artifact" ]; then
+            IFS=
+        run: |
+          set -euo pipefail
+          python scripts/manual_serve_return_3000.py --limit "${{ inputs.max_requests }}"
+      - name: Upload private staging and usage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: manual-serve-return-${{ github.run_id }}
+          path: .cache/tbt/manual-serve-return/output/
+          if-no-files-found: warn
+          retention-days: 7
+\\t' read -r previous_run previous_name <<< "$artifact"
+            gh run download "$previous_run" --repo "$GH_REPO" --name "$previous_name" --dir .cache/tbt/manual-serve-return/previous
+            test -s .cache/tbt/manual-serve-return/previous/provider_responses.jsonl
+            echo "Recovered previous staging: $previous_name"
+          else
+            echo "No previous artifact found; refusing to spend paid requests without recovery."
+            exit 1
+          fi
       - name: Stage provider statistics (no production writes)
         run: |
           set -euo pipefail
