@@ -3405,6 +3405,9 @@
     const betting=currentWindow?.betting||{},overall=betting?.overall||{};
     let result=null;
     if(card.metric==='today_picks'){
+      if(!feed.entitlements&&!Array.isArray(feed.daily_picks)&&!feed.generated_at){
+        return {text:'—',available:false};
+      }
       // Match the actual first public card: use the authorized daily unique
       // total, never sum SEE ALL a second time.
       const supplied=Number(feed.entitlements?.daily_pick_count);
