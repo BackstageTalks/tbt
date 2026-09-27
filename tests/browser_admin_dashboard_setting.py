@@ -146,10 +146,29 @@ def main():
                 options = choice.locator("option").evaluate_all(
                     "(nodes) => Object.fromEntries(nodes.map(n=>[n.value,n.textContent]))"
                 )
-                assert options["model_success"] == "Modelová úspešnosť (iba víťaz zápasu)"
-                assert options["results_success"] == "Úspešnosť – Výsledky (všetky tipy)"
+                assert options["model_success"] == "Úspešnosť (víťazi)"
+                assert options["results_success"] == "Úspešnosť (výsledky)"
                 assert options["avg_odds"] == "Priemerný kurz (pôvodný TOP)"
-                assert options["results_avg_odds"] == "Kurz – Výsledky (všetky tipy)"
+                assert options["results_avg_odds"] == "Priemerný kurz (výsledky)"
+                visible = choice.locator("option").evaluate_all(
+                    "(nodes) => nodes.filter(n => !n.hidden).map(n=>[n.value,n.textContent])"
+                )
+                assert visible == [
+                    ["today_picks", "Dnešné predikcie"],
+                    ["model_success", "Úspešnosť (víťazi)"],
+                    ["results_success", "Úspešnosť (výsledky)"],
+                    ["auto_success", "Úspešnosť (auto)"],
+                    ["winner_avg_odds", "Priemerný kurz (víťazi)"],
+                    ["results_avg_odds", "Priemerný kurz (výsledky)"],
+                    ["auto_avg_odds", "Priemerný kurz (auto)"],
+                    ["winner_roi", "ROI (víťazi)"],
+                    ["results_roi", "ROI (výsledky)"],
+                    ["auto_roi", "ROI (auto)"],
+                    ["winner_yield_units", "Yield (víťazi)"],
+                    ["results_yield_units", "Yield (výsledky)"],
+                    ["auto_yield_units", "Yield (auto)"],
+                ]
+                assert all("historický súhrn" not in label.lower() for _,label in visible)
                 choice.select_option("model_success")
                 period.select_option("30")
                 assert page.locator('[data-admin-kpi-preview="0"]').inner_text() == "67.0%"
@@ -351,6 +370,40 @@ def main():
                 assert page.locator("#dashboardKpis .dashboard-kpi").count() == 3
                 assert [c.locator("strong").inner_text() for c in page.locator("#dashboardKpis .dashboard-kpi").all()] == [
                     "0.0%", "80.0%", "+3.20u"
+                ]
+                # AUTO now compares the two separate calculation sources,
+                # rather than selecting only the best window of one source.
+                page.evaluate("""() => {
+                  const h=dashboardHarness;
+                  h.state.ui.dashboard.kpi_cards=[
+                    {metric:'auto_success',period:'auto'},
+                    {metric:'auto_avg_odds',period:'auto'},
+                    {metric:'auto_roi',period:'auto'}
+                  ];
+                  h.state.feed.dashboard_kpi_cards=[];
+                  document.getElementById('routePanel').innerHTML=h.renderAdminRoute();
+                  h.wireAdmin();
+                }""")
+                previews = page.locator("[data-admin-kpi-preview]").all_inner_texts()
+                assert previews == ["81.0%", "2.25", "80.0%"], previews
+                slot_text = [x.inner_text() for x in page.locator(".admin-dashboard-slot").all()]
+                assert "víťazi" in slot_text[0] and "14 dní" in slot_text[0]
+                assert "výsledky" in slot_text[1] and "celé obdobie" in slot_text[1]
+                assert "výsledky" in slot_text[2] and "celé obdobie" in slot_text[2]
+                assert page.locator('[data-admin-kpi-index="0"][data-admin-kpi-field="period"]').is_disabled()
+                # Publication sends three final scalars only; dashboard adds
+                # no technical description, badges or new public cards.
+                page.evaluate("""() => {
+                  const h=dashboardHarness;
+                  h.state.feed.dashboard_kpi_cards=[
+                    {metric:'auto_success',period:'auto',value:.81,selected_source:'model_success',selected_period:'14',sample:60},
+                    {metric:'auto_avg_odds',period:'auto',value:2.25,selected_source:'results_avg_odds',selected_period:'all',sample:4},
+                    {metric:'auto_roi',period:'auto',value:.8,selected_source:'results_roi',selected_period:'all',sample:4}
+                  ];
+                  h.renderDashboardKpis();
+                }""")
+                assert [c.locator("strong").inner_text() for c in page.locator("#dashboardKpis .dashboard-kpi").all()] == [
+                    "81.0%", "2.25", "80.0%"
                 ]
                 assert page.locator("#dashboardKpis .dashboard-kpi p").count() == 0
                 assert page.locator("#dashboardKpis .dashboard-kpi[title]").count() == 0
