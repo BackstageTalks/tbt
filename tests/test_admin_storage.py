@@ -217,6 +217,14 @@ def test_runtime_ui_backup_preserves_previous_complete_published_version(monkeyp
     previous = admin_storage._decode_runtime_ui_payload(previous_row["payload"])
     assert previous == first
     assert admin_storage.load_runtime_ui_config() == changed
+    # Both the version listing and the exact full version must be recoverable.
+    active_get = table.get_entity
+    def indexed_get(*, partition_key, row_key):
+        if partition_key == "ui-config-history":
+            return next(row for row in table.entities if row["RowKey"] == row_key)
+        return active_get(partition_key, row_key)
+    monkeypatch.setattr(table, "get_entity", indexed_get)
+    assert admin_storage.load_runtime_ui_snapshot(result["previous_snapshot_id"]) == first
 
 
 def test_runtime_ui_backup_failure_does_not_overwrite_published_version(monkeypatch):
