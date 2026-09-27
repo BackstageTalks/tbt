@@ -2,7 +2,7 @@ name: MCP overlap audit (read-only)
 on:
   push:
     branches: [main]
-    paths: ['.github/workflows/mcp-overlap-audit.yml']
+    paths: ['.github/workflows/mcp-overlap-audit.yml', 'scripts/audit_mcp_overlap.py']
   workflow_dispatch:
 permissions:
   contents: read
@@ -52,6 +52,8 @@ jobs:
         if: always()
         with:
           name: mcp-overlap-${{ github.run_id }}
-          path: .cache/tbt/mcp-overlap/report.json
+          path: |
+            .cache/tbt/mcp-overlap/report.json
+            .cache/tbt/mcp-overlap/mcp_staged_candidates.json
           if-no-files-found: warn
           retention-days: 14
