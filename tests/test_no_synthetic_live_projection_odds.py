@@ -6,17 +6,16 @@ APP = (ROOT / "web/app.js").read_text(encoding="utf-8")
 PIPE = (ROOT / "scripts/pipeline.py").read_text(encoding="utf-8")
 
 
-def test_live_cards_keep_api_publication_strict_but_temporarily_mask_ace_df_display_odds():
-    live = APP[APP.index("function authenticLiveProjection("):
+def test_live_cards_require_exact_api_odds_and_never_use_results_placeholder():
+    live = APP[APP.index("function projectionOddsHtml("):
                APP.index("function dailyHubRow(")]
-    assert "row?.price_status==='priced_projection'" in live
-    assert "Number.isFinite(odds)&&odds>=1.50" in live
-    assert "Boolean(row?.captured_at)" in live
-    assert "['ace','sg'].includes(key)?value.filter(authenticLiveProjection)" in live
-    assert "function aceDfTemporaryDisplayOdds(row)" in live
-    assert "const step=(hash>>>0)%21" in live
-    assert "1.50+step/100" in live
-    assert "['aces','double_faults'].includes(market)" in live
+    contract = APP[APP.index("function authenticLiveProjection("):
+                   APP.index("function dailyHubRow(")]
+    assert "row?.price_status==='priced_projection'" in contract
+    assert "Number.isFinite(odds)&&odds>=1.50" in contract
+    assert "Boolean(row?.captured_at)" in contract
+    assert "['ace','sg'].includes(key)?value.filter(authenticLiveProjection)" in contract
+    assert "aceDfResultsDisplayOdds" not in live
     assert "hubNumberHtml('N/A',reason)" in live
 
 
