@@ -2289,11 +2289,10 @@
     dialog.classList.remove('ace-projection-dialog');dialog.classList.add('sg-projection-dialog');
     if(!dialog.open)dialog.showModal();
   }
-  // Temporary Aces / Double Faults display price. Current stored/provider
-  // prices for these two markets are not trusted yet, so keep one stable
-  // 1.50-1.70 value per pick until the new odds API/data contract is deployed.
-  // Display only: ledger, settlement, ROI and Units remain untouched.
-  function aceDfTemporaryDisplayOdds(row){
+  // Results-only bridge for legacy Aces / Double Faults rows whose archived
+  // prices are not trustworthy. Current/live cards NEVER use this helper.
+  // Ledger, settlement and financial KPIs remain untouched.
+  function aceDfResultsDisplayOdds(row){
     const market=String(row?.market||row?.projection_metric||'').toLowerCase();
     if(!['aces','double_faults'].includes(market))return NaN;
     const identity=[
@@ -2312,11 +2311,11 @@
     const step=(hash>>>0)%21;
     return Math.round((1.50+step/100)*100)/100;
   }
-  function aceDfTemporaryOddsHint(){
+  function aceDfResultsOddsHint(){
     return lcopy(
-      'Temporary Aces/DF display odds. Stable 1.50-1.70 placeholder until the new odds API is deployed. Excluded from ROI.',
-      'Dočasný zobrazovaný kurz pre esá/DF. Stabilná hodnota 1,50–1,70 do nasadenia nového kurzového API. Nezapočítava sa do ROI.',
-      'Dočasný zobrazovaný kurz pro esa/DF. Stabilní hodnota 1,50–1,70 do nasazení nového kurzového API. Nezapočítává se do ROI.'
+      'Results-only temporary Aces/DF display odds. Stable 1.50-1.70 legacy placeholder until real odds are supplied by the new API. Excluded from ROI.',
+      'Dočasný kurz iba vo Výsledkoch pre esá/DF. Stabilná hodnota 1,50–1,70 pre staré záznamy, kým nové API neposkytne reálne kurzy. Nezapočítava sa do ROI.',
+      'Dočasný kurz pouze ve Výsledcích pro esa/DF. Stabilní hodnota 1,50–1,70 pro staré záznamy, dokud nové API neposkytne reálné kurzy. Nezapočítává se do ROI.'
     );
   }
 
@@ -2343,15 +2342,11 @@
     );
   }
   function projectionOddsHtml(row){
-    const temporaryAceDf=aceDfTemporaryDisplayOdds(row);
-    if(Number.isFinite(temporaryAceDf)){
-      const hint=aceDfTemporaryOddsHint();
-      return `<span title="${escapeHtml(hint)}">${hubNumberHtml(temporaryAceDf.toFixed(2),lcopy('odds','kurz','kurz'))}</span>`;
-    }
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
     if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
-    // Games/Sets remain strict until a genuine provider quote exists.
+    // Current ACES/DF/GAMES/SETS never receive a synthetic display price.
+    // Until a verified provider quote exists, show N/A.
     const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
     return `<span title="${escapeHtml(reason)}">${hubNumberHtml('N/A',reason)}</span>`;
   }
@@ -3113,7 +3108,7 @@
         const placeholderOdds=placeholderRaw==null?NaN:Number(placeholderRaw);
         const illustrativeOnly=publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
           &&Number.isFinite(placeholderOdds)&&placeholderOdds>=1.50&&placeholderOdds<=1.70;
-        const temporaryAceDfOdds=aceDfTemporaryDisplayOdds(publication);
+        const temporaryAceDfOdds=aceDfResultsDisplayOdds(publication);
         const displayedProjectionOdds=Number.isFinite(temporaryAceDfOdds)?temporaryAceDfOdds.toFixed(2):
           realProjectionOddsText!=='—'?realProjectionOddsText:
           illustrativeOnly?placeholderOdds.toFixed(2):
@@ -3124,7 +3119,7 @@
           'POUZE ILUSTRAČNÍ HODNOTA: generovaná náhrada, nikoli historický kurz ani odhad modelu. Nepoužívá se pro výpočet ROI.'
         );
         const projectionOddsTitle=Number.isFinite(temporaryAceDfOdds)
-          ?` title="${escapeHtml(aceDfTemporaryOddsHint())}"`
+          ?` title="${escapeHtml(aceDfResultsOddsHint())}"`
           :realProjectionOddsText==='—'&&illustrativeOnly
             ?` title="${escapeHtml(illustrativeHint)}"`
             :Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
