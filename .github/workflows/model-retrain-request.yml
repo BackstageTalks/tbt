@@ -1,0 +1,38 @@
+name: BlinQ controlled model retrain request
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/model-retrain-request.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: blinq-model-retrain-request
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate request and dispatch governed training
+        shell: bash
+        run: |
+          set -euo pipefail
+          request=".github/model-retrain-request.json"
+          test -s "$request"
+          mode="$(jq -r '.mode // ""' "$request")"
+          promote="$(jq -r '.promote // false' "$request")"
+          test "$mode" = "train" || { echo "Invalid retrain mode"; exit 1; }
+          case "$promote" in true|false) ;; *) echo "Invalid promote flag"; exit 1;; esac
+          gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main             -f mode=train             -f promote="$promote"             -f max_requests=1
+          echo "Governed BlinQ retrain dispatched: promote=$promote"
