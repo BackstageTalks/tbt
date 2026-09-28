@@ -3586,6 +3586,7 @@
       'INFO STORAGE':'INFO potrebuje funkčné trvalé úložisko. Skontroluj Admin Storage.',
       'PLAYER IMAGES':'Zobrazujú sa náhradné fotografie. Neovplyvňuje to výpočet tipov.',
       'TOURNAMENT LOGOS':'Chýbajúce logá majú náhradný obrázok; predikcie fungujú ďalej.',
+      'BETTING ODDS':'Niektorý publikovaný TOP / Short Odds / Value / Doubles bet nemá reálny bookmaker kurz. Over posledný market refresh; diagnostika cenu nevymýšľa.',
       'LIVE DATA':'Over dátový feed a posledný úspešný deploy. Obnovenie diagnostiky nič nespúšťa.',
       'LIVE WORKER':d.live_worker&&d.live_worker.configured
         ? 'Token v Azure je nastavený. Over externý cron, zhodný GitHub Secret a posledný beh LIVE Radar.'
