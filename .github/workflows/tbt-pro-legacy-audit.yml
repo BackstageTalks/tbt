@@ -73,6 +73,15 @@ jobs:
           python scripts/audit_tbt_pro_exact_market_outputs.py             --history-dir .cache/tbt/history             --legacy-dir .cache/tbt-pro             --out-dir .cache/tbt/exact-market-audit
           test -s .cache/tbt/exact-market-audit/exact_market_audit.json
 
+      - name: Strict legacy score gap-fill dry-run
+        run: |
+          set -euo pipefail
+          python scripts/dryrun_import_legacy_scores.py \
+            --history-dir .cache/tbt/history \
+            --legacy-dir .cache/tbt-pro \
+            --out-dir .cache/tbt/legacy-score-dryrun
+          test -s .cache/tbt/legacy-score-dryrun/report.json
+
       - name: Persist compact audit in private data repo
         run: |
           set -euo pipefail
@@ -95,6 +104,19 @@ jobs:
             gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$exact_path"               -f message="Audit exact legacy market run $AUDIT_RUN_ID"               -f content="$exact_encoded" >/dev/null
           fi
 
+          score_path="audit/tbt-pro-legacy-score-dryrun-latest.json"
+          score_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$score_path" --jq .sha 2>/dev/null || true)"
+          score_encoded="$(base64 -w0 .cache/tbt/legacy-score-dryrun/report.json)"
+          if [[ -n "$score_sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$score_path" \
+              -f message="Audit legacy score dry-run $AUDIT_RUN_ID" \
+              -f content="$score_encoded" -f sha="$score_sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$score_path" \
+              -f message="Audit legacy score dry-run $AUDIT_RUN_ID" \
+              -f content="$score_encoded" >/dev/null
+          fi
+
       - name: Upload legacy audit evidence
         uses: actions/upload-artifact@v4
         with:
@@ -105,5 +127,8 @@ jobs:
             .cache/tbt/legacy-audit/previous_match_candidates.jsonl.gz
             .cache/tbt/exact-market-audit/exact_market_audit.json
             .cache/tbt/exact-market-audit/exact_market_candidates.jsonl.gz
+            .cache/tbt/legacy-score-dryrun/report.json
+            .cache/tbt/legacy-score-dryrun/stage.jsonl.gz
+            .cache/tbt/legacy-score-dryrun/rejections_sample.jsonl.gz
           if-no-files-found: error
           retention-days: 14
