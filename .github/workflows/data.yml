@@ -71,7 +71,10 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: tbt-history-data-writer
+  # Model training reads canonical history but does not mutate history
+  # partitions. Keep it off the history-writer lock so long retrains cannot
+  # block independent enrichment/import jobs.
+  group: ${{ (github.event_name == 'workflow_dispatch' && inputs.mode == 'train' && 'tbt-model-trainer') || 'tbt-history-data-writer' }}
   cancel-in-progress: false
 jobs:
   pipeline:
