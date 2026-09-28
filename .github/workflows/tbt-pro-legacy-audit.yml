@@ -11,8 +11,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: blinq-tbt-pro-legacy-audit-v2
-  cancel-in-progress: true
+  group: tbt-history-data-writer
+  cancel-in-progress: false
 
 jobs:
   audit:
@@ -55,8 +55,19 @@ jobs:
       - name: Validate controlled request
         run: |
           set -euo pipefail
-          test "$(jq -r '.mode // ""' .github/tbt-pro-legacy-audit-request.json)" = "legacy-audit"
+          mode="$(jq -r '.mode // ""' .github/tbt-pro-legacy-audit-request.json)"
+          zero_api="$(jq -r '.zero_provider_api_requests // false' .github/tbt-pro-legacy-audit-request.json)"
+          case "$mode" in
+            legacy-audit|legacy-score-write) ;;
+            *) echo "Invalid controlled mode: $mode"; exit 1 ;;
+          esac
+          test "$zero_api" = "true" || { echo "Legacy import must remain zero-provider-API"; exit 1; }
           test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          if [[ "$mode" == "legacy-score-write" && "$GITHUB_EVENT_NAME" != "push" && "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "Write mode is forbidden outside main push/manual dispatch"
+            exit 1
+          fi
+          echo "LEGACY_IMPORT_MODE=$mode" >> "$GITHUB_ENV"
 
       - name: Download canonical production history
         run: python scripts/download_production_preflight_inputs.py
@@ -81,6 +92,97 @@ jobs:
             --legacy-dir .cache/tbt-pro \
             --out-dir .cache/tbt/legacy-score-dryrun
           test -s .cache/tbt/legacy-score-dryrun/report.json
+
+      - name: Validate strict score dry-run before write
+        if: env.LEGACY_IMPORT_MODE == 'legacy-score-write'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path(".cache/tbt/legacy-score-dryrun/report.json").read_text())
+          counts = report.get("counts") or {}
+          stage_rows = int(report.get("stage_rows") or 0)
+          conflicts = int(counts.get("stat_conflict_matches") or 0)
+          identity_mismatch = int(counts.get("identity_mismatch") or 0)
+          print(json.dumps({
+              "stage_rows": stage_rows,
+              "conflicts_quarantined": conflicts,
+              "identity_mismatch_quarantined": identity_mismatch,
+              "projected_add": report.get("coverage_projected_add"),
+          }, ensure_ascii=False))
+          if stage_rows <= 0 and int(counts.get("already_complete_or_present") or 0) <= 0:
+              raise SystemExit("No verified legacy score rows available; refusing write")
+          PY
+
+      - name: Write verified legacy score gaps into local private history
+        if: env.LEGACY_IMPORT_MODE == 'legacy-score-write'
+        run: |
+          set -euo pipefail
+          python scripts/dryrun_import_legacy_scores.py \
+            --history-dir .cache/tbt/history \
+            --legacy-dir .cache/tbt-pro \
+            --out-dir .cache/tbt/legacy-score-write \
+            --write-partitions \
+            --write-history-dir .cache/tbt/history
+          test -s .cache/tbt/legacy-score-write/report.json
+
+      - name: Validate and publish changed private history bundle
+        if: env.LEGACY_IMPORT_MODE == 'legacy-score-write'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          directory = Path(".cache/tbt/history")
+          report = json.loads(Path(".cache/tbt/legacy-score-write/report.json").read_text())
+          years = [int(year) for year in report.get("changed_years") or []]
+          if not years:
+              print("No changed legacy score partitions; nothing to publish.")
+              raise SystemExit(0)
+
+          matches, safety = sanitize_history_identities(load_partitions(directory))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Identity safety failed after legacy score import")
+          paths = [directory / f"history-{year:04d}.parquet" for year in years]
+          paths.append(directory / "history_manifest.json")
+          if any(not path.is_file() or path.stat().st_size <= 0 for path in paths):
+              raise SystemExit("Changed legacy score history bundle is incomplete")
+
+          store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory)
+          store.upload_bundle(paths)
+          print(f"Published verified legacy score updates for years: {years}")
+          PY
+
+      - name: Verify committed private release
+        if: env.LEGACY_IMPORT_MODE == 'legacy-score-write'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          directory = Path(".cache/tbt/legacy-score-verify")
+          store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory)
+          store.download(require_bundle_manifest=True)
+          matches, safety = sanitize_history_identities(load_partitions(directory))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Committed legacy score history identity validation failed")
+
+          write_report = json.loads(Path(".cache/tbt/legacy-score-write/report.json").read_text())
+          print(json.dumps({
+              "committed_rows": len(matches),
+              "changed_years": write_report.get("changed_years"),
+              "coverage_projected_after": write_report.get("coverage_projected_after"),
+          }, ensure_ascii=False))
+          PY
 
       - name: Persist compact audit in private data repo
         run: |
@@ -130,5 +232,8 @@ jobs:
             .cache/tbt/legacy-score-dryrun/report.json
             .cache/tbt/legacy-score-dryrun/stage.jsonl.gz
             .cache/tbt/legacy-score-dryrun/rejections_sample.jsonl.gz
-          if-no-files-found: error
+            .cache/tbt/legacy-score-write/report.json
+            .cache/tbt/legacy-score-write/stage.jsonl.gz
+            .cache/tbt/legacy-score-write/rejections_sample.jsonl.gz
+          if-no-files-found: warn
           retention-days: 14
