@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import Counter
+from collections import Counter, defaultdict
+from statistics import mean, median
 from pathlib import Path
 import sys
 
@@ -32,6 +33,8 @@ def main() -> None:
     counts = Counter()
     by_surface = Counter()
     by_round = Counter()
+    rich_signal_values = defaultdict(list)
+    rich_signal_present = Counter()
 
     for match in matches:
         stats = match.stats if isinstance(match.stats, dict) else {}
@@ -65,6 +68,72 @@ def main() -> None:
             counts["rich_charting_any"] += 1
         if rich_complete == len(rich_pairs):
             counts["rich_charting_full"] += 1
+
+        # Descriptive only: measure whether the historical match winner had the
+        # expected directional advantage in each specialist rate. This does not
+        # feed outcomes back into FeatureBuilder and is not a promotion test.
+        if match.winner_id in {match.player1_id, match.player2_id}:
+            attack1 = stats.get("p1_attacking_points_rate")
+            attack2 = stats.get("p2_attacking_points_rate")
+            ue1 = stats.get("p1_unforced_error_rate")
+            ue2 = stats.get("p2_unforced_error_rate")
+            aggression1 = (
+                float(attack1) - float(ue1)
+                if attack1 is not None and ue1 is not None else None
+            )
+            aggression2 = (
+                float(attack2) - float(ue2)
+                if attack2 is not None and ue2 is not None else None
+            )
+            signals = {
+                "first_strike_serve": (
+                    stats.get("p1_first_strike_serve_win"),
+                    stats.get("p2_first_strike_serve_win"),
+                    1.0,
+                ),
+                "return_in_play": (
+                    stats.get("p1_return_in_play_rate"),
+                    stats.get("p2_return_in_play_rate"),
+                    1.0,
+                ),
+                "return_depth": (
+                    stats.get("p1_return_deep_rate"),
+                    stats.get("p2_return_deep_rate"),
+                    1.0,
+                ),
+                "break_point_serve": (
+                    stats.get("p1_break_point_serve_win"),
+                    stats.get("p2_break_point_serve_win"),
+                    1.0,
+                ),
+                "break_point_return": (
+                    stats.get("p1_break_point_return_win"),
+                    stats.get("p2_break_point_return_win"),
+                    1.0,
+                ),
+                "net_efficiency": (
+                    stats.get("p1_net_points_win"),
+                    stats.get("p2_net_points_win"),
+                    1.0,
+                ),
+                "aggression_balance": (
+                    aggression1,
+                    aggression2,
+                    1.0,
+                ),
+            }
+            for label, (value1, value2, direction) in signals.items():
+                if value1 is None or value2 is None:
+                    continue
+                value1, value2 = float(value1), float(value2)
+                rich_signal_present[label] += 1
+                if abs(value1 - value2) <= 1e-12:
+                    continue
+                winner_value = value1 if match.winner_id == match.player1_id else value2
+                loser_value = value2 if match.winner_id == match.player1_id else value1
+                rich_signal_values[label].append(
+                    float(direction) * (winner_value - loser_value)
+                )
         if _present(stats, ("total_sets", "total_games")):
             counts["structured_score"] += 1
         if _present(stats, ("p1_first_set_won", "p2_first_set_won", "p1_second_set_won", "p2_second_set_won")):
@@ -85,6 +154,20 @@ def main() -> None:
         }
         for key, value in sorted(counts.items())
     }
+    rich_signal_directional = {}
+    for label in sorted(rich_signal_present):
+        values = rich_signal_values.get(label, [])
+        rich_signal_directional[label] = {
+            "matches_present": int(rich_signal_present[label]),
+            "matches_compared": int(len(values)),
+            "directional_accuracy": (
+                float(sum(value > 0 for value in values)) / len(values)
+                if values else None
+            ),
+            "mean_winner_advantage": float(mean(values)) if values else None,
+            "median_winner_advantage": float(median(values)) if values else None,
+        }
+
     payload = {
         "schema": 1,
         "model": "blinq-data-model-v3",
@@ -92,6 +175,7 @@ def main() -> None:
         "rows": total,
         "identity_safety": identity,
         "coverage": coverage,
+        "rich_signal_directional": rich_signal_directional,
         "surface_rows": dict(by_surface.most_common()),
         "round_rows_top25": dict(by_round.most_common(25)),
         "feature_sources": {
