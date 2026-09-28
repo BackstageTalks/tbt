@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "mode": "write",
-  "purpose": "Execute fail-closed offline ATP + Match Charting enrichment after correcting zero-API validation guard; persist auditable report.",
+  "purpose": "Publish verified rich Match Charting v2 specialist rates into existing canonical history only; preserve fail-closed identity/stat checks; zero provider API requests.",
   "atp_repository": "Kadantte/tennis_atp",
   "atp_commit": "712be0c5ade693cdab9e69c23a71a0edf5a23c44",
   "charting_repository": "JeffSackmann/tennis_MatchChartingProject",
   "charting_commit": "1813a1309b7ed7ebf1c7e884b32bf675d00e4edf",
-  "requested_at_utc": "2026-09-28T18:35:00Z"
+  "requested_at_utc": "2026-09-28T19:25:00Z"
 }
