@@ -7,6 +7,8 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 
+MAX_FEED_BYTES = 16 * 1024 * 1024
+
 
 def _betting_day_key(moment, *, timezone_name="Europe/Bratislava", start_hour=6):
     if moment.tzinfo is None:
@@ -98,8 +100,8 @@ def read_feed(path):
     target = Path(path)
     if not target.is_file():
         return empty_feed()
-    if target.stat().st_size > 10 * 1024 * 1024:
-        raise ValueError("Serving feed exceeds the 10 MB cap")
+    if target.stat().st_size > MAX_FEED_BYTES:
+        raise ValueError(f"Serving feed exceeds the {MAX_FEED_BYTES // (1024 * 1024)} MB cap")
 
     try:
         payload = json.loads(target.read_text(encoding="utf-8"))
