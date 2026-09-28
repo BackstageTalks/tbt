@@ -1311,8 +1311,14 @@ def live_radar(req):
         # durable storage is temporarily unavailable, fall back to one cached
         # on-demand scan so eligible members/admin still get a usable service.
         snapshot=_live_worker_snapshot()
+        status=str(account.get("status") or "").lower()
+        history_plan=(
+            "" if account.get("is_admin") or str(account.get("role") or "").lower()=="admin"
+            else "rookie" if status=="trial"
+            else str(account.get("plan") or "").lower()
+        )
         try:
-            results=list_live_radar_results(limit=60)
+            results=list_live_radar_results(limit=60, plan=history_plan)
         except AdminStorageUnavailable:
             results=[]
         if snapshot is not None:
