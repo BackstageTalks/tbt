@@ -15,7 +15,7 @@ def test_live_cards_require_exact_api_odds_and_never_use_results_placeholder():
     assert "Number.isFinite(odds)&&odds>=1.50" in contract
     assert "Boolean(row?.captured_at)" in contract
     assert "['ace','sg'].includes(key)?value.filter(authenticLiveProjection)" in contract
-    assert "aceDfResultsDisplayOdds" not in live
+    assert "aceDfLegacyResultDisplayOdds" not in live
     assert "hubNumberHtml('N/A',reason)" in live
 
 
