@@ -2343,9 +2343,8 @@
     );
   }
   function projectionOddsHtml(row){
-    const market=String(row?.market||row?.projection_metric||'').toLowerCase();
     const temporaryAceDf=aceDfTemporaryDisplayOdds(row);
-    if(['aces','double_faults'].includes(market)&&Number.isFinite(temporaryAceDf)){
+    if(Number.isFinite(temporaryAceDf)){
       const hint=aceDfTemporaryOddsHint();
       return `<span title="${escapeHtml(hint)}">${hubNumberHtml(temporaryAceDf.toFixed(2),lcopy('odds','kurz','kurz'))}</span>`;
     }
