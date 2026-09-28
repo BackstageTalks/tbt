@@ -70,12 +70,26 @@ def main():
     ap.add_argument("--history-dir", required=True)
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--write-partitions", action="store_true")
+    ap.add_argument(
+        "--write-history-dir", default="",
+        help="Optional existing private history directory to update in-place.",
+    )
     args = ap.parse_args()
+    if args.write_history_dir and not args.write_partitions:
+        ap.error("--write-history-dir requires --write-partitions")
     output = Path(args.out_dir)
     output.mkdir(parents=True, exist_ok=True)
     matches, safety = sanitize_history_identities(load_partitions(args.history_dir))
     if safety["quarantined_rows"]:
         raise ValueError("Historical identities ambiguous; refusing import")
+    def quality_ready(match):
+        stats = match.stats or {}
+        return all(
+            FeatureBuilder._extract_quality(stats, prefix)[0] is not None
+            and FeatureBuilder._extract_quality(stats, prefix)[1] is not None
+            for prefix in ("p1", "p2")
+        )
+    quality_ready_before = sum(1 for match in matches if quality_ready(match))
     by_id = {str(m.match_id): m for m in matches}
     event_ids = Counter(_provider_event_id(m) for m in matches if _provider_event_id(m))
     rows = _read_stage(args.stage)
@@ -138,19 +152,26 @@ def main():
             all(FeatureBuilder._extract_quality(new_stats, prefix)[0] is not None and
                 FeatureBuilder._extract_quality(new_stats, prefix)[1] is not None
                 for prefix in ("p1", "p2")))
+    quality_ready_after = sum(1 for match in matches if quality_ready(match))
+    write_target = Path(args.write_history_dir) if args.write_history_dir else output / "history"
     report = {"schema": 1, "stage_rows": len(rows), "counts": dict(counts),
               "changed_years": sorted(changed_years),
+              "quality_ready_before": quality_ready_before,
+              "quality_ready_after": quality_ready_after,
+              "quality_ready_added": quality_ready_after - quality_ready_before,
               "production_mutated": False,
               "local_partitions_written": bool(args.write_partitions and changed_years),
-              "note": "No private release upload or production mutation; review quarantined rows."}
+              "note": "No private release upload occurs inside the importer; review quarantined rows before publish."}
     (output / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
     with (output / "review.jsonl").open("w", encoding="utf-8") as f:
         for row in review:
             f.write(json.dumps(row, ensure_ascii=False) + "\n")
     if args.write_partitions:
         for year in sorted(changed_years):
-            write_year_partition(matches, output / "history", year,
-                                 extra_manifest={"coverage_status": "private_serve_return_import_pending_review"})
+            write_year_partition(
+                matches, write_target, year,
+                extra_manifest={"coverage_status": "private_serve_return_import_pending_review"},
+            )
     print(json.dumps(report, indent=2))
 if __name__ == "__main__":
     main()
