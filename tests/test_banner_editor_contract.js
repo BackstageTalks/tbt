@@ -16,5 +16,9 @@ assert.ok(app.includes('n(c.headline_size,12,72,36)'), 'small headline sizes mus
 assert.ok(app.includes('sizes([10,12,14,16,18,20,24,28],c.text_size,14)'), 'subtitle choices remain unchanged');
 assert.ok(css.includes('font-size:min(var(--creative-headline-size,36px),clamp(18px,calc(var(--creative-headline-size,36px)*.75),38px))!important;'), 'mobile honors small headline sizes');
 assert.ok(css.includes('font-size:min(var(--creative-headline-size,36px),clamp(14px,calc(var(--creative-headline-size,36px)*.65),44px))!important;'), 'desktop preview honors 12 px');
+
+assert.ok(app.includes("state.adminPreviewPaused=true;"), 'editing a banner pauses carousel preview');
+assert.ok(app.includes("state.adminPreviewIndex=Math.max(0,Number(match[1])-1);"), 'editing a banner shows the same slot in preview');
+assert.ok(app.includes("const match=String(id||'').match(/^HERO_BANNER_(\\d)$/);"), 'banner selection is mapped to its preview slot');
 for(let i=1;i<=5;i++)assert.equal(ui.elements['HERO_BANNER_'+i].content.accent_text,'');
 console.log('PASS: banner editor contract');
