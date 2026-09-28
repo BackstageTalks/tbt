@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:''}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -3154,6 +3154,20 @@
       item:elements()?.[`HERO_BANNER_${i+1}`]||{content:{}}
     }));
   }
+  function adminPreviewEntry(entries=activeAdminBanners()){
+    const pinned=String(state.adminPreviewPinnedId||'');
+    if(/^HERO_BANNER_[1-5]$/.test(pinned)&&elements()?.[pinned])
+      return {id:pinned,item:elements()[pinned]};
+    return entries[state.adminPreviewIndex]||entries[0];
+  }
+  function adminPreviewStatus(entries,entry){
+    if(state.adminPreviewPinnedId){
+      const slot=String(entry?.id||'').split('_').pop();
+      const active=entries.some(x=>x.id===entry?.id);
+      return 'Banner '+slot+' · náhľad úprav'+(active?'':' (mimo rotácie)');
+    }
+    return 'Banner '+(state.adminPreviewIndex+1)+' / '+entries.length+' · '+(state.adminPreviewPaused?'pozastavené':'živý náhľad');
+  }
   function adminHeroPreviewCard(entry,mode){
     const c=entry.item?.content||{};
     const desktop=safePhotoUrl(c.image_url||'')||'/assets/hero-reference-exact-v680.webp';
@@ -3170,17 +3184,17 @@
     if(!stage||state.route!=='admin'||state.adminTab!=='banners')return;
     const entries=activeAdminBanners();
     state.adminPreviewIndex=((state.adminPreviewIndex%entries.length)+entries.length)%entries.length;
-    const entry=entries[state.adminPreviewIndex];
+    const entry=adminPreviewEntry(entries);
     for(const mode of ['desktop','mobile']){
       const host=stage.querySelector(`[data-admin-preview-card="${mode}"]`);
       if(host)host.innerHTML=adminHeroPreviewCard(entry,mode);
     }
     const status=stage.querySelector('[data-admin-preview-status]');
-    if(status)status.textContent=`Banner ${state.adminPreviewIndex+1} / ${entries.length} · ${state.adminPreviewPaused?'pozastavené':'živý náhľad'}`;
+    if(status)status.textContent=adminPreviewStatus(entries,entry);
     const pause=stage.querySelector('[data-admin-preview-pause]');
     if(pause){pause.textContent=state.adminPreviewPaused?'Spustiť':'Pozastaviť';pause.setAttribute('aria-pressed',String(state.adminPreviewPaused));}
     stage.querySelectorAll('[data-admin-preview-dot]').forEach(dot=>{
-      const active=Number(dot.dataset.adminPreviewDot)===state.adminPreviewIndex;
+      const active=!state.adminPreviewPinnedId&&Number(dot.dataset.adminPreviewDot)===state.adminPreviewIndex;
       dot.classList.toggle('is-active',active);
       dot.setAttribute('aria-current',String(active));
     });
@@ -3208,7 +3222,7 @@
     const rotation=Math.max(3,Math.min(10,Number(globalHero.rotation_seconds)||6));
     const entries=activeAdminBanners();
     state.adminPreviewIndex=Math.max(0,Math.min(state.adminPreviewIndex,entries.length-1));
-    const previewEntry=entries[state.adminPreviewIndex];
+    const previewEntry=adminPreviewEntry(entries);
     const hero1=elements()?.HERO_BANNER_1?.content||{};
     const bg=safePhotoUrl(hero1.site_background_url||'')||String(state.presentationConfig?.theme?.background?.image||'/assets/blinq_page_background.webp');
     const effects=['fade-up','fade','slide-down'];
@@ -3228,7 +3242,7 @@
       </div>
       <div class="admin-hero-tabs" role="group" aria-label="Vybrať banner na úpravu">${tabs}</div>
       <section class="admin-hero-preview-stage" id="adminHeroLivePreview" aria-label="Živý náhľad carouselu">
-        <div class="admin-hero-preview-toolbar"><div><small>ŽIVÝ NÁHĽAD</small><strong data-admin-preview-status>Banner ${state.adminPreviewIndex+1} / ${entries.length} · živý náhľad</strong></div><div class="admin-hero-preview-actions"><button type="button" data-admin-preview-step="-1" aria-label="Predchádzajúci banner">‹</button><button type="button" data-admin-preview-pause aria-pressed="${state.adminPreviewPaused}">${state.adminPreviewPaused?'Spustiť':'Pozastaviť'}</button><button type="button" data-admin-preview-step="1" aria-label="Nasledujúci banner">›</button></div></div>
+        <div class="admin-hero-preview-toolbar"><div><small>ŽIVÝ NÁHĽAD</small><strong data-admin-preview-status>${escapeHtml(adminPreviewStatus(entries,previewEntry))}</strong></div><div class="admin-hero-preview-actions"><button type="button" data-admin-preview-step="-1" aria-label="Predchádzajúci banner">‹</button><button type="button" data-admin-preview-pause aria-pressed="${state.adminPreviewPaused}">${state.adminPreviewPaused?'Spustiť':'Pozastaviť'}</button><button type="button" data-admin-preview-step="1" aria-label="Nasledujúci banner">›</button></div></div>
         <div class="lean-admin-preview-grid"><div><span>Desktop · 1920 × 640</span><div data-admin-preview-card="desktop">${adminHeroPreviewCard(previewEntry,'desktop')}</div></div><div><span>Mobil · 1080 × 720</span><div data-admin-preview-card="mobile">${adminHeroPreviewCard(previewEntry,'mobile')}</div></div></div>
         <div class="admin-hero-preview-dots" aria-label="Pozícia náhľadu">${entries.map((_,i)=>`<button type="button" data-admin-preview-dot="${i}" class="${i===state.adminPreviewIndex?'is-active':''}" aria-current="${i===state.adminPreviewIndex}" aria-label="Zobraziť banner ${i+1}"></button>`).join('')}</div>
       </section>
@@ -3878,7 +3892,7 @@
     const current=clone(state.ui),next=clone(state.ui);
     next.hero_banner=mergeConfig(next.hero_banner||{},saved.hero_banner);
     Object.entries(saved.elements).forEach(([id,old])=>{
-      if(!next.elements?.[id]||!old||next.elements[id].kind!==old.kind)return;
+      if(!old||old.kind!=='hero_banner'||next.elements?.[id]?.kind!=='hero_banner')return;
       if(old.content&&typeof old.content==='object')next.elements[id].content=mergeConfig(next.elements[id].content||{},old.content);
       if(old.kind==='hero_banner'&&old.watermark)next.elements[id].watermark=mergeConfig(next.elements[id].watermark||{},old.watermark);
     });
@@ -3992,7 +4006,17 @@
     finally{if(generation===feedGeneration){state.adminUsersLoading=false;rerenderAdmin();adminApplyUserFilters();}}
   }
 
-  function setSelectedElement(id){ if(!elements()?.[id])return;state.selectedElement=id;rerenderAdmin(); }
+  function setSelectedElement(id){
+    if(!elements()?.[id])return;
+    state.selectedElement=id;
+    if(/^HERO_BANNER_[1-5]$/.test(id)){
+      // Editing must show the selected creative, including unpublished slots;
+      // the independent live carousel resumes from its existing position.
+      state.adminPreviewPinnedId=id;
+      state.adminPreviewPaused=true;
+    }
+    rerenderAdmin();
+  }
   function setAdminPlanDefaults(planId, force=false){
     const expiry=$('adminUserExpires');if(!expiry)return;
     const plan=state.ui?.plans?.[planId]||{};
@@ -4053,11 +4077,11 @@
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
       const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.tab_enabled=true;rule.row_overrides={};if(preset==='full'){rule.display_state='active';rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.display_state='active';rule.visible_rows=3;rule.selection_mode='first';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='rookie2'){rule.display_state='active';rule.visible_rows=tab==='daily'?2:Math.min(1,Number(rule.visible_rows)||1);rule.selection_mode='stable_random';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='blurred'){rule.display_state='blurred';rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.display_state='hidden';rule.visible_rows=0;rule.blur_remaining=false;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Zobrazenie · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
       const previewStep=event.target.closest('[data-admin-preview-step]');
-      if(previewStep){const n=activeAdminBanners().length;state.adminPreviewIndex=(state.adminPreviewIndex+Number(previewStep.dataset.adminPreviewStep)+n)%n;syncAdminHeroPreview();return;}
+      if(previewStep){const n=activeAdminBanners().length;state.adminPreviewPinnedId=null;state.adminPreviewIndex=(state.adminPreviewIndex+Number(previewStep.dataset.adminPreviewStep)+n)%n;syncAdminHeroPreview();return;}
       const previewDot=event.target.closest('[data-admin-preview-dot]');
-      if(previewDot){state.adminPreviewIndex=Number(previewDot.dataset.adminPreviewDot)||0;syncAdminHeroPreview();return;}
+      if(previewDot){state.adminPreviewPinnedId=null;state.adminPreviewIndex=Number(previewDot.dataset.adminPreviewDot)||0;syncAdminHeroPreview();return;}
       const previewPause=event.target.closest('[data-admin-preview-pause]');
-      if(previewPause){state.adminPreviewPaused=!state.adminPreviewPaused;syncAdminHeroPreview();return;}
+      if(previewPause){state.adminPreviewPaused=!state.adminPreviewPaused;if(!state.adminPreviewPaused)state.adminPreviewPinnedId=null;syncAdminHeroPreview();return;}
       const element=event.target.closest('[data-admin-element]');if(element){setSelectedElement(element.dataset.adminElement);return;}
       const userButton=event.target.closest('[data-admin-user]');if(userButton){state.adminSelectedUser=(state.adminUsers||[]).find(x=>String(x.id)===String(userButton.dataset.adminUser))||null;rerenderAdmin();return;}
       const quick=event.target.closest('[data-admin-user-plan]');if(quick){const input=$('adminUserPlan');if(input){input.value=quick.dataset.adminUserPlan;host.querySelectorAll('[data-admin-user-plan]').forEach(btn=>btn.classList.toggle('active',btn===quick));setAdminPlanDefaults(input.value,false);}return;}
@@ -4146,7 +4170,7 @@
       if(t.dataset.adminHeroRotate!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.auto_rotate=t.checked;renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
-      if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/_size$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;renderAllUiContent();rerenderAdmin();}return;}
+      if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/_size$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;state.adminPreviewPinnedId=id;state.adminPreviewPaused=true;renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.adminKpiIndex!==undefined&&t.dataset.adminKpiField){
         const index=Number(t.dataset.adminKpiIndex),field=t.dataset.adminKpiField;
         if(!Number.isInteger(index)||index<0||index>=3)return;
@@ -4184,6 +4208,8 @@
       if(!item)return;
       item.content=item.content||{};
       item.content[field]=t.value;
+      state.adminPreviewPinnedId=wrap.dataset.simpleBanner;
+      state.adminPreviewPaused=true;
       syncAdminHeroPreview();
     };
     startAdminHeroPreview();
@@ -4548,8 +4574,17 @@
       :lockedContext&&below
       ?`<span class="upgrade-tier-note is-warning">${escapeHtml(lcopy('Does not unlock this section','Neodomkne túto sekciu','Neodemkne tuto sekci'))}</span>`
       :required?`<span class="upgrade-tier-note">${escapeHtml(lcopy('Required for this section','Potrebné pre túto sekciu','Potřebné pro tuto sekci'))}</span>`:'';
+    // Historical English release notes must not leak into localized upgrade cards.
+    // Preserve explicitly authored newer notes, if present.
+    const legacyNotes=new Set([
+      'Full core predictions and tournaments.',
+      '180-day premium access; workspace permissions remain configurable in Admin.',
+      '365-day premium access; workspace permissions remain configurable in Admin.',
+      'Top-tier access with duration managed in Admin.'
+    ]);
     const featureHeading=String(p?.note||'').trim();
-    return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${lockedContext&&below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy">${planEyebrowHtml(p)}<strong>${escapeHtml(publicPlanLabel(id,title))}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:''}${featureHeading?`<p class="upgrade-feature-heading">${escapeHtml(featureHeading)}</p>`:''}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
+    const displayFeatureHeading=legacyNotes.has(featureHeading)?'':featureHeading;
+    return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${lockedContext&&below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy">${planEyebrowHtml(p)}<strong>${escapeHtml(publicPlanLabel(id,title))}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:''}${displayFeatureHeading?`<p class="upgrade-feature-heading">${escapeHtml(displayFeatureHeading)}</p>`:''}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
   }
   function showUpgradePrompt(planId='pro',sectionLabel='this content',lockedContext=false){
     const dialog=$('upgradeDialog'),host=$('upgradeDialogContent');if(!dialog||!host)return;
