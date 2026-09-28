@@ -401,7 +401,38 @@ def restore_published_market_snapshots(feed, ledger):
                     # corruption. The rest of the site remains deployable and a
                     # subsequent refresh regenerates a clean publication row.
                     continue
-                raise RuntimeError(f"Market feed/ledger mismatch for {section} event {commitment[0]}; no unique issued snapshot")
+
+                # Legacy Match Winner ledgers can contain conflicting rows that
+                # were all marked published after repeated refreshes. The first
+                # actual issuance is the immutable public commitment; later
+                # published rows must not replace it. Resolve only when there is
+                # one uniquely earliest valid issued_at timestamp.
+                issued = []
+                for publication in matches:
+                    raw_issued_at = publication.get("issued_at")
+                    try:
+                        issued_at = datetime.fromisoformat(
+                            str(raw_issued_at).replace("Z", "+00:00")
+                        )
+                    except (TypeError, ValueError):
+                        continue
+                    if issued_at.tzinfo is None:
+                        continue
+                    issued.append((issued_at, publication))
+                if issued:
+                    earliest = min(item[0] for item in issued)
+                    earliest_rows = [item[1] for item in issued if item[0] == earliest]
+                    earliest_unique = {}
+                    for publication in earliest_rows:
+                        signature = _market_commitment_from_publication(
+                            commitment[0], publication
+                        )
+                        earliest_unique.setdefault(signature, publication)
+                    if len(earliest_unique) == 1:
+                        matches = list(earliest_unique.values())
+
+                if len(matches) != 1:
+                    raise RuntimeError(f"Market feed/ledger mismatch for {section} event {commitment[0]}; no unique issued snapshot")
 
             snapshot = matches[0]
             betting = row.get("betting")
