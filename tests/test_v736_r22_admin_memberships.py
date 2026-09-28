@@ -10,7 +10,7 @@ RELEASE=json.loads((ROOT/'web'/'release.json').read_text(encoding='utf-8'))
 def test_membership_admin_exists_and_edits_runtime_plans():
     assert "['levels','Členstvá','Levely · odkazy']" in APP
     assert 'function renderAdminLevels()' in APP
-    for field in ('enabled','label','card_title','eyebrow','short_description','description','cta_label','url','invite_url','duration_days','features'):
+    for field in ('enabled','label','card_title','eyebrow','short_description','upgrade_description','account_description','cta_label','url','invite_url','duration_days','features'):
         assert f'data-admin-level-field="{field}"' in APP
     assert 'runtimeConfigSnapshot?.plans' in APP
     assert 'state.ui?.plans?.[id]?.features' in APP
