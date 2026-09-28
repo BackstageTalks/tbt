@@ -99,7 +99,7 @@ def test_conflicting_legacy_dayless_prime_snapshots_still_fail_closed():
         restore_published_market_snapshots(feed, ledger)
 
 
-def test_duplicate_identical_legacy_snapshots_remain_ambiguous():
+def test_duplicate_identical_legacy_snapshots_collapse_safely():
     snapshot = _legacy_publication()
     feed = {
         "top_daily_picks": [],
@@ -114,5 +114,8 @@ def test_duplicate_identical_legacy_snapshots_remain_ambiguous():
         "market_publications": [deepcopy(snapshot), deepcopy(snapshot)],
     }]
 
-    with pytest.raises(RuntimeError, match="prime event 17201971"):
-        restore_published_market_snapshots(feed, ledger)
+    restored = restore_published_market_snapshots(feed, ledger)
+    card = restored["prime_picks"][0]
+    assert card["betting"]["odds"] == 1.84
+    assert card["betting"]["model_probability"] == 0.69
+    assert card["betting"]["betting_day"] == "2026-09-28"

@@ -36,11 +36,11 @@ def test_never_repair_different_identity_or_pending(field, value):
         restore_published_market_snapshots(feed, ledger)
 
 
-def test_reject_ambiguous_or_missing_ledger():
+def test_collapse_identical_duplicates_but_reject_missing_ledger():
     feed, ledger = artifacts()
     ledger[0]['market_publications'] *= 2
-    with pytest.raises(RuntimeError):
-        restore_published_market_snapshots(feed, ledger)
+    restored = restore_published_market_snapshots(feed, ledger)
+    assert restored['top_daily_picks'][0]['betting']['model_probability'] == .71281
     with pytest.raises(RuntimeError):
         restore_published_market_snapshots(feed, [])
 
