@@ -40,6 +40,7 @@ jobs:
             thinq/data/players
             thinq/data/ta_profiles
             thinq/data/elo
+            outputs/2026/all
           sparse-checkout-cone-mode: true
 
       - uses: actions/setup-python@v5
@@ -66,6 +67,12 @@ jobs:
           python scripts/audit_tbt_pro_legacy.py             --history-dir .cache/tbt/history             --legacy-dir .cache/tbt-pro             --out-dir .cache/tbt/legacy-audit
           test -s .cache/tbt/legacy-audit/legacy_audit.json
 
+      - name: Audit exact provider opening/current odds
+        run: |
+          set -euo pipefail
+          python scripts/audit_tbt_pro_exact_market_outputs.py             --history-dir .cache/tbt/history             --legacy-dir .cache/tbt-pro             --out-dir .cache/tbt/exact-market-audit
+          test -s .cache/tbt/exact-market-audit/exact_market_audit.json
+
       - name: Persist compact audit in private data repo
         run: |
           set -euo pipefail
@@ -79,6 +86,15 @@ jobs:
             gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit tbt-pro legacy data run $AUDIT_RUN_ID"               -f content="$encoded" >/dev/null
           fi
 
+          exact_path="audit/tbt-pro-exact-market-audit-latest.json"
+          exact_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$exact_path" --jq .sha 2>/dev/null || true)"
+          exact_encoded="$(base64 -w0 .cache/tbt/exact-market-audit/exact_market_audit.json)"
+          if [[ -n "$exact_sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$exact_path"               -f message="Audit exact legacy market run $AUDIT_RUN_ID"               -f content="$exact_encoded" -f sha="$exact_sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$exact_path"               -f message="Audit exact legacy market run $AUDIT_RUN_ID"               -f content="$exact_encoded" >/dev/null
+          fi
+
       - name: Upload legacy audit evidence
         uses: actions/upload-artifact@v4
         with:
@@ -87,5 +103,7 @@ jobs:
             .cache/tbt/legacy-audit/legacy_audit.json
             .cache/tbt/legacy-audit/market_candidates.jsonl.gz
             .cache/tbt/legacy-audit/previous_match_candidates.jsonl.gz
+            .cache/tbt/exact-market-audit/exact_market_audit.json
+            .cache/tbt/exact-market-audit/exact_market_candidates.jsonl.gz
           if-no-files-found: error
           retention-days: 14
