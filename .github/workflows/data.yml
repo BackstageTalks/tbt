@@ -490,6 +490,21 @@ jobs:
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         run: python scripts/clean_generated_artifacts.py
 
+      - name: Recheck latest main and stamp deployed frontend
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main --depth=1
+          current="$(git rev-parse HEAD)"
+          latest="$(git rev-parse origin/main)"
+          if [[ "$current" != "$latest" || "$GITHUB_SHA" != "$latest" ]]; then
+            echo "::warning::Skipping old data-redeploy $current: main is now $latest."
+            echo "BLINQ_SKIP_STALE_DEPLOY=true" >> "$GITHUB_ENV"
+          else
+            python scripts/stamp_web_deployment.py --web web --sha "$GITHUB_SHA"
+          fi
+
       - name: Deploy refreshed feed and application
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
         uses: Azure/static-web-apps-deploy@v1
@@ -500,6 +515,25 @@ jobs:
           api_location: api
           output_location: ''
           skip_app_build: true
+
+      - name: Verify exact web revision after prediction redeploy
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true' && vars.TBT_PRODUCTION_URL != ''
+        env:
+          TBT_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="${TBT_PRODUCTION_URL%/}"
+          for attempt in 1 2 3 4 5; do
+            if curl -fsSL -H 'Cache-Control: no-cache' "$base/deployment.json?__blinq_sha=$GITHUB_SHA" -o /tmp/blinq-data-deployment.json; then
+              if python -c 'import json,os; assert json.load(open("/tmp/blinq-data-deployment.json"))["git_sha"] == os.environ["GITHUB_SHA"]'; then
+                exit 0
+              fi
+            fi
+            sleep $((attempt * 2))
+          done
+          echo "::error::Deployed frontend revision differs from the verified data workflow"
+          exit 1
 
       - name: Confirm exactly deployed prediction publication
         if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
