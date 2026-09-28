@@ -8,7 +8,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, results-rebuild, deploy-current, train, backtest, refresh]
+        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, top-audit, market-audit, results-rebuild, deploy-current, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -31,6 +31,10 @@ on:
         description: Current betting-day events to enrich with provider-1 odds during refresh
         type: number
         default: 120
+      propline_max_events:
+        description: PropLine fallback events per refresh (0 disables; max 75)
+        type: number
+        default: 75
       doubles_odds_max_events:
         description: Current betting-day doubles candidates to enrich with provider-1 Match Winner odds
         type: number
@@ -39,6 +43,10 @@ on:
         description: Europe/Bratislava hour that starts the BlinQ betting day
         type: number
         default: 6
+      morning_refresh:
+        description: Prepare the new betting day before 06:00, publish after 06:01
+        type: boolean
+        default: false
       ace_target_samples:
         description: Target recent Aces/DF stat samples per current upcoming player
         type: number
@@ -64,6 +72,7 @@ on:
     - cron: '40 22 * * *'
 permissions:
   contents: read
+  actions: write
 concurrency:
   group: tbt-history-data-writer
   cancel-in-progress: false
@@ -83,6 +92,10 @@ jobs:
     env:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: ${{ (inputs.mode == 'refresh' || github.event_name == 'push' || github.event.schedule == '20 1,7,13,19 * * *') && 'refresh' || 'history' }}
+      PROPL: ${{ secrets.PROPL }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       MODE: ${{ inputs.mode || (github.event_name == 'push' && 'refresh' || (github.event.schedule == '40 22 * * *' && 'history' || 'refresh')) }}
       START_DATE: ${{ inputs.start }}
@@ -90,7 +103,9 @@ jobs:
       END_DATE: ${{ inputs.end }}
       MAX_REQUESTS: ${{ inputs.max_requests || (github.event.schedule == '40 22 * * *' && 4000 || 750) }}
       MARKET_ODDS_MAX_EVENTS: ${{ inputs.market_odds_max_events || 120 }}
+      PROPLINE_MAX_EVENTS: ${{ github.event_name == 'workflow_dispatch' && inputs.propline_max_events == 0 && '0' || inputs.propline_max_events || 75 }}
       DOUBLES_ODDS_MAX_EVENTS: ${{ inputs.doubles_odds_max_events || 40 }}
+      MORNING_REFRESH: ${{ inputs.morning_refresh && 'true' || 'false' }}
       BETTING_DAY_START_HOUR: ${{ inputs.betting_day_start_hour || 6 }}
       ACE_TARGET_SAMPLES: ${{ inputs.ace_target_samples || 18 }}
       ACE_LOOKBACK_DAYS: ${{ inputs.ace_lookback_days || 550 }}
@@ -202,6 +217,14 @@ jobs:
           elif [[ "$MODE" == production-audit ]]; then
             python scripts/audit_production_predictions.py \
               --data-repository "$TBT_DATA_REPOSITORY"
+          elif [[ "$MODE" == top-audit ]]; then
+            python scripts/audit_top_reliability.py \
+              --data-repository "$TBT_DATA_REPOSITORY" \
+              --window-days 90
+          elif [[ "$MODE" == market-audit ]]; then
+            python scripts/audit_market_reliability.py \
+              --data-repository "$TBT_DATA_REPOSITORY" \
+              --window-days 90
           elif [[ "$MODE" == results-rebuild ]]; then
             python scripts/rebuild_results_history.py \
               --data-repository "$TBT_DATA_REPOSITORY"
@@ -248,13 +271,24 @@ jobs:
             args=(
               "$MODE"
               --max-requests "$MAX_REQUESTS"
-              --market-odds-max-events "$MARKET_ODDS_MAX_EVENTS"
+              --market-odds-max-events "$MARKET_ODDS_MAX_EVENTS" \
+              --propline-max-events "$PROPLINE_MAX_EVENTS"
               --doubles-odds-max-events "$DOUBLES_ODDS_MAX_EVENTS"
               --betting-day-start-hour "$BETTING_DAY_START_HOUR"
             )
             if [[ "$PROMOTE" == true ]]; then args+=(--promote); fi
+            if [[ "$MORNING_REFRESH" == true ]]; then args+=(--morning-refresh); fi
             python scripts/pipeline.py "${args[@]}"
           fi
+
+      - name: Save morning refresh budget evidence
+        if: env.MODE == 'refresh' && env.MORNING_REFRESH == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-morning-refresh-report-${{ github.run_id }}
+          path: .cache/tbt/predictions/refresh_report.json
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Upload mega-data report
         if: ${{ always() && env.MODE == 'mega-data' }}
@@ -282,6 +316,23 @@ jobs:
             .cache/tbt/production/readiness_report.json
             .cache/tbt/production/readiness_report.md
           if-no-files-found: warn
+
+      - name: Upload TOP evidence and calibration audit
+        if: ${{ always() && env.MODE == 'top-audit' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-top-audit-${{ github.run_id }}
+          path: .cache/tbt/top-accuracy/audit.json
+          if-no-files-found: error
+      - name: Upload TOP VALUE doubles quality and overlap audit
+        if: ${{ always() && env.MODE == 'market-audit' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-market-audit-${{ github.run_id }}
+          path: |
+            .cache/tbt/market-quality/audit.json
+            .cache/tbt/market-quality/audit.md
+          if-no-files-found: error
 
       - name: Upload Data Model v3 feature audit
         if: ${{ always() && env.MODE == 'feature-audit' }}
@@ -395,7 +446,7 @@ jobs:
           if-no-files-found: error
 
       - name: Plan remaining presentation-enrichment budget
-        if: env.MODE == 'refresh'
+        if: env.MODE == 'refresh' && env.MORNING_REFRESH != 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -409,7 +460,7 @@ jobs:
             --github-env "$GITHUB_ENV"
 
       - name: Refresh presentation metadata for current feed
-        if: env.MODE == 'refresh' && env.BLINQ_ENRICH_PLANNED_MAX != '0'
+        if: env.MODE == 'refresh' && env.MORNING_REFRESH != 'true' && env.BLINQ_ENRICH_PLANNED_MAX != '0'
         shell: bash
         run: |
           set -euo pipefail
@@ -552,3 +603,83 @@ jobs:
             fi
             sleep $((attempt * 10))
           done
+
+  morning_presentation:
+    name: Optional photos and profiles after morning publish
+    needs: [pipeline, deploy]
+    if: >-
+      needs.pipeline.result == 'success' &&
+      needs.deploy.result == 'success' &&
+      inputs.mode == 'refresh' && inputs.morning_refresh == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    concurrency:
+      group: tbt-player-assets-writer
+      cancel-in-progress: false
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: ${{ inputs.mode == 'refresh' && 'refresh' || 'history' }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      MAX_REQUESTS: ${{ inputs.max_requests || 100 }}
+    steps:
+      - name: Checkout latest presentation assets
+        uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - run: python -m pip install -r api/requirements-train.txt
+
+      - name: Load the actual morning request count
+        uses: actions/download-artifact@v4
+        with:
+          name: blinq-morning-refresh-report-${{ github.run_id }}
+          path: .cache/tbt/predictions
+
+      - name: Plan only unused morning request allowance
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/plan_player_enrichment_budget.py \
+            --total-cap "$MAX_REQUESTS" \
+            --refresh-report .cache/tbt/predictions/refresh_report.json \
+            --photo 250 \
+            --fallback-ranking 120 \
+            --player-detail 250 \
+            --tournament-logo 120 \
+            --github-env "$GITHUB_ENV"
+
+      - name: Enrich presentation after predictions were deployed
+        id: enrich
+        if: env.BLINQ_ENRICH_PLANNED_MAX != '0'
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          test -n "$RAPIDAPI_KEY" || { echo 'Missing RAPIDAPI_KEY'; exit 1; }
+          python scripts/enrich_player_cards.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --max-players 0 \
+            --max-photo-requests "$BLINQ_ENRICH_PHOTO_CAP" \
+            --max-fallback-ranking-requests "$BLINQ_ENRICH_FALLBACK_RANK_CAP" \
+            --max-player-detail-requests "$BLINQ_ENRICH_DETAIL_CAP" \
+            --max-tournament-logo-requests "$BLINQ_ENRICH_LOGO_CAP"
+
+      - name: Deploy added artwork with no new paid data refresh
+        if: steps.enrich.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # This mode only prepares and redeploys the current private feed.
+          gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f mode=deploy-current -f max_requests=1
+          echo "Queued no-provider deploy-current for refreshed player assets."
