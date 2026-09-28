@@ -1622,8 +1622,16 @@ def save_live_radar_result(payload: object, *, result_id: str) -> dict:
     }
 
 
-def list_live_radar_results(*, limit: int = 60) -> list[dict]:
-    """Newest settled confirmed comeback / Set-2 signals."""
+def list_live_radar_results(
+    *, limit: int = 60, plan: str = "", config: dict | None = None,
+    now: datetime | None = None,
+) -> list[dict]:
+    """Newest settled confirmed comeback / Set-2 signals.
+
+    Admin callers omit plan and receive the complete durable history. Member
+    callers are filtered independently by kind, configured levels and the
+    configured 0/24/48/72-hour history window.
+    """
     try:
         rows = list(_table(INSIGHTS_TABLE).query_entities(query_filter="PartitionKey eq 'live-results'"))
     except Exception as exc:
@@ -1641,9 +1649,39 @@ def list_live_radar_results(*, limit: int = 60) -> list[dict]:
     } for row in rows]
     deleted = _live_deletion_ids("result")
     items = [row for row in items if row["id"] not in deleted]
+
+    member_plan = str(plan or "").strip().lower()
+    if member_plan:
+        current = now or datetime.now(timezone.utc)
+        if current.tzinfo is None:
+            current = current.replace(tzinfo=timezone.utc)
+        current = current.astimezone(timezone.utc)
+        filtered = []
+        rule_cache = {}
+        for row in items:
+            kind = str(row.get("kind") or "").strip().lower()
+            if kind not in {"comeback", "set2"}:
+                continue
+            if kind not in rule_cache:
+                rule_cache[kind] = live_history_rule(kind, config)
+            rule = rule_cache[kind]
+            if member_plan not in rule["levels"] or rule["hours"] <= 0:
+                continue
+            try:
+                settled = datetime.fromisoformat(
+                    str(row.get("settled_at") or "").replace("Z", "+00:00")
+                )
+            except (TypeError, ValueError):
+                continue
+            if settled.tzinfo is None:
+                settled = settled.replace(tzinfo=timezone.utc)
+            if settled.astimezone(timezone.utc) < current - timedelta(hours=rule["hours"]):
+                continue
+            filtered.append(row)
+        items = filtered
+
     items.sort(key=lambda row: row.get("settled_at") or "", reverse=True)
     return items[:max(1, min(200, int(limit or 60)))]
-
 
 def save_automated_insight(payload: object, *, actor_id: str = "automation", insight_id: str) -> tuple[dict, bool]:
     """Create or refresh one deterministic system insight idempotently.
