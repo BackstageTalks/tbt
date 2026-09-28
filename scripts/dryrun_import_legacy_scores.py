@@ -326,6 +326,16 @@ def main() -> None:
         ))
         if not before_set12 and after_set12:
             projected_add["set1_set2_outcomes"] += 1
+
+        before_set12_games = all(existing.get(k) is not None for k in (
+            "p1_set1_games", "p2_set1_games", "p1_set2_games", "p2_set2_games"
+        ))
+        after_set12_games = all(after_stats.get(k) is not None for k in (
+            "p1_set1_games", "p2_set1_games", "p1_set2_games", "p2_set2_games"
+        ))
+        if not before_set12_games and after_set12_games:
+            projected_add["set1_set2_games"] += 1
+
         if existing.get("deciding_set") is None and after_stats.get("deciding_set") is not None:
             projected_add["deciding_set"] += 1
 
