@@ -119,3 +119,46 @@ def test_duplicate_identical_legacy_snapshots_collapse_safely():
     assert card["betting"]["odds"] == 1.84
     assert card["betting"]["model_probability"] == 0.69
     assert card["betting"]["betting_day"] == "2026-09-28"
+
+
+def test_conflicting_legacy_snapshots_restore_first_issued_commitment():
+    feed = {
+        "top_daily_picks": [],
+        "prime_picks": [_feed_row()],
+        "value_picks": [],
+        "doubles_picks": [],
+        "ace_picks": [],
+        "sg_picks": [],
+    }
+    first = _legacy_publication(odds=1.84, probability=0.69, edge=0.08, ev=0.09)
+    later = _legacy_publication(odds=1.91, probability=0.66, edge=0.05, ev=0.06)
+    later["issued_at"] = "2026-09-28T06:05:00+00:00"
+    ledger = [{
+        "event_id": "17201971",
+        "market_publications": [later, first],
+    }]
+
+    restored = restore_published_market_snapshots(feed, ledger)
+    card = restored["prime_picks"][0]
+    assert card["betting"]["odds"] == 1.84
+    assert card["betting"]["model_probability"] == 0.69
+
+
+def test_conflicting_legacy_snapshots_with_tied_first_issue_still_fail_closed():
+    feed = {
+        "top_daily_picks": [],
+        "prime_picks": [_feed_row()],
+        "value_picks": [],
+        "doubles_picks": [],
+        "ace_picks": [],
+        "sg_picks": [],
+    }
+    first = _legacy_publication(odds=1.84)
+    conflict = _legacy_publication(odds=1.91)
+    ledger = [{
+        "event_id": "17201971",
+        "market_publications": [first, conflict],
+    }]
+
+    with pytest.raises(RuntimeError, match="prime event 17201971"):
+        restore_published_market_snapshots(feed, ledger)
