@@ -224,7 +224,7 @@ jobs:
           print("Offline linker:", json.dumps(summary, ensure_ascii=False))
           if int(r.get("source_rows") or 0) < 200000:
               raise SystemExit("Unexpectedly small offline source coverage")
-          if int(r.get("api_requests") or -1) != 0:
+          if int(r.get("api_requests", -1)) != 0:
               raise SystemExit("Offline linker unexpectedly used provider API")
           if int(c.get("staged_matches") or 0) <= 0 and int(c.get("already_present") or 0) <= 0:
               raise SystemExit("No safe linked rows available")
