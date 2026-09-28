@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "mode": "write",
-  "purpose": "Execute reviewed fail-closed offline ATP + Match Charting enrichment after PR dry-run passes; existing canonical identities only; zero provider API requests.",
+  "purpose": "Execute fail-closed offline ATP + Match Charting enrichment and persist an auditable run report in private tbt-data.",
   "atp_repository": "Kadantte/tennis_atp",
   "atp_commit": "712be0c5ade693cdab9e69c23a71a0edf5a23c44",
   "charting_repository": "JeffSackmann/tennis_MatchChartingProject",
   "charting_commit": "1813a1309b7ed7ebf1c7e884b32bf675d00e4edf",
-  "requested_at_utc": "2026-09-28T18:22:00Z"
+  "requested_at_utc": "2026-09-28T18:28:00Z"
 }

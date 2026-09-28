@@ -317,6 +317,57 @@ jobs:
           print(f"Committed private history verified: {len(matches)} rows")
           PY
 
+      - name: Persist latest enrichment audit in private data repo
+        if: always()
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          def read_json(path):
+              p = Path(path)
+              if not p.is_file():
+                  return None
+              try:
+                  return json.loads(p.read_text(encoding="utf-8"))
+              except Exception as exc:
+                  return {"read_error": str(exc)}
+
+          audit = {
+              "schema": 1,
+              "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+              "job_status": os.environ.get("JOB_STATUS"),
+              "mode": os.environ.get("ENRICH_MODE"),
+              "run_id": os.environ.get("RUN_ID"),
+              "run_sha": os.environ.get("RUN_SHA"),
+              "atp_repository": os.environ.get("ATP_REPO"),
+              "atp_commit": os.environ.get("ATP_SHA"),
+              "charting_repository": os.environ.get("CHARTING_REPO"),
+              "charting_commit": os.environ.get("CHARTING_SHA"),
+              "link_report": read_json(".cache/tbt/offline-enrichment/link/report.json"),
+              "dry_run_report": read_json(".cache/tbt/offline-enrichment/dry-run/report.json"),
+              "write_report": read_json(".cache/tbt/offline-enrichment/write/report.json"),
+          }
+          Path("/tmp/offline-enrichment-audit.json").write_text(
+              json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          PY
+          path="audit/offline-history-enrichment-latest.json"
+          existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          encoded="$(base64 -w0 /tmp/offline-enrichment-audit.json)"
+          if [[ -n "$existing_sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit offline history enrichment run $RUN_ID"               -f content="$encoded"               -f sha="$existing_sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit offline history enrichment run $RUN_ID"               -f content="$encoded" >/dev/null
+          fi
+
       - name: Upload audit reports
         if: always()
         uses: actions/upload-artifact@v4
