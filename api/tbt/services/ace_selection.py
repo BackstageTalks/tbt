@@ -465,8 +465,9 @@ def select_ace_picks(
     per_market_limit: int = 10,
     total_limit: int = 20,
     target_count: int = 10,
+    available_markets_by_event: dict[str, set[str]] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    """Return a small, point-in-time projection shortlist from stored counts."""
+    """Build predictions only for bookmaker-available markets in odds-first mode."""
     if now.tzinfo is None:
         raise ValueError("select_ace_picks requires timezone-aware now")
     now = now.astimezone(timezone.utc)
@@ -493,6 +494,9 @@ def select_ace_picks(
             best_of = None
 
         for market in ("aces", "double_faults"):
+            if (available_markets_by_event is not None
+                and market not in available_markets_by_event.get(str(row.get("event_id") or ""), set())):
+                continue
             p1_projection = _projection(
                 p1_id, p2_id, market, histories, baselines[market], now,
                 surface=surface, best_of=best_of,

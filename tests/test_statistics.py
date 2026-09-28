@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 import pytest
 
 from tbt.errors import ProviderError
-from tbt.providers.statistics import parse_statistics
+from tbt.providers.statistics import parse_statistics, complete_opponent_service_rates
 from tbt.services.statistics_enrichment import StatisticsEnricher
 from tbt.models.feature_builder import FeatureBuilder
 from tbt.data.history_snapshot import load_snapshot, write_snapshot
@@ -261,4 +261,51 @@ def test_schema_two_count_only_marker_is_retried_for_quality_rates(match_factory
     assert match.provider_payload["_tbt_statistics"]["schema"] == 3
     assert enricher.enrich(match) == "cached"
     assert provider.calls == ["/api/tennis/event/123/statistics"]
+    enricher.close()
+
+
+def test_return_only_quality_recovers_both_service_rates_without_serve_fields():
+    raw = {"statistics": [{"period": "ALL", "groups": [{"statisticsItems": [
+        {"key": "firstReturnPoints", "homeValue": 15, "homeTotal": 42,
+         "awayValue": 14, "awayTotal": 45},
+        {"key": "secondReturnPoints", "homeValue": 16, "homeTotal": 25,
+         "awayValue": 11, "awayTotal": 19},
+    ]}]}]}
+    stats = parse_statistics(raw, home_is_player1=True)
+    assert stats["p1_return_points_won"] == 31 / 67
+    assert stats["p2_return_points_won"] == 25 / 64
+    assert stats["p1_service_points_won"] == 39 / 64
+    assert stats["p2_service_points_won"] == 36 / 67
+    assert FeatureBuilder._extract_quality(stats, "p1") == (39 / 64, 31 / 67)
+
+
+def test_derived_service_never_overwrites_explicit_or_uses_invalid_return():
+    stats = {"p1_service_points_won": 0.7, "p2_return_points_won": 0.4,
+             "p1_return_points_won": 1.4}
+    assert not complete_opponent_service_rates(stats)
+    assert stats["p1_service_points_won"] == 0.7
+    assert "p2_service_points_won" not in stats
+
+
+def test_existing_return_only_schema_three_repairs_without_api_calls(match_factory, tmp_path):
+    class NoRequests:
+        def _get(self, path, **kwargs):
+            raise AssertionError(f"Local repair must not call provider: {path}")
+
+    match = match_factory("return-only", "A", "B", "A")
+    match.stats = {"p1_return_points_won": 31 / 67,
+                   "p2_return_points_won": 25 / 64}
+    match.provider_payload = {
+        "id": "123",
+        "_tbt_statistics": {
+            "schema": 3, "event_id": "123", "source": "tennisapi1",
+            "fetched_at": datetime.now(timezone.utc).isoformat(),
+            "status": "available",
+        },
+    }
+    enricher = StatisticsEnricher(NoRequests(), tmp_path / "local-repair.sqlite")
+    assert enricher.enrich(match) == "enriched"
+    assert match.stats["p1_service_points_won"] == 39 / 64
+    assert match.stats["p2_service_points_won"] == 36 / 67
+    assert enricher.enrich(match) == "cached"
     enricher.close()

@@ -116,3 +116,16 @@ def test_games_and_sets_are_independent_admin_panels():
     assert manifest['sections']['games']['returned']==1
     assert manifest['sections']['sets']['returned']==0
     assert manifest['sections']['sets']['display_state']=='blurred'
+
+
+def test_free_pro_locked_detail_button_fits_last_column_without_clipping():
+    # Desktop TOP/Short Odds/Value/Doubles have eight columns. Their widths
+    # must total 100%; otherwise overflow hides the locked Detail on the right.
+    scoped=CSS735.split("FREE / PRO: keep the locked Detail button",1)[1]
+    assert '[data-plan="rookie"]' in scoped
+    assert '[data-plan="pro"]' in scoped
+    assert 'min-width:901px' in scoped
+    assert ':is(.hub-head-action,.hub-action-cell){width:9%!important}' in scoped
+    assert 'width:min(100%,88px)!important' in scoped
+    assert 'min-width:0!important;max-width:100%!important' in scoped
+    assert 3.5 + 7.5 + 23 + 27 + 14 + 8 + 8 + 9 == 100

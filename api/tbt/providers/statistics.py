@@ -87,6 +87,27 @@ COUNT_ALIASES = {
     "doublefaulterrors": "double_faults",
 }
 
+def complete_opponent_service_rates(values: dict[str, float]) -> bool:
+    """Recover whole-match service points won from the opponent's return rate.
+
+    These are complementary outcomes on the *same* service points. Do not use
+    first-serve placement percentages or unweighted first/second percentages.
+    Existing explicit service statistics always take precedence.
+    """
+    changed = False
+    for prefix, opponent in (("p1", "p2"), ("p2", "p1")):
+        service_field = f"{prefix}_service_points_won"
+        return_rate = values.get(f"{opponent}_return_points_won")
+        if service_field in values or return_rate is None:
+            continue
+        if not isinstance(return_rate, (int, float)) or not math.isfinite(return_rate):
+            continue
+        if not 0 <= return_rate <= 1:
+            continue
+        values[service_field] = 1.0 - return_rate
+        changed = True
+    return changed
+
 
 def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float]:
     if payload == {} or payload.get("statistics") == []:
@@ -147,6 +168,10 @@ def parse_statistics(payload: dict, *, home_is_player1: bool) -> dict[str, float
             service = (first[0] + second[0]) / (first[1] + second[1])
             values.setdefault(f"{prefix}_service_points_won", service)
             values.setdefault(f"{opponent}_return_points_won", 1 - service)
+
+    # A verified opponent's whole-match return rate also tells us the fraction
+    # of own service points won, even when serve-specific fields are absent.
+    complete_opponent_service_rates(values)
 
     if not values:
         raise NoSupportedStatisticsError("Statistics contain no supported rate/count fields; no imputation performed")

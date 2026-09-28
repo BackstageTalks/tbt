@@ -245,3 +245,26 @@ def test_r55_confirmation_refuses_new_market_inside_cutoff():
     assert publication["publication_status"] == "expired_unpublished"
     assert publication["excluded_reason"] == "inside_publication_cutoff"
     assert publication["issued_at"] is None
+
+
+def test_top_six_published_core_prevent_new_65_percent_fallback():
+    now = datetime(2026, 9, 25, 10, tzinfo=timezone.utc)
+    core = [winner_row(str(i), "2026-09-25T08:00:00+00:00",
+                       selection="Alpha", odds=1.55, day="2026-09-25")
+            for i in range(6)]
+    for x in core:
+        x["blinq_probability"] = 0.70
+    weak = [winner_row(f"weak{i}", "2026-09-25T16:00:00+00:00",
+                       selection="Alpha", odds=1.65, day="2026-09-25")
+            for i in range(4)]
+    for x in weak:
+        x["blinq_probability"] = 0.65
+    ledger = [{"event_id": x["event_id"],
+               "market_publications": [publication_for(x, "top_daily")]}
+              for x in core]
+    merged, report = carry_forward_betting_day_market_rows(
+        {"top_daily_picks": weak}, {"top_daily_picks": core}, ledger, now=now,
+    )
+    assert len(merged["top_daily_picks"]) == 6
+    assert report["top_core_available"]["top_daily_picks"] == 6
+    assert report["skipped_top_fallback"]["top_daily_picks"] == 4

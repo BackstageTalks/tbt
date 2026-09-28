@@ -51,6 +51,22 @@ static = load_json(WEB / 'staticwebapp.config.json')
 site = load_json(WEB / 'config' / 'site-content.json')
 tiers = load_json(WEB / 'config' / 'membership-tiers.json')
 
+# Azure Static Web Apps treats /path and /path/ as the same route. Keep one
+# canonical SPA alias; this catches a deploy-breaking conflict before upload.
+route_rules = static.get('routes', []) if isinstance(static, dict) else []
+if isinstance(route_rules, list):
+    normalized_routes = [str(rule.get('route', '')).rstrip('/') or '/'
+                         for rule in route_rules if isinstance(rule, dict)]
+    duplicate_routes = sorted({r for r in normalized_routes if normalized_routes.count(r) > 1})
+    if duplicate_routes:
+        fail(f'Azure Static Web Apps duplicate normalized routes: {duplicate_routes}')
+    else:
+        ok('Azure Static Web Apps normalized routes are unique')
+    aliases = [r for r in route_rules if isinstance(r, dict) and
+               str(r.get('route', '')).rstrip('/') == '/follow-the-data']
+    if len(aliases) != 1 or aliases[0].get('rewrite') != '/index.html':
+        fail('follow-the-data SPA alias must have exactly one rewrite to /index.html')
+
 # 1. Release/cache identity is one source of truth.
 meta_release = re.search(r'<meta name="blinq-web-release" content="([^"]+)"', index)
 meta_patch = re.search(r'<meta name="blinq-web-patch" content="736-r(\d+)"', index)
@@ -299,9 +315,18 @@ if 'Guard fresh main commit' not in ci_yml or 'origin/main' not in ci_yml or 'ST
     fail('CI stale re-run guard missing')
 if 'run-name: "BlinQ CI · ${{ github.sha }}"' not in ci_yml:
     fail('CI run name does not expose commit SHA')
-if 'TBT_ACCOUNT_INACTIVITY_ENABLED' not in account_yml or 'BLINQ_ACCOUNT_WORKER_TOKEN' not in account_yml or '/api/v1/internal/account-inactivity-worker' not in account_yml:
-    fail('daily account inactivity workflow contract missing')
-ok('workflow stale-deploy + stale-rerun + account-inactivity safeguards present')
+if 'workflow_dispatch:' not in account_yml or 'BLINQ_ACCOUNT_WORKER_TOKEN' not in account_yml or '/api/v1/internal/account-inactivity-worker' not in account_yml:
+    fail('externally dispatched account inactivity workflow contract missing')
+# All recurring timings now belong to the external cron scheduler. Preserve
+# GitHub push/PR checks and explicit workflow_dispatch without internal timers.
+scheduled_workflows = [
+    path.name for path in sorted((ROOT / '.github' / 'workflows').iterdir())
+    if path.suffix in {'.yml', '.yaml'}
+    and re.search(r'(?m)^  schedule:\s*$', path.read_text(encoding='utf-8'))
+]
+if scheduled_workflows:
+    fail('GitHub cron schedules must be external-only: ' + ', '.join(scheduled_workflows))
+ok('workflow stale-deploy + stale-rerun + externally dispatched worker safeguards present')
 
 # 9. Production tree cleanliness.
 # In CI the checkout itself necessarily contains .git/.git metadata.  The audit must

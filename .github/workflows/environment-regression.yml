@@ -6,8 +6,10 @@ on:
       - "api/tbt/services/environment.py"
       - "api/tbt/services/countries.py"
       - "scripts/enrich_environment_snapshot.py"
+      - "scripts/audit_static_environment_ablation.py"
       - "scripts/tests/test_environment_location_candidates.py"
       - "scripts/tests/test_environment_bulk_modes.py"
+      - "scripts/tests/test_environment_ablation.py"
       - ".github/workflows/environment-*.yml"
   push:
     branches:
@@ -31,10 +33,11 @@ jobs:
       - name: Install test dependencies
         run: python -m pip install -r api/requirements-train.txt
       - name: Compile environment source
-        run: python -m compileall -q api/tbt/services/environment.py scripts/enrich_environment_snapshot.py
+        run: python -m compileall -q api/tbt/services/environment.py scripts/enrich_environment_snapshot.py scripts/audit_static_environment_ablation.py
       - name: Regression tests
         env:
           PYTHONPATH: api:scripts
         run: |
           python -m unittest discover -s scripts/tests -p "test_environment_location_candidates.py" -v
           python -m unittest discover -s scripts/tests -p "test_environment_bulk_modes.py" -v
+          python -m unittest discover -s scripts/tests -p "test_environment_ablation.py" -v
