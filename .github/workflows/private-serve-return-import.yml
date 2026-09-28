@@ -14,6 +14,14 @@ on:
         required: false
         default: ""
         type: string
+  pull_request:
+    paths:
+      - ".github/private-serve-return-import-request.json"
+      - ".github/workflows/private-serve-return-import.yml"
+  push:
+    branches: [main]
+    paths:
+      - ".github/private-serve-return-import-request.json"
 
 permissions:
   contents: read
@@ -31,10 +39,45 @@ jobs:
       PYTHONPATH: api:scripts
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
-      IMPORT_MODE: ${{ inputs.mode }}
-      REQUESTED_RUN_ID: ${{ inputs.artifact_run_id }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve controlled import request
+        id: request
+        shell: bash
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+          DISPATCH_RUN_ID: ${{ inputs.artifact_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            mode="${DISPATCH_MODE:-dry-run}"
+            run_id="${DISPATCH_RUN_ID:-}"
+          else
+            request=".github/private-serve-return-import-request.json"
+            test -s "$request" || { echo "Missing controlled import request"; exit 1; }
+            requested_mode="$(jq -r '.mode // "dry-run"' "$request")"
+            run_id="$(jq -r '.artifact_run_id // ""' "$request")"
+            if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+              mode="dry-run"
+            else
+              mode="$requested_mode"
+            fi
+          fi
+          case "$mode" in dry-run|write) ;; *) echo "Invalid import mode: $mode"; exit 1;; esac
+          if [[ "$mode" == "write" && "$GITHUB_EVENT_NAME" != "push" && "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "Write mode is forbidden outside main push/manual dispatch"
+            exit 1
+          fi
+          if [[ "$mode" == "write" && -z "$run_id" ]]; then
+            echo "Write mode requires an explicit artifact_run_id"
+            exit 1
+          fi
+          echo "Resolved Serve/Return request: event=$GITHUB_EVENT_NAME mode=$mode artifact_run_id=${run_id:-latest}"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "IMPORT_MODE=$mode" >> "$GITHUB_ENV"
+          echo "REQUESTED_RUN_ID=$run_id" >> "$GITHUB_ENV"
 
       - uses: actions/setup-python@v5
         with:
@@ -124,13 +167,13 @@ jobs:
           PY
 
       - name: Write verified rows into local private history
-        if: ${{ inputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' }}
         run: |
           set -euo pipefail
           python scripts/import_private_serve_return.py             --stage .cache/tbt/serve-return/blinq_serve_return_import_stage.zip             --history-dir .cache/tbt/serve-return/history             --out-dir .cache/tbt/serve-return/write             --write-partitions             --write-history-dir .cache/tbt/serve-return/history
 
       - name: Validate and publish changed private history bundle
-        if: ${{ inputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -161,7 +204,7 @@ jobs:
           PY
 
       - name: Verify committed private release
-        if: ${{ inputs.mode == 'write' }}
+        if: ${{ steps.request.outputs.mode == 'write' }}
         run: |
           set -euo pipefail
           python - <<'PY'
