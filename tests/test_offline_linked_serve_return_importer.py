@@ -77,3 +77,37 @@ def test_existing_stat_conflict_fails_closed(tmp_path):
     report, review=run(tmp_path,base_row(),existing={"p1_service_points_won":0.9})
     assert report["counts"]["stat_conflicts"]==1
     assert "p1_service_points_won" in review[0]["keys"]
+
+def test_accepts_bounded_rich_charting_rates(tmp_path):
+    row=base_row()
+    row["incoming_stats"].update({
+        "p1_first_strike_serve_win":0.44,
+        "p2_first_strike_serve_win":0.36,
+        "p1_return_in_play_rate":0.88,
+        "p2_return_in_play_rate":0.79,
+        "p1_return_deep_rate":0.62,
+        "p2_return_deep_rate":0.51,
+        "p1_break_point_serve_win":0.67,
+        "p2_break_point_serve_win":0.55,
+        "p1_break_point_return_win":0.45,
+        "p2_break_point_return_win":0.35,
+        "p1_net_points_win":0.71,
+        "p2_net_points_win":0.58,
+        "p1_attacking_points_rate":0.56,
+        "p2_attacking_points_rate":0.43,
+        "p1_unforced_error_rate":0.22,
+        "p2_unforced_error_rate":0.31,
+    })
+    report, review=run(tmp_path,row)
+    assert report["counts"]["updated"]==1
+    assert not review
+
+
+def test_rejects_out_of_range_rich_charting_rate(tmp_path):
+    row=base_row()
+    row["incoming_stats"]["p1_return_deep_rate"]=1.2
+    report, review=run(tmp_path,row)
+    assert report["counts"]["invalid_stats"]==1
+    assert review[0]["reason"]=="invalid_stats"
+    assert "p1_return_deep_rate" in review[0]["keys"]
+
