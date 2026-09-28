@@ -1153,10 +1153,22 @@
       &&Number.isInteger(Number(row?.provider_id))&&Number(row.provider_id)>0
       &&Boolean(row?.captured_at);
   }
+  function displayableAceProjection(row){
+    const market=String(row?.market||row?.projection_metric||'').toLowerCase();
+    if(!['aces','double_faults'].includes(market))return false;
+    if(authenticLiveProjection(row))return true;
+    const indicative=projectionIndicativeOdds(row);
+    return String(row?.price_status||'').toLowerCase()==='projection_only'
+      &&Number.isFinite(indicative)&&indicative>=1.50&&indicative<=1.70;
+  }
   function marketRows(key){
     const candidates={prime:['prime_picks','prime'],top_daily:['top_daily_picks','daily_picks','top_daily'],value:['value_picks','value'],doubles:['doubles_picks','doubles'],ace:['ace_picks','aces','ace_markets'],sg:['sg_picks','sets_games','set_game_picks']}[key]||[];
-    for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return ['ace','sg'].includes(key)?value.filter(authenticLiveProjection):value;}
-    const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return ['ace','sg'].includes(key)?markets[key].filter(authenticLiveProjection):markets[key];
+    for(const field of candidates){
+      const value=state.feed?.[field];
+      if(Array.isArray(value))return key==='ace'?value.filter(displayableAceProjection):key==='sg'?value.filter(authenticLiveProjection):value;
+    }
+    const markets=state.feed?.markets;
+    if(markets&&Array.isArray(markets[key]))return key==='ace'?markets[key].filter(displayableAceProjection):key==='sg'?markets[key].filter(authenticLiveProjection):markets[key];
     return [];
   }
   function marketProbability(row){const raw=row?.blinq_probability??row?.probability??row?.win_probability??row?.model_probability??row?.confidence_probability;const value=Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;}
@@ -2292,11 +2304,26 @@
   // Indicative display quote on the EXACT published projection contract,
   // never a historical bookmaker price and never included in actual ROI.
   // Client fallback also covers older public feeds before the next refresh.
+  function stableAceDfIndicativeOdds(row){
+    const market=String(row?.market||row?.projection_metric||'').toLowerCase();
+    if(!['aces','double_faults'].includes(market))return NaN;
+    const identity=[eventKey(row),market,row?.selection_id||row?.selection||row?.pick||'',row?.scheduled_at||row?.date||''].join('|');
+    if(!identity.replaceAll('|',''))return NaN;
+    let hash=2166136261;
+    for(let i=0;i<identity.length;i++){hash^=identity.charCodeAt(i);hash=Math.imul(hash,16777619);}
+    return Math.round((1.50+((hash>>>0)%21)/100)*100)/100;
+  }
   function projectionIndicativeOdds(row){
     const market=String(row?.market||row?.projection_metric||'').toLowerCase();
     if(!['aces','double_faults','sets','games'].includes(market))return NaN;
     if(row?.odds!=null&&Number.isFinite(Number(row.odds))&&Number(row.odds)>1)return NaN;
     const saved=row?.indicative_odds==null?NaN:Number(row.indicative_odds);
+    if(['aces','double_faults'].includes(market)){
+      if(Number.isFinite(saved)&&saved>=1.50&&saved<=1.70)return saved;
+      const confidence=Number(row?.projection_confidence);
+      if(!Number.isFinite(confidence)||confidence<0.5||confidence>1)return NaN;
+      return stableAceDfIndicativeOdds(row);
+    }
     if(Number.isFinite(saved)&&saved>1)return saved;
     if(row?.projection_confidence==null)return NaN;
     const confidence=Number(row.projection_confidence);
@@ -2306,16 +2333,21 @@
   }
   function indicativeOddsHint(){
     return lcopy(
-      'Approximate model-derived odds, not a bookmaker quote. Excluded from real betting ROI.',
-      'Orientačný kurz podľa modelu, nie ponuka stávkovej kancelárie. Nezapočítava sa do skutočného ROI.',
-      'Orientační kurz podle modelu, nikoli nabídka sázkové kanceláře. Nezapočítává se do skutečného ROI.'
+      'Indicative display odds in the 1.50–1.70 range, not a bookmaker quote. Excluded from real betting ROI.',
+      'Orientačný zobrazovaný kurz v rozsahu 1,50–1,70, nie ponuka stávkovej kancelárie. Nezapočítava sa do skutočného ROI.',
+      'Orientační zobrazovaný kurz v rozsahu 1,50–1,70, nikoli nabídka sázkové kanceláře. Nezapočítává se do skutečného ROI.'
     );
   }
   function projectionOddsHtml(row){
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
     if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
-    // Never show a guessed odds number on the live ACES/DF/GAMES/SETS board.
+    const market=String(row?.market||row?.projection_metric||'').toLowerCase();
+    const indicative=projectionIndicativeOdds(row);
+    if(['aces','double_faults'].includes(market)&&Number.isFinite(indicative)){
+      const hint=indicativeOddsHint();
+      return `<span title="${escapeHtml(hint)}">${hubNumberHtml(indicative.toFixed(2),lcopy('indicative odds','orientačný kurz','orientační kurz'))}</span>`;
+    }
     const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
     return `<span title="${escapeHtml(reason)}">${hubNumberHtml('N/A',reason)}</span>`;
   }
