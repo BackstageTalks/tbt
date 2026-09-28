@@ -1,5 +1,9 @@
 name: Tennis data and predictions
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/refresh-now'
   workflow_dispatch:
     inputs:
       mode:
@@ -65,14 +69,14 @@ concurrency:
   cancel-in-progress: false
 jobs:
   pipeline:
-    if: github.event_name == 'workflow_dispatch' || (github.event.schedule == '40 22 * * *' && vars.TBT_AUTO_HISTORY == 'true') || (github.event.schedule == '20 1,7,13,19 * * *' && vars.TBT_AUTO_REFRESH == 'true')
+    if: (github.event_name == 'push' && contains(github.event.head_commit.message, '[refresh-now]')) || github.event_name == 'workflow_dispatch' || (github.event.schedule == '40 22 * * *' && vars.TBT_AUTO_HISTORY == 'true') || (github.event.schedule == '20 1,7,13,19 * * *' && vars.TBT_AUTO_REFRESH == 'true')
     # Refresh/results publication mutates tbt-predictions-v1, so it must also
     # share the exact production publication lock used by CI/player deploys.
     # History/statistics modes receive a run-unique job group and therefore do
     # not block ordinary application deploys. The workflow-level history lock
     # still serializes all shared history writers.
     concurrency:
-      group: ${{ ((inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current' || github.event.schedule == '20 1,7,13,19 * * *') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
+      group: ${{ ((github.event_name == 'push' || inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current' || github.event.schedule == '20 1,7,13,19 * * *') && 'tbt-production-deploy') || format('tbt-data-pipeline-{0}', github.run_id) }}
       cancel-in-progress: false
     runs-on: ubuntu-latest
     timeout-minutes: 210
@@ -80,7 +84,7 @@ jobs:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
-      MODE: ${{ inputs.mode || (github.event.schedule == '40 22 * * *' && 'history' || 'refresh') }}
+      MODE: ${{ inputs.mode || (github.event_name == 'push' && 'refresh' || (github.event.schedule == '40 22 * * *' && 'history' || 'refresh')) }}
       START_DATE: ${{ inputs.start }}
       LOOKBACK_DAYS: ${{ inputs.lookback_days || 1095 }}
       END_DATE: ${{ inputs.end }}
@@ -435,7 +439,8 @@ jobs:
     needs: pipeline
     if: >-
       needs.pipeline.result == 'success' &&
-      (inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current' ||
+      ((github.event_name == 'push' && contains(github.event.head_commit.message, '[refresh-now]')) ||
+       inputs.mode == 'refresh' || inputs.mode == 'results-rebuild' || inputs.mode == 'deploy-current' ||
        (github.event.schedule == '20 1,7,13,19 * * *' && vars.TBT_AUTO_REFRESH == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 45
