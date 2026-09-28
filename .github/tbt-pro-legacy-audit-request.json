@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "mode": "legacy-score-write",
-  "purpose": "Write only strict identity-, winner- and score-verified legacy score gaps into private canonical history; quarantine conflicts; zero provider API.",
+  "purpose": "Retry strict legacy score write after correcting projected set1/set2 games coverage; same verified rows only; zero provider API.",
   "zero_provider_api_requests": true,
-  "requested_at_utc": "2026-09-28T21:58:00Z"
+  "requested_at_utc": "2026-09-28T21:57:30Z"
 }
