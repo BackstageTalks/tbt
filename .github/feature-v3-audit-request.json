@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "mode": "feature-audit",
-  "purpose": "Measure zero-request Data Model v3 feature coverage after offline ATP + charting history enrichment.",
-  "source_enrichment_run_id": "36465088035",
+  "purpose": "Measure zero-request Data Model v3 coverage after rich Match Charting v2 write, including specialist feature groups.",
+  "source_enrichment_run_id": "36471908489",
   "expected_quality_ready": 38409,
-  "requested_at_utc": "2026-09-28T19:18:00Z"
+  "requested_at_utc": "2026-09-28T19:35:00Z"
 }
