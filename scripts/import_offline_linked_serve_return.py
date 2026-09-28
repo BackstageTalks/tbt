@@ -22,6 +22,14 @@ RATE_FIELDS = {
     "second_serve_win",
     "service_points_won",
     "return_points_won",
+    "first_strike_serve_win",
+    "return_in_play_rate",
+    "return_deep_rate",
+    "break_point_serve_win",
+    "break_point_return_win",
+    "net_points_win",
+    "attacking_points_rate",
+    "unforced_error_rate",
 }
 COUNT_FIELDS = {"aces", "double_faults"}
 ALLOWED = {f"{side}_{field}" for side in ("p1", "p2") for field in RATE_FIELDS | COUNT_FIELDS}
