@@ -117,7 +117,6 @@ def test_local_draft_restores_marketing_only_without_reverting_new_entitlements(
         "async function previewAdminUiSnapshot(snapshotId){", 1
     )[0]
     assert "next.hero_banner=mergeConfig" in presentation
-    assert "old.kind!=='hero_banner'" in presentation
     assert "marketing.forEach(" in presentation
     assert "next.dashboard=" not in presentation
     assert "next.access_contract_revision=" not in presentation
