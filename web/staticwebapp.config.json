@@ -56,14 +56,34 @@
     },
     {
       "route": "/follow-the-data",
-      "redirect": "/follow-the-data/",
-      "statusCode": 301
+      "rewrite": "/index.html",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0"
+      }
     },
     {
       "route": "/auth/action",
       "rewrite": "/auth/action/index.html",
       "headers": {
         "Cache-Control": "no-store, max-age=0"
+      }
+    },
+    {
+      "route": "/deployment.json",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "route": "/config/*",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "route": "/membership-links.json",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
       }
     }
   ],
