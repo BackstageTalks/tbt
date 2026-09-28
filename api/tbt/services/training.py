@@ -9,11 +9,24 @@ from typing import Iterable
 import pandas as pd
 
 from ..models.ensemble import TennisEnsemble
-from ..models.feature_builder import FeatureBuilder
+from ..models.feature_builder import FEATURE_NAMES, RICH_CHARTING_FEATURE_NAMES, FeatureBuilder
 from ..models.metrics import evaluate_probabilities
 from ..schemas import MatchRecord
 from .data_quality import audit_history
 from .prediction_quality import subgroup_report, history_band
+
+
+PRODUCTION_FEATURE_NAMES = [
+    name
+    for name in FEATURE_NAMES
+    if name not in set(RICH_CHARTING_FEATURE_NAMES)
+]
+
+
+def _new_production_ensemble() -> TennisEnsemble:
+    """Governed candidate model with experimentally unproven rich fields off."""
+    return TennisEnsemble(feature_names=PRODUCTION_FEATURE_NAMES)
+
 
 
 @dataclass
@@ -528,7 +541,7 @@ def train_from_matches(
     holdout_fingerprint = _holdout_fingerprint(test) if len(test) else ""
 
     evaluation_model = (
-        TennisEnsemble()
+        _new_production_ensemble()
         .fit(
             train,
             calibration,
