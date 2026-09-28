@@ -65,11 +65,13 @@ def test_illustrative_feed_backfill_does_not_change_original_ledger_or_result():
 
 
 def test_ui_never_renders_filler_as_a_real_quote():
-    assert "function aceDfResultsDisplayOdds(row)" in APP
+    assert "function aceDfLegacyResultDisplayOdds(row)" in APP
+    assert "ace_df_real_api_v1" in APP
+    assert "1.50+step/100" in APP
     results = APP[APP.index("function renderResults()"):APP.index("function wireResultsFilters()")]
-    assert "aceDfResultsDisplayOdds(publication)" in results
+    assert "aceDfLegacyResultDisplayOdds(publication)" in results
     live = APP[APP.index("function projectionOddsHtml("):APP.index("function dailyHubRow(")]
-    assert "aceDfResultsDisplayOdds" not in live
+    assert "aceDfLegacyResultDisplayOdds" not in live
     assert "historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'" in APP
     assert "illustrativeOnly?placeholderOdds.toFixed(2)" in APP
     assert "not an archived bookmaker price or model estimate" in APP
