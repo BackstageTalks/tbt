@@ -63,6 +63,7 @@ def main() -> None:
     ap.add_argument("--history-dir", default=".cache/tbt/history")
     ap.add_argument("--out", default=".cache/tbt/rich-ablation.json")
     ap.add_argument("--first-test-year", type=int, default=2023)
+    ap.add_argument("--year", type=int, default=None, help="Run exactly one test year")
     args = ap.parse_args()
 
     raw = load_partitions(Path(args.history_dir))
@@ -85,6 +86,8 @@ def main() -> None:
     all_base = []
 
     years = sorted(int(y) for y in frame["year"].unique() if int(y) >= args.first_test_year)
+    if args.year is not None:
+        years = [int(args.year)] if int(args.year) in years else []
     for year in years:
         historical = frame[frame["year"] < year].copy()
         test = frame[frame["year"] == year].copy()
@@ -105,29 +108,38 @@ def main() -> None:
         base_correct = (base_p >= .5) == target
         paired = _paired_accuracy(full_correct, base_correct)
 
-        rich_known = test["rich_charting_known_both"].astype(float).to_numpy() > 0.5
-        rich_known_count = int(rich_known.sum())
-        rich_subset = None
-        if rich_known_count:
-            rich_subset = {
-                "n": rich_known_count,
-                "full": evaluate_probabilities(target[rich_known], full_p[rich_known]),
-                "base": evaluate_probabilities(target[rich_known], base_p[rich_known]),
+        rich_level = test["rich_charting_known_both"].astype(float).to_numpy()
+
+        def subset_report(mask: np.ndarray) -> dict | None:
+            count = int(mask.sum())
+            if not count:
+                return None
+            result = {
+                "n": count,
+                "full": evaluate_probabilities(target[mask], full_p[mask]),
+                "base": evaluate_probabilities(target[mask], base_p[mask]),
                 "paired_accuracy": _paired_accuracy(
-                    full_correct[rich_known], base_correct[rich_known]
+                    full_correct[mask], base_correct[mask]
                 ),
             }
-            rich_subset["delta_full_minus_base"] = {
-                key: _delta(rich_subset["full"], rich_subset["base"], key)
+            result["delta_full_minus_base"] = {
+                key: _delta(result["full"], result["base"], key)
                 for key in ("accuracy", "roc_auc", "log_loss", "brier_score", "ece_10")
             }
+            return result
+
+        rich_subsets = {
+            "any": subset_report(rich_level > 0.0),
+            "majority": subset_report(rich_level > 0.5),
+            "full": subset_report(rich_level >= 0.999999),
+        }
 
         folds.append({
             "year": year,
             "train_rows": int(len(train)),
             "calibration_rows": int(len(calibration)),
             "test_rows": int(len(test)),
-            "rich_known_test_rows": rich_known_count,
+            "rich_known_test_rows": int((rich_level > 0.0).sum()),
             "full": full_metrics,
             "base_without_rich": base_metrics,
             "delta_full_minus_base": {
@@ -135,7 +147,7 @@ def main() -> None:
                 for key in ("accuracy", "roc_auc", "log_loss", "brier_score", "ece_10")
             },
             "paired_accuracy": paired,
-            "rich_known_subset": rich_subset,
+            "rich_subsets": rich_subsets,
             "full_model_metadata": full_model.metadata,
             "base_model_metadata": base_model.metadata,
         })
