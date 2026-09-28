@@ -1,0 +1,194 @@
+name: BlinQ private serve-return import
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run first; write publishes only identity-verified rows to private tbt-data"
+        required: true
+        default: "dry-run"
+        type: choice
+        options: [dry-run, write]
+      artifact_run_id:
+        description: "Optional manual serve-return run ID; blank = latest non-expired cumulative artifact"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      IMPORT_MODE: ${{ inputs.mode }}
+      REQUESTED_RUN_ID: ${{ inputs.artifact_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test import code
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m compileall -q scripts/normalize_private_serve_return.py scripts/import_private_serve_return.py
+          python -m pytest tests/test_private_serve_return_normalizer.py -q
+
+      - name: Verify private history destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Recover cumulative private raw staging
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/serve-return/raw
+          if [[ -n "$REQUESTED_RUN_ID" ]]; then
+            artifact_name="manual-serve-return-$REQUESTED_RUN_ID"
+            run_id="$REQUESTED_RUN_ID"
+          else
+            artifact_json="$(gh api "repos/$GH_REPO/actions/artifacts?per_page=100" --jq '[.artifacts[] | select(.name | startswith("manual-serve-return-")) | select(.expired == false)] | sort_by(.created_at) | reverse | .[0]')"
+            test "$artifact_json" != "null" || { echo 'No non-expired serve-return staging artifact found'; exit 1; }
+            artifact_name="$(printf '%s' "$artifact_json" | jq -r .name)"
+            run_id="$(printf '%s' "$artifact_json" | jq -r .workflow_run.id)"
+          fi
+          gh run download "$run_id" --repo "$GH_REPO" --name "$artifact_name" --dir .cache/tbt/serve-return/raw
+          test -s .cache/tbt/serve-return/raw/provider_responses.jsonl
+          echo "Using private artifact: $artifact_name (run $run_id)"
+          echo "ARTIFACT_NAME=$artifact_name" >> "$GITHUB_ENV"
+          echo "ARTIFACT_RUN_ID=$run_id" >> "$GITHUB_ENV"
+
+      - name: Normalize provider schema without trusting player orientation
+        run: |
+          set -euo pipefail
+          python scripts/normalize_private_serve_return.py             --raw .cache/tbt/serve-return/raw/provider_responses.jsonl             --out .cache/tbt/serve-return/blinq_serve_return_import_stage.zip
+
+      - name: Download checksum-verified private history
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          directory = Path(".cache/tbt/serve-return/history")
+          store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory)
+          store.download(require_bundle_manifest=True)
+          PY
+
+      - name: Dry-run canonical identity/orientation import
+        run: |
+          set -euo pipefail
+          python scripts/import_private_serve_return.py             --stage .cache/tbt/serve-return/blinq_serve_return_import_stage.zip             --history-dir .cache/tbt/serve-return/history             --out-dir .cache/tbt/serve-return/dry-run
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report = json.loads(Path(".cache/tbt/serve-return/dry-run/report.json").read_text())
+          counts = report.get("counts") or {}
+          updated = int(counts.get("updated") or 0)
+          print("Serve/Return dry-run:", json.dumps({
+              "stage_rows": report.get("stage_rows"),
+              "updated": updated,
+              "identity_unmatched": counts.get("identity_unmatched", 0),
+              "orientation_unverified": counts.get("orientation_unverified", 0),
+              "stat_conflicts": counts.get("stat_conflicts", 0),
+              "already_present": counts.get("already_present", 0),
+              "quality_ready_before": report.get("quality_ready_before"),
+              "quality_ready_after": report.get("quality_ready_after"),
+              "quality_ready_added": report.get("quality_ready_added"),
+              "changed_years": report.get("changed_years"),
+          }, ensure_ascii=False))
+          if not report.get("stage_rows"):
+              raise SystemExit("Empty normalized stage")
+          if updated <= 0 and not counts.get("already_present"):
+              raise SystemExit("No verified rows can be imported; refusing write")
+          PY
+
+      - name: Write verified rows into local private history
+        if: ${{ inputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python scripts/import_private_serve_return.py             --stage .cache/tbt/serve-return/blinq_serve_return_import_stage.zip             --history-dir .cache/tbt/serve-return/history             --out-dir .cache/tbt/serve-return/write             --write-partitions             --write-history-dir .cache/tbt/serve-return/history
+
+      - name: Validate and publish changed private history bundle
+        if: ${{ inputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          directory = Path(".cache/tbt/serve-return/history")
+          report = json.loads(Path(".cache/tbt/serve-return/write/report.json").read_text())
+          years = [int(year) for year in report.get("changed_years") or []]
+          if not years:
+              print("No changed partitions; nothing to publish.")
+              raise SystemExit(0)
+
+          matches, safety = sanitize_history_identities(load_partitions(directory))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Identity safety failed after local import")
+          paths = [directory / f"history-{year:04d}.parquet" for year in years]
+          paths.append(directory / "history_manifest.json")
+          if any(not path.is_file() or path.stat().st_size <= 0 for path in paths):
+              raise SystemExit("Changed history bundle is incomplete")
+
+          store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory)
+          store.upload_bundle(paths)
+          print(f"Published verified Serve/Return updates for years: {years}")
+          PY
+
+      - name: Verify committed private release
+        if: ${{ inputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          directory = Path(".cache/tbt/serve-return/verify")
+          store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory)
+          store.download(require_bundle_manifest=True)
+          matches, safety = sanitize_history_identities(load_partitions(directory))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Committed history identity validation failed")
+          print(f"Committed private history verified: {len(matches)} rows")
+          PY
+
+      - name: Upload review reports only
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-serve-return-import-${{ github.run_id }}
+          path: |
+            .cache/tbt/serve-return/dry-run/report.json
+            .cache/tbt/serve-return/dry-run/review.jsonl
+            .cache/tbt/serve-return/write/report.json
+            .cache/tbt/serve-return/write/review.jsonl
+          if-no-files-found: warn
+          retention-days: 14
