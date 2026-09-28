@@ -1,0 +1,30 @@
+name: One-shot current-main refresh self-test
+
+on:
+  push:
+    branches:
+      - ops/refresh-selftest-20260928
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch production refresh from current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f mode=refresh \
+            -f max_requests=1000 \
+            -f market_odds_max_events=120 \
+            -f propline_max_events=75 \
+            -f doubles_odds_max_events=40 \
+            -f betting_day_start_hour=6 \
+            -f morning_refresh=false
+          echo "Current-main refresh dispatched."
