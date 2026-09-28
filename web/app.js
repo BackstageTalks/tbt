@@ -2317,10 +2317,18 @@
   }
   function aceDfLegacyResultsOddsHint(){
     return lcopy(
-      'Normalized legacy Aces/DF result odds in the reviewed 1.50-1.70 market range. Not the original archived bookmaker quote; excluded from ROI.',
-      'Normalizovaný historický kurz esá/DF v overenom trhovom rozsahu 1,50–1,70. Nie je to pôvodný archivovaný kurz stávkovej kancelárie a nezapočítava sa do ROI.',
-      'Normalizovaný historický kurz esa/DF v ověřeném tržním rozsahu 1,50–1,70. Není to původní archivovaný kurz sázkové kanceláře a nezapočítává se do ROI.'
+      'Normalized legacy Aces/DF result odds in the reviewed 1.50-1.70 market range. Not the original archived bookmaker quote.',
+      'Normalizovaný historický kurz esá/DF v overenom trhovom rozsahu 1,50–1,70. Nie je to pôvodný archivovaný kurz stávkovej kancelárie.',
+      'Normalizovaný historický kurz esa/DF v ověřeném tržním rozsahu 1,50–1,70. Není to původní archivovaný kurz sázkové kanceláře.'
     );
+  }
+  function aceDfResultKpiOdds(publication){
+    const market=String(publication?.market||publication?.projection_metric||'').toLowerCase();
+    if(!['aces','double_faults'].includes(market))return NaN;
+    const realApi=String(publication?.odds_contract_version||'')==='ace_df_real_api_v1';
+    const actual=publication?.odds==null?NaN:Number(publication.odds);
+    if(realApi&&Number.isFinite(actual)&&actual>1)return actual;
+    return aceDfLegacyResultDisplayOdds(publication);
   }
 
   // Indicative display quote on the EXACT published projection contract,
@@ -3019,29 +3027,39 @@
     return NaN;
   }
   function localResultMetrics(rows,category){
-    // Keep the deduped settled W/L record intact. ROI and Units count only
-    // genuinely priced, staked publications outside Short Odds; placeholders
-    // displayed in historical projection rows never enter financial totals.
     const entries=settledPublishedEntries(rows,category);
     const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
     const voids=entries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
+    const aceDfCategory=category==='ace'||category==='double_faults';
     let stake=0,profit=0,oddsTotal=0,oddsSample=0,unitSample=0,roiOddsSum=0,roiOddCount=0,ledgerDiscrepancies=0;
     for(const {publication} of graded){
-      // An average quote is descriptive and retains Short Odds; never include
-      // indicative/synthetic historical projection prices in real quote KPIs.
+      // ACES/DF Results use the same normalized-or-real quote shown in the table.
+      // This is a 1u display performance calculation and does not rewrite ledger settlement.
+      if(aceDfCategory){
+        const displayOdds=aceDfResultKpiOdds(publication);
+        if(!Number.isFinite(displayOdds)||displayOdds<=1)continue;
+        const outcome=publicationOutcome(publication);
+        const units=outcome.kind==='win'?displayOdds-1:-1;
+        oddsTotal+=displayOdds;
+        oddsSample++;
+        stake+=1;
+        profit+=units;
+        unitSample++;
+        roiOddsSum+=displayOdds;
+        roiOddCount++;
+        continue;
+      }
+
+      // Other Results categories retain verified real-stake financial KPIs only.
       const actualOdds=publication?.odds==null?NaN:Number(publication.odds);
       const status=String(publication?.price_status||'').trim().toLowerCase();
       const market=String(publication?.market||'').trim().toLowerCase();
       const projectionMarket=['aces','double_faults','sets','games'].includes(market);
-      // Keep browser-filtered Results aligned with backend immutable ledger
-      // KPIs: projection-only and indicative prices are never real stakes.
       const priced=projectionMarket?status==='priced_projection':['','priced','priced_projection'].includes(status);
       if(!priced||!Number.isFinite(actualOdds)||actualOdds<=1)continue;
       oddsTotal+=actualOdds;
       oddsSample++;
-      // Prime / Short Odds still contribute their wins and losses above, but
-      // intentionally do not contribute stake, profit, or ROI.
       if(String(publication?.section||'').toLowerCase()==='prime')continue;
       const realStake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
       const realProfit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
@@ -3051,8 +3069,6 @@
       unitSample++;
       roiOddsSum+=actualOdds;
       roiOddCount++;
-      // An audit-only consistency signal: never silently overwrite an
-      // immutable settlement just because displayed bookmaker odds differ.
       const expected=publicationOutcome(publication).kind==='win'
         ?(actualOdds-1)*realStake:-realStake;
       if(Math.abs(realProfit-expected)>.01)ledgerDiscrepancies++;
@@ -3063,6 +3079,7 @@
       hit:sample?wins/sample:null,avgOdds:oddsSample?oddsTotal/oddsSample:null,
       roi:stake?profit/stake:null,profit,stake,oddsSample,unitSample,
       roiAvgOdds:roiOddCount?roiOddsSum/roiOddCount:null,ledgerDiscrepancies,
+      aceDfNormalizedKpis:aceDfCategory,
     };
   }
   function renderResults(){
@@ -3130,7 +3147,10 @@
         // Historical display-only prices can fill the visible Units cell,
         // but never become a settled stake, ledger profit, or genuine ROI.
         const hasSettledUnits=Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0;
-        const displayUnits=resultVisibleUnits(publication,outcome,resultVisibleOdds(publication));
+        const aceDfKpiOdds=aceDfResultKpiOdds(publication);
+        const displayUnits=Number.isFinite(aceDfKpiOdds)
+          ?(outcome.kind==='void'?0:outcome.kind==='win'?aceDfKpiOdds-1:outcome.kind==='loss'?-1:NaN)
+          :resultVisibleUnits(publication,outcome,resultVisibleOdds(publication));
         const unitsText=Number.isFinite(displayUnits)?
           `${displayUnits>0?'+':''}${displayUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
@@ -4507,8 +4527,8 @@
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
-      ['ROI',m.roi==null?'—':pct(m.roi),lcopy('real settled stakes','reálne vyhodnotené vklady','reálné vyhodnocené vklady')],
-      [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',lcopy('settled profit','vyhodnotený zisk','vyhodnocený zisk')],
+      ['ROI',m.roi==null?'—':pct(m.roi),m.aceDfNormalizedKpis?lcopy('1u result ROI from normalized legacy / real API odds','1u výsledkové ROI z normalizovaných historických / reálnych API kurzov','1u výsledkové ROI z normalizovaných historických / reálných API kurzů'):lcopy('real settled stakes','reálne vyhodnotené vklady','reálné vyhodnocené vklady')],
+      [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',m.aceDfNormalizedKpis?lcopy('1u per settled Aces/DF pick','1u na každý vyhodnotený pick ESÁ/DF','1u na každý vyhodnocený tip ESA/DF'):lcopy('settled profit','vyhodnotený zisk','vyhodnocený zisk')],
       [publicText('Sample'),String(m.sample),lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')],
     ]);
   }
