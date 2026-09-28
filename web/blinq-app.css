@@ -8089,3 +8089,34 @@ body#blinqPremium.blinq-admin .admin-live-result-row .admin-insight-row-actions{
     width:100%;justify-content:flex-end;
   }
 }
+
+
+/* Banner editor contract: editable typography wins over historical parity rules.
+   These selectors are deliberately last in the stylesheet so Admin values are
+   reflected on the public hero and in both previews. */
+body#blinqPremium #dashboardHero .hero-slide .dashboard-hero-copy h2,
+body#blinqPremium #dashboardHero .hero-slide .dashboard-hero-copy h2 strong,
+body#blinqPremium #dashboardHero .hero-slide .dashboard-hero-copy h2 span{
+  font-size:var(--creative-headline-size,36px)!important;
+  color:var(--creative-headline-color,#ffffff)!important;
+}
+body#blinqPremium #dashboardHero .hero-slide .dashboard-hero-copy p{
+  font-size:var(--creative-text-size,14px)!important;
+  color:var(--creative-text-color,#c8dad6)!important;
+}
+body#blinqPremium #dashboardHero .hero-slide .dashboard-hero-copy>small{
+  font-size:var(--creative-eyebrow-size,10px)!important;
+  color:var(--creative-eyebrow-color,var(--lean-green))!important;
+}
+body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy strong{
+  font-size:var(--creative-headline-size,36px)!important;
+  color:var(--creative-headline-color,#ffffff)!important;
+}
+body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy p{
+  font-size:var(--creative-text-size,14px)!important;
+  color:var(--creative-text-color,#c8dad6)!important;
+}
+body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy small{
+  font-size:var(--creative-eyebrow-size,10px)!important;
+  color:var(--creative-eyebrow-color,#6be8b4)!important;
+}
