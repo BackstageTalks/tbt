@@ -1,0 +1,334 @@
+name: BlinQ offline history enrichment
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run first; write publishes only identity-verified offline enrichment"
+        required: true
+        default: "dry-run"
+        type: choice
+        options: [dry-run, write]
+  pull_request:
+    paths:
+      - ".github/offline-history-enrichment-request.json"
+      - ".github/workflows/offline-history-enrichment.yml"
+      - "scripts/link_offline_serve_return.py"
+      - "scripts/import_offline_linked_serve_return.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/offline-history-enrichment-request.json"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('tbt-offline-enrichment-dry-run-{0}', github.ref) || 'tbt-history-data-writer' }}
+  cancel-in-progress: false
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      ATP_REPO: Kadantte/tennis_atp
+      ATP_SHA: 712be0c5ade693cdab9e69c23a71a0edf5a23c44
+      CHARTING_REPO: JeffSackmann/tennis_MatchChartingProject
+      CHARTING_SHA: 1813a1309b7ed7ebf1c7e884b32bf675d00e4edf
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve controlled request
+        id: request
+        shell: bash
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            mode="${DISPATCH_MODE:-dry-run}"
+          else
+            request=".github/offline-history-enrichment-request.json"
+            test -s "$request" || { echo "Missing controlled enrichment request"; exit 1; }
+            requested_mode="$(jq -r '.mode // "dry-run"' "$request")"
+            if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+              mode="dry-run"
+            else
+              mode="$requested_mode"
+            fi
+          fi
+          case "$mode" in dry-run|write) ;; *) echo "Invalid mode: $mode"; exit 1;; esac
+          if [[ "$mode" == "write" && "$GITHUB_EVENT_NAME" != "push" && "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            echo "Write mode is forbidden outside main push/manual dispatch"
+            exit 1
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "ENRICH_MODE=$mode" >> "$GITHUB_ENV"
+          echo "Resolved offline enrichment: event=$GITHUB_EVENT_NAME mode=$mode"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test linker/importer
+        run: |
+          set -euo pipefail
+          python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
+          python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
+          python -m compileall -q scripts/link_offline_serve_return.py scripts/import_offline_linked_serve_return.py
+          python -m pytest tests/test_offline_serve_return_linker.py tests/test_offline_linked_serve_return_importer.py -q
+
+      - name: Verify private history destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download pinned offline source snapshots
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/offline-sources/atp .cache/tbt/offline-sources/charting
+          curl --fail --location --retry 5 --retry-delay 2             "https://github.com/$ATP_REPO/archive/$ATP_SHA.zip"             -o .cache/tbt/offline-sources/atp.zip
+          curl --fail --location --retry 5 --retry-delay 2             "https://github.com/$CHARTING_REPO/archive/$CHARTING_SHA.zip"             -o .cache/tbt/offline-sources/charting.zip
+          unzip -q .cache/tbt/offline-sources/atp.zip -d .cache/tbt/offline-sources/atp
+          unzip -q .cache/tbt/offline-sources/charting.zip -d .cache/tbt/offline-sources/charting
+          ATP_DIR="$(find .cache/tbt/offline-sources/atp -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          CHARTING_DIR="$(find .cache/tbt/offline-sources/charting -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          test -d "$ATP_DIR" && test -d "$CHARTING_DIR"
+          echo "ATP_DIR=$ATP_DIR" >> "$GITHUB_ENV"
+          echo "CHARTING_DIR=$CHARTING_DIR" >> "$GITHUB_ENV"
+
+      - name: Verify source snapshot identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          check_blob() {
+            local path="$1"
+            local expected="$2"
+            local actual
+            actual="$(git hash-object "$path")"
+            test "$actual" = "$expected" || {
+              echo "Source hash mismatch: $path expected=$expected actual=$actual"
+              exit 1
+            }
+          }
+          check_blob "$ATP_DIR/atp_matches_2026.csv" "e47ba9f9f2521ca96450001ac978da5161f18d6d"
+          check_blob "$ATP_DIR/atp_matches_2025.csv" "b9c0d84ee91691cc10fbe1d56212c39760dddcdb"
+          check_blob "$ATP_DIR/atp_players.csv" "095eee901ab84e6374aa4de39e8360eb12746eee"
+          check_blob "$ATP_DIR/atp_matches_qual_chall_2026.csv" "44816ed0175384de008d81c1734066aa821e855b"
+          check_blob "$ATP_DIR/atp_matches_futures_2026.csv" "701e5e339ac60a7e84cfa21247a5958891b06fad"
+          check_blob "$CHARTING_DIR/charting-m-matches.csv" "7bf0d44611caf3c2becfb77d47db70da57fab4cd"
+          check_blob "$CHARTING_DIR/charting-m-stats-Overview.csv" "7dc756e12aa6a2e315157c4d1a3ff34a7335b11b"
+          check_blob "$CHARTING_DIR/charting-w-matches.csv" "87ca5e78cc2f408f5df67fe74705ad8541fc3001"
+          check_blob "$CHARTING_DIR/charting-w-stats-Overview.csv" "7e030ca388d6e4ace46c4e694d886e08a50b3f07"
+
+      - name: Build source list and charting ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os, re, zipfile
+          from pathlib import Path
+
+          atp = Path(os.environ["ATP_DIR"])
+          charting = Path(os.environ["CHARTING_DIR"])
+          files = []
+          for p in sorted(atp.glob("atp_matches_*.csv")):
+              name = p.name
+              if name.startswith("atp_matches_doubles_"):
+                  continue
+              if name == "atp_matches_amateur.csv":
+                  files.append(p)
+                  continue
+              if re.fullmatch(r"atp_matches_\d{4}\.csv", name):
+                  files.append(p)
+                  continue
+              if re.fullmatch(r"atp_matches_futures_\d{4}\.csv", name):
+                  files.append(p)
+                  continue
+              if re.fullmatch(r"atp_matches_qual_chall_\d{4}\.csv", name):
+                  files.append(p)
+                  continue
+          if len(files) != 145:
+              raise SystemExit(f"Expected 145 ATP singles source files, found {len(files)}")
+          Path(".cache/tbt/offline-sources/atp_sources.txt").write_text(
+              "\n".join(str(p) for p in files) + "\n", encoding="utf-8"
+          )
+
+          chart_files = sorted(charting.glob("charting-*.csv"))
+          if len(chart_files) < 40:
+              raise SystemExit(f"Expected at least 40 charting CSVs, found {len(chart_files)}")
+          out = Path(".cache/tbt/offline-sources/charting-root.zip")
+          with zipfile.ZipFile(out, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as z:
+              for p in chart_files:
+                  z.write(p, p.name)
+          print(f"ATP source files: {len(files)}")
+          print(f"Charting CSV files: {len(chart_files)}")
+          PY
+
+      - name: Download checksum-verified private history
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          directory = Path(".cache/tbt/offline-enrichment/history")
+          store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory)
+          store.download(require_bundle_manifest=True)
+          PY
+
+      - name: Link offline ATP and charting stats to canonical history
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t sources < .cache/tbt/offline-sources/atp_sources.txt
+          args=()
+          for f in "${sources[@]}"; do
+            args+=(--source-csv "$f")
+          done
+          python scripts/link_offline_serve_return.py             --history-dir .cache/tbt/offline-enrichment/history             "${args[@]}"             --charting-zip .cache/tbt/offline-sources/charting-root.zip             --out-dir .cache/tbt/offline-enrichment/link
+
+      - name: Validate linker report
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path(".cache/tbt/offline-enrichment/link/report.json").read_text())
+          c = r.get("counts") or {}
+          summary = {
+              "canonical_rows": r.get("canonical_rows"),
+              "source_rows": r.get("source_rows"),
+              "identity_linked": c.get("identity_linked", 0),
+              "staged_matches": c.get("staged_matches", 0),
+              "already_present": c.get("already_present", 0),
+              "unmatched": c.get("unmatched", 0),
+              "ambiguous": c.get("ambiguous", 0),
+              "weak_evidence": c.get("weak_evidence", 0),
+              "stat_conflict_matches": c.get("stat_conflict_matches", 0),
+              "quality_ready_before": r.get("quality_ready_before"),
+              "quality_ready_projected_after": r.get("quality_ready_projected_after"),
+              "quality_ready_projected_added": r.get("quality_ready_projected_added"),
+              "api_requests": r.get("api_requests"),
+          }
+          print("Offline linker:", json.dumps(summary, ensure_ascii=False))
+          if int(r.get("source_rows") or 0) < 200000:
+              raise SystemExit("Unexpectedly small offline source coverage")
+          if int(r.get("api_requests") or -1) != 0:
+              raise SystemExit("Offline linker unexpectedly used provider API")
+          if int(c.get("staged_matches") or 0) <= 0 and int(c.get("already_present") or 0) <= 0:
+              raise SystemExit("No safe linked rows available")
+          PY
+
+      - name: Dry-run strict canonical importer
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/offline-enrichment/link/auto_linked.jsonl             --history-dir .cache/tbt/offline-enrichment/history             --out-dir .cache/tbt/offline-enrichment/dry-run
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path(".cache/tbt/offline-enrichment/dry-run/report.json").read_text())
+          c = r.get("counts") or {}
+          summary = {
+              "stage_rows": r.get("stage_rows"),
+              "updated": c.get("updated", 0),
+              "already_present": c.get("already_present", 0),
+              "identity_missing": c.get("identity_missing", 0),
+              "identity_changed": c.get("identity_changed", 0),
+              "invalid_stats": c.get("invalid_stats", 0),
+              "stat_conflicts": c.get("stat_conflicts", 0),
+              "quality_ready_before": r.get("quality_ready_before"),
+              "quality_ready_after": r.get("quality_ready_after"),
+              "quality_ready_added": r.get("quality_ready_added"),
+              "changed_years": r.get("changed_years"),
+          }
+          print("Strict importer dry-run:", json.dumps(summary, ensure_ascii=False))
+          for key in ("identity_missing", "identity_changed", "invalid_stats", "stat_conflicts"):
+              if int(c.get(key) or 0):
+                  raise SystemExit(f"Strict importer rejected rows: {key}={c.get(key)}")
+          if int(c.get("updated") or 0) <= 0 and int(c.get("already_present") or 0) <= 0:
+              raise SystemExit("No verified enrichment rows")
+          PY
+
+      - name: Write verified enrichment into local private history
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/offline-enrichment/link/auto_linked.jsonl             --history-dir .cache/tbt/offline-enrichment/history             --out-dir .cache/tbt/offline-enrichment/write             --write-partitions             --write-history-dir .cache/tbt/offline-enrichment/history
+
+      - name: Validate and publish changed private history bundle
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          directory = Path(".cache/tbt/offline-enrichment/history")
+          report = json.loads(Path(".cache/tbt/offline-enrichment/write/report.json").read_text())
+          years = [int(year) for year in report.get("changed_years") or []]
+          if not years:
+              print("No changed partitions; nothing to publish.")
+              raise SystemExit(0)
+
+          matches, safety = sanitize_history_identities(load_partitions(directory))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Identity safety failed after offline enrichment")
+          paths = [directory / f"history-{year:04d}.parquet" for year in years]
+          paths.append(directory / "history_manifest.json")
+          if any(not path.is_file() or path.stat().st_size <= 0 for path in paths):
+              raise SystemExit("Changed history bundle is incomplete")
+
+          store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory)
+          store.upload_bundle(paths)
+          print(f"Published offline enrichment for years: {years}")
+          PY
+
+      - name: Verify committed private release
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          directory = Path(".cache/tbt/offline-enrichment/verify")
+          store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory)
+          store.download(require_bundle_manifest=True)
+          matches, safety = sanitize_history_identities(load_partitions(directory))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Committed history identity validation failed")
+          print(f"Committed private history verified: {len(matches)} rows")
+          PY
+
+      - name: Upload audit reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-offline-enrichment-${{ github.run_id }}
+          path: |
+            .cache/tbt/offline-enrichment/link/report.json
+            .cache/tbt/offline-enrichment/link/review.jsonl
+            .cache/tbt/offline-enrichment/link/quarantine.jsonl
+            .cache/tbt/offline-enrichment/dry-run/report.json
+            .cache/tbt/offline-enrichment/dry-run/review.jsonl
+            .cache/tbt/offline-enrichment/write/report.json
+            .cache/tbt/offline-enrichment/write/review.jsonl
+          if-no-files-found: warn
+          retention-days: 14
