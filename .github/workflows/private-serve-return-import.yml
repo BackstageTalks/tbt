@@ -88,7 +88,8 @@ jobs:
       - name: Install and test import code
         run: |
           set -euo pipefail
-          python -m pip install -r api/requirements-train.txt pytest
+          python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
+          python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
           python -m compileall -q scripts/normalize_private_serve_return.py scripts/import_private_serve_return.py
           python -m pytest tests/test_private_serve_return_normalizer.py -q
 
