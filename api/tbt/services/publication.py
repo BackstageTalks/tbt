@@ -273,11 +273,32 @@ def validate_market_publication_candidate(feed, ledger):
             ledger_row = ledger_index.get(event_id)
             if ledger_row is None:
                 raise RuntimeError(f"Market feed/ledger mismatch: {event_id} missing from ledger")
-            candidates = [
+            publications = [
                 item for item in ledger_row.get("market_publications", []) or []
                 if isinstance(item, dict)
-                and _market_commitment_from_publication(event_id, item) == commitment
             ]
+            candidates = [
+                item for item in publications
+                if _market_commitment_from_publication(event_id, item) == commitment
+            ]
+            if not candidates and section in {"top_daily", "prime", "value", "doubles"}:
+                # Legacy Match Winner publications created before betting-day
+                # persistence can still be validated exactly on every immutable
+                # field except the absent day. This is accepted only for one
+                # uniquely issued snapshot; ambiguity remains fail-closed.
+                legacy = []
+                for item in publications:
+                    stored = _market_commitment_from_publication(event_id, item)
+                    if (
+                        stored[:8] == commitment[:8]
+                        and stored[8] in (None, "")
+                        and stored[9:] == commitment[9:]
+                        and item.get("issued_at")
+                        and item.get("publication_status") == "published"
+                    ):
+                        legacy.append(item)
+                if len(legacy) == 1:
+                    candidates = legacy
             if not candidates:
                 raise RuntimeError(
                     f"Market feed/ledger mismatch for {section} event {event_id}; "
@@ -362,11 +383,10 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
             if not matches and legacy_dayless_matches:
                 matches = legacy_dayless_matches
 
-            if matches:
-                # Exact lifecycle duplicates are harmless for every market: they
-                # encode the same immutable public commitment. Collapse only
-                # byte-for-byte commitment signatures; conflicting snapshots stay
-                # distinct and therefore still fail closed below.
+            if section in {"ace", "double_faults", "sets", "games"} and matches:
+                # Projection lifecycle duplicates can be collapsed when they
+                # encode exactly the same immutable projection snapshot. Match
+                # Winner duplicates remain strict/ambiguous by design.
                 unique = {}
                 for publication in matches:
                     signature = _market_commitment_from_publication(commitment[0], publication)
