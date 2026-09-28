@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Strict read-only dry-run of legacy previous-match scores into canonical BlinQ history."""
+"""Strict dry-run/write of legacy previous-match scores into canonical BlinQ history."""
 from __future__ import annotations
 
 import argparse
@@ -14,7 +14,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "api"))
 
-from tbt.data.history_snapshot import load_partitions
+from tbt.data.history_snapshot import load_partitions, write_year_partition
 from tbt.data.history_safety import sanitize_history_identities
 from tbt.errors import ProviderError
 from tbt.match_format import exact_best_of_from_score_stats, explicit_best_of_from_event
@@ -128,7 +128,11 @@ def main() -> None:
     ap.add_argument("--history-dir", default=".cache/tbt/history")
     ap.add_argument("--legacy-dir", default=".cache/tbt-pro")
     ap.add_argument("--out-dir", default=".cache/tbt/legacy-score-dryrun")
+    ap.add_argument("--write-partitions", action="store_true")
+    ap.add_argument("--write-history-dir", default="")
     args = ap.parse_args()
+    if args.write_history_dir and not args.write_partitions:
+        ap.error("--write-history-dir requires --write-partitions")
 
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -189,6 +193,7 @@ def main() -> None:
     stage: list[dict[str, Any]] = []
     rejections: list[dict[str, Any]] = []
     projected_add = Counter()
+    changed_years: set[int] = set()
 
     for eid, event in unique_events.items():
         counts["unique_singles_events"] += 1
@@ -324,6 +329,10 @@ def main() -> None:
         if existing.get("deciding_set") is None and after_stats.get("deciding_set") is not None:
             projected_add["deciding_set"] += 1
 
+        if args.write_partitions:
+            match.stats = after_stats
+            changed_years.add(match.scheduled_at.year)
+
         stage.append({
             "schema": 1,
             "match_id": match.match_id,
@@ -346,6 +355,23 @@ def main() -> None:
     for key, value in projected_add.items():
         projected_after[key] = int(projected_after.get(key, 0)) + int(value)
 
+    actual_after = _coverage(matches)
+    if args.write_partitions:
+        for key, expected in projected_after.items():
+            if int(actual_after.get(key, 0)) != int(expected):
+                raise SystemExit(
+                    f"Coverage mismatch after local write for {key}: "
+                    f"expected={expected} actual={actual_after.get(key, 0)}"
+                )
+        target = Path(args.write_history_dir) if args.write_history_dir else out_dir / "history"
+        for year in sorted(changed_years):
+            write_year_partition(
+                matches,
+                target,
+                year,
+                extra_manifest={"coverage_status": "legacy_score_gap_fill_verified"},
+            )
+
     report = {
         "schema": 1,
         "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -359,13 +385,21 @@ def main() -> None:
         "coverage_before": before,
         "coverage_projected_add": dict(projected_add),
         "coverage_projected_after": projected_after,
+        "coverage_actual_after": actual_after if args.write_partitions else before,
+        "changed_years": sorted(changed_years),
+        "local_partitions_written": bool(args.write_partitions and changed_years),
+        "write_mode": bool(args.write_partitions),
         "policy": {
             "link": "exact provider event_id only",
             "identity": "exact home/away provider player IDs must equal canonical player IDs",
             "winner": "legacy winnerCode must agree with canonical winner when present",
             "score": "same strict tbt.providers.score.parse_event_score parser as production",
             "format": "structured score must prove BO3/BO5; provider/canonical conflicts fail closed",
-            "write": "dry-run only; no canonical history mutation",
+            "write": (
+                "verified local partition write; publication is external to this script"
+                if args.write_partitions
+                else "dry-run only; no canonical history mutation"
+            ),
         },
     }
     _write_jsonl_gz(out_dir / "stage.jsonl.gz", stage)
