@@ -249,6 +249,56 @@ def _market_commitment_from_publication(event_id, publication):
     )
 
 
+def _value_issuance_evidence_ready(feed_row: dict) -> tuple[bool, str]:
+    """Value must carry enough pre-match evidence to create an exact issue snapshot.
+
+    Historical rows are never reconstructed. This contract applies only to a
+    newly deployed Value card before its publication is confirmed.
+    """
+    if not isinstance(feed_row, dict):
+        return False, "invalid_card"
+    betting = feed_row.get("betting") if isinstance(feed_row.get("betting"), dict) else {}
+
+    def finite_number(value):
+        try:
+            number = float(value)
+        except (TypeError, ValueError):
+            return None
+        return number if number == number and abs(number) != float("inf") else None
+
+    odds = finite_number(betting.get("odds") if betting else feed_row.get("odds"))
+    fair = finite_number(
+        betting.get("fair_implied_probability")
+        if betting else feed_row.get("fair_implied_probability")
+    )
+    model = finite_number(
+        betting.get("model_probability")
+        if betting else feed_row.get("model_probability")
+    )
+    if odds is None or odds <= 1:
+        return False, "missing_real_odds"
+    if fair is None or not 0 < fair < 1:
+        return False, "missing_two_sided_fair_probability"
+    if model is None or not 0 < model < 1:
+        return False, "missing_model_probability"
+
+    quality = feed_row.get("quality")
+    if not isinstance(quality, dict):
+        return False, "missing_quality_snapshot"
+    for side in ("player1", "player2"):
+        row = quality.get(side)
+        if not isinstance(row, dict):
+            return False, "missing_quality_snapshot"
+        surface = finite_number(row.get("surface_matches"))
+        if surface is None or surface < 0:
+            return False, "missing_surface_sample"
+
+    depth = finite_number(feed_row.get("data_depth"))
+    if depth is None or not 0 <= depth <= 1:
+        return False, "missing_data_depth"
+    return True, ""
+
+
 def validate_market_publication_candidate(feed, ledger):
     """Bind every odds-backed section row to an exact ledger snapshot.
 
@@ -270,6 +320,13 @@ def validate_market_publication_candidate(feed, ledger):
         for feed_row in _section_feed_rows(feed, section, key):
             commitment = _market_commitment_from_feed_row(feed_row, section)
             event_id = commitment[0]
+            if section == "value":
+                ready, reason = _value_issuance_evidence_ready(feed_row)
+                if not ready:
+                    raise RuntimeError(
+                        f"Value issuance evidence incomplete for event {event_id}: {reason}; "
+                        "refusing deployment without an exact pre-match audit trail"
+                    )
             ledger_row = ledger_index.get(event_id)
             if ledger_row is None:
                 raise RuntimeError(f"Market feed/ledger mismatch: {event_id} missing from ledger")
@@ -958,6 +1015,11 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
                     # provenance is NOT implied by this presentation snapshot.
                     if evidence["model_probability"] == publication.get("model_probability"):
                         publication["issued_snapshot"] = evidence
+            if section == "value" and not isinstance(publication.get("issued_snapshot"), dict):
+                raise RuntimeError(
+                    f"Value issuance snapshot was not frozen for event {row.get('event_id')}; "
+                    "refusing to confirm an unauditable Value publication"
+                )
             newly_confirmed += 1
         row["market_publications"] = publications
         confirmed.append(row)
