@@ -4582,9 +4582,9 @@
       '365-day premium access; workspace permissions remain configurable in Admin.',
       'Top-tier access with duration managed in Admin.'
     ]);
-    const rawNote=String(p?.note||'').trim();
-    const featureHeading=legacyNotes.has(rawNote)?'':rawNote;
-    return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${lockedContext&&below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy">${planEyebrowHtml(p)}<strong>${escapeHtml(publicPlanLabel(id,title))}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:''}${featureHeading?`<p class="upgrade-feature-heading">${escapeHtml(featureHeading)}</p>`:''}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
+    const featureHeading=String(p?.note||'').trim();
+    const displayFeatureHeading=legacyNotes.has(featureHeading)?'':featureHeading;
+    return `<article class="upgrade-tier-card plan-${escapeHtml(id)}${required?' is-required':''}${lockedContext&&below?' is-below-required':''}">${note}<div class="upgrade-tier-top">${planAvatarPairHtml(id,p)}<div class="upgrade-tier-copy">${planEyebrowHtml(p)}<strong>${escapeHtml(publicPlanLabel(id,title))}</strong>${short?`<span>${escapeHtml(short)}</span>`:''}</div></div>${detail?`<p class="upgrade-tier-description">${escapeHtml(detail)}</p>`:''}${displayFeatureHeading?`<p class="upgrade-feature-heading">${escapeHtml(displayFeatureHeading)}</p>`:''}<ul class="upgrade-feature-list">${features.map(item=>`<li>${escapeHtml(item)}</li>`).join('')}</ul>${action}</article>`;
   }
   function showUpgradePrompt(planId='pro',sectionLabel='this content',lockedContext=false){
     const dialog=$('upgradeDialog'),host=$('upgradeDialogContent');if(!dialog||!host)return;
