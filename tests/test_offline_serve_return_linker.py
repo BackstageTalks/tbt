@@ -146,12 +146,54 @@ def test_charting_requires_exact_event_metadata_and_links(tmp_path):
 20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Roman Safiullin,Total,73,9,3,43,36,30,14,3,2,69,26,0,0,0,0,0,0
 20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Matteo Arnaldi,Total,69,3,2,37,27,32,16,8,5,73,23,0,0,0,0,0,0
 """
+    specialist = {
+        "charting-m-stats-ServeBasics.csv": """match_id,player,row,pts,pts_won,aces,unret,forced_err,pts_won_lte_3_shots,wide,body,t
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Roman Safiullin,Total,73,50,9,4,6,30,20,5,48
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Matteo Arnaldi,Total,69,43,3,3,4,20,18,3,48
+""",
+        "charting-m-stats-ReturnOutcomes.csv": """match_id,player,row,pts,pts_won,returnable,returnable_won,in_play,in_play_won,winners,total_shots
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Roman Safiullin,Total,69,26,60,24,54,22,2,300
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Matteo Arnaldi,Total,73,23,64,21,48,18,1,280
+""",
+        "charting-m-stats-ReturnDepth.csv": """match_id,player,row,returnable,shallow,deep,very_deep,unforced,err_net,err_deep,err_wide,err_wide_deep
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Roman Safiullin,Total,60,15,42,10,3,0,1,2,0
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Matteo Arnaldi,Total,64,22,36,8,6,1,2,3,0
+""",
+        "charting-m-stats-NetPoints.csv": """match_id,player,row,net_pts,pts_won,net_winner,induced_forced,net_unforced,passed_at_net,passing_shot_induced_forced,total_shots
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Roman Safiullin,NetPoints,20,15,8,5,1,1,0,90
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Matteo Arnaldi,NetPoints,10,5,2,2,2,1,0,60
+""",
+        "charting-m-stats-KeyPointsServe.csv": """match_id,player,row,pts,pts_won,first_in,aces,svc_winners,rally_winners,rally_forced,unforced,dfs
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Roman Safiullin,BP,10,7,7,1,2,1,2,1,1
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Matteo Arnaldi,BP,8,4,5,0,1,1,1,2,1
+""",
+        "charting-m-stats-KeyPointsReturn.csv": """match_id,player,row,pts,pts_won,rally_winners,rally_forced,unforced
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Roman Safiullin,BPO,8,4,1,1,1
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Matteo Arnaldi,BPO,10,3,0,1,2
+""",
+        "charting-m-stats-ShotTypes.csv": """match_id,player,row,shots,pt_ending,winners,induced_forced,unforced,serve_return,shots_in_pts_won,shots_in_pts_lost
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Roman Safiullin,Total,280,50,20,15,15,60,120,160
+20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi,Matteo Arnaldi,Total,270,50,12,10,28,64,100,170
+""",
+    }
     with zipfile.ZipFile(zpath, "w") as zf:
         zf.writestr("charting-m-matches.csv", matches_csv)
         zf.writestr("charting-m-stats-Overview.csv", overview_csv)
+        for name, payload in specialist.items():
+            zf.writestr(name, payload)
     report, staged, review, quarantine = run_linker(tmp_path, [canonical()], charting=zpath)
     assert report["counts"]["identity_linked"] == 1
     assert len(staged) == 1
     assert not review
     assert not quarantine
-    assert staged[0]["incoming_stats"]["p1_return_points_won"] == 26 / 69
+    stats = staged[0]["incoming_stats"]
+    assert stats["p1_return_points_won"] == 26 / 69
+    assert stats["p1_first_strike_serve_win"] == 30 / 73
+    assert stats["p2_first_strike_serve_win"] == 20 / 69
+    assert stats["p1_return_in_play_rate"] == 54 / 60
+    assert stats["p1_return_deep_rate"] == 42 / 60
+    assert stats["p1_break_point_serve_win"] == 7 / 10
+    assert stats["p1_break_point_return_win"] == 4 / 8
+    assert stats["p1_net_points_win"] == 15 / 20
+    assert stats["p1_attacking_points_rate"] == 35 / 50
+    assert stats["p1_unforced_error_rate"] == 15 / 50
