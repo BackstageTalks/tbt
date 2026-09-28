@@ -4146,7 +4146,18 @@
       if(t.dataset.adminHeroRotate!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.auto_rotate=t.checked;renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
-      if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/_size$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;renderAllUiContent();rerenderAdmin();}return;}
+      if(simpleBanner&&t.dataset.simpleBannerField){
+        const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];
+        if(item){
+          item.content=item.content||{};
+          item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/_size$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;
+          const previewIndex=activeAdminBanners().findIndex(entry=>entry.id===id);
+          if(previewIndex>=0)state.adminPreviewIndex=previewIndex;
+          renderAllUiContent();
+          rerenderAdmin();
+        }
+        return;
+      }
       if(t.dataset.adminKpiIndex!==undefined&&t.dataset.adminKpiField){
         const index=Number(t.dataset.adminKpiIndex),field=t.dataset.adminKpiField;
         if(!Number.isInteger(index)||index<0||index>=3)return;
@@ -4184,6 +4195,8 @@
       if(!item)return;
       item.content=item.content||{};
       item.content[field]=t.value;
+      const previewIndex=activeAdminBanners().findIndex(entry=>entry.id===wrap?.dataset?.simpleBanner);
+      if(previewIndex>=0)state.adminPreviewIndex=previewIndex;
       syncAdminHeroPreview();
     };
     startAdminHeroPreview();
