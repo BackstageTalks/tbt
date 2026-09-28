@@ -824,6 +824,24 @@
       "legend",
       "goat"
     ],
-    "info_min_level": "rookie"
+    "info_min_level": "rookie",
+    "live_history": {
+      "comeback": {
+        "levels": [
+          "elite",
+          "legend",
+          "goat"
+        ],
+        "hours": 72
+      },
+      "set2": {
+        "levels": [
+          "elite",
+          "legend",
+          "goat"
+        ],
+        "hours": 72
+      }
+    }
   }
 }

@@ -1403,6 +1403,16 @@
     const normalized=membershipHierarchy.includes(String(minPlan||'').toLowerCase())?String(minPlan).toLowerCase():'rookie';
     const index=Math.max(0,membershipHierarchy.indexOf(normalized));return membershipHierarchy.slice(index);
   }
+  function liveHistoryAccessRule(kind){
+    const liveLevels=membershipLevelsFrom(notificationAudienceConfig().live_min_level);
+    const raw=state.ui?.notifications?.live_history?.[kind];
+    const levels=Array.isArray(raw?.levels)
+      ?raw.levels.map(level=>String(level||'').toLowerCase()).filter((level,index,list)=>liveLevels.includes(level)&&list.indexOf(level)===index)
+      :[...liveLevels];
+    const parsed=Number(raw?.hours);
+    const hours=[0,24,48,72].includes(parsed)?parsed:72;
+    return {levels,hours};
+  }
   function membershipAtLeast(plan,minPlan='rookie'){
     if(String(plan||'').toLowerCase()==='admin')return true;
     const current=membershipHierarchy.indexOf(String(plan||'').toLowerCase()),required=membershipHierarchy.indexOf(String(minPlan||'').toLowerCase());
@@ -3461,6 +3471,18 @@
     const allLevels=membershipHierarchy.filter(level=>allowed.has(level));
     const selectedLevels=new Set(levels.length?levels:(itemIsLive?liveLevels:notificationCfg.info_default_levels));
     const levelChecks=allLevels.map(level=>{const disabled=itemIsLive?!liveLevels.includes(level):!infoLevels.includes(level);return `<label class="admin-insight-level${disabled?' is-disabled':''}"><input type="checkbox" name="insight_level" value="${level}" ${selectedLevels.has(level)&&!disabled?'checked':''} ${disabled?'disabled':''}><span>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,''))}</span></label>`;}).join('');
+    const comebackHistory=liveHistoryAccessRule('comeback'),set2History=liveHistoryAccessRule('set2');
+    const historyLevelChecks=(kind,rule)=>liveLevels.map(level=>`<label class="admin-insight-level"><input type="checkbox" data-live-history-level="${kind}" value="${level}" ${rule.levels.includes(level)?'checked':''}><span>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,''))}</span></label>`).join('');
+    const historyHoursOptions=selected=>[[0,'0 h · skryť'],[24,'24 h'],[48,'48 h'],[72,'72 h']].map(([hours,label])=>`<option value="${hours}"${selected===hours?' selected':''}>${label}</option>`).join('');
+    const liveHistoryAccess=`<div class="admin-notification-access-grid">
+      <div class="admin-live-access-rule"><div><small>HISTÓRIA COMEBACK</small><strong>Kto vidí vyhodnotené Comeback výsledky</strong><span>LIVE signály ostávajú bez zmeny. Toto riadi iba kartu Výsledky po vyhodnotení.</span></div>
+        <fieldset class="admin-insight-audience"><legend>Levely</legend><div>${historyLevelChecks('comeback',comebackHistory)}</div></fieldset>
+        <label><span>Dostupná história</span><select id="adminLiveHistoryComebackHours">${historyHoursOptions(comebackHistory.hours)}</select></label></div>
+      <div class="admin-live-access-rule"><div><small>HISTÓRIA 2. SET</small><strong>Kto vidí vyhodnotené výsledky 2. setu</strong><span>0 h znamená, že používateľská história je skrytá; Admin ju stále vidí.</span></div>
+        <fieldset class="admin-insight-audience"><legend>Levely</legend><div>${historyLevelChecks('set2',set2History)}</div></fieldset>
+        <label><span>Dostupná história</span><select id="adminLiveHistorySet2Hours">${historyHoursOptions(set2History.hours)}</select></label></div>
+      <div class="admin-insight-actions"><button class="btn btn-primary" type="button" data-admin-action="save-live-history-access">Uložiť históriu LIVE</button></div>
+    </div>`;
     const liveTypes=new Set(['alert','live_watch','set2']);
     const infoEntries=list.filter(row=>!liveTypes.has(String(row.type||'').toLowerCase()));
     const liveEntries=list.filter(row=>liveTypes.has(String(row.type||'').toLowerCase()));
@@ -3491,6 +3513,8 @@
       <div class="admin-subsection-heading"><div><strong>LIVE zápisy · Comeback a 2. set</strong><span>${state.adminInsightsLoading?'Načítavam…':liveEntries.length+' správ'}</span></div></div>
       <p class="admin-live-delete-help">Zmaže upozornenie z LIVE panela. Automaticky vytvorený zápis sa po vymazaní už neobnoví ďalším scanom.</p>
       ${state.adminInsightsLoading?'<div class="admin-note">Načítavam LIVE zápisy…</div>':liveRows||'<div class="admin-note">Žiadne LIVE zápisy.</div>'}
+      <div class="admin-subsection-heading"><div><strong>Prístup k vyhodnotenej histórii</strong><span>0 / 24 / 48 / 72 h</span></div></div>
+      ${liveHistoryAccess}
       <div class="admin-subsection-heading"><div><strong>Vyhodnotené LIVE výsledky</strong><span>${state.adminLiveResultsLoading?'Načítavam…':results.length+' výsledkov'}</span></div></div>
       <p class="admin-live-delete-help">Výsledky Comeback a 2. setu sa mažú samostatne od správ. Vymazané výsledky sa pri opakovanom vyhodnocovaní neobnovia.</p>
       ${state.adminLiveResultsError?`<div class="admin-runtime-note is-error">${escapeHtml(state.adminLiveResultsError)}</div>`:''}
@@ -4124,7 +4148,19 @@
       }
       if(action==='insight-audience-preset'){const form=$('adminInsightForm');if(!form)return;const preset=String(actionNode.dataset.audiencePreset||'all'),wanted=new Set(adminAudiencePresetLevels(preset)),live=String($('adminInsightType')?.value||'vip')==='alert',cfg=notificationAudienceConfig(),allowed=new Set(membershipLevelsFrom(live?cfg.live_min_level:cfg.info_min_level));form.querySelectorAll('input[name="insight_level"]').forEach(node=>{node.checked=!node.disabled&&wanted.has(node.value)&&allowed.has(node.value);});return;}
       if(action==='save-info-access'){const value=String($('adminInfoMinLevel')?.value||'rookie').toLowerCase();state.ui.notifications=state.ui.notifications||{};state.ui.notifications.info_min_level=membershipHierarchy.includes(value)?value:'rookie';state.ui.notifications.info_default_levels=membershipLevelsFrom(state.ui.notifications.info_min_level);const saved=await publishUiConfig();if(saved!==false)showStatus(`Predvolené INFO publikum bolo nastavené od ${publicPlanLabel(state.ui.notifications.info_min_level,state.ui?.plans?.[state.ui.notifications.info_min_level]?.label||'')}.`);return;}
-      if(action==='save-live-access'){const value=String($('adminLiveMinLevel')?.value||'elite').toLowerCase();state.ui.notifications=state.ui.notifications||{};state.ui.notifications.live_min_level=membershipHierarchy.includes(value)?value:'elite';state.ui.notifications.default_min_level=state.ui.notifications.live_min_level;state.ui.notifications.default_levels=membershipLevelsFrom(state.ui.notifications.live_min_level);const saved=await publishUiConfig();if(saved!==false)showStatus(`LIVE prístup bol nastavený od ${String(upgradePlanLabel(state.ui.notifications.live_min_level)||state.ui.notifications.live_min_level).replace(/^BlinQ\s+/i,'').toUpperCase()}.`);return;}
+      if(action==='save-live-access'){const value=String($('adminLiveMinLevel')?.value||'elite').toLowerCase();state.ui.notifications=state.ui.notifications||{};state.ui.notifications.live_min_level=membershipHierarchy.includes(value)?value:'elite';state.ui.notifications.default_min_level=state.ui.notifications.live_min_level;state.ui.notifications.default_levels=membershipLevelsFrom(state.ui.notifications.live_min_level);const allowedHistory=new Set(state.ui.notifications.default_levels);const history=state.ui.notifications.live_history||{};for(const kind of ['comeback','set2']){if(Array.isArray(history?.[kind]?.levels))history[kind].levels=history[kind].levels.filter(level=>allowedHistory.has(level));}state.ui.notifications.live_history=history;const saved=await publishUiConfig();if(saved!==false)showStatus(`LIVE prístup bol nastavený od ${String(upgradePlanLabel(state.ui.notifications.live_min_level)||state.ui.notifications.live_min_level).replace(/^BlinQ\s+/i,'').toUpperCase()}.`);return;}
+      if(action==='save-live-history-access'){
+        const hours=value=>[0,24,48,72].includes(Number(value))?Number(value):72;
+        const levels=kind=>[...host.querySelectorAll(`[data-live-history-level="${kind}"]:checked`)].map(node=>String(node.value||'').toLowerCase()).filter(level=>membershipHierarchy.includes(level));
+        state.ui.notifications=state.ui.notifications||{};
+        state.ui.notifications.live_history={
+          comeback:{levels:levels('comeback'),hours:hours($('adminLiveHistoryComebackHours')?.value)},
+          set2:{levels:levels('set2'),hours:hours($('adminLiveHistorySet2Hours')?.value)}
+        };
+        const saved=await publishUiConfig();
+        if(saved!==false)showStatus('Prístup k LIVE histórii bol uložený.');
+        return;
+      }
       if(action==='live-radar-scan'){if(state.adminLiveRadarLoading)return;state.adminLiveRadarLoading=true;state.adminLiveRadarStatus=null;rerenderAdmin();try{const result=await BlinqAuth.adminLiveRadar(true,true);state.adminLiveRadarStatus={...result,ok:true,new_alerts:Number(result?.created)||0};state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus(`LIVE Radar: ${Number(result?.signals?.length??result?.signals)||0} signálov · ${Number(result?.created)||0} nových upozornení.`);}catch(error){state.adminLiveRadarStatus={error:error.message||'LIVE Radar sa nepodarilo spustiť.'};showStatus(state.adminLiveRadarStatus.error);}finally{state.adminLiveRadarLoading=false;rerenderAdmin();}return;}
       if(action==='diagnostics'){loadAdminDiagnostics(true);return;}
       if(action==='copy-diagnostics'){
