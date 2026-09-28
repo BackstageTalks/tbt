@@ -34,6 +34,13 @@ jobs:
           path: .cache/tbt-pro
           token: ${{ secrets.TBT_DATA_GH_TOKEN }}
           fetch-depth: 1
+          sparse-checkout: |
+            data/marq_ai/odds_snapshots/events
+            blinq/data/form/previous_matches
+            thinq/data/players
+            thinq/data/ta_profiles
+            thinq/data/elo
+          sparse-checkout-cone-mode: true
 
       - uses: actions/setup-python@v5
         with:
