@@ -40,6 +40,19 @@ assert.equal(app.includes("if(!location&&rawName.includes(','))"),false);
 
 // Membership: all tier feature copy comes from JSON; generic Upgrade isn't a locked-content prompt.
 for (const id of ['rookie','pro','elite','legend','goat']) assert.ok(Array.isArray(tiers.tiers[id].features) && tiers.tiers[id].features.length);
+assert.match(app,/if\(Array\.isArray\(data\.features\)\)p\.features=data\.features\.map/);
+assert.match(app,/p\.note=String\(data\.short_description\|\|data\.description\|\|''\)\.trim\(\)/);
+for (const legacy of [
+  'Entry access to the BlinQ workspace.',
+  'Full core predictions and tournaments.',
+  'The highest publicly available BlinQ tier.',
+  'Private all-access'
+]) {
+  assert.equal(tiers.tiers.rookie.description === legacy, false);
+  assert.equal(tiers.tiers.pro.description === legacy, false);
+  assert.equal(tiers.tiers.legend.description === legacy, false);
+  assert.equal(tiers.tiers.goat.card_title === legacy, false);
+}
 assert.match(app,/showUpgradePrompt\(plan,section\)/);
 assert.match(app,/lockedContext/);
 
