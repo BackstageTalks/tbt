@@ -1089,9 +1089,18 @@
   },
   "dashboard": {
     "kpi_cards": [
-      {"metric": "today_picks", "period": "today"},
-      {"metric": "model_success", "period": "auto"},
-      {"metric": "avg_odds", "period": "today"}
+      {
+        "metric": "today_picks",
+        "period": "today"
+      },
+      {
+        "metric": "model_success",
+        "period": "auto"
+      },
+      {
+        "metric": "avg_odds",
+        "period": "today"
+      }
     ],
     "sections": {
       "prime": {
@@ -2345,7 +2354,25 @@
       "legend",
       "goat"
     ],
-    "info_min_level": "rookie"
+    "info_min_level": "rookie",
+    "live_history": {
+      "comeback": {
+        "levels": [
+          "elite",
+          "legend",
+          "goat"
+        ],
+        "hours": 72
+      },
+      "set2": {
+        "levels": [
+          "elite",
+          "legend",
+          "goat"
+        ],
+        "hours": 72
+      }
+    }
   },
   "asset_revision": 7360,
   "ui_copy": {
