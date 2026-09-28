@@ -79,21 +79,28 @@ def test_ui_never_renders_filler_as_a_real_quote():
     assert "nie historický kurz ani odhad modelu" in APP
 
 
-def test_historical_display_stays_separate_from_verified_financial_kpis():
+def test_ace_df_results_kpis_use_displayed_normalized_or_real_api_odds_without_rewriting_ledger():
     assert "function resultVisibleOdds(publication)" in APP
     assert "function resultVisibleUnits(publication,outcome,odds)" in APP
-    assert "const displayUnits=resultVisibleUnits(publication,outcome,resultVisibleOdds(publication))" in APP
+    assert "function aceDfResultKpiOdds(publication)" in APP
+    assert "const aceDfKpiOdds=aceDfResultKpiOdds(publication)" in APP
+    assert "outcome.kind==='win'?aceDfKpiOdds-1" in APP
+    assert "outcome.kind==='loss'?-1" in APP
+    assert "const aceDfCategory=category==='ace'||category==='double_faults'" in APP
+    assert "const displayOdds=aceDfResultKpiOdds(publication)" in APP
+    assert "stake+=1" in APP
+    assert "profit+=units" in APP
+    assert "aceDfNormalizedKpis:aceDfCategory" in APP
+    assert "1u result ROI from normalized legacy / real API odds" in APP
+    assert "1u per settled Aces/DF pick" in APP
     assert "const unitsText=Number.isFinite(displayUnits)?" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits>0?'correct'" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits<0?'wrong'" in APP
     assert "const entries=settledPublishedEntries(rows,category)" in APP
-    assert "const actualOdds=publication?.odds==null?NaN:Number(publication.odds)" in APP
     assert "const realStake=publication?.result?.staked_units" in APP
     assert "function localResultMetrics(rows,category)" in APP
     assert "return metricCards([" in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
-    assert "projectionCategory" not in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
-    assert "+Number(p.result?.profit_units||0)" not in APP[APP.index("function localResultMetrics("):APP.index("function renderResults()")]
-    # Historical display-only prices still do not change actual real-money ROI.
+    # The legacy feed/ledger remains untouched; normalization is a Results presentation KPI.
     assert "historical_display_placeholder_scope" in historical_display_placeholder(publication(), event_id="1001")
     assert round(1.66 - 1, 2) == .66
     assert round(1.52 - 1, 2) == .52
