@@ -15,7 +15,9 @@
         "1 Value pick denne",
         "Základný dashboard"
       ],
-      "eyebrow": ""
+      "eyebrow": "",
+      "upgrade_description": "Bezplatná úroveň BlinQ bez časového obmedzenia. Denne sprístupní 1 TOP, 1 Short Odds a 1 Value predikciu.",
+      "account_description": "Na zoznámenie s BlinQ. Každý deň dostaneš malý výber predikcií a môžeš si v pokoji pozrieť, ako BlinQ pracuje s dátami."
     },
     "pro": {
       "label": "BlinQ PRO",
@@ -31,7 +33,9 @@
         "3 Value picky denne",
         "Plný dashboard"
       ],
-      "eyebrow": ""
+      "eyebrow": "",
+      "upgrade_description": "Plný dashboard a denný prístup k hlavným predikciám BlinQ.",
+      "account_description": "Keď chceš vidieť o niečo viac. Širší denný výber a viac priestoru sledovať BlinQ pravidelne, bez zbytočností navyše."
     },
     "elite": {
       "label": "BlinQ ELITE",
@@ -48,7 +52,9 @@
         "See All",
         "Overview + pokročilé analýzy"
       ],
-      "eyebrow": ""
+      "eyebrow": "",
+      "upgrade_description": "VIP skupina, See All, Overview a premium analytický prístup.",
+      "account_description": "Tu sa BlinQ začína otvárať naplno. Celá ponuka, See All, Overview, VIP obsah a podrobnejší pohľad na to, čo stojí za jednotlivými predikciami."
     },
     "legend": {
       "label": "BlinQ LEGEND",
@@ -64,7 +70,9 @@
         "Pokročilé štatistiky výkonu",
         "Dlhodobý analytický prehľad"
       ],
-      "eyebrow": ""
+      "eyebrow": "",
+      "upgrade_description": "ELITE plus výsledky a pokročilé štatistiky výkonu.",
+      "account_description": "Nestačí vedieť čo. Zaujímavé je aj prečo. K ELITE pribúdajú výsledky, história a pokročilejšie štatistiky, vďaka ktorým môžeš sledovať BlinQ v širšom kontexte."
     },
     "goat": {
       "label": "BlinQ GOAT",
@@ -80,7 +88,9 @@
         "Partner / reklamné privilégiá",
         "Výhoda na reklamný banner"
       ],
-      "eyebrow": ""
+      "eyebrow": "",
+      "upgrade_description": "Najvyššia úroveň BlinQ s kompletným prístupom; platnosť nastavuješ v Admin → Členstvá.",
+      "account_description": "Všetko, čo BlinQ ponúka, na jednom mieste. Kompletný prístup bez ďalších úrovní nad tebou. Dáta, analytika aj funkcie v ich plnom rozsahu."
     }
   }
 }
