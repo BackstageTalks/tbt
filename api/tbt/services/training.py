@@ -25,7 +25,11 @@ PRODUCTION_FEATURE_NAMES = [
 
 def _new_production_ensemble() -> TennisEnsemble:
     """Governed candidate model with experimentally unproven rich fields off."""
-    return TennisEnsemble(feature_names=PRODUCTION_FEATURE_NAMES)
+    model = TennisEnsemble()
+    # Assign after construction so test doubles and legacy constructors that
+    # accept no feature_names argument remain compatible.
+    model.feature_names = list(PRODUCTION_FEATURE_NAMES)
+    return model
 
 
 
