@@ -56,6 +56,8 @@ from tbt.services.admin_storage import (
     banner_analytics_summary,
     load_runtime_ui_config,
     load_effective_ui_config,
+    list_runtime_ui_snapshots,
+    load_runtime_ui_snapshot,
     record_banner_event,
     save_runtime_ui_config,
     list_insights,
@@ -64,10 +66,14 @@ from tbt.services.admin_storage import (
     mark_insight_read,
     save_live_worker_status,
     load_live_worker_status,
+    save_match_status_snapshot,
+    load_match_status_snapshot,
     save_account_worker_status,
     load_account_worker_status,
     live_min_level,
     membership_levels_from,
+    list_live_radar_results,
+    delete_live_radar_result,
 )
 from tbt.services.content_news import news_pool
 from tbt.services.media_storage import (
@@ -78,7 +84,14 @@ from tbt.services.push_notifications import (
 )
 from tbt.services.ops_storage import record_system_event, list_system_events
 from tbt.services.feed import read_feed, visible_feed
+from tbt.services.dashboard_kpis import selected_dashboard_cards
 from tbt.providers.rapidapi import RapidTennisClient
+from tbt.providers.shared_budget import (
+    reserve as reserve_shared_api_budget,
+    status as shared_api_budget_status,
+    SharedBudgetExhausted,
+    SharedBudgetUnavailable,
+)
 from tbt.services.entitlements import (
     filter_feed_for_access,
     match_detail_entitlements,
@@ -90,7 +103,9 @@ from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnost
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
     attach_second_set_odds, set2_push_eligible, set2_push_thresholds,
+    settle_radar_results,
 )
+from tbt.services.match_status import event_ids_from_feed, scan_match_statuses
 from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_slot
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
@@ -131,6 +146,9 @@ _LIVE_RADAR_CACHE: tuple[float, dict] | None = None
 _LIVE_RADAR_CACHE_LOCK = Lock()
 _LIVE_RADAR_TTL_SECONDS = 45
 _LIVE_RADAR_LAST_PUBLISHED_SCAN: str | None = None
+_LIVE_ODDS_CACHE: dict[str, tuple[float, object]] = {}
+_LIVE_ODDS_CACHE_LOCK = Lock()
+_LIVE_ODDS_CACHE_SECONDS = 120.0
 
 
 def _banner_event_allowed(payload):
@@ -249,10 +267,11 @@ def _access_context_with_daily_allocation(user, account_data: dict, profile: dic
         try:
             save_daily_access_allocations(user.get("id"), day=state["day"], allocations=state["sections"])
         except AdminStorageUnavailable:
-            # Fail closed for stable-random rows rather than revealing a second
-            # pick if allocation persistence becomes unavailable mid-request.
-            context["_daily_allocations_fail_closed"] = True
-            return context
+            # The profile was read successfully. Reuse its existing assignment
+            # and the deterministic additions computed from it for this request;
+            # do not drop a FREE pick solely because the write was unavailable.
+            # The next successful request persists the same allocation.
+            logging.warning("Daily pick allocation write unavailable; serving the current computed assignment")
     context["_daily_allocations"] = state["sections"]
     context["_access_day"] = state["day"]
     return context
@@ -797,6 +816,12 @@ def match_intelligence(req):
             return response({**public_feed_result, "cached": False, "live_provider": False})
         try:
             client = RapidTennisClient(settings)
+            # Preserve a preconfigured remote ledger if one is present; Azure
+            # otherwise uses the same durable quota via its direct store.
+            if client.request_budget is None:
+                client.request_budget = (
+                    lambda *args, **kwargs: reserve_shared_api_budget("history")
+                )
             # Explicit opt-in still has a strict per-request ceiling. The default
             # production path above consumes zero online Tennis RapidAPI calls.
             client.request_limit = min(getattr(client, "request_limit", 9) or 9, 9)
@@ -1009,15 +1034,35 @@ def feed(req):
             return response({"error": "email_not_verified"}, 403)
         profile = _profile_for(user)
         account_data = public_account(user, cfg=settings, profile=profile)
-        data = visible_feed(read_feed(FEED))
+        source_feed = visible_feed(read_feed(FEED))
         try:
             runtime_ui, _, _ = load_effective_ui_config()
-            access_context = _access_context_with_daily_allocation(user, account_data, profile, data, runtime_ui)
-            data, entitlements = filter_feed_for_access(data, access_context, runtime_ui)
+            access_context = _access_context_with_daily_allocation(user, account_data, profile, source_feed, runtime_ui)
+            data, entitlements = filter_feed_for_access(source_feed, access_context, runtime_ui)
+            # Global admin-selected KPI scalars only. Never return unrestricted
+            # raw performance windows to accounts with limited Results access.
+            data["dashboard_kpi_cards"] = selected_dashboard_cards(source_feed, runtime_ui)
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
         data["account"] = account_data
         data["entitlements"] = entitlements
+        # Match outcomes are a tiny runtime overlay. They never mutate the
+        # immutable prediction feed; only statuses for rows this account can
+        # already see are returned.
+        try:
+            status_snapshot = load_match_status_snapshot() or {}
+            allowed_event_ids = event_ids_from_feed(data)
+            raw_statuses = status_snapshot.get("statuses")
+            raw_statuses = raw_statuses if isinstance(raw_statuses, dict) else {}
+            data["match_statuses"] = {
+                str(event_id): value
+                for event_id, value in raw_statuses.items()
+                if str(event_id) in allowed_event_ids and isinstance(value, dict)
+            }
+            data["match_status_updated_at"] = status_snapshot.get("updated_at")
+        except AdminStorageUnavailable:
+            data["match_statuses"] = {}
+            data["match_status_updated_at"] = None
         return response(data)
     except AuthUnavailable as exc:
         record_system_event("error", "feed", "Authentication service unavailable while serving feed", details={"error": exc.__class__.__name__})
@@ -1071,6 +1116,7 @@ def _public_live_radar_payload(result: dict) -> dict:
         "prime_total": int(result.get("prime_total") or 0),
         "prime_eligible": int(result.get("prime_eligible") or 0),
         "provider_skipped_reason": result.get("provider_skipped_reason"),
+        "budget_paused": bool(result.get("budget_paused")),
         "cached": bool(result.get("cached")),
         "alert_storage_unavailable": bool(result.get("alert_storage_unavailable")),
         "thresholds": result.get("thresholds") or {},
@@ -1134,15 +1180,12 @@ def _public_live_worker_heartbeat() -> dict:
         "updated_at": snapshot.get("updated_at"),
         "fresh": fresh,
         "age_seconds": age_seconds,
+        "budget_paused": bool(snapshot.get("budget_paused")),
     }
 
 
 def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
-    """Run/cached LIVE scan and publish idempotent alerts.
-
-    Production scheduling is handled by the autonomous LIVE worker workflow.
-    Browser polling is only a freshness fallback when the worker heartbeat is stale.
-    """
+    """One independently metered LIVE scan; odds cache never bypasses the quota."""
     global _LIVE_RADAR_CACHE, _LIVE_RADAR_LAST_PUBLISHED_SCAN
     now=time.monotonic(); fresh=False
     with _LIVE_RADAR_CACHE_LOCK:
@@ -1155,36 +1198,74 @@ def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
         prime_pool=feed_payload.get("prime_picks") if isinstance(feed_payload.get("prime_picks"),list) else []
         eligible_pool=[row for row in prime_pool if isinstance(row,dict) and prime_radar_eligible(row)]
         if not eligible_pool:
-            # Do not spend a provider request when there is no pre-match PRIME
-            # candidate that could possibly qualify for Comeback LIVE.
             scan=scan_comeback_radar(feed_payload,[])
             scan["provider_skipped_reason"]="no_eligible_prime_candidates"
         else:
-            client=RapidTennisClient(settings)
+            client=RapidTennisClient(
+                settings,
+                request_budget=lambda *args, **kwargs: reserve_shared_api_budget("live"),
+            )
+            # A single slow provider request must not exceed the SWA HTTP window.
+            client.configure_runtime_fast_fail(timeout_seconds=5,attempts=1)
+            client.request_limit=7  # 1 LIVE request + up to six eligible odds.
             try:
-                live_events=client.live_events()
-                scan=scan_comeback_radar(feed_payload,live_events)
-                odds_payloads={}
-                max_odds_events=max(0,min(12,int(os.getenv("BLINQ_LIVE_SET2_ODDS_MAX_EVENTS","6"))))
-                for candidate in (scan.get("candidates") or [])[:max_odds_events]:
-                    eid=str(candidate.get("event_id") or "").strip() if isinstance(candidate,dict) else ""
-                    if not eid:continue
-                    try:odds_payloads[eid]=client.event_odds(eid,provider_id=1)
-                    except Exception as exc:
-                        logging.info("Set-2 odds unavailable for %s: %s",eid,exc.__class__.__name__)
-                scan=attach_second_set_odds(scan,odds_payloads,live_events)
+                try:
+                    live_events=client.live_events()
+                except SharedBudgetExhausted:
+                    # Normal economic pause: no paid calls, no fabricated signals.
+                    scan=scan_comeback_radar(feed_payload,[])
+                    scan["provider_skipped_reason"]="shared_budget_exhausted"
+                    scan["budget_paused"]=True
+                else:
+                    scan=scan_comeback_radar(feed_payload,live_events)
+                    odds_payloads={}
+                    budget=shared_api_budget_status()
+                    scan["budget"]=budget
+                    remaining_live=int(budget["remaining"]["live"])
+                    remaining_global=int(budget["global_remaining"])
+                    default_odds=2  # Preserve LIVE feed headroom over optional odds.
+                    max_odds_events=max(0,min(6,int(os.getenv(
+                        "BLINQ_LIVE_SET2_ODDS_MAX_EVENTS",str(default_odds)))))
+                    if remaining_live < 200 or remaining_global < 500:
+                        max_odds_events=0
+                    with _LIVE_ODDS_CACHE_LOCK:
+                        stale=[key for key,(stamp,_) in _LIVE_ODDS_CACHE.items()
+                               if time.monotonic()-stamp >= _LIVE_ODDS_CACHE_SECONDS]
+                        for key in stale: _LIVE_ODDS_CACHE.pop(key,None)
+                    for candidate in (scan.get("candidates") or [])[:max_odds_events]:
+                        eid=str(candidate.get("event_id") or "").strip() if isinstance(candidate,dict) else ""
+                        if not eid:continue
+                        with _LIVE_ODDS_CACHE_LOCK:
+                            cached=_LIVE_ODDS_CACHE.get(eid)
+                            odds=cached[1] if cached and time.monotonic()-cached[0]<_LIVE_ODDS_CACHE_SECONDS else None
+                        if odds is not None:
+                            odds_payloads[eid]=odds
+                            continue
+                        try:
+                            odds=client.event_odds(eid,provider_id=1)
+                            odds_payloads[eid]=odds
+                            with _LIVE_ODDS_CACHE_LOCK:
+                                _LIVE_ODDS_CACHE[eid]=(time.monotonic(),odds)
+                        except SharedBudgetExhausted:
+                            scan["odds_paused_reason"]="shared_budget_exhausted"
+                            break
+                        except Exception as exc:
+                            logging.info("Set-2 odds unavailable for %s: %s",eid,exc.__class__.__name__)
+                    scan=attach_second_set_odds(scan,odds_payloads,live_events)
             finally:
                 try:client.close()
                 except Exception:pass
         scan["prime_total"]=len(prime_pool)
         scan["prime_eligible"]=len(eligible_pool)
         scan["cached"]=False; fresh=True
-        with _LIVE_RADAR_CACHE_LOCK:_LIVE_RADAR_CACHE=(time.monotonic(),dict(scan))
+        # A quota pause must not overwrite a successful cached LIVE snapshot.
+        if not scan.get("budget_paused"):
+            with _LIVE_RADAR_CACHE_LOCK:_LIVE_RADAR_CACHE=(time.monotonic(),dict(scan))
 
     pub={"published":[],"created":0,"watch_created":0,"confirmed_created":0}
     storage_unavailable=False
     scan_id=str(scan.get("scanned_at") or "")
-    should_publish=bool(publish and scan_id)
+    should_publish=bool(publish and scan_id and not scan.get("budget_paused"))
     with _LIVE_RADAR_CACHE_LOCK:
         if should_publish and not force and _LIVE_RADAR_LAST_PUBLISHED_SCAN==scan_id:
             should_publish=False
@@ -1197,9 +1278,10 @@ def _run_live_radar(*,force:bool=False,publish:bool=True)->dict:
             logging.warning("Comeback LIVE Radar alert storage unavailable")
         except Exception as exc:
             logging.exception("Comeback LIVE Radar alert publish failed")
-            return {**scan,**pub,"alert_storage_unavailable":False,"alert_publish_error":exc.__class__.__name__,"fresh_scan":fresh}
-    return {**scan,**pub,"alert_storage_unavailable":storage_unavailable,"fresh_scan":fresh}
-
+            return {**scan,**pub,"alert_storage_unavailable":False,
+                    "alert_publish_error":exc.__class__.__name__,"fresh_scan":fresh}
+    return {**scan,**pub,"alert_storage_unavailable":storage_unavailable,
+            "fresh_scan":fresh}
 
 def _insight_plan_for_user(user):
     """Resolve the membership level used by the private BlinQ Insights feed."""
@@ -1229,14 +1311,60 @@ def live_radar(req):
         # durable storage is temporarily unavailable, fall back to one cached
         # on-demand scan so eligible members/admin still get a usable service.
         snapshot=_live_worker_snapshot()
+        try:
+            results=list_live_radar_results(limit=60)
+        except AdminStorageUnavailable:
+            results=[]
         if snapshot is not None:
-            return response({**_public_live_radar_payload(snapshot),"autonomous":True})
+            return response({**_public_live_radar_payload(snapshot),"results":results,"autonomous":True})
+        # On a deliberate quota pause, serve the last heartbeat instead of
+        # triggering paid browser fallback scans on every page view.
+        last_status=load_live_worker_status() or {}
+        if last_status.get("budget_paused"):
+            return response({**_public_live_radar_payload(last_status),
+                             "results":results,"autonomous":True,"stale":True})
         r=_run_live_radar(force=False,publish=True)
-        return response({**_public_live_radar_payload(r),"autonomous":False,"fallback_scan":True})
+        return response({**_public_live_radar_payload(r),"results":results,"autonomous":False,"fallback_scan":True})
     except AuthUnavailable:return response({"error":"auth_unavailable"},503)
     except AdminStorageUnavailable:return response({"error":"live_radar_storage_unavailable"},503)
     except Exception as exc:
         logging.exception("Comeback LIVE Radar scan failed");return response({"error":"live_radar_unavailable"},503)
+
+
+@app.route(route="v1/internal/api-budget/reserve", methods=["POST"])
+def internal_api_budget_reserve(req):
+    """Secret-protected per-attempt reservation for external GitHub Actions."""
+    if not _live_worker_token_ok(req):
+        return response({"error":"forbidden"},403)
+    try:
+        data=req.get_json()
+        if not isinstance(data,dict):
+            return response({"error":"invalid_budget_request"},400)
+        purpose=str(data.get("purpose") or "").strip()
+        count=data.get("requests",1)
+        # External paid clients reserve exactly one attempt at a time.
+        if purpose not in {"live","match","refresh","history"} or type(count) is not int or count != 1:
+            return response({"error":"invalid_budget_request"},400)
+        result=reserve_shared_api_budget(purpose,count)
+        return response({"ok":True,"budget":result})
+    except SharedBudgetExhausted:
+        return response({"error":"api_budget_exhausted"},429)
+    except SharedBudgetUnavailable:
+        logging.exception("Shared API budget unavailable")
+        return response({"error":"api_budget_unavailable"},503)
+    except Exception:
+        logging.exception("Unexpected API budget reservation error")
+        return response({"error":"api_budget_unavailable"},503)
+
+
+@app.route(route="v1/admin/api-budget", methods=["GET"])
+def admin_api_budget(req):
+    admin,denied=_admin_user(req)
+    if denied:return denied
+    try:
+        return response({"ok":True,"budget":shared_api_budget_status()})
+    except SharedBudgetUnavailable:
+        return response({"error":"api_budget_unavailable"},503)
 
 
 @app.route(route="v1/internal/live-radar-worker", methods=["POST"])
@@ -1249,6 +1377,13 @@ def internal_live_radar_worker(req):
     try:
         result=_run_live_radar(force=True,publish=True)
         public=_public_live_radar_payload(result)
+        if public.get("budget_paused"):
+            previous=load_live_worker_status() or {}
+            public["last_error"]="api_budget_exhausted"
+            public["last_success_at"]=(
+                previous.get("last_success_at")
+                or (previous.get("scanned_at") if not previous.get("last_error") else None)
+            )
         persisted=True
         try:
             save_live_worker_status(public)
@@ -1269,6 +1404,86 @@ def internal_live_radar_worker(req):
         except Exception:
             pass
         return response({"error":"live_worker_failed","detail":exc.__class__.__name__},503)
+
+
+@app.route(route="v1/internal/match-status-worker", methods=["POST"])
+def internal_match_status_worker(req):
+    """Hourly result overlay for already-started prediction rows."""
+    if not str(os.getenv("BLINQ_LIVE_WORKER_TOKEN") or "").strip():
+        return response({"error": "live_worker_not_configured"}, 503)
+    if not _live_worker_token_ok(req):
+        return response({"error": "forbidden"}, 403)
+    try:
+        feed_payload = read_feed(FEED)
+        previous = load_match_status_snapshot() or {}
+        client = RapidTennisClient(
+            settings, request_budget=lambda *args, **kwargs: reserve_shared_api_budget("match")
+        )
+        # An earlier run hit the HTTP gateway after ~45s. This worker uses
+        # short batches and a bounded latency/request budget; all other users
+        # of RapidTennisClient retain their existing retry policy.
+        client.request_limit = max(4, min(12, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT", "8"))))
+        client.retry_attempts = 1
+        client.client.timeout = 4.0
+        try:
+            snapshot = scan_match_statuses(
+                feed_payload,
+                client,
+                previous,
+                max_checks=max(
+                    1,
+                    min(5, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS", "5"))),
+                ),
+                max_near_checks=max(
+                    1,
+                    min(5, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "5"))),
+                ),
+                max_wall_seconds=22.0,
+            )
+        finally:
+            try:
+                client.close()
+            except Exception:
+                pass
+        saved = save_match_status_snapshot(snapshot)
+        live_results = {"saved": 0, "comeback": 0, "set2": 0}
+        try:
+            live_results = settle_radar_results(snapshot.get("settled_events") or [])
+        except AdminStorageUnavailable:
+            logging.warning("LIVE Radar result storage unavailable during match settlement")
+        except Exception:
+            logging.exception("LIVE Radar result settlement failed")
+        if saved.get("degraded"):
+            logging.warning(
+                "Hourly match status provider failed: checked=%s requests=%s codes=%s",
+                saved.get("checked"),
+                saved.get("provider_requests"),
+                saved.get("provider_errors"),
+            )
+            return response({
+                "error": "match_status_provider_unavailable",
+                "autonomous": True,
+                "due": saved.get("due"),
+                "checked": saved.get("checked"),
+                "provider_requests": saved.get("provider_requests"),
+                "provider_errors": saved.get("provider_errors"),
+                "newly_resolved": saved.get("newly_resolved"),
+            }, 503)
+        return response({**saved, "autonomous": True, "live_results": live_results})
+    except AdminStorageUnavailable:
+        return response({"error": "match_status_storage_unavailable"}, 503)
+    except Exception as exc:
+        logging.exception("Hourly match status worker failed")
+        record_system_event(
+            "warning",
+            "match-status",
+            "Hourly match status worker failed",
+            details={"error": exc.__class__.__name__},
+        )
+        return response(
+            {"error": "match_status_worker_failed", "detail": exc.__class__.__name__},
+            503,
+        )
 
 
 @app.route(route="v1/internal/account-inactivity-worker", methods=["POST"])
@@ -1312,6 +1527,42 @@ def admin_live_radar(req):
     except AdminStorageUnavailable:return response({"error":"live_radar_storage_unavailable"},503)
     except Exception as exc:
         logging.exception("Admin LIVE Radar scan failed");return response({"error":"live_radar_unavailable","detail":exc.__class__.__name__},503)
+
+
+@app.route(route="v1/admin/live-radar/results", methods=["GET"])
+def admin_live_radar_results(req):
+    admin, denied = _admin_user(req)
+    if denied:
+        return denied
+    try:
+        return response({"items": list_live_radar_results(limit=200)})
+    except AdminStorageUnavailable:
+        return response({"error": "live_results_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/live-radar/results/{result_id}", methods=["DELETE"])
+def admin_live_radar_result_item(req):
+    admin, denied = _admin_user(req)
+    if denied:
+        return denied
+    result_id = str((req.route_params or {}).get("result_id") or "")
+    try:
+        result = delete_live_radar_result(
+            result_id, actor_id=str(admin.get("id") or "")
+        )
+        if result.get("deleted"):
+            record_system_event("info", "live-radar", "Admin removed LIVE result",
+                                details={"id": result_id, "kind": result.get("kind"),
+                                         "actor": str(admin.get("id") or "")})
+        return response(result)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "live_results_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
 
 
 @app.route(route="v1/push/config", methods=["GET"])
@@ -1570,6 +1821,21 @@ def admin_diagnostics(req):
             "configured": bool(str(getattr(settings, "rapidapi_key", "") or "").strip()),
             "host": str(getattr(settings, "rapidapi_host", "") or "")[:120],
         }
+        try:
+            api_budget = shared_api_budget_status()
+            api_budget["available"] = True
+            api_budget["alerts"] = [
+                {"name": name, "percent": int(100 * spent / cap)}
+                for name, spent, cap in (
+                    ("global", api_budget["global_spent"], api_budget["global_limit"]),
+                    *((kind, used, {"live": 2500, "match": 250,
+                                     "refresh": 750, "history": 8500}[kind])
+                      for kind, used in api_budget["spent"].items()),
+                )
+                if spent * 100 >= cap * 80
+            ]
+        except SharedBudgetUnavailable:
+            api_budget = {"available": False, "alerts": []}
         users_ok = False
         try:
             list_users(settings, page=1, per_page=1)
@@ -1592,6 +1858,8 @@ def admin_diagnostics(req):
             problems.append("firebase_admin_users_unavailable")
         if not storage_ok:
             problems.append("admin_storage_unavailable")
+        if not api_budget.get("available"):
+            problems.append("tennis_api_budget_unavailable")
         if not media.get("configured") or not media.get("available"):
             problems.append("media_storage_unavailable")
         if not worker_configured:
@@ -1657,6 +1925,7 @@ def admin_diagnostics(req):
             "assets": asset_health,
             "services": service_health,
             "provider": provider_health,
+            "api_budget": api_budget,
             "ops": ops,
             "problems": problems,
             "actor_id": actor.get("id"),
@@ -1931,7 +2200,13 @@ def admin_insight_item(req):
             return failure
         insight_id = str((req.route_params or {}).get("insight_id") or "")
         if req.method == "DELETE":
-            return response(delete_insight(insight_id))
+            result = delete_insight(insight_id, actor_id=str(admin.get("id") or ""))
+            if result.get("deleted"):
+                record_system_event("info", "insights", "Admin removed insight",
+                                    details={"id": insight_id,
+                                             "automated_live": bool(result.get("suppressed")),
+                                             "actor": str(admin.get("id") or "")})
+            return response(result)
         try:
             payload = req.get_json()
         except ValueError:
@@ -1943,6 +2218,38 @@ def admin_insight_item(req):
         return response({"error": "admin_storage_unavailable"}, 503)
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
+
+@app.route(route="v1/admin/ui-config/snapshots", methods=["GET"])
+def admin_ui_config_snapshots(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        return response({"snapshots": list_runtime_ui_snapshots()})
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/ui-config/snapshots/{snapshot_id}", methods=["GET"])
+def admin_ui_config_snapshot(req):
+    try:
+        actor, denied = _admin_user(req)
+        if denied:
+            return denied
+        snapshot_id = str(req.route_params.get("snapshot_id") or "")
+        item = load_runtime_ui_snapshot(snapshot_id)
+        if item is None:
+            return response({"error": "snapshot_not_found"}, 404)
+        return response({"id": snapshot_id, "config": item})
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AuthUnavailable:
+        return response({"error": "admin_auth_unavailable"}, 503)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+
 
 @app.route(route="v1/admin/ui-config", methods=["PUT"])
 def admin_ui_config(req):
