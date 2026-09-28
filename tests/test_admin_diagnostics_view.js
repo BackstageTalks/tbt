@@ -37,8 +37,28 @@ const healthy = {
     services: { premium_info: true, live_alert_history: true, admin_config: true },
   },
   assets: {
-    player_images: { ok: true, provider_or_proxy_refs: 139, total: 139, fallback_needed: 0 },
-    tournament_logos: { ok: true, provider_or_proxy_refs: 147, total: 147, fallback_needed: 0 },
+    player_images: { ok: true, deployed_assets: 139, provider_or_proxy_refs: 139, total: 139, fallback_needed: 0 },
+    tournament_logos: { ok: true, deployed_assets: 147, provider_or_proxy_refs: 147, total: 147, fallback_needed: 0 },
+    market_odds: {
+      required: {
+        ok: true, total: 20, priced: 20, missing: 0,
+        sections: {
+          short_odds: { total: 5, priced: 5, missing: 0 },
+          top: { total: 5, priced: 5, missing: 0 },
+          value: { total: 5, priced: 5, missing: 0 },
+          doubles: { total: 5, priced: 5, missing: 0 },
+        },
+      },
+      projections: {
+        total: 12, priced: 7, missing: 5,
+        sections: {
+          aces: { total: 3, priced: 2, missing: 1 },
+          double_faults: { total: 3, priced: 1, missing: 2 },
+          games: { total: 3, priced: 2, missing: 1 },
+          sets: { total: 3, priced: 2, missing: 1 },
+        },
+      },
+    },
   },
   services: { info_storage: true, live_data: true },
   live_worker: { configured: true, healthy: true, age_seconds: 55 },
@@ -63,24 +83,37 @@ const healthy = {
 
 const allGood = render(healthy);
 assert.match(allGood, /Všetky kontroly v poriadku/);
-assert.match(allGood, /<b>11<\/b> v poriadku/);
+assert.match(allGood, /<b>12<\/b> v poriadku/);
 assert.match(allGood, /admin-health-ok-details" open/);
 assert.match(allGood, /API ROZPOČET · LIVE RADAR/);
 assert.match(allGood, /LIVE využité/);
 assert.match(allGood, /6 \/ 2\s?500/);
 assert.match(allGood, /Spolu rezervované/);
 assert.match(allGood, /Obnoviť diagnostiku/);
+assert.match(allGood, /PREZENTAČNÁ COVERAGE · FOTO & KURZY/);
+assert.match(allGood, /20\/20 priced · 0 missing/);
+assert.match(allGood, /12\/7|7\/12 priced · 5 missing/);
 assert.ok(!allGood.includes('Treba skontrolovať'));
 
 const warnings = structuredClone(healthy);
-warnings.assets.tournament_logos = { ok: false, provider_or_proxy_refs: 104, total: 147, fallback_needed: 43 };
+warnings.assets.tournament_logos = { ok: false, deployed_assets: 104, provider_or_proxy_refs: 147, total: 147, fallback_needed: 43 };
 warnings.live_worker = { configured: true, healthy: false, age_seconds: 500 };
 const degraded = render(warnings);
 assert.match(degraded, /Funguje s upozorneniami/);
-assert.match(degraded, /<b>9<\/b> v poriadku/);
+assert.match(degraded, /<b>10<\/b> v poriadku/);
 assert.match(degraded, /<b>2<\/b> na kontrolu/);
 assert.match(degraded, /Treba skontrolovať/);
 assert.match(degraded, /Chýbajúce logá majú náhradný obrázok/);
+const missingOdds = structuredClone(healthy);
+missingOdds.assets.market_odds.required = {
+  ...missingOdds.assets.market_odds.required,
+  ok: false, total: 20, priced: 18, missing: 2,
+};
+const oddsWarning = render(missingOdds);
+assert.match(oddsWarning, /BETTING ODDS/);
+assert.match(oddsWarning, /18\/20 priced · 2 missing/);
+assert.match(oddsWarning, /market refresh/);
+
 assert.match(degraded, /Over externý cron, zhodný GitHub Secret/);
 assert.match(degraded, /<details class="admin-health-ok-details">/);
 assert.ok(!degraded.includes('TBT_LIVE_RADAR_ENABLED'), 'obsolete internal GitHub timers must not be recommended');

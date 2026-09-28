@@ -395,6 +395,9 @@ def _attach_player_assets(payload: dict, repository: str) -> dict:
                 "generated_at": tournament_payload.get("generated_at"),
                 "profiles_cached": len(tournament_profiles),
                 "logos_deployed": len(logos),
+                "tournament_ids_requested": len(tournament_ids),
+                "logo_coverage": round(len({Path(name).stem for name in logos}) / len(tournament_ids), 4) if tournament_ids else 0.0,
+                "logos_missing": max(0, len(tournament_ids) - len({Path(name).stem for name in logos})),
                 "presentation_only": True,
                 "fallback": "local_tournament_type_assets",
             }
