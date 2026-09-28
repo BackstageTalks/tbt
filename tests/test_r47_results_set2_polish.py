@@ -53,7 +53,7 @@ def test_shared_background_watermarks_and_free_membership_contract_survive_r47()
     assert 'wm-a' not in INDEX and 'wm-c' not in INDEX
     assert "if(id==='rookie')return 'FREE'" in APP
     assert 'data-reactivate-free' in APP
-    assert "detail=String(p.description||'').trim()" in APP
+    assert "detail=String(p.account_description||p.description||'').trim()" in APP
 
 
 def test_uniform_visible_results_labels_without_rewriting_settlement_data():
