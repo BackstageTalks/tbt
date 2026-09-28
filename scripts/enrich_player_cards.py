@@ -317,65 +317,40 @@ def _build_named_zip(source_dir: Path, zip_path: Path, prefix: str) -> None:
 
 
 def _current_players(feed: dict[str, Any]) -> list[dict[str, Any]]:
-    """Find individuals in every visible section, not only feed.upcoming.
-
-    Prediction sections/results can contain players omitted by the abbreviated
-    upcoming board. In doubles, a provider team ID is not a person's photo ID:
-    enrich its explicit member IDs instead, never fetch a team "headshot".
-    """
-    if not isinstance(feed, dict):
-        return []
+    """Return unique current players, prioritising the strongest visible picks."""
     scored: dict[str, dict[str, Any]] = {}
-    sections = (
-        "upcoming", "prime_picks", "top_daily_picks", "top_daily",
-        "daily_picks", "value_picks", "value", "doubles_picks", "doubles",
-        "ace_picks", "aces", "ace_markets", "sg_picks", "sets_games",
-        "set_game_picks", "results",
-    )
-    groups = [(key, feed.get(key)) for key in sections]
-    markets = feed.get("markets")
-    if isinstance(markets, dict):
-        groups.extend((f"markets.{key}", value) for key, value in markets.items())
-    for section, rows in groups:
-        if not isinstance(rows, list):
+    rows = feed.get("upcoming") if isinstance(feed, dict) else []
+    if not isinstance(rows, list):
+        return []
+    for row in rows:
+        if not isinstance(row, dict):
             continue
-        for row in rows:
-            if not isinstance(row, dict):
+        confidence = row.get("confidence")
+        try:
+            score = float(confidence)
+        except (TypeError, ValueError):
+            score = 0.0
+        tour = str(row.get("tour") or "").upper()
+        for key in ("player1", "player2"):
+            player = row.get(key)
+            if not isinstance(player, dict):
                 continue
-            try:
-                confidence = float(row.get("confidence") or 0)
-            except (ValueError, TypeError):
-                confidence = 0.0
-            # Prefer actually published picks when photo-budget is limited.
-            priority = confidence + (2.0 if section not in ("upcoming", "results") else
-                                     0.0 if section == "upcoming" else -1.0)
-            tour = str(row.get("tour") or "").upper()
-            for key in ("player1", "player2"):
-                player = row.get(key)
-                if not isinstance(player, dict):
+            candidates = [player]
+            members = player.get("members") if isinstance(player.get("members"), list) else []
+            candidates.extend(member for member in members if isinstance(member, dict))
+            for candidate_player in candidates:
+                player_id = str(candidate_player.get("id") or "").strip()
+                if not player_id or not player_id.isdigit():
                     continue
-                members = player.get("members")
-                members = [m for m in members if isinstance(m, dict)] if isinstance(members, list) else []
-                other = row.get("player2" if key == "player1" else "player1")
-                other = other if isinstance(other, dict) else {}
-                doubles = (row.get("prediction_family") == "doubles" or len(members) >= 2 or
-                           (" / " in str(player.get("name") or "") and
-                            " / " in str(other.get("name") or "")))
-                # No member IDs means no safe player-image lookup for a team.
-                candidates = members if doubles else [player]
-                for candidate in candidates:
-                    player_id = str(candidate.get("id") or "").strip()
-                    if not player_id.isdigit():
-                        continue
-                    item = {
-                        "id": player_id,
-                        "name": str(candidate.get("name") or "").strip(),
-                        "tour": tour,
-                        "priority": priority,
-                    }
-                    if (player_id not in scored or
-                        item["priority"] > scored[player_id]["priority"]):
-                        scored[player_id] = item
+                item = scored.get(player_id)
+                candidate = {
+                    "id": player_id,
+                    "name": str(candidate_player.get("name") or "").strip(),
+                    "tour": tour,
+                    "priority": score,
+                }
+                if item is None or candidate["priority"] > item["priority"]:
+                    scored[player_id] = candidate
     return sorted(scored.values(), key=lambda row: (-row["priority"], row["name"], row["id"]))
 
 

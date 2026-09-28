@@ -69,8 +69,7 @@ def test_daily_account_worker_and_smtp_diagnostics_are_wired():
     assert "BLINQ_ACCOUNT_WORKER_TOKEN" in CONFIG
     assert "BLINQ_SMTP_HOST" in CONFIG
     assert "BLINQ_ADMIN_EMAILS" in CONFIG
-    assert "workflow_dispatch:" in WORKFLOW
-    assert "  schedule:" not in WORKFLOW
+    assert "TBT_ACCOUNT_INACTIVITY_ENABLED" in WORKFLOW
     assert "BLINQ_ACCOUNT_WORKER_TOKEN" in WORKFLOW
     assert "/api/v1/internal/account-inactivity-worker" in WORKFLOW
     assert "ACCOUNT CHECK" in APP

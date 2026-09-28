@@ -49,39 +49,6 @@ jobs:
             api/requirements.txt
             api/requirements-train.txt
 
-      - name: Inspect live Azure UI configuration (read-only)
-        env:
-          BLINQ_PUBLIC_URL: ${{ vars.TBT_PRODUCTION_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          url="${BLINQ_PUBLIC_URL%/}/api/v1/ui-config"
-          if ! curl -fsSL --connect-timeout 4 --max-time 18 -H 'Cache-Control: no-cache' "$url?restore_audit=$GITHUB_SHA" -o /tmp/blinq-live-ui.json; then
-            echo "::warning::Live UI storage could not be inspected. Preserve existing published settings."
-          else
-            python - <<'PYUI'
-          import json
-          p=json.load(open('/tmp/blinq-live-ui.json',encoding='utf-8'))
-          cfg=p.get('config') or {}
-          els=cfg.get('elements') or {}
-          banners=[els.get(f'HERO_BANNER_{i}') or {} for i in range(1,6)]
-          enabled=sum(bool((b.get('content') or {}).get('enabled')) for b in banners)
-          hero=cfg.get('hero_banner') or {}
-          print(f"Live UI: storage_available={p.get('storage_available')}, runtime_configured={p.get('runtime_configured')}, banner_slots={enabled}, active_slots={hero.get('slot_count')}")
-          # Only expose marketing metadata, never the complete config or account secrets.
-          for i,b in enumerate(banners,1):
-              c=b.get('content') or {}
-              print("Live hero %s: %s" % (i,json.dumps({
-                  "enabled":c.get("enabled"),"headline":str(c.get("headline") or "")[:90],
-                  "image_url":str(c.get("image_url") or "")[:180],
-                  "mobile_image_url":str(c.get("mobile_image_url") or "")[:180],
-                  "has_link":bool(c.get("link") or c.get("route")),
-              },ensure_ascii=False)))
-          if p.get('storage_available') is not True or p.get('runtime_configured') is not True:
-              print("::warning::Live Azure UI config is not confirmed; do not overwrite it with the release fallback.")
-          PYUI
-          fi
-
       - name: Audit repository/release contract
         run: |
           echo "Commit: $GITHUB_SHA"
@@ -146,8 +113,6 @@ jobs:
           node tests/test_firebase_email_verification.js
           node tests/test_auth_init_resilience_r35.js
           node tests/test_v736_ui_regression_contract.js
-          node tests/test_banner_editor_contract.js
-          node tests/test_admin_diagnostics_view.js
 
       - name: Run real-browser runtime contract
         run: |
@@ -156,14 +121,6 @@ jobs:
           python tests/browser_runtime_r43.py
           python tests/browser_access_odds.py
           python tests/browser_preproduction_r61.py
-          python tests/browser_banner_editor_r62.py
-          python tests/browser_admin_account_filters.py
-          python tests/browser_admin_dashboard_setting.py
-          python tests/browser_info_sg_detail.py
-          python tests/browser_admin_live_delete.py
-          python tests/browser_results_financial_audit.py
-          python tests/browser_mobile_results_layout.py
-          python tests/browser_profile_chip_fit.py
 
       - name: Check production web artifact
         run: |
@@ -224,21 +181,6 @@ jobs:
           test -s api/data/feed.json
           python scripts/verify_presentation_feed.py api/data/feed.json --summary
 
-      # A run that passed tests hours ago may be queued behind a newer deploy.
-      # Recheck main while holding the production lock, immediately before upload.
-      - name: Reject queued stale deploy and stamp exact frontend revision
-        shell: bash
-        run: |
-          set -euo pipefail
-          git fetch origin main --depth=1
-          latest="$(git rev-parse origin/main)"
-          current="$(git rev-parse HEAD)"
-          if [[ "$current" != "$latest" || "$GITHUB_SHA" != "$latest" ]]; then
-            echo "::error::STALE DEPLOY: checkout=$current, workflow=$GITHUB_SHA, main=$latest"
-            exit 42
-          fi
-          python scripts/stamp_web_deployment.py --web web --sha "$GITHUB_SHA"
-
       - name: Deploy BlinQ to Azure Static Web Apps
         uses: Azure/static-web-apps-deploy@v1
         with:
@@ -260,8 +202,6 @@ jobs:
           stamp="${GITHUB_SHA}"
           curl -fsSL -H 'Cache-Control: no-cache' "$base/?__blinq_release=$stamp" -o /tmp/blinq-index.html
           grep -q 'data-web-release="7.3.6"' /tmp/blinq-index.html
-          grep -Fq "blinq-deployment-sha\" content=\"$stamp" /tmp/blinq-index.html
-          curl -fsSL -H 'Cache-Control: no-cache' "$base/deployment.json?__blinq_release=$stamp" -o /tmp/blinq-deployment.json
           visual=$(python -c "import json; print(json.load(open('web/release.json', encoding='utf-8'))['visual_revision'])")
           grep -Fq "blinq-visual-revision\" content=\"${visual}" /tmp/blinq-index.html
           # Compare against this checkout, not the potentially stale deployed HTML.
@@ -278,7 +218,6 @@ jobs:
           curl -fsSL -H 'Cache-Control: no-cache' "$base/app.js?__blinq_release=$stamp" -o /tmp/blinq-app.js
           grep -q "UI config failed; auth remains available" /tmp/blinq-app.js
           grep -Fq "BlinQ visual revision: ${visual}" /tmp/blinq-app.js
-          curl -fsSL -H 'Cache-Control: no-cache' "$base/responsive.js?__blinq_release=$stamp" -o /tmp/blinq-responsive.js
           curl -fsSL -H 'Cache-Control: no-cache' "$base/release.json?__blinq_release=$stamp" -o /tmp/blinq-release.json
           python - <<'PYWEB'
           import json
@@ -287,20 +226,7 @@ jobs:
           expected=json.load(open('web/release.json', encoding='utf-8'))
           assert data.get('patch') == expected.get('patch'), (data, expected)
           assert data.get('visual_revision') == expected.get('visual_revision'), (data, expected)
-          deploy=json.load(open('/tmp/blinq-deployment.json', encoding='utf-8'))
-          assert deploy['git_sha'] == __import__('os').environ['GITHUB_SHA'], deploy
-          assert deploy['patch'] == expected['patch'], deploy
-          for name, local in {
-              'blinq-app.css': '/tmp/blinq-app.css',
-              'app.js': '/tmp/blinq-app.js',
-              'auth.js': '/tmp/blinq-auth.js',
-              'responsive.js': '/tmp/blinq-responsive.js',
-          }.items():
-              import hashlib
-              digest=hashlib.sha256(open(local, 'rb').read()).hexdigest()
-              assert digest == deploy['files_sha256'][name], (name, digest)
           print(json.dumps(data, indent=2))
-          print('Exact Git SHA and all four deployed asset hashes: PASS')
           PYWEB
 
       - name: Smoke deployed authentication readiness

@@ -1,6 +1,8 @@
 name: Autonomous LIVE comeback radar
 
 on:
+  schedule:
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -12,7 +14,7 @@ concurrency:
 
 jobs:
   live-radar:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || vars.TBT_LIVE_RADAR_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:

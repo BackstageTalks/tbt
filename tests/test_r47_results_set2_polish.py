@@ -23,9 +23,7 @@ def test_projection_results_are_human_readable_and_projection_only_categories_sh
     assert 'function projectionResultProjectionText' in APP
     assert 'function projectionResultActualText' in APP
     assert 'class="results-outcome-stack"' in APP
-    assert "function resultsSummary()" in APP
-    assert "return metricCards([" in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
-    assert "projectionCategory" not in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
+    assert "projectionCategory=['ace','double_faults','sg','sets','games'].includes(category)" in APP
     assert "High\\s+Total\\s+Games" in APP
     assert "projectionResultNumber(opponent,publication,1)" in APP
 
@@ -54,14 +52,3 @@ def test_shared_background_watermarks_and_free_membership_contract_survive_r47()
     assert "if(id==='rookie')return 'FREE'" in APP
     assert 'data-reactivate-free' in APP
     assert "detail=String(p.description||'').trim()" in APP
-
-
-def test_uniform_visible_results_labels_without_rewriting_settlement_data():
-    assert "if(value.includes('walkover')" not in APP
-    assert "function resultVoidLabel(reason='')" in APP
-    assert "return 'VOID';" in APP
-    assert "lcopy('WIN','VÝHRA','VÝHRA')" in APP
-    assert "lcopy('LOSS','PREHRA','PREHRA')" in APP
-    assert "lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')" in APP
-    assert 'voidLabel===\'SKREČ\'?\'retired\':\'void\'' in APP
-    assert ".results-table .retired{color:#bf8cff" in CSS

@@ -1,6 +1,8 @@
 name: Daily account lifecycle review
 
 on:
+  schedule:
+    - cron: '20 6 * * *'
   workflow_dispatch:
 
 permissions:
@@ -12,7 +14,7 @@ concurrency:
 
 jobs:
   account-lifecycle:
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || vars.TBT_ACCOUNT_INACTIVITY_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

@@ -516,15 +516,6 @@
   async function adminLiveRadar(force = false, publish = false) {
     return apiWithSession(`/api/v1/admin/live-radar${force?'?force=1':''}`, {method: publish ? 'POST' : 'GET'});
   }
-  async function adminLiveResults() {
-    return apiWithSession('/api/v1/admin/live-radar/results');
-  }
-  async function adminDeleteLiveResult(resultId) {
-    return apiWithSession(
-      `/api/v1/admin/live-radar/results/${encodeURIComponent(resultId)}`,
-      {method: 'DELETE'}
-    );
-  }
   async function markInsightRead(insightId) {
     return apiWithSession(`/api/v1/insights/${encodeURIComponent(insightId)}/read`, {method: 'POST'});
   }
@@ -572,12 +563,6 @@
   async function adminSaveUiConfig(payload) {
     return apiWithSession('/api/v1/admin/ui-config', {method: 'PUT', body: JSON.stringify(payload || {})});
   }
-  async function adminUiSnapshots() {
-    return apiWithSession('/api/v1/admin/ui-config/snapshots');
-  }
-  async function adminUiSnapshot(snapshotId) {
-    return apiWithSession('/api/v1/admin/ui-config/snapshots/'+encodeURIComponent(String(snapshotId||'')));
-  }
   async function pushConfig() {
     return apiWithSession('/api/v1/push/config');
   }
@@ -610,10 +595,10 @@
 
   window.BlinqAuth = {
     init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, matchIntelligence,
-    insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
+    insights, liveRadar, adminLiveRadar, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews,
-    bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
+    bannerEvent, adminSaveUiConfig, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
     sessionStorageKeys, sessionEpochKey,
   };
 })();

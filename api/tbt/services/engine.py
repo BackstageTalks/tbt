@@ -528,46 +528,20 @@ def _settle_projection_publications(row, match, now):
         stat_suffix = "aces" if market == "aces" else "double_faults"
         try:
             actual = float(stats.get(f"{selected_side}_{stat_suffix}"))
-        except (TypeError, ValueError):
-            publication["excluded_reason"] = "projection_result_unavailable"
-            continue
-        if not np.isfinite(actual) or actual < 0:
-            publication["excluded_reason"] = "projection_result_unavailable"
-            continue
-        try:
             opponent_actual = float(stats.get(f"{opponent_side}_{stat_suffix}"))
         except (TypeError, ValueError):
-            opponent_actual = float("nan")
-        contract = str(publication.get("price_contract") or "").strip().lower()
-        if contract == "player_total_ou":
-            # The new player-total contract is graded against its *published*
-            # bookmaker line, never against the opponent's actual count.
-            direction = str(publication.get("ou_side") or "").strip().lower()
-            try:
-                line = float(publication.get("market_line"))
-            except (TypeError, ValueError):
-                line = float("nan")
-            if direction not in {"over", "under"} or not np.isfinite(line) or line < 0:
-                publication["excluded_reason"] = "invalid_published_ou_contract"
-                continue
-            if actual == line:
-                status, correct = "void", None
-            else:
-                correct = (actual > line) if direction == "over" else (actual < line)
-                status = "hit" if correct else "miss"
-        elif contract in {"", "player_superiority"}:
-            if not np.isfinite(opponent_actual) or opponent_actual < 0:
-                publication["excluded_reason"] = "projection_result_unavailable"
-                continue
-            if actual == opponent_actual:
-                status, correct = "void", None
-            else:
-                correct = actual > opponent_actual
-                status = "hit" if correct else "miss"
-        else:
-            publication["excluded_reason"] = "unknown_price_contract"
+            publication["excluded_reason"] = "projection_result_unavailable"
+            continue
+        if not np.isfinite(actual) or not np.isfinite(opponent_actual) or actual < 0 or opponent_actual < 0:
+            publication["excluded_reason"] = "projection_result_unavailable"
             continue
         publication.pop("excluded_reason", None)
+        if actual == opponent_actual:
+            status = "void"
+            correct = None
+        else:
+            correct = actual > opponent_actual
+            status = "hit" if correct else "miss"
         existing = publication.get("result") if isinstance(publication.get("result"), dict) else None
         price_units = _projection_price_units(publication, correct)
         settled = {
@@ -716,53 +690,6 @@ def _projection_metrics(publications):
     }
 
 
-def _genuine_publication_odds(publication):
-    """A financial quote must be an actual bookmaker snapshot, never a display
-    filler or projection-only/model-only price. Legacy winner publications may
-    omit price_status; their immutable issued odds remain authoritative.
-    """
-    status = str(publication.get("price_status") or "").strip().lower()
-    market = str(publication.get("market") or "").strip().lower()
-    if status in {"projection_only", "model_only"}:
-        return None
-    if market in {"aces", "double_faults", "sets", "games"} and status != "priced_projection":
-        return None
-    if market not in {"aces", "double_faults", "sets", "games"} and status not in {"", "priced", "priced_projection"}:
-        return None
-    if publication.get("historical_display_placeholder_source") == "synthetic_illustrative_not_bookmaker" and publication.get("odds") is None:
-        return None
-    try:
-        odds = float(publication.get("odds"))
-    except (TypeError, ValueError):
-        return None
-    return odds if math.isfinite(odds) and odds > 1 else None
-
-
-_REFUNDED_RESULT_STATUSES = {
-    "void", "push", "retired", "ret", "cancelled", "canceled", "postponed",
-    "walkover", "walk over", "w/o", "abandoned", "interrupted",
-    "suspended", "no_action",
-}
-
-
-def _is_void_bet_result(result):
-    """Mirror the public Results status classifier for refunded/void bets.
-
-    Older provider settlements sometimes use "retired" or a void boolean
-    instead of the canonical "void" status. A stale correct=False/stake=1
-    from an older settlement must never reduce the live ROI of a refunded bet.
-    """
-    if not isinstance(result, dict):
-        return False
-    if result.get("void") is True or result.get("is_void") is True:
-        return True
-    status = str(
-        result.get("status") or result.get("outcome")
-        or result.get("settlement") or result.get("result") or ""
-    ).strip().lower()
-    return status in _REFUNDED_RESULT_STATUSES
-
-
 def _betting_metrics(publications):
     rows = [
         p for p in publications
@@ -774,7 +701,7 @@ def _betting_metrics(publications):
     graded = [
         p for p in rows
         if p["result"].get("correct") in {True, False}
-        and not _is_void_bet_result(p["result"])
+        and str(p["result"].get("status") or "").strip().lower() != "void"
     ]
     voids = len(rows) - len(graded)
     if not rows:
@@ -784,24 +711,9 @@ def _betting_metrics(publications):
         }
     wins = sum(1 for p in graded if p["result"].get("correct") is True)
     losses = sum(1 for p in graded if p["result"].get("correct") is False)
-    # W/L covers every genuinely issued graded publication. Actual financial
-    # ROI includes only bookmaker-priced, staked bets outside Short Odds.
-    quotes = [_genuine_publication_odds(p) for p in graded]
-    odds = [quote for quote in quotes if quote is not None]
-    stakes = []
-    for publication, quote in zip(graded, quotes):
-        if str(publication.get("section") or "").strip().lower() == "prime" or quote is None:
-            continue
-        result = publication["result"]
-        try:
-            stake = float(result["staked_units"])
-            profit_units = float(result["profit_units"])
-        except (KeyError, TypeError, ValueError):
-            continue
-        if math.isfinite(stake) and stake > 0 and math.isfinite(profit_units):
-            stakes.append((stake, profit_units))
-    staked = sum(stake for stake, _ in stakes)
-    profit = sum(net for _, net in stakes)
+    odds = [float(p.get("odds")) for p in graded if p.get("odds") is not None]
+    staked = sum(float(p["result"].get("staked_units") or 0.0) for p in graded)
+    profit = sum(float(p["result"].get("profit_units") or 0.0) for p in graded)
     return {
         "n": len(graded),
         "wins": wins,
@@ -813,6 +725,7 @@ def _betting_metrics(publications):
         "profit_units": profit,
         "roi": profit / staked if staked > 0 else None,
     }
+
 
 def _result_publication_semantic_key(row, publication):
     """Stable identity for one public result, independent of lifecycle schema.
@@ -870,7 +783,6 @@ def betting_performance(results):
     return {
         "schema": 2,
         "stake_model": "flat_1u",
-        "unit_excluded_sections": ["prime"],
         "overall": _betting_metrics(canonical_publications),
         "sections": sections,
         "markets": markets,
@@ -885,9 +797,7 @@ def betting_performance(results):
 
 PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 
-PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30, 180, 365)
-# Explicit 180-day cards must not silently change the old auto-selected KPI.
-PERFORMANCE_AUTO_WINDOWS_DAYS = (3, 7, 10, 14, 30, 365)
+PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30)
 PERFORMANCE_BEST_MIN_SAMPLE = 30
 
 
@@ -936,7 +846,7 @@ def performance_windows(winner_results, public_results, *, now):
         }
 
     candidates = []
-    for days in PERFORMANCE_AUTO_WINDOWS_DAYS:
+    for days in PERFORMANCE_WINDOWS_DAYS:
         model = windows[str(days)]["model"]
         accuracy = model.get("accuracy") if isinstance(model, dict) else None
         n = int(model.get("n") or 0) if isinstance(model, dict) else 0
@@ -965,7 +875,7 @@ def performance_windows(winner_results, public_results, *, now):
     category_best = {}
     for category, path in category_map.items():
         category_candidates = []
-        for days in PERFORMANCE_AUTO_WINDOWS_DAYS:
+        for days in PERFORMANCE_WINDOWS_DAYS:
             metric = windows[str(days)]
             for key in path:
                 metric = metric.get(key, {}) if isinstance(metric, dict) else {}

@@ -273,32 +273,11 @@ def validate_market_publication_candidate(feed, ledger):
             ledger_row = ledger_index.get(event_id)
             if ledger_row is None:
                 raise RuntimeError(f"Market feed/ledger mismatch: {event_id} missing from ledger")
-            publications = [
+            candidates = [
                 item for item in ledger_row.get("market_publications", []) or []
                 if isinstance(item, dict)
+                and _market_commitment_from_publication(event_id, item) == commitment
             ]
-            candidates = [
-                item for item in publications
-                if _market_commitment_from_publication(event_id, item) == commitment
-            ]
-            if not candidates and section in {"top_daily", "prime", "value", "doubles"}:
-                # Legacy Match Winner publications created before betting-day
-                # persistence can still be validated exactly on every immutable
-                # field except the absent day. This is accepted only for one
-                # uniquely issued snapshot; ambiguity remains fail-closed.
-                legacy = []
-                for item in publications:
-                    stored = _market_commitment_from_publication(event_id, item)
-                    if (
-                        stored[:8] == commitment[:8]
-                        and stored[8] in (None, "")
-                        and stored[9:] == commitment[9:]
-                        and item.get("issued_at")
-                        and item.get("publication_status") == "published"
-                    ):
-                        legacy.append(item)
-                if len(legacy) == 1:
-                    candidates = legacy
             if not candidates:
                 raise RuntimeError(
                     f"Market feed/ledger mismatch for {section} event {event_id}; "
@@ -308,7 +287,7 @@ def validate_market_publication_candidate(feed, ledger):
     return validated
 
 
-def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
+def restore_published_market_snapshots(feed, ledger):
     """Reuse a uniquely identified issued snapshot; never rewrite the ledger.
 
     Current predictions may drift after an offer was issued. Only a published
@@ -348,11 +327,9 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                 continue
 
             matches = []
-            legacy_dayless_matches = []
             for publication in publications:
                 stored = _market_commitment_from_publication(commitment[0], publication)
-                same_identity = stored[:4] == commitment[:4]
-                same_day = stored[8] == commitment[8]
+                same_identity = stored[:4] == commitment[:4] and stored[8] == commitment[8]
                 # Projection scope + metric are part of the semantic identity.
                 # They disambiguate e.g. player aces from any future totals.
                 if section in {"ace", "double_faults", "sets", "games"}:
@@ -361,32 +338,13 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                         and stored[11] == commitment[11]
                         and stored[12] == commitment[12]
                     )
-                issued = (
-                    publication.get("issued_at")
-                    and publication.get("publication_status") == "published"
-                )
-                if same_identity and same_day and issued:
+                if same_identity and publication.get("issued_at") and publication.get("publication_status") == "published":
                     matches.append(publication)
-                elif (
-                    same_identity
-                    and issued
-                    and section in {"top_daily", "prime", "value", "doubles"}
-                    and stored[8] in (None, "")
-                ):
-                    # Pre-betting-day Match Winner ledgers have immutable issued
-                    # odds/probabilities but no betting_day field. If there is
-                    # exactly one such immutable snapshot for this event/section/
-                    # selection, it is safer to restore that known public offer
-                    # than to crash refresh or invent the current drifting price.
-                    legacy_dayless_matches.append(publication)
-
-            if not matches and legacy_dayless_matches:
-                matches = legacy_dayless_matches
 
             if section in {"ace", "double_faults", "sets", "games"} and matches:
-                # Projection lifecycle duplicates can be collapsed when they
-                # encode exactly the same immutable projection snapshot. Match
-                # Winner duplicates remain strict/ambiguous by design.
+                # Multiple ledger rows are safe only when they encode exactly the
+                # same immutable projection snapshot. Collapse lifecycle-only
+                # duplicates; never choose between conflicting projections.
                 unique = {}
                 for publication in matches:
                     signature = _market_commitment_from_publication(commitment[0], publication)
@@ -395,20 +353,9 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
 
             if len(matches) != 1:
                 if section in {"ace", "double_faults", "sets", "games"}:
-                    # Legacy conflicting publications must never be guessed.
-                    # Make deliberate card-level suppression explicit so the
-                    # pipeline integrity check can distinguish it from a
-                    # serialization or market-section regression.
-                    if quarantine_report is not None:
-                        quarantine_report.append({
-                            "event_id": commitment[0],
-                            "market": "aces" if section == "ace" else section,
-                            "reason": (
-                                "ambiguous_issued_legacy_snapshots"
-                                if len(matches) > 1 else
-                                "no_compatible_issued_snapshot"
-                            ),
-                        })
+                    # Fail closed at card granularity for legacy projection
+                    # corruption. The rest of the site remains deployable and a
+                    # subsequent refresh regenerates a clean publication row.
                     continue
                 raise RuntimeError(f"Market feed/ledger mismatch for {section} event {commitment[0]}; no unique issued snapshot")
 
@@ -437,9 +384,7 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                     "projection_direction", "projection_confidence", "projection_label",
                     "projection_kind", "projection_subject", "projection_samples",
                     "projection_unit", "best_of", "data_depth", "price_status",
-                    "price_contract", "ou_side", "model_probability", "expected_value",
                     "provider_id", "captured_at", "odds_market_name",
-                    "odds_source", "odds_bookmaker", "odds_provider_event_id",
                 ):
                     if field in snapshot:
                         row[field] = deepcopy(snapshot.get(field))
@@ -584,21 +529,6 @@ def _market_row_before_cutoff(row, now, cutoff_minutes=PUBLICATION_CUTOFF_MINUTE
     return now < scheduled - timedelta(minutes=max(0, int(cutoff_minutes)))
 
 
-def _top_display_probability(row):
-    """Use the same adjusted confidence as the public TOP card."""
-    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
-    for value in (row.get("blinq_probability"), betting.get("blinq_probability"), row.get("probability")):
-        if value is None:
-            continue
-        try:
-            probability = float(value)
-        except (ValueError, TypeError):
-            continue
-        if 0 <= probability <= 100:
-            return probability / 100 if probability > 1 else probability
-    return None
-
-
 def carry_forward_betting_day_market_rows(
     feed,
     prior_feed,
@@ -638,8 +568,6 @@ def carry_forward_betting_day_market_rows(
         "carried": {},
         "new": {},
         "skipped_cutoff": {},
-        "skipped_top_fallback": {},
-        "top_core_available": {},
         "total": {},
     }
     processed_keys = set()
@@ -681,38 +609,8 @@ def carry_forward_betting_day_market_rows(
             seen.add(ident)
             carried += 1
 
-        # Later refreshes preserve issued morning picks, but the fresh selector
-        # can see fewer core picks after those morning matches have started.
-        # Before admitting NEW 65–67% fallbacks, count all eligible core picks
-        # across both the immutable daily offer and current discovery.
-        core_floor, core_minimum = 0.68, 5
-        core_ids = set()
-        if key == "top_daily_picks":
-            config = (result.get("market_selection") or {}).get("top_daily_rule") or {}
-            if isinstance(config, dict):
-                try:
-                    core_floor = float(config.get("core_min_probability", 0.68))
-                    core_minimum = max(1, int(config.get("fallback_only_if_core_count_below", 5)))
-                except (ValueError, TypeError):
-                    core_floor, core_minimum = 0.68, 5
-            for row in kept:
-                if (_top_display_probability(row) or 0) + 1e-12 >= core_floor:
-                    core_ids.add(_market_row_identity(row, key, timezone_name=timezone_name, start_hour=start_hour))
-            for row in current_rows:
-                if not isinstance(row, dict) or _row_betting_day(row, timezone_name=timezone_name, start_hour=start_hour) != day:
-                    continue
-                ident = _market_row_identity(row, key, timezone_name=timezone_name, start_hour=start_hour)
-                if not ident or ident in seen:
-                    continue
-                if not (_issued_exact_market_row(row, key, ledger_index)
-                        or _market_row_before_cutoff(row, now, publication_cutoff_minutes)):
-                    continue
-                if (_top_display_probability(row) or 0) + 1e-12 >= core_floor:
-                    core_ids.add(ident)
-
         new_count = 0
         skipped_cutoff = 0
-        skipped_top_fallback = 0
         for row in current_rows:
             if not isinstance(row, dict):
                 continue
@@ -739,13 +637,6 @@ def carry_forward_betting_day_market_rows(
             ):
                 skipped_cutoff += 1
                 continue
-            if (key == "top_daily_picks" and not already_published
-                    and len(core_ids) >= core_minimum
-                    and (_top_display_probability(row) or 0) + 1e-12 < core_floor):
-                # A never-issued weak pick can be skipped. A previously issued
-                # one is immutable and must remain visible and settle normally.
-                skipped_top_fallback += 1
-                continue
 
             kept.append(deepcopy(row))
             seen.add(ident)
@@ -755,9 +646,6 @@ def carry_forward_betting_day_market_rows(
         report["carried"][key] = carried
         report["new"][key] = new_count
         report["skipped_cutoff"][key] = skipped_cutoff
-        report["skipped_top_fallback"][key] = skipped_top_fallback
-        if key == "top_daily_picks":
-            report["top_core_available"][key] = len(core_ids)
         report["total"][key] = len(kept)
 
     result["market_selection"] = {
@@ -845,14 +733,10 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
     validate_market_publication_candidate(deployed_feed, ledger)
 
     deployed = set()
-    deployed_rows = {}
     for section, key in _MARKET_SECTION_KEYS.items():
         for row in _section_feed_rows(deployed_feed, section, key):
             commitment = _market_commitment_from_feed_row(row, section)
             deployed.add(commitment)
-            # Presentation-only ranking may be added after private candidate creation.
-            # Record the exact card displayed at the first confirmed issuance.
-            deployed_rows.setdefault(commitment, []).append(row)
 
     confirmed = []
     newly_confirmed = 0
@@ -880,42 +764,6 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
                 continue
             publication["issued_at"] = now.isoformat()
             publication["publication_status"] = "published"
-            if section in {"top_daily", "prime", "value"} and publication.get("market") == "match_winner":
-                candidates = deployed_rows.get(commitment) or []
-                if len(candidates) == 1:
-                    card = candidates[0]
-                    betting = card.get("betting") if isinstance(card.get("betting"), dict) else {}
-                    players = {}
-                    for side in ("player1", "player2"):
-                        player = card.get(side) if isinstance(card.get(side), dict) else {}
-                        rank = player.get("rank")
-                        try:
-                            rank_number = float(rank) if rank is not None else None
-                        except (ValueError, TypeError):
-                            rank_number = None
-                        if rank_number is not None and not 0 < rank_number < float("inf"):
-                            rank_number = None
-                        players[side] = {
-                            "id": str(player.get("id") or ""),
-                            "rank": int(rank_number) if rank_number is not None else None,
-                        }
-                    evidence = {
-                        "schema": 1,
-                        "source": "deployed_feed_at_issuance",
-                        "captured_at": now.isoformat(),
-                        "model_probability": betting.get("model_probability"),
-                        "blinq_probability": _top_display_probability(card),
-                        "model_version": card.get("model_version"),
-                        "ranks": players,
-                        "rank_provenance": "public_card_snapshot_not_verified_historical_rank",
-                        "quality": deepcopy(card.get("quality")) if isinstance(card.get("quality"), dict) else None,
-                        "stats_available": card.get("stats_available") if isinstance(card.get("stats_available"), bool) else None,
-                        "data_depth": card.get("data_depth"),
-                    }
-                    # The market commitment matches exactly. Historical ranking
-                    # provenance is NOT implied by this presentation snapshot.
-                    if evidence["model_probability"] == publication.get("model_probability"):
-                        publication["issued_snapshot"] = evidence
             newly_confirmed += 1
         row["market_publications"] = publications
         confirmed.append(row)

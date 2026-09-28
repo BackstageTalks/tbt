@@ -14,23 +14,23 @@ on:
         default: ""
         type: string
       mode:
-        description: "write stores ONLY positive, country/city-compatible geocodes; probe runs first"
+        description: "First use dry-run; write persists verified results"
         required: true
         type: choice
         default: "dry-run"
         options: [dry-run, write]
       limit:
-        description: "Max candidate matches; 0 = all (recommended for grouped test)"
+        description: "Max matches, 0 = all candidate matches"
         required: true
         default: "0"
         type: string
       max_requests:
-        description: "Shared cap INCLUDING health probe, geocoding and elevation"
+        description: "Hard cap across geocoding AND elevation requests"
         required: true
-        default: "30"
+        default: "200"
         type: string
       retry_unresolved:
-        description: "Additional retry flag (bulk mode automatically retries old failed negatives safely)"
+        description: "Retry even current-resolver negative rows (leave OFF first)"
         required: true
         default: false
         type: boolean

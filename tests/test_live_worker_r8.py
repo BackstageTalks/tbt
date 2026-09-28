@@ -25,13 +25,12 @@ def test_browser_prefers_worker_snapshot_and_only_falls_back_to_scan():
     assert '"fallback_scan":True' in block
 
 
-def test_worker_remains_externally_dispatchable_without_github_cron():
-    assert 'workflow_dispatch:' in WORKFLOW
-    assert '  schedule:' not in WORKFLOW
+def test_worker_runs_roughly_once_per_minute_without_browser():
+    assert "cron: '*/5 * * * *'" in WORKFLOW
     assert 'for scan in 1 2 3 4 5 6' in WORKFLOW
     assert 'sleep 50' in WORKFLOW
     assert 'X-Blinq-Worker-Token' in WORKFLOW
-    assert "github.event_name == 'workflow_dispatch'" in WORKFLOW
+    assert 'TBT_LIVE_RADAR_ENABLED' in WORKFLOW
 
 
 def test_worker_heartbeat_is_persistent_and_visible_in_admin_system():
@@ -59,16 +58,3 @@ def test_worker_skips_provider_when_no_prime_candidate_can_qualify():
     assert 'eligible_pool=[row for row in prime_pool' in run_block
     assert 'if not eligible_pool:' in run_block
     assert 'scan=scan_comeback_radar(feed_payload,[])' in run_block
-
-
-def test_live_drawer_has_separate_results_tab_for_settled_confirmed_signals():
-    assert 'data-live-radar-tab="results"' in WEB
-    assert "radar.results" in WEB
-    assert "Zatiaľ nie sú vyhodnotené žiadne LIVE signály." in WEB
-    assert "settle_radar_results" in API
-    assert "list_live_radar_results" in API
-
-
-def test_live_results_tab_spans_full_radar_width():
-    css = (ROOT / "web" / "blinq-app.css").read_text(encoding="utf-8")
-    assert '[data-live-radar-tab="results"]{grid-column:1/-1}' in css

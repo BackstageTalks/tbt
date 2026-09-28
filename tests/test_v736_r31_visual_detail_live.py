@@ -88,7 +88,7 @@ def test_results_default_to_legend_plus_and_keep_admin_visibility_toggle():
 
 def test_r31_rolling_performance_is_only_rendered_as_single_model_success_kpi():
     engine = (ROOT / "api" / "tbt" / "services" / "engine.py").read_text(encoding="utf-8")
-    assert 'PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30, 180, 365)' in engine
+    assert 'PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30)' in engine
     assert 'best_accuracy_min_sample' in engine
     assert '"dashboard_model_success"' in engine
     assert 'dashboardBest=state.feed?.dashboard_model_success' in APP

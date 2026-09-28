@@ -95,8 +95,9 @@ def main():
                     assert len({b['y'] for b in sizes}) == 1
                 else:
                     assert len({b['y'] for b in sizes}) == 3, (width, sizes, page.locator('#dashboardKpis').evaluate('(e)=>getComputedStyle(e).gridTemplateColumns'))
-                assert page.locator('body').evaluate('(e)=>getComputedStyle(e).backgroundImage') == login_background
-                # Homepage has no global, hero, footer or prediction watermarks.
+                assert 'blinq_background.webp' in page.locator('body').evaluate('(e)=>getComputedStyle(e).backgroundImage')
+                # Home stays free of global/hero/footer watermark overlays.  Only
+                # individual predictions receive a small, non-interactive mark.
                 assert page.locator('#dashboardHero').evaluate(
                     '(e) => getComputedStyle(e, "::after").display'
                 ) == 'none'
@@ -104,8 +105,11 @@ def main():
                 assert page.locator('.anti-share-watermarks:visible').count() == 0
                 match_cell = page.locator('#dailyHubBody tr:not(.hub-row-locked) .hub-match-cell').first
                 assert match_cell.count() == 1, width
+                assert 'blinq_logo.svg' in match_cell.evaluate(
+                    '(e) => getComputedStyle(e, "::after").backgroundImage'
+                )
                 assert match_cell.evaluate(
-                    '(e) => getComputedStyle(e, "::after").content'
+                    '(e) => getComputedStyle(e, "::after").pointerEvents'
                 ) == 'none'
                 loader = page.locator('#bootSplash')
                 # The preproduction harness removes bootSplash above; confirm
@@ -124,7 +128,11 @@ def main():
                 assert page.locator('.site-footer .footer-watermark-logo').count() == 0
                 match = page.locator('#dailyHubBody tr:not(.hub-row-locked) .hub-match-cell').first
                 assert match.count(), (width, page.locator('#dailyHubBody').inner_html())
-                assert match.evaluate('(e)=>getComputedStyle(e,"::after").content') == 'none', width
+                assert match.evaluate('''e => {
+                  const wm=getComputedStyle(e,'::after');
+                  return wm.content!=='none' && wm.backgroundImage.includes('blinq_logo.svg')
+                    && parseFloat(wm.opacity)<=0.10;
+                }'''), width
                 assert button.locator('svg').count() == 1
                 # Safe versioned local photos must survive both source selection
                 # and avatar rendering; no malformed second question mark.

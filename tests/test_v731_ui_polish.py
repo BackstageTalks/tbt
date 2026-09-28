@@ -17,9 +17,9 @@ def test_v731_layer_is_loaded_last():
 
 
 def test_player_photos_are_in_daily_board_and_results():
-    assert "sideAvatarHtml(row,player,side,'hub-avatar')" in APP
+    assert "smallAvatar(photoFor(player,side),name,row?.tour" in APP
     assert 'results-match-player' in APP and 'results-opponent' in APP
-    assert "sideAvatarHtml(r,p1,'player1','hub-avatar')" in APP
+    assert "smallAvatar(p1Photo,p1Name,r?.tour" in APP
     assert '/assets/missing_foto_m.webp' in APP
     assert '/assets/missing_foto_w.webp' in APP
 

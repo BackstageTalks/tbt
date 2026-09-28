@@ -43,8 +43,7 @@ def main():
     # and metrics are rebuilt from immutable issued ledger evidence.
     for key in (
         "results", "performance", "betting_performance", "performance_windows",
-        "performance_window_summary", "dashboard_model_success", "results_meta",
-        "performance_subgroups", "history",
+        "performance_window_summary", "results_meta", "performance_subgroups", "history",
     ):
         feed[key] = derived[key]
     feed["results_rebuild"] = {

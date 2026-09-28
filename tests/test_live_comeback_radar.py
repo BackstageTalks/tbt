@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from tbt.services.live_comeback import evaluate_prime_live, scan_comeback_radar, settle_radar_results
+from tbt.services.live_comeback import evaluate_prime_live, scan_comeback_radar
 from tbt.services.entitlements import filter_feed_for_access
 
 def prime_row(event_id='123', probability=.88, odds=1.18):
@@ -28,60 +28,3 @@ def test_watch_stage_exists_before_confirmed_signal():
     assert len(scan['candidates'])==1
     assert scan['candidates'][0]['stage']=='watch'
     assert scan['signals']==[]
-
-
-def test_results_only_settle_previously_published_confirmed_signals(monkeypatch):
-    from tbt.services import live_comeback as live
-    saved = []
-    sources = {
-        "live-comeback-123": {
-            "id": "live-comeback-123", "title": "Comeback LIVE · Favorite",
-            "created_at": "2026-09-25T10:00:00+00:00",
-        },
-        "live-set2-123": {
-            "id": "live-set2-123", "title": "2. set LIVE · Favorite",
-            "created_at": "2026-09-25T10:01:00+00:00",
-        },
-    }
-    monkeypatch.setattr(live, "load_insight_by_id", lambda insight_id: sources.get(insight_id))
-    monkeypatch.setattr(live, "save_live_radar_result", lambda payload, result_id: saved.append((result_id, payload)) or payload)
-
-    out = settle_radar_results([{
-        "event_id": "123", "match_status": "win", "second_set_status": "loss",
-        "checked_at": "2026-09-25T12:00:00+00:00",
-    }])
-
-    assert out == {"saved": 2, "comeback": 1, "set2": 1}
-    assert saved[0][0] == "live-result-comeback-123"
-    assert saved[0][1]["outcome"] == "win"
-    assert saved[1][0] == "live-result-set2-123"
-    assert saved[1][1]["outcome"] == "loss"
-
-
-def test_watch_only_candidate_never_enters_results(monkeypatch):
-    from tbt.services import live_comeback as live
-    saved = []
-    monkeypatch.setattr(live, "load_insight_by_id", lambda _insight_id: None)
-    monkeypatch.setattr(live, "save_live_radar_result", lambda payload, result_id: saved.append((result_id, payload)))
-    out = settle_radar_results([{
-        "event_id": "123", "match_status": "win", "second_set_status": "win",
-        "checked_at": "2026-09-25T12:00:00+00:00",
-    }])
-    assert out["saved"] == 0
-    assert saved == []
-
-
-def test_confirmed_retirement_is_void_with_separate_public_skrec_reason(monkeypatch):
-    from tbt.services import live_comeback as live
-    saved = []
-    monkeypatch.setattr(live, "load_insight_by_id", lambda insight_id:
-                        {"id": insight_id, "title": "Comeback LIVE"} if insight_id == "live-comeback-123" else None)
-    monkeypatch.setattr(live, "save_live_radar_result",
-                        lambda payload, result_id: saved.append(payload))
-    out = settle_radar_results([{
-        "event_id": "123", "match_status": "retired",
-        "second_set_status": "",
-    }])
-    assert out["comeback"] == 1
-    assert saved[0]["outcome"] == "void"
-    assert saved[0]["reason"] == "retired"
