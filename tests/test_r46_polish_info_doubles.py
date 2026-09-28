@@ -35,9 +35,9 @@ def test_rookie_stays_internal_but_public_membership_is_free():
 
 
 def test_account_cards_use_detail_description_and_membership_card_keeps_note_heading():
-    # Account cards must use Admin -> Detailny popis, never the internal note fallback.
-    assert "detail=String(p.description||'').trim()" in APP
-    assert 'p.description||p.note' not in APP
+    # Account cards use the dedicated profile copy with the historical description as fallback.
+    assert "detail=String(p.account_description||p.description||'').trim()" in APP
+    assert 'p.account_description||p.description||p.note' not in APP
     # Large upgrade/membership cards intentionally keep internal note as the heading above benefits.
     assert "featureHeading=String(p?.note||'').trim()" in APP
     assert 'upgrade-feature-heading' in APP
