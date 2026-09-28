@@ -34,6 +34,18 @@ from tbt.data.history_safety import sanitize_history_identities
 from tbt.models.feature_builder import FeatureBuilder
 
 
+RICH_CHARTING_FIELDS = {
+    "first_strike_serve_win",
+    "return_in_play_rate",
+    "return_deep_rate",
+    "break_point_serve_win",
+    "break_point_return_win",
+    "net_points_win",
+    "attacking_points_rate",
+    "unforced_error_rate",
+}
+
+
 STAT_FIELDS = {
     "aces",
     "double_faults",
@@ -628,6 +640,7 @@ def main() -> None:
 
     staged: list[dict] = []
     quarantine: list[dict] = []
+    staged_field_counts = Counter()
     quality_before = sum(1 for m in matches if _quality_ready(m.stats or {}))
     projected_quality = quality_before
 
@@ -662,6 +675,13 @@ def main() -> None:
         is_ready = _quality_ready(projected)
         if is_ready and not was_ready:
             projected_quality += 1
+        staged_field_counts.update(merged.keys())
+        if any(
+            key.split("_", 1)[1] in RICH_CHARTING_FIELDS
+            for key in merged
+            if "_" in key
+        ):
+            counts["rich_staged_matches"] += 1
         staged.append({
             "schema": 1,
             "match_id": mid,
@@ -691,6 +711,7 @@ def main() -> None:
         "source_rows": len(sources),
         "counts": dict(counts),
         "source_rows_by_source": dict(per_source),
+        "staged_field_counts": dict(sorted(staged_field_counts.items())),
         "quality_ready_before": quality_before,
         "quality_ready_projected_after": projected_quality,
         "quality_ready_projected_added": projected_quality - quality_before,
