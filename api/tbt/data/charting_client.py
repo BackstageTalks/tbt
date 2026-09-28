@@ -15,7 +15,7 @@ from urllib.request import Request, urlopen
 
 _REPO = "BackstageTalks/tbt-data"
 _BASE = f"https://api.github.com/repos/{_REPO}/contents/tennis/charting/"
-_PROFILE = re.compile(r"^profiles/(atp|wta)/(atp|wta)-[a-z0-9-]+\\.json\\.gz$")
+_PROFILE = re.compile(r"^profiles/(atp|wta)/(atp|wta)-[a-z0-9-]+\.json\.gz$")
 _MAX_BYTES = 8 * 1024 * 1024
 
 
