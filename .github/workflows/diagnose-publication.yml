@@ -1,0 +1,39 @@
+name: Diagnose legacy PRIME publication
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/publication-diagnose-now'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Inspect event 17201972 ledger publications
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          mkdir -p /tmp/blinq-ledger
+          gh release download tbt-predictions-v1 -R "$TBT_DATA_REPOSITORY" -p ledger.json -D /tmp/blinq-ledger --clobber
+          python - <<'PY'
+          import json
+          rows=json.load(open('/tmp/blinq-ledger/ledger.json', encoding='utf-8'))
+          target=next((r for r in rows if str(r.get('event_id') or '')=='17201972'), None)
+          if target is None:
+              raise SystemExit('event 17201972 not found in ledger')
+          keep=('schema','publication_key','section','market','selection','selection_id','odds',
+                'model_probability','edge','expected_value','betting_day','issued_at',
+                'publication_status','provider_id','captured_at')
+          pubs=[]
+          for p in target.get('market_publications') or []:
+              if isinstance(p,dict):
+                  pubs.append({k:p.get(k) for k in keep if k in p})
+          print(json.dumps({'event_id':'17201972','publication_count':len(pubs),'market_publications':pubs}, indent=2, ensure_ascii=False))
+          PY
