@@ -3992,7 +3992,19 @@
     finally{if(generation===feedGeneration){state.adminUsersLoading=false;rerenderAdmin();adminApplyUserFilters();}}
   }
 
-  function setSelectedElement(id){ if(!elements()?.[id])return;state.selectedElement=id;rerenderAdmin(); }
+  function setSelectedElement(id){
+    if(!elements()?.[id])return;
+    state.selectedElement=id;
+    const match=String(id||'').match(/^HERO_BANNER_(\d)$/);
+    if(match){
+      state.adminPreviewIndex=Math.max(0,Number(match[1])-1);
+      // While editing, keep the preview on the banner being edited. The old
+      // independent carousel made typography/image changes look broken because
+      // the preview could be showing another slot.
+      state.adminPreviewPaused=true;
+    }
+    rerenderAdmin();
+  }
   function setAdminPlanDefaults(planId, force=false){
     const expiry=$('adminUserExpires');if(!expiry)return;
     const plan=state.ui?.plans?.[planId]||{};
@@ -4146,7 +4158,17 @@
       if(t.dataset.adminHeroRotate!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.auto_rotate=t.checked;renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
-      if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/_size$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;renderAllUiContent();rerenderAdmin();}return;}
+      if(simpleBanner&&t.dataset.simpleBannerField){
+        const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];
+        if(item){
+          item.content=item.content||{};
+          item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/_size$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;
+          const match=String(id||'').match(/^HERO_BANNER_(\d)$/);
+          if(match){state.adminPreviewIndex=Math.max(0,Number(match[1])-1);state.adminPreviewPaused=true;}
+          renderAllUiContent();rerenderAdmin();
+        }
+        return;
+      }
       if(t.dataset.adminKpiIndex!==undefined&&t.dataset.adminKpiField){
         const index=Number(t.dataset.adminKpiIndex),field=t.dataset.adminKpiField;
         if(!Number.isInteger(index)||index<0||index>=3)return;
@@ -4180,10 +4202,12 @@
     host.oninput=event=>{
       const t=event.target,field=t?.dataset?.simpleBannerField;
       if(!field||!['eyebrow','headline','text','button_text'].includes(field))return;
-      const wrap=t.closest('[data-simple-banner]'),item=elements()?.[wrap?.dataset?.simpleBanner];
+      const wrap=t.closest('[data-simple-banner]'),id=wrap?.dataset?.simpleBanner,item=elements()?.[id];
       if(!item)return;
       item.content=item.content||{};
       item.content[field]=t.value;
+      const match=String(id||'').match(/^HERO_BANNER_(\d)$/);
+      if(match){state.adminPreviewIndex=Math.max(0,Number(match[1])-1);state.adminPreviewPaused=true;}
       syncAdminHeroPreview();
     };
     startAdminHeroPreview();
