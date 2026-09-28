@@ -293,8 +293,17 @@ def validate_market_publication_candidate(feed, ledger):
                         and item.get("publication_status") == "published"
                     ):
                         legacy.append(item)
-                if len(legacy) == 1:
-                    candidates = legacy
+                if legacy:
+                    # Old ledgers can contain lifecycle-duplicate rows for the
+                    # exact same issued snapshot. Collapse only byte-for-byte
+                    # immutable market commitments; conflicting prices/picks
+                    # remain ambiguous and fail closed below.
+                    unique_legacy = {}
+                    for item in legacy:
+                        signature = _market_commitment_from_publication(event_id, item)
+                        unique_legacy.setdefault(signature, item)
+                    if len(unique_legacy) == 1:
+                        candidates = list(unique_legacy.values())
             if not candidates:
                 raise RuntimeError(
                     f"Market feed/ledger mismatch for {section} event {event_id}; "
@@ -374,10 +383,12 @@ def restore_published_market_snapshots(feed, ledger):
             if not matches and legacy_dayless_matches:
                 matches = legacy_dayless_matches
 
-            if section in {"ace", "double_faults", "sets", "games"} and matches:
-                # Multiple ledger rows are safe only when they encode exactly the
-                # same immutable projection snapshot. Collapse lifecycle-only
-                # duplicates; never choose between conflicting projections.
+            if matches:
+                # Multiple ledger rows are safe only when they encode exactly
+                # the same immutable snapshot. This also covers old Match Winner
+                # ledgers that duplicated one issued row without betting-day
+                # identity. Collapse lifecycle-only duplicates; never choose
+                # between conflicting prices, probabilities or selections.
                 unique = {}
                 for publication in matches:
                     signature = _market_commitment_from_publication(commitment[0], publication)
