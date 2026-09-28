@@ -8089,3 +8089,175 @@ body#blinqPremium.blinq-admin .admin-live-result-row .admin-insight-row-actions{
     width:100%;justify-content:flex-end;
   }
 }
+
+
+/* BlinQ mobile UX audit 2026-09-28 — one authoritative small-screen closeout.
+   Fixes the desktop 555px table cap leaking mobile cards through the footer,
+   compacts header access controls, keeps lock badges attached to their control,
+   and makes fixed navigation/browser-toolbar geometry safe-area aware. */
+body#blinqPremium.blinq-route .results-filter-bar.results-filter-bar-v683{
+  grid-template-columns:repeat(7,minmax(0,1fr))!important;
+}
+body#blinqPremium.blinq-route .results-betting-day-toggle{
+  display:flex!important;align-items:center!important;gap:9px!important;min-width:0!important;
+  height:42px!important;align-self:end!important;padding:0 10px!important;margin:0!important;
+  border:1px solid rgba(54,115,90,.72)!important;border-radius:9px!important;
+  background:rgba(6,23,19,.9)!important;color:#dcebe5!important;cursor:pointer!important;
+}
+body#blinqPremium.blinq-route .results-betting-day-toggle input{
+  width:16px!important;height:16px!important;min-width:16px!important;margin:0!important;accent-color:#3be99b!important;
+}
+body#blinqPremium.blinq-route .results-betting-day-toggle>span{
+  display:grid!important;gap:1px!important;min-width:0!important;line-height:1.05!important;
+}
+body#blinqPremium.blinq-route .results-betting-day-toggle strong{
+  color:#dcebe5!important;font-size:9px!important;font-weight:850!important;white-space:nowrap!important;
+}
+body#blinqPremium.blinq-route .results-betting-day-toggle small{
+  color:#6f9184!important;font-size:7px!important;font-weight:700!important;white-space:nowrap!important;
+}
+
+@media(max-width:900px){
+  html,body#blinqPremium{min-height:100dvh!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar{
+    border-bottom:1px solid rgba(74,164,132,.18)!important;
+    box-shadow:0 8px 24px rgba(0,0,0,.16)!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
+    grid-template-columns:70px minmax(0,1fr)!important;
+    min-height:60px!important;height:60px!important;padding:0 8px!important;gap:6px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand{
+    width:68px!important;min-width:68px!important;height:60px!important;min-height:60px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand-source-logo{
+    width:66px!important;max-width:66px!important;max-height:34px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-actions{
+    width:100%!important;max-width:none!important;justify-content:flex-end!important;gap:4px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .header-upgrade{
+    min-width:56px!important;max-width:62px!important;height:34px!important;padding:0 6px!important;
+    font-size:7.5px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .insight-shortcut.insight-live-button{
+    position:relative!important;width:42px!important;min-width:42px!important;max-width:42px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .insight-info-button{
+    position:relative!important;width:34px!important;min-width:34px!important;max-width:34px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .insight-shortcut.is-access-locked::after,
+  body#blinqPremium:not(.blinq-admin) .insight-bell.is-access-locked::after{
+    position:absolute!important;right:-2px!important;top:-3px!important;margin:0!important;
+    display:grid!important;place-items:center!important;width:14px!important;height:14px!important;
+    border:1px solid rgba(218,177,92,.26)!important;border-radius:999px!important;
+    background:#092019!important;font-size:7px!important;line-height:1!important;z-index:2!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{
+    width:36px!important;min-width:36px!important;max-width:36px!important;height:36px!important;min-height:36px!important;
+  }
+
+  /* Desktop capped the board at 555px. Mobile cards were changed to overflow:
+     visible but the cap remained, so rows painted through the footer. */
+  body#blinqPremium:not(.blinq-admin) .daily-panel{
+    height:auto!important;max-height:none!important;overflow:hidden!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .table-scroller{
+    height:auto!important;max-height:none!important;overflow:visible!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table,
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table tbody{
+    height:auto!important;max-height:none!important;
+  }
+
+  body#blinqPremium:not(.blinq-admin) .daily-tabs-row{position:relative!important}
+  body#blinqPremium:not(.blinq-admin) .daily-tabs{padding-right:6px!important;scroll-padding-inline:4px!important}
+  body#blinqPremium:not(.blinq-admin) .daily-toolbar{
+    position:relative!important;z-index:4!important;padding-left:5px!important;
+    background:linear-gradient(90deg,rgba(9,24,21,.10),rgba(9,24,21,.98) 34%)!important;
+    box-shadow:-10px 0 16px rgba(5,18,16,.48)!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .daily-hub-table .hub-pick-stack strong{
+    white-space:normal!important;overflow-wrap:anywhere!important;display:-webkit-box!important;
+    -webkit-box-orient:vertical!important;-webkit-line-clamp:2!important;line-height:1.22!important;
+  }
+
+  /* Footer is a normal-flow status card. It must never behave like an overlay. */
+  body#blinqPremium:not(.blinq-admin) .site-footer.site-footer-minimal{
+    position:relative!important;z-index:1!important;box-sizing:border-box!important;
+    width:100%!important;margin:14px 0 0!important;padding:11px 12px 14px!important;
+    display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;align-items:center!important;
+    gap:9px 12px!important;border:1px solid rgba(74,164,132,.16)!important;border-radius:12px!important;
+    background:rgba(4,20,17,.78)!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .site-footer-minimal .footer-left,
+  body#blinqPremium:not(.blinq-admin) .site-footer-minimal .footer-right{
+    min-width:0!important;max-width:100%!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .footer-system-status{
+    display:grid!important;grid-template-columns:auto minmax(0,1fr)!important;gap:3px 8px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .footer-system-status strong{white-space:normal!important;font-size:9px!important}
+  body#blinqPremium:not(.blinq-admin) .footer-system-status small{
+    grid-column:2!important;width:auto!important;padding:0!important;white-space:normal!important;font-size:7px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .footer-system-divider{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .site-footer-minimal .languages{
+    display:flex!important;align-items:center!important;gap:5px!important;margin:0!important;white-space:nowrap!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .site-footer-minimal .languages>span{display:none!important}
+
+  /* Fixed bottom bar remains clear of gesture/nav areas in Chrome, Brave and iOS. */
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs{
+    left:10px!important;right:10px!important;bottom:calc(8px + env(safe-area-inset-bottom,0px))!important;
+    height:64px!important;min-height:64px!important;border-radius:18px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs a{height:54px!important;font-size:10px!important}
+  body#blinqPremium:not(.blinq-admin) #mobileTabs a.access-nav-locked{padding-right:4px!important}
+  body#blinqPremium:not(.blinq-admin) #mobileTabs a.access-nav-locked::after{
+    right:auto!important;left:calc(50% + 9px)!important;top:6px!important;transform:none!important;
+    display:grid!important;place-items:center!important;width:13px!important;height:13px!important;
+    border-radius:999px!important;background:#092019!important;font-size:7px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .app-shell{
+    padding-bottom:calc(92px + env(safe-area-inset-bottom,0px))!important;
+  }
+
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-bar.results-filter-bar-v683{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;padding:10px!important;
+  }
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-betting-day-toggle{
+    grid-column:1/-1!important;height:38px!important;justify-self:stretch!important;
+  }
+}
+
+@media(max-width:480px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
+    grid-template-columns:66px minmax(0,1fr)!important;padding-inline:7px!important;gap:5px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand{width:64px!important;min-width:64px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand-source-logo{width:62px!important;max-width:62px!important}
+  body#blinqPremium:not(.blinq-admin) .header-upgrade{min-width:52px!important;max-width:56px!important;padding-inline:5px!important}
+  body#blinqPremium:not(.blinq-admin) .insight-shortcut.insight-live-button{width:39px!important;min-width:39px!important;max-width:39px!important}
+  body#blinqPremium:not(.blinq-admin) .site-footer.site-footer-minimal{
+    grid-template-columns:1fr!important;align-items:start!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .site-footer-minimal .footer-right{justify-self:start!important}
+}
+
+@media(max-width:340px){
+  body#blinqPremium:not(.blinq-admin) .header-upgrade{display:none!important}
+}
+
+/* Short landscape phones: reduce vertical chrome, not horizontal touch targets. */
+@media(max-width:900px) and (max-height:500px) and (orientation:landscape){
+  body#blinqPremium:not(.blinq-admin) .site-header.reference-topbar,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{height:52px!important;min-height:52px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand{height:52px!important;min-height:52px!important}
+  body#blinqPremium:not(.blinq-admin) #dashboardHero,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-slide{height:160px!important;min-height:160px!important;max-height:160px!important}
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs{height:56px!important;min-height:56px!important}
+  body#blinqPremium:not(.blinq-admin) .mobile-tabs a{height:46px!important}
+  body#blinqPremium:not(.blinq-admin) .app-shell{padding-bottom:calc(82px + env(safe-area-inset-bottom,0px))!important}
+}
