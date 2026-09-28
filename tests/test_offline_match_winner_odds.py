@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "api"))
 
+from tbt.data.provider_context import minimize_provider_payload  # noqa: E402
 from tbt.data.offline_odds import (  # noqa: E402
     candidate_link,
     decimal_odds,
@@ -142,6 +143,28 @@ class OfflineOddsTests(unittest.TestCase):
         )
         self.assertFalse(linked["accepted"])
         self.assertIn("winner_conflict", linked["evidence"])
+
+    def test_provider_context_preserves_compact_market_marker(self):
+        payload = {
+            "_tbt_match_winner_odds": {
+                "schema": 1,
+                "status": "linked",
+                "source": "operator_wta_txt",
+                "source_match_id": "abc123",
+                "source_file_sha256": "deadbeef",
+                "price_kind": "historical_two_way_unspecified_timestamp",
+                "player1_odds": 1.55,
+                "player2_odds": 2.45,
+                "player1_implied_probability": 0.6125,
+                "player2_implied_probability": 0.3875,
+                "raw_overround": 0.053,
+                "should_drop": "raw-noise",
+            }
+        }
+        compact = minimize_provider_payload(payload)
+        marker = compact["_tbt_match_winner_odds"]
+        self.assertEqual(marker["source"], "operator_wta_txt")
+        self.assertNotIn("should_drop", marker)
 
     def test_tournament_tokens(self):
         score, evidence = tournament_score(
