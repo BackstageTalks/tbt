@@ -5,6 +5,7 @@ import numpy as np
 from tbt.schemas import MatchRecord
 from tbt.services.training import train_from_matches
 from tbt.models.symmetry import swap_frame
+from tbt.models.feature_builder import RICH_CHARTING_FEATURE_NAMES
 
 
 def test_end_to_end_training_reports_real_match_counts_and_symmetric_outputs():
@@ -24,3 +25,5 @@ def test_end_to_end_training_reports_real_match_counts_and_symmetric_outputs():
     assert report["holdout"]["selective_accuracy"][0]["n"] == report["data"]["holdout"]
     frame = result.feature_frame.tail(20)
     assert np.allclose(result.model.predict_proba(frame) + result.model.predict_proba(swap_frame(frame)), 1)
+    assert not (set(RICH_CHARTING_FEATURE_NAMES) & set(result.model.feature_names))
+    assert set(RICH_CHARTING_FEATURE_NAMES).issubset(result.feature_frame.columns)
