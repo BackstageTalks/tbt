@@ -11,8 +11,12 @@ import hashlib
 from typing import Any
 
 PROJECTION_MARKETS = {"aces", "double_faults", "games", "sets"}
-ESTIMATE_MODEL = "frozen_projection_confidence_v1"
+ESTIMATE_MODEL = "frozen_projection_confidence_v2"
 DISPLAY_OVERROUND = 0.055
+ACE_DF_DISPLAY_MIN = 1.50
+ACE_DF_DISPLAY_MAX = 1.70
+ACE_DF_CONFIDENCE_MIN = 0.60
+ACE_DF_CONFIDENCE_MAX = 0.90
 
 
 def _number(value: Any) -> float | None:
@@ -42,9 +46,19 @@ def indicative_price(record: dict) -> dict | None:
     confidence = _number(record.get("projection_confidence"))
     if confidence is None or confidence < 0.5 or confidence > 1.0:
         return None
-    # Wide bounds avoid excessive apparent certainty from point projections.
     p = min(0.94, max(0.50, confidence))
-    price = max(1.05, min(2.50, 1.0 / (p * (1.0 + DISPLAY_OVERROUND))))
+    if market in {"aces", "double_faults"}:
+        # Live ACE/DF projections use the realistic display band agreed from
+        # observed bookmaker boards. Higher model confidence maps to the lower
+        # end of the band. This is presentation-only and never becomes a real
+        # bookmaker quote, price_status=priced_projection, stake, EV or ROI.
+        bounded = min(ACE_DF_CONFIDENCE_MAX, max(ACE_DF_CONFIDENCE_MIN, p))
+        span = ACE_DF_CONFIDENCE_MAX - ACE_DF_CONFIDENCE_MIN
+        strength = (bounded - ACE_DF_CONFIDENCE_MIN) / span if span else 0.0
+        price = ACE_DF_DISPLAY_MAX - strength * (ACE_DF_DISPLAY_MAX - ACE_DF_DISPLAY_MIN)
+    else:
+        # Keep the broader legacy estimate for GAMES/SETS historical display.
+        price = max(1.05, min(2.50, 1.0 / (p * (1.0 + DISPLAY_OVERROUND))))
     return {
         "indicative_odds": round(price + 1e-9, 2),
         "indicative_odds_method": ESTIMATE_MODEL,
@@ -121,8 +135,9 @@ def annotate_feed_indicative_odds(feed: dict) -> tuple[dict, dict]:
             market = str(publication.get("market") or "").lower()
             counts[market] += 1
     return feed, {
-        "schema": 2, "method": ESTIMATE_MODEL,
+        "schema": 3, "method": ESTIMATE_MODEL,
         "display_overround": DISPLAY_OVERROUND,
+        "ace_df_display_range": [ACE_DF_DISPLAY_MIN, ACE_DF_DISPLAY_MAX],
         "historic_estimates_by_market": counts,
         "historic_estimates_total": sum(counts.values()),
         "historical_illustrative_only_by_market": historical_placeholder_counts,
