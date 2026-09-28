@@ -111,12 +111,14 @@ def render_blinq_email(
     button_url: str = "",
     footer_sk: str = "",
     footer_en: str = "",
+    preheader: str = "",
 ) -> tuple[str, str]:
     """Return plain + HTML bodies using the canonical BlinQ transactional style."""
     button_label = str(button_label or "").strip()
     button_url = str(button_url or "").strip()
     footer_sk = str(footer_sk or "").strip()
     footer_en = str(footer_en or "").strip()
+    preheader = str(preheader or title_sk or title_en or "").strip()
 
     plain_parts = [str(title_sk), str(body_sk)]
     if button_url:
@@ -138,6 +140,7 @@ def render_blinq_email(
         "button_url": button_url,
         "footer_sk": footer_sk,
         "footer_en": footer_en,
+        "preheader": preheader,
     }.items()}
     for key in ("body_sk", "body_en", "footer_sk", "footer_en"):
         safe[key] = safe[key].replace("\n", "<br>")
@@ -145,9 +148,13 @@ def render_blinq_email(
     button = ""
     if button_label and button_url:
         button = (
-            f'<div style="margin:24px 0"><a href="{safe["button_url"]}" '
-            'style="display:inline-block;background:#43e6a0;color:#03110d;text-decoration:none;font-weight:800;'
-            f'border-radius:10px;padding:13px 19px">{safe["button_label"]}</a></div>'
+            '<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:24px 0">'
+            '<tr><td bgcolor="#43e6a0" style="border-radius:10px">'
+            f'<a href="{safe["button_url"]}" '
+            'style="display:inline-block;background:#43e6a0;color:#03110d;text-decoration:none;'
+            'font-family:Arial,Helvetica,sans-serif;font-size:14px;font-weight:800;line-height:18px;'
+            f'border-radius:10px;padding:13px 19px">{safe["button_label"]}</a>'
+            '</td></tr></table>'
         )
     footer = ""
     if footer_sk or footer_en:
@@ -158,9 +165,10 @@ def render_blinq_email(
             + f'{safe["footer_en"]}</p>'
         )
 
-    html = f'''<!doctype html><html><body style="margin:0;background:#020c0b;color:#eaf6f1;font-family:Arial,Helvetica,sans-serif">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#020c0b;padding:28px 12px"><tr><td align="center">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#061713;border:1px solid #164c3b;border-radius:18px;overflow:hidden">
+    html = f'''<!doctype html><html><body bgcolor="#020c0b" style="margin:0;padding:0;background:#020c0b;color:#eaf6f1;font-family:Arial,Helvetica,sans-serif">
+<div style="display:none!important;visibility:hidden;opacity:0;color:transparent;height:0;width:0;overflow:hidden;mso-hide:all">{safe["preheader"]}</div>
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#020c0b" style="width:100%;background:#020c0b"><tr><td align="center" style="padding:28px 12px">
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#061713" style="width:100%;max-width:620px;background:#061713;border:1px solid #164c3b;border-radius:18px">
 <tr><td style="padding:28px 30px 18px"><span style="display:inline-block;color:#f3fbf8;font-family:Arial,Helvetica,sans-serif;font-size:30px;font-weight:800;letter-spacing:-1px;line-height:1.1">Blin<span style="color:#43e6a0">Q</span></span></td></tr>
 <tr><td style="padding:6px 30px 30px"><div style="font-size:12px;letter-spacing:.16em;color:#45e7a2;font-weight:700">{safe["eyebrow"]}</div>
 <h1 style="margin:10px 0 8px;font-size:27px;line-height:1.2;color:#f3fbf8">{safe["title_sk"]}</h1>
