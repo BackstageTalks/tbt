@@ -278,6 +278,64 @@ jobs:
             python scripts/pipeline.py "${args[@]}"
           fi
 
+      - name: Persist training decision audit
+        if: ${{ always() && env.MODE == 'train' }}
+        continue-on-error: true
+        env:
+          TRAIN_RUN_ID: ${{ github.run_id }}
+          TRAIN_RUN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          def read_json(path, default=None):
+              p = Path(path)
+              if not p.is_file():
+                  return default
+              try:
+                  return json.loads(p.read_text(encoding="utf-8"))
+              except Exception as exc:
+                  return {"read_error": str(exc)}
+
+          report = read_json(".cache/tbt/model/training_report.json", {})
+          history = read_json(".cache/tbt/model/promotion_history.json", [])
+          decision = history[-1] if isinstance(history, list) and history else None
+          audit = {
+              "schema": 1,
+              "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+              "run_id": os.environ.get("TRAIN_RUN_ID"),
+              "run_sha": os.environ.get("TRAIN_RUN_SHA"),
+              "promotion_requested": os.environ.get("PROMOTE") == "true",
+              "decision": decision,
+              "training_report": report,
+          }
+          Path("/tmp/model-training-audit.json").write_text(
+              json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          PY
+          path="audit/model-training-latest.json"
+          existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          encoded="$(base64 -w0 /tmp/model-training-audit.json)"
+          if [[ -n "$existing_sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit BlinQ model training run $TRAIN_RUN_ID"               -f content="$encoded"               -f sha="$existing_sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit BlinQ model training run $TRAIN_RUN_ID"               -f content="$encoded" >/dev/null
+          fi
+
+      - name: Upload training decision evidence
+        if: ${{ always() && env.MODE == 'train' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-model-training-${{ github.run_id }}
+          path: |
+            .cache/tbt/model/training_report.json
+            .cache/tbt/model/promotion_history.json
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Save morning refresh budget evidence
         if: env.MODE == 'refresh' && env.MORNING_REFRESH == 'true'
         uses: actions/upload-artifact@v4
