@@ -327,9 +327,11 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                 continue
 
             matches = []
+            legacy_dayless_matches = []
             for publication in publications:
                 stored = _market_commitment_from_publication(commitment[0], publication)
-                same_identity = stored[:4] == commitment[:4] and stored[8] == commitment[8]
+                same_identity = stored[:4] == commitment[:4]
+                same_day = stored[8] == commitment[8]
                 # Projection scope + metric are part of the semantic identity.
                 # They disambiguate e.g. player aces from any future totals.
                 if section in {"ace", "double_faults", "sets", "games"}:
@@ -338,13 +340,33 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                         and stored[11] == commitment[11]
                         and stored[12] == commitment[12]
                     )
-                if same_identity and publication.get("issued_at") and publication.get("publication_status") == "published":
+                issued = (
+                    publication.get("issued_at")
+                    and publication.get("publication_status") == "published"
+                )
+                if same_identity and same_day and issued:
                     matches.append(publication)
+                elif (
+                    same_identity
+                    and issued
+                    and section in {"top_daily", "prime", "value", "doubles"}
+                    and stored[8] in (None, "")
+                ):
+                    # Pre-betting-day Match Winner ledgers have immutable issued
+                    # odds/probabilities but no betting_day field. If there is
+                    # exactly one such immutable snapshot for this event/section/
+                    # selection, it is safer to restore that known public offer
+                    # than to crash refresh or invent the current drifting price.
+                    legacy_dayless_matches.append(publication)
 
-            if section in {"ace", "double_faults", "sets", "games"} and matches:
-                # Multiple ledger rows are safe only when they encode exactly the
-                # same immutable projection snapshot. Collapse lifecycle-only
-                # duplicates; never choose between conflicting projections.
+            if not matches and legacy_dayless_matches:
+                matches = legacy_dayless_matches
+
+            if matches:
+                # Exact lifecycle duplicates are harmless for every market: they
+                # encode the same immutable public commitment. Collapse only
+                # byte-for-byte commitment signatures; conflicting snapshots stay
+                # distinct and therefore still fail closed below.
                 unique = {}
                 for publication in matches:
                     signature = _market_commitment_from_publication(commitment[0], publication)
