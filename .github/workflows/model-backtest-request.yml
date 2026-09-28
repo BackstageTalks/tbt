@@ -1,0 +1,87 @@
+name: BlinQ controlled model backtest
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/model-backtest-request.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-model-backtest
+  cancel-in-progress: false
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      BACKTEST_RUN_ID: ${{ github.run_id }}
+      BACKTEST_RUN_SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install training dependencies
+        run: python -m pip install -r api/requirements-train.txt
+
+      - name: Validate controlled request
+        run: |
+          set -euo pipefail
+          test -s .github/model-backtest-request.json
+          test "$(jq -r '.mode // ""' .github/model-backtest-request.json)" = "backtest"
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+
+      - name: Run zero-provider walk-forward backtest
+        run: |
+          set -euo pipefail
+          python scripts/pipeline.py backtest --max-requests 1
+          test -s .cache/tbt/backtest.json
+
+      - name: Persist latest backtest audit
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          report = json.loads(Path(".cache/tbt/backtest.json").read_text(encoding="utf-8"))
+          payload = {
+              "schema": 1,
+              "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+              "run_id": os.environ["BACKTEST_RUN_ID"],
+              "run_sha": os.environ["BACKTEST_RUN_SHA"],
+              "api_requests": 0,
+              "report": report,
+          }
+          Path("/tmp/model-backtest-latest.json").write_text(
+              json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          PY
+          path="audit/model-backtest-latest.json"
+          existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          encoded="$(base64 -w0 /tmp/model-backtest-latest.json)"
+          if [[ -n "$existing_sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit BlinQ model backtest run $BACKTEST_RUN_ID"               -f content="$encoded"               -f sha="$existing_sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit BlinQ model backtest run $BACKTEST_RUN_ID"               -f content="$encoded" >/dev/null
+          fi
+
+      - name: Upload backtest evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-model-backtest-${{ github.run_id }}
+          path: .cache/tbt/backtest.json
+          if-no-files-found: error
+          retention-days: 14
