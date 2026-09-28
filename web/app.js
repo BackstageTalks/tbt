@@ -2289,6 +2289,37 @@
     dialog.classList.remove('ace-projection-dialog');dialog.classList.add('sg-projection-dialog');
     if(!dialog.open)dialog.showModal();
   }
+  // Temporary Aces / Double Faults display price. Current stored/provider
+  // prices for these two markets are not trusted yet, so keep one stable
+  // 1.50-1.70 value per pick until the new odds API/data contract is deployed.
+  // Display only: ledger, settlement, ROI and Units remain untouched.
+  function aceDfTemporaryDisplayOdds(row){
+    const market=String(row?.market||row?.projection_metric||'').toLowerCase();
+    if(!['aces','double_faults'].includes(market))return NaN;
+    const identity=[
+      row?.event_id||row?.match_id||row?.id||'',
+      market,
+      row?.publication_key||row?.selection_key||'',
+      row?.selection_id||row?.selection||row?.pick||'',
+      row?.issued_at||row?.scheduled_at||row?.date||''
+    ].join('|');
+    if(!identity.replaceAll('|',''))return NaN;
+    let hash=2166136261;
+    for(let i=0;i<identity.length;i++){
+      hash^=identity.charCodeAt(i);
+      hash=Math.imul(hash,16777619);
+    }
+    const step=(hash>>>0)%21;
+    return Math.round((1.50+step/100)*100)/100;
+  }
+  function aceDfTemporaryOddsHint(){
+    return lcopy(
+      'Temporary Aces/DF display odds. Stable 1.50-1.70 placeholder until the new odds API is deployed. Excluded from ROI.',
+      'Dočasný zobrazovaný kurz pre esá/DF. Stabilná hodnota 1,50–1,70 do nasadenia nového kurzového API. Nezapočítava sa do ROI.',
+      'Dočasný zobrazovaný kurz pro esa/DF. Stabilní hodnota 1,50–1,70 do nasazení nového kurzového API. Nezapočítává se do ROI.'
+    );
+  }
+
   // Indicative display quote on the EXACT published projection contract,
   // never a historical bookmaker price and never included in actual ROI.
   // Client fallback also covers older public feeds before the next refresh.
@@ -2312,10 +2343,15 @@
     );
   }
   function projectionOddsHtml(row){
+    const temporaryAceDf=aceDfTemporaryDisplayOdds(row);
+    if(Number.isFinite(temporaryAceDf)){
+      const hint=aceDfTemporaryOddsHint();
+      return `<span title="${escapeHtml(hint)}">${hubNumberHtml(temporaryAceDf.toFixed(2),lcopy('odds','kurz','kurz'))}</span>`;
+    }
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
     if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
-    // Never show a guessed odds number on the live ACES/DF/GAMES/SETS board.
+    // Games/Sets remain strict until a genuine provider quote exists.
     const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
     return `<span title="${escapeHtml(reason)}">${hubNumberHtml('N/A',reason)}</span>`;
   }
@@ -3077,7 +3113,9 @@
         const placeholderOdds=placeholderRaw==null?NaN:Number(placeholderRaw);
         const illustrativeOnly=publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
           &&Number.isFinite(placeholderOdds)&&placeholderOdds>=1.50&&placeholderOdds<=1.70;
-        const displayedProjectionOdds=realProjectionOddsText!=='—'?realProjectionOddsText:
+        const temporaryAceDfOdds=aceDfTemporaryDisplayOdds(publication);
+        const displayedProjectionOdds=Number.isFinite(temporaryAceDfOdds)?temporaryAceDfOdds.toFixed(2):
+          realProjectionOddsText!=='—'?realProjectionOddsText:
           illustrativeOnly?placeholderOdds.toFixed(2):
           Number.isFinite(estimatedProjectionOdds)?estimatedProjectionOdds.toFixed(2):'—';
         const illustrativeHint=lcopy(
@@ -3085,9 +3123,11 @@
           'IBA ILUSTRAČNÁ HODNOTA: generovaná náhrada, nie historický kurz ani odhad modelu. Nepoužíva sa na výpočet ROI.',
           'POUZE ILUSTRAČNÍ HODNOTA: generovaná náhrada, nikoli historický kurz ani odhad modelu. Nepoužívá se pro výpočet ROI.'
         );
-        const projectionOddsTitle=realProjectionOddsText==='—'&&illustrativeOnly
-          ?` title="${escapeHtml(illustrativeHint)}"`
-          :Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
+        const projectionOddsTitle=Number.isFinite(temporaryAceDfOdds)
+          ?` title="${escapeHtml(aceDfTemporaryOddsHint())}"`
+          :realProjectionOddsText==='—'&&illustrativeOnly
+            ?` title="${escapeHtml(illustrativeHint)}"`
+            :Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
         // Historical display-only prices can fill the visible Units cell,
         // but never become a settled stake, ledger profit, or genuine ROI.
         const hasSettledUnits=Number.isFinite(projectionUnits)&&Number(publication?.result?.staked_units)>0;
