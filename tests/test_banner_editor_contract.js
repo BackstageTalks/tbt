@@ -17,4 +17,14 @@ assert.ok(app.includes('sizes([10,12,14,16,18,20,24,28],c.text_size,14)'), 'subt
 assert.ok(css.includes('font-size:min(var(--creative-headline-size,36px),clamp(18px,calc(var(--creative-headline-size,36px)*.75),38px))!important;'), 'mobile honors small headline sizes');
 assert.ok(css.includes('font-size:min(var(--creative-headline-size,36px),clamp(14px,calc(var(--creative-headline-size,36px)*.65),44px))!important;'), 'desktop preview honors 12 px');
 for(let i=1;i<=5;i++)assert.equal(ui.elements['HERO_BANNER_'+i].content.accent_text,'');
+
+assert.ok(app.includes("const previewIndex=activeAdminBanners().findIndex(entry=>entry.id===id);"), 'select/change keeps preview on edited banner');
+assert.ok(app.includes("const previewIndex=activeAdminBanners().findIndex(entry=>entry.id===wrap?.dataset?.simpleBanner);"), 'live text input keeps preview on edited banner');
+const tail=css.slice(css.lastIndexOf('Banner editor contract: editable typography wins'));
+for(const token of [
+  'font-size:var(--creative-headline-size,36px)!important',
+  'font-size:var(--creative-text-size,14px)!important',
+  'font-size:var(--creative-eyebrow-size,10px)!important'
+]) assert.ok(tail.includes(token), 'final banner override missing: '+token);
+
 console.log('PASS: banner editor contract');
