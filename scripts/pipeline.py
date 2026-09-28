@@ -14,6 +14,7 @@ from download_tennis_history import read_json, write_json
 from history_download_budget import LocalRequestBudget, reserve_allocation
 from release_store import ReleaseStore
 from tbt.config import settings
+from tbt.errors import ProviderError
 from tbt.data.history_snapshot import (
     load_partitions,
     sync_year_partition,
@@ -164,21 +165,50 @@ def _merge_refresh_batch_safely(matches, incoming, *, day, tour):
 
 
 def _refresh_history(provider, matches, history_dir, history_store, start, end):
+    """Refresh recent completed history without letting one broken old provider day
+    take down the whole publication job.
+
+    TennisApi occasionally returns a hard 4xx for one historical calendar date
+    while adjacent dates remain healthy. Existing canonical history is
+    append/merge-only here, so skipping that *past* day preserves the last known
+    good partition and lets the next refresh retry it. The current day remains
+    fail-closed because publishing a feed after losing today's discovery would
+    be unsafe.
+    """
     provider_years = {
         provider_id: match.scheduled_at.astimezone(timezone.utc).year
         for match in matches
         if (provider_id := _provider_event_id(match)) is not None
     }
+    skipped_days: set[str] = set()
     day = start
     while day <= end:
+        day_failed = False
         for tour in ("atp", "wta"):
-            incoming = [
-                match
-                for match in provider.matches_for_day(
-                    tour, day, historical=True
-                )
-                if match.is_completed
-            ]
+            try:
+                incoming = [
+                    match
+                    for match in provider.matches_for_day(
+                        tour, day, historical=True
+                    )
+                    if match.is_completed
+                ]
+            except ProviderError as exc:
+                # A historical provider hole must not destroy an otherwise valid
+                # refresh. Do not apply this to today: current-day discovery is
+                # required before we are allowed to publish a new betting feed.
+                if day >= end:
+                    raise
+                skipped_days.add(day.isoformat())
+                day_failed = True
+                print(json.dumps({
+                    "warning": "historical_provider_day_skipped",
+                    "day": day.isoformat(),
+                    "tour": tour,
+                    "reason": str(exc)[:300],
+                    "policy": "preserve_existing_history_and_retry_next_refresh",
+                }, ensure_ascii=False), flush=True)
+                break
 
             matches, accepted_incoming = _merge_refresh_batch_safely(
                 matches, incoming, day=day, tour=tour
@@ -215,8 +245,13 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
                     provider_years[provider_id] = (
                         match.scheduled_at.astimezone(timezone.utc).year
                     )
+        if day_failed:
+            # The same calendar discovery powers ATP, WTA and doubles. Avoid
+            # spending another request on a date that just returned a provider
+            # error in this run.
+            pass
         day += timedelta(days=1)
-    return matches
+    return matches, skipped_days
 
 
 
@@ -610,8 +645,10 @@ def main():
     doubles_completed = []
     doubles_upcoming = []
     try:
-        matches = _refresh_history(provider, matches, history_dir, history_store,
-                                   now.date() - timedelta(days=7), now.date())
+        matches, skipped_history_days = _refresh_history(
+            provider, matches, history_dir, history_store,
+            now.date() - timedelta(days=7), now.date()
+        )
         for tour in ("atp", "wta"):
             upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
 
@@ -630,6 +667,9 @@ def main():
         # doubles history adds very little discovery traffic.
         doubles_day = now.date() - timedelta(days=7)
         while doubles_day <= now.date():
+            if doubles_day.isoformat() in skipped_history_days:
+                doubles_day += timedelta(days=1)
+                continue
             doubles_completed.extend(
                 match for match in provider.doubles_for_day(doubles_day, historical=True)
                 if match.is_completed
