@@ -1,0 +1,93 @@
+name: BlinQ one-night adaptive data backfill (Sep 26)
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/overnight-data-20260926.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Never overlap MegaData, refresh, Environment or other history writers.
+# This is intentionally a SINGLE overnight run, not an uncapped daily schedule.
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  bounded-backfill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: history
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install and test spending guards
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+          python -m unittest discover -s scripts/tests -p 'test_overnight_data_optimizer.py' -v
+          test -n "$GH_TOKEN" || { echo "::error::Missing private data token"; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = PRIVATE
+      - name: Collect only if provider confirms remaining quota; reserve serving headroom
+        run: |
+          set -euo pipefail
+          python scripts/overnight_data_optimizer.py \
+            --deadline 2026-09-27T03:15:00Z \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --max-spend 6000 \
+            --reserve 1200
+      - name: Publish real progress, not assumed results
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          from pathlib import Path
+          p=Path('.cache/tbt/overnight-20260926/overnight_report.json')
+          print("# BlinQ night backfill: observed results")
+          if not p.is_file():
+              print("Workflow failed before creating its report; no completion claim.")
+          else:
+              r=json.loads(p.read_text())
+              print(f"- Confirmed provider quota: {r.get('quota_observed')}")
+              print(f"- Requests charged conservatively: {r.get('requests_used',0)} / {r['max_spend']}")
+              print(f"- Reserved for serving: {r['serving_reserve']}")
+              for phase in r.get('phases',[]):
+                  print(f"- {phase['name']}: exit={phase.get('exit_code','INCOMPLETE')}")
+              for label,item in (("Before",r.get("baseline") or {}),("After",r.get("final_inventory") or {})):
+                  print(f"- {label}: {item}")
+              print(f"- Preflight: {r.get('readiness')}")
+              for warning in r.get('warnings') or []:
+                  print(f"- Warning: {warning}")
+              if r.get('fatal_error'): print(f"- Fatal: {r['fatal_error']}")
+          PY
+      - name: Preserve all diagnostics even after a partial collector failure
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-overnight-maximize-${{ github.run_id }}
+          path: |
+            .cache/tbt/overnight-20260926/
+            .cache/tbt/production/statistics_inventory_report.json
+            .cache/tbt/production/training_table_report.json
+            .cache/tbt/production/readiness_report.json
+            .cache/tbt/production/leakage_audit_report.json
+            .cache/tbt/sg-history/sg_run_summary.json
+            .cache/tbt/ace-history/ace_run_summary.json
+          if-no-files-found: warn
+          retention-days: 30

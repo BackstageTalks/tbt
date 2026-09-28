@@ -46,12 +46,27 @@ class WeatherAtMatch:
     source_time_utc: str | None
 
 
+# Only documented equivalent city spellings. Never guess arbitrary cities.
+_CITY_CANONICAL = {
+    "sharm elsheikh": "sharm el sheikh",
+    "sharm el-sheikh": "sharm el sheikh",
+    "s. margherita di pula": "santa margherita di pula",
+    "s margherita di pula": "santa margherita di pula",
+    # Open-Meteo and tennis feeds disagree about the Dutch city's apostrophe.
+    "'s-hertogenbosch": "s-hertogenbosch",
+    "'s hertogenbosch": "s-hertogenbosch",
+    "s hertogenbosch": "s-hertogenbosch",
+    "den bosch": "s-hertogenbosch",
+}
+
+
 def _normal(value: Any) -> str:
-    return "".join(
+    normalized = "".join(
         c
         for c in unicodedata.normalize("NFKD", str(value or "").casefold())
         if not unicodedata.combining(c)
     ).strip()
+    return _CITY_CANONICAL.get(normalized, normalized)
 
 
 _COUNTRY_HINT_ALIASES = {
@@ -86,6 +101,8 @@ class OpenMeteoClient:
         *,
         request_limit: int | None = None,
         min_interval_seconds: float = 0.75,
+        transient_retries: int = 2,
+        retry_backoff_seconds: float = 0.75,
         client: httpx.Client | None = None,
     ) -> None:
         if request_limit is not None and request_limit < 1:
@@ -97,25 +114,39 @@ class OpenMeteoClient:
         self.request_limit = int(request_limit) if request_limit is not None else None
         self.request_count = 0
         self.min_interval_seconds = max(0.0, float(min_interval_seconds))
+        self.transient_retries = max(0, int(transient_retries))
+        self.retry_backoff_seconds = max(0.0, float(retry_backoff_seconds))
         self._last_request = 0.0
 
     def close(self) -> None:
         self.client.close()
 
     def _get(self, url: str, params: dict[str, Any]) -> dict[str, Any]:
-        if self.request_limit is not None and self.request_count >= self.request_limit:
-            raise OpenMeteoBudgetExceeded("Open-Meteo request cap reached")
-        delay = self.min_interval_seconds - (time.monotonic() - self._last_request)
-        if delay > 0:
-            time.sleep(delay)
-        self._last_request = time.monotonic()
-        self.request_count += 1
-        response = self.client.get(url, params=params)
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, dict) or payload.get("error"):
-            raise ValueError("Invalid Open-Meteo response")
-        return payload
+        last_exc: Exception | None = None
+        for attempt in range(self.transient_retries + 1):
+            if self.request_limit is not None and self.request_count >= self.request_limit:
+                raise OpenMeteoBudgetExceeded("Open-Meteo request cap reached")
+            delay = self.min_interval_seconds - (time.monotonic() - self._last_request)
+            if delay > 0:
+                time.sleep(delay)
+            self._last_request = time.monotonic()
+            self.request_count += 1
+            try:
+                response = self.client.get(url, params=params)
+                response.raise_for_status()
+                payload = response.json()
+                if not isinstance(payload, dict) or payload.get("error"):
+                    raise ValueError("Invalid Open-Meteo response")
+                return payload
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError) as exc:
+                last_exc = exc
+                if attempt >= self.transient_retries:
+                    raise
+                backoff = self.retry_backoff_seconds * (2 ** attempt)
+                if backoff > 0:
+                    time.sleep(backoff)
+        assert last_exc is not None
+        raise last_exc
 
     # Retain positive AND negative queries throughout a full history pass.
     # 4k evicted common ITF city misses and repeated paid geocodes.
@@ -179,9 +210,19 @@ class OpenMeteoClient:
                     continue
             exact.append(row)
 
-        # Fail closed on ambiguity. We never pick "the first" city silently.
+        # Open-Meteo can return BOTH a populated city and an administrative
+        # region with the same name (e.g. Antalya). Prefer the populated place
+        # only when the response identifies one unambiguous settlement. Two
+        # different settlements with the same name remain unresolved.
         if len(exact) != 1:
-            return None
+            populated = [
+                item for item in exact
+                if str(item.get("feature_code") or "").upper().startswith("PPL")
+            ]
+            if len(populated) == 1:
+                exact = populated
+            else:
+                return None
         row = exact[0]
 
         latitude = float(row["latitude"])
@@ -200,7 +241,14 @@ class OpenMeteoClient:
             longitude=longitude,
             elevation_m=float(elevation) if elevation is not None else None,
             timezone=row.get("timezone"),
-            country=row.get("country"),
+            # Some Open-Meteo entries (e.g. Hong Kong) omit the display
+            # country but retain the authoritative GeoNames country_code.
+            # Never infer country from the requested query alone.
+            country=row.get("country") or (
+                row.get("country_code")
+                if normalize_country_code(row.get("country_code"))
+                else None
+            ),
         )
 
     @lru_cache(maxsize=4096)
@@ -379,6 +427,8 @@ _LOCATION_ALIASES = {
     "rotterdam": "Rotterdam, NL",
     "little rock": "Little Rock, Arkansas, US",
     "s-hertogenbosch": "'s-Hertogenbosch, NL",
+    "'s-hertogenbosch": "'s-Hertogenbosch, NL",
+    "'s hertogenbosch": "'s-Hertogenbosch, NL",
     "hertogenbosch": "'s-Hertogenbosch, NL",
     "antwerp": "Antwerp, BE",
     "brussels": "Brussels, BE",
@@ -726,14 +776,29 @@ def venue_context_compatible(
     if country_hints and venue_country not in country_hints:
         return False, "country_mismatch"
 
-    city_hints = strong_location_name_hints(provider_payload, tournament)
-    if city_hints:
-        venue_names = {
-            _normal(venue.get("name")),
-            _normal(str(venue.get("query") or "").split(",", 1)[0]),
-        }
-        venue_names.discard("")
-        if not venue_names.intersection(city_hints):
+    venue_names = {
+        _normal(venue.get("name")),
+        _normal(str(venue.get("query") or "").split(",", 1)[0]),
+    }
+    venue_names.discard("")
+    raw = _as_dict(provider_payload)
+    tournament_obj = _as_dict(raw.get("tournament"))
+    direct_cities = {
+        _normal(value) for value in (
+            _as_dict(raw.get("venue")).get("city"),
+            tournament_obj.get("city"),
+            _as_dict(tournament_obj.get("uniqueTournament")).get("city"),
+            raw.get("city"), raw.get("venueCity"),
+        ) if _normal(value)
+    }
+    # Provider-supplied city is authoritative even when a broader tournament
+    # alias names a nearby but different place (Antalya vs Belek).
+    if direct_cities:
+        if not venue_names.intersection(direct_cities):
+            return False, "provider_city_mismatch"
+    else:
+        city_hints = strong_location_name_hints(provider_payload, tournament)
+        if city_hints and not venue_names.intersection(city_hints):
             return False, "city_mismatch"
     return True, "compatible"
 
@@ -771,6 +836,11 @@ def location_candidates(
         text = _clean_location_token(value)
         if not text:
             return
+        # Normalize only explicit, proven alternative city spellings.
+        city_part, separator, qualifier = text.partition(",")
+        canonical = _normal(city_part)
+        if canonical in {"sharm el sheikh", "santa margherita di pula"}:
+            text = canonical + (separator + qualifier if separator else "")
         # Never fall back to a countryless query when the provider supplied
         # an unambiguous country; this prevents homonymous-city mismatches.
         if city and only_country and "," not in text:
@@ -782,6 +852,9 @@ def location_candidates(
         city = _clean_location_token(value)
         if not city:
             return
+        # Canonical aliases preserve the original explicit country restriction.
+        if _normal(city) in {"sharm el sheikh", "santa margherita di pula"}:
+            city = _normal(city)
         explicit = normalize_country_code(country)
         if explicit:
             add(f"{city}, {explicit}")

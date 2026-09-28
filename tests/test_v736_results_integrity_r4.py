@@ -54,7 +54,11 @@ def test_backend_metrics_collapse_legacy_duplicate_publication_keys():
     assert metrics["overall"]["n"] == 1
     assert metrics["overall"]["wins"] == 1
     assert metrics["sections"]["prime"]["n"] == 1
-    assert abs(metrics["overall"]["profit_units"] - 0.8) < 1e-12
+    assert metrics["overall"]["profit_units"] == 0.0
+    assert metrics["overall"]["staked_units"] == 0.0
+    assert metrics["overall"]["roi"] is None
+    assert metrics["sections"]["prime"]["wins"] == 1
+    assert metrics["unit_excluded_sections"] == ["prime"]
 
 
 def test_release_stays_736_and_patch_cache_matches_patch_marker():

@@ -1,0 +1,282 @@
+name: BlinQ Environment autopilot (no Tennis API)
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/environment-autopilot.yml']
+  workflow_run:
+    workflows:
+      - Environment 1 - cache-only bulk backfill
+      - Environment overnight - safe geocoding
+      - Environment joint run - cache, coverage, preflight, ablation
+      - Environment nightly 10-run backfill (no Tennis API)
+      # A user-started Tennis pipeline may be holding the history writer lock.
+      # Immediately request the already-authorized read-only research audit
+      # after it completes, if the overnight run has finished.
+      - Tennis data and predictions
+      - BlinQ one-night adaptive data backfill (Sep 26)
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: blinq-environment-autopilot-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch-next:
+    # Explicit kill switch. No Tennis RapidAPI requests are made by this workflow
+    # or by any of the three environment workflows it dispatches.
+    if: vars.TBT_ENV_AUTOPILOT_ENABLED != 'false'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Advance safe Environment pipeline only after previous run finishes
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import datetime
+          import json
+          import os
+          import subprocess
+          import sys
+
+          repo = os.environ["GH_REPO"]
+          now = datetime.datetime.now(datetime.timezone.utc)
+          today = now.date()
+          workflows = [
+              "environment-cache-only.yml",
+              "environment-overnight.yml",
+              "environment-joint.yml",
+              # Also check manual Environment jobs using the SAME history writer lock.
+              "environment-enrichment.yml",
+              "environment-unique-geocoding.yml",
+              "environment-audit.yml",
+              # Nightly ten-stage batch holds the same history writer lock.
+              "environment-nightly-ten.yml",
+              "data.yml",
+              "overnight-data-20260926.yml",
+          ]
+          def recent(workflow):
+              url = f"repos/{repo}/actions/workflows/{workflow}/runs?per_page=35"
+              output = subprocess.check_output(["gh", "api", url], text=True)
+              return json.loads(output).get("workflow_runs", [])
+          def started_today(run):
+              return datetime.datetime.fromisoformat(
+                  run["created_at"].replace("Z", "+00:00")
+              ).date() == today
+          def dispatch(workflow, inputs):
+              command = ["gh", "workflow", "run", workflow, "--repo", repo, "--ref", "main"]
+              for key, value in inputs.items():
+                  command += ["-f", f"{key}={value}"]
+              subprocess.run(command, check=True)
+              print(f"Dispatched {workflow}: {inputs}")
+          runs = {workflow: recent(workflow) for workflow in workflows}
+          # Read-only 15-minute watcher for the bounded night collector.
+          # It never dispatches or retries a paid job; a partial run may
+          # have spent provider quota even if GitHub reports failure.
+          overnight = runs["overnight-data-20260926.yml"]
+          if overnight:
+              current = sorted(overnight, key=lambda r: r["created_at"])[-1]
+              print("Nightly data monitor:", current["html_url"],
+                    current["status"], current.get("conclusion"),
+                    "updated:", current.get("updated_at"))
+              if (current["status"] == "completed"
+                      and current.get("conclusion") != "success"
+                      and now.date() <= datetime.date(2026, 9, 27)):
+                  print("::error::Overnight backfill did not complete; "
+                        "inspect partial checkpoints before any paid retry.")
+                  sys.exit(1)
+          # Nightly backfill already chains completed batches immediately. Every
+          # Event-driven/manual autopilot is its independent progress watchdog:
+          # cancel accidental duplicate push runs, restart one failed batch once,
+          # and repair a missing handoff without starting any Tennis API job.
+          nightly_runs = runs["environment-nightly-ten.yml"]
+          night_end = datetime.datetime(2026, 9, 27, 11, tzinfo=datetime.timezone.utc)
+          first_nightly_id = 36259199600
+          if nightly_runs and now < night_end:
+              for run in nightly_runs:
+                  # A workflow-file update briefly enabled a second push batch zero.
+                  # Cancel the accidental pending run; leave the original initial
+                  # push run untouched and keep all legitimate dispatch runs.
+                  if (run["event"] == "push" and run["id"] != first_nightly_id
+                          and run["status"] not in ("completed",)):
+                      subprocess.run(
+                          ["gh", "api", "-X", "POST",
+                           f"repos/{repo}/actions/runs/{run['id']}/cancel"],
+                          check=True,
+                      )
+                      print(f"Cancelled unintended duplicate overnight push run {run['id']}")
+              legitimate = sorted(
+                  (r for r in nightly_runs
+                   if r["id"] == first_nightly_id or r["event"] == "workflow_dispatch"),
+                  key=lambda r: r["created_at"],
+              )
+              if legitimate:
+                  import re
+                  last = legitimate[-1]
+                  match = re.search(r"batch ([0-9]) / 9", last.get("display_title") or "")
+                  batch = int(match.group(1)) if match else len(legitimate) - 1
+                  print(f"Nightly Environment progress: batch {batch+1}/10, "
+                        f"run {last['id']}, status={last['status']}, "
+                        f"conclusion={last.get('conclusion')}, "
+                        f"attempt={last.get('run_attempt', 1)}.")
+                  if not 0 <= batch <= 9:
+                      print("::error::Unrecognized nightly batch. No speculative dispatch.")
+                      sys.exit(1)
+                  if last["status"] != "completed":
+                      print("Nightly writer active or queued; Event-driven watchdog healthy.")
+                      sys.exit(0)
+                  completed_at = datetime.datetime.fromisoformat(
+                      last["updated_at"].replace("Z", "+00:00")
+                  )
+                  age_minutes = (now - completed_at).total_seconds() / 60
+                  if last.get("conclusion") == "success":
+                      if batch == 9:
+                          print("All ten nightly Environment batches finished successfully.")
+                          # Follow with one FULL audit on the latest committed
+                          # release: Environment + production preflight and
+                          # statistics coverage + leakage checks + static ablation.
+                          # An explicit workflow_dispatch can recover the trigger if workflow_run
+                          # from a bot dispatch does not produce a new event.
+                          final_finished = completed_at
+                          audits_after_final = [
+                              r for r in runs["environment-joint.yml"]
+                              if datetime.datetime.fromisoformat(
+                                  r["created_at"].replace("Z", "+00:00")
+                              ) > final_finished
+                          ]
+                          if audits_after_final:
+                              print("Post-nightly full audit already triggered:",
+                                    audits_after_final[0]["html_url"],
+                                    audits_after_final[0]["status"],
+                                    audits_after_final[0].get("conclusion"))
+                              sys.exit(0)
+                          other_busy = [
+                              (w, r["id"], r["status"])
+                              for w, items in runs.items()
+                              if w != "environment-nightly-ten.yml"
+                              for r in items if r["status"] != "completed"
+                          ]
+                          if other_busy:
+                              print("Waiting before full audit:", other_busy[:8])
+                              sys.exit(0)
+                          dispatch("environment-joint.yml", {
+                              "mode": "audit-only",
+                              "start": "2021-01-01",
+                              "end": ""
+                          })
+                          print("Dispatched full read-only Environment/Preflight/"
+                                "statistics/ablation audit after 10/10 batches.")
+                          sys.exit(0)
+                      if age_minutes >= 15:
+                          # A completed batch normally self-dispatches its successor.
+                          # Re-read before repairing a possibly delayed GitHub handoff.
+                          fresh = recent("environment-nightly-ten.yml")
+                          newer = any(
+                              r["id"] != last["id"] and
+                              r["event"] == "workflow_dispatch" and
+                              r["created_at"] > last["created_at"]
+                              for r in fresh
+                          )
+                          if not newer:
+                              dispatch("environment-nightly-ten.yml", {"batch": str(batch+1)})
+                              print(f"Repaired missing handoff; launched batch {batch+2}/10.")
+                          else:
+                              print("Successor run appeared after the initial scan.")
+                      else:
+                          print("Batch completed; allowing GitHub up to 15 minutes to queue the successor.")
+                      sys.exit(0)
+                  if last.get("conclusion") == "failure":
+                      # Dispatch current main, not GitHub "rerun", which would
+                      # replay the old buggy checkout. At most one repaired
+                      # dispatch is permitted for each numbered batch.
+                      prior_failures = [
+                          r for r in legitimate
+                          if re.search(
+                              rf"batch {batch} / 9",
+                              r.get("display_title") or "",
+                          ) and r.get("conclusion") == "failure"
+                      ]
+                      if len(prior_failures) == 1 and age_minutes >= 3:
+                          # No other data/Environment history writer may overlap.
+                          other_busy = [
+                              (w, x["id"]) for w, items in runs.items()
+                              if w != "environment-nightly-ten.yml"
+                              for x in items
+                              if x["status"] != "completed"
+                          ]
+                          if other_busy:
+                              print("Waiting for active writer:", other_busy[:6])
+                              sys.exit(0)
+                          dispatch("environment-nightly-ten.yml", {
+                              "batch": str(batch)
+                          })
+                          print(f"Restarted repaired nightly batch {batch+1}/10 on main.")
+                          sys.exit(0)
+                      if len(prior_failures) >= 2:
+                          print(f"::error::Nightly batch {batch+1}/10 failed twice: "
+                                f"{last['html_url']}")
+                          sys.exit(1)
+                      print("Failed batch in brief recovery grace period.")
+                      sys.exit(0)
+                  print(f"::warning::Nightly run ended as {last.get('conclusion')}; "
+                        "not restarting a cancelled/skipped run.")
+                  sys.exit(0)
+          # No speculative parallel dispatches. Both shared writers and ad hoc
+          # manual Environment audits get to finish before the next stage.
+          busy = [
+              (workflow, run["id"], run["status"])
+              for workflow, items in runs.items()
+              for run in items
+              if run["status"] not in ("completed",)
+          ]
+          if busy:
+              print("Another data/Environment job is active; waiting:", busy[:10])
+              sys.exit(0)
+
+          # Only autopilot-dispatched runs count as today's stages.
+          # Manual dry-runs (including pre-fix failures) must not permanently
+          # block autonomous recovery. Every manual run still blocks while active.
+          def ours(run):
+              actor = (run.get("actor") or {}).get("login", "").casefold()
+              return actor in ("github-actions[bot]", "github-actions")
+          cache = [r for r in runs["environment-cache-only.yml"] if started_today(r) and ours(r)]
+          geocode = [r for r in runs["environment-overnight.yml"] if started_today(r) and ours(r)]
+          audits = [r for r in runs["environment-joint.yml"] if started_today(r) and ours(r)]
+          # Never endlessly requeue a broken workflow or pay for repeated
+          # provider failures. Failed stages require operator investigation.
+          for name, records in [
+              ("cache-only", cache), ("geocoding", geocode), ("audit", audits)
+          ]:
+              if records and records[0].get("conclusion") != "success":
+                  print(f"::error::Latest {name} stage failed: {records[0]['html_url']}")
+                  sys.exit(1)
+
+          if not cache:
+              dispatch("environment-cache-only.yml", {
+                  "start": "2021-01-01", "end": "", "mode": "write", "limit": "0"
+              })
+          elif len(geocode) < 1:
+              # Open-Meteo / geocoding only, never the paid Tennis RapidAPI.
+              # At most 1 x 300 Open-Meteo requests per UTC day; audit before retrying low-yield candidates.
+              dispatch("environment-overnight.yml", {
+                  "start": "2021-01-01", "end": "", "mode": "write",
+                  "limit": "0", "max_requests": "300",
+                  "retry_unresolved": "false"
+              })
+          elif not audits:
+              dispatch("environment-joint.yml", {
+                  "mode": "audit-only", "start": "2021-01-01", "end": ""
+              })
+          else:
+              print("Today's cache, geocoding and coverage/preflight audit all completed.")
+              print("Next cycle begins tomorrow UTC; no Tennis RapidAPI requests.")
+          PY

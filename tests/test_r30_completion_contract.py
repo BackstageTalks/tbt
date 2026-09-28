@@ -18,7 +18,7 @@ def test_r30_workflow_exposes_production_audit_and_results_rebuild():
 def test_r30_rolling_windows_feed_single_model_success_card_only():
     app = read('web/app.js')
     engine = read('api/tbt/services/engine.py')
-    assert 'PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30)' in engine
+    assert 'PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30, 180, 365)' in engine
     assert '"dashboard_model_success"' in engine
     assert 'dashboardBest=state.feed?.dashboard_model_success' in app
     assert 'dailyHubPerformanceText' not in app

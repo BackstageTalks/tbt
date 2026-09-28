@@ -1,0 +1,104 @@
+name: BlinQ morning prediction refresh
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_requests:
+        description: Tennis RapidAPI requests to reserve (1-750)
+        type: number
+        required: false
+        default: 300
+      force:
+        description: Explicit manual override of the once-per-Bratislava-day guard
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: blinq-morning-refresh-dispatch
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    # Only external/manual workflow_dispatch may start the paid refresh.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MORNING_MAX_REQUESTS: ${{ inputs.max_requests || vars.TBT_MORNING_REFRESH_MAX_REQUESTS || '300' }}
+    steps:
+      - name: Validate daily request cap
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$MORNING_MAX_REQUESTS" =~ ^[0-9]+$ ]] ||
+             (( 10#$MORNING_MAX_REQUESTS < 1 || 10#$MORNING_MAX_REQUESTS > 750 )); then
+            echo "::error::Morning max_requests must be an integer from 1 to 750."
+            exit 1
+          fi
+
+      - name: Prevent a second paid morning dispatch
+        id: daily_guard
+        shell: bash
+        env:
+          MORNING_FORCE: ${{ inputs.force || 'false' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import datetime
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          zone = ZoneInfo("Europe/Bratislava")
+          today = datetime.datetime.now(zone).date()
+          if os.environ["MORNING_FORCE"].lower() == "true":
+              print("::warning::Explicit manual morning override: extra API requests are possible.")
+              should_dispatch = True
+          else:
+              # Fail closed if the GitHub API cannot establish prior dispatches.
+              url = ("repos/" + os.environ["GITHUB_REPOSITORY"] +
+                     "/actions/workflows/morning-refresh.yml/runs?per_page=70")
+              payload = json.loads(subprocess.check_output(["gh", "api", url], text=True))
+              current_id = int(os.environ["GITHUB_RUN_ID"])
+              previous = [
+                  run for run in payload.get("workflow_runs", [])
+                  if run.get("event") == "workflow_dispatch"
+                  and int(run.get("id") or 0) != current_id
+                  and run.get("conclusion") == "success"
+                  and datetime.datetime.fromisoformat(
+                      run["created_at"].replace("Z", "+00:00")
+                  ).astimezone(zone).date() == today
+              ]
+              should_dispatch = not previous
+              if previous:
+                  print("::notice::Morning refresh already dispatched today: " +
+                        str(previous[0]["id"]) + "; skipping duplicate.")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as handle:
+              handle.write("dispatch=" + str(should_dispatch).lower() + "\n")
+          PY
+
+      - name: Dispatch existing prediction refresh and deployment
+        if: steps.daily_guard.outputs.dispatch == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Reuse data.yml instead of running an independent writer. This
+          # preserves its history/publication concurrency locks, request
+          # accounting, release validation and production deploy guards.
+          gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f mode=refresh \
+            -f morning_refresh=true \
+            -f max_requests="$MORNING_MAX_REQUESTS" \
+            -f market_odds_max_events=90 \
+            -f doubles_odds_max_events=25 \
+            -f betting_day_start_hour=6
+          echo "Morning data.yml refresh dispatched with max_requests=$MORNING_MAX_REQUESTS."
+          echo "Track the actual refresh/deploy result in the Tennis data and predictions workflow."

@@ -66,13 +66,28 @@ class RapidTennisClient:
             )
 
         self.cfg = cfg
-        self.request_budget = request_budget
+        # Preserve existing local caps and additionally enforce the shared,
+        # server-side quota when a GitHub job supplies its budget credentials.
+        # Missing/incomplete credentials fail closed rather than silently
+        # bypassing a partially configured shared budget.
+        from .shared_budget import from_environment
+        shared_reservation = from_environment()
+        self._shared_reservation = shared_reservation
+        if shared_reservation is not None and request_budget is not None:
+            def combined_reservation(client, cfg, *, enrichment=False):
+                request_budget(client, cfg, enrichment=enrichment)
+                shared_reservation(client, cfg, enrichment=enrichment)
+            self.request_budget = combined_reservation
+        else:
+            self.request_budget = shared_reservation or request_budget
         self.client = httpx.Client(
             timeout=cfg.request_timeout_seconds
         )
         self._last_request_at = 0.0
         self.request_count = 0
         self.request_limit = 15000
+        # Latency-sensitive workers may opt out of retries without affecting batch jobs.
+        self.retry_attempts = 5
         self.rate_limit_remaining = None
         self._category_cache: dict[str, list[dict[str, Any]]] = {}
         self._event_cache: dict[tuple[str, int], list[dict[str, Any]]] = {}
@@ -83,6 +98,24 @@ class RapidTennisClient:
 
     def close(self) -> None:
         self.client.close()
+        shared = getattr(self, "_shared_reservation", None)
+        if shared is not None:
+            shared.close()
+
+    def configure_runtime_fast_fail(
+        self,
+        *,
+        timeout_seconds: float = 4.0,
+        attempts: int = 1,
+    ) -> None:
+        """Bound latency for user-facing/serverless runtime workers.
+
+        Batch ingestion keeps the normal retry policy. Runtime workers instead
+        fail fast so a slow provider cannot outlive the HTTP gateway deadline.
+        """
+        timeout_seconds = max(1.0, min(15.0, float(timeout_seconds)))
+        self.client.timeout = httpx.Timeout(timeout_seconds)
+        self.retry_attempts = max(1, min(3, int(attempts)))
 
     @property
     def headers(self) -> dict[str, str]:
@@ -152,8 +185,9 @@ class RapidTennisClient:
         )
 
         last_error: Exception | None = None
+        attempts = max(1, min(5, int(self.retry_attempts)))
 
-        for attempt in range(5):
+        for attempt in range(attempts):
             self._throttle()
 
             # Reserve outside the retry block: budget/storage failures fail closed.
@@ -178,6 +212,8 @@ class RapidTennisClient:
                     self.rate_limit_remaining = safe_int(remaining)
 
                 if response.status_code == 429:
+                    if attempt + 1 >= attempts:
+                        raise ProviderError(f"RapidAPI HTTP 429 for {path}")
                     delay = self._retry_after_seconds(
                         response.headers.get("Retry-After")
                     )
@@ -193,6 +229,8 @@ class RapidTennisClient:
                     continue
 
                 if response.status_code >= 500:
+                    if attempt + 1 >= attempts:
+                        raise ProviderError(f"RapidAPI HTTP {response.status_code} for {path}")
                     time.sleep(
                         min(
                             2**attempt,
@@ -219,13 +257,8 @@ class RapidTennisClient:
                 ValueError,
             ) as exc:
                 last_error = exc
-
-                time.sleep(
-                    min(
-                        2**attempt,
-                        10,
-                    )
-                )
+                if attempt + 1 < attempts:
+                    time.sleep(min(2**attempt, 10))
 
         raise ProviderError(
             f"RapidAPI request failed: "
@@ -248,7 +281,7 @@ class RapidTennisClient:
         url = f"{self.cfg.rapidapi_base_url}{path}"
         last_error: Exception | None = None
 
-        for attempt in range(5):
+        for attempt in range(max(1, min(5, int(self.retry_attempts)))):
             self._throttle()
             if self.request_limit is not None and self.request_count >= self.request_limit:
                 raise RequestBudgetExceeded("Per-run request limit exhausted")
@@ -427,6 +460,17 @@ class RapidTennisClient:
         page = max(0, int(page))
         return self._get(
             f"/api/tennis/player/{player_id}/events/next/{page}",
+            enrichment=True,
+        )
+
+    def near_player_matches_for_status(self, player_id: str | int) -> Any:
+        """One documented near-match lookup for bounded status settlement.
+
+        Unlike the general presentation helper, an HTTP 404 must propagate so
+        the hourly worker can distinguish a missing player/route from no match.
+        """
+        return self._get(
+            f"/api/tennis/player/{player_id}/events/near",
             enrichment=True,
         )
 

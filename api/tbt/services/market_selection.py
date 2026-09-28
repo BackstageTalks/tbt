@@ -575,6 +575,7 @@ def enrich_current_betting_day_odds(
     candidate_min_probability: float = VALUE_MIN_PROBABILITY,
     candidate_min_data_depth: float = VALUE_MIN_DATA_DEPTH,
     candidate_min_surface_matches: int = VALUE_MIN_SURFACE_MATCHES,
+    prefetched_payloads: dict[str, Any] | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     """Fetch provider-1 odds only for plausible published betting candidates.
 
@@ -633,7 +634,14 @@ def enrich_current_betting_day_odds(
         p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
         try:
             report["odds_requested"] += 1
-            payload = provider.event_odds(event_id, provider_id=provider_id)
+            # Share the initial odds-first provider response with Match Winner
+            # to avoid querying the same event twice in a refresh.
+            if prefetched_payloads is not None and event_id in prefetched_payloads:
+                payload = prefetched_payloads[event_id]
+            else:
+                payload = provider.event_odds(event_id, provider_id=provider_id)
+                if prefetched_payloads is not None:
+                    prefetched_payloads[event_id] = payload
             market = extract_match_winner_odds(
                 payload,
                 str(p1.get("name") or ""),
@@ -1199,7 +1207,22 @@ def annotate_market_publication_candidates(
             market = str(card.get("market") or "").strip()
             selection_id = str(card.get("selection_id") or "").strip()
             scope = str(card.get("projection_scope") or "player").strip() or "player"
+            # A newly priced player O/U is a DIFFERENT bet from the original
+            # "Most Aces / Most DF" superiority projection on the same player.
+            # Old publication keys omitted the contract, causing immutable
+            # issued legacy snapshots to consume the new O/U candidate's key
+            # and silently quarantine the only real-price ACES rows.
+            # Retain historic identity for older/superiority publications.
             selection_key = f"projection:{market}:{scope}:{event_id}:{selection_id}"
+            if card.get("price_contract") == "player_total_ou":
+                side = str(card.get("ou_side") or "").strip().lower()
+                try:
+                    line = float(card.get("market_line"))
+                except (TypeError, ValueError):
+                    raise ValueError("Priced player total missing exact O/U line")
+                if side not in {"over", "under"} or not 0 <= line <= 100:
+                    raise ValueError("Priced player total missing valid O/U contract")
+                selection_key += f":total:{side}:{line:.1f}"
             projection_section = "ace" if market == "aces" else "double_faults"
             publications.append({
                 "schema": 3,
@@ -1217,8 +1240,14 @@ def annotate_market_publication_candidates(
                 "provider_id": card.get("provider_id"),
                 "captured_at": card.get("captured_at"),
                 "odds_market_name": card.get("odds_market_name"),
+                "odds_source": card.get("odds_source"),
+                "odds_bookmaker": card.get("odds_bookmaker"),
+                "odds_provider_event_id": card.get("odds_provider_event_id"),
                 "betting_day": None,
                 "price_status": card.get("price_status") or "projection_only",
+                "price_contract": card.get("price_contract"),
+                "ou_side": card.get("ou_side"),
+                "market_line": card.get("market_line"),
                 "projection": card.get("projection"),
                 "opponent_projection": card.get("opponent_projection"),
                 "projection_gap": card.get("projection_gap"),
@@ -1255,6 +1284,9 @@ def annotate_market_publication_candidates(
                 "provider_id": card.get("provider_id"),
                 "captured_at": card.get("captured_at"),
                 "odds_market_name": card.get("odds_market_name"),
+                "odds_source": card.get("odds_source"),
+                "odds_bookmaker": card.get("odds_bookmaker"),
+                "odds_provider_event_id": card.get("odds_provider_event_id"),
                 "betting_day": None,
                 "price_status": card.get("price_status") or "projection_only",
                 "projection": card.get("projection"),

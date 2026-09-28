@@ -700,7 +700,7 @@
         "route": "",
         "plan_id": "",
         "effect": "fade-up",
-        "site_background_url": "/assets/blinq_background.webp"
+        "site_background_url": "/assets/blinq_page_background.webp"
       },
       "watermark": {
         "enabled": false,
@@ -731,7 +731,7 @@
         "sponsored": false,
         "eyebrow": "COMMUNITY",
         "headline": "Join the BlinQ",
-        "accent_text": "Telegram Community",
+        "accent_text": "",
         "text": "News · Predictions · Discussions",
         "button_text": "JOIN",
         "theme": "blue",
@@ -769,7 +769,7 @@
         "sponsored": false,
         "eyebrow": "RESULTS & STATS",
         "headline": "Track performance.",
-        "accent_text": "Stay informed.",
+        "accent_text": "",
         "text": "Transparent model results and published statistics.",
         "button_text": "SEE RESULTS",
         "theme": "green",
@@ -807,7 +807,7 @@
         "sponsored": true,
         "eyebrow": "BLINQ PARTNER",
         "headline": "Your campaign.",
-        "accent_text": "Your message.",
+        "accent_text": "",
         "text": "Assign a campaign, image, link and schedule in Admin.",
         "button_text": "OPEN",
         "theme": "gold",
@@ -845,7 +845,7 @@
         "sponsored": true,
         "eyebrow": "BLINQ PARTNER",
         "headline": "Main banner 5",
-        "accent_text": "Your message.",
+        "accent_text": "",
         "text": "Assign a campaign, image, link and schedule in Admin.",
         "button_text": "OPEN",
         "theme": "gold",
@@ -1054,7 +1054,7 @@
   },
   "assets": {
     "favicon": "/assets/blinq_favi.png",
-    "background": "/assets/blinq_background.webp",
+    "background": "/assets/blinq_page_background.webp",
     "player_fallback": {
       "atp": "/assets/missing_foto_m.webp",
       "wta": "/assets/missing_foto_w.webp"
@@ -1088,6 +1088,11 @@
     "admin_avatar_plan": "goat"
   },
   "dashboard": {
+    "kpi_cards": [
+      {"metric": "today_picks", "period": "today"},
+      {"metric": "model_success", "period": "auto"},
+      {"metric": "avg_odds", "period": "today"}
+    ],
     "sections": {
       "prime": {
         "label": "Short Odds",

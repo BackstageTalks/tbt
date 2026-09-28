@@ -4,10 +4,12 @@ import argparse
 import json
 import math
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from _bootstrap import ROOT
+from morning_clock import morning_selection_now, morning_publication_delay
 from download_tennis_history import read_json, write_json
 from history_download_budget import LocalRequestBudget, reserve_allocation
 from release_store import ReleaseStore
@@ -31,7 +33,12 @@ from tbt.services.publication import (
 )
 from tbt.services.ace_selection import select_ace_picks
 from tbt.services.sg_selection import select_sg_picks
-from tbt.services.projection_odds import enrich_projection_odds
+from tbt.services.projection_odds import (
+    enrich_projection_odds, prefetch_projection_market_board,
+    extract_match_total_odds,
+)
+from tbt.services.indicative_odds import annotate_feed_indicative_odds
+from tbt.services.propline_live import PropLineClient, discover_propline_fallback
 from tbt.services.doubles_selection import (
     build_predictions as build_doubles_predictions,
     select_picks as select_doubles_picks,
@@ -161,9 +168,12 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
     """Refresh recent completed history without letting one broken old provider day
     take down the whole publication job.
 
-    A hard provider error for a past calendar day preserves the last known-good
-    canonical history and is retried on a later refresh. The current day remains
-    fail-closed because today's discovery is required before publishing.
+    TennisApi occasionally returns a hard 4xx for one historical calendar date
+    while adjacent dates remain healthy. Existing canonical history is
+    append/merge-only here, so skipping that *past* day preserves the last known
+    good partition and lets the next refresh retry it. The current day remains
+    fail-closed because publishing a feed after losing today's discovery would
+    be unsafe.
     """
     provider_years = {
         provider_id: match.scheduled_at.astimezone(timezone.utc).year
@@ -184,6 +194,9 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
                     if match.is_completed
                 ]
             except ProviderError as exc:
+                # A historical provider hole must not destroy an otherwise valid
+                # refresh. Do not apply this to today: current-day discovery is
+                # required before we are allowed to publish a new betting feed.
                 if day >= end:
                     raise
                 skipped_days.add(day.isoformat())
@@ -233,6 +246,9 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
                         match.scheduled_at.astimezone(timezone.utc).year
                     )
         if day_failed:
+            # The same calendar discovery powers ATP, WTA and doubles. Avoid
+            # spending another request on a date that just returned a provider
+            # error in this run.
             pass
         day += timedelta(days=1)
     provider._tbt_skipped_history_days = skipped_days
@@ -306,7 +322,8 @@ def _save_doubles_history(store, rows, *, extra_report=None):
     return report
 
 
-def _projection_presentation_integrity(feed, *, ace_picks=None, sg_picks=None):
+def _projection_presentation_integrity(feed, *, ace_picks=None, sg_picks=None,
+                                       quarantined=None):
     expected = {
         "aces": sum(1 for row in (ace_picks or []) if str(row.get("market") or "").lower() == "aces"),
         "double_faults": sum(1 for row in (ace_picks or []) if str(row.get("market") or "").lower() == "double_faults"),
@@ -319,12 +336,28 @@ def _projection_presentation_integrity(feed, *, ace_picks=None, sg_picks=None):
         "sets": sum(1 for row in (feed.get("sg_picks") or []) if str(row.get("market") or "").lower() == "sets"),
         "games": sum(1 for row in (feed.get("sg_picks") or []) if str(row.get("market") or "").lower() == "games"),
     }
-    mismatches = {market: {"selected": expected[market], "published": actual[market]}
-                  for market in expected if expected[market] != actual[market]}
-    report = {"ok": not mismatches, "selected": expected, "published": actual, "mismatches": mismatches}
+    # Only restore_published_market_snapshots may suppress a projection:
+    # it first checks the immutable ledger and drops ambiguous/legacy snapshots
+    # individually. An unaccounted loss still aborts the entire deployment.
+    quarantined = list(quarantined or [])
+    withheld = {market: sum(item.get("market") == market for item in quarantined)
+                for market in expected}
+    mismatches = {
+        market: {
+            "selected": expected[market], "published": actual[market],
+            "ledger_quarantined": withheld[market],
+        }
+        for market in expected
+        if expected[market] != actual[market] + withheld[market]
+    }
+    report = {
+        "ok": not mismatches, "selected": expected, "published": actual,
+        "ledger_quarantined": withheld, "quarantine_details": quarantined,
+        "mismatches": mismatches,
+    }
     if mismatches:
         raise RuntimeError(
-            "Projection presentation integrity failure: selector output was lost before publication: "
+            "Projection presentation integrity failure: unexplained selector output loss: "
             + json.dumps(mismatches, sort_keys=True)
         )
     return report
@@ -334,7 +367,8 @@ def _publish_predictions(
     store, ledger, predictions, matches, model, report, upcoming,
     *, odds_report=None, ace_picks=None, ace_report=None,
     sg_picks=None, sg_report=None, doubles_picks=None, doubles_report=None,
-    doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None, betting_day_start_hour=6,
+    doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None,
+    betting_day_start_hour=6, morning_refresh=False,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
     # empty until the workflow confirms a successful public Azure deployment.
@@ -371,8 +405,17 @@ def _publish_predictions(
     # betting-day snapshot is merged, the final public feed is intentionally a
     # superset because already-issued morning rows remain visible after start.
     feed = clean(feed)
-    feed = restore_published_market_snapshots(feed, records)
-    integrity = _projection_presentation_integrity(feed, ace_picks=ace_picks, sg_picks=sg_picks)
+    projection_quarantine = []
+    feed = restore_published_market_snapshots(
+        feed, records, quarantine_report=projection_quarantine,
+    )
+    integrity = _projection_presentation_integrity(
+        feed, ace_picks=ace_picks, sg_picks=sg_picks,
+        quarantined=projection_quarantine,
+    )
+    if projection_quarantine:
+        print(json.dumps({"projection_publication_quarantine": integrity},
+                         sort_keys=True), flush=True)
     feed["market_selection"] = {
         **(feed.get("market_selection") or {}),
         "presentation_integrity": integrity,
@@ -390,7 +433,7 @@ def _publish_predictions(
         snapshot_sources.append(prior_snapshot)
     if isinstance(prior_feed, dict) and prior_feed:
         snapshot_sources.append(prior_feed)
-    if snapshot_sources:
+    if snapshot_sources or morning_refresh:
         feed, daily_snapshot_report = carry_forward_betting_day_market_rows(
             feed,
             snapshot_sources,
@@ -411,6 +454,10 @@ def _publish_predictions(
         now=now,
         start_hour=betting_day_start_hour,
     )
+    # Decorate only the serving feed, after all immutable issuance checks.
+    # Historical ledger, snapshots and REAL betting ROI stay untouched.
+    feed, indicative_audit = annotate_feed_indicative_odds(feed)
+    feed["indicative_odds_audit"] = indicative_audit
     write_json(store.directory / "ledger.json", records)
     write_json(store.directory / "feed.json", feed)
     write_json(store.directory / "daily_offer_snapshot.json", snapshot)
@@ -434,6 +481,10 @@ def main():
         help="Maximum provider-1 odds calls for the current BlinQ betting day",
     )
     parser.add_argument(
+        "--propline-max-events", type=int, default=75,
+        help="Max PropLine fallback events per refresh (0 disables, max 75)",
+    )
+    parser.add_argument(
         "--doubles-odds-max-events",
         type=int,
         default=40,
@@ -445,12 +496,18 @@ def main():
         default=6,
         help="Europe/Bratislava local hour that starts the BlinQ betting day",
     )
+    parser.add_argument(
+        "--morning-refresh", action="store_true",
+        help="Prepare the upcoming local betting day before 06:00 and wait until 06:01 to publish",
+    )
     parser.add_argument("--promote", action="store_true")
     args = parser.parse_args()
     if not 1 <= args.max_requests <= 3000:
         parser.error("refresh allowance must be 1..3000")
     if args.market_odds_max_events < 0:
         parser.error("market-odds-max-events must be >= 0")
+    if not 0 <= args.propline_max_events <= 75:
+        parser.error("propline-max-events must be 0..75")
     if args.doubles_odds_max_events < 0:
         parser.error("doubles-odds-max-events must be >= 0")
     if not 0 <= args.betting_day_start_hour <= 23:
@@ -589,13 +646,25 @@ def main():
     doubles_completed = []
     doubles_upcoming = []
     try:
-        matches = _refresh_history(provider, matches, history_dir, history_store,
-                                   now.date() - timedelta(days=7), now.date())
+        matches = _refresh_history(
+            provider, matches, history_dir, history_store,
+            now.date() - timedelta(days=7), now.date()
+        )
         skipped_history_days = set(
             getattr(provider, "_tbt_skipped_history_days", set())
         )
         for tour in ("atp", "wta"):
             upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
+
+        # Provider calls retain their actual timestamps. Before 06:00, evaluate
+        # eligibility against the upcoming local betting day; never backdate.
+        selection_now = (
+            morning_selection_now(
+                datetime.now(timezone.utc), start_hour=args.betting_day_start_hour
+            ) if args.morning_refresh else now
+        )
+        if args.morning_refresh:
+            print(json.dumps({"morning_selection_clock": selection_now.isoformat()}), flush=True)
 
         # Doubles uses a separate pair/member model. The raw daily event calls are
         # already cached by the singles refresh above, so maintaining the recent
@@ -622,7 +691,7 @@ def main():
         doubles_odds_report = {}
         if args.doubles_odds_max_events and doubles_predictions:
             doubles_predictions, doubles_odds_report = enrich_current_betting_day_odds(
-                provider, doubles_predictions, now=now,
+                provider, doubles_predictions, now=selection_now,
                 max_events=args.doubles_odds_max_events, provider_id=1,
                 timezone_name="Europe/Bratislava", start_hour=args.betting_day_start_hour,
                 candidate_min_probability=0.55, candidate_min_data_depth=0.35,
@@ -636,39 +705,181 @@ def main():
             "selection": doubles_selection_report,
         }
 
-        # Generate the singles model probabilities first, then spend additional provider
-        # calls only on the current BlinQ betting day. The odds layer now powers
-        # Prime / Top Bets / Value discovery with mutually exclusive public assignment.
+        # Odds-first for ACES/DF/GAMES/SETS: obtain actual available offers
+        # BEFORE evaluating their projection models. Match Winner continues to
+        # use its independent qualification rules and shares cached payloads.
         predictions = predict(model, matches, upcoming)
-        if args.market_odds_max_events:
-            predictions, odds_report = enrich_current_betting_day_odds(
-                provider,
-                predictions,
-                now=now,
-                max_events=args.market_odds_max_events,
+        projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        projection_odds_report = {}
+        projection_market_cache = {}
+        available_projection_markets = {}
+        projection_discovery_report = {}
+        bookmaker_lines_by_event = {}
+        prop_market_payloads = {}
+        if projection_odds_cap:
+            # Both market discovery and Match Winner share the SAME global
+            # RapidAPI limit. Reserve a third of the available quota (up to 40
+            # requests) for otherwise-unpriced Match Winner candidates; the
+            # prefetch cache already covers overlapping events at zero cost.
+            remaining_total = (max(0, int(provider.request_limit) - int(provider.request_count))
+                               if provider.request_limit is not None else 2 * projection_odds_cap)
+            reserved_match_winner = min(40, remaining_total // 3)
+            remaining = max(0, remaining_total - reserved_match_winner)
+            available_odds_calls = min(projection_odds_cap, remaining)
+            (projection_market_cache, available_projection_markets,
+             projection_discovery_report) = prefetch_projection_market_board(
+                provider, predictions, now=selection_now, max_events=available_odds_calls,
                 provider_id=1,
+            )
+            projection_discovery_report["remaining_request_budget_at_start"] = remaining_total
+            projection_discovery_report["reserved_match_winner_requests"] = reserved_match_winner
+            projection_discovery_report["requested_event_cap"] = projection_odds_cap
+            for event_id, markets in available_projection_markets.items():
+                payload = projection_market_cache.get(event_id)
+                bookmaker_lines_by_event[event_id] = {
+                    market: [float(quote["line"]) for quote in
+                             extract_match_total_odds(payload, market)]
+                    for market in ("sets", "games") if market in markets
+                }
+            # Paid/API requests only run as part of an explicitly authorized
+            # refresh (the existing workflow auto-refresh gate is unchanged).
+            # This secret already powers the separate research-only CLV job.
+            # Budget upper bound: 4 x (1 board + 2 x 75 fixtures) = 604
+            # calls/day. The separate hourly CLV pilot is capped at 250/day,
+            # leaving >=146 of the shared 1000/day budget unallocated.
+            prop_key = os.getenv("PROPL", "").strip()
+            if prop_key and args.propline_max_events:
+                prop_client = PropLineClient(
+                    prop_key, max_calls=1 + 2 * args.propline_max_events,
+                    min_remaining=150,
+                )
+                prop_market_payloads, prop_report = discover_propline_fallback(
+                    prop_client, predictions, available_projection_markets,
+                    now=now, max_events=args.propline_max_events,
+                )
+                for rapid_id, by_metric in prop_market_payloads.items():
+                    available_projection_markets.setdefault(rapid_id, set()).update(by_metric)
+                    for metric, quote in by_metric.items():
+                        if metric in ("games", "sets"):
+                            bookmaker_lines_by_event.setdefault(rapid_id, {})[metric] = [
+                                float(line["line"]) for line in
+                                extract_match_total_odds(quote["payload"], metric)
+                            ]
+                projection_discovery_report["propline"] = prop_report
+                print(json.dumps({"propline_market_audit": prop_report}, ensure_ascii=False), flush=True)
+            else:
+                projection_discovery_report["propline"] = {
+                    "enabled": False, "reason": (
+                        "PROPL_secret_missing" if not prop_key else "disabled_by_event_cap"
+                    ), "calls": 0,
+                }
+            # No re-query for events already visited by odds-first discovery.
+            predictions, odds_report = enrich_current_betting_day_odds(
+                provider, predictions, now=selection_now,
+                max_events=projection_odds_cap, provider_id=1,
                 timezone_name="Europe/Bratislava",
                 start_hour=args.betting_day_start_hour,
+                prefetched_payloads=projection_market_cache,
             )
-        # Projection models are selected from history first. A separate strict
-        # provider-odds pass may attach a real price only when the exact market
-        # can be identified; confidence is never displayed as a synthetic odd.
-        ace_picks, ace_report = select_ace_picks(matches, predictions, now=now)
-        sg_picks, sg_report = select_sg_picks(matches, predictions, now=now)
-        projection_odds_report = {}
-        # Projection prices are part of the public ACES/DF/GAMES/SETS rows.
-        # Reuse the configured market-odds budget instead of silently truncating
-        # projection lookup to the first 40 events (which disproportionately
-        # starved Sets/Games after Aces/DF were inserted first).
-        projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        # In odds-first mode the projection models operate only on events
+        # that have a complete matching market from the provider. Keep an
+        # expanded *eligible* pool so publication can independently rank each
+        # of the four categories without one consuming the others' slots.
+        projection_pool_per_market = (
+            max(30, min(200, projection_odds_cap)) if projection_odds_cap else 10
+        )
+        ace_picks, ace_report = select_ace_picks(
+            matches, predictions, now=selection_now,
+            per_market_limit=projection_pool_per_market,
+            total_limit=2 * projection_pool_per_market,
+            target_count=projection_pool_per_market,
+            available_markets_by_event=(
+                available_projection_markets if projection_odds_cap else None
+            ),
+        )
+        sg_picks, sg_report = select_sg_picks(
+            matches, predictions, now=selection_now,
+            per_market_limit=projection_pool_per_market,
+            total_limit=2 * projection_pool_per_market,
+            target_count=projection_pool_per_market,
+            available_markets_by_event=(
+                available_projection_markets if projection_odds_cap else None
+            ),
+            bookmaker_lines_by_event=(
+                bookmaker_lines_by_event if projection_odds_cap else None
+            ),
+        )
+        projection_odds_report["discovery"] = projection_discovery_report
         if projection_odds_cap and (ace_picks or sg_picks):
-            ace_picks, sg_picks, projection_odds_report = enrich_projection_odds(
-                provider, ace_picks, sg_picks, max_events=projection_odds_cap, provider_id=1
+            ace_picks, sg_picks, attachment_report = enrich_projection_odds(
+                provider, ace_picks, sg_picks,
+                max_events=projection_odds_cap, provider_id=1,
+                prefetched_payloads=projection_market_cache,
+                alternate_market_payloads=prop_market_payloads,
             )
+            projection_odds_report.update(attachment_report)
+            projection_odds_report["discovery"] = projection_discovery_report
+        # Market-first publication is strict: an unmatched card remains an
+        # internal model diagnostic, never a bookmaker-looking bet.
+        if projection_odds_cap:
+            projection_odds_report["unpriced_model_candidates"] = {
+                market: sum(row.get("market") == market and
+                            row.get("price_status") != "priced_projection"
+                            for row in ace_picks + sg_picks)
+                for market in ("aces", "double_faults", "games", "sets")
+            }
+            # Do not publish penny-price bets or a confidence-derived estimate:
+            # the bookmaker quote must belong to this exact market contract.
+            def publishable_api_price(row):
+                try:
+                    odds = float(row.get("odds") or 0)
+                    provider = int(row.get("provider_id") or 0)
+                except (TypeError, ValueError, OverflowError):
+                    return False
+                return (
+                    row.get("price_status") == "priced_projection"
+                    and provider > 0 and bool(row.get("captured_at"))
+                    and 1.50 <= odds < float("inf")
+                )
+            ace_picks = [row for row in ace_picks if publishable_api_price(row)]
+            sg_picks = [row for row in sg_picks if publishable_api_price(row)]
+        # Ten per independent category, sorted by validated projection
+        # confidence and evidence, NOT simply by the highest bookmaker price.
+        def priced_first_ten(rows):
+            indexed = list(enumerate(rows))
+            chosen = []
+            for metric in ("aces", "double_faults", "sets", "games"):
+                group = [(i, row) for i, row in indexed if row.get("market") == metric]
+                group.sort(key=lambda pair: (
+                    str(pair[1].get("price_status") or "") == "priced_projection",
+                    -pair[0],
+                ), reverse=True)
+                chosen.extend(group[:10])
+            chosen.sort(key=lambda pair: pair[0])
+            return [row for _, row in chosen]
+
+        ace_picks = priced_first_ten(ace_picks)
+        sg_picks = priced_first_ten(sg_picks)
+        projection_odds_report["published_priced_cards"] = {
+            metric: sum(
+                row.get("market") == metric
+                and row.get("price_status") == "priced_projection"
+                for row in ace_picks + sg_picks
+            )
+            for metric in ("aces", "double_faults", "sets", "games")
+        }
         if isinstance(ace_report, dict):
-            ace_report = {**ace_report, "odds_attachment": projection_odds_report}
+            ace_report = {
+                **ace_report, "odds_attachment": projection_odds_report,
+                "published_selected": len(ace_picks),
+                "priced_selection_policy": "odds_first_exact_market_then_model_independent_top10",
+            }
         if isinstance(sg_report, dict):
-            sg_report = {**sg_report, "odds_attachment": projection_odds_report}
+            sg_report = {
+                **sg_report, "odds_attachment": projection_odds_report,
+                "published_selected": len(sg_picks),
+                "priced_selection_policy": "odds_first_exact_market_then_model_independent_top10",
+            }
     except Exception as exc:
         refresh_error = exc
     finally:
@@ -681,6 +892,14 @@ def main():
         # Partial completed history is checkpointed, but no new prediction
         # feed is published from an incomplete refresh.
         raise refresh_error
+    if args.morning_refresh:
+        # A single job waits without spending provider requests, then publishes.
+        delay = morning_publication_delay(
+            datetime.now(timezone.utc), start_hour=args.betting_day_start_hour
+        )
+        if delay:
+            print(json.dumps({"morning_publish_wait_seconds": round(delay, 1)}), flush=True)
+            time.sleep(delay)
     feed = _publish_predictions(
         prediction_store, prediction_ledger,
         predictions, matches, model, report, upcoming,
@@ -690,6 +909,7 @@ def main():
         doubles_matches=doubles_completed, doubles_upcoming=doubles_upcoming,
         prior_feed=prior_feed, prior_snapshot=prior_snapshot,
         betting_day_start_hour=args.betting_day_start_hour,
+        morning_refresh=args.morning_refresh,
     )
     target = ROOT / "api/data/feed.json"
     target.parent.mkdir(parents=True, exist_ok=True)
