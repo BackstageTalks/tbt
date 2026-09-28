@@ -78,6 +78,21 @@ FEATURE_NAMES = [
     "data_depth",
 ]
 
+# Match Charting specialist rates are retained in canonical history and in
+# FeatureBuilder state for research / future coverage growth. Current paired
+# walk-forward ablation (2023-2026) did not show robust prospective lift, so
+# governed production retraining excludes these fields by default.
+RICH_CHARTING_FEATURE_NAMES = [
+    "first_strike_serve_diff",
+    "return_in_play_diff",
+    "return_depth_diff",
+    "break_point_serve_diff",
+    "break_point_return_diff",
+    "net_efficiency_diff",
+    "aggression_balance_diff",
+    "rich_charting_known_both",
+]
+
 
 def stats_surface_key(surface: str) -> str:
     """Surface bucket used by performance statistics. Indoor hard shares the hard pool; indoor remains a separate feature."""
