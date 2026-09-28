@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 from pathlib import Path
 import sys
 
 import numpy as np
 import pandas as pd
+from scipy.stats import binomtest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "api"))
@@ -47,9 +47,7 @@ def _paired_accuracy(full_correct: np.ndarray, base_correct: np.ndarray) -> dict
     discordant = full_only + base_only
     # Two-sided exact McNemar/binomial test without scipy dependency.
     if discordant:
-        k = min(full_only, base_only)
-        tail = sum(math.comb(discordant, i) for i in range(k + 1)) / (2 ** discordant)
-        p_value = min(1.0, 2.0 * tail)
+        p_value = float(binomtest(full_only, discordant, p=0.5, alternative="two-sided").pvalue)
     else:
         p_value = 1.0
     return {
