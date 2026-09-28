@@ -1,0 +1,7 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "artifact_run_id": "36346469109",
+  "purpose": "Verify canonical Serve/Return import before any private history write.",
+  "requested_at_utc": "2026-09-28T10:41:00Z"
+}
