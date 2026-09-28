@@ -25,13 +25,13 @@ class _Store:
 
 def test_refresh_skips_one_broken_past_provider_day(tmp_path):
     provider = _Provider(date(2026, 9, 22))
-    matches, skipped = pipeline._refresh_history(
+    matches = pipeline._refresh_history(
         provider, [], tmp_path, _Store(),
         date(2026, 9, 21), date(2026, 9, 23),
     )
 
     assert matches == []
-    assert skipped == {"2026-09-22"}
+    assert provider._tbt_skipped_history_days == {"2026-09-22"}
     # Once the shared calendar discovery for a day fails, do not waste another
     # request trying the WTA path for the same broken historical date.
     assert ("wta", date(2026, 9, 22), True) not in provider.calls
