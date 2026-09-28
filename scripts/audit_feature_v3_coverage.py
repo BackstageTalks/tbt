@@ -42,6 +42,29 @@ def main() -> None:
             by_round[str(match.round_name).strip().lower()] += 1
         if _present(stats, ("p1_service_points_won", "p2_service_points_won", "p1_return_points_won", "p2_return_points_won")):
             counts["serve_return_complete"] += 1
+
+        rich_pairs = {
+            "rich_first_strike_serve": ("p1_first_strike_serve_win", "p2_first_strike_serve_win"),
+            "rich_return_in_play": ("p1_return_in_play_rate", "p2_return_in_play_rate"),
+            "rich_return_depth": ("p1_return_deep_rate", "p2_return_deep_rate"),
+            "rich_break_point_serve": ("p1_break_point_serve_win", "p2_break_point_serve_win"),
+            "rich_break_point_return": ("p1_break_point_return_win", "p2_break_point_return_win"),
+            "rich_net_efficiency": ("p1_net_points_win", "p2_net_points_win"),
+            "rich_attacking_rate": ("p1_attacking_points_rate", "p2_attacking_points_rate"),
+            "rich_unforced_error_rate": ("p1_unforced_error_rate", "p2_unforced_error_rate"),
+        }
+        rich_complete = 0
+        rich_any = False
+        for label, keys in rich_pairs.items():
+            present = _present(stats, keys)
+            if present:
+                counts[label] += 1
+                rich_complete += 1
+                rich_any = True
+        if rich_any:
+            counts["rich_charting_any"] += 1
+        if rich_complete == len(rich_pairs):
+            counts["rich_charting_full"] += 1
         if _present(stats, ("total_sets", "total_games")):
             counts["structured_score"] += 1
         if _present(stats, ("p1_first_set_won", "p2_first_set_won", "p1_second_set_won", "p2_second_set_won")):
