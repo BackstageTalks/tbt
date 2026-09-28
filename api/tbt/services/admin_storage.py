@@ -1275,6 +1275,43 @@ def live_min_level(config: dict | None = None) -> str:
 
 def live_alert_levels(config: dict | None = None) -> list[str]:
     return membership_levels_from(live_min_level(config))
+
+
+_LIVE_HISTORY_HOURS = {0, 24, 48, 72}
+
+
+def live_history_rule(kind: str, config: dict | None = None) -> dict:
+    """Resolve settled LIVE-history visibility without widening LIVE access."""
+    kind = str(kind or "").strip().lower()
+    if kind not in {"comeback", "set2"}:
+        raise ValueError("Invalid LIVE history kind")
+    runtime = config if isinstance(config, dict) else None
+    if runtime is None:
+        runtime, _, _ = load_effective_ui_config()
+    notifications = (runtime.get("notifications") or {}) if isinstance(runtime, dict) else {}
+    history = notifications.get("live_history") if isinstance(notifications, dict) else {}
+    raw = history.get(kind) if isinstance(history, dict) else {}
+    raw = raw if isinstance(raw, dict) else {}
+
+    live_levels = live_alert_levels(runtime)
+    if isinstance(raw.get("levels"), list):
+        levels = []
+        for value in raw["levels"]:
+            level = str(value or "").strip().lower()
+            if level in live_levels and level not in levels:
+                levels.append(level)
+    else:
+        levels = list(live_levels)
+
+    try:
+        hours = int(raw.get("hours", 72))
+    except (TypeError, ValueError):
+        hours = 72
+    if hours not in _LIVE_HISTORY_HOURS:
+        hours = 72
+    return {"levels": levels, "hours": hours}
+
+
 def info_min_level(config: dict | None = None) -> str:
     runtime = config if isinstance(config, dict) else None
     if runtime is None:
