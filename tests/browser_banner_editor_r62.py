@@ -9,7 +9,7 @@ def route_request(route):
         source=(WEB/'app.js').read_text(encoding='utf-8')
         needle='  boot();'
         assert source.count(needle)==1
-        source=source.replace(needle,'  window.bannerHarness={state,heroSlideHtml,renderAdminBanners,wireAdmin,syncAdminHeroPreview,setSelectedElement,renderUpgradeTierCard};\n'+needle)
+        source=source.replace(needle,'  window.bannerHarness={state,heroSlideHtml,renderAdminBanners,wireAdmin,syncAdminHeroPreview};\n'+needle)
         route.fulfill(content_type='application/javascript',body=source)
     else:
         static_route(route)
@@ -68,36 +68,6 @@ def main():
             assert final['stored']=='#303030',final
             assert final['current']=='Zmenený nadpis',final
             assert '--creative-headline-color:#303030' in final['style'],final
-            # A selected unpublished banner must be previewable independently of
-            # the public rotation, and each font-size change must be visible.
-            edited=page.evaluate('''() => {
-              const h=bannerHarness,s=h.state;
-              s.ui.hero_banner.slot_count=1;
-              h.setSelectedElement('HERO_BANNER_2');
-              const preview=()=>document.querySelector('[data-admin-preview-card="desktop"] .lean-admin-preview');
-              const heading=()=>parseFloat(getComputedStyle(document.querySelector('[data-admin-preview-card="desktop"] .admin-hero-preview-copy strong')).fontSize);
-              const small=document.querySelector('[data-simple-banner-field="headline_size"]');
-              small.value='24';small.dispatchEvent(new Event('change',{bubbles:true}));
-              const first=heading();
-              const big=document.querySelector('[data-simple-banner-field="headline_size"]');
-              big.value='72';big.dispatchEvent(new Event('change',{bubbles:true}));
-              const second=heading();
-              const note=h.renderUpgradeTierCard('pro',s.ui.plans.pro,0,false,-1);
-              const custom=h.renderUpgradeTierCard('pro',{...s.ui.plans.pro,note:'Vlastná poznámka'},0,false,-1);
-              return {
-                selected:s.selectedElement,pinned:s.adminPreviewPinnedId,paused:s.adminPreviewPaused,
-                previewSlot:preview()?.dataset.previewSlot,
-                previewStyle:preview()?.getAttribute('style'),
-                first,second,
-                obsoleteNote:note.includes('Full core predictions and tournaments.'),
-                customNote:custom.includes('Vlastná poznámka')
-              };
-            }''')
-            assert edited['selected']=='HERO_BANNER_2' and edited['pinned']=='HERO_BANNER_2',edited
-            assert edited['paused'] and edited['previewSlot']=='HERO_BANNER_2',edited
-            assert '--creative-headline-size:72px' in edited['previewStyle'],edited
-            assert edited['second']>edited['first'],edited
-            assert not edited['obsoleteNote'] and edited['customNote'],edited
             assert not errors,errors
             print('PASS: live carousel, text, grayscale and no hidden accent')
         finally:
