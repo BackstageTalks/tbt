@@ -114,9 +114,12 @@ def test_winner_conflict_is_not_auto_linked(tmp_path):
 
 def test_duplicate_canonical_candidate_fails_ambiguous(tmp_path):
     source = tmp_path / "atp_matches_2024.csv"
-    write_source(source)
-    second = canonical(match_id="m2")
-    report, staged, review, _ = run_linker(tmp_path, [canonical(), second], source=source)
+    # Missing round removes the only discriminator between two same-day
+    # canonical meetings; the linker must refuse to guess.
+    write_source(source, round="")
+    first = canonical(match_id="m1", round_name="QF")
+    second = canonical(match_id="m2", round_name="SF")
+    report, staged, review, _ = run_linker(tmp_path, [first, second], source=source)
     assert not staged
     assert report["counts"]["ambiguous"] == 1
     assert review[0]["reason"] == "ambiguous"
