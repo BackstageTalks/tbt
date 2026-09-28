@@ -273,11 +273,28 @@ def validate_market_publication_candidate(feed, ledger):
             ledger_row = ledger_index.get(event_id)
             if ledger_row is None:
                 raise RuntimeError(f"Market feed/ledger mismatch: {event_id} missing from ledger")
-            candidates = [
+            publications = [
                 item for item in ledger_row.get("market_publications", []) or []
                 if isinstance(item, dict)
-                and _market_commitment_from_publication(event_id, item) == commitment
             ]
+            candidates = [
+                item for item in publications
+                if _market_commitment_from_publication(event_id, item) == commitment
+            ]
+            if not candidates and section in {"top_daily", "prime", "value", "doubles"}:
+                legacy = []
+                for item in publications:
+                    stored = _market_commitment_from_publication(event_id, item)
+                    if (
+                        stored[:8] == commitment[:8]
+                        and stored[8] in (None, "")
+                        and stored[9:] == commitment[9:]
+                        and item.get("issued_at")
+                        and item.get("publication_status") == "published"
+                    ):
+                        legacy.append(item)
+                if len(legacy) == 1:
+                    candidates = legacy
             if not candidates:
                 raise RuntimeError(
                     f"Market feed/ledger mismatch for {section} event {event_id}; "
@@ -327,9 +344,11 @@ def restore_published_market_snapshots(feed, ledger):
                 continue
 
             matches = []
+            legacy_dayless_matches = []
             for publication in publications:
                 stored = _market_commitment_from_publication(commitment[0], publication)
-                same_identity = stored[:4] == commitment[:4] and stored[8] == commitment[8]
+                same_identity = stored[:4] == commitment[:4]
+                same_day = stored[8] == commitment[8]
                 # Projection scope + metric are part of the semantic identity.
                 # They disambiguate e.g. player aces from any future totals.
                 if section in {"ace", "double_faults", "sets", "games"}:
@@ -338,8 +357,22 @@ def restore_published_market_snapshots(feed, ledger):
                         and stored[11] == commitment[11]
                         and stored[12] == commitment[12]
                     )
-                if same_identity and publication.get("issued_at") and publication.get("publication_status") == "published":
+                issued = (
+                    publication.get("issued_at")
+                    and publication.get("publication_status") == "published"
+                )
+                if same_identity and same_day and issued:
                     matches.append(publication)
+                elif (
+                    same_identity
+                    and issued
+                    and section in {"top_daily", "prime", "value", "doubles"}
+                    and stored[8] in (None, "")
+                ):
+                    legacy_dayless_matches.append(publication)
+
+            if not matches and legacy_dayless_matches:
+                matches = legacy_dayless_matches
 
             if section in {"ace", "double_faults", "sets", "games"} and matches:
                 # Multiple ledger rows are safe only when they encode exactly the
