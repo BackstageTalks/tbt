@@ -11,10 +11,27 @@ APP = (Path(__file__).resolve().parents[1] / "web/app.js").read_text(encoding="u
 def test_frozen_confidence_approximates_never_overwrites_real_odds():
     item = {"market": "aces", "projection_confidence": 0.80, "odds": None}
     result = indicative_price(item)
-    assert result["indicative_odds"] == 1.18
+    assert result["indicative_odds"] == 1.57
     assert result["indicative_odds_method"] == ESTIMATE_MODEL
     assert result["indicative_odds_scope"] == "display_only_not_bookmaker_not_real_roi"
     assert indicative_price({**item, "odds": 1.72}) is None
+
+
+
+
+def test_ace_df_indicative_band_is_150_to_170_and_monotonic():
+    aces = [
+        indicative_price({"market": "aces", "projection_confidence": confidence, "odds": None})["indicative_odds"]
+        for confidence in (0.60, 0.70, 0.80, 0.90)
+    ]
+    dfs = [
+        indicative_price({"market": "double_faults", "projection_confidence": confidence, "odds": None})["indicative_odds"]
+        for confidence in (0.60, 0.75, 0.90)
+    ]
+    assert aces == [1.70, 1.63, 1.57, 1.50]
+    assert dfs == [1.70, 1.60, 1.50]
+    assert all(1.50 <= value <= 1.70 for value in aces + dfs)
+    assert aces == sorted(aces, reverse=True)
 
 
 def test_missing_or_invalid_confidence_never_invents_price():
