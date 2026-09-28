@@ -63,6 +63,7 @@ def main() -> None:
     ap.add_argument("--history-dir", default=".cache/tbt/history")
     ap.add_argument("--out", default=".cache/tbt/rich-ablation.json")
     ap.add_argument("--first-test-year", type=int, default=2023)
+    ap.add_argument("--year", type=int, default=None, help="Run exactly one test year")
     args = ap.parse_args()
 
     raw = load_partitions(Path(args.history_dir))
@@ -85,6 +86,8 @@ def main() -> None:
     all_base = []
 
     years = sorted(int(y) for y in frame["year"].unique() if int(y) >= args.first_test_year)
+    if args.year is not None:
+        years = [int(args.year)] if int(args.year) in years else []
     for year in years:
         historical = frame[frame["year"] < year].copy()
         test = frame[frame["year"] == year].copy()
