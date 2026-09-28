@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: blinq-tbt-pro-legacy-audit
+  group: blinq-tbt-pro-legacy-audit-v2
   cancel-in-progress: true
 
 jobs:

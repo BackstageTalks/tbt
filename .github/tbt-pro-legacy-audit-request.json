@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "mode": "legacy-audit",
-  "purpose": "Read-only sparse audit of tbt-pro legacy data; cancel stale prior audit attempts and run latest evidence only.",
+  "purpose": "Run latest sparse tbt-pro legacy audit on independent v2 concurrency group; read-only, zero provider API.",
   "zero_provider_api_requests": true,
-  "requested_at_utc": "2026-09-28T21:35:00Z"
+  "requested_at_utc": "2026-09-28T21:38:00Z"
 }
