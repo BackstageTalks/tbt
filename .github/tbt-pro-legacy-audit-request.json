@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "mode": "legacy-audit",
-  "purpose": "Read-only legacy audit with exact provider market recovery plus strict production-parser score gap-fill dry-run; zero provider API.",
+  "mode": "legacy-score-write",
+  "purpose": "Write only strict identity-, winner- and score-verified legacy score gaps into private canonical history; quarantine conflicts; zero provider API.",
   "zero_provider_api_requests": true,
-  "requested_at_utc": "2026-09-28T21:52:00Z"
+  "requested_at_utc": "2026-09-28T21:58:00Z"
 }
