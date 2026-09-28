@@ -1,8 +1,9 @@
-"""Indicative, model-derived price *display* for unpriced issued projections.
+"""Display-only indicative prices for unpriced projection cards.
 
-Never represent this estimate as an archived bookmaker quote or feed it into
-real-money betting ROI. Only frozen pre-match projection confidence is used;
-actual result, realized win rate and match outcome are never consulted.
+Never represent these values as archived or live bookmaker quotes and never feed
+them into real-money betting ROI. ACES/Double Faults use a stable illustrative
+1.50–1.70 display range; Games/Sets retain the confidence-derived estimate.
+Actual result, realized win rate and match outcome are never consulted.
 """
 from __future__ import annotations
 
@@ -11,8 +12,12 @@ import hashlib
 from typing import Any
 
 PROJECTION_MARKETS = {"aces", "double_faults", "games", "sets"}
+ACE_DF_MARKETS = {"aces", "double_faults"}
 ESTIMATE_MODEL = "frozen_projection_confidence_v1"
+ACE_DF_DISPLAY_MODEL = "stable_illustrative_150_170_v1"
 DISPLAY_OVERROUND = 0.055
+ACE_DF_DISPLAY_MIN = 1.50
+ACE_DF_DISPLAY_MAX = 1.70
 
 
 def _number(value: Any) -> float | None:
@@ -23,13 +28,31 @@ def _number(value: Any) -> float | None:
     return candidate if math.isfinite(candidate) else None
 
 
-def indicative_price(record: dict) -> dict | None:
-    """Estimate a display-only decimal price for a frozen selection.
+def _stable_ace_df_display_price(record: dict) -> float | None:
+    """Return one repeatable 1.50–1.70 display value for the same projection."""
+    market = str(record.get("market") or record.get("projection_metric") or "").lower()
+    identity = "|".join((
+        str(record.get("event_id") or record.get("match_id") or record.get("id") or ""),
+        market,
+        str(record.get("selection_id") or record.get("selection") or record.get("pick") or ""),
+        str(record.get("scheduled_at") or record.get("date") or ""),
+    ))
+    if not identity.replace("|", ""):
+        return None
+    cents = int.from_bytes(
+        hashlib.sha256(identity.encode("utf-8")).digest()[:4], "big"
+    ) % 21
+    return round(ACE_DF_DISPLAY_MIN + cents / 100, 2)
 
-    These estimates apply to exactly the original projection contract. In
-    particular, games' model baseline is NOT a tradable bookmaker O/U line and
-    Aces/Double Faults legacy cards predict player superiority, not player
-    O/U. Do not silently map these into different bet types.
+
+def indicative_price(record: dict) -> dict | None:
+    """Return a display-only decimal price without creating a fake bookmaker quote.
+
+    ACES and Double Faults use the agreed stable illustrative 1.50–1.70 range.
+    The number is deterministic per projection so it cannot jump on each render.
+    It stays in indicative_odds only; odds and price_status remain untouched,
+    therefore settlement, EV and real betting ROI cannot consume it.
+    Games/Sets keep the older confidence-derived display estimate.
     """
     if not isinstance(record, dict):
         return None
@@ -42,6 +65,20 @@ def indicative_price(record: dict) -> dict | None:
     confidence = _number(record.get("projection_confidence"))
     if confidence is None or confidence < 0.5 or confidence > 1.0:
         return None
+
+    if market in ACE_DF_MARKETS:
+        price = _stable_ace_df_display_price(record)
+        if price is None:
+            return None
+        return {
+            "indicative_odds": price,
+            "indicative_odds_method": ACE_DF_DISPLAY_MODEL,
+            "indicative_odds_probability": None,
+            "indicative_odds_scope": (
+                "display_only_illustrative_150_170_not_bookmaker_not_real_roi"
+            ),
+        }
+
     # Wide bounds avoid excessive apparent certainty from point projections.
     p = min(0.94, max(0.50, confidence))
     price = max(1.05, min(2.50, 1.0 / (p * (1.0 + DISPLAY_OVERROUND))))
@@ -51,7 +88,6 @@ def indicative_price(record: dict) -> dict | None:
         "indicative_odds_probability": round(p, 4),
         "indicative_odds_scope": "display_only_not_bookmaker_not_real_roi",
     }
-
 
 
 def historical_display_placeholder(publication: dict, *, event_id: str = "") -> dict | None:
