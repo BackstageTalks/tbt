@@ -90,6 +90,18 @@ def main():
                     }
                   }
                 }''')
+                # ACES/DF may show an explicit model-derived indicative quote.
+                page.evaluate('''() => {
+                  const base={event_id:'ace-test',projection:6.2,projection_confidence:.80,player1:{id:'11',name:'A'},player2:{id:'22',name:'B'},selection_id:'11'};
+                  for(const market of ['aces','double_faults']){
+                    const table=document.createElement('table');
+                    table.innerHTML=accessTest.dailyHubRow({...base,market,_hub_source:market==='aces'?'ace':'double_faults'},market==='aces'?'ace':'double_faults');
+                    const cell=table.querySelector('.hub-odds');
+                    if(!cell.textContent.includes('~1.57'))throw new Error(market+': indicative odds must be ~1.57 at 80% confidence, got '+cell.textContent);
+                    const hint=cell.querySelector('[title]')?.getAttribute('title')||'';
+                    if(!/stávkovej kancelárie/i.test(hint))throw new Error(market+': indicative odds need bookmaker disclaimer');
+                  }
+                }''')
                 # Reproduce the FREE regression: the API returns one random
                 # authorized pick at original offer slot 8, not slot 1.
                 # The browser must render slot 8 and may not show "Requires FREE".
