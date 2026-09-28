@@ -77,6 +77,31 @@ jobs:
                   "mobile_image_url":str(c.get("mobile_image_url") or "")[:180],
                   "has_link":bool(c.get("link") or c.get("route")),
               },ensure_ascii=False)))
+          # Recovery audit: printable marketing copy only, read-only; never emit
+          # invitation URLs, payments, emails, account data or full runtime JSON.
+          for plan_id in ('rookie','pro','elite','legend','goat'):
+              plan=(cfg.get('plans') or {}).get(plan_id) or {}
+              print('LIVE_ACCOUNT_COPY '+json.dumps({
+                  'plan':plan_id,
+                  'label':plan.get('label'),
+                  'card_title':plan.get('card_title'),
+                  'eyebrow':plan.get('eyebrow'),
+                  'short_description':plan.get('short_description'),
+                  'description':plan.get('description'),
+                  'note':plan.get('note'),
+                  'cta_label':plan.get('cta_label'),
+                  'features':plan.get('features'),
+                  'has_link':bool(plan.get('url') or plan.get('payment_link')),
+              },ensure_ascii=False))
+          telegram=cfg.get('telegram_groups') or {}
+          print('LIVE_TELEGRAM_COPY '+json.dumps({
+              'title':telegram.get('title'),
+              'description':telegram.get('description'),
+              'groups':[{'id':x.get('id'),'title':x.get('title'),
+                'description':x.get('description'),'cta':x.get('cta'),
+                'has_link':bool(x.get('url'))}
+                for x in (telegram.get('groups') or []) if isinstance(x,dict)],
+          },ensure_ascii=False))
           if p.get('storage_available') is not True or p.get('runtime_configured') is not True:
               print("::warning::Live Azure UI config is not confirmed; do not overwrite it with the release fallback.")
           PYUI
