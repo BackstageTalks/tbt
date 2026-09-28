@@ -1155,8 +1155,8 @@
   }
   function marketRows(key){
     const candidates={prime:['prime_picks','prime'],top_daily:['top_daily_picks','daily_picks','top_daily'],value:['value_picks','value'],doubles:['doubles_picks','doubles'],ace:['ace_picks','aces','ace_markets'],sg:['sg_picks','sets_games','set_game_picks']}[key]||[];
-    for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return ['ace','sg'].includes(key)?value.filter(authenticLiveProjection):value;}
-    const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return ['ace','sg'].includes(key)?markets[key].filter(authenticLiveProjection):markets[key];
+    for(const field of candidates){const value=state.feed?.[field];if(Array.isArray(value))return key==='sg'?value.filter(authenticLiveProjection):value;}
+    const markets=state.feed?.markets;if(markets&&Array.isArray(markets[key]))return key==='sg'?markets[key].filter(authenticLiveProjection):markets[key];
     return [];
   }
   function marketProbability(row){const raw=row?.blinq_probability??row?.probability??row?.win_probability??row?.model_probability??row?.confidence_probability;const value=Number(raw);return Number.isFinite(value)?(value>1?value/100:value):null;}
@@ -2281,7 +2281,7 @@
     const why=isSets
       ?lcopy(`The model compares how often both players' historical matches extend beyond the reference set length and shrinks sparse evidence toward neutral.`,`Model porovnáva, ako často sa historické zápasy oboch hráčov predĺžia nad referenčnú dĺžku setov a pri malej vzorke výsledok konzervatívne približuje k neutrálu.`,`Model porovnává, jak často se historické zápasy obou hráčů prodlužují nad referenční délku setů a při malém vzorku výsledek konzervativně přibližuje k neutrálu.`)
       :lcopy(`The projection is built from structured historical total-games scores for both players, adjusted by sample depth and surface evidence.`,`Projekcia vychádza zo štruktúrovaných historických počtov gemov oboch hráčov a zohľadňuje hĺbku vzorky aj dáta na povrchu.`,`Projekce vychází ze strukturovaných historických počtů gemů obou hráčů a zohledňuje hloubku vzorku i data na povrchu.`);
-    return `<div class="match-detail-shell sg-detail-shell" data-detail-market="${escapeHtml(d.market)}"><header class="match-detail-head"><div><div class="dialog-eyebrow">${isSets?'SETS':'GAMES'} · ${escapeHtml(d.match.tour)} · ${escapeHtml(d.match.tournament)}</div><h2>${escapeHtml(d.match.p1)} <span>vs</span> ${escapeHtml(d.match.p2)}</h2></div></header><div class="sg-detail-hero"><div><small>${escapeHtml(lcopy('Model projection','Modelová projekcia','Modelová projekce'))}</small><strong>${escapeHtml(d.selection)}</strong></div><div><b>${escapeHtml(projectionText)}</b><small>${escapeHtml(isSets?lcopy('projected total sets','projekcia setov','projekce setů'):lcopy('projected total games','projekcia gemov','projekce gemů'))}</small></div></div><div class="sg-detail-grid"><article><small>${escapeHtml(lcopy('Reference','Referencia','Reference'))}</small><strong>${escapeHtml(baselineText)}</strong></article><article><small>${escapeHtml(lcopy('Projection gap','Rozdiel projekcie','Rozdíl projekce'))}</small><strong>${escapeHtml(gapText)}</strong></article><article><small>${escapeHtml(lcopy('Model confidence','Istota modelu','Jistota modelu'))}</small><strong>${Number.isFinite(d.confidence)?escapeHtml(pct(d.confidence)):'—'}</strong></article><article class="data-depth"><small>DATA DEPTH</small><strong>${escapeHtml(depthText)}</strong></article><article><small>${escapeHtml(lcopy('History samples P1 / P2','Historická vzorka P1 / P2','Historický vzorek P1 / P2'))}</small><strong>${escapeHtml(sample(p1,p2))}</strong></article><article><small>${escapeHtml(lcopy('Surface samples P1 / P2','Vzorka na povrchu P1 / P2','Vzorek na povrchu P1 / P2'))}</small><strong>${escapeHtml(sample(s1,s2))}</strong></article></div><p class="ace-detail-note">${escapeHtml(lcopy('This is a model projection, not an odds-backed betting market. Market odds are shown only when a real provider market exists.','Ide o modelovú projekciu, nie o predikciu podloženú kurzovým marketom. Kurz zobrazujeme iba vtedy, keď existuje reálny market od providera.','Jde o modelovou projekci, ne o predikci podloženou kurzovým marketem. Kurz zobrazujeme pouze tehdy, když existuje reálný market od providera.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(d.match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(d.match.date)} · ${fmtTime(d.match.date)}</span>${Number.isFinite(d.bestOf)?`<span>BO${Math.trunc(d.bestOf)}</span>`:''}<span>${escapeHtml(d.source.replaceAll('_',' '))}</span></div></div>`;
+    return `<div class="match-detail-shell sg-detail-shell" data-detail-market="${escapeHtml(d.market)}"><header class="match-detail-head"><div><div class="dialog-eyebrow">${isSets?'SETS':'GAMES'} · ${escapeHtml(d.match.tour)} · ${escapeHtml(d.match.tournament)}</div><h2>${escapeHtml(d.match.p1)} <span>vs</span> ${escapeHtml(d.match.p2)}</h2></div></header><div class="sg-detail-hero"><div><small>${escapeHtml(lcopy('Model projection','Modelová projekcia','Modelová projekce'))}</small><strong>${escapeHtml(d.selection)}</strong></div><div><b>${escapeHtml(projectionText)}</b><small>${escapeHtml(isSets?lcopy('projected total sets','projekcia setov','projekce setů'):lcopy('projected total games','projekcia gemov','projekce gemů'))}</small></div></div><div class="sg-detail-grid"><article><small>${escapeHtml(lcopy('Reference','Referencia','Reference'))}</small><strong>${escapeHtml(baselineText)}</strong></article><article><small>${escapeHtml(lcopy('Projection gap','Rozdiel projekcie','Rozdíl projekce'))}</small><strong>${escapeHtml(gapText)}</strong></article><article><small>${escapeHtml(lcopy('Model confidence','Istota modelu','Jistota modelu'))}</small><strong>${Number.isFinite(d.confidence)?escapeHtml(pct(d.confidence)):'—'}</strong></article><article class="data-depth"><small>DATA DEPTH</small><strong>${escapeHtml(depthText)}</strong></article><article><small>${escapeHtml(lcopy('History samples P1 / P2','Historická vzorka P1 / P2','Historický vzorek P1 / P2'))}</small><strong>${escapeHtml(sample(p1,p2))}</strong></article><article><small>${escapeHtml(lcopy('Surface samples P1 / P2','Vzorka na povrchu P1 / P2','Vzorek na povrchu P1 / P2'))}</small><strong>${escapeHtml(sample(s1,s2))}</strong></article></div><p class="ace-detail-note">${escapeHtml(lcopy('This is a model projection. A real provider quote is shown when available; otherwise ACES/DF use a clearly marked indicative ~1.50–1.70 display estimate that is excluded from real betting ROI.','Ide o modelovú projekciu. Ak máme reálny kurz od providera, zobrazíme ho; inak pri ACES/DF používame jasne označený orientačný odhad ~1,50–1,70, ktorý sa nezapočítava do skutočného ROI.','Jde o modelovou projekci. Je-li dostupný reálný kurz od providera, zobrazíme ho; jinak u ACES/DF používáme jasně označený orientační odhad ~1,50–1,70, který se nezapočítává do skutečného ROI.'))}</p><div class="dialog-meta"><span>${escapeHtml(String(d.match.surface||'').replaceAll('_',' '))}</span><span>${fmtDate(d.match.date)} · ${fmtTime(d.match.date)}</span>${Number.isFinite(d.bestOf)?`<span>BO${Math.trunc(d.bestOf)}</span>`:''}<span>${escapeHtml(d.source.replaceAll('_',' '))}</span></div></div>`;
   }
   function openSgProjection(row,sourceTab=''){
     const dialog=$('matchDialog'),content=$('dialogContent');if(!dialog||!content)return;
@@ -2302,6 +2302,11 @@
     const confidence=Number(row.projection_confidence);
     if(!Number.isFinite(confidence)||confidence<0.5||confidence>1)return NaN;
     const p=Math.min(0.94,Math.max(0.5,confidence));
+    if(['aces','double_faults'].includes(market)){
+      const bounded=Math.min(0.90,Math.max(0.60,p));
+      const strength=(bounded-0.60)/0.30;
+      return Math.round((1.70-strength*0.20)*100)/100;
+    }
     return Math.round(Math.max(1.05,Math.min(2.50,1/(p*1.055)))*100)/100;
   }
   function indicativeOddsHint(){
@@ -2315,7 +2320,12 @@
     const odds=[row?.odds,row?.betting?.odds].map(value=>firstFinite(value)).find(value=>Number.isFinite(value)&&value>1);
     const realOddsText=Number.isFinite(odds)&&odds>1?odds.toFixed(2):'—';
     if(authenticLiveProjection(row))return hubNumberHtml(realOddsText,lcopy('odds','kurz','kurz'));
-    // Never show a guessed odds number on the live ACES/DF/GAMES/SETS board.
+    const market=String(row?.market||row?.projection_metric||'').toLowerCase();
+    if(['aces','double_faults'].includes(market)){
+      const approx=projectionIndicativeOdds(row);
+      if(Number.isFinite(approx))return `<span title="${escapeHtml(indicativeOddsHint())}">${hubNumberHtml('~'+approx.toFixed(2),lcopy('estimate','odhad','odhad'))}</span>`;
+    }
+    // GAMES/SETS still require a genuine provider quote on the live board.
     const reason=lcopy('Market odds unavailable','Trhový kurz nie je dostupný','Tržní kurz není dostupný');
     return `<span title="${escapeHtml(reason)}">${hubNumberHtml('N/A',reason)}</span>`;
   }
