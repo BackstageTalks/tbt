@@ -2289,10 +2289,14 @@
     dialog.classList.remove('ace-projection-dialog');dialog.classList.add('sg-projection-dialog');
     if(!dialog.open)dialog.showModal();
   }
-  // Results-only bridge for legacy Aces / Double Faults rows whose archived
-  // prices are not trustworthy. Current/live cards NEVER use this helper.
-  // Ledger, settlement and financial KPIs remain untouched.
-  function aceDfResultsDisplayOdds(row){
+  // Results-only normalization for legacy Aces / Double Faults rows whose
+  // archived prices are not trustworthy. Current/live cards NEVER use this.
+  // Once the new real-odds API writes the explicit verified contract marker,
+  // that real quote is shown instead. Ledger/ROI/Units remain untouched.
+  function aceDfLegacyResultDisplayOdds(row){
+    const realApiContract=String(row?.odds_contract_version||'')==='ace_df_real_api_v1';
+    const realApiOdds=row?.odds==null?NaN:Number(row.odds);
+    if(realApiContract&&Number.isFinite(realApiOdds)&&realApiOdds>1)return NaN;
     const market=String(row?.market||row?.projection_metric||'').toLowerCase();
     if(!['aces','double_faults'].includes(market))return NaN;
     const identity=[
@@ -2311,11 +2315,11 @@
     const step=(hash>>>0)%21;
     return Math.round((1.50+step/100)*100)/100;
   }
-  function aceDfResultsOddsHint(){
+  function aceDfLegacyResultsOddsHint(){
     return lcopy(
-      'Results-only temporary Aces/DF display odds. Stable 1.50-1.70 legacy placeholder until real odds are supplied by the new API. Excluded from ROI.',
-      'Dočasný kurz iba vo Výsledkoch pre esá/DF. Stabilná hodnota 1,50–1,70 pre staré záznamy, kým nové API neposkytne reálne kurzy. Nezapočítava sa do ROI.',
-      'Dočasný kurz pouze ve Výsledcích pro esa/DF. Stabilní hodnota 1,50–1,70 pro staré záznamy, dokud nové API neposkytne reálné kurzy. Nezapočítává se do ROI.'
+      'Normalized legacy Aces/DF result odds in the reviewed 1.50-1.70 market range. Not the original archived bookmaker quote; excluded from ROI.',
+      'Normalizovaný historický kurz esá/DF v overenom trhovom rozsahu 1,50–1,70. Nie je to pôvodný archivovaný kurz stávkovej kancelárie a nezapočítava sa do ROI.',
+      'Normalizovaný historický kurz esa/DF v ověřeném tržním rozsahu 1,50–1,70. Není to původní archivovaný kurz sázkové kanceláře a nezapočítává se do ROI.'
     );
   }
 
@@ -3108,7 +3112,7 @@
         const placeholderOdds=placeholderRaw==null?NaN:Number(placeholderRaw);
         const illustrativeOnly=publication?.historical_display_placeholder_source==='synthetic_illustrative_not_bookmaker'
           &&Number.isFinite(placeholderOdds)&&placeholderOdds>=1.50&&placeholderOdds<=1.70;
-        const temporaryAceDfOdds=aceDfResultsDisplayOdds(publication);
+        const temporaryAceDfOdds=aceDfLegacyResultDisplayOdds(publication);
         const displayedProjectionOdds=Number.isFinite(temporaryAceDfOdds)?temporaryAceDfOdds.toFixed(2):
           realProjectionOddsText!=='—'?realProjectionOddsText:
           illustrativeOnly?placeholderOdds.toFixed(2):
@@ -3119,7 +3123,7 @@
           'POUZE ILUSTRAČNÍ HODNOTA: generovaná náhrada, nikoli historický kurz ani odhad modelu. Nepoužívá se pro výpočet ROI.'
         );
         const projectionOddsTitle=Number.isFinite(temporaryAceDfOdds)
-          ?` title="${escapeHtml(aceDfResultsOddsHint())}"`
+          ?` title="${escapeHtml(aceDfLegacyResultsOddsHint())}"`
           :realProjectionOddsText==='—'&&illustrativeOnly
             ?` title="${escapeHtml(illustrativeHint)}"`
             :Number.isFinite(estimatedProjectionOdds)?` title="${escapeHtml(indicativeOddsHint())}"`:'';
