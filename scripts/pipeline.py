@@ -251,7 +251,8 @@ def _refresh_history(provider, matches, history_dir, history_store, start, end):
             # error in this run.
             pass
         day += timedelta(days=1)
-    return matches, skipped_days
+    provider._tbt_skipped_history_days = skipped_days
+    return matches
 
 
 
@@ -645,9 +646,12 @@ def main():
     doubles_completed = []
     doubles_upcoming = []
     try:
-        matches, skipped_history_days = _refresh_history(
+        matches = _refresh_history(
             provider, matches, history_dir, history_store,
             now.date() - timedelta(days=7), now.date()
+        )
+        skipped_history_days = set(
+            getattr(provider, "_tbt_skipped_history_days", set())
         )
         for tour in ("atp", "wta"):
             upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
