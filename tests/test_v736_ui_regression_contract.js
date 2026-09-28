@@ -42,6 +42,18 @@ assert.equal(app.includes("if(!location&&rawName.includes(','))"),false);
 for (const id of ['rookie','pro','elite','legend','goat']) assert.ok(Array.isArray(tiers.tiers[id].features) && tiers.tiers[id].features.length);
 assert.match(app,/if\(Array\.isArray\(data\.features\)\)p\.features=data\.features\.map/);
 assert.match(app,/p\.note=String\(data\.short_description\|\|data\.description\|\|''\)\.trim\(\)/);
+for (const id of ['rookie','pro','elite','legend','goat']) {
+  assert.equal(typeof tiers.tiers[id].account_description, 'string');
+  assert.ok(tiers.tiers[id].account_description.trim().length > 0);
+  assert.equal(typeof tiers.tiers[id].upgrade_description, 'string');
+  assert.ok(tiers.tiers[id].upgrade_description.trim().length > 0);
+}
+assert.match(app,/data-admin-level-field="account_description"/);
+assert.match(app,/data-admin-level-field="upgrade_description"/);
+assert.match(app,/p\.account_description\|\|p\.description/);
+assert.match(app,/p\?\.upgrade_description\|\|p\?\.description/);
+assert.match(app,/published\.account_description===undefined&&published\.description!==undefined/);
+assert.match(app,/published\.upgrade_description===undefined&&published\.description!==undefined/);
 for (const legacy of [
   'Entry access to the BlinQ workspace.',
   'Full core predictions and tournaments.',
