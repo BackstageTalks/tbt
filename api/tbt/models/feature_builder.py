@@ -13,7 +13,7 @@ from ..utils import clamp, stable_hash
 from .elo import elo_expected, update_elo
 
 
-FEATURE_STATE_SCHEMA_VERSION = 2
+FEATURE_STATE_SCHEMA_VERSION = 3
 
 
 FEATURE_NAMES = [
@@ -48,6 +48,14 @@ FEATURE_NAMES = [
     "surface_return_quality_diff",
     "stats_known_both",
     "surface_stats_known_both",
+    "first_strike_serve_diff",
+    "return_in_play_diff",
+    "return_depth_diff",
+    "break_point_serve_diff",
+    "break_point_return_diff",
+    "net_efficiency_diff",
+    "aggression_balance_diff",
+    "rich_charting_known_both",
     "sets_7d_advantage",
     "games_7d_advantage",
     "sets_14d_advantage",
@@ -92,6 +100,13 @@ class RecentPerformance:
     second_set_won: float | None = None
     round_bucket: str = "unknown"
     tournament_key: str = ""
+    first_strike_serve: float | None = None
+    return_in_play: float | None = None
+    return_depth: float | None = None
+    break_point_serve: float | None = None
+    break_point_return: float | None = None
+    net_efficiency: float | None = None
+    aggression_balance: float | None = None
 
 
 @dataclass
@@ -223,6 +238,13 @@ class FeatureBuilder:
                         "second_set_won": item.second_set_won,
                         "round_bucket": item.round_bucket,
                         "tournament_key": item.tournament_key,
+                        "first_strike_serve": item.first_strike_serve,
+                        "return_in_play": item.return_in_play,
+                        "return_depth": item.return_depth,
+                        "break_point_serve": item.break_point_serve,
+                        "break_point_return": item.break_point_return,
+                        "net_efficiency": item.net_efficiency,
+                        "aggression_balance": item.aggression_balance,
                     }
                     for item in state.recent
                 ],
@@ -262,10 +284,10 @@ class FeatureBuilder:
         if not isinstance(payload, dict):
             return builder
         version = int(payload.get("schema_version") or 0)
-        if version not in {1, FEATURE_STATE_SCHEMA_VERSION}:
+        if version not in {1, 2, FEATURE_STATE_SCHEMA_VERSION}:
             raise ValueError(
                 f"Unsupported FeatureBuilder state schema {version}; "
-                f"expected 1 or {FEATURE_STATE_SCHEMA_VERSION}"
+                f"expected 1, 2 or {FEATURE_STATE_SCHEMA_VERSION}"
             )
 
         raw_players = payload.get("players")
@@ -312,6 +334,13 @@ class FeatureBuilder:
                                 second_set_won=item.get("second_set_won"),
                                 round_bucket=str(item.get("round_bucket") or "unknown"),
                                 tournament_key=str(item.get("tournament_key") or ""),
+                                first_strike_serve=item.get("first_strike_serve"),
+                                return_in_play=item.get("return_in_play"),
+                                return_depth=item.get("return_depth"),
+                                break_point_serve=item.get("break_point_serve"),
+                                break_point_return=item.get("break_point_return"),
+                                net_efficiency=item.get("net_efficiency"),
+                                aggression_balance=item.get("aggression_balance"),
                             )
                         )
                 builder.players[str(key)] = state
@@ -1371,6 +1400,30 @@ class FeatureBuilder:
             and surface_return2 is not None
         )
 
+        # Match Charting Project specialist rates are stored on historical
+        # matches, then decayed here exactly like serve/return quality. The
+        # current match is never visible because snapshot() always precedes
+        # update() in training/replay.
+        rich_pairs: list[tuple[float | None, float | None]] = []
+        rich_values: dict[str, tuple[float | None, float | None]] = {}
+        for feature_name, state_field in (
+            ("first_strike_serve_diff", "first_strike_serve"),
+            ("return_in_play_diff", "return_in_play"),
+            ("return_depth_diff", "return_depth"),
+            ("break_point_serve_diff", "break_point_serve"),
+            ("break_point_return_diff", "break_point_return"),
+            ("net_efficiency_diff", "net_efficiency"),
+            ("aggression_balance_diff", "aggression_balance"),
+        ):
+            value1 = self._stat_quality(p1, match.scheduled_at, state_field)
+            value2 = self._stat_quality(p2, match.scheduled_at, state_field)
+            rich_values[feature_name] = (value1, value2)
+            rich_pairs.append((value1, value2))
+        rich_charting_known_both = (
+            sum(1 for left, right in rich_pairs if left is not None and right is not None)
+            / float(len(rich_pairs))
+        )
+
         surface_h2h_advantage, surface_h2h_known = self._surface_h2h_values(match)
 
         p1_sets_7d = self._metric_sum_in_window(p1, match.scheduled_at, 7.0, "sets_played")
@@ -1664,6 +1717,42 @@ class FeatureBuilder:
                 stats_known
             ),
             "surface_stats_known_both": surface_stats_known,
+            "first_strike_serve_diff": (
+                float(rich_values["first_strike_serve_diff"][0])
+                - float(rich_values["first_strike_serve_diff"][1])
+                if None not in rich_values["first_strike_serve_diff"] else 0.0
+            ),
+            "return_in_play_diff": (
+                float(rich_values["return_in_play_diff"][0])
+                - float(rich_values["return_in_play_diff"][1])
+                if None not in rich_values["return_in_play_diff"] else 0.0
+            ),
+            "return_depth_diff": (
+                float(rich_values["return_depth_diff"][0])
+                - float(rich_values["return_depth_diff"][1])
+                if None not in rich_values["return_depth_diff"] else 0.0
+            ),
+            "break_point_serve_diff": (
+                float(rich_values["break_point_serve_diff"][0])
+                - float(rich_values["break_point_serve_diff"][1])
+                if None not in rich_values["break_point_serve_diff"] else 0.0
+            ),
+            "break_point_return_diff": (
+                float(rich_values["break_point_return_diff"][0])
+                - float(rich_values["break_point_return_diff"][1])
+                if None not in rich_values["break_point_return_diff"] else 0.0
+            ),
+            "net_efficiency_diff": (
+                float(rich_values["net_efficiency_diff"][0])
+                - float(rich_values["net_efficiency_diff"][1])
+                if None not in rich_values["net_efficiency_diff"] else 0.0
+            ),
+            "aggression_balance_diff": (
+                float(rich_values["aggression_balance_diff"][0])
+                - float(rich_values["aggression_balance_diff"][1])
+                if None not in rich_values["aggression_balance_diff"] else 0.0
+            ),
+            "rich_charting_known_both": rich_charting_known_both,
             "sets_7d_advantage": sets_7d_advantage,
             "games_7d_advantage": games_7d_advantage,
             "sets_14d_advantage": sets_14d_advantage,
@@ -1920,6 +2009,23 @@ class FeatureBuilder:
         round_bucket = self._round_bucket(match.round_name)
         tournament_key = self._tournament_key(match)
 
+        def rich_rate(prefix: str, field_name: str) -> float | None:
+            value = self._num(stats.get(f"{prefix}_{field_name}"))
+            return value if value is not None and 0.0 <= value <= 1.0 else None
+
+        p1_attack = rich_rate("p1", "attacking_points_rate")
+        p1_unforced = rich_rate("p1", "unforced_error_rate")
+        p2_attack = rich_rate("p2", "attacking_points_rate")
+        p2_unforced = rich_rate("p2", "unforced_error_rate")
+        p1_aggression = (
+            p1_attack - p1_unforced
+            if p1_attack is not None and p1_unforced is not None else None
+        )
+        p2_aggression = (
+            p2_attack - p2_unforced
+            if p2_attack is not None and p2_unforced is not None else None
+        )
+
         p1.recent.append(
             RecentPerformance(
                 match.scheduled_at,
@@ -1935,6 +2041,13 @@ class FeatureBuilder:
                 p1_second_set,
                 round_bucket,
                 tournament_key,
+                first_strike_serve=rich_rate("p1", "first_strike_serve_win"),
+                return_in_play=rich_rate("p1", "return_in_play_rate"),
+                return_depth=rich_rate("p1", "return_deep_rate"),
+                break_point_serve=rich_rate("p1", "break_point_serve_win"),
+                break_point_return=rich_rate("p1", "break_point_return_win"),
+                net_efficiency=rich_rate("p1", "net_points_win"),
+                aggression_balance=p1_aggression,
             )
         )
 
@@ -1953,6 +2066,13 @@ class FeatureBuilder:
                 p2_second_set,
                 round_bucket,
                 tournament_key,
+                first_strike_serve=rich_rate("p2", "first_strike_serve_win"),
+                return_in_play=rich_rate("p2", "return_in_play_rate"),
+                return_depth=rich_rate("p2", "return_deep_rate"),
+                break_point_serve=rich_rate("p2", "break_point_serve_win"),
+                break_point_return=rich_rate("p2", "break_point_return_win"),
+                net_efficiency=rich_rate("p2", "net_points_win"),
+                aggression_balance=p2_aggression,
             )
         )
 

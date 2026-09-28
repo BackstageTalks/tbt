@@ -34,6 +34,18 @@ from tbt.data.history_safety import sanitize_history_identities
 from tbt.models.feature_builder import FeatureBuilder
 
 
+RICH_CHARTING_FIELDS = {
+    "first_strike_serve_win",
+    "return_in_play_rate",
+    "return_deep_rate",
+    "break_point_serve_win",
+    "break_point_return_win",
+    "net_points_win",
+    "attacking_points_rate",
+    "unforced_error_rate",
+}
+
+
 STAT_FIELDS = {
     "aces",
     "double_faults",
@@ -41,6 +53,16 @@ STAT_FIELDS = {
     "second_serve_win",
     "service_points_won",
     "return_points_won",
+    # Normalized Match Charting Project rates. Every value is bounded 0..1;
+    # FeatureBuilder later turns these into rolling point-in-time features.
+    "first_strike_serve_win",
+    "return_in_play_rate",
+    "return_deep_rate",
+    "break_point_serve_win",
+    "break_point_return_win",
+    "net_points_win",
+    "attacking_points_rate",
+    "unforced_error_rate",
 }
 
 
@@ -242,6 +264,13 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
 
 
 def _charting_rows(path: str) -> Iterable[OfflineMatch]:
+    """Yield charting matches with Overview plus high-confidence specialist rates.
+
+    Specialist tables are normalized at match level here, not in the model.
+    Only rows with unambiguous denominators are accepted; missing/zero
+    denominators remain missing. This keeps raw charting quirks out of the
+    canonical history and preserves a bounded 0..1 importer contract.
+    """
     with zipfile.ZipFile(path) as archive:
         names = set(archive.namelist())
         for code, tour in (("m", "atp"), ("w", "wta")):
@@ -249,6 +278,23 @@ def _charting_rows(path: str) -> Iterable[OfflineMatch]:
             overview_name = f"charting-{code}-stats-Overview.csv"
             if match_name not in names or overview_name not in names:
                 continue
+
+            def load_stat_rows(dataset: str, wanted_row: str) -> dict[str, dict[str, dict[str, str]]]:
+                filename = f"charting-{code}-stats-{dataset}.csv"
+                values: dict[str, dict[str, dict[str, str]]] = defaultdict(dict)
+                if filename not in names:
+                    return values
+                with archive.open(filename) as raw:
+                    text = (line.decode("utf-8-sig", errors="replace") for line in raw)
+                    for stat in csv.DictReader(text):
+                        if str(stat.get("row") or "").strip().lower() != wanted_row.lower():
+                            continue
+                        mid = str(stat.get("match_id") or "")
+                        player = _norm_name(stat.get("player"))
+                        if mid and player:
+                            values[mid][player] = stat
+                return values
+
             overview: dict[str, dict[str, dict[str, str]]] = defaultdict(dict)
             with archive.open(overview_name) as raw:
                 text = (line.decode("utf-8-sig", errors="replace") for line in raw)
@@ -256,6 +302,72 @@ def _charting_rows(path: str) -> Iterable[OfflineMatch]:
                     if str(row.get("set") or "").strip().lower() != "total":
                         continue
                     overview[str(row.get("match_id") or "")][_norm_name(row.get("player"))] = row
+
+            serve_basics = load_stat_rows("ServeBasics", "Total")
+            return_outcomes = load_stat_rows("ReturnOutcomes", "Total")
+            return_depth = load_stat_rows("ReturnDepth", "Total")
+            net_points = load_stat_rows("NetPoints", "NetPoints")
+            key_serve = load_stat_rows("KeyPointsServe", "BP")
+            key_return = load_stat_rows("KeyPointsReturn", "BPO")
+            shot_types = load_stat_rows("ShotTypes", "Total")
+
+            def specialist_stats(mid: str, player_name: str) -> dict[str, float]:
+                key = _norm_name(player_name)
+                result: dict[str, float] = {}
+
+                src = serve_basics.get(mid, {}).get(key)
+                if src:
+                    value = _rate(src.get("pts_won_lte_3_shots"), src.get("pts"))
+                    if value is not None:
+                        result["first_strike_serve_win"] = value
+
+                src = return_outcomes.get(mid, {}).get(key)
+                if src:
+                    value = _rate(src.get("in_play"), src.get("returnable"))
+                    if value is not None:
+                        result["return_in_play_rate"] = value
+
+                src = return_depth.get(mid, {}).get(key)
+                if src:
+                    # MCP very_deep is a subset of deep; deep alone is the
+                    # correct numerator rather than deep + very_deep.
+                    value = _rate(src.get("deep"), src.get("returnable"))
+                    if value is not None:
+                        result["return_deep_rate"] = value
+
+                src = key_serve.get(mid, {}).get(key)
+                if src:
+                    value = _rate(src.get("pts_won"), src.get("pts"))
+                    if value is not None:
+                        result["break_point_serve_win"] = value
+
+                src = key_return.get(mid, {}).get(key)
+                if src:
+                    value = _rate(src.get("pts_won"), src.get("pts"))
+                    if value is not None:
+                        result["break_point_return_win"] = value
+
+                src = net_points.get(mid, {}).get(key)
+                if src:
+                    value = _rate(src.get("pts_won"), src.get("net_pts"))
+                    if value is not None:
+                        result["net_points_win"] = value
+
+                src = shot_types.get(mid, {}).get(key)
+                if src:
+                    ending = _num(src.get("pt_ending"))
+                    winners = _num(src.get("winners"))
+                    forced = _num(src.get("induced_forced"))
+                    unforced = _num(src.get("unforced"))
+                    attacking = None if winners is None or forced is None else winners + forced
+                    attack_rate = _rate(attacking, ending)
+                    error_rate = _rate(unforced, ending)
+                    if attack_rate is not None:
+                        result["attacking_points_rate"] = attack_rate
+                    if error_rate is not None:
+                        result["unforced_error_rate"] = error_rate
+                return result
+
             with archive.open(match_name) as raw:
                 text = (line.decode("utf-8-sig", errors="replace") for line in raw)
                 for row in csv.DictReader(text):
@@ -270,7 +382,7 @@ def _charting_rows(path: str) -> Iterable[OfflineMatch]:
                     if not a_raw or not b_raw:
                         continue
 
-                    def stats(src: dict[str, str]) -> dict[str, float]:
+                    def stats(src: dict[str, str], player_name: str) -> dict[str, float]:
                         serve_pts = _num(src.get("serve_pts"))
                         first_in = _num(src.get("first_in"))
                         first_won = _num(src.get("first_won"))
@@ -279,8 +391,8 @@ def _charting_rows(path: str) -> Iterable[OfflineMatch]:
                         return_pts = _num(src.get("return_pts"))
                         return_won = _num(src.get("return_pts_won"))
                         result: dict[str, float] = {}
-                        for field, key in (("aces", "aces"), ("double_faults", "dfs")):
-                            value = _num(src.get(key))
+                        for field, key_name in (("aces", "aces"), ("double_faults", "dfs")):
+                            value = _num(src.get(key_name))
                             if value is not None and value >= 0 and value.is_integer():
                                 result[field] = float(value)
                         for field, value in (
@@ -294,6 +406,7 @@ def _charting_rows(path: str) -> Iterable[OfflineMatch]:
                         ):
                             if value is not None:
                                 result[field] = value
+                        result.update(specialist_stats(mid, player_name))
                         return result
 
                     bo = _num(row.get("Best of"))
@@ -309,10 +422,9 @@ def _charting_rows(path: str) -> Iterable[OfflineMatch]:
                         surface=_norm_surface(row.get("Surface")),
                         round_name=_norm_round(row.get("Round")),
                         best_of=int(bo) if bo in (3.0, 5.0) else None,
-                        stats_a=stats(a_raw),
-                        stats_b=stats(b_raw),
+                        stats_a=stats(a_raw, p1),
+                        stats_b=stats(b_raw, p2),
                     )
-
 
 def _tournament_score(a: str, b: str) -> tuple[int, str]:
     na, nb = _norm_text(a), _norm_text(b)
@@ -528,6 +640,7 @@ def main() -> None:
 
     staged: list[dict] = []
     quarantine: list[dict] = []
+    staged_field_counts = Counter()
     quality_before = sum(1 for m in matches if _quality_ready(m.stats or {}))
     projected_quality = quality_before
 
@@ -562,6 +675,13 @@ def main() -> None:
         is_ready = _quality_ready(projected)
         if is_ready and not was_ready:
             projected_quality += 1
+        staged_field_counts.update(merged.keys())
+        if any(
+            key.split("_", 1)[1] in RICH_CHARTING_FIELDS
+            for key in merged
+            if "_" in key
+        ):
+            counts["rich_staged_matches"] += 1
         staged.append({
             "schema": 1,
             "match_id": mid,
@@ -591,6 +711,7 @@ def main() -> None:
         "source_rows": len(sources),
         "counts": dict(counts),
         "source_rows_by_source": dict(per_source),
+        "staged_field_counts": dict(sorted(staged_field_counts.items())),
         "quality_ready_before": quality_before,
         "quality_ready_projected_after": projected_quality,
         "quality_ready_projected_added": projected_quality - quality_before,

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from tbt.models.feature_builder import FEATURE_NAMES, FeatureBuilder
+from tbt.models.feature_builder import FEATURE_NAMES, FEATURE_STATE_SCHEMA_VERSION, FeatureBuilder
 
 
 def _score(match, *, total_sets, total_games, p1_first, p2_first, p1_second, p2_second, deciding):
@@ -94,7 +94,7 @@ def test_surface_h2h_is_separate_and_shrunk(match_factory):
 def test_feature_state_v1_remains_loadable():
     legacy = {"schema_version": 1, "players": {}, "h2h": []}
     restored = FeatureBuilder.from_state(legacy)
-    assert restored.export_state()["schema_version"] == 2
+    assert restored.export_state()["schema_version"] == FEATURE_STATE_SCHEMA_VERSION
 
 
 def test_serving_respects_legacy_artifact_feature_schema(match_factory):
