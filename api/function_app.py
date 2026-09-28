@@ -1697,10 +1697,19 @@ def insights_mark_read(req):
         return response({"error": "auth_unavailable"}, 503)
 
 def _feed_asset_health(raw_feed: dict) -> dict:
-    """Describe player/tournament media coverage without spending provider requests."""
+    """Describe actual deployed media and public price coverage, read-only.
+
+    A numeric provider id is useful for a proxy request, but is not evidence
+    that a real image was deployed. Prefer the serving snapshot's asset bundle
+    metadata and keep proxy capability as a separate diagnostic.
+    """
     rows = []
     seen_rows = set()
-    for key in ("upcoming", "results", "prime_picks", "top_daily_picks", "value_picks", "ace_picks", "sg_picks", "doubles_picks"):
+    row_sections = (
+        "upcoming", "results", "prime_picks", "top_daily_picks", "value_picks",
+        "ace_picks", "sg_picks", "doubles_picks",
+    )
+    for key in row_sections:
         for row in raw_feed.get(key) or []:
             if not isinstance(row, dict):
                 continue
@@ -1722,36 +1731,163 @@ def _feed_asset_health(raw_feed: dict) -> dict:
             key = pid or name.lower()
             if not key:
                 continue
-            explicit = str(player.get("photo_url") or player.get("image_url") or player.get("photo") or row.get(f"{side}_photo_url") or row.get(f"{side}_image_url") or "").strip()
-            proxy_ref = bool(pid.isdigit())
-            players[key] = bool(players.get(key) or explicit or proxy_ref)
+            explicit = str(
+                player.get("photo_url") or player.get("image_url") or player.get("photo")
+                or row.get(f"{side}_photo_url") or row.get(f"{side}_image_url") or ""
+            ).strip()
+            item = players.setdefault(key, {"explicit": False, "proxy": False})
+            item["explicit"] = bool(item["explicit"] or explicit)
+            item["proxy"] = bool(item["proxy"] or pid.isdigit())
 
-        tournament = str(row.get("tournament") or row.get("competition_name") or row.get("competition") or "").strip()
-        tid = str(row.get("tournament_logo_id") or row.get("tournament_id") or row.get("unique_tournament_id") or "").strip()
+        tournament = str(
+            row.get("tournament") or row.get("competition_name")
+            or row.get("competition") or ""
+        ).strip()
+        tid = str(
+            row.get("tournament_logo_id") or row.get("tournament_id")
+            or row.get("unique_tournament_id") or ""
+        ).strip()
         tkey = tid or tournament.lower()
         if tkey:
-            explicit_logo = str(row.get("tournament_logo_url") or row.get("competition_logo_url") or row.get("competition_logo") or row.get("tournament_logo") or "").strip()
-            tournaments[tkey] = bool(tournaments.get(tkey) or explicit_logo or tid.isdigit())
+            explicit_logo = str(
+                row.get("tournament_logo_url") or row.get("competition_logo_url")
+                or row.get("competition_logo") or row.get("tournament_logo") or ""
+            ).strip()
+            item = tournaments.setdefault(tkey, {"explicit": False, "proxy": False})
+            item["explicit"] = bool(item["explicit"] or explicit_logo)
+            item["proxy"] = bool(item["proxy"] or tid.isdigit())
 
-    player_total = len(players)
-    player_refs = sum(1 for ok in players.values() if ok)
-    tournament_total = len(tournaments)
-    tournament_refs = sum(1 for ok in tournaments.values() if ok)
+    player_meta = raw_feed.get("player_assets")
+    player_meta = player_meta if isinstance(player_meta, dict) else {}
+    player_total = int(player_meta.get("player_ids_requested") or len(players) or 0)
+    deployed_players = int(player_meta.get("photos_deployed") or 0)
+    if not player_meta.get("available"):
+        deployed_players = sum(1 for item in players.values() if item["explicit"])
+    player_missing = (
+        int(player_meta.get("photos_missing"))
+        if player_meta.get("photos_missing") is not None
+        else max(0, player_total - deployed_players)
+    )
+    player_proxy = sum(1 for item in players.values() if item["proxy"])
+
+    tournament_meta = raw_feed.get("tournament_assets")
+    tournament_meta = tournament_meta if isinstance(tournament_meta, dict) else {}
+    tournament_total = int(
+        tournament_meta.get("tournament_ids_requested") or len(tournaments) or 0
+    )
+    deployed_tournaments = int(tournament_meta.get("logos_deployed") or 0)
+    if not tournament_meta.get("available"):
+        deployed_tournaments = sum(
+            1 for item in tournaments.values() if item["explicit"]
+        )
+    tournament_missing = (
+        int(tournament_meta.get("logos_missing"))
+        if tournament_meta.get("logos_missing") is not None
+        else max(0, tournament_total - deployed_tournaments)
+    )
+    tournament_proxy = sum(1 for item in tournaments.values() if item["proxy"])
+
+    def real_odds(row):
+        if not isinstance(row, dict):
+            return None
+        if str(row.get("historical_display_placeholder_source") or "") == "synthetic_illustrative_not_bookmaker":
+            return None
+        sources = [row]
+        if isinstance(row.get("betting"), dict):
+            sources.append(row["betting"])
+        for source in sources:
+            for key in ("odds", "decimal_odds", "price"):
+                value = source.get(key)
+                if value is None or isinstance(value, bool):
+                    continue
+                try:
+                    number = float(value)
+                except (TypeError, ValueError):
+                    continue
+                if number == number and number not in (float("inf"), float("-inf")) and number > 1:
+                    return number
+        return None
+
+    required_sections = {
+        "short_odds": "prime_picks",
+        "top": "top_daily_picks",
+        "value": "value_picks",
+        "doubles": "doubles_picks",
+    }
+    projection_rows = {"aces": [], "double_faults": [], "games": [], "sets": []}
+    for row in raw_feed.get("ace_picks") or []:
+        if isinstance(row, dict):
+            metric = str(row.get("market") or "").strip().lower()
+            if metric in projection_rows:
+                projection_rows[metric].append(row)
+    for row in raw_feed.get("sg_picks") or []:
+        if isinstance(row, dict):
+            metric = str(row.get("market") or "").strip().lower()
+            if metric in projection_rows:
+                projection_rows[metric].append(row)
+
+    def price_stats(rows):
+        rows = [row for row in (rows or []) if isinstance(row, dict)]
+        priced = sum(1 for row in rows if real_odds(row) is not None)
+        total = len(rows)
+        missing = max(0, total - priced)
+        return {
+            "total": total,
+            "priced": priced,
+            "missing": missing,
+            "coverage": round(priced / total, 4) if total else 1.0,
+        }
+
+    required_price_sections = {
+        name: price_stats(raw_feed.get(key) or [])
+        for name, key in required_sections.items()
+    }
+    projection_price_sections = {
+        name: price_stats(section_rows)
+        for name, section_rows in projection_rows.items()
+    }
+    required_total = sum(item["total"] for item in required_price_sections.values())
+    required_priced = sum(item["priced"] for item in required_price_sections.values())
+    projection_total = sum(item["total"] for item in projection_price_sections.values())
+    projection_priced = sum(item["priced"] for item in projection_price_sections.values())
+
     return {
         "player_images": {
             "total": player_total,
-            "provider_or_proxy_refs": player_refs,
-            "fallback_needed": max(0, player_total - player_refs),
-            "ok": player_total == 0 or player_refs == player_total,
+            "deployed_assets": deployed_players,
+            "provider_or_proxy_refs": player_proxy,
+            "fallback_needed": player_missing,
+            "coverage": round(deployed_players / player_total, 4) if player_total else 1.0,
+            "source": "deployed_bundle" if player_meta.get("available") else "feed_explicit_only",
+            "ok": player_total == 0 or player_missing == 0,
         },
         "tournament_logos": {
             "total": tournament_total,
-            "provider_or_proxy_refs": tournament_refs,
-            "fallback_needed": max(0, tournament_total - tournament_refs),
-            "ok": tournament_total == 0 or tournament_refs == tournament_total,
+            "deployed_assets": deployed_tournaments,
+            "provider_or_proxy_refs": tournament_proxy,
+            "fallback_needed": tournament_missing,
+            "coverage": round(deployed_tournaments / tournament_total, 4) if tournament_total else 1.0,
+            "source": "deployed_bundle" if tournament_meta.get("available") else "feed_explicit_only",
+            "ok": tournament_total == 0 or tournament_missing == 0,
+        },
+        "market_odds": {
+            "required": {
+                "total": required_total,
+                "priced": required_priced,
+                "missing": max(0, required_total - required_priced),
+                "coverage": round(required_priced / required_total, 4) if required_total else 1.0,
+                "ok": required_total == required_priced,
+                "sections": required_price_sections,
+            },
+            "projections": {
+                "total": projection_total,
+                "priced": projection_priced,
+                "missing": max(0, projection_total - projection_priced),
+                "coverage": round(projection_priced / projection_total, 4) if projection_total else 1.0,
+                "sections": projection_price_sections,
+            },
         },
     }
-
 
 @app.route(route="v1/admin/diagnostics", methods=["GET"])
 def admin_diagnostics(req):
