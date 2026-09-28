@@ -109,6 +109,18 @@ def minimize_provider_payload(
     if isinstance(format_marker, dict):
         out["_tbt_match_format"] = {k: format_marker[k] for k in
             ("schema", "status", "best_of", "source", "provider_best_of", "score_best_of") if k in format_marker}
+    odds_marker = raw.get("_tbt_match_winner_odds")
+    if isinstance(odds_marker, dict):
+        out["_tbt_match_winner_odds"] = {
+            k: odds_marker[k]
+            for k in (
+                "schema", "status", "source", "source_match_id",
+                "source_file_sha256", "price_kind", "player1_odds",
+                "player2_odds", "player1_implied_probability",
+                "player2_implied_probability", "raw_overround",
+            )
+            if k in odds_marker
+        }
     termination = _compact_termination(raw)
     if termination is not None:
         out["_tbt_termination"] = termination
