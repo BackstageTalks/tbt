@@ -781,10 +781,10 @@ def main():
                 start_hour=args.betting_day_start_hour,
                 prefetched_payloads=projection_market_cache,
             )
-        # In odds-first mode the projection models operate only on events
-        # that have a complete matching market from the provider. Keep an
-        # expanded *eligible* pool so publication can independently rank each
-        # of the four categories without one consuming the others' slots.
+        # GAMES/SETS remain odds-first. ACES/DF also publish model-only
+        # projections when no exact bookmaker contract is available; those
+        # cards receive an explicitly indicative 1.50-1.70 display quote only
+        # after immutable publication checks and never enter real-price ROI.
         projection_pool_per_market = (
             max(30, min(200, projection_odds_cap)) if projection_odds_cap else 10
         )
@@ -793,9 +793,7 @@ def main():
             per_market_limit=projection_pool_per_market,
             total_limit=2 * projection_pool_per_market,
             target_count=projection_pool_per_market,
-            available_markets_by_event=(
-                available_projection_markets if projection_odds_cap else None
-            ),
+            available_markets_by_event=None,
         )
         sg_picks, sg_report = select_sg_picks(
             matches, predictions, now=selection_now,
@@ -819,8 +817,9 @@ def main():
             )
             projection_odds_report.update(attachment_report)
             projection_odds_report["discovery"] = projection_discovery_report
-        # Market-first publication is strict: an unmatched card remains an
-        # internal model diagnostic, never a bookmaker-looking bet.
+        # GAMES/SETS stay strict real-price bets. ACES/DF may remain
+        # projection_only and are rendered with a clearly marked indicative
+        # display quote; exact provider prices still take precedence.
         if projection_odds_cap:
             projection_odds_report["unpriced_model_candidates"] = {
                 market: sum(row.get("market") == market and
@@ -841,7 +840,10 @@ def main():
                     and provider > 0 and bool(row.get("captured_at"))
                     and 1.50 <= odds < float("inf")
                 )
-            ace_picks = [row for row in ace_picks if publishable_api_price(row)]
+            # Keep ACES/DF model projections even when the exact bookmaker
+            # contract is unavailable. Their odds field stays null and only
+            # the serving-feed decorator adds an indicative display value.
+            # GAMES/SETS remain real-provider-only.
             sg_picks = [row for row in sg_picks if publishable_api_price(row)]
         # Ten per independent category, sorted by validated projection
         # confidence and evidence, NOT simply by the highest bookmaker price.
@@ -872,7 +874,7 @@ def main():
             ace_report = {
                 **ace_report, "odds_attachment": projection_odds_report,
                 "published_selected": len(ace_picks),
-                "priced_selection_policy": "odds_first_exact_market_then_model_independent_top10",
+                "priced_selection_policy": "ace_df_model_projection_with_real_price_when_available_indicative_display_fallback",
             }
         if isinstance(sg_report, dict):
             sg_report = {
