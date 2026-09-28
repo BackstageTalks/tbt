@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "mode": "backtest",
+  "purpose": "Walk-forward evaluation of current FeatureBuilder including rich Match Charting v2 signals; read-only, zero provider API, no production promotion.",
+  "source_enrichment_run_id": "36471908489",
+  "feature_audit_run_id": "36473092874",
+  "requested_at_utc": "2026-09-28T19:40:00Z"
+}
