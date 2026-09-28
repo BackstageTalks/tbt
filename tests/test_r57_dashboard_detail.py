@@ -78,7 +78,8 @@ def test_dashboard_uses_server_unique_count_and_preserves_title():
     )[0]
     assert "state.feed?.entitlements?.daily_pick_count" in dashboard
     assert "DNEŠNÉ PREDIKCIE" in dashboard
-    assert "String(totalToday),'',''" in dashboard
+    assert "value=String(totalToday);" in dashboard
+    assert "metric==='today_picks'" in dashboard
     assert "['daily','prime','value','ace','double_faults','doubles','games','sets']" in dashboard
     assert "totalToday=Math.max(Number(dailyEnt?.total)" not in dashboard
 
