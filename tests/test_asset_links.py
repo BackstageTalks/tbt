@@ -8,7 +8,7 @@ def test_static_asset_contract_is_configured():
     cfg = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
     assets = cfg["assets"]
     assert assets["favicon"] == "/assets/blinq_favi.png"
-    assert assets["background"] == "/assets/blinq_background.webp"
+    assert assets["background"] == "/assets/blinq_page_background.webp"
     assert assets["player_fallback"] == {
         "atp": "/assets/missing_foto_m.webp",
         "wta": "/assets/missing_foto_w.webp",
