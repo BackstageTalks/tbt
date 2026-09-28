@@ -3892,7 +3892,7 @@
     const current=clone(state.ui),next=clone(state.ui);
     next.hero_banner=mergeConfig(next.hero_banner||{},saved.hero_banner);
     Object.entries(saved.elements).forEach(([id,old])=>{
-      if(!next.elements?.[id]||!old||next.elements[id].kind!==old.kind)return;
+      if(!old||old.kind!=='hero_banner'||next.elements?.[id]?.kind!=='hero_banner')return;
       if(old.content&&typeof old.content==='object')next.elements[id].content=mergeConfig(next.elements[id].content||{},old.content);
       if(old.kind==='hero_banner'&&old.watermark)next.elements[id].watermark=mergeConfig(next.elements[id].watermark||{},old.watermark);
     });
