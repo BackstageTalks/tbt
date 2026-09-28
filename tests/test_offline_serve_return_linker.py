@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "link_offline_serve_return.py"
 
 
-def canonical(*, match_id="m1", tournament="Brisbane", round_name="QF", stats=None):
+def canonical(*, match_id="m1", tournament="Brisbane", round_name="QF", stats=None, provider_event_id="1001"):
     return MatchRecord(
         match_id=match_id,
         tour="atp",
@@ -34,7 +34,7 @@ def canonical(*, match_id="m1", tournament="Brisbane", round_name="QF", stats=No
         status="completed",
         best_of=3,
         stats=stats or {},
-        provider_payload={"_tbt_provider_event_id": "1001"},
+        provider_payload={"_tbt_provider_event_id": provider_event_id},
     )
 
 
@@ -118,7 +118,7 @@ def test_duplicate_canonical_candidate_fails_ambiguous(tmp_path):
     # canonical meetings; the linker must refuse to guess.
     write_source(source, round="")
     first = canonical(match_id="m1", round_name="QF")
-    second = canonical(match_id="m2", round_name="SF")
+    second = canonical(match_id="m2", round_name="SF", provider_event_id="1002")
     report, staged, review, _ = run_linker(tmp_path, [first, second], source=source)
     assert not staged
     assert report["counts"]["ambiguous"] == 1
