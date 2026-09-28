@@ -20,12 +20,16 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlparse
 
+from .dashboard_kpis import ALLOWED_PERIODS
+
 
 class AdminStorageUnavailable(RuntimeError):
     pass
 
 
 UI_TABLE = "BlinQAdminConfig"
+UI_HISTORY_PARTITION = "ui-config-history"
+_UI_SNAPSHOT_ID = re.compile(r"^before-\d{8}T\d{12}Z-[a-f0-9]{8}$")
 ANALYTICS_TABLE = "BlinQBannerAnalytics"
 INSIGHTS_TABLE = "BlinQInsights"
 INSIGHT_READS_TABLE = "BlinQInsightReads"
@@ -541,6 +545,8 @@ def save_live_worker_status(payload: object) -> dict:
         "signal_items": data.get("signal_items") if isinstance(data.get("signal_items"), list) else [],
         "thresholds": data.get("thresholds") if isinstance(data.get("thresholds"), dict) else {},
         "last_error": last_error,
+        "budget_paused": bool(data.get("budget_paused")),
+        "provider_skipped_reason": str(data.get("provider_skipped_reason") or "")[:64],
         "updated_at": now,
     }
     # Keep snapshots deliberately tiny; the durable insight table is the alert history.
@@ -574,6 +580,106 @@ def load_live_worker_status() -> dict | None:
     except ValueError:
         return None
     return payload if isinstance(payload, dict) else None
+
+def save_match_status_snapshot(payload: object) -> dict:
+    """Persist the compact hourly match-status map used by prediction tables."""
+    data = dict(payload or {}) if isinstance(payload, dict) else {}
+    now = datetime.now(timezone.utc).isoformat()
+    raw_statuses = data.get("statuses")
+    raw_statuses = raw_statuses if isinstance(raw_statuses, dict) else {}
+    statuses = {}
+    for event_id, value in raw_statuses.items():
+        if not isinstance(value, dict):
+            continue
+        status = str(value.get("status") or "").strip().lower()
+        if status not in {"win", "loss", "retired", "void"}:
+            continue
+        eid = str(event_id or "").strip()[:64]
+        if not eid:
+            continue
+        statuses[eid] = {
+            "status": status,
+            "checked_at": str(value.get("checked_at") or "")[:64],
+            "winner_id": str(value.get("winner_id") or "")[:64],
+            "provider_status": str(value.get("provider_status") or "")[:120],
+        }
+    # Compact pending identities survive the next morning's feed rollover.
+    raw_pending = data.get("pending")
+    raw_pending = raw_pending if isinstance(raw_pending, dict) else {}
+    pending = {}
+    for eid, item in raw_pending.items():
+        if not isinstance(item, dict):
+            continue
+        key = str(eid or "").strip()[:64]
+        entry = {field: str(item.get(field) or "").strip()[:64]
+                 for field in ("t", "s", "a", "b", "c")}
+        if key and all(entry[field] for field in ("t", "s", "a", "b")):
+            pending[key] = entry
+    safe = {
+        "schema": 1,
+        "updated_at": str(data.get("updated_at") or now)[:64],
+        "statuses": statuses,
+        "pending": pending,
+        "pending_count": len(pending),
+        "tracked": max(0, int(data.get("tracked") or 0)),
+        "due": max(0, int(data.get("due") or 0)),
+        "window_candidates": max(0, int(data.get("window_candidates") or 0)),
+        "window_min_age_minutes": max(0, int(data.get("window_min_age_minutes") or 0)),
+        "window_max_age_minutes": max(0, int(data.get("window_max_age_minutes") or 0)),
+        "checked": max(0, int(data.get("checked") or 0)),
+        "skipped_live": max(0, int(data.get("skipped_live") or 0)),
+        "provider_requests": max(0, int(data.get("provider_requests") or 0)),
+        "time_budget_exhausted": bool(data.get("time_budget_exhausted", False)),
+        "newly_resolved": max(0, int(data.get("newly_resolved") or 0)),
+        "successful_history": max(0, int(data.get("successful_history") or 0)),
+        "failed_history": max(0, int(data.get("failed_history") or 0)),
+        "matched_events": max(0, int(data.get("matched_events") or 0)),
+        "preferred_route": "near" if data.get("preferred_route") == "near" else "history",
+        "near_attempts": max(0, int(data.get("near_attempts") or 0)),
+        "unmatched": max(0, int(data.get("unmatched") or 0)),
+        "next_due_id": str(data.get("next_due_id") or "")[:64],
+        "provider_errors": {
+            str(k)[:64]: max(0, int(v))
+            for k, v in list((data.get("provider_errors") or {}).items())[:8]
+            if isinstance(k, str) and k.replace("_", "").isalnum()
+        },
+        "degraded": bool(data.get("degraded")),
+        "terminal": len(statuses),
+    }
+    payload_json = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
+    # Azure Table limits string properties to 64 KiB (UTF-16).
+    payload_text = (_encode_runtime_ui_payload(safe)
+                    if len(payload_json.encode("utf-16-le")) > 40_000
+                    else payload_json)
+    if len(payload_text.encode("utf-16-le")) > 60_000:
+        # Fail loudly: never silently truncate unfinished matches or results.
+        raise AdminStorageUnavailable("Match status snapshot exceeds storage property limit")
+    entity = {
+        "PartitionKey": "runtime",
+        "RowKey": "match-status-worker",
+        "payload": payload_text,
+        "updated_at": now,
+    }
+    try:
+        _table(UI_TABLE).upsert_entity(entity, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save match status snapshot") from exc
+    return safe
+
+
+def load_match_status_snapshot() -> dict | None:
+    """Load the last compact hourly match-status snapshot."""
+    try:
+        entity = _table(UI_TABLE).get_entity(
+            partition_key="runtime", row_key="match-status-worker"
+        )
+    except Exception as exc:
+        if _storage_not_found(exc):
+            return None
+        raise AdminStorageUnavailable("Unable to load match status snapshot") from exc
+    # Accept both legacy JSON and gzip-encoded large snapshots.
+    return _decode_runtime_ui_payload(str(entity.get("payload") or "{}"))
+
 
 def save_account_worker_status(payload: object) -> dict:
     """Persist the last account-inactivity worker summary for Admin diagnostics."""
@@ -691,6 +797,20 @@ def validate_ui_config(payload: object) -> dict:
     contexts = {"trial", "expired", "rookie", "pro", "elite", "goat", "legend"}
 
     dashboard = payload.get("dashboard") or {}
+    kpi_cards = dashboard.get("kpi_cards")
+    # Existing saved Azure configs may not have this field yet. New changes
+    # must be exactly three supported cards with individually valid periods.
+    if kpi_cards is not None:
+        if not isinstance(kpi_cards, list) or len(kpi_cards) != 3:
+            raise ValueError("Dashboard setting requires exactly three cards")
+        for index, card in enumerate(kpi_cards):
+            if not isinstance(card, dict) or set(card) != {"metric", "period"}:
+                raise ValueError(f"Invalid Dashboard setting card {index + 1}")
+            metric, period = card["metric"], card["period"]
+            if not isinstance(metric, str) or metric not in ALLOWED_PERIODS:
+                raise ValueError(f"Invalid Dashboard setting metric {index + 1}")
+            if not isinstance(period, str) or period not in ALLOWED_PERIODS[metric]:
+                raise ValueError(f"Invalid Dashboard setting period {index + 1}")
     sections = dashboard.get("sections") or {}
     pick_section_order = ["prime", "top_daily", "value", "doubles", "ace", "sg"]
     section_order = dashboard.get("section_order") or []
@@ -914,6 +1034,12 @@ def validate_ui_config(payload: object) -> dict:
 
 
 def save_runtime_ui_config(payload: object, *, actor_id: str = "") -> dict:
+    """Save published UI only after a durable snapshot of the previous version.
+
+    Release JSON and source-code ZIPs cannot restore Azure-published banner
+    images, links and text. Fail closed if snapshotting fails; never overwrite
+    the sole prior published version without a recoverable copy.
+    """
     config = validate_ui_config(payload)
     now = datetime.now(timezone.utc).isoformat()
     encoded = _encode_runtime_ui_payload(config)
@@ -926,11 +1052,68 @@ def save_runtime_ui_config(payload: object, *, actor_id: str = "") -> dict:
         "updated_by": str(actor_id or "")[:256],
     }
     client = _table(UI_TABLE)
+    snapshot_id = None
     try:
+        try:
+            previous = client.get_entity(partition_key="runtime", row_key="ui-config")
+        except Exception as exc:
+            if not _storage_not_found(exc):
+                raise
+            previous = None
+        if previous and _decode_runtime_ui_payload(previous.get("payload")) is not None:
+            snapshot_id = "before-" + datetime.now(timezone.utc).strftime(
+                "%Y%m%dT%H%M%S%fZ"
+            ) + "-" + uuid.uuid4().hex[:8]
+            client.create_entity({
+                "PartitionKey": UI_HISTORY_PARTITION,
+                "RowKey": snapshot_id,
+                "payload": previous["payload"],
+                "payload_encoding": str(previous.get("payload_encoding") or ""),
+                "previous_updated_at": str(previous.get("updated_at") or "")[:64],
+                "previous_updated_by": str(previous.get("updated_by") or "")[:256],
+                "saved_at": now,
+                "saved_by": str(actor_id or "")[:256],
+            })
         client.upsert_entity(entity, mode="replace")
     except Exception as exc:
-        raise AdminStorageUnavailable("Unable to save runtime UI configuration") from exc
-    return {"saved": True, "updated_at": now}
+        raise AdminStorageUnavailable(
+            "Unable to snapshot previous UI configuration or save new configuration"
+        ) from exc
+    return {"saved": True, "updated_at": now, "previous_snapshot_id": snapshot_id}
+
+
+def list_runtime_ui_snapshots(*, limit: int = 25) -> list[dict]:
+    """Metadata only; accessible through the authenticated Admin endpoint."""
+    client = _table(UI_TABLE)
+    try:
+        rows = client.query_entities(
+            query_filter=f"PartitionKey eq '{UI_HISTORY_PARTITION}'"
+        )
+        items = [{
+            "id": str(row.get("RowKey") or ""),
+            "saved_at": str(row.get("saved_at") or ""),
+            "previous_updated_at": str(row.get("previous_updated_at") or ""),
+            "previous_updated_by": str(row.get("previous_updated_by") or ""),
+        } for row in rows if _UI_SNAPSHOT_ID.fullmatch(str(row.get("RowKey") or ""))]
+        return sorted(items, key=lambda row: row["id"], reverse=True)[:max(1, min(50, limit))]
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to list UI configuration snapshots") from exc
+
+
+def load_runtime_ui_snapshot(snapshot_id: str) -> dict | None:
+    """Read a past complete published config for explicit Admin preview."""
+    if not _UI_SNAPSHOT_ID.fullmatch(str(snapshot_id or "")):
+        raise ValueError("Invalid UI snapshot ID")
+    client = _table(UI_TABLE)
+    try:
+        row = client.get_entity(
+            partition_key=UI_HISTORY_PARTITION, row_key=snapshot_id
+        )
+    except Exception as exc:
+        if _storage_not_found(exc):
+            return None
+        raise AdminStorageUnavailable("Unable to load UI configuration snapshot") from exc
+    return _decode_runtime_ui_payload(row.get("payload"))
 
 
 def _clean_id(value: object, *, fallback: str = "") -> str:
@@ -1266,6 +1449,165 @@ def save_insight(payload: object, *, actor_id: str = "", insight_id: str = "") -
     return item
 
 
+def load_insight_by_id(insight_id: str) -> dict | None:
+    """Load one durable insight by deterministic id."""
+    insight_id = str(insight_id or "").strip()
+    if not _VALID_ID.fullmatch(insight_id):
+        return None
+    if insight_id.startswith(_LIVE_AUTO_PREFIXES) and _live_deleted(insight_id, "insight"):
+        return None
+    try:
+        entity = _table(INSIGHTS_TABLE).get_entity(partition_key="insights", row_key=insight_id)
+    except Exception as exc:
+        status = getattr(exc, "status_code", None)
+        name = type(exc).__name__.lower()
+        if status == 404 or "notfound" in name or isinstance(exc, KeyError):
+            return None
+        raise AdminStorageUnavailable("Unable to load insight") from exc
+    return _insight_from_entity(entity)
+
+
+
+# Autonomous scans use deterministic IDs. Tombstones prevent deleted rows from
+# reappearing on the next scan/settlement; LIVE posts and results are independent.
+_LIVE_AUTO_PREFIXES = ("live-watch-", "live-comeback-", "live-set2-")
+_LIVE_DELETION_PARTITION = "live-deletions"
+
+
+def _is_missing_entity(exc: Exception) -> bool:
+    return (getattr(exc, "status_code", None) == 404
+            or "notfound" in type(exc).__name__.lower()
+            or isinstance(exc, KeyError))
+
+
+def _live_deletion_key(record_id: str, kind: str) -> str:
+    if not _VALID_ID.fullmatch(str(record_id or "")) or kind not in {"insight", "result"}:
+        raise ValueError("Invalid LIVE record id")
+    return f"{kind}:{record_id}"
+
+
+def _live_deleted(record_id: str, kind: str) -> bool:
+    try:
+        _table(INSIGHTS_TABLE).get_entity(
+            partition_key=_LIVE_DELETION_PARTITION,
+            row_key=_live_deletion_key(record_id, kind),
+        )
+        return True
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            return False
+        raise AdminStorageUnavailable("Unable to verify LIVE deletion") from exc
+
+
+def _live_deletion_ids(kind: str) -> set[str]:
+    try:
+        rows = _table(INSIGHTS_TABLE).query_entities(
+            query_filter=f"PartitionKey eq '{_LIVE_DELETION_PARTITION}'"
+        )
+        return {str(row.get("record_id") or "")
+                for row in rows if row.get("kind") == kind}
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to read LIVE deletion history") from exc
+
+
+def _store_live_deletion(record_id: str, kind: str, *, actor_id: str = "") -> None:
+    try:
+        _table(INSIGHTS_TABLE).upsert_entity({
+            "PartitionKey": _LIVE_DELETION_PARTITION,
+            "RowKey": _live_deletion_key(record_id, kind),
+            "kind": kind, "record_id": record_id,
+            "deleted_at": datetime.now(timezone.utc).isoformat(),
+            "deleted_by": str(actor_id or "admin")[:256],
+        }, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to record LIVE deletion") from exc
+
+
+def delete_live_radar_result(result_id: str, *, actor_id: str = "") -> dict:
+    """Delete just the specified settled comeback or Set-2 result."""
+    result_id = str(result_id or "").strip()
+    if not _VALID_ID.fullmatch(result_id) or not result_id.startswith(
+            ("live-result-comeback-", "live-result-set2-")):
+        raise ValueError("Invalid LIVE result id")
+    client = _table(INSIGHTS_TABLE)
+    try:
+        existing = client.get_entity(partition_key="live-results", row_key=result_id)
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            return {"deleted": False, "id": result_id}
+        raise AdminStorageUnavailable("Unable to load LIVE result") from exc
+    if existing.get("kind") not in {"comeback", "set2"}:
+        raise ValueError("Unsupported LIVE result")
+    _store_live_deletion(result_id, "result", actor_id=actor_id)
+    try:
+        client.delete_entity(partition_key="live-results", row_key=result_id)
+    except Exception as exc:
+        if not _is_missing_entity(exc):
+            raise AdminStorageUnavailable("Unable to delete LIVE result") from exc
+    return {"deleted": True, "id": result_id, "kind": existing["kind"]}
+
+
+def save_live_radar_result(payload: object, *, result_id: str) -> dict:
+    """Persist one settled LIVE Radar signal result idempotently."""
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid LIVE result")
+    result_id = str(result_id or "").strip()
+    if not _VALID_ID.fullmatch(result_id):
+        raise ValueError("Invalid LIVE result id")
+    if _live_deleted(result_id, "result"):
+        return {"id": result_id, "suppressed": True}
+    kind = str(payload.get("kind") or "").strip().lower()
+    outcome = str(payload.get("outcome") or "").strip().lower()
+    if kind not in {"comeback", "set2"}:
+        raise ValueError("Invalid LIVE result kind")
+    if outcome not in {"win", "loss", "void"}:
+        raise ValueError("Invalid LIVE result outcome")
+    event_id = str(payload.get("event_id") or "").strip()[:64]
+    if not event_id:
+        raise ValueError("Missing LIVE result event")
+    entity = {
+        "PartitionKey": "live-results", "RowKey": result_id,
+        "kind": kind, "outcome": outcome, "event_id": event_id,
+        "reason": str(payload.get("reason") or "")[:40],
+        "title": str(payload.get("title") or "")[:160],
+        "source_id": str(payload.get("source_id") or "")[:96],
+        "signal_at": str(payload.get("signal_at") or "")[:64],
+        "settled_at": str(payload.get("settled_at") or datetime.now(timezone.utc).isoformat())[:64],
+    }
+    try:
+        _table(INSIGHTS_TABLE).upsert_entity(entity, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save LIVE result") from exc
+    return {
+        "id": result_id, "kind": kind, "outcome": outcome, "event_id": event_id,
+        "title": entity["title"], "reason": entity["reason"], "source_id": entity["source_id"],
+        "signal_at": entity["signal_at"], "settled_at": entity["settled_at"],
+    }
+
+
+def list_live_radar_results(*, limit: int = 60) -> list[dict]:
+    """Newest settled confirmed comeback / Set-2 signals."""
+    try:
+        rows = list(_table(INSIGHTS_TABLE).query_entities(query_filter="PartitionKey eq 'live-results'"))
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to list LIVE results") from exc
+    items = [{
+        "id": str(row.get("RowKey") or ""),
+        "kind": str(row.get("kind") or ""),
+        "outcome": str(row.get("outcome") or ""),
+        "reason": str(row.get("reason") or ""),
+        "event_id": str(row.get("event_id") or ""),
+        "title": str(row.get("title") or ""),
+        "source_id": str(row.get("source_id") or ""),
+        "signal_at": str(row.get("signal_at") or ""),
+        "settled_at": str(row.get("settled_at") or ""),
+    } for row in rows]
+    deleted = _live_deletion_ids("result")
+    items = [row for row in items if row["id"] not in deleted]
+    items.sort(key=lambda row: row.get("settled_at") or "", reverse=True)
+    return items[:max(1, min(200, int(limit or 60)))]
+
+
 def save_automated_insight(payload: object, *, actor_id: str = "automation", insight_id: str) -> tuple[dict, bool]:
     """Create or refresh one deterministic system insight idempotently.
 
@@ -1275,6 +1617,8 @@ def save_automated_insight(payload: object, *, actor_id: str = "automation", ins
     """
     insight_id=str(insight_id or '').strip()
     if not _VALID_ID.fullmatch(insight_id): raise ValueError("Invalid automated insight id")
+    if insight_id.startswith(_LIVE_AUTO_PREFIXES) and _live_deleted(insight_id, "insight"):
+        return {"id": insight_id, "suppressed": True}, False
     client=_table(INSIGHTS_TABLE)
     try: existing_entity=client.get_entity(partition_key="insights",row_key=insight_id)
     except Exception as exc:
@@ -1302,18 +1646,28 @@ def save_automated_insight(payload: object, *, actor_id: str = "automation", ins
     return item,True
 
 
-def delete_insight(insight_id: str) -> dict:
-    if not _VALID_ID.fullmatch(str(insight_id or "")):
+def delete_insight(insight_id: str, *, actor_id: str = "") -> dict:
+    insight_id = str(insight_id or "").strip()
+    if not _VALID_ID.fullmatch(insight_id):
         raise ValueError("Invalid insight id")
     client = _table(INSIGHTS_TABLE)
     try:
+        existing = client.get_entity(partition_key="insights", row_key=insight_id)
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            return {"deleted": False}
+        raise AdminStorageUnavailable("Unable to load insight") from exc
+    is_auto_live = (insight_id.startswith(_LIVE_AUTO_PREFIXES)
+                    and str(existing.get("type") or "").lower()
+                    in {"alert", "live_watch", "set2"})
+    if is_auto_live:
+        _store_live_deletion(insight_id, "insight", actor_id=actor_id)
+    try:
         client.delete_entity(partition_key="insights", row_key=insight_id)
     except Exception as exc:
-        status = getattr(exc, "status_code", None)
-        if status == 404 or "notfound" in exc.__class__.__name__.lower() or isinstance(exc, KeyError):
-            return {"deleted": False}
-        raise AdminStorageUnavailable("Unable to delete insight") from exc
-    return {"deleted": True}
+        if not _is_missing_entity(exc):
+            raise AdminStorageUnavailable("Unable to delete insight") from exc
+    return {"deleted": True, "suppressed": is_auto_live}
 
 
 def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool = False, limit: int = 100) -> dict:
@@ -1334,9 +1688,12 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
     # With a large history this used to multiply UI-config storage reads by N.
     live_levels = set(live_alert_levels()) if plan and not include_inactive else set()
     info_levels = set(info_alert_levels()) if plan and not include_inactive else set()
+    deleted_live = _live_deletion_ids("insight")
     items = []
     for entity in rows:
         item = _insight_from_entity(entity)
+        if item["id"] in deleted_live:
+            continue
         if not include_inactive:
             if not item["active"] or (plan and plan not in item["levels"]):
                 continue
