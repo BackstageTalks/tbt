@@ -1,8 +1,8 @@
 {
   "schema": 1,
   "mode": "feature-audit",
-  "purpose": "Measure zero-request Data Model v3 coverage after rich Match Charting v2 write, including specialist feature groups.",
+  "purpose": "Measure rich Match Charting v2 coverage and descriptive winner-direction signal strength; zero provider API and no production mutation.",
   "source_enrichment_run_id": "36471908489",
   "expected_quality_ready": 38409,
-  "requested_at_utc": "2026-09-28T19:35:00Z"
+  "requested_at_utc": "2026-09-28T19:45:00Z"
 }
