@@ -39,6 +39,7 @@ def test_auth_critical_assets_are_never_served_from_stale_cache():
 
 
 def test_deploy_contract_checks_frontend_and_server_auth_readiness():
-    assert "AUTH_RUNTIME = '736-r${patch}'" in CI
+    assert "('auth runtime patch', f\"AUTH_RUNTIME = '{patch}'\" in auth)" in CI
+    assert "for attempt in 1 2 3 4 5 6 7 8" in CI
     assert "Smoke deployed authentication readiness" in CI
     assert "data.get('server_ready') is True" in CI
