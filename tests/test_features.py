@@ -111,3 +111,35 @@ def test_indoor_hard_updates_shared_hard_surface_bucket(match_factory):
 
     assert builder._state(indoor, True).surface_matches["hard"] == 1
     assert "indoor_hard" not in builder._state(indoor, True).surface_matches
+
+
+def test_season_yelo_is_pre_match_and_resets_each_year(match_factory):
+    builder = FeatureBuilder()
+    first = match_factory("yelo-1", "A", "B", "A", day=1)
+    snap0 = builder.snapshot(first)
+    assert snap0["season_yelo_diff"] == 0.0
+    assert snap0["season_yelo_probability"] == 0.5
+    builder.update(first)
+
+    next_match = match_factory("yelo-2", "A", "B", None, day=2)
+    snap1 = builder.snapshot(next_match)
+    assert snap1["season_yelo_diff"] > 0.0
+
+    # Force a new UTC year without exposing any future result.
+    next_match.scheduled_at = next_match.scheduled_at.replace(year=next_match.scheduled_at.year + 1)
+    snap2 = builder.snapshot(next_match)
+    assert snap2["season_yelo_diff"] == 0.0
+    assert snap2["season_yelo_probability"] == 0.5
+    assert snap2["season_yelo_known_both"] == 0.0
+
+
+def test_same_day_yelo_results_are_not_used_as_features(match_factory):
+    matches = [
+        match_factory("y1", "A", "B", "A", day=1),
+        match_factory("y2", "A", "C", "A", day=1),
+        match_factory("y3", "A", "D", "A", day=2),
+    ]
+    frame = FeatureBuilder().build_training_frame(matches)
+    assert frame.loc[0, "season_yelo_diff"] == 0.0
+    assert frame.loc[1, "season_yelo_diff"] == 0.0
+    assert abs(frame.loc[2, "season_yelo_diff"]) > 0.0

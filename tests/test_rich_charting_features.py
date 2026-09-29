@@ -91,7 +91,7 @@ def test_rich_charting_feature_state_round_trip_and_v2_compatibility():
     builder.update(_match("m1", start, stats=_rich_stats()))
 
     payload = builder.export_state()
-    assert payload["schema_version"] == FEATURE_STATE_SCHEMA_VERSION == 3
+    assert payload["schema_version"] == FEATURE_STATE_SCHEMA_VERSION == 4
     restored = FeatureBuilder.from_state(payload)
     snapshot = restored.snapshot(_match("m2", start + timedelta(days=2)))
     assert snapshot["rich_charting_known_both"] == pytest.approx(1.0)
