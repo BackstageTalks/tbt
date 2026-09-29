@@ -3512,7 +3512,12 @@
     const cfg=notificationAudienceConfig();
     return {title:'',body:'',type:'vip',priority:'normal',levels:[...cfg.info_default_levels],link:'',link_label:'',match_id:'',active:true,pinned:false,active_from:'',active_until:''};
   }
-  function adminDatetimeValue(value){const text=String(value||'');return text?text.replace('Z','').slice(0,16):'';}
+  function adminDatetimeValue(value){
+    const date=new Date(String(value||''));
+    if(!Number.isFinite(date.getTime()))return '';
+    const pad=n=>String(n).padStart(2,'0');
+    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
   function adminAudiencePresetLevels(preset){
     if(preset==='all'||preset==='rookie+')return [...membershipHierarchy];
     if(preset==='live-default')return membershipLevelsFrom(notificationAudienceConfig().live_min_level);
@@ -3524,7 +3529,7 @@
     const live=String(form.querySelector('#adminInsightType')?.value||'vip')==='alert';
     const cfg=notificationAudienceConfig(),
       liveLevels=new Set(membershipLevelsFrom(cfg.live_min_level)),
-      infoLevels=new Set(membershipLevelsFrom(cfg.info_min_level)),
+      infoLevels=new Set(cfg.editable_levels||membershipHierarchy),
       permitted=live?liveLevels:infoLevels;
     const nodes=[...form.querySelectorAll('input[name="insight_level"]')];
     nodes.forEach(node=>{node.disabled=!permitted.has(node.value);if(node.disabled)node.checked=false;});
@@ -3535,22 +3540,19 @@
     }
     const hint=form.querySelector('[data-insight-audience-hint]');
     if(hint){
-      const minimum=live?cfg.live_min_level:cfg.info_min_level;
-      const minLabel=String(upgradePlanLabel(minimum)||minimum).replace(/^BlinQ\s+/i,'').toUpperCase();
+      const minLabel=String(upgradePlanLabel(cfg.live_min_level)||cfg.live_min_level).replace(/^BlinQ\s+/i,'').toUpperCase();
       hint.textContent=live
         ?`LIVE rešpektuje globálne minimum ${minLabel}. Pre konkrétnu správu môžeš publikum iba zúžiť.`
-        :`INFO môžeš poslať iba zvoleným levelom od ${minLabel}. Publikum si môžeš zúžiť pri každej správe.`;
+        :'INFO publikum sa riadi presne levelmi zvolenými pri tejto správe.';
     }
   }
   function renderAdminInsights(){
     const item=adminInsightDraft(),levels=Array.isArray(item.levels)?item.levels:[];const list=Array.isArray(state.adminInsights)?state.adminInsights:[];
     const notificationCfg=notificationAudienceConfig(),
       liveMin=notificationCfg.live_min_level,
-      infoMin=notificationCfg.info_min_level,
       liveLevels=membershipLevelsFrom(liveMin),
-      infoLevels=membershipLevelsFrom(infoMin),
-      liveLabel=String(upgradePlanLabel(liveMin)||liveMin).replace(/^BlinQ\s+/i,'').toUpperCase(),
-      infoLabel=String(upgradePlanLabel(infoMin)||infoMin).replace(/^BlinQ\s+/i,'').toUpperCase();
+      infoLevels=[...membershipHierarchy],
+      liveLabel=String(upgradePlanLabel(liveMin)||liveMin).replace(/^BlinQ\s+/i,'').toUpperCase();
     const itemIsLive=String(item.type||'vip')==='alert';
     const allowed=new Set(notificationCfg.editable_levels||membershipHierarchy);
     const allLevels=membershipHierarchy.filter(level=>allowed.has(level));
