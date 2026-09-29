@@ -42,6 +42,8 @@ jobs:
       CHARTING_SHA: 1813a1309b7ed7ebf1c7e884b32bf675d00e4edf
       HALLMARK_URL: https://www.kaggle.com/api/v1/datasets/download/ehallmar/a-large-tennis-dataset-for-atp-and-itf-betting/all_matches.csv?datasetVersionNumber=1
       HALLMARK_SHA256: 957347f83047eabb8ddb43d84cab7c6194ede58e38bea39376933cf14f093960
+      HALLMARK_SEMANTIC_SHA256: 51c3fd6bc2ff4cdfaaf5c82ae2c29cc4753a0b21d75c23b8f15e828c0b930b08
+      HALLMARK_ROWS: "2555396"
     steps:
       - uses: actions/checkout@v4
 
@@ -154,7 +156,44 @@ jobs:
           check_blob "$CHARTING_DIR/charting-m-stats-Overview.csv" "7dc756e12aa6a2e315157c4d1a3ff34a7335b11b"
           check_blob "$CHARTING_DIR/charting-w-matches.csv" "87ca5e78cc2f408f5df67fe74705ad8541fc3001"
           check_blob "$CHARTING_DIR/charting-w-stats-Overview.csv" "7e030ca388d6e4ace46c4e694d886e08a50b3f07"
-          echo "$HALLMARK_SHA256  $HALLMARK_CSV" | sha256sum -c -
+          python - <<'PY'
+          import csv, hashlib, os
+          from pathlib import Path
+
+          path = Path(os.environ["HALLMARK_CSV"])
+          expected_semantic = os.environ["HALLMARK_SEMANTIC_SHA256"]
+          expected_rows = int(os.environ["HALLMARK_ROWS"])
+          cols = [
+              "start_date","end_date","court_surface","year","player_id","opponent_id",
+              "tournament","round","aces","double_faults",
+              "first_serve_points_made","first_serve_points_attempted",
+              "second_serve_points_made","second_serve_points_attempted",
+              "break_points_saved","break_points_against","break_points_made",
+              "break_points_attempted","service_points_won","service_points_attempted",
+              "return_points_won","return_points_attempted","player_victory","retirement",
+              "doubles","masters",
+          ]
+          byte_hash = hashlib.sha256(path.read_bytes()).hexdigest()
+          digest = hashlib.sha256()
+          rows = 0
+          with path.open("r", encoding="utf-8-sig", newline="") as handle:
+              reader = csv.DictReader(handle)
+              missing = [name for name in cols if name not in (reader.fieldnames or [])]
+              if missing:
+                  raise SystemExit(f"Hallmark source missing required columns: {missing}")
+              for row in reader:
+                  rows += 1
+                  digest.update(("\x1f".join((row.get(name) or "") for name in cols) + "\n").encode("utf-8"))
+          semantic = digest.hexdigest()
+          print(f"Hallmark source byte_sha256={byte_hash} rows={rows} semantic_sha256={semantic}")
+          print(f"Uploaded snapshot byte_sha256={os.environ['HALLMARK_SHA256']}")
+          if rows != expected_rows:
+              raise SystemExit(f"Hallmark row count mismatch: expected={expected_rows} actual={rows}")
+          if semantic != expected_semantic:
+              raise SystemExit(
+                  f"Hallmark semantic fingerprint mismatch: expected={expected_semantic} actual={semantic}"
+              )
+          PY
 
       - name: Build source list and charting ZIP
         shell: bash
