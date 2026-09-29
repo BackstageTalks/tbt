@@ -2,12 +2,18 @@
   "schema": 1,
   "mode": "train",
   "promote": true,
-  "purpose": "Governed Match Winner retrain on the verified 738,716-row expanded history after historical foundation, ATP/Match Charting relink and WTA historical-odds relink; promotion remains gated against Elo and current champion.",
-  "requested_at_utc": "2026-09-29T19:02:00Z",
+  "purpose": "Governed Match Winner retrain with leakage-safe seasonal yElo features on the verified 738,716-row expanded history. Promotion remains gated against Elo and current champion.",
+  "requested_at_utc": "2026-09-29T21:15:00Z",
   "expected_history_rows": 738716,
   "expected_history_quality_ready": 239685,
   "historical_foundation_run_id": "36598439373",
   "source_enrichment_run_id": "36600114554",
   "source_historical_odds_run_id": "36600114619",
-  "prerequisite_backtest_run_id": "36616139554"
+  "prerequisite_backtest_run_id": "36616139554",
+  "yelo_validation": {
+    "source": "uploaded chronological 2021-2026 BlinQ Elo features",
+    "test_rows": 56793,
+    "result": "consistent positive lift in 2024, 2025 and 2026",
+    "implementation_commit": "6fc25314daf4cddff8c37d4cf3f71caf09203a25"
+  }
 }
