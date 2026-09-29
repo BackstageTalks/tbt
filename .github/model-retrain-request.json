@@ -2,8 +2,12 @@
   "schema": 1,
   "mode": "train",
   "promote": true,
-  "purpose": "Retrigger governed Match Winner retrain after offline history enrichment write success (run 36465088035); promotion remains gated against Elo and current champion.",
-  "requested_at_utc": "2026-09-28T19:12:00Z",
-  "expected_history_quality_ready": 38409,
-  "source_enrichment_run_id": "36465088035"
+  "purpose": "Governed Match Winner retrain on the verified 738,716-row expanded history after historical foundation, ATP/Match Charting relink and WTA historical-odds relink; promotion remains gated against Elo and current champion.",
+  "requested_at_utc": "2026-09-29T19:02:00Z",
+  "expected_history_rows": 738716,
+  "expected_history_quality_ready": 239685,
+  "historical_foundation_run_id": "36598439373",
+  "source_enrichment_run_id": "36600114554",
+  "source_historical_odds_run_id": "36600114619",
+  "prerequisite_backtest_run_id": "36616139554"
 }
