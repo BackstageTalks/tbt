@@ -139,6 +139,8 @@ def _runtime_publication_key(
         or ""
     ).strip()
     issued_at = str(publication.get("issued_at") or "").strip()
+    if event_id and selection and issued_at:
+        return f"{event_id}|{section}|{market}|{selection}|{issued_at}"
     return f"{event_id}|{section}|{market}|{selection}|{issued_at}|{index}"
 
 
@@ -189,8 +191,16 @@ def runtime_settled_results(
                     continue
                 if not publication.get("issued_at") or publication.get("excluded_reason"):
                     continue
-                market = str(publication.get("market") or "match_winner").strip().lower()
+                section = str(publication.get("section") or "").strip().lower()
+                market = str(publication.get("market") or "").strip().lower()
+                if not market and section in {"top_daily", "prime", "value", "doubles"}:
+                    market = "match_winner"
                 if market != "match_winner":
+                    continue
+                publication_status = str(
+                    publication.get("publication_status") or "published"
+                ).strip().lower()
+                if publication_status != "published":
                     continue
                 selection = str(
                     publication.get("selection_id")
@@ -232,12 +242,16 @@ def runtime_settled_results(
                     result.update({
                         "status": "hit" if correct else "miss",
                         "correct": correct,
-                        "staked_units": 1.0,
-                        "return_units": odds if correct and odds > 1 else 0.0,
-                        "profit_units": (odds - 1.0) if correct and odds > 1 else (
-                            0.0 if correct else -1.0
-                        ),
                     })
+                    # A live status can settle W/L without odds, but financial
+                    # fields are created only when the issued publication has a
+                    # genuine price. This keeps ROI fail-closed.
+                    if odds > 1:
+                        result.update({
+                            "staked_units": 1.0,
+                            "return_units": odds if correct else 0.0,
+                            "profit_units": (odds - 1.0) if correct else -1.0,
+                        })
                 result.update({
                     "settled_at": checked_at or scheduled_at,
                     "scheduled_at": scheduled_at,
