@@ -17,6 +17,9 @@ from tbt.services.market_selection import _walk_market_rows, _outcome_text, _pri
 from tbt.providers.budget import RequestBudgetExceeded
 
 
+ACE_DF_REAL_ODDS_CONTRACT = "ace_df_real_api_v1"
+
+
 def _normal(value: Any) -> str:
     return " ".join(str(value or "").strip().casefold().replace("_", " ").split())
 
@@ -284,6 +287,8 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
             "odds_market_name": superiority.get("market_name"),
             "price_contract": "player_superiority",
         })
+        if int(provider_id) == 2:
+            out["odds_contract_version"] = ACE_DF_REAL_ODDS_CONTRACT
         return out, True, "priced"
 
     # Otherwise convert the COUNT prediction, not the superiority confidence,
@@ -322,6 +327,8 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
         "provider_id": int(provider_id), "captured_at": captured_at,
         "odds_market_name": choice["market_name"],
     })
+    if int(provider_id) == 2:
+        out["odds_contract_version"] = ACE_DF_REAL_ODDS_CONTRACT
     return out, True, "priced_player_total_ou"
 
 def prefetch_projection_market_board(
