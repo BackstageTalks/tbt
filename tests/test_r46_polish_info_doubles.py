@@ -45,11 +45,13 @@ def test_account_cards_use_detail_description_and_membership_card_keeps_note_hea
 
 def test_info_all_really_includes_rookie_but_live_remains_gated():
     assert "if(preset==='all'||preset==='rookie+')return [...membershipHierarchy]" in APP
-    # INFO and LIVE must both respect their respective configured minimums.
+    # INFO is exact per-message audience; info_min_level is only the composer default.
     assert "node.disabled=!permitted.has(node.value)" in APP
     assert "infoMin=notificationCfg.info_min_level" in APP
-    assert "INFO môžeš poslať iba zvoleným levelom od" in APP
+    assert "infoLevels=new Set(cfg.editable_levels||membershipHierarchy)" in APP
+    assert "INFO publikum sa riadi presne levelmi zvolenými pri tejto správe." in APP
     assert 'return list(_INSIGHT_LEVELS)' in ADMIN_STORAGE
+    # LIVE remains protected by its configured global minimum.
     assert 'if insight_type in {"alert", "live_watch", "set2"}' in ADMIN_STORAGE
 
 
