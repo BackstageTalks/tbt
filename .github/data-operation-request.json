@@ -1,0 +1,6 @@
+{
+  "schema": 1,
+  "mode": "train",
+  "promote": false,
+  "purpose": "Retrain from current canonical tbt-data-v1 after offline data integration; do not promote automatically."
+}
