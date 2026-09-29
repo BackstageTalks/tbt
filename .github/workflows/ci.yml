@@ -260,50 +260,101 @@ jobs:
           set -euo pipefail
           base="${TBT_PRODUCTION_URL%/}"
           stamp="${GITHUB_SHA}"
-          curl -fsSL -H 'Cache-Control: no-cache' "$base/?__blinq_release=$stamp" -o /tmp/blinq-index.html
-          grep -q 'data-web-release="7.3.6"' /tmp/blinq-index.html
-          grep -Fq "blinq-deployment-sha\" content=\"$stamp" /tmp/blinq-index.html
-          curl -fsSL -H 'Cache-Control: no-cache' "$base/deployment.json?__blinq_release=$stamp" -o /tmp/blinq-deployment.json
           visual=$(python -c "import json; print(json.load(open('web/release.json', encoding='utf-8'))['visual_revision'])")
-          grep -Fq "blinq-visual-revision\" content=\"${visual}" /tmp/blinq-index.html
-          # Compare against this checkout, not the potentially stale deployed HTML.
           patch=$(python -c "import json; print(json.load(open('web/release.json', encoding='utf-8'))['patch'].split('-r')[-1])")
-          grep -q "blinq-web-patch\" content=\"736-r${patch}" /tmp/blinq-index.html
-          grep -q "/blinq-app.css?v=7360&p=${patch}" /tmp/blinq-index.html
-          grep -q "/app.js?v=7360&p=${patch}" /tmp/blinq-index.html
-          grep -q "/auth.js?v=7360&p=${patch}" /tmp/blinq-index.html
-          curl -fsSL -H 'Cache-Control: no-cache' "$base/blinq-app.css?__blinq_release=$stamp" -o /tmp/blinq-app.css
-          grep -q "BlinQ runtime patch 7.3.6-r${patch}" /tmp/blinq-app.css
-          grep -Fq "BlinQ visual revision ${visual}" /tmp/blinq-app.css
-          curl -fsSL -H 'Cache-Control: no-cache' "$base/auth.js?__blinq_release=$stamp" -o /tmp/blinq-auth.js
-          grep -q "AUTH_RUNTIME = '736-r${patch}'" /tmp/blinq-auth.js
-          curl -fsSL -H 'Cache-Control: no-cache' "$base/app.js?__blinq_release=$stamp" -o /tmp/blinq-app.js
-          grep -q "UI config failed; auth remains available" /tmp/blinq-app.js
-          grep -Fq "BlinQ visual revision: ${visual}" /tmp/blinq-app.js
-          curl -fsSL -H 'Cache-Control: no-cache' "$base/responsive.js?__blinq_release=$stamp" -o /tmp/blinq-responsive.js
-          curl -fsSL -H 'Cache-Control: no-cache' "$base/release.json?__blinq_release=$stamp" -o /tmp/blinq-release.json
-          python - <<'PYWEB'
+          ok=0
+
+          # Azure Static Web Apps can report "Deployment Complete" a few seconds
+          # before every CDN edge serves the new HTML/assets. Verify the exact
+          # release repeatedly instead of marking a successful upload as failed
+          # after one stale edge response.
+          for attempt in 1 2 3 4 5 6 7 8; do
+            bust="${stamp}-${attempt}"
+            echo "Frontend verification attempt ${attempt}/8 for ${stamp}"
+
+            fetched=1
+            curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/?__blinq_release=$bust" -o /tmp/blinq-index.html || fetched=0
+            curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/deployment.json?__blinq_release=$bust" -o /tmp/blinq-deployment.json || fetched=0
+            curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/blinq-app.css?__blinq_release=$bust" -o /tmp/blinq-app.css || fetched=0
+            curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/auth.js?__blinq_release=$bust" -o /tmp/blinq-auth.js || fetched=0
+            curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/app.js?__blinq_release=$bust" -o /tmp/blinq-app.js || fetched=0
+            curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/responsive.js?__blinq_release=$bust" -o /tmp/blinq-responsive.js || fetched=0
+            curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "$base/release.json?__blinq_release=$bust" -o /tmp/blinq-release.json || fetched=0
+
+            if [[ "$fetched" == "1" ]] &&               GITHUB_SHA="$stamp" EXPECTED_VISUAL="$visual" EXPECTED_PATCH="$patch" python - <<'PYWEB'
+          import hashlib
           import json
-          data=json.load(open('/tmp/blinq-release.json', encoding='utf-8'))
-          assert data.get('frontend_marker') == 'blinq-web-736', data
-          expected=json.load(open('web/release.json', encoding='utf-8'))
-          assert data.get('patch') == expected.get('patch'), (data, expected)
-          assert data.get('visual_revision') == expected.get('visual_revision'), (data, expected)
-          deploy=json.load(open('/tmp/blinq-deployment.json', encoding='utf-8'))
-          assert deploy['git_sha'] == __import__('os').environ['GITHUB_SHA'], deploy
-          assert deploy['patch'] == expected['patch'], deploy
+          import os
+          from pathlib import Path
+
+          stamp = os.environ['GITHUB_SHA']
+          visual = os.environ['EXPECTED_VISUAL']
+          patch_number = os.environ['EXPECTED_PATCH']
+          patch = f'736-r{patch_number}'
+
+          index = Path('/tmp/blinq-index.html').read_text(encoding='utf-8')
+          css = Path('/tmp/blinq-app.css').read_text(encoding='utf-8')
+          auth = Path('/tmp/blinq-auth.js').read_text(encoding='utf-8')
+          app = Path('/tmp/blinq-app.js').read_text(encoding='utf-8')
+          release = json.load(open('/tmp/blinq-release.json', encoding='utf-8'))
+          deploy = json.load(open('/tmp/blinq-deployment.json', encoding='utf-8'))
+          expected = json.load(open('web/release.json', encoding='utf-8'))
+
+          checks = [
+              ('web release', 'data-web-release="7.3.6"' in index),
+              ('deployment SHA meta', f'blinq-deployment-sha" content="{stamp}' in index),
+              ('visual revision meta', f'blinq-visual-revision" content="{visual}' in index),
+              ('web patch meta', f'blinq-web-patch" content="{patch}' in index),
+              ('CSS cache key', f'/blinq-app.css?v=7360&p={patch_number}' in index),
+              ('app.js cache key', f'/app.js?v=7360&p={patch_number}' in index),
+              ('auth.js cache key', f'/auth.js?v=7360&p={patch_number}' in index),
+              ('CSS runtime patch', f'BlinQ runtime patch 7.3.6-r{patch_number}' in css),
+              ('CSS visual revision', f'BlinQ visual revision {visual}' in css),
+              ('auth runtime patch', f"AUTH_RUNTIME = '{patch}'" in auth),
+              ('app auth fallback marker', 'UI config failed; auth remains available' in app),
+              ('app visual revision', f'BlinQ visual revision: {visual}' in app),
+              ('release frontend marker', release.get('frontend_marker') == 'blinq-web-736'),
+              ('release patch', release.get('patch') == expected.get('patch')),
+              ('release visual revision', release.get('visual_revision') == expected.get('visual_revision')),
+              ('deployment git SHA', deploy.get('git_sha') == stamp),
+              ('deployment patch', deploy.get('patch') == expected.get('patch')),
+          ]
+          failed = [name for name, passed in checks if not passed]
           for name, local in {
               'blinq-app.css': '/tmp/blinq-app.css',
               'app.js': '/tmp/blinq-app.js',
               'auth.js': '/tmp/blinq-auth.js',
               'responsive.js': '/tmp/blinq-responsive.js',
           }.items():
-              import hashlib
-              digest=hashlib.sha256(open(local, 'rb').read()).hexdigest()
-              assert digest == deploy['files_sha256'][name], (name, digest)
-          print(json.dumps(data, indent=2))
+              digest = hashlib.sha256(Path(local).read_bytes()).hexdigest()
+              if digest != (deploy.get('files_sha256') or {}).get(name):
+                  failed.append(f'{name} sha256')
+
+          if failed:
+              print('Not fully propagated yet:', ', '.join(failed))
+              print('Current deployment.json:', json.dumps({
+                  'git_sha': deploy.get('git_sha'),
+                  'patch': deploy.get('patch'),
+              }, ensure_ascii=False))
+              raise SystemExit(1)
+
+          print(json.dumps(release, indent=2))
           print('Exact Git SHA and all four deployed asset hashes: PASS')
           PYWEB
+            then
+              ok=1
+              break
+            fi
+
+            if [[ "$attempt" != "8" ]]; then
+              sleep $((attempt * 2))
+            fi
+          done
+
+          if [[ "$ok" != "1" ]]; then
+            echo "::error::Frontend deploy uploaded successfully, but the exact release did not propagate to production after 8 checks."
+            exit 1
+          fi
 
       - name: Smoke deployed authentication readiness
         if: ${{ vars.TBT_PRODUCTION_URL != '' }}
