@@ -1,10 +1,12 @@
 {
   "schema": 1,
   "mode": "write",
-  "purpose": "Publish verified rich Match Charting v2 specialist rates into existing canonical history only; preserve fail-closed identity/stat checks; zero provider API requests.",
+  "purpose": "Finalize complete Match Charting layer: full 16-group/point audit, broadened fail-closed identity corroboration, strict dry-run, canonical write, publish and committed-release verification; zero provider API requests.",
   "atp_repository": "Kadantte/tennis_atp",
   "atp_commit": "712be0c5ade693cdab9e69c23a71a0edf5a23c44",
   "charting_repository": "JeffSackmann/tennis_MatchChartingProject",
   "charting_commit": "1813a1309b7ed7ebf1c7e884b32bf675d00e4edf",
-  "requested_at_utc": "2026-09-28T19:25:00Z"
+  "requested_at_utc": "2026-09-29T07:07:00Z",
+  "link_policy": "charting_exact_pair_tour_date_plus_3_corroboration_v3",
+  "full_bundle_audit": true
 }
