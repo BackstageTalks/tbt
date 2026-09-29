@@ -8,5 +8,7 @@
   "expected_source_rows": 45383,
   "tour": "wta",
   "source_label": "operator_wta_txt_2006_2026",
-  "purpose": "Publish only the 4,306 identity-verified historical WTA Match Winner odds rows validated by dry-run 36528630868."
+  "purpose": "Re-run the pinned WTA historical Match Winner odds source against the newly expanded pre-2021 canonical history and publish only identity-verified links.",
+  "requested_at_utc": "2026-09-29T16:35:00Z",
+  "relink_reason": "historical_foundation_1990_2020_added"
 }
