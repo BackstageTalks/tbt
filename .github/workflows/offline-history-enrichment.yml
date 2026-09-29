@@ -156,6 +156,19 @@ jobs:
           check_blob "$CHARTING_DIR/charting-m-stats-Overview.csv" "7dc756e12aa6a2e315157c4d1a3ff34a7335b11b"
           check_blob "$CHARTING_DIR/charting-w-matches.csv" "87ca5e78cc2f408f5df67fe74705ad8541fc3001"
           check_blob "$CHARTING_DIR/charting-w-stats-Overview.csv" "7e030ca388d6e4ace46c4e694d886e08a50b3f07"
+          actual_byte_sha="$(sha256sum "$HALLMARK_CSV" | awk '{print $1}')"
+          if [[ "$actual_byte_sha" != "$HALLMARK_SHA256" ]]; then
+            echo "Current Kaggle file differs; testing whether uploaded snapshot is an exact historical prefix."
+            head -n 2555397 "$HALLMARK_CSV" > "$HALLMARK_CSV.pinned"
+            prefix_sha="$(sha256sum "$HALLMARK_CSV.pinned" | awk '{print $1}')"
+            echo "Hallmark historical-prefix sha256=$prefix_sha"
+            if [[ "$prefix_sha" != "$HALLMARK_SHA256" ]]; then
+              echo "Uploaded snapshot is not an exact prefix of the current Kaggle file."
+              exit 1
+            fi
+            mv "$HALLMARK_CSV.pinned" "$HALLMARK_CSV"
+            echo "Recovered exact uploaded Hallmark snapshot from current Kaggle prefix."
+          fi
           python - <<'PY'
           import csv, hashlib, os
           from pathlib import Path
