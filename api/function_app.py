@@ -105,7 +105,7 @@ from tbt.services.live_comeback import (
     attach_second_set_odds, set2_push_eligible, set2_push_thresholds,
     settle_radar_results,
 )
-from tbt.services.match_status import event_ids_from_feed, scan_match_statuses
+from tbt.services.match_status import event_ids_from_feed, runtime_settled_results, scan_match_statuses
 from tbt.services.auth_email import send_blinq_action_email, claim_auth_email_slot
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
@@ -1059,6 +1059,12 @@ def feed(req):
                 for event_id, value in raw_statuses.items()
                 if str(event_id) in allowed_event_ids and isinstance(value, dict)
             }
+            # External scheduler settlements become response-time Results only
+            # after the normal membership entitlement filter has run. The
+            # deployed feed/ledger stays immutable and projection markets are
+            # never inferred from the match-winner status.
+            if bool(entitlements.get("results")):
+                data["results"] = runtime_settled_results(data, data["match_statuses"])
             data["match_status_updated_at"] = status_snapshot.get("updated_at")
         except AdminStorageUnavailable:
             data["match_statuses"] = {}
