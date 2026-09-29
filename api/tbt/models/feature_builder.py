@@ -10,16 +10,20 @@ import pandas as pd
 
 from ..schemas import MatchRecord
 from ..utils import clamp, stable_hash
-from .elo import elo_expected, update_elo
+from .elo import dynamic_k, elo_expected, update_elo
 
 
-FEATURE_STATE_SCHEMA_VERSION = 3
+FEATURE_STATE_SCHEMA_VERSION = 4
 
 
 FEATURE_NAMES = [
     "elo_diff",
     "surface_elo_diff",
     "elo_probability",
+    "season_yelo_diff",
+    "season_yelo_probability",
+    "season_yelo_form_diff",
+    "season_yelo_known_both",
     "experience_diff",
     "recent_form_diff",
     "medium_form_diff",
@@ -128,6 +132,9 @@ class RecentPerformance:
 class PlayerState:
     overall_elo: float = 1500.0
     matches: int = 0
+    season_year: int | None = None
+    season_yelo: float = 1500.0
+    season_matches: int = 0
     surface_elo: dict[str, float] = field(default_factory=dict)
     surface_matches: dict[str, int] = field(default_factory=dict)
     last_played: datetime | None = None
@@ -228,6 +235,9 @@ class FeatureBuilder:
             players[str(key)] = {
                 "overall_elo": float(state.overall_elo),
                 "matches": int(state.matches),
+                "season_year": state.season_year,
+                "season_yelo": float(state.season_yelo),
+                "season_matches": int(state.season_matches),
                 "surface_elo": {str(k): float(v) for k, v in state.surface_elo.items()},
                 "surface_matches": {str(k): int(v) for k, v in state.surface_matches.items()},
                 "last_played": (
@@ -299,10 +309,10 @@ class FeatureBuilder:
         if not isinstance(payload, dict):
             return builder
         version = int(payload.get("schema_version") or 0)
-        if version not in {1, 2, FEATURE_STATE_SCHEMA_VERSION}:
+        if version not in {1, 2, 3, FEATURE_STATE_SCHEMA_VERSION}:
             raise ValueError(
                 f"Unsupported FeatureBuilder state schema {version}; "
-                f"expected 1, 2 or {FEATURE_STATE_SCHEMA_VERSION}"
+                f"expected 1, 2, 3 or {FEATURE_STATE_SCHEMA_VERSION}"
             )
 
         raw_players = payload.get("players")
@@ -313,6 +323,9 @@ class FeatureBuilder:
                 state = PlayerState(
                     overall_elo=float(raw.get("overall_elo", 1500.0)),
                     matches=int(raw.get("matches", 0)),
+                    season_year=(int(raw["season_year"]) if raw.get("season_year") is not None else None),
+                    season_yelo=float(raw.get("season_yelo", 1500.0)),
+                    season_matches=int(raw.get("season_matches", 0)),
                     surface_elo={
                         str(k): float(v)
                         for k, v in (raw.get("surface_elo") or {}).items()
@@ -400,6 +413,13 @@ class FeatureBuilder:
             f"{tour.lower()}:"
             f"{player_id}"
         )
+
+    @staticmethod
+    def _season_yelo_values(state: PlayerState, now: datetime) -> tuple[float, int]:
+        """Return point-in-time season Elo, resetting logically at each UTC year boundary."""
+        if state.season_year != now.year:
+            return 1500.0, 0
+        return float(state.season_yelo), int(state.season_matches)
 
     def _state(
         self,
@@ -1108,6 +1128,10 @@ class FeatureBuilder:
             False,
         )
 
+        y1, y1_n = self._season_yelo_values(p1, match.scheduled_at)
+        y2, y2_n = self._season_yelo_values(p2, match.scheduled_at)
+        season_yelo_p = elo_expected(y1, y2)
+
         s1 = p1.get_surface_elo(
             stats_surface_key(match.surface)
         )
@@ -1625,6 +1649,19 @@ class FeatureBuilder:
             "elo_probability": (
                 elo_p
             ),
+            "season_yelo_diff": (
+                y1 - y2
+            ) / 400.0,
+            "season_yelo_probability": (
+                season_yelo_p
+            ),
+            "season_yelo_form_diff": (
+                (y1 - p1.overall_elo)
+                - (y2 - p2.overall_elo)
+            ) / 400.0,
+            "season_yelo_known_both": float(
+                y1_n >= 5 and y2_n >= 5
+            ),
             "experience_diff": clamp(
                 (
                     math.log1p(
@@ -1917,6 +1954,29 @@ class FeatureBuilder:
             match.winner_id
             == match.player1_id
         )
+
+        season_year = match.scheduled_at.year
+        if p1.season_year != season_year:
+            p1.season_year = season_year
+            p1.season_yelo = 1500.0
+            p1.season_matches = 0
+        if p2.season_year != season_year:
+            p2.season_year = season_year
+            p2.season_yelo = 1500.0
+            p2.season_matches = 0
+
+        season_expected1 = elo_expected(
+            p1.season_yelo,
+            p2.overall_elo,
+        )
+        season_expected2 = elo_expected(
+            p2.season_yelo,
+            p1.overall_elo,
+        )
+        p1.season_yelo += dynamic_k(p1.season_matches) * (p1_won - season_expected1)
+        p2.season_yelo += dynamic_k(p2.season_matches) * ((1.0 - p1_won) - season_expected2)
+        p1.season_matches += 1
+        p2.season_matches += 1
 
         expected_overall = elo_expected(
             p1.overall_elo,
