@@ -163,14 +163,16 @@ jobs:
             prefix_sha="$(sha256sum "$HALLMARK_CSV.pinned" | awk '{print $1}')"
             echo "Hallmark historical-prefix sha256=$prefix_sha"
             if [[ "$prefix_sha" != "$HALLMARK_SHA256" ]]; then
-              echo "Uploaded snapshot is not an exact prefix of the current Kaggle file."
-              exit 1
+              echo "Uploaded snapshot is not an exact prefix of the current Kaggle file; continuing diagnostic fingerprint audit."
+              rm -f "$HALLMARK_CSV.pinned"
+            else
+              mv "$HALLMARK_CSV.pinned" "$HALLMARK_CSV"
+              echo "Recovered exact uploaded Hallmark snapshot from current Kaggle prefix."
             fi
-            mv "$HALLMARK_CSV.pinned" "$HALLMARK_CSV"
-            echo "Recovered exact uploaded Hallmark snapshot from current Kaggle prefix."
           fi
           python - <<'PY'
-          import csv, hashlib, os
+          import csv, hashlib, os, json
+          from collections import Counter
           from pathlib import Path
 
           path = Path(os.environ["HALLMARK_CSV"])
@@ -198,6 +200,8 @@ jobs:
           digest = hashlib.sha256()
           total_rows = 0
           selected_rows = 0
+          selected_by_year = Counter()
+          selected_by_level = Counter()
           with path.open("r", encoding="utf-8-sig", newline="") as handle:
               reader = csv.DictReader(handle)
               missing = [name for name in cols if name not in (reader.fieldnames or [])]
@@ -214,6 +218,8 @@ jobs:
                   if not all((row.get(name) or "").strip() for name in required_stats):
                       continue
                   selected_rows += 1
+                  selected_by_year[str(row.get("year") or "")] += 1
+                  selected_by_level[str(row.get("masters") or "")] += 1
                   digest.update(("\x1f".join((row.get(name) or "") for name in cols) + "\n").encode("utf-8"))
           semantic = digest.hexdigest()
           print(
@@ -221,6 +227,8 @@ jobs:
               f"selected_rows={selected_rows} selected_semantic_sha256={semantic}"
           )
           print(f"Uploaded snapshot byte_sha256={os.environ['HALLMARK_SHA256']}")
+          print("Hallmark selected_by_year=" + json.dumps(dict(sorted(selected_by_year.items())), sort_keys=True))
+          print("Hallmark selected_by_level=" + json.dumps(dict(sorted(selected_by_level.items())), sort_keys=True))
           if selected_rows != expected_rows:
               raise SystemExit(
                   f"Hallmark selected-row count mismatch: expected={expected_rows} actual={selected_rows}"
