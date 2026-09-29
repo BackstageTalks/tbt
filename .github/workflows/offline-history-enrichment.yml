@@ -82,7 +82,7 @@ jobs:
           set -euo pipefail
           python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
           python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
-          python -m compileall -q scripts/link_offline_serve_return.py scripts/import_offline_linked_serve_return.py
+          python -m compileall -q scripts/link_offline_serve_return.py scripts/import_offline_linked_serve_return.py scripts/audit_match_charting_bundle.py
           python -m pytest tests/test_offline_serve_return_linker.py tests/test_offline_linked_serve_return_importer.py -q
 
       - name: Verify private history destination
@@ -172,6 +172,30 @@ jobs:
                   z.write(p, p.name)
           print(f"ATP source files: {len(files)}")
           print(f"Charting CSV files: {len(chart_files)}")
+          PY
+
+      - name: Audit complete Match Charting bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/offline-enrichment
+          python scripts/audit_match_charting_bundle.py \
+            --charting-zip .cache/tbt/offline-sources/charting-root.zip \
+            --repository "$CHARTING_REPO" \
+            --commit "$CHARTING_SHA" \
+            --out .cache/tbt/offline-enrichment/charting-bundle-audit.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path(".cache/tbt/offline-enrichment/charting-bundle-audit.json").read_text())
+          t = r.get("totals") or {}
+          print("Match Charting bundle audit:", json.dumps(t, ensure_ascii=False))
+          if int(t.get("unique_matches") or 0) < 11000:
+              raise SystemExit("Unexpectedly small Match Charting match inventory")
+          if int(t.get("point_rows") or 0) < 1500000:
+              raise SystemExit("Unexpectedly small Match Charting point inventory")
+          if int(t.get("api_requests", -1)) != 0:
+              raise SystemExit("Match Charting audit unexpectedly used provider API")
           PY
 
       - name: Download checksum-verified private history
@@ -351,6 +375,7 @@ jobs:
               "atp_commit": os.environ.get("ATP_SHA"),
               "charting_repository": os.environ.get("CHARTING_REPO"),
               "charting_commit": os.environ.get("CHARTING_SHA"),
+              "charting_bundle_audit": read_json(".cache/tbt/offline-enrichment/charting-bundle-audit.json"),
               "link_report": read_json(".cache/tbt/offline-enrichment/link/report.json"),
               "dry_run_report": read_json(".cache/tbt/offline-enrichment/dry-run/report.json"),
               "write_report": read_json(".cache/tbt/offline-enrichment/write/report.json"),
@@ -374,6 +399,7 @@ jobs:
         with:
           name: blinq-offline-enrichment-${{ github.run_id }}
           path: |
+            .cache/tbt/offline-enrichment/charting-bundle-audit.json
             .cache/tbt/offline-enrichment/link/report.json
             .cache/tbt/offline-enrichment/link/review.jsonl
             .cache/tbt/offline-enrichment/link/quarantine.jsonl
