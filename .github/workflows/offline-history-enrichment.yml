@@ -42,8 +42,8 @@ jobs:
       CHARTING_SHA: 1813a1309b7ed7ebf1c7e884b32bf675d00e4edf
       HALLMARK_URL: https://www.kaggle.com/api/v1/datasets/download/ehallmar/a-large-tennis-dataset-for-atp-and-itf-betting/all_matches.csv?datasetVersionNumber=1
       HALLMARK_SHA256: 957347f83047eabb8ddb43d84cab7c6194ede58e38bea39376933cf14f093960
-      HALLMARK_SEMANTIC_SHA256: 51c3fd6bc2ff4cdfaaf5c82ae2c29cc4753a0b21d75c23b8f15e828c0b930b08
-      HALLMARK_ROWS: "2555396"
+      HALLMARK_SEMANTIC_SHA256: 56cd6e325b0ebd16335c6c9c9f736bdf05c56670470e79f044803ee9824c08a2
+      HALLMARK_ROWS: "282994"
     steps:
       - uses: actions/checkout@v4
 
@@ -173,25 +173,48 @@ jobs:
               "return_points_won","return_points_attempted","player_victory","retirement",
               "doubles","masters",
           ]
+          required_stats = [
+              "aces","double_faults","first_serve_points_made","first_serve_points_attempted",
+              "second_serve_points_made","second_serve_points_attempted",
+              "break_points_saved","break_points_against","break_points_made",
+              "break_points_attempted","service_points_won","service_points_attempted",
+              "return_points_won","return_points_attempted",
+          ]
+          allowed_levels = {"100", "250", "500", "1000", "2000"}
           byte_hash = hashlib.sha256(path.read_bytes()).hexdigest()
           digest = hashlib.sha256()
-          rows = 0
+          total_rows = 0
+          selected_rows = 0
           with path.open("r", encoding="utf-8-sig", newline="") as handle:
               reader = csv.DictReader(handle)
               missing = [name for name in cols if name not in (reader.fieldnames or [])]
               if missing:
                   raise SystemExit(f"Hallmark source missing required columns: {missing}")
               for row in reader:
-                  rows += 1
+                  total_rows += 1
+                  if (row.get("doubles") or "").lower() == "t":
+                      continue
+                  if (row.get("retirement") or "").lower() == "t":
+                      continue
+                  if (row.get("masters") or "") not in allowed_levels:
+                      continue
+                  if not all((row.get(name) or "").strip() for name in required_stats):
+                      continue
+                  selected_rows += 1
                   digest.update(("\x1f".join((row.get(name) or "") for name in cols) + "\n").encode("utf-8"))
           semantic = digest.hexdigest()
-          print(f"Hallmark source byte_sha256={byte_hash} rows={rows} semantic_sha256={semantic}")
+          print(
+              f"Hallmark source byte_sha256={byte_hash} total_rows={total_rows} "
+              f"selected_rows={selected_rows} selected_semantic_sha256={semantic}"
+          )
           print(f"Uploaded snapshot byte_sha256={os.environ['HALLMARK_SHA256']}")
-          if rows != expected_rows:
-              raise SystemExit(f"Hallmark row count mismatch: expected={expected_rows} actual={rows}")
+          if selected_rows != expected_rows:
+              raise SystemExit(
+                  f"Hallmark selected-row count mismatch: expected={expected_rows} actual={selected_rows}"
+              )
           if semantic != expected_semantic:
               raise SystemExit(
-                  f"Hallmark semantic fingerprint mismatch: expected={expected_semantic} actual={semantic}"
+                  f"Hallmark selected semantic fingerprint mismatch: expected={expected_semantic} actual={semantic}"
               )
           PY
 
