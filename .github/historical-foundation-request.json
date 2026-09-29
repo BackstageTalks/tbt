@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "atp_repository": "Kadantte/tennis_atp",
+  "atp_commit": "712be0c5ade693cdab9e69c23a71a0edf5a23c44",
+  "wta_history_repository": "IndigoHarpy/FIT3163-Project",
+  "wta_history_commit": "25be3f9a8c94e6cbf7f51e3e8b18e94ef61b142a",
+  "wta_overlap_repository": "natcebron/tennis_atp",
+  "wta_overlap_commit": "fd934a0431efa93907b41c67b54548bc4a059cb7",
+  "atp_import_from_year": 1991,
+  "wta_import_from_year": 2000,
+  "import_through_year": 2020,
+  "crosswalk_years": [2021, 2022],
+  "include_atp_main": true,
+  "include_atp_qual_chall": true,
+  "include_atp_futures_in_training": false,
+  "api_requests": 0
+}
