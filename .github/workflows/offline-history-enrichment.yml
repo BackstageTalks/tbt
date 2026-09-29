@@ -257,7 +257,34 @@ jobs:
       - name: Dry-run strict canonical importer
         run: |
           set -euo pipefail
-          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/offline-enrichment/link/auto_linked.jsonl             --history-dir .cache/tbt/offline-enrichment/history             --out-dir .cache/tbt/offline-enrichment/dry-run
+          stage=.cache/tbt/offline-enrichment/link/auto_linked.jsonl
+          if [[ -s "$stage" ]]; then
+            python scripts/import_offline_linked_serve_return.py               --stage "$stage"               --history-dir .cache/tbt/offline-enrichment/history               --out-dir .cache/tbt/offline-enrichment/dry-run
+          else
+            mkdir -p .cache/tbt/offline-enrichment/dry-run
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          link=json.loads(Path(".cache/tbt/offline-enrichment/link/report.json").read_text())
+          lc=link.get("counts") or {}
+          report={
+              "schema":1,
+              "stage_rows":0,
+              "counts":{"already_present":int(lc.get("already_present") or 0)},
+              "changed_years":[],
+              "quality_ready_before":link.get("quality_ready_before"),
+              "quality_ready_after":link.get("quality_ready_before"),
+              "quality_ready_added":0,
+              "production_mutated":False,
+              "local_partitions_written":False,
+              "api_requests":0,
+              "note":"Verified no-op: linker found no new stage rows.",
+          }
+          Path(".cache/tbt/offline-enrichment/dry-run/report.json").write_text(
+              json.dumps(report, indent=2), encoding="utf-8"
+          )
+          PY
+          fi
           python - <<'PY'
           import json
           from pathlib import Path
@@ -288,7 +315,13 @@ jobs:
         if: ${{ steps.request.outputs.mode == 'write' }}
         run: |
           set -euo pipefail
-          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/offline-enrichment/link/auto_linked.jsonl             --history-dir .cache/tbt/offline-enrichment/history             --out-dir .cache/tbt/offline-enrichment/write             --write-partitions             --write-history-dir .cache/tbt/offline-enrichment/history
+          stage=.cache/tbt/offline-enrichment/link/auto_linked.jsonl
+          if [[ -s "$stage" ]]; then
+            python scripts/import_offline_linked_serve_return.py               --stage "$stage"               --history-dir .cache/tbt/offline-enrichment/history               --out-dir .cache/tbt/offline-enrichment/write               --write-partitions               --write-history-dir .cache/tbt/offline-enrichment/history
+          else
+            mkdir -p .cache/tbt/offline-enrichment/write
+            cp .cache/tbt/offline-enrichment/dry-run/report.json .cache/tbt/offline-enrichment/write/report.json
+          fi
 
       - name: Validate and publish changed private history bundle
         if: ${{ steps.request.outputs.mode == 'write' }}
