@@ -79,6 +79,7 @@ def main() -> None:
     staged = []
     review = []
     quarantine = []
+    linked_by_match = defaultdict(list)
     seen_source_ids = set()
 
     for source_name in args.source_csv:
@@ -91,7 +92,7 @@ def main() -> None:
                 if source is None:
                     counts["invalid_or_marketless_source_rows"] += 1
                     continue
-                unique_source_key = (source.source_match_id, source_sha)
+                unique_source_key = source.source_match_id
                 if unique_source_key in seen_source_ids:
                     counts["duplicate_source_rows"] += 1
                     continue
@@ -169,11 +170,9 @@ def main() -> None:
                         })
                     continue
 
-                staged.append({
-                    "schema": 1,
-                    "match_id": str(match.match_id),
+                linked_by_match[str(match.match_id)].append({
+                    "marker": marker,
                     "canonical": _signature(match),
-                    "incoming_market_history": marker,
                     "source": {
                         "source_file": source_path.name,
                         "row_number": number,
@@ -182,14 +181,40 @@ def main() -> None:
                         "evidence": linked["evidence"],
                         "orientation": linked["orientation"],
                     },
-                    "import_ready": True,
                 })
                 counts["identity_linked"] += 1
-                counts["staged_matches"] += 1
-                if linked.get("opening") is not None:
-                    counts["staged_opening_markets"] += 1
-                if linked.get("closing") is not None:
-                    counts["staged_closing_markets"] += 1
+
+    for mid, rows in linked_by_match.items():
+        first = rows[0]
+        if len(rows) > 1:
+            equivalent = all(
+                market_history_equivalent(first["marker"], item["marker"])
+                for item in rows[1:]
+            )
+            if not equivalent:
+                counts["canonical_duplicate_link_conflicts"] += 1
+                quarantine.append({
+                    "match_id": mid,
+                    "reason": "multiple_source_market_links",
+                    "sources": [item["source"] for item in rows],
+                    "incoming": [item["marker"] for item in rows],
+                })
+                continue
+            counts["duplicate_equivalent_links"] += len(rows) - 1
+
+        staged.append({
+            "schema": 1,
+            "match_id": mid,
+            "canonical": first["canonical"],
+            "incoming_market_history": first["marker"],
+            "source": first["source"],
+            "import_ready": True,
+        })
+        counts["staged_matches"] += 1
+        if first["marker"].get("opening") is not None:
+            counts["staged_opening_markets"] += 1
+        if first["marker"].get("closing") is not None:
+            counts["staged_closing_markets"] += 1
 
     report = {
         "schema": 1,
