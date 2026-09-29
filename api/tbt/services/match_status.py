@@ -14,10 +14,12 @@ are changed here.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import re
 import time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 TERMINAL_STATUSES = {"win", "loss", "retired", "void"}
@@ -114,6 +116,167 @@ def prediction_rows(feed: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def event_ids_from_feed(feed: dict[str, Any]) -> set[str]:
     return set(prediction_rows(feed))
+
+
+_RUNTIME_RESULT_SOURCE_KEYS = (
+    "daily_picks",
+    "prime_picks",
+    "top_daily_picks",
+    "value_picks",
+    "doubles_picks",
+)
+
+
+def _runtime_publication_key(
+    row: dict[str, Any], publication: dict[str, Any], index: int = 0
+) -> str:
+    event_id = _event_id(row)
+    section = str(publication.get("section") or "").strip().lower()
+    market = str(publication.get("market") or "match_winner").strip().lower()
+    selection = str(
+        publication.get("selection_id")
+        or publication.get("winner_id")
+        or publication.get("pick_id")
+        or ""
+    ).strip()
+    issued_at = str(publication.get("issued_at") or "").strip()
+    if event_id and selection and issued_at:
+        return f"{event_id}|{section}|{market}|{selection}|{issued_at}"
+    return f"{event_id}|{section}|{market}|{selection}|{issued_at}|{index}"
+
+
+def runtime_settled_results(
+    feed: dict[str, Any], statuses: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    """Overlay verified match-winner settlements onto an already-authorized feed.
+
+    The durable prediction ledger and deployed feed remain immutable. This helper
+    only builds response-time Results rows from the external match-status snapshot,
+    and only for issued match-winner publications visible to this account.
+    Projection markets (ACES/DF/Games/Sets) are intentionally never settled from
+    a match-winner outcome.
+    """
+    existing_results = [
+        deepcopy(row) for row in (feed.get("results") or []) if isinstance(row, dict)
+    ]
+    if not isinstance(statuses, dict) or not statuses:
+        return existing_results
+
+    seen: set[str] = set()
+    for row in existing_results:
+        for index, publication in enumerate(row.get("market_publications") or []):
+            if isinstance(publication, dict):
+                seen.add(_runtime_publication_key(row, publication, index))
+
+    runtime_rows: list[dict[str, Any]] = []
+    runtime_seen: set[str] = set()
+    for source_key in _RUNTIME_RESULT_SOURCE_KEYS:
+        rows = feed.get(source_key)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            event_id = _event_id(row)
+            status_row = statuses.get(event_id)
+            if not isinstance(status_row, dict):
+                continue
+            status = str(status_row.get("status") or "").strip().lower()
+            if status not in TERMINAL_STATUSES:
+                continue
+
+            expected_selection = _selection_id(row)
+            overlay_publications: list[dict[str, Any]] = []
+            for index, publication in enumerate(row.get("market_publications") or []):
+                if not isinstance(publication, dict):
+                    continue
+                if not publication.get("issued_at") or publication.get("excluded_reason"):
+                    continue
+                section = str(publication.get("section") or "").strip().lower()
+                market = str(publication.get("market") or "").strip().lower()
+                if not market and section in {"top_daily", "prime", "value", "doubles"}:
+                    market = "match_winner"
+                if market != "match_winner":
+                    continue
+                publication_status = str(
+                    publication.get("publication_status") or "published"
+                ).strip().lower()
+                if publication_status != "published":
+                    continue
+                selection = str(
+                    publication.get("selection_id")
+                    or publication.get("winner_id")
+                    or publication.get("pick_id")
+                    or ""
+                ).strip()
+                if expected_selection and selection and selection != expected_selection:
+                    continue
+
+                key = _runtime_publication_key(row, publication, index)
+                if key in seen or key in runtime_seen:
+                    continue
+
+                result = publication.get("result")
+                result = deepcopy(result) if isinstance(result, dict) else {}
+                checked_at = str(status_row.get("checked_at") or "").strip()
+                scheduled_at = str(row.get("scheduled_at") or row.get("date") or "").strip()
+                odds_raw = publication.get("odds")
+                try:
+                    odds = float(odds_raw)
+                except (TypeError, ValueError):
+                    odds = 0.0
+
+                if status in {"retired", "void"}:
+                    result.update({
+                        "status": "retired" if status == "retired" else "void",
+                        "correct": None,
+                        "void": True,
+                        "reason": "retired" if status == "retired" else (
+                            str(status_row.get("provider_status") or "void")[:120]
+                        ),
+                        "staked_units": 0.0,
+                        "return_units": 0.0,
+                        "profit_units": 0.0,
+                    })
+                else:
+                    correct = status == "win"
+                    result.update({
+                        "status": "hit" if correct else "miss",
+                        "correct": correct,
+                    })
+                    # A live status can settle W/L without odds, but financial
+                    # fields are created only when the issued publication has a
+                    # genuine price. This keeps ROI fail-closed.
+                    if odds > 1:
+                        result.update({
+                            "staked_units": 1.0,
+                            "return_units": odds if correct else 0.0,
+                            "profit_units": (odds - 1.0) if correct else -1.0,
+                        })
+                result.update({
+                    "settled_at": checked_at or scheduled_at,
+                    "scheduled_at": scheduled_at,
+                    "runtime_overlay": True,
+                    "runtime_source": "match_status_snapshot",
+                })
+                copy = deepcopy(publication)
+                copy["result"] = result
+                overlay_publications.append(copy)
+                runtime_seen.add(key)
+
+            if overlay_publications:
+                copy = deepcopy(row)
+                copy["market_publications"] = overlay_publications
+                copy["runtime_result_overlay"] = True
+                runtime_rows.append(copy)
+
+    combined = existing_results + runtime_rows
+    combined.sort(
+        key=lambda row: _parse_time(row.get("scheduled_at") or row.get("date"))
+        or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    return combined
 
 
 def _provider_rows(payload: Any) -> list[dict[str, Any]]:
@@ -348,8 +511,34 @@ def scan_match_statuses(
         due.append((scheduled, eid, row))
         pending[eid] = compact
 
-    # Single chronological queue; no priority bands and no age cutoff.
+    # Preserve the full backlog, but under severe backlog pressure prioritize
+    # the current Bratislava betting day (06:00–06:00) without increasing the
+    # provider-request budget. At least one history slot remains available for
+    # older pending fixtures so the backlog still drains.
     due.sort(key=lambda item: (item[0], item[1]))
+    priority_limit = max(0, min(120, int(max_checks)))
+    local_now = now.astimezone(ZoneInfo("Europe/Bratislava"))
+    betting_day_start_local = local_now.replace(hour=6, minute=0, second=0, microsecond=0)
+    if local_now < betting_day_start_local:
+        betting_day_start_local -= timedelta(days=1)
+    betting_day_start = betting_day_start_local.astimezone(timezone.utc)
+    recent_due = [item for item in due if item[0] >= betting_day_start]
+    backlog_due = [item for item in due if item[0] < betting_day_start]
+    priority_mode = bool(
+        recent_due and backlog_due and priority_limit >= 2
+        and len(due) > max(40, priority_limit * 20)
+    )
+
+    def fairness_key(item: tuple[datetime, str, dict[str, Any]]):
+        _, eid, _ = item
+        old = prior_pending.get(eid)
+        old = old if isinstance(old, dict) else {}
+        last_checked = _parse_time(old.get("c"))
+        return (
+            last_checked or datetime.min.replace(tzinfo=timezone.utc),
+            item[0],
+            eid,
+        )
 
     prior_errors = prior.get("provider_errors")
     prior_errors = prior_errors if isinstance(prior_errors, dict) else {}
@@ -382,10 +571,28 @@ def scan_match_statuses(
     newly_resolved = consecutive_errors = near_attempts = unmatched = 0
     next_due_id = ""
     settled_events: dict[str, dict[str, str]] = {}
-    max_checks = max(0, min(120, int(max_checks)))
+    max_checks = priority_limit
     cursor = str(prior.get("next_due_id") or "")
-    offset = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), 0)
-    ordered = due[offset:] + due[:offset]
+    if priority_mode:
+        recent_ordered = sorted(recent_due, key=fairness_key)
+        backlog_ordered = sorted(backlog_due, key=fairness_key)
+        recent_quota = min(len(recent_ordered), max(1, max_checks - 1))
+        backlog_quota = min(len(backlog_ordered), max_checks - recent_quota)
+        # If the current day has fewer candidates than the request budget,
+        # give the unused slots back to the backlog.
+        if recent_quota + backlog_quota < max_checks:
+            backlog_quota = min(
+                len(backlog_ordered), max_checks - recent_quota
+            )
+        ordered = (
+            recent_ordered[:recent_quota]
+            + backlog_ordered[:backlog_quota]
+            + recent_ordered[recent_quota:]
+            + backlog_ordered[backlog_quota:]
+        )
+    else:
+        offset = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), 0)
+        ordered = due[offset:] + due[:offset]
 
     # One live request can settle every due fixture, including those beyond
     # the per-event request budget of thirty.
@@ -533,6 +740,10 @@ def scan_match_statuses(
         "window_candidates": len(due),  # Legacy diagnostic, no window cutoff.
         "window_min_age_minutes": 0,
         "window_max_age_minutes": 0,
+        "priority_mode": priority_mode,
+        "betting_day_start": betting_day_start.isoformat(),
+        "current_betting_day_due": len(recent_due),
+        "backlog_due": len(backlog_due),
         "pending_count": len(pending),
         "pending": pending,
         "checked": checked,

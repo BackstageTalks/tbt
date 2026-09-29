@@ -75,8 +75,8 @@ def main():
                 assert created["levels"] == ["rookie", "pro"]
                 assert page.locator(".admin-insight-row").count() == 1
 
-                # A configured INFO minimum must be enforced before submit;
-                # the old 'all' preset must not create a request the API rejects.
+                # INFO minimum is a composer default only. Exact per-message
+                # audience may include FREE/ROOKIE even when the default starts at PRO.
                 page.evaluate("""() => {
                     const h=infoHarness;
                     h.state.ui.notifications.info_min_level='pro';
@@ -86,15 +86,15 @@ def main():
                     h.wireAdmin();
                 }""")
                 rookie=page.locator('input[name="insight_level"][value="rookie"]')
-                assert rookie.is_disabled() and not rookie.is_checked()
+                assert rookie.is_enabled() and not rookie.is_checked()
                 page.locator('[data-audience-preset="all"]').click()
-                assert rookie.is_disabled() and not rookie.is_checked()
+                assert rookie.is_enabled() and rookie.is_checked()
                 assert page.locator('input[name="insight_level"][value="pro"]').is_checked()
-                page.locator("#adminInsightTitle").fill("INFO od PRO")
-                page.locator("#adminInsightBody").fill("Správa pre povolené publikum.")
+                page.locator("#adminInsightTitle").fill("INFO pre všetkých")
+                page.locator("#adminInsightBody").fill("Správa pre presne zvolené publikum.")
                 page.locator('#adminInsightForm button[type="submit"]').click()
                 page.wait_for_function("window.__infoSent.length===2")
-                assert "rookie" not in page.evaluate("window.__infoSent[1].levels")
+                assert "rookie" in page.evaluate("window.__infoSent[1].levels")
 
                 # End-to-end offline contract: one newly published VIP/INFO
                 # message for ROOKIE must appear BOTH in the unread bell and

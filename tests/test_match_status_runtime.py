@@ -1,6 +1,7 @@
+from pathlib import Path
 from datetime import datetime, timedelta, timezone
 
-from tbt.services.match_status import classify_finished_event, scan_match_statuses
+from tbt.services.match_status import classify_finished_event, runtime_settled_results, scan_match_statuses
 
 
 def _row(event_id="101", winner_id="11", scheduled_at=None):
@@ -637,3 +638,148 @@ def test_runtime_provider_fast_fail_configuration_is_bounded():
         assert client.client.timeout.read == 4.0
     finally:
         client.close()
+
+
+def test_runtime_status_overlay_adds_only_match_winner_results_and_dedupes_aliases():
+    row = _row("101", "11", "2026-09-29T12:00:00+00:00")
+    row["betting"] = {"selection_id": "11", "odds": 1.62}
+    row["market_publications"] = [
+        {
+            "issued_at": "2026-09-29T06:00:00+00:00",
+            "publication_status": "published",
+            "section": "top_daily",
+            "market": "match_winner",
+            "selection_id": "11",
+            "odds": 1.62,
+            "result": None,
+        },
+        {
+            "issued_at": "2026-09-29T06:00:00+00:00",
+            "publication_status": "published",
+            "section": "ace",
+            "market": "aces",
+            "selection_id": "11",
+            "odds": 1.66,
+            "result": None,
+        },
+    ]
+    feed = {
+        "daily_picks": [row],
+        "top_daily_picks": [dict(row)],
+        "results": [],
+    }
+    rows = runtime_settled_results(feed, {
+        "101": {
+            "status": "win",
+            "checked_at": "2026-09-29T15:30:00+00:00",
+        }
+    })
+    assert len(rows) == 1
+    assert rows[0]["runtime_result_overlay"] is True
+    assert len(rows[0]["market_publications"]) == 1
+    publication = rows[0]["market_publications"][0]
+    assert publication["market"] == "match_winner"
+    assert publication["result"]["correct"] is True
+    assert publication["result"]["runtime_source"] == "match_status_snapshot"
+    assert publication["result"]["staked_units"] == 1.0
+    assert abs(publication["result"]["profit_units"] - .62) < 1e-12
+
+
+def test_runtime_status_overlay_keeps_roi_fail_closed_without_real_odds():
+    row = _row("202", "11", "2026-09-29T13:00:00+00:00")
+    row["market_publications"] = [{
+        "issued_at": "2026-09-29T06:00:00+00:00",
+        "publication_status": "published",
+        "section": "value",
+        "market": "match_winner",
+        "selection_id": "11",
+        "odds": None,
+        "result": None,
+    }]
+    rows = runtime_settled_results(
+        {"value_picks": [row], "results": []},
+        {"202": {"status": "loss", "checked_at": "2026-09-29T15:00:00+00:00"}},
+    )
+    result = rows[0]["market_publications"][0]["result"]
+    assert result["correct"] is False
+    assert result["status"] == "miss"
+    assert "staked_units" not in result
+    assert "profit_units" not in result
+
+
+def test_runtime_status_overlay_never_replaces_existing_durable_result():
+    row = _row("303", "11", "2026-09-29T14:00:00+00:00")
+    publication = {
+        "issued_at": "2026-09-29T06:00:00+00:00",
+        "publication_status": "published",
+        "section": "top_daily",
+        "market": "match_winner",
+        "selection_id": "11",
+        "odds": 1.70,
+        "result": {
+            "status": "hit",
+            "correct": True,
+            "staked_units": 1.0,
+            "profit_units": .70,
+        },
+    }
+    row["market_publications"] = [publication]
+    rows = runtime_settled_results(
+        {"daily_picks": [row], "results": [row]},
+        {"303": {"status": "loss", "checked_at": "2026-09-29T15:00:00+00:00"}},
+    )
+    assert len(rows) == 1
+    assert rows[0]["market_publications"][0]["result"]["correct"] is True
+    assert "runtime_overlay" not in rows[0]["market_publications"][0]["result"]
+
+
+def test_feed_wires_runtime_status_only_after_results_entitlement():
+    source = (Path(__file__).resolve().parents[1] / "api" / "function_app.py").read_text()
+    block = source.split('def feed(req):', 1)[1].split('def _membership_allowed', 1)[0]
+    assert 'if bool(entitlements.get("results")):' in block
+    assert 'runtime_settled_results(data, data["match_statuses"])' in block
+
+
+def test_large_backlog_prioritizes_current_betting_day_without_more_requests():
+    now = datetime(2026, 9, 29, 16, 0, tzinfo=timezone.utc)
+    old_rows = []
+    for i in range(105):
+        player_id = str(2000 + i)
+        row = _row(
+            f"old-{i}", player_id,
+            (now - timedelta(days=1, hours=2) + timedelta(minutes=i)).isoformat(),
+        )
+        row["player1"]["id"] = player_id
+        row["player2"]["id"] = str(5000 + i)
+        old_rows.append(row)
+
+    recent_rows = []
+    for i in range(5):
+        player_id = str(9000 + i)
+        row = _row(
+            f"today-{i}", player_id,
+            (now - timedelta(hours=4) + timedelta(minutes=i * 10)).isoformat(),
+        )
+        row["player1"]["id"] = player_id
+        row["player2"]["id"] = str(9500 + i)
+        recent_rows.append(row)
+
+    provider = _Provider()
+    result = scan_match_statuses(
+        {"upcoming": old_rows + recent_rows},
+        provider,
+        now=now,
+        max_checks=5,
+        max_near_checks=5,
+    )
+
+    assert result["priority_mode"] is True
+    assert result["current_betting_day_due"] == 5
+    assert result["backlog_due"] == 105
+    assert result["checked"] == 5
+    assert provider.previous_calls[:4] == [
+        ("9000", 0), ("9001", 0), ("9002", 0), ("9003", 0),
+    ]
+    assert provider.previous_calls[4] == ("2000", 0)
+    # Request budget is unchanged: one LIVE lookup plus five history lookups.
+    assert result["provider_requests"] == 6
