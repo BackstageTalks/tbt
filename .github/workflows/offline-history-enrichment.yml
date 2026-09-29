@@ -14,7 +14,9 @@ on:
       - ".github/offline-history-enrichment-request.json"
       - ".github/workflows/offline-history-enrichment.yml"
       - "scripts/link_offline_serve_return.py"
+      - "scripts/link_offline_all_matches.py"
       - "scripts/import_offline_linked_serve_return.py"
+      - "tests/test_offline_all_matches_linker.py"
   push:
     branches: [main]
     paths:
@@ -82,8 +84,8 @@ jobs:
           set -euo pipefail
           python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
           python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
-          python -m compileall -q scripts/link_offline_serve_return.py scripts/import_offline_linked_serve_return.py scripts/audit_match_charting_bundle.py
-          python -m pytest tests/test_offline_serve_return_linker.py tests/test_offline_linked_serve_return_importer.py -q
+          python -m compileall -q scripts/link_offline_serve_return.py scripts/link_offline_all_matches.py scripts/import_offline_linked_serve_return.py scripts/audit_match_charting_bundle.py
+          python -m pytest tests/test_offline_serve_return_linker.py tests/test_offline_all_matches_linker.py tests/test_offline_linked_serve_return_importer.py -q
 
       - name: Verify private history destination
         run: |
