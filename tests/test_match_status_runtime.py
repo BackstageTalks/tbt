@@ -737,3 +737,48 @@ def test_feed_wires_runtime_status_only_after_results_entitlement():
     block = source.split('def feed(req):', 1)[1].split('def _membership_allowed', 1)[0]
     assert 'if bool(entitlements.get("results")):' in block
     assert 'runtime_settled_results(data, data["match_statuses"])' in block
+
+
+def test_large_backlog_prioritizes_current_betting_day_without_more_requests():
+    now = datetime(2026, 9, 29, 16, 0, tzinfo=timezone.utc)
+    old_rows = []
+    for i in range(105):
+        player_id = str(2000 + i)
+        row = _row(
+            f"old-{i}", player_id,
+            (now - timedelta(days=1, hours=2) + timedelta(minutes=i)).isoformat(),
+        )
+        row["player1"]["id"] = player_id
+        row["player2"]["id"] = str(5000 + i)
+        old_rows.append(row)
+
+    recent_rows = []
+    for i in range(5):
+        player_id = str(9000 + i)
+        row = _row(
+            f"today-{i}", player_id,
+            (now - timedelta(hours=4) + timedelta(minutes=i * 10)).isoformat(),
+        )
+        row["player1"]["id"] = player_id
+        row["player2"]["id"] = str(9500 + i)
+        recent_rows.append(row)
+
+    provider = _Provider()
+    result = scan_match_statuses(
+        {"upcoming": old_rows + recent_rows},
+        provider,
+        now=now,
+        max_checks=5,
+        max_near_checks=5,
+    )
+
+    assert result["priority_mode"] is True
+    assert result["current_betting_day_due"] == 5
+    assert result["backlog_due"] == 105
+    assert result["checked"] == 5
+    assert provider.previous_calls[:4] == [
+        ("9000", 0), ("9001", 0), ("9002", 0), ("9003", 0),
+    ]
+    assert provider.previous_calls[4] == ("2000", 0)
+    # Request budget is unchanged: one LIVE lookup plus five history lookups.
+    assert result["provider_requests"] == 6
