@@ -40,6 +40,8 @@ jobs:
       ATP_SHA: 712be0c5ade693cdab9e69c23a71a0edf5a23c44
       CHARTING_REPO: JeffSackmann/tennis_MatchChartingProject
       CHARTING_SHA: 1813a1309b7ed7ebf1c7e884b32bf675d00e4edf
+      HALLMARK_URL: https://www.kaggle.com/api/v1/datasets/download/ehallmar/a-large-tennis-dataset-for-atp-and-itf-betting/all_matches.csv?datasetVersionNumber=2
+      HALLMARK_SHA256: 957347f83047eabb8ddb43d84cab7c6194ede58e38bea39376933cf14f093960
     steps:
       - uses: actions/checkout@v4
 
@@ -95,11 +97,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p .cache/tbt/offline-sources/atp .cache/tbt/offline-sources/charting
+          mkdir -p .cache/tbt/offline-sources/atp .cache/tbt/offline-sources/charting .cache/tbt/offline-sources/hallmark
           curl --fail --location --retry 5 --retry-delay 2             "https://github.com/$ATP_REPO/archive/$ATP_SHA.zip"             -o .cache/tbt/offline-sources/atp.zip
           curl --fail --location --retry 5 --retry-delay 2             "https://github.com/$CHARTING_REPO/archive/$CHARTING_SHA.zip"             -o .cache/tbt/offline-sources/charting.zip
           unzip -q .cache/tbt/offline-sources/atp.zip -d .cache/tbt/offline-sources/atp
           unzip -q .cache/tbt/offline-sources/charting.zip -d .cache/tbt/offline-sources/charting
+          curl --fail --location --retry 5 --retry-delay 2 \
+            "$HALLMARK_URL" \
+            -o .cache/tbt/offline-sources/hallmark-download
+          python - <<'PY'
+          import shutil, zipfile
+          from pathlib import Path
+
+          src = Path(".cache/tbt/offline-sources/hallmark-download")
+          out = Path(".cache/tbt/offline-sources/hallmark/all_matches.csv")
+          if zipfile.is_zipfile(src):
+              with zipfile.ZipFile(src) as zf:
+                  candidates = [name for name in zf.namelist() if Path(name).name == "all_matches.csv"]
+                  if len(candidates) != 1:
+                      raise SystemExit(f"Expected exactly one all_matches.csv in Kaggle payload, found {candidates}")
+                  with zf.open(candidates[0]) as r, out.open("wb") as w:
+                      shutil.copyfileobj(r, w)
+          else:
+              shutil.copyfile(src, out)
+          if not out.is_file() or out.stat().st_size < 400_000_000:
+              raise SystemExit(f"Hallmark source unexpectedly small: {out.stat().st_size if out.exists() else 0}")
+          print(f"Hallmark all_matches.csv bytes={out.stat().st_size}")
+          PY
+          echo "HALLMARK_CSV=.cache/tbt/offline-sources/hallmark/all_matches.csv" >> "$GITHUB_ENV"
           ATP_DIR="$(find .cache/tbt/offline-sources/atp -mindepth 1 -maxdepth 1 -type d | head -n1)"
           CHARTING_DIR="$(find .cache/tbt/offline-sources/charting -mindepth 1 -maxdepth 1 -type d | head -n1)"
           test -d "$ATP_DIR" && test -d "$CHARTING_DIR"
@@ -129,6 +154,7 @@ jobs:
           check_blob "$CHARTING_DIR/charting-m-stats-Overview.csv" "7dc756e12aa6a2e315157c4d1a3ff34a7335b11b"
           check_blob "$CHARTING_DIR/charting-w-matches.csv" "87ca5e78cc2f408f5df67fe74705ad8541fc3001"
           check_blob "$CHARTING_DIR/charting-w-stats-Overview.csv" "7e030ca388d6e4ace46c4e694d886e08a50b3f07"
+          echo "$HALLMARK_SHA256  $HALLMARK_CSV" | sha256sum -c -
 
       - name: Build source list and charting ZIP
         shell: bash
@@ -219,7 +245,7 @@ jobs:
           for f in "${sources[@]}"; do
             args+=(--source-csv "$f")
           done
-          python scripts/link_offline_serve_return.py             --history-dir .cache/tbt/offline-enrichment/history             "${args[@]}"             --charting-zip .cache/tbt/offline-sources/charting-root.zip             --out-dir .cache/tbt/offline-enrichment/link
+          python scripts/link_offline_serve_return.py             --history-dir .cache/tbt/offline-enrichment/history             "${args[@]}"             --hallmark-csv "$HALLMARK_CSV"             --charting-zip .cache/tbt/offline-sources/charting-root.zip             --out-dir .cache/tbt/offline-enrichment/link
 
       - name: Validate linker report
         shell: bash
@@ -246,8 +272,8 @@ jobs:
               "api_requests": r.get("api_requests"),
           }
           print("Offline linker:", json.dumps(summary, ensure_ascii=False))
-          if int(r.get("source_rows") or 0) < 200000:
-              raise SystemExit("Unexpectedly small offline source coverage")
+          if int(r.get("source_rows") or 0) < 350000:
+              raise SystemExit("Unexpectedly small offline source coverage after Hallmark integration")
           if int(r.get("api_requests", -1)) != 0:
               raise SystemExit("Offline linker unexpectedly used provider API")
           if int(c.get("staged_matches") or 0) <= 0 and int(c.get("already_present") or 0) <= 0:
@@ -375,6 +401,8 @@ jobs:
               "atp_commit": os.environ.get("ATP_SHA"),
               "charting_repository": os.environ.get("CHARTING_REPO"),
               "charting_commit": os.environ.get("CHARTING_SHA"),
+              "hallmark_source_url": os.environ.get("HALLMARK_URL"),
+              "hallmark_sha256": os.environ.get("HALLMARK_SHA256"),
               "charting_bundle_audit": read_json(".cache/tbt/offline-enrichment/charting-bundle-audit.json"),
               "link_report": read_json(".cache/tbt/offline-enrichment/link/report.json"),
               "dry_run_report": read_json(".cache/tbt/offline-enrichment/dry-run/report.json"),
