@@ -741,6 +741,23 @@ def main():
                              extract_match_total_odds(payload, market)]
                     for market in ("sets", "games") if market in markets
                 }
+
+            # ACES / Double Faults real-odds contract: the legacy RapidAPI
+            # prop prices are not trusted for publication. Keep RapidAPI as
+            # the primary source for Games/Sets and Match Winner, but require
+            # PropLine for current Aces/DF. If PropLine has no exact complete
+            # player market, the projection remains unpublished.
+            ignored_rapid_ace_df = {"aces": 0, "double_faults": 0}
+            for event_id, markets in list(available_projection_markets.items()):
+                trusted = set(markets)
+                for metric in ("aces", "double_faults"):
+                    if metric in trusted:
+                        ignored_rapid_ace_df[metric] += 1
+                        trusted.discard(metric)
+                available_projection_markets[event_id] = trusted
+            projection_discovery_report["ace_df_real_odds_policy"] = "propline_only_v1"
+            projection_discovery_report["rapidapi_ace_df_markets_ignored"] = ignored_rapid_ace_df
+
             # Paid/API requests only run as part of an explicitly authorized
             # refresh (the existing workflow auto-refresh gate is unchanged).
             # This secret already powers the separate research-only CLV job.
@@ -836,10 +853,21 @@ def main():
                     provider = int(row.get("provider_id") or 0)
                 except (TypeError, ValueError, OverflowError):
                     return False
+                market = str(row.get("market") or "").strip().lower()
+                ace_df_real_api = (
+                    market not in ("aces", "double_faults")
+                    or (
+                        row.get("odds_contract_version") == "ace_df_real_api_v1"
+                        and row.get("odds_source") == "propline"
+                        and provider == 2
+                        and bool(row.get("odds_bookmaker"))
+                    )
+                )
                 return (
                     row.get("price_status") == "priced_projection"
                     and provider > 0 and bool(row.get("captured_at"))
                     and 1.50 <= odds < float("inf")
+                    and ace_df_real_api
                 )
             ace_picks = [row for row in ace_picks if publishable_api_price(row)]
             sg_picks = [row for row in sg_picks if publishable_api_price(row)]
