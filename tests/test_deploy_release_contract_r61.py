@@ -19,5 +19,7 @@ def test_deployed_patch_must_match_checkout():
     index = (ROOT / "web/index.html").read_text(encoding="utf-8")
     assert f'blinq-web-patch" content="{release["patch"]}"' in index
     assert "json.load(open('web/release.json', encoding='utf-8'))" in workflow
-    assert "assert data.get('patch') == expected.get('patch')" in workflow
-    assert 'grep -q "blinq-web-patch' in workflow
+    assert "('release patch', release.get('patch') == expected.get('patch'))" in workflow
+    assert "('web patch meta'," in workflow
+    assert 'blinq-web-patch" content="' in workflow
+    assert "for attempt in 1 2 3 4 5 6 7 8" in workflow
