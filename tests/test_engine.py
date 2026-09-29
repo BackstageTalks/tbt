@@ -18,6 +18,14 @@ def test_prediction_is_frozen_and_settles_against_player_identity(match_factory)
     fixture.provider_payload = {'id': '123'}
     model = SimpleNamespace(version='test', predict_proba=lambda frame: np.full(len(frame), .7))
     first = predict(model, [], [fixture], now)
+    audit = first[0]["model_audit"]
+    assert audit["schema"] == 1
+    assert audit["model_version"] == "test"
+    assert audit["raw_probability_player1"] == pytest.approx(.7)
+    assert audit["raw_winner_probability"] == pytest.approx(.7)
+    assert audit["semantics"] == "signed_player1_minus_player2_inputs_not_feature_attributions"
+    assert "elo_diff" in audit["inputs"]
+    assert "rank_advantage" in audit["inputs"]
     ledger = reconcile_ledger([], first, [], now)
     changed = copy.deepcopy(first)
     changed[0]['player1']['probability'] = .1
