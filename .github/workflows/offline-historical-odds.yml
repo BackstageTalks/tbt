@@ -198,7 +198,31 @@ jobs:
       - name: Dry-run strict historical odds importer
         run: |
           set -euo pipefail
-          python scripts/import_offline_linked_match_winner_odds.py             --stage .cache/tbt/offline-odds/link/auto_linked.jsonl             --history-dir .cache/tbt/offline-odds/history             --out-dir .cache/tbt/offline-odds/dry-run
+          stage=.cache/tbt/offline-odds/link/auto_linked.jsonl
+          if [[ -s "$stage" ]]; then
+            python scripts/import_offline_linked_match_winner_odds.py               --stage "$stage"               --history-dir .cache/tbt/offline-odds/history               --out-dir .cache/tbt/offline-odds/dry-run
+          else
+            mkdir -p .cache/tbt/offline-odds/dry-run
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          link=json.loads(Path(".cache/tbt/offline-odds/link/report.json").read_text())
+          lc=link.get("counts") or {}
+          report={
+              "schema":1,
+              "stage_rows":0,
+              "counts":{"already_present":int(lc.get("already_present") or 0)},
+              "changed_years":[],
+              "production_mutated":False,
+              "local_partitions_written":False,
+              "api_requests":0,
+              "note":"Verified no-op: linker found no new historical odds rows.",
+          }
+          Path(".cache/tbt/offline-odds/dry-run/report.json").write_text(
+              json.dumps(report, indent=2), encoding="utf-8"
+          )
+          PY
+          fi
           python - <<'PY'
           import json
           from pathlib import Path
@@ -217,7 +241,13 @@ jobs:
         if: env.ODDS_MODE == 'write'
         run: |
           set -euo pipefail
-          python scripts/import_offline_linked_match_winner_odds.py             --stage .cache/tbt/offline-odds/link/auto_linked.jsonl             --history-dir .cache/tbt/offline-odds/history             --out-dir .cache/tbt/offline-odds/write             --write-partitions             --write-history-dir .cache/tbt/offline-odds/history
+          stage=.cache/tbt/offline-odds/link/auto_linked.jsonl
+          if [[ -s "$stage" ]]; then
+            python scripts/import_offline_linked_match_winner_odds.py               --stage "$stage"               --history-dir .cache/tbt/offline-odds/history               --out-dir .cache/tbt/offline-odds/write               --write-partitions               --write-history-dir .cache/tbt/offline-odds/history
+          else
+            mkdir -p .cache/tbt/offline-odds/write
+            cp .cache/tbt/offline-odds/dry-run/report.json .cache/tbt/offline-odds/write/report.json
+          fi
 
       - name: Validate and publish changed private history bundle
         if: env.ODDS_MODE == 'write'
