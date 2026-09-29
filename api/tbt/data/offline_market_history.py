@@ -42,6 +42,23 @@ def _int(value: object) -> int | None:
     return result
 
 
+
+
+def valuebet_surface(value: object) -> str:
+    text = norm_text(value)
+    aliases = {
+        "dur": "hard",
+        "hard": "hard",
+        "terre battue": "clay",
+        "clay": "clay",
+        "gazon": "grass",
+        "grass": "grass",
+        "moquette": "carpet",
+        "carpet": "carpet",
+    }
+    return aliases.get(text, norm_surface(value))
+
+
 def _market(left: object, right: object) -> dict[str, float] | None:
     o1, o2 = decimal_odds(left), decimal_odds(right)
     if o1 is None or o2 is None:
@@ -116,7 +133,7 @@ def parse_valuebet_row(row: dict[str, Any], *, row_number: int) -> ValuebetMarke
         tournament=str(row.get("tournoi") or "").strip(),
         tournament_id=str(row.get("tournoi_id") or "").strip(),
         category=str(row.get("categorie") or "").strip(),
-        surface=norm_surface(row.get("surface")),
+        surface=valuebet_surface(row.get("surface")),
         round_number=_int(row.get("tour")),
         player_a=p1,
         player_a_id=p1_id,
