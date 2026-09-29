@@ -6,11 +6,11 @@
   "atp_commit": "712be0c5ade693cdab9e69c23a71a0edf5a23c44",
   "charting_repository": "JeffSackmann/tennis_MatchChartingProject",
   "charting_commit": "1813a1309b7ed7ebf1c7e884b32bf675d00e4edf",
-  "requested_at_utc": "2026-09-29T09:35:00Z",
+  "requested_at_utc": "2026-09-29T09:53:00Z",
   "link_policy": "hallmark_exact_pair_tour_window_surface_round_winner_tournament_v1",
   "full_bundle_audit": true,
   "hallmark_dataset": "ehallmar/a-large-tennis-dataset-for-atp-and-itf-betting",
-  "hallmark_dataset_version": 2,
+  "hallmark_dataset_version": 1,
   "hallmark_file": "all_matches.csv",
   "hallmark_sha256": "957347f83047eabb8ddb43d84cab7c6194ede58e38bea39376933cf14f093960",
   "hallmark_license": "unknown"
