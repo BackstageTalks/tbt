@@ -1,8 +1,10 @@
 {
   "schema": 1,
   "mode": "backtest",
-  "purpose": "Walk-forward evaluation of current FeatureBuilder including rich Match Charting v2 signals; read-only, zero provider API, no production promotion.",
-  "source_enrichment_run_id": "36471908489",
-  "feature_audit_run_id": "36473092874",
-  "requested_at_utc": "2026-09-28T19:40:00Z"
+  "purpose": "Walk-forward evaluation of the fully expanded historical foundation after verified ATP/Match Charting and WTA historical odds relinks; read-only, zero provider API, no production promotion.",
+  "historical_foundation_run_id": "36598439373",
+  "source_enrichment_run_id": "36600114554",
+  "source_historical_odds_run_id": "36600114619",
+  "expected_canonical_rows": 738716,
+  "requested_at_utc": "2026-09-29T18:52:00Z"
 }
