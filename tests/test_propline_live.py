@@ -120,6 +120,7 @@ def test_fallback_discovers_and_attaches_real_prices_with_source_provenance():
     assert found_ace[0]["odds_source"] == "propline"
     assert found_ace[0]["odds_bookmaker"] == "draftkings"
     assert found_ace[0]["odds_provider_event_id"] == "1234"
+    assert found_ace[0]["odds_contract_version"] == "ace_df_real_api_v1"
     assert found_sg[0]["odds"] == 1.625
     assert attach["attached_by_provider"]["propline"] == 2
 
