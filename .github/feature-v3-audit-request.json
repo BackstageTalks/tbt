@@ -1,8 +1,10 @@
 {
   "schema": 1,
   "mode": "feature-audit",
-  "purpose": "Measure rich Match Charting v2 coverage and descriptive winner-direction signal strength; zero provider API and no production mutation.",
-  "source_enrichment_run_id": "36471908489",
-  "expected_quality_ready": 38409,
-  "requested_at_utc": "2026-09-28T19:45:00Z"
+  "purpose": "Measure final feature coverage after historical foundation + full ATP/Match Charting relink + historical WTA odds relink; zero provider API and no production mutation.",
+  "source_enrichment_run_id": "36600114554",
+  "source_historical_foundation_run_id": "36598439373",
+  "source_historical_odds_run_id": "36600114619",
+  "expected_quality_ready": 239685,
+  "requested_at_utc": "2026-09-29T17:40:00Z"
 }
