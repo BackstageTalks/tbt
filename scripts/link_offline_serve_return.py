@@ -505,16 +505,28 @@ def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]
         score += 3
         evidence.append("winner")
 
-    # Source-specific gates. Charting lacks a winner field, so require exact date
-    # plus all three independent event descriptors. Sackmann rows must confirm
-    # the canonical winner and reach a strong score.
+    # Source-specific gates. Match Charting identity is already constrained by
+    # exact normalized player pair + tour and a narrow date window. Requiring an
+    # exact tournament string discarded many legitimate rows because event names
+    # differ across sources (sponsor/location aliases). Keep this fail-closed:
+    # exact match date is mandatory, round conflicts are rejected, and at least
+    # three corroboration points beyond the pair/date must be present. Exact
+    # tournament agreement is worth two points; token-level tournament agreement,
+    # surface, round and best-of are each worth one.
     if source.source.startswith("charting:"):
+        corroboration_points = 0
+        if "tournament_exact" in evidence:
+            corroboration_points += 2
+        elif "tournament_tokens" in evidence:
+            corroboration_points += 1
+        corroboration_points += int("surface" in evidence)
+        corroboration_points += int("round" in evidence)
+        corroboration_points += int("best_of" in evidence)
         accepted = (
             "date_exact" in evidence
-            and "tournament_exact" in evidence
-            and "surface" in evidence
-            and "round" in evidence
-            and score >= 8
+            and "round_conflict" not in evidence
+            and corroboration_points >= 3
+            and score >= 7
         )
     else:
         accepted = "winner" in evidence and score >= 8

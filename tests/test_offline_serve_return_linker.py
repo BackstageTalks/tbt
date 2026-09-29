@@ -197,3 +197,43 @@ def test_charting_requires_exact_event_metadata_and_links(tmp_path):
     assert stats["p1_net_points_win"] == 15 / 20
     assert stats["p1_attacking_points_rate"] == 35 / 50
     assert stats["p1_unforced_error_rate"] == 15 / 50
+
+
+def _minimal_charting_zip(path: Path, *, tournament="Brisbane", round_name="QF"):
+    mid = "20240105-M-Brisbane-QF-Roman_Safiullin-Matteo_Arnaldi"
+    matches_csv = f"""match_id,Player 1,Player 2,Pl 1 hand,Pl 2 hand,Date,Tournament,Round,Time,Court,Surface,Umpire,Best of,Final TB?,Charted by
+{mid},Roman Safiullin,Matteo Arnaldi,R,R,20240105,{tournament},{round_name},,,Hard,,3,A,test
+"""
+    overview_csv = f"""match_id,player,set,serve_pts,aces,dfs,first_in,first_won,second_in,second_won,bk_pts,bp_saved,return_pts,return_pts_won,winners,winners_fh,winners_bh,unforced,unforced_fh,unforced_bh
+{mid},Roman Safiullin,Total,73,9,3,43,36,30,14,3,2,69,26,0,0,0,0,0,0
+{mid},Matteo Arnaldi,Total,69,3,2,37,27,32,16,8,5,73,23,0,0,0,0,0,0
+"""
+    with zipfile.ZipFile(path, "w") as zf:
+        zf.writestr("charting-m-matches.csv", matches_csv)
+        zf.writestr("charting-m-stats-Overview.csv", overview_csv)
+
+
+def test_charting_allows_tournament_alias_with_three_other_corroborators(tmp_path):
+    zpath = tmp_path / "charting.zip"
+    _minimal_charting_zip(zpath, tournament="Brisbane International")
+    report, staged, review, quarantine = run_linker(
+        tmp_path, [canonical(tournament="Brisbane")], charting=zpath
+    )
+    assert report["counts"]["identity_linked"] == 1
+    assert len(staged) == 1
+    assert not review
+    assert not quarantine
+    assert "tournament_mismatch" in staged[0]["sources"][0]["evidence"]
+
+
+def test_charting_round_conflict_still_fails_closed(tmp_path):
+    zpath = tmp_path / "charting.zip"
+    _minimal_charting_zip(zpath, tournament="Brisbane", round_name="SF")
+    report, staged, review, quarantine = run_linker(
+        tmp_path, [canonical(tournament="Brisbane", round_name="QF")], charting=zpath
+    )
+    assert not staged
+    assert not quarantine
+    assert report["counts"]["weak_evidence"] == 1
+    assert review[0]["reason"] == "weak_evidence"
+    assert "round_conflict" in review[0]["evidence"]
