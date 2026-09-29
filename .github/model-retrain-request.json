@@ -2,8 +2,10 @@
   "schema": 1,
   "mode": "train",
   "promote": true,
-  "purpose": "Retrigger governed Match Winner retrain after offline history enrichment write success (run 36465088035); promotion remains gated against Elo and current champion.",
-  "requested_at_utc": "2026-09-28T19:12:00Z",
-  "expected_history_quality_ready": 38409,
-  "source_enrichment_run_id": "36465088035"
+  "purpose": "Governed Match Winner retrain after complete 2026-09-29 historical foundation and final offline stats/charting/odds relink; promote only if existing champion/Elo gates pass.",
+  "requested_at_utc": "2026-09-29T16:50:00Z",
+  "expected_history_quality_ready": 239685,
+  "source_enrichment_run_id": "36600114554",
+  "source_historical_foundation_run_id": "36598439373",
+  "required_preflight": "final-production-preflight-20260929"
 }
