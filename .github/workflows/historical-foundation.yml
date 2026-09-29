@@ -181,8 +181,10 @@ jobs:
           print(json.dumps(r, ensure_ascii=False, indent=2))
           if int(r.get("staged_historical_matches") or 0) < 150000:
               raise SystemExit("Historical foundation unexpectedly small")
-          if int(r.get("crosswalk_players") or 0) < 1000:
+          if int(r.get("crosswalk_players") or 0) < 500:
               raise SystemExit("Historical player crosswalk unexpectedly small")
+          if int(r.get("mapped_player_sides") or 0) < 100000:
+              raise SystemExit("Historical crosswalk does not cover enough match sides")
           if int((r.get("identity_safety") or {}).get("quarantined_rows") or 0):
               raise SystemExit("Projected historical history is not identity-safe")
           if int(r.get("api_requests", -1)) != 0:
