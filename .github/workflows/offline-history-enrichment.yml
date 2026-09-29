@@ -40,7 +40,7 @@ jobs:
       ATP_SHA: 712be0c5ade693cdab9e69c23a71a0edf5a23c44
       CHARTING_REPO: JeffSackmann/tennis_MatchChartingProject
       CHARTING_SHA: 1813a1309b7ed7ebf1c7e884b32bf675d00e4edf
-      HALLMARK_URL: https://www.kaggle.com/api/v1/datasets/download/ehallmar/a-large-tennis-dataset-for-atp-and-itf-betting/all_matches.csv?datasetVersionNumber=1
+      HALLMARK_URL: https://www.kaggle.com/api/v1/datasets/download/ehallmar/a-large-tennis-dataset-for-atp-and-itf-betting?datasetVersionNumber=1
       HALLMARK_SHA256: 957347f83047eabb8ddb43d84cab7c6194ede58e38bea39376933cf14f093960
       HALLMARK_SEMANTIC_SHA256: 56cd6e325b0ebd16335c6c9c9f736bdf05c56670470e79f044803ee9824c08a2
       HALLMARK_ROWS: "282994"
