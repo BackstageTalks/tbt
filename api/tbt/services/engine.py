@@ -269,6 +269,41 @@ def predict(model, history, upcoming, now=None):
         signals = [{"label": name, "player_id": match.player1_id if value >= 0 else match.player2_id}
                    for name, value, scale in sorted(factors, key=lambda x: abs(x[1] / x[2]), reverse=True)
                    if abs(value) >= scale][:3]
+
+        # Audit-only input snapshot. These are the actual point-in-time features
+        # consumed by the deployed artifact, not post-hoc feature attributions.
+        # Keep this compact enough for the serving feed while making individual
+        # predictions reproducible when a player appears systematically mispriced.
+        audit_feature_names = (
+            "elo_diff", "surface_elo_diff", "elo_probability",
+            "experience_diff", "recent_form_diff", "medium_form_diff",
+            "opponent_adjusted_form_diff", "surface_form_diff",
+            "rank_advantage", "rank_known_both",
+            "rest_advantage", "layoff_advantage",
+            "fatigue_3d_advantage", "fatigue_7d_advantage",
+            "h2h_advantage", "surface_h2h_advantage",
+            "serve_quality_diff", "return_quality_diff",
+            "surface_serve_quality_diff", "surface_return_quality_diff",
+            "stats_known_both", "surface_stats_known_both", "data_depth",
+        )
+        model_inputs = {
+            name: float(f[name])
+            for name in audit_feature_names
+            if name in feature_names and name in f and np.isfinite(float(f[name]))
+        }
+        model_audit = {
+            "schema": 1,
+            "model_version": model.version,
+            "active_feature_count": len(feature_names),
+            "uses_rank_feature": "rank_advantage" in feature_names,
+            "uses_surface_elo_feature": "surface_elo_diff" in feature_names,
+            "raw_probability_player1": p,
+            "raw_winner_probability": max(p, 1 - p),
+            "displayed_winner_probability": 0.5 + (max(p, 1 - p) - 0.5) * float(f["data_depth"]),
+            "data_depth": float(f["data_depth"]),
+            "inputs": model_inputs,
+            "semantics": "signed_player1_minus_player2_inputs_not_feature_attributions",
+        }
         tournament_obj = match.provider_payload.get("tournament") if isinstance(match.provider_payload, dict) else None
         unique_tournament = tournament_obj.get("uniqueTournament") if isinstance(tournament_obj, dict) else None
         tournament_logo_id = ""
@@ -330,6 +365,7 @@ def predict(model, history, upcoming, now=None):
             "probability_reliability": float(f["data_depth"]),
             "data_depth": f["data_depth"],
             "stats_available": bool(f["stats_known_both"]), "signals": signals,
+            "model_audit": model_audit,
             "model_version": model.version, "created_at": now.isoformat(),
             "issued_at": None, "publication_status": "pending", "result": None})
     return rows
