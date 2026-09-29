@@ -6,7 +6,7 @@ import pandas as pd
 from .feature_builder import FEATURE_NAMES
 
 INVARIANT_FEATURES = {
-    "rank_known_both", "travel_known", "altitude_change_known", "weather_known",
+    "rank_known_both", "season_yelo_known_both", "travel_known", "altitude_change_known", "weather_known",
     "environment_known", "stats_known_both", "surface_stats_known_both",
     "rich_charting_known_both", "surface_h2h_known", "score_workload_known_both",
     "deciding_set_known_both",
@@ -21,7 +21,7 @@ def swap_frame(frame: pd.DataFrame) -> pd.DataFrame:
     for name in FEATURE_NAMES:
         if name not in swapped:
             continue
-        if name == "elo_probability":
+        if name in {"elo_probability", "season_yelo_probability"}:
             swapped[name] = 1.0 - frame[name]
         elif name not in INVARIANT_FEATURES:
             swapped[name] = -frame[name]
