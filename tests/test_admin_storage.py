@@ -64,6 +64,43 @@ def test_runtime_ui_config_reads_legacy_plain_json(monkeypatch):
     assert admin_storage.load_runtime_ui_config() == payload
 
 
+def test_legacy_info_runtime_is_healed_once_and_future_admin_choices_survive():
+    payload = json.loads((ROOT / "web" / "ui-config.json").read_text(encoding="utf-8"))
+    payload.pop("info_contract_revision", None)
+    payload["notifications"].update({
+        "enabled": False,
+        "show_bell": False,
+        "one_way": False,
+        "mode": "legacy",
+        "allow_user_replies": True,
+        "read_tracking": False,
+        "editable_levels": ["elite", "legend", "goat"],
+        "info_min_level": "elite",
+        "info_default_levels": ["elite", "legend", "goat"],
+    })
+
+    healed = admin_storage._normalize_membership_invariants(payload)
+    notifications = healed["notifications"]
+    assert healed["info_contract_revision"] == 1
+    assert notifications["enabled"] is True
+    assert notifications["show_bell"] is True
+    assert notifications["mode"] == "one_way"
+    assert notifications["one_way"] is True
+    assert notifications["allow_user_replies"] is False
+    assert notifications["read_tracking"] is True
+    assert notifications["editable_levels"] == ["rookie", "pro", "elite", "legend", "goat"]
+    assert notifications["info_min_level"] == "rookie"
+    assert notifications["info_default_levels"] == ["rookie", "pro", "elite", "legend", "goat"]
+
+    # The migration is one-shot. Once deployed, later Admin audience defaults
+    # must remain user-managed instead of being reset on every read.
+    notifications["info_min_level"] = "pro"
+    notifications["info_default_levels"] = ["pro", "elite", "legend", "goat"]
+    healed_again = admin_storage._normalize_membership_invariants(healed)
+    assert healed_again["notifications"]["info_min_level"] == "pro"
+    assert healed_again["notifications"]["info_default_levels"] == ["pro", "elite", "legend", "goat"]
+
+
 def test_banner_analytics_are_aggregated_by_campaign_and_unique_visitor(monkeypatch):
     table = FakeTable()
     monkeypatch.setattr(admin_storage, "_table", lambda name: table)

@@ -440,6 +440,29 @@ def _normalize_membership_invariants(payload: object) -> object:
             notifications["default_levels"] = ["elite", "legend", "goat"]
         payload["access_contract_revision"] = 1
 
+    # INFO contract v1 heals legacy runtime rows once so a code deploy is
+    # sufficient to restore the one-way INFO channel for every active tier.
+    # After this marker is present, Admin changes remain authoritative.
+    try:
+        info_revision = int(payload.get("info_contract_revision") or 0)
+    except (TypeError, ValueError):
+        info_revision = 0
+    if info_revision < 1:
+        notifications = payload.setdefault("notifications", {})
+        if isinstance(notifications, dict):
+            notifications.update({
+                "enabled": True,
+                "mode": "one_way",
+                "one_way": True,
+                "show_bell": True,
+                "allow_user_replies": False,
+                "read_tracking": True,
+                "editable_levels": ["rookie", "pro", "elite", "legend", "goat"],
+                "info_min_level": "rookie",
+                "info_default_levels": ["rookie", "pro", "elite", "legend", "goat"],
+            })
+        payload["info_contract_revision"] = 1
+
     # Keep backend and frontend legacy migrations identical. Runtime rows may
     # intentionally be older than the current release, but missing access fields
     # must resolve to the same effective contract on both sides.
