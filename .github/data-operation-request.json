@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "mode": "train",
+  "mode": "production-preflight",
   "promote": false,
-  "purpose": "Retrain from current canonical tbt-data-v1 after offline data integration; do not promote automatically.",
-  "requested_at_utc": "2026-09-29T05:48:00Z",
-  "training_scope": "canonical_history_current_release",
+  "purpose": "Final production preflight after historical foundation and complete offline stats/charting/odds relink; build training table, leakage audit, statistics inventory and readiness report before governed retraining.",
+  "requested_at_utc": "2026-09-29T16:45:00Z",
+  "training_scope": "canonical_history_after_full_offline_relink",
   "historical_match_winner_odds_as_model_feature": false
 }
