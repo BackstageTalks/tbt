@@ -218,6 +218,7 @@ class OfflineMatch:
     best_of: int | None
     stats_a: dict[str, float]
     stats_b: dict[str, float]
+    event_end_date: date | None = None
 
     @property
     def pair_key(self) -> tuple[str, str]:
@@ -260,6 +261,235 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                     best_of=int(bo) if bo in (3.0, 5.0) else None,
                     stats_a=w_stats,
                     stats_b=l_stats,
+                )
+
+
+HALLMARK_ALLOWED_LEVELS = {"100", "250", "500", "1000", "2000"}
+HALLMARK_REQUIRED_STATS = (
+    "aces",
+    "double_faults",
+    "first_serve_points_made",
+    "first_serve_points_attempted",
+    "second_serve_points_made",
+    "second_serve_points_attempted",
+    "break_points_saved",
+    "break_points_against",
+    "break_points_made",
+    "break_points_attempted",
+    "service_points_won",
+    "service_points_attempted",
+    "return_points_won",
+    "return_points_attempted",
+)
+
+
+def _parse_iso_day(value: object) -> date | None:
+    text = str(value or "").strip()
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def _hallmark_round(value: object) -> str:
+    text = _norm_text(value)
+    aliases = {
+        "finals": "f",
+        "final": "f",
+        "semi finals": "sf",
+        "semifinals": "sf",
+        "semi final": "sf",
+        "quarter finals": "qf",
+        "quarterfinals": "qf",
+        "quarter final": "qf",
+        "round of 16": "r16",
+        "round of 32": "r32",
+        "round of 64": "r64",
+        "round of 128": "r128",
+        "1st round qualifying": "q1",
+        "first round qualifying": "q1",
+        "2nd round qualifying": "q2",
+        "second round qualifying": "q2",
+        "3rd round qualifying": "q3",
+        "third round qualifying": "q3",
+        "round robin": "rr",
+    }
+    return aliases.get(text, _norm_round(value))
+
+
+def _hallmark_tournament_score(a: str, b: str) -> tuple[int, str]:
+    na, nb = _norm_text(a), _norm_text(b)
+    if not na or not nb:
+        return 0, "tournament_missing"
+    if na == nb:
+        return 2, "tournament_exact"
+    generic = {
+        "atp", "tour", "tennis", "championship", "championships",
+        "challenger", "open", "international", "masters", "presented",
+        "by", "the",
+    }
+    def core(text: str) -> set[str]:
+        return {token for token in text.split() if token not in generic and not token.isdigit()}
+    ca, cb = core(na), core(nb)
+    if ca and ca == cb:
+        return 2, "tournament_core_exact"
+    if ca and cb:
+        overlap = len(ca & cb) / max(1, len(ca | cb))
+        if overlap >= 0.6 or ca.issubset(cb) or cb.issubset(ca):
+            return 1, "tournament_core_tokens"
+    return 0, "tournament_mismatch"
+
+
+def _hallmark_stats(row: dict[str, str]) -> dict[str, float] | None:
+    if any(_num(row.get(key)) is None for key in HALLMARK_REQUIRED_STATS):
+        return None
+    result: dict[str, float] = {}
+    for field in ("aces", "double_faults"):
+        value = _num(row.get(field))
+        if value is None or value < 0 or not value.is_integer():
+            return None
+        result[field] = float(value)
+
+    rates = {
+        "first_serve_win": _rate(
+            row.get("first_serve_points_made"), row.get("first_serve_points_attempted")
+        ),
+        "second_serve_win": _rate(
+            row.get("second_serve_points_made"), row.get("second_serve_points_attempted")
+        ),
+        "service_points_won": _rate(
+            row.get("service_points_won"), row.get("service_points_attempted")
+        ),
+        "return_points_won": _rate(
+            row.get("return_points_won"), row.get("return_points_attempted")
+        ),
+        "break_point_serve_win": _rate(
+            row.get("break_points_saved"), row.get("break_points_against")
+        ),
+        "break_point_return_win": _rate(
+            row.get("break_points_made"), row.get("break_points_attempted")
+        ),
+    }
+    for field, value in rates.items():
+        if value is not None:
+            result[field] = value
+    if "service_points_won" not in result or "return_points_won" not in result:
+        return None
+    return result
+
+
+def _hallmark_pair_consistent(a: dict[str, str], b: dict[str, str]) -> bool:
+    if str(a.get("player_id") or "") != str(b.get("opponent_id") or ""):
+        return False
+    if str(a.get("opponent_id") or "") != str(b.get("player_id") or ""):
+        return False
+    outcomes = sorted(
+        (str(a.get("player_victory") or "").lower(), str(b.get("player_victory") or "").lower())
+    )
+    if outcomes != ["f", "t"]:
+        return False
+    for left, right in (
+        ("service_points_attempted", "return_points_attempted"),
+        ("return_points_attempted", "service_points_attempted"),
+    ):
+        av = _num(a.get(left))
+        bv = _num(b.get(right))
+        if av is None or bv is None or av != bv:
+            return False
+    a_svpt = _num(a.get("service_points_attempted"))
+    a_svw = _num(a.get("service_points_won"))
+    b_rtw = _num(b.get("return_points_won"))
+    b_svpt = _num(b.get("service_points_attempted"))
+    b_svw = _num(b.get("service_points_won"))
+    a_rtw = _num(a.get("return_points_won"))
+    if None in (a_svpt, a_svw, b_rtw, b_svpt, b_svw, a_rtw):
+        return False
+    if a_svw + b_rtw != a_svpt:
+        return False
+    if b_svw + a_rtw != b_svpt:
+        return False
+    return True
+
+
+def _hallmark_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
+    """Read Evan Hallmark's player-perspective all_matches.csv safely.
+
+    The source has one row per player outcome (normally two mirrored rows per
+    match) and start_date/end_date describe the tournament window, not the exact
+    match date. Only completed ATP/Challenger singles with complete point stats
+    and a mutually consistent mirrored pair are emitted.
+    """
+    keep = set(HALLMARK_REQUIRED_STATS) | {
+        "start_date", "end_date", "court_surface", "year", "player_id",
+        "opponent_id", "tournament", "round", "player_victory", "retirement",
+        "doubles", "masters",
+    }
+    for raw_path in paths:
+        path = Path(raw_path)
+        pending: dict[tuple[str, ...], dict[str, str]] = {}
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            for raw in csv.DictReader(handle):
+                if str(raw.get("doubles") or "").lower() == "t":
+                    continue
+                if str(raw.get("retirement") or "").lower() == "t":
+                    continue
+                if str(raw.get("masters") or "") not in HALLMARK_ALLOWED_LEVELS:
+                    continue
+                start = _parse_iso_day(raw.get("start_date"))
+                end = _parse_iso_day(raw.get("end_date"))
+                if not start or not end or end < start or (end - start).days > 14:
+                    continue
+                a = str(raw.get("player_id") or "").strip()
+                b = str(raw.get("opponent_id") or "").strip()
+                if not a or not b or a == b or "_" in a or "_" in b:
+                    continue
+                compact = {key: str(raw.get(key) or "") for key in keep}
+                if _hallmark_stats(compact) is None:
+                    continue
+                key = (
+                    compact["start_date"],
+                    compact["end_date"],
+                    compact["tournament"],
+                    compact["round"],
+                    compact["court_surface"],
+                    min(a, b),
+                    max(a, b),
+                )
+                prior = pending.pop(key, None)
+                if prior is None:
+                    pending[key] = compact
+                    continue
+                if not _hallmark_pair_consistent(prior, compact):
+                    continue
+                stats_a = _hallmark_stats(prior)
+                stats_b = _hallmark_stats(compact)
+                if not stats_a or not stats_b:
+                    continue
+                winner_id = (
+                    prior["player_id"]
+                    if prior["player_victory"].lower() == "t"
+                    else compact["player_id"]
+                )
+                source_id = "|".join(
+                    (compact["start_date"], compact["tournament"], compact["round"], min(a, b), max(a, b))
+                )
+                yield OfflineMatch(
+                    source=f"hallmark:{path.name}",
+                    source_match_id=source_id,
+                    tour="atp",
+                    event_date=start,
+                    event_end_date=end,
+                    player_a=str(prior["player_id"]).replace("-", " "),
+                    player_b=str(compact["player_id"]).replace("-", " "),
+                    winner=str(winner_id).replace("-", " "),
+                    tournament=compact["tournament"],
+                    surface=_norm_surface(compact["court_surface"]),
+                    round_name=_hallmark_round(compact["round"]),
+                    best_of=None,
+                    stats_a=stats_a,
+                    stats_b=stats_b,
                 )
 
 
@@ -455,15 +685,24 @@ def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]
     if source_names != canonical_names or source.tour != str(match.tour or "").lower():
         return -100, ["pair_or_tour_mismatch"], False
 
-    delta = abs((match.scheduled_at.astimezone(timezone.utc).date() - source.event_date).days)
-    if delta == 0:
-        score += 4
-        evidence.append("date_exact")
-    elif delta == 1:
-        score += 1
-        evidence.append("date_plusminus_1")
+    canonical_day = match.scheduled_at.astimezone(timezone.utc).date()
+    if source.source.startswith("hallmark:"):
+        end_day = source.event_end_date or source.event_date
+        if source.event_date <= canonical_day <= end_day:
+            score += 4
+            evidence.append("date_in_tournament_window")
+        else:
+            return -100, ["date_outside_tournament_window"], False
     else:
-        return -100, ["date_mismatch"], False
+        delta = abs((canonical_day - source.event_date).days)
+        if delta == 0:
+            score += 4
+            evidence.append("date_exact")
+        elif delta == 1:
+            score += 1
+            evidence.append("date_plusminus_1")
+        else:
+            return -100, ["date_mismatch"], False
 
     canonical_surface = _norm_surface(match.surface)
     if source.surface not in ("", "unknown") and canonical_surface not in ("", "unknown"):
@@ -474,11 +713,15 @@ def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]
             evidence.append("surface_conflict")
             return score, evidence, False
 
-    ts, te = _tournament_score(source.tournament, match.tournament)
+    if source.source.startswith("hallmark:"):
+        ts, te = _hallmark_tournament_score(source.tournament, match.tournament)
+    else:
+        ts, te = _tournament_score(source.tournament, match.tournament)
     score += ts
     evidence.append(te)
 
-    cr, sr = _norm_round(match.round_name), source.round_name
+    cr = _hallmark_round(match.round_name) if source.source.startswith("hallmark:") else _norm_round(match.round_name)
+    sr = source.round_name
     if cr and sr:
         if cr == sr:
             score += 1
@@ -513,7 +756,17 @@ def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]
     # three corroboration points beyond the pair/date must be present. Exact
     # tournament agreement is worth two points; token-level tournament agreement,
     # surface, round and best-of are each worth one.
-    if source.source.startswith("charting:"):
+    if source.source.startswith("hallmark:"):
+        accepted = (
+            "date_in_tournament_window" in evidence
+            and "surface" in evidence
+            and "round" in evidence
+            and "winner" in evidence
+            and ("tournament_exact" in evidence or "tournament_core_exact" in evidence or "tournament_core_tokens" in evidence)
+            and "round_conflict" not in evidence
+            and score >= 10
+        )
+    elif source.source.startswith("charting:"):
         corroboration_points = 0
         if "tournament_exact" in evidence:
             corroboration_points += 2
@@ -564,6 +817,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--history-dir", required=True)
     ap.add_argument("--source-csv", action="append", default=[])
+    ap.add_argument("--hallmark-csv", action="append", default=[])
     ap.add_argument("--charting-zip", default="")
     ap.add_argument("--out-dir", required=True)
     args = ap.parse_args()
@@ -581,6 +835,7 @@ def main() -> None:
         canonical_by_day_pair[(str(match.tour or "").lower(), match.scheduled_at.date(), pair)].append(match)
 
     sources: list[OfflineMatch] = list(_sackmann_rows(args.source_csv))
+    sources.extend(_hallmark_rows(args.hallmark_csv))
     if args.charting_zip:
         sources.extend(_charting_rows(args.charting_zip))
 
@@ -593,9 +848,16 @@ def main() -> None:
         counts["source_rows"] += 1
         per_source[source.source] += 1
         candidates = []
-        for delta in (-1, 0, 1):
-            day = source.event_date + timedelta(days=delta)
-            candidates.extend(canonical_by_day_pair.get((source.tour, day, source.pair_key), []))
+        if source.source.startswith("hallmark:"):
+            end_day = source.event_end_date or source.event_date
+            day = source.event_date
+            while day <= end_day:
+                candidates.extend(canonical_by_day_pair.get((source.tour, day, source.pair_key), []))
+                day += timedelta(days=1)
+        else:
+            for delta in (-1, 0, 1):
+                day = source.event_date + timedelta(days=delta)
+                candidates.extend(canonical_by_day_pair.get((source.tour, day, source.pair_key), []))
         # Same canonical row can only appear once, but de-duplicate defensively.
         unique = {str(m.match_id): m for m in candidates}
         scored = []
