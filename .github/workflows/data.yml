@@ -4,6 +4,7 @@ on:
     branches: [main]
     paths:
       - '.github/refresh-now'
+      - '.github/data-operation-request.json'
   workflow_dispatch:
     inputs:
       mode:
@@ -75,7 +76,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   pipeline:
-    if: (github.event_name == 'push' && contains(github.event.head_commit.message, '[refresh-now]')) || github.event_name == 'workflow_dispatch'
+    if: (github.event_name == 'push' && (contains(github.event.head_commit.message, '[refresh-now]') || contains(github.event.head_commit.message, '[data-request]'))) || github.event_name == 'workflow_dispatch'
     # Refresh/results publication mutates tbt-predictions-v1, so it must also
     # share the exact production publication lock used by CI/player deploys.
     # History/statistics modes receive a run-unique job group and therefore do
@@ -113,6 +114,25 @@ jobs:
       PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve controlled push data request
+        if: github.event_name == 'push' && contains(github.event.head_commit.message, '[data-request]')
+        shell: bash
+        run: |
+          set -euo pipefail
+          request=".github/data-operation-request.json"
+          test -s "$request" || { echo "Missing controlled data request"; exit 1; }
+          mode="$(jq -r '.mode // empty' "$request")"
+          case "$mode" in
+            train|backtest|feature-audit|production-preflight) ;;
+            *) echo "Push data request forbids mode: $mode"; exit 1 ;;
+          esac
+          promote="$(jq -r '.promote // false' "$request")"
+          [[ "$promote" == "true" || "$promote" == "false" ]] || { echo "Invalid promote flag"; exit 1; }
+          echo "MODE=$mode" >> "$GITHUB_ENV"
+          echo "PROMOTE=$promote" >> "$GITHUB_ENV"
+          echo "Resolved controlled data request: mode=$mode promote=$promote"
+
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
