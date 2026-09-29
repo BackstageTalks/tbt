@@ -1,0 +1,314 @@
+name: BlinQ historical foundation
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run or write verified historical foundation"
+        required: true
+        default: "dry-run"
+        type: choice
+        options: [dry-run, write]
+  pull_request:
+    paths:
+      - ".github/historical-foundation-request.json"
+      - ".github/workflows/historical-foundation.yml"
+      - "scripts/import_historical_match_foundation.py"
+      - "tests/test_historical_match_foundation.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/historical-foundation-request.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('historical-foundation-dry-{0}', github.ref) || 'tbt-history-data-writer' }}
+  cancel-in-progress: false
+
+jobs:
+  foundation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve controlled request
+        id: request
+        shell: bash
+        env:
+          DISPATCH_MODE: ${{ inputs.mode }}
+        run: |
+          set -euo pipefail
+          request=".github/historical-foundation-request.json"
+          test -s "$request"
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            mode="${DISPATCH_MODE:-dry-run}"
+          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            mode="dry-run"
+          else
+            mode="$(jq -r '.mode // "dry-run"' "$request")"
+          fi
+          case "$mode" in dry-run|write) ;; *) exit 1;; esac
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "FOUNDATION_MODE=$mode" >> "$GITHUB_ENV"
+          echo "ATP_REPO=$(jq -r '.atp_repository' "$request")" >> "$GITHUB_ENV"
+          echo "ATP_SHA=$(jq -r '.atp_commit' "$request")" >> "$GITHUB_ENV"
+          echo "WTA_HISTORY_REPO=$(jq -r '.wta_history_repository' "$request")" >> "$GITHUB_ENV"
+          echo "WTA_HISTORY_SHA=$(jq -r '.wta_history_commit' "$request")" >> "$GITHUB_ENV"
+          echo "WTA_OVERLAP_REPO=$(jq -r '.wta_overlap_repository' "$request")" >> "$GITHUB_ENV"
+          echo "WTA_OVERLAP_SHA=$(jq -r '.wta_overlap_commit' "$request")" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and unit test
+        run: |
+          set -euo pipefail
+          python -m pip install --retries 8 --timeout 60 -r api/requirements.txt
+          python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt pytest
+          python -m compileall -q scripts/import_historical_match_foundation.py
+          python -m pytest tests/test_historical_match_foundation.py -q
+
+      - name: Verify private history destination
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download pinned ATP corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=".cache/tbt/historical-foundation"
+          mkdir -p "$root/atp-src"
+          curl --fail --location --retry 5             "https://github.com/$ATP_REPO/archive/$ATP_SHA.zip"             -o "$root/atp.zip"
+          unzip -q "$root/atp.zip" -d "$root/atp-src"
+          ATP_DIR="$(find "$root/atp-src" -mindepth 1 -maxdepth 1 -type d | head -n1)"
+          test -d "$ATP_DIR"
+          echo "ATP_DIR=$ATP_DIR" >> "$GITHUB_ENV"
+
+          git_hash() { git hash-object "$1"; }
+          test "$(git_hash "$ATP_DIR/atp_matches_2000.csv")" = "fc691d2ec10ee8a7c9152c18aa8aeec5110cfe4f"
+          test "$(git_hash "$ATP_DIR/atp_matches_2020.csv")" = "33e6e0b0d9d29df4b7920943322dcb73b02e6fe7"
+          test "$(git_hash "$ATP_DIR/atp_matches_2022.csv")" = "f0d0ced1145a0585f24ca7d1bbdb95b57ee92308"
+          test "$(git_hash "$ATP_DIR/atp_matches_qual_chall_2020.csv")" = "99783f7a6cff630d8577dfafbecd2cac59a77d36"
+          test "$(git_hash "$ATP_DIR/atp_matches_qual_chall_2022.csv")" = "a640361f8b267d4e1d07b8a629166ab93b2f318c"
+
+      - name: Download pinned WTA historical and overlap rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          root=".cache/tbt/historical-foundation/wta"
+          mkdir -p "$root/history" "$root/overlap"
+
+          for year in $(seq 2000 2020); do
+            curl --fail --location --retry 5               "https://raw.githubusercontent.com/$WTA_HISTORY_REPO/$WTA_HISTORY_SHA/Womens%20singles/wta_matches_$year.csv"               -o "$root/history/wta_matches_$year.csv"
+          done
+          for year in 2021 2022; do
+            curl --fail --location --retry 5               "https://raw.githubusercontent.com/$WTA_OVERLAP_REPO/$WTA_OVERLAP_SHA/WTA/data/wta_matches_$year.csv"               -o "$root/overlap/wta_matches_$year.csv"
+          done
+
+          test "$(git hash-object "$root/history/wta_matches_2000.csv")" = "7b613227c85a80f677b716b4621ebac1f629129f"
+          test "$(git hash-object "$root/history/wta_matches_2020.csv")" = "1b3ef2297141d224e7ddca8bdbabdad5e698b3e6"
+          test "$(git hash-object "$root/overlap/wta_matches_2021.csv")" = "00d69c3a946760433b42a948207bbe839abb4ba2"
+          test "$(git hash-object "$root/overlap/wta_matches_2022.csv")" = "3f77a65506d07da9b481a367a92d89cbcb9b3ca1"
+
+      - name: Build controlled ATP source list
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          root = Path(os.environ["ATP_DIR"])
+          files = []
+          for year in range(1991, 2023):
+              main = root / f"atp_matches_{year}.csv"
+              if main.is_file():
+                  files.append(main)
+              qc = root / f"atp_matches_qual_chall_{year}.csv"
+              if qc.is_file():
+                  files.append(qc)
+          if len(files) < 50:
+              raise SystemExit(f"Unexpectedly small ATP file inventory: {len(files)}")
+          out = Path(".cache/tbt/historical-foundation/atp_sources.txt")
+          out.write_text("\n".join(str(p) for p in files) + "\n")
+          print(f"ATP controlled source files: {len(files)}")
+          PY
+
+      - name: Download checksum-verified canonical history
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          path = Path(".cache/tbt/historical-foundation/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", path).download(
+              require_bundle_manifest=True
+          )
+          PY
+
+      - name: Dry-run historical foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t atp < .cache/tbt/historical-foundation/atp_sources.txt
+          args=()
+          for f in "${atp[@]}"; do args+=(--atp-csv "$f"); done
+          for f in .cache/tbt/historical-foundation/wta/history/*.csv .cache/tbt/historical-foundation/wta/overlap/*.csv; do
+            args+=(--wta-csv "$f")
+          done
+          python scripts/import_historical_match_foundation.py             --history-dir .cache/tbt/historical-foundation/history             "${args[@]}"             --import-through-year 2020             --crosswalk-from-year 2021             --out-dir .cache/tbt/historical-foundation/dry-run
+
+      - name: Validate projected foundation
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r = json.loads(Path(".cache/tbt/historical-foundation/dry-run/report.json").read_text())
+          print(json.dumps(r, ensure_ascii=False, indent=2))
+          if int(r.get("staged_historical_matches") or 0) < 150000:
+              raise SystemExit("Historical foundation unexpectedly small")
+          if int(r.get("crosswalk_players") or 0) < 500:
+              raise SystemExit("Historical player crosswalk unexpectedly small")
+          if int(r.get("mapped_player_sides") or 0) < 100000:
+              raise SystemExit("Historical crosswalk does not cover enough match sides")
+          if int((r.get("identity_safety") or {}).get("quarantined_rows") or 0):
+              raise SystemExit("Projected historical history is not identity-safe")
+          if int(r.get("api_requests", -1)) != 0:
+              raise SystemExit("Historical foundation unexpectedly used provider API")
+          years = [int(y) for y in r.get("changed_years") or []]
+          if not years or min(years) > 2000 or max(years) != 2020:
+              raise SystemExit(f"Unexpected historical year coverage: {years[:2]}..{years[-2:] if years else []}")
+          PY
+
+      - name: Write verified historical foundation locally
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t atp < .cache/tbt/historical-foundation/atp_sources.txt
+          args=()
+          for f in "${atp[@]}"; do args+=(--atp-csv "$f"); done
+          for f in .cache/tbt/historical-foundation/wta/history/*.csv .cache/tbt/historical-foundation/wta/overlap/*.csv; do
+            args+=(--wta-csv "$f")
+          done
+          python scripts/import_historical_match_foundation.py             --history-dir .cache/tbt/historical-foundation/history             "${args[@]}"             --import-through-year 2020             --crosswalk-from-year 2021             --out-dir .cache/tbt/historical-foundation/write             --write-partitions             --write-history-dir .cache/tbt/historical-foundation/history
+
+      - name: Validate and publish historical partitions
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          root = Path(".cache/tbt/historical-foundation")
+          history = root / "history"
+          report = json.loads((root / "write/report.json").read_text())
+          years = [int(y) for y in report.get("changed_years") or []]
+          matches, safety = sanitize_history_identities(load_partitions(history))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Historical foundation identity safety failed before publish")
+          paths = [history / f"history-{year:04d}.parquet" for year in years]
+          paths.append(history / "history_manifest.json")
+          if any(not p.is_file() or p.stat().st_size <= 0 for p in paths):
+              raise SystemExit("Historical release bundle incomplete")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", history).upload_bundle(paths)
+          print(f"Published historical foundation: rows={len(matches)} years={years[0]}-{years[-1]}")
+          PY
+
+      - name: Verify committed private history
+        if: ${{ steps.request.outputs.mode == 'write' }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          path = Path(".cache/tbt/historical-foundation/verify")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", path).download(
+              require_bundle_manifest=True
+          )
+          matches, safety = sanitize_history_identities(load_partitions(path))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Committed historical foundation failed identity validation")
+          if len(matches) < 550000:
+              raise SystemExit(f"Committed history unexpectedly small: {len(matches)}")
+          print(f"Committed historical foundation verified: {len(matches)} rows")
+          PY
+
+      - name: Persist audit
+        if: always()
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          def read(path):
+              p=Path(path)
+              if not p.is_file(): return None
+              try: return json.loads(p.read_text())
+              except Exception as exc: return {"read_error": str(exc)}
+          audit = {
+              "schema": 1,
+              "generated_at_utc": datetime.now(timezone.utc).isoformat(),
+              "job_status": os.environ.get("JOB_STATUS"),
+              "mode": os.environ.get("FOUNDATION_MODE"),
+              "run_id": os.environ.get("RUN_ID"),
+              "run_sha": os.environ.get("RUN_SHA"),
+              "api_requests": 0,
+              "atp_source": {"repository": os.environ.get("ATP_REPO"), "commit": os.environ.get("ATP_SHA")},
+              "wta_history_source": {"repository": os.environ.get("WTA_HISTORY_REPO"), "commit": os.environ.get("WTA_HISTORY_SHA")},
+              "wta_overlap_source": {"repository": os.environ.get("WTA_OVERLAP_REPO"), "commit": os.environ.get("WTA_OVERLAP_SHA")},
+              "dry_run": read(".cache/tbt/historical-foundation/dry-run/report.json"),
+              "write": read(".cache/tbt/historical-foundation/write/report.json"),
+          }
+          Path("/tmp/historical-foundation-audit.json").write_text(
+              json.dumps(audit, ensure_ascii=False, indent=2)
+          )
+          PY
+          path="audit/historical-foundation-latest.json"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          encoded="$(base64 -w0 /tmp/historical-foundation-audit.json)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit historical foundation run $RUN_ID" -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Audit historical foundation run $RUN_ID" -f content="$encoded" >/dev/null
+          fi
+
+      - name: Upload audit artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: historical-foundation-${{ github.run_id }}
+          path: |
+            .cache/tbt/historical-foundation/dry-run/report.json
+            .cache/tbt/historical-foundation/dry-run/crosswalk.jsonl
+            .cache/tbt/historical-foundation/dry-run/quarantine.jsonl
+            .cache/tbt/historical-foundation/write/report.json
+          if-no-files-found: warn
+          retention-days: 14
