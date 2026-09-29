@@ -14,6 +14,7 @@ are changed here.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 import re
 import time
@@ -114,6 +115,153 @@ def prediction_rows(feed: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def event_ids_from_feed(feed: dict[str, Any]) -> set[str]:
     return set(prediction_rows(feed))
+
+
+_RUNTIME_RESULT_SOURCE_KEYS = (
+    "daily_picks",
+    "prime_picks",
+    "top_daily_picks",
+    "value_picks",
+    "doubles_picks",
+)
+
+
+def _runtime_publication_key(
+    row: dict[str, Any], publication: dict[str, Any], index: int = 0
+) -> str:
+    event_id = _event_id(row)
+    section = str(publication.get("section") or "").strip().lower()
+    market = str(publication.get("market") or "match_winner").strip().lower()
+    selection = str(
+        publication.get("selection_id")
+        or publication.get("winner_id")
+        or publication.get("pick_id")
+        or ""
+    ).strip()
+    issued_at = str(publication.get("issued_at") or "").strip()
+    return f"{event_id}|{section}|{market}|{selection}|{issued_at}|{index}"
+
+
+def runtime_settled_results(
+    feed: dict[str, Any], statuses: dict[str, Any] | None
+) -> list[dict[str, Any]]:
+    """Overlay verified match-winner settlements onto an already-authorized feed.
+
+    The durable prediction ledger and deployed feed remain immutable. This helper
+    only builds response-time Results rows from the external match-status snapshot,
+    and only for issued match-winner publications visible to this account.
+    Projection markets (ACES/DF/Games/Sets) are intentionally never settled from
+    a match-winner outcome.
+    """
+    existing_results = [
+        deepcopy(row) for row in (feed.get("results") or []) if isinstance(row, dict)
+    ]
+    if not isinstance(statuses, dict) or not statuses:
+        return existing_results
+
+    seen: set[str] = set()
+    for row in existing_results:
+        for index, publication in enumerate(row.get("market_publications") or []):
+            if isinstance(publication, dict):
+                seen.add(_runtime_publication_key(row, publication, index))
+
+    runtime_rows: list[dict[str, Any]] = []
+    runtime_seen: set[str] = set()
+    for source_key in _RUNTIME_RESULT_SOURCE_KEYS:
+        rows = feed.get(source_key)
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            event_id = _event_id(row)
+            status_row = statuses.get(event_id)
+            if not isinstance(status_row, dict):
+                continue
+            status = str(status_row.get("status") or "").strip().lower()
+            if status not in TERMINAL_STATUSES:
+                continue
+
+            expected_selection = _selection_id(row)
+            overlay_publications: list[dict[str, Any]] = []
+            for index, publication in enumerate(row.get("market_publications") or []):
+                if not isinstance(publication, dict):
+                    continue
+                if not publication.get("issued_at") or publication.get("excluded_reason"):
+                    continue
+                market = str(publication.get("market") or "match_winner").strip().lower()
+                if market != "match_winner":
+                    continue
+                selection = str(
+                    publication.get("selection_id")
+                    or publication.get("winner_id")
+                    or publication.get("pick_id")
+                    or ""
+                ).strip()
+                if expected_selection and selection and selection != expected_selection:
+                    continue
+
+                key = _runtime_publication_key(row, publication, index)
+                if key in seen or key in runtime_seen:
+                    continue
+
+                result = publication.get("result")
+                result = deepcopy(result) if isinstance(result, dict) else {}
+                checked_at = str(status_row.get("checked_at") or "").strip()
+                scheduled_at = str(row.get("scheduled_at") or row.get("date") or "").strip()
+                odds_raw = publication.get("odds")
+                try:
+                    odds = float(odds_raw)
+                except (TypeError, ValueError):
+                    odds = 0.0
+
+                if status in {"retired", "void"}:
+                    result.update({
+                        "status": "retired" if status == "retired" else "void",
+                        "correct": None,
+                        "void": True,
+                        "reason": "retired" if status == "retired" else (
+                            str(status_row.get("provider_status") or "void")[:120]
+                        ),
+                        "staked_units": 0.0,
+                        "return_units": 0.0,
+                        "profit_units": 0.0,
+                    })
+                else:
+                    correct = status == "win"
+                    result.update({
+                        "status": "hit" if correct else "miss",
+                        "correct": correct,
+                        "staked_units": 1.0,
+                        "return_units": odds if correct and odds > 1 else 0.0,
+                        "profit_units": (odds - 1.0) if correct and odds > 1 else (
+                            0.0 if correct else -1.0
+                        ),
+                    })
+                result.update({
+                    "settled_at": checked_at or scheduled_at,
+                    "scheduled_at": scheduled_at,
+                    "runtime_overlay": True,
+                    "runtime_source": "match_status_snapshot",
+                })
+                copy = deepcopy(publication)
+                copy["result"] = result
+                overlay_publications.append(copy)
+                runtime_seen.add(key)
+
+            if overlay_publications:
+                copy = deepcopy(row)
+                copy["market_publications"] = overlay_publications
+                copy["runtime_result_overlay"] = True
+                runtime_rows.append(copy)
+
+    combined = existing_results + runtime_rows
+    combined.sort(
+        key=lambda row: _parse_time(row.get("scheduled_at") or row.get("date"))
+        or datetime.min.replace(tzinfo=timezone.utc),
+        reverse=True,
+    )
+    return combined
 
 
 def _provider_rows(payload: Any) -> list[dict[str, Any]]:
