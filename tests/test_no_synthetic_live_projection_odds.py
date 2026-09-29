@@ -25,5 +25,9 @@ def test_actual_api_price_requirement_is_enforced_before_issuing_bets():
     assert 'row.get("price_status") == "priced_projection"' in live
     assert 'and provider > 0 and bool(row.get("captured_at"))' in live
     assert 'and 1.50 <= odds < float("inf")' in live
+    assert 'row.get("odds_contract_version") == "ace_df_real_api_v1"' in live
+    assert 'row.get("odds_source") == "propline"' in live
+    assert 'and provider == 2' in live
+    assert 'and bool(row.get("odds_bookmaker"))' in live
     assert "ace_picks = [row for row in ace_picks if publishable_api_price(row)]" in live
     assert "sg_picks = [row for row in sg_picks if publishable_api_price(row)]" in live
