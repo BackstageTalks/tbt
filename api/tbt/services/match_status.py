@@ -19,6 +19,7 @@ from datetime import datetime, timedelta, timezone
 import re
 import time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 
 TERMINAL_STATUSES = {"win", "loss", "retired", "void"}
@@ -510,8 +511,34 @@ def scan_match_statuses(
         due.append((scheduled, eid, row))
         pending[eid] = compact
 
-    # Single chronological queue; no priority bands and no age cutoff.
+    # Preserve the full backlog, but under severe backlog pressure prioritize
+    # the current Bratislava betting day (06:00–06:00) without increasing the
+    # provider-request budget. At least one history slot remains available for
+    # older pending fixtures so the backlog still drains.
     due.sort(key=lambda item: (item[0], item[1]))
+    priority_limit = max(0, min(120, int(max_checks)))
+    local_now = now.astimezone(ZoneInfo("Europe/Bratislava"))
+    betting_day_start_local = local_now.replace(hour=6, minute=0, second=0, microsecond=0)
+    if local_now < betting_day_start_local:
+        betting_day_start_local -= timedelta(days=1)
+    betting_day_start = betting_day_start_local.astimezone(timezone.utc)
+    recent_due = [item for item in due if item[0] >= betting_day_start]
+    backlog_due = [item for item in due if item[0] < betting_day_start]
+    priority_mode = bool(
+        recent_due and backlog_due and priority_limit >= 2
+        and len(due) > max(40, priority_limit * 20)
+    )
+
+    def fairness_key(item: tuple[datetime, str, dict[str, Any]]):
+        _, eid, _ = item
+        old = prior_pending.get(eid)
+        old = old if isinstance(old, dict) else {}
+        last_checked = _parse_time(old.get("c"))
+        return (
+            last_checked or datetime.min.replace(tzinfo=timezone.utc),
+            item[0],
+            eid,
+        )
 
     prior_errors = prior.get("provider_errors")
     prior_errors = prior_errors if isinstance(prior_errors, dict) else {}
@@ -544,10 +571,28 @@ def scan_match_statuses(
     newly_resolved = consecutive_errors = near_attempts = unmatched = 0
     next_due_id = ""
     settled_events: dict[str, dict[str, str]] = {}
-    max_checks = max(0, min(120, int(max_checks)))
+    max_checks = priority_limit
     cursor = str(prior.get("next_due_id") or "")
-    offset = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), 0)
-    ordered = due[offset:] + due[:offset]
+    if priority_mode:
+        recent_ordered = sorted(recent_due, key=fairness_key)
+        backlog_ordered = sorted(backlog_due, key=fairness_key)
+        recent_quota = min(len(recent_ordered), max(1, max_checks - 1))
+        backlog_quota = min(len(backlog_ordered), max_checks - recent_quota)
+        # If the current day has fewer candidates than the request budget,
+        # give the unused slots back to the backlog.
+        if recent_quota + backlog_quota < max_checks:
+            backlog_quota = min(
+                len(backlog_ordered), max_checks - recent_quota
+            )
+        ordered = (
+            recent_ordered[:recent_quota]
+            + backlog_ordered[:backlog_quota]
+            + recent_ordered[recent_quota:]
+            + backlog_ordered[backlog_quota:]
+        )
+    else:
+        offset = next((i for i, (_, eid, _) in enumerate(due) if eid == cursor), 0)
+        ordered = due[offset:] + due[:offset]
 
     # One live request can settle every due fixture, including those beyond
     # the per-event request budget of thirty.
@@ -695,6 +740,10 @@ def scan_match_statuses(
         "window_candidates": len(due),  # Legacy diagnostic, no window cutoff.
         "window_min_age_minutes": 0,
         "window_max_age_minutes": 0,
+        "priority_mode": priority_mode,
+        "betting_day_start": betting_day_start.isoformat(),
+        "current_betting_day_due": len(recent_due),
+        "backlog_due": len(backlog_due),
         "pending_count": len(pending),
         "pending": pending,
         "checked": checked,
