@@ -60,7 +60,7 @@ def write_source(path: Path, **overrides):
         writer.writerow(row)
 
 
-def run_linker(tmp_path: Path, matches: list[MatchRecord], source: Path | None = None, charting: Path | None = None):
+def run_linker(tmp_path: Path, matches: list[MatchRecord], source: Path | None = None, charting: Path | None = None, hallmark: Path | None = None):
     history = tmp_path / "history"
     history.mkdir()
     write_year_partition(matches, history, 2024)
@@ -74,6 +74,8 @@ def run_linker(tmp_path: Path, matches: list[MatchRecord], source: Path | None =
         cmd += ["--source-csv", str(source)]
     if charting is not None:
         cmd += ["--charting-zip", str(charting)]
+    if hallmark is not None:
+        cmd += ["--hallmark-csv", str(hallmark)]
     subprocess.run(cmd, cwd=ROOT, check=True)
     report = json.loads((out / "report.json").read_text())
     staged = [json.loads(x) for x in (out / "auto_linked.jsonl").read_text().splitlines() if x.strip()]
@@ -237,3 +239,97 @@ def test_charting_round_conflict_still_fails_closed(tmp_path):
     assert report["counts"]["weak_evidence"] == 1
     assert review[0]["reason"] == "weak_evidence"
     assert "round_conflict" in review[0]["evidence"]
+
+
+def write_hallmark_source(path: Path, *, round_name="Quarter-Finals", outcomes=("t", "f")):
+    fields = [
+        "start_date","end_date","court_surface","year","player_id","opponent_id",
+        "tournament","round","aces","double_faults",
+        "first_serve_points_made","first_serve_points_attempted",
+        "second_serve_points_made","second_serve_points_attempted",
+        "break_points_saved","break_points_against","break_points_made","break_points_attempted",
+        "service_points_won","service_points_attempted",
+        "return_points_won","return_points_attempted",
+        "player_victory","retirement","doubles","masters",
+    ]
+    rows = [
+        {
+            "start_date":"2024-01-01","end_date":"2024-01-07","court_surface":"Hard","year":"2024",
+            "player_id":"roman-safiullin","opponent_id":"matteo-arnaldi",
+            "tournament":"brisbane_challenger","round":round_name,
+            "aces":"9","double_faults":"3",
+            "first_serve_points_made":"36","first_serve_points_attempted":"43",
+            "second_serve_points_made":"14","second_serve_points_attempted":"30",
+            "break_points_saved":"2","break_points_against":"3",
+            "break_points_made":"3","break_points_attempted":"8",
+            "service_points_won":"50","service_points_attempted":"73",
+            "return_points_won":"26","return_points_attempted":"69",
+            "player_victory":outcomes[0],"retirement":"f","doubles":"f","masters":"250",
+        },
+        {
+            "start_date":"2024-01-01","end_date":"2024-01-07","court_surface":"Hard","year":"2024",
+            "player_id":"matteo-arnaldi","opponent_id":"roman-safiullin",
+            "tournament":"brisbane_challenger","round":round_name,
+            "aces":"3","double_faults":"2",
+            "first_serve_points_made":"27","first_serve_points_attempted":"37",
+            "second_serve_points_made":"16","second_serve_points_attempted":"32",
+            "break_points_saved":"5","break_points_against":"8",
+            "break_points_made":"1","break_points_attempted":"3",
+            "service_points_won":"43","service_points_attempted":"69",
+            "return_points_won":"23","return_points_attempted":"73",
+            "player_victory":outcomes[1],"retirement":"f","doubles":"f","masters":"250",
+        },
+    ]
+    with path.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def test_hallmark_interval_pair_links_and_adds_serve_return(tmp_path):
+    source = tmp_path / "all_matches.csv"
+    write_hallmark_source(source)
+    report, staged, review, quarantine = run_linker(
+        tmp_path, [canonical()], hallmark=source
+    )
+    assert report["api_requests"] == 0
+    assert report["counts"]["identity_linked"] == 1
+    assert report["counts"]["staged_matches"] == 1
+    assert not review
+    assert not quarantine
+    row = staged[0]
+    assert row["incoming_stats"]["p1_aces"] == 9
+    assert row["incoming_stats"]["p1_double_faults"] == 3
+    assert row["incoming_stats"]["p1_first_serve_win"] == 36 / 43
+    assert row["incoming_stats"]["p1_second_serve_win"] == 14 / 30
+    assert row["incoming_stats"]["p1_service_points_won"] == 50 / 73
+    assert row["incoming_stats"]["p1_return_points_won"] == 26 / 69
+    assert row["incoming_stats"]["p1_break_point_serve_win"] == 2 / 3
+    assert row["incoming_stats"]["p1_break_point_return_win"] == 3 / 8
+    assert "date_in_tournament_window" in row["sources"][0]["evidence"]
+    assert "tournament_core_exact" in row["sources"][0]["evidence"]
+
+
+def test_hallmark_round_conflict_fails_closed(tmp_path):
+    source = tmp_path / "all_matches.csv"
+    write_hallmark_source(source, round_name="Semi-Finals")
+    report, staged, review, quarantine = run_linker(
+        tmp_path, [canonical()], hallmark=source
+    )
+    assert not staged
+    assert not quarantine
+    assert report["counts"]["weak_evidence"] == 1
+    assert review[0]["reason"] == "weak_evidence"
+    assert "round_conflict" in review[0]["evidence"]
+
+
+def test_hallmark_requires_consistent_mirrored_outcomes(tmp_path):
+    source = tmp_path / "all_matches.csv"
+    write_hallmark_source(source, outcomes=("t", "t"))
+    report, staged, review, quarantine = run_linker(
+        tmp_path, [canonical()], hallmark=source
+    )
+    assert report["source_rows"] == 0
+    assert not staged
+    assert not review
+    assert not quarantine
