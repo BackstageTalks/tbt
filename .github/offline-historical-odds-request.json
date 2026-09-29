@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "source_ref": "source/wta-historical-odds-cedbf748",
+  "source_prefix": "research/offline-sources/_staging-v2",
+  "expected_sha256": "cedbf748e111e1f14317a09f561f267bc4861e60dbbafa5500f2826c6d5a4c72",
+  "expected_file_lines": 45384,
+  "expected_source_rows": 45383,
+  "tour": "wta",
+  "source_label": "operator_wta_txt_2006_2026",
+  "purpose": "Publish only the 4,306 identity-verified historical WTA Match Winner odds rows validated by dry-run 36528630868."
+}
