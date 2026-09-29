@@ -10,7 +10,7 @@ import csv
 import hashlib
 import json
 from collections import Counter, defaultdict
-from datetime import timedelta, timezone
+from datetime import timezone
 from pathlib import Path
 
 from _bootstrap import ROOT  # noqa: F401
@@ -22,6 +22,7 @@ from tbt.data.offline_market_history import (
     market_history_equivalent,
     parse_valuebet_row,
 )
+from tbt.data.offline_odds import norm_text
 
 
 def _sha256(path: Path) -> str:
@@ -69,9 +70,10 @@ def main() -> None:
     if safety.get("quarantined_rows"):
         raise SystemExit("Canonical history has identity quarantine; refusing market-history linking")
 
-    by_day = defaultdict(list)
+    by_pair = defaultdict(list)
     for match in matches:
-        by_day[(str(match.tour or "").lower(), match.scheduled_at.date())].append(match)
+        pair = tuple(sorted((norm_text(match.player1_name), norm_text(match.player2_name))))
+        by_pair[(str(match.tour or "").lower(), pair)].append(match)
 
     counts = Counter()
     staged = []
@@ -96,13 +98,10 @@ def main() -> None:
                 seen_source_ids.add(unique_source_key)
                 counts["usable_source_rows"] += 1
 
-                candidates = []
-                for delta in (-1, 0, 1):
-                    candidates.extend(
-                        by_day.get((source.tour, source.event_date + timedelta(days=delta)), [])
-                    )
+                pair = tuple(sorted((norm_text(source.player_a), norm_text(source.player_b))))
+                candidates = by_pair.get((source.tour, pair), [])
                 scored = []
-                for match in {str(item.match_id): item for item in candidates}.values():
+                for match in candidates:
                     linked = candidate_link(
                         source,
                         canonical_tour=match.tour,
