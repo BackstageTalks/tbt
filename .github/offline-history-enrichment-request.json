@@ -6,7 +6,7 @@
   "atp_commit": "712be0c5ade693cdab9e69c23a71a0edf5a23c44",
   "charting_repository": "JeffSackmann/tennis_MatchChartingProject",
   "charting_commit": "1813a1309b7ed7ebf1c7e884b32bf675d00e4edf",
-  "requested_at_utc": "2026-09-29T09:56:00Z",
+  "requested_at_utc": "2026-09-29T10:00:00Z",
   "link_policy": "hallmark_exact_pair_tour_window_surface_round_winner_tournament_v1",
   "full_bundle_audit": true,
   "hallmark_dataset": "ehallmar/a-large-tennis-dataset-for-atp-and-itf-betting",
@@ -14,6 +14,7 @@
   "hallmark_file": "all_matches.csv",
   "hallmark_sha256": "957347f83047eabb8ddb43d84cab7c6194ede58e38bea39376933cf14f093960",
   "hallmark_license": "unknown",
-  "hallmark_semantic_sha256": "51c3fd6bc2ff4cdfaaf5c82ae2c29cc4753a0b21d75c23b8f15e828c0b930b08",
-  "hallmark_rows": 2555396
+  "hallmark_semantic_sha256": "56cd6e325b0ebd16335c6c9c9f736bdf05c56670470e79f044803ee9824c08a2",
+  "hallmark_rows": 282994,
+  "hallmark_fingerprint_scope": "completed singles; masters 100/250/500/1000/2000; complete Aces/DF + serve/return point stats"
 }
