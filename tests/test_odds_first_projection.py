@@ -78,6 +78,7 @@ def test_board_discovers_all_four_complete_markets_and_reuses_requests():
     )
     assert provider.calls == [("100", 1), ("101", 1)]
     assert ace_out[0]["odds"] == 1.68
+    assert "odds_contract_version" not in ace_out[0]
     assert sg_out[0]["odds"] == 1.86
     assert sg_out[0]["market_line"] == 23.5
     assert diagnostics["priced_cards"]["games"] == 1
