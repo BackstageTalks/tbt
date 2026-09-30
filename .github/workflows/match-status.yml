@@ -31,12 +31,27 @@ jobs:
           echo
           # A 503 with provider_errors now fails this job rather than reporting an empty PASS.
 
-      - name: Dispatch hourly CLV snapshot
+      - name: Dispatch hourly selected-match CLV snapshot
         if: always()
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh workflow run the-odds-clv.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f reason=hourly
+          gh workflow run propline-clv-pilot.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f events_per_run=12
+
+      - name: Dispatch sparse consensus market snapshot
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          hour="$(date -u +%H)"
+          if [[ "$hour" == "06" || "$hour" == "18" ]]; then
+            gh workflow run the-odds-clv.yml --repo "$GITHUB_REPOSITORY" --ref main \
+              -f reason=hourly
+          else
+            echo "The Odds consensus snapshot skipped at UTC hour $hour."
+          fi
