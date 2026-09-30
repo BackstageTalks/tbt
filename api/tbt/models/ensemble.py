@@ -188,6 +188,82 @@ class TennisEnsemble:
         self.fitted = True
         return self
 
+    def fit_frozen(
+        self,
+        train_frame,
+        calibration_frame,
+        *,
+        blend_weight: float,
+        elo_weight: float,
+        calibrator_kind: str,
+    ):
+        """Refit a serving artifact without re-selecting model choices.
+
+        This is used only after an untouched holdout has approved the candidate.
+        The base estimators learn from the expanded serving-train period while
+        the already-selected blend/Elo weights and calibrator *type* stay frozen.
+        The calibrator parameters may be refit on the later disjoint serving
+        calibration period because those outcomes are already consumed and will
+        never be used again for a promotion decision.
+        """
+        self.fitted = False
+        if len(train_frame) < 300:
+            raise ValueError("At least 300 training matches are required")
+        if calibrator_kind not in {"identity", "platt", "isotonic"}:
+            raise ValueError("Unsupported frozen calibrator kind")
+        if not 0.0 <= float(blend_weight) <= 1.0:
+            raise ValueError("blend_weight must be 0..1")
+        if not 0.0 <= float(elo_weight) <= 1.0:
+            raise ValueError("elo_weight must be 0..1")
+
+        train = train_frame.sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
+        cal = calibration_frame.sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
+        if cal.empty:
+            raise ValueError("Serving calibration partition is empty")
+        for part in (train, cal):
+            if part["match_id"].duplicated().any():
+                raise ValueError("Duplicate match IDs in model partition")
+            if not part["target"].isin([0, 1]).all():
+                raise ValueError("Targets must be binary")
+            if pd.to_datetime(part["scheduled_at"], utc=True).isna().any():
+                raise ValueError("Missing match timestamps")
+
+        train_end = pd.to_datetime(train.scheduled_at, utc=True).max().normalize()
+        cal_start = pd.to_datetime(cal.scheduled_at, utc=True).min().normalize()
+        if train_end >= cal_start or set(train.match_id) & set(cal.match_id):
+            raise ValueError("Training and calibration must be disjoint whole UTC days")
+
+        augmented = pd.concat([train, swap_frame(train)], ignore_index=True)
+        x, y = self._matrix(augmented), augmented.target.to_numpy(dtype=int)
+        self.linear.fit(x, y)
+        self.boost.fit(x, y)
+
+        self.blend_weight = float(blend_weight)
+        self.elo_weight = float(elo_weight)
+        self.calibrator = ProbabilityCalibrator()
+        if calibrator_kind != "identity":
+            raw = self._raw(cal)
+            self.calibrator = self._fit_calibrator(
+                calibrator_kind,
+                raw,
+                cal.target.to_numpy(dtype=int),
+            )
+
+        self.metadata = {
+            "objective": self.objective,
+            "feature_names": self.feature_names,
+            "excluded_features": sorted(self.excluded_features),
+            "symmetric_inference": True,
+            "training_matches": len(train),
+            "blend_weight_boost": self.blend_weight,
+            "elo_weight": self.elo_weight,
+            "calibration_method": self.calibrator.kind,
+            "frozen_serving_refit": True,
+            "serving_calibration_matches": len(cal),
+        }
+        self.fitted = True
+        return self
+
     def predict_proba(self, frame):
         if not self.fitted:
             raise RuntimeError("Model is not fitted")
