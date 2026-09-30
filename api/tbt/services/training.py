@@ -316,7 +316,13 @@ def _metric_delta(
 
 def _period(
     frame: pd.DataFrame,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
+    if frame.empty:
+        return {
+            "start": None,
+            "end": None,
+        }
+
     timestamps = pd.to_datetime(
         frame[
             "scheduled_at"
