@@ -167,11 +167,30 @@ def evaluate(snapshots, ledger=()):
                 [row for row in candidates if row["bookmaker"] == bookmaker],
                 key=lambda row: row["captured_at"],
             )
-            issue = [row for row in book if row["captured_at"] <= issued and issued-row["captured_at"] <= timedelta(hours=2)]
-            close = [row for row in book if issued < row["captured_at"] < kickoff and kickoff-row["captured_at"] <= timedelta(minutes=90)]
-            if not issue or not close:
+            pre_issue = [
+                row for row in book
+                if row["captured_at"] <= issued
+                and issued-row["captured_at"] <= timedelta(hours=2)
+            ]
+            post_issue = [
+                row for row in book
+                if issued < row["captured_at"] <= issued + timedelta(minutes=15)
+                and row["captured_at"] < kickoff
+            ]
+            close = [
+                row for row in book
+                if issued < row["captured_at"] < kickoff
+                and kickoff-row["captured_at"] <= timedelta(minutes=90)
+            ]
+            if not close or (not pre_issue and not post_issue):
                 continue
-            before, final = issue[-1], close[-1]
+            if pre_issue:
+                before = pre_issue[-1]
+                issue_relation = "pre_issue"
+            else:
+                before = post_issue[0]
+                issue_relation = "post_issue_proxy"
+            final = close[-1]
             actual_name = next((name for name in before["prices"] if _norm(name) == _norm(selection)), None)
             close_name = next((name for name in final["prices"] if _norm(name) == _norm(selection)), None)
             if actual_name is None or close_name is None:
@@ -182,6 +201,7 @@ def evaluate(snapshots, ledger=()):
                 "selection": selection,
                 "issued_at": issued.isoformat(),
                 "issue_sample_time": before["captured_at"].isoformat(),
+                "issue_sample_relation": issue_relation,
                 "close_proxy_time": final["captured_at"].isoformat(),
                 "issue_decimal": round(before["prices"][actual_name], 4),
                 "close_proxy_decimal": round(final["prices"][close_name], 4),
@@ -197,6 +217,7 @@ def evaluate(snapshots, ledger=()):
         "method": "same bookmaker h2h; latest pre-issue sample vs last sample within 90m of start",
         "limits": [
             "Close is an observed pre-start proxy, not an official bookmaker closing line.",
+            "Issue price prefers the last sample within 2h before issue; publication capture may be used as a first post-issue proxy only within 15 minutes.",
             "Only exact normalized player-pair matches within two hours of scheduled start are linked.",
             "No post-issue value is ever eligible as a feature for that same match.",
         ],
