@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
+import pandas as pd
 
 from tbt.schemas import MatchRecord
-from tbt.services.training import train_from_matches
+from tbt.services.training import _period, train_from_matches
 from tbt.models.symmetry import swap_frame
 from tbt.models.feature_builder import RICH_CHARTING_FEATURE_NAMES
 
@@ -27,3 +28,8 @@ def test_end_to_end_training_reports_real_match_counts_and_symmetric_outputs():
     assert np.allclose(result.model.predict_proba(frame) + result.model.predict_proba(swap_frame(frame)), 1)
     assert not (set(RICH_CHARTING_FEATURE_NAMES) & set(result.model.feature_names))
     assert set(RICH_CHARTING_FEATURE_NAMES).issubset(result.feature_frame.columns)
+
+
+def test_empty_evaluation_period_is_explicitly_none():
+    frame = pd.DataFrame({"scheduled_at": pd.Series([], dtype="datetime64[ns, UTC]")})
+    assert _period(frame) == {"start": None, "end": None}
