@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 15
     env:
       THE_ODDS_API_KEY: ${{ secrets.THE_ODDS_API_KEY }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       CLV_DAILY_CREDIT_CAP: "700"
