@@ -1,0 +1,61 @@
+name: The Odds API tennis CLV collector
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/the-odds-clv.yml"
+      - "scripts/the_odds_clv_collect.py"
+      - "scripts/the_odds_clv_report.py"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Capture reason"
+        type: choice
+        options: [manual, publication, hourly]
+        default: manual
+
+permissions:
+  contents: read
+
+concurrency:
+  group: the-odds-api-tennis-clv
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      THE_ODDS_API_KEY: ${{ secrets.THE_ODDS_API_KEY }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      CLV_DAILY_CREDIT_CAP: "700"
+      CLV_MAX_SPORTS_PER_RUN: "28"
+      CLV_PROVIDER_RESERVE: "250"
+      CLV_LOOKBACK_DAYS: "7"
+      CLV_CAPTURE_REASON: ${{ github.event_name == 'push' && 'bootstrap' || inputs.reason || 'manual' }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Collect point-in-time h2h board
+        run: python scripts/the_odds_clv_collect.py
+
+      - name: Build CLV movement report
+        run: python scripts/the_odds_clv_report.py
+
+      - name: Save reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: the-odds-clv-${{ github.run_id }}
+          path: |
+            reports/the_odds_clv_snapshot.json
+            reports/the_odds_clv_report.json
+          if-no-files-found: warn
+          retention-days: 14
