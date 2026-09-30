@@ -5,12 +5,11 @@ from typing import Iterable
 import numpy as np
 import pandas as pd
 
-from ..models.ensemble import TennisEnsemble
 from ..models.feature_builder import FeatureBuilder
 from ..models.metrics import evaluate_probabilities
 from ..schemas import MatchRecord
 from .data_quality import audit_history
-from .training import _enforce_rank_provenance
+from .training import _enforce_rank_provenance, _new_production_ensemble
 
 
 def _calendar_safe_split(
@@ -300,7 +299,7 @@ def walk_forward_backtest(
         )
 
         model = (
-            TennisEnsemble()
+            _new_production_ensemble()
             .fit(
                 train,
                 calibration,
