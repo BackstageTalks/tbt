@@ -694,6 +694,16 @@ jobs:
             sleep $((attempt * 10))
           done
 
+      - name: Capture market immediately after publication
+        if: env.BLINQ_SKIP_STALE_DEPLOY != 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh workflow run the-odds-clv.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f reason=publication
+
   morning_presentation:
     name: Optional photos and profiles after morning publish
     needs: [pipeline, deploy]
