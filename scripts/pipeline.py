@@ -559,10 +559,33 @@ def main():
         report = clean(result.report)
         governance = report.get("evaluation_governance") or {}
         fingerprint = str(governance.get("holdout_fingerprint") or "")
-        eligible, gate_reasons = _promotion_metric_gate(report)
-        if not fingerprint or _holdout_already_used(promotion_history, fingerprint):
+        eligibility_reason = governance.get("eligibility_reason")
+        deferred = eligibility_reason == "no_eligible_unseen_evaluation_rows"
+
+        if deferred:
+            # This is not a model/data failure. The candidate is reproducibly
+            # trainable, but production promotion must wait for later matches
+            # that neither the champion nor an earlier promotion decision saw.
             eligible = False
-            gate_reasons.append("missing_or_reused_holdout_fingerprint")
+            gate_reasons = [eligibility_reason]
+        else:
+            eligible, gate_reasons = _promotion_metric_gate(report)
+            if not fingerprint:
+                eligible = False
+                gate_reasons.append("missing_holdout_fingerprint")
+            elif _holdout_already_used(promotion_history, fingerprint):
+                eligible = False
+                gate_reasons.append("reused_holdout_fingerprint")
+
+        if not args.promote:
+            decision_status = "not_requested"
+        elif deferred:
+            decision_status = "deferred"
+        elif eligible:
+            decision_status = "approved"
+        else:
+            decision_status = "rejected"
+
         decision = {
             "holdout_fingerprint": fingerprint,
             "candidate_version": result.model.version,
@@ -576,13 +599,18 @@ def main():
             "delta_vs_production": report.get("delta_vs_production"),
             "eligible": eligible,
             "promotion_requested": args.promote,
-            "decision": "approved" if eligible and args.promote else "rejected" if not eligible else "not_requested",
+            "decision": decision_status,
             "reasons": gate_reasons,
         }
-        # Persist every holdout-based decision before returning or rejecting,
-        # including a gate computed without --promote.
+        # Only a real evaluated holdout is consumable governance evidence.
+        # Deferred attempts carry no fingerprint and therefore must not poison
+        # future unseen evaluation windows.
         if fingerprint:
             promotion_history.append(decision)
+
+        # Keep the current attempt visible even when it is deferred and thus is
+        # intentionally absent from promotion_history.
+        report["promotion_decision"] = decision
         save_model(result.model, str(model_dir / "model.joblib"))
         write_json(model_dir / "training_report.json", report)
         write_json(promotion_history_path, promotion_history)
@@ -590,6 +618,13 @@ def main():
                                  promotion_history_path])
         print(json.dumps(decision, indent=2))
         if args.promote:
+            if deferred:
+                print(
+                    "Candidate saved. Promotion deferred until new unseen evaluation rows exist; "
+                    "current champion unchanged.",
+                    flush=True,
+                )
+                return
             if not eligible:
                 raise SystemExit("Candidate saved. Promotion refused by governance gate; current champion unchanged.")
             production.upload_bundle([model_dir / "model.joblib", model_dir / "training_report.json",
