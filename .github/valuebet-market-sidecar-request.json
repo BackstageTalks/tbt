@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "mode": "publish-sidecar",
+  "purpose": "Build and publish a canonical-match keyed Valuebetennis opening/closing market sidecar for research, CLV validation and future pre-issue market-feature evaluation; zero provider API and no production mutation.",
+  "source_page": "https://www.valuebetennis.com/en/donnees.htm",
+  "source_base": "https://www.valuebetennis.com/datasets",
+  "license": "CC BY 4.0",
+  "years": [2021, 2022, 2023, 2024, 2025, 2026],
+  "zero_provider_api_requests": true,
+  "production_mutated": false,
+  "model_feature_policy": "opening_only_candidate_after_separate_leakage_ablation; closing_validation_only",
+  "requested_at_utc": "2026-09-30T14:20:00Z"
+}
