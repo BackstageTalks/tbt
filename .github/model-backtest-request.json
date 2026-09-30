@@ -1,11 +1,12 @@
 {
   "schema": 1,
   "mode": "backtest",
-  "purpose": "Final zero-provider walk-forward evaluation after the 2026-09-30 full BlinQ library audit and governed retrain. Evaluate the finalized canonical 739109-row history with production leakage/rank-provenance rules unchanged; rich charting remains stored but disabled as a model signal per ablation.",
+  "purpose": "Final zero-provider walk-forward evaluation after the 2026-09-30 full BlinQ library audit and governed retrain. Evaluate the finalized canonical 739109-row history with the same governed production feature policy as training; rich charting remains stored but disabled per ablation.",
   "historical_foundation_run_id": "36598439373",
   "source_enrichment_run_id": "36600114554",
   "source_historical_odds_run_id": "36600114619",
   "source_training_run_id": "36760193700",
   "expected_canonical_rows": 739109,
-  "requested_at_utc": "2026-09-30T20:31:00Z"
+  "requested_at_utc": "2026-09-30T20:42:00Z",
+  "source_code_commit": "d5ce7d12c8518308d48e85851837ecd5b5f3394f"
 }
