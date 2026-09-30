@@ -7,8 +7,6 @@ on:
       - ".github/workflows/the-odds-clv.yml"
       - "scripts/the_odds_clv_collect.py"
       - "scripts/the_odds_clv_report.py"
-  schedule:
-    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       reason:
@@ -37,7 +35,7 @@ jobs:
       CLV_MAX_SPORTS_PER_RUN: "8"
       CLV_PROVIDER_RESERVE: "100"
       CLV_LOOKBACK_DAYS: "7"
-      CLV_CAPTURE_REASON: ${{ github.event_name == 'schedule' && 'hourly' || github.event_name == 'push' && 'bootstrap' || inputs.reason || 'manual' }}
+      CLV_CAPTURE_REASON: ${{ github.event_name == 'push' && 'bootstrap' || inputs.reason || 'manual' }}
       PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4
