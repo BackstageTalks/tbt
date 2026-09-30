@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 12
     env:
       PROPL: ${{ secrets.PROPL }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       CLV_EVENTS_PER_RUN: ${{ inputs.events_per_run || '12' }}
