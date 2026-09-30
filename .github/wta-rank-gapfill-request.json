@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "mode": "audit",
+  "source_ref": "source/wta-historical-odds-cedbf748",
+  "source_prefix": "research/offline-sources/_staging-v2",
+  "expected_sha256": "cedbf748e111e1f14317a09f561f267bc4861e60dbbafa5500f2826c6d5a4c72",
+  "expected_file_lines": 45384,
+  "source_label": "operator_wta_txt_2006_2026_rank",
+  "purpose": "Audit unused WTA point-in-time ranks and ranking points from the already pinned source against current canonical history.",
+  "zero_provider_api_requests": true,
+  "production_mutated": false,
+  "requested_at_utc": "2026-09-30T14:40:00Z"
+}
