@@ -4,6 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: read
 
 concurrency:
@@ -29,3 +30,13 @@ jobs:
           curl --fail-with-body --silent --show-error             --retry 0 --max-time 120             -X POST             -H "X-Blinq-Worker-Token: $BLINQ_LIVE_WORKER_TOKEN"             "$base/api/v1/internal/match-status-worker"
           echo
           # A 503 with provider_errors now fails this job rather than reporting an empty PASS.
+
+      - name: Dispatch hourly CLV snapshot
+        if: always()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh workflow run the-odds-clv.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f reason=hourly
