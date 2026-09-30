@@ -238,6 +238,89 @@ def _split_by_date(
     )
 
 
+def _split_serving_refit_by_date(
+    frame: pd.DataFrame,
+    calibration_fraction: float = 0.15,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Use every consumed outcome while keeping serving calibration out of base fit."""
+    if frame.empty:
+        raise ValueError("No serving-refit rows")
+    if not 0.05 <= calibration_fraction <= 0.30:
+        raise ValueError("Invalid serving calibration fraction")
+
+    ordered = frame.sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
+    row_days = pd.to_datetime(ordered["scheduled_at"], utc=True).dt.date
+    days = sorted(row_days.unique())
+    if len(days) < 30:
+        raise ValueError("Serving refit requires at least 30 distinct dates")
+
+    split_idx = max(1, int(len(days) * (1.0 - calibration_fraction)))
+    split_idx = min(split_idx, len(days) - 1)
+    train_end = days[split_idx - 1]
+    serving_train = ordered.loc[row_days <= train_end].copy()
+    serving_calibration = ordered.loc[row_days > train_end].copy()
+
+    if len(serving_train) < 300 or len(serving_calibration) < 120:
+        raise ValueError("Serving refit partitions are too small")
+    if (
+        pd.to_datetime(serving_train["scheduled_at"], utc=True).max().normalize()
+        >= pd.to_datetime(serving_calibration["scheduled_at"], utc=True).min().normalize()
+    ):
+        raise RuntimeError("Serving refit date overlap")
+    return serving_train, serving_calibration
+
+
+def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
+    """Refit only after promotion approval, consuming the already-used holdout."""
+    selected = result.model
+    serving_train, serving_calibration = _split_serving_refit_by_date(result.feature_frame)
+
+    serving = _new_production_ensemble()
+    serving.fit_frozen(
+        serving_train,
+        serving_calibration,
+        blend_weight=float(selected.blend_weight),
+        elo_weight=float(getattr(selected, "elo_weight", 0.0)),
+        calibrator_kind=str(selected.calibrator.kind),
+    )
+
+    selected_metadata = dict(getattr(selected, "metadata", {}) or {})
+    full_period = _period(result.feature_frame)
+    serving.metadata = {
+        **serving.metadata,
+        "model_version": serving.version,
+        "trained_at": pd.Timestamp.now(tz="UTC").isoformat(),
+        "serving_refit": True,
+        "selection_model_version": selected.version,
+        "selection_holdout_fingerprint": selected_metadata.get("holdout_fingerprint"),
+        "selection_history_end": selected_metadata.get("history_end"),
+        "selection_evaluation_end": selected_metadata.get("evaluation_end"),
+        "history_start": full_period["start"],
+        "history_end": full_period["end"],
+        "evaluation_end": full_period["end"],
+        "training_matches": int(len(result.feature_frame)),
+        "production_train_matches": int(len(serving_train)),
+        "production_calibration_matches": int(len(serving_calibration)),
+        "rank_provenance": selected_metadata.get("rank_provenance"),
+        "holdout_metrics": selected_metadata.get("holdout_metrics"),
+        "elo_baseline_metrics": selected_metadata.get("elo_baseline_metrics"),
+        "holdout_delta_vs_elo": selected_metadata.get("holdout_delta_vs_elo"),
+        "evaluation_method": selected_metadata.get("evaluation_method"),
+        "static_environment_features_enabled": selected_metadata.get(
+            "static_environment_features_enabled", True
+        ),
+        "static_environment_features": selected_metadata.get(
+            "static_environment_features", []
+        ),
+        "historical_weather_training_enabled": False,
+        "historical_weather_reason": selected_metadata.get(
+            "historical_weather_reason",
+            "waiting_for_point_in_time_pre_match_forecast_snapshots",
+        ),
+    }
+    return serving
+
+
 def _group_metrics(
     frame: pd.DataFrame,
     probabilities,

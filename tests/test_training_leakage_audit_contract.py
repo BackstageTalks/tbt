@@ -39,3 +39,13 @@ def test_every_train_runs_fail_closed_leakage_preflight_and_can_defer_promotion(
     assert 'decision_status = "deferred"' in pipeline
     assert 'Promotion deferred until new unseen evaluation rows exist' in pipeline
     assert 'report["promotion_decision"] = decision' in pipeline
+
+
+def test_refresh_and_train_publish_model_promotion_readiness():
+    workflow = read('.github/workflows/data.yml')
+    assert "Update model promotion readiness" in workflow
+    assert "scripts/model_promotion_readiness.py" in workflow
+    assert "--minimum-gate-rows 200" in workflow
+    assert "--target-rows 1000" in workflow
+    assert "--minimum-days 3" in workflow
+    assert "audit/model-promotion-readiness-latest.json" in workflow
