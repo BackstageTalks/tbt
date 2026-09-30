@@ -57,7 +57,7 @@ jobs:
       - name: Install dependencies and focused tests
         run: |
           set -euo pipefail
-          python -m pip install -r api/requirements-train.txt
+          python -m pip install -r api/requirements-train.txt pytest
           python -m pytest tests/test_offline_market_history_v2.py tests/test_valuebet_market_sidecar_contract.py -q
 
       - name: Verify private destination
