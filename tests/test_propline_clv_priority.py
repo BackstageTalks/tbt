@@ -38,7 +38,7 @@ def test_propline_picker_prioritizes_blinq_pair_before_nearer_control():
     assert selected[0][0] == 0
 
 
-def test_clv_routing_uses_propline_hourly_and_sparse_the_odds_consensus():
+def test_clv_routing_uses_hourly_propline_and_hourly_bounded_the_odds_consensus():
     status = (ROOT / ".github/workflows/match-status.yml").read_text(encoding="utf-8")
     data = (ROOT / ".github/workflows/data.yml").read_text(encoding="utf-8")
     odds = (ROOT / ".github/workflows/the-odds-clv.yml").read_text(encoding="utf-8")
@@ -46,12 +46,14 @@ def test_clv_routing_uses_propline_hourly_and_sparse_the_odds_consensus():
 
     assert "propline-clv-pilot.yml" in status
     assert "events_per_run=12" in status
-    assert 'hour="$(date -u +%H)"' in status
-    assert '"06"' in status and '"18"' in status
+    assert "the-odds-clv.yml" in status
+    assert "reason=hourly" in status
     assert "propline-clv-pilot.yml" in data
     assert "the-odds-clv.yml" in data
-    assert 'CLV_DAILY_CREDIT_CAP: "12"' in odds
-    assert 'CLV_MAX_SPORTS_PER_RUN: "6"' in odds
+    assert 'CLV_DAILY_CREDIT_CAP: "300"' in odds
+    assert 'CLV_MAX_SPORTS_PER_RUN: "8"' in odds
+    assert 'CLV_PROVIDER_RESERVE: "100"' in odds
+    assert "  schedule:" not in odds
     assert "GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}" in propline
     assert "  push:" in propline
     assert '"scripts/propline_clv_collect.py"' in propline

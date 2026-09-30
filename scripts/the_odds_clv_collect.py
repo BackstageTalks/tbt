@@ -28,9 +28,9 @@ DATA_REPO = os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data")
 ROOT_PATH = "research/the_odds_clv"
 KEY = os.getenv("THE_ODDS_API_KEY", "").strip()
 GH_TOKEN = os.getenv("TBT_DATA_GH_TOKEN", "").strip()
-DAILY_CAP = max(1, int(os.getenv("CLV_DAILY_CREDIT_CAP", "700")))
-MAX_SPORTS = max(1, min(50, int(os.getenv("CLV_MAX_SPORTS_PER_RUN", "28"))))
-PROVIDER_RESERVE = max(0, int(os.getenv("CLV_PROVIDER_RESERVE", "250")))
+DAILY_CAP = max(1, min(900, int(os.getenv("CLV_DAILY_CREDIT_CAP", "300"))))
+MAX_SPORTS = max(1, min(50, int(os.getenv("CLV_MAX_SPORTS_PER_RUN", "8"))))
+PROVIDER_RESERVE = max(0, int(os.getenv("CLV_PROVIDER_RESERVE", "100")))
 REASON = os.getenv("CLV_CAPTURE_REASON", "hourly").strip() or "hourly"
 
 

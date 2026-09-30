@@ -130,7 +130,7 @@ def test_report_links_only_pre_issue_snapshot_and_near_close_proxy():
     assert datetime.fromisoformat(row["issue_sample_time"]) < datetime.fromisoformat(row["issued_at"])
 
 
-def test_workflow_is_externally_hourly_bounded_and_publication_triggered():
+def test_workflow_is_hourly_bounded_and_publication_triggered():
     workflow = (ROOT / ".github/workflows/the-odds-clv.yml").read_text(encoding="utf-8")
     data = (ROOT / ".github/workflows/data.yml").read_text(encoding="utf-8")
     status = (ROOT / ".github/workflows/match-status.yml").read_text(encoding="utf-8")
@@ -138,14 +138,35 @@ def test_workflow_is_externally_hourly_bounded_and_publication_triggered():
     assert "  push:" in workflow
     assert '"scripts/the_odds_clv_collect.py"' in workflow
     assert "  schedule:" not in workflow
-    assert 'CLV_DAILY_CREDIT_CAP: "12"' in workflow
-    assert 'CLV_MAX_SPORTS_PER_RUN: "6"' in workflow
-    assert 'CLV_PROVIDER_RESERVE: "250"' in workflow
+    assert 'CLV_DAILY_CREDIT_CAP: "300"' in workflow
+    assert 'CLV_MAX_SPORTS_PER_RUN: "8"' in workflow
+    assert 'CLV_PROVIDER_RESERVE: "100"' in workflow
     assert "THE_ODDS_API_KEY" in workflow
     assert "GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}" in workflow
     assert "the-odds-clv.yml" in data
     assert "reason=publication" in data
     assert "the-odds-clv.yml" in status
-    assert 'hour="$(date -u +%H)"' in status
-    assert '"06"' in status and '"18"' in status
+    assert "reason=hourly" in status
     assert "propline-clv-pilot.yml" in status
+
+
+def test_report_accepts_first_post_issue_snapshot_within_15_minutes():
+    kickoff = datetime(2026, 9, 30, 14, tzinfo=timezone.utc)
+    snapshots = [
+        _snapshot(kickoff - timedelta(minutes=55), 1.95, 1.85),
+        _snapshot(kickoff - timedelta(minutes=30), 1.80, 2.00),
+    ]
+    ledger = [{
+        "event_id": "blinq-event",
+        "scheduled_at": kickoff.isoformat(),
+        "issued_at": (kickoff - timedelta(minutes=60)).isoformat(),
+        "winner_id": "a",
+        "player1": {"id": "a", "name": "Player A"},
+        "player2": {"id": "b", "name": "Player B"},
+    }]
+    report = evaluate(snapshots, ledger)
+    assert report["blinq_comparable_bookmaker_series"] == 1
+    row = report["blinq_examples"][0]
+    assert row["issue_sample_relation"] == "post_issue_proxy"
+    assert row["issue_sample_time"] == (kickoff - timedelta(minutes=55)).isoformat()
+    assert row["price_clv_pct"] > 0
