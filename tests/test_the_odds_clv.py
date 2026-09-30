@@ -137,7 +137,7 @@ def test_workflow_is_hourly_bounded_and_publication_triggered():
     assert "workflow_dispatch:" in workflow
     assert "  push:" in workflow
     assert '"scripts/the_odds_clv_collect.py"' in workflow
-    assert 'cron: "17 * * * *"' in workflow
+    assert "  schedule:" not in workflow
     assert 'CLV_DAILY_CREDIT_CAP: "300"' in workflow
     assert 'CLV_MAX_SPORTS_PER_RUN: "8"' in workflow
     assert 'CLV_PROVIDER_RESERVE: "100"' in workflow
@@ -145,7 +145,8 @@ def test_workflow_is_hourly_bounded_and_publication_triggered():
     assert "GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}" in workflow
     assert "the-odds-clv.yml" in data
     assert "reason=publication" in data
-    assert "the-odds-clv.yml" not in status
+    assert "the-odds-clv.yml" in status
+    assert "reason=hourly" in status
     assert "propline-clv-pilot.yml" in status
 
 
