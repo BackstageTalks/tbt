@@ -125,13 +125,17 @@ def test_report_links_only_pre_issue_snapshot_and_near_close_proxy():
     assert datetime.fromisoformat(row["issue_sample_time"]) < datetime.fromisoformat(row["issued_at"])
 
 
-def test_workflow_is_hourly_bounded_and_publication_triggered():
+def test_workflow_is_externally_hourly_bounded_and_publication_triggered():
     workflow = (ROOT / ".github/workflows/the-odds-clv.yml").read_text(encoding="utf-8")
     data = (ROOT / ".github/workflows/data.yml").read_text(encoding="utf-8")
-    assert 'cron: "17 * * * *"' in workflow
+    status = (ROOT / ".github/workflows/match-status.yml").read_text(encoding="utf-8")
+    assert "workflow_dispatch:" in workflow
+    assert "  schedule:" not in workflow
     assert 'CLV_DAILY_CREDIT_CAP: "700"' in workflow
     assert 'CLV_MAX_SPORTS_PER_RUN: "28"' in workflow
     assert 'CLV_PROVIDER_RESERVE: "250"' in workflow
     assert "THE_ODDS_API_KEY" in workflow
     assert "the-odds-clv.yml" in data
     assert "reason=publication" in data
+    assert "the-odds-clv.yml" in status
+    assert "reason=hourly" in status
