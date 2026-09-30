@@ -15,11 +15,13 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 DATA_REPO = os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data")
-TOKEN = os.environ["TBT_DATA_GH_TOKEN"]
+TOKEN = os.getenv("TBT_DATA_GH_TOKEN", "").strip()
 ROOT = "research/the_odds_clv"
 
 
 def _gh(path, missing_ok=False):
+    if not TOKEN:
+        raise RuntimeError("Missing TBT_DATA_GH_TOKEN")
     req = urllib.request.Request(
         "https://api.github.com/repos/" + DATA_REPO + "/contents/" + path,
         headers={
