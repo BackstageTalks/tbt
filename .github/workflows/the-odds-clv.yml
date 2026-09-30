@@ -1,8 +1,6 @@
 name: The Odds API tennis CLV collector
 
 on:
-  schedule:
-    - cron: "17 * * * *"
   workflow_dispatch:
     inputs:
       reason:
@@ -30,7 +28,7 @@ jobs:
       CLV_MAX_SPORTS_PER_RUN: "28"
       CLV_PROVIDER_RESERVE: "250"
       CLV_LOOKBACK_DAYS: "7"
-      CLV_CAPTURE_REASON: ${{ github.event_name == 'schedule' && 'hourly' || inputs.reason || 'manual' }}
+      CLV_CAPTURE_REASON: ${{ inputs.reason || 'manual' }}
       PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4
