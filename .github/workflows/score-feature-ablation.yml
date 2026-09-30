@@ -208,16 +208,26 @@ jobs:
           set -euo pipefail
           path="audit/score-feature-ablation-latest.json"
           existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
-          encoded="$(base64 -w0 /tmp/score-feature-ablation-latest.json)"
-          if [[ -n "$existing_sha" ]]; then
-            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
-              -f message="Audit BlinQ score feature ablation run $ABLATION_RUN_ID" \
-              -f content="$encoded" -f sha="$existing_sha" >/dev/null
-          else
-            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
-              -f message="Audit BlinQ score feature ablation run $ABLATION_RUN_ID" \
-              -f content="$encoded" >/dev/null
-          fi
+          EXISTING_SHA="$existing_sha" python - <<'PY'
+          import base64
+          import json
+          import os
+          from pathlib import Path
+
+          source = Path("/tmp/score-feature-ablation-latest.json")
+          payload = {
+              "message": f"Audit BlinQ score feature ablation run {os.environ['ABLATION_RUN_ID']}",
+              "content": base64.b64encode(source.read_bytes()).decode("ascii"),
+          }
+          if os.environ.get("EXISTING_SHA"):
+              payload["sha"] = os.environ["EXISTING_SHA"]
+          Path("/tmp/score-feature-ablation-upload.json").write_text(
+              json.dumps(payload),
+              encoding="utf-8",
+          )
+          PY
+          gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+            --input /tmp/score-feature-ablation-upload.json >/dev/null
 
       - name: Upload aggregate evidence
         uses: actions/upload-artifact@v4
