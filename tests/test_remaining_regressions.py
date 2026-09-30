@@ -414,8 +414,29 @@ def test_all_holdout_decisions_persist_before_promotion(monkeypatch, tmp_path, p
     monkeypatch.setattr(pipeline, 'ROOT', tmp_path)
     monkeypatch.setattr(pipeline, 'ReleaseStore', Store)
     monkeypatch.setattr(pipeline, 'load_partitions', lambda path: [])
-    monkeypatch.setattr(pipeline, 'train_from_matches', lambda *args, **kwargs:
-                        SimpleNamespace(model=SimpleNamespace(version='candidate'), report=report))
+    candidate_model = SimpleNamespace(
+        version='candidate',
+        metadata={'evaluation_end': '2025-02-01T00:00Z'},
+        blend_weight=.5,
+        elo_weight=0.,
+        calibrator=SimpleNamespace(kind='identity'),
+    )
+    serving_model = SimpleNamespace(
+        version='serving',
+        metadata={
+            'history_end': '2025-02-01T00:00Z',
+            'production_train_matches': 1000,
+            'production_calibration_matches': 200,
+        },
+        blend_weight=.5,
+        elo_weight=0.,
+        calibrator=SimpleNamespace(kind='identity'),
+    )
+    monkeypatch.setattr(
+        pipeline, 'train_from_matches',
+        lambda *args, **kwargs: SimpleNamespace(model=candidate_model, report=report),
+    )
+    monkeypatch.setattr(pipeline, 'refit_serving_model', lambda result: serving_model)
     monkeypatch.setattr(pipeline, 'save_model', lambda model, path: Path(path).write_bytes(b'model'))
     monkeypatch.setattr('sys.argv', ['pipeline', 'train'] + (['--promote'] if promote else []))
     if promote and not passing:
