@@ -16,6 +16,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -88,7 +89,10 @@ def _gh(path, method="GET", data=None, missing_ok=False):
 
 
 def _norm(value):
-    return " ".join(re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).split())
+    ascii_text = unicodedata.normalize("NFKD", str(value or "")).encode(
+        "ascii", "ignore"
+    ).decode("ascii")
+    return " ".join(re.sub(r"[^a-z0-9]+", " ", ascii_text.lower()).split())
 
 
 def _priority_terms():
