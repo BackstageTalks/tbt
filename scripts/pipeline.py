@@ -54,6 +54,7 @@ from tbt.services.market_selection import (
 )
 from tbt.services.training import refit_serving_model, train_from_matches
 from tbt.services.backtest_service import walk_forward_backtest
+from tbt.services.shadow_evaluation import update_shadow_ledger, build_shadow_report
 
 
 def clean(value):
@@ -662,6 +663,63 @@ def main():
     )
     model = load_model(str(model_dir / "model.joblib"))
     report = read_json(model_dir / "training_report.json", {})
+
+    # Private challenger shadow evaluation. This never mutates the public feed
+    # and never consumes Tennis provider requests. A broken/missing shadow
+    # artifact must not block the production refresh.
+    challenger_model = None
+    challenger_version = ""
+    shadow_dir = cache / "shadow"
+    shadow_store = None
+    shadow_ledger = []
+    shadow_report = {}
+    shadow_enabled = False
+    try:
+        candidate_dir = cache / "candidate-shadow"
+        candidate_store = ReleaseStore(
+            args.data_repository, "tbt-model-candidate-v1", candidate_dir
+        )
+        candidate_assets = candidate_store._asset_names()
+        if "model.joblib" in candidate_assets:
+            candidate_store.download(
+                extra_names=("model.joblib",),
+                required_names=("model.joblib",),
+            )
+            challenger_model = load_model(str(candidate_dir / "model.joblib"))
+            challenger_version = str(getattr(challenger_model, "version", "") or "")
+
+        shadow_store = ReleaseStore(
+            args.data_repository, "tbt-model-shadow-v1", shadow_dir
+        )
+        shadow_assets = shadow_store._asset_names()
+        shadow_required = {"shadow_ledger.json", "shadow_report.json"}
+        if shadow_required <= shadow_assets:
+            shadow_store.download(
+                extra_names=tuple(sorted(shadow_required)),
+                required_names=tuple(sorted(shadow_required)),
+            )
+            prior_shadow = read_json(shadow_dir / "shadow_ledger.json", [])
+            if not isinstance(prior_shadow, list):
+                raise ValueError("Invalid shadow ledger")
+            shadow_ledger = prior_shadow
+        elif shadow_assets & shadow_required:
+            raise FileNotFoundError("Incomplete private shadow evaluation release")
+
+        shadow_enabled = bool(
+            challenger_model is not None
+            and challenger_version
+            and challenger_version != str(getattr(model, "version", "") or "")
+        )
+    except Exception as exc:
+        print(json.dumps({
+            "warning": "shadow_evaluation_disabled",
+            "detail": str(exc)[:500],
+        }, ensure_ascii=False), flush=True)
+        challenger_model = None
+        challenger_version = ""
+        shadow_store = None
+        shadow_enabled = False
+
     prediction_dir = cache / "predictions"
     prediction_store = ReleaseStore(
         args.data_repository,
@@ -766,7 +824,50 @@ def main():
         # Odds-first for ACES/DF/GAMES/SETS: obtain actual available offers
         # BEFORE evaluating their projection models. Match Winner continues to
         # use its independent qualification rules and shares cached payloads.
-        predictions = predict(model, matches, upcoming)
+        prediction_now = datetime.now(timezone.utc)
+        predictions = predict(model, matches, upcoming, now=prediction_now)
+
+        # Score the exact same pre-match fixtures with the private challenger.
+        # Only the first snapshot for a model-pair/fixture is retained. Results
+        # are settled later from canonical completed history.
+        if shadow_store is not None:
+            challenger_predictions = (
+                predict(challenger_model, matches, upcoming, now=prediction_now)
+                if shadow_enabled else []
+            )
+            shadow_ledger = update_shadow_ledger(
+                shadow_ledger,
+                production_predictions=predictions,
+                challenger_predictions=challenger_predictions,
+                completed_matches=matches,
+                production_model_version=str(getattr(model, "version", "") or ""),
+                challenger_model_version=challenger_version if shadow_enabled else "",
+                now=prediction_now,
+            )
+            if shadow_enabled:
+                shadow_report = build_shadow_report(
+                    shadow_ledger,
+                    production_model_version=str(getattr(model, "version", "") or ""),
+                    challenger_model_version=challenger_version,
+                )
+                shadow_report["generated_at_utc"] = prediction_now.isoformat()
+                write_json(shadow_dir / "shadow_ledger.json", shadow_ledger)
+                write_json(shadow_dir / "shadow_report.json", clean(shadow_report))
+                shadow_store.upload_bundle([
+                    shadow_dir / "shadow_ledger.json",
+                    shadow_dir / "shadow_report.json",
+                ])
+                print(json.dumps({
+                    "shadow_evaluation": {
+                        "production": str(getattr(model, "version", "") or ""),
+                        "challenger": challenger_version,
+                        "captured": shadow_report.get("cohort", {}).get("captured", 0),
+                        "settled": shadow_report.get("cohort", {}).get("settled", 0),
+                        "minimum_for_review": shadow_report.get("cohort", {}).get("minimum_for_review", 200),
+                        "ready_for_promotion_review": shadow_report.get("gate", {}).get("ready_for_promotion_review", False),
+                    }
+                }, ensure_ascii=False), flush=True)
+
         projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
         projection_odds_report = {}
         projection_market_cache = {}
@@ -1015,6 +1116,14 @@ def main():
         "odds": odds_report or {},
         "settled": len(feed["results"]),
         "model": model.version,
+        "shadow": {
+            "enabled": shadow_enabled,
+            "challenger_model": challenger_version or None,
+            "captured": (shadow_report.get("cohort") or {}).get("captured", 0),
+            "settled": (shadow_report.get("cohort") or {}).get("settled", 0),
+            "minimum_for_review": (shadow_report.get("cohort") or {}).get("minimum_for_review", 200),
+            "ready_for_promotion_review": (shadow_report.get("gate") or {}).get("ready_for_promotion_review", False),
+        },
     }
     write_json(prediction_dir / "refresh_report.json", refresh_report)
     print(json.dumps(refresh_report))
