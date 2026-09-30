@@ -6,6 +6,7 @@ on:
       - ".github/wta-rank-gapfill-request.json"
       - ".github/workflows/wta-rank-gapfill.yml"
       - "scripts/audit_offline_wta_rank_points.py"
+      - "scripts/import_offline_wta_rank_fill.py"
       - "tests/test_wta_rank_gapfill_contract.py"
   push:
     branches: [main]
@@ -37,7 +38,10 @@ jobs:
         run: |
           set -euo pipefail
           request=.github/wta-rank-gapfill-request.json
-          test "$(jq -r '.mode' "$request")" = "audit"
+          mode="$(jq -r '.mode' "$request")"
+          [[ "$mode" == "write" || "$mode" == "dry-run" ]]
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then mode="dry-run"; fi
+          echo "RANK_MODE=$mode" >> "$GITHUB_ENV"
           test "$(jq -r '.zero_provider_api_requests' "$request")" = "true"
           {
             echo "SOURCE_REF=$(jq -r '.source_ref' "$request")"
@@ -85,6 +89,69 @@ jobs:
           python scripts/audit_offline_wta_rank_points.py             --history-dir .cache/tbt/wta-rank/history             --source-csv .cache/tbt/wta-rank/source/wta.txt             --source-label "$SOURCE_LABEL"             --out-dir .cache/tbt/wta-rank/audit
           test -s .cache/tbt/wta-rank/audit/report.json
 
+      - name: Dry-run strict rank importer
+        run: |
+          python scripts/import_offline_wta_rank_fill.py \
+            --stage .cache/tbt/wta-rank/audit/rank-fill-candidates.jsonl \
+            --history-dir .cache/tbt/wta-rank/history \
+            --out-dir .cache/tbt/wta-rank/dry
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/wta-rank/dry/report.json").read_text())
+          c=r.get("counts") or {}
+          print(json.dumps(r,indent=2))
+          for key in ("identity_missing","identity_changed","invalid_incoming","point_in_time_rejected","duplicate_or_missing_match_id"):
+              if int(c.get(key) or 0):
+                  raise SystemExit(f"Strict WTA rank importer rejected rows: {key}={c.get(key)}")
+          if int(c.get("updated") or 0) <= 0:
+              raise SystemExit("No safe WTA rank fills")
+          PY
+
+      - name: Write verified WTA ranks into local history
+        if: env.RANK_MODE == 'write'
+        run: |
+          python scripts/import_offline_wta_rank_fill.py \
+            --stage .cache/tbt/wta-rank/audit/rank-fill-candidates.jsonl \
+            --history-dir .cache/tbt/wta-rank/history \
+            --out-dir .cache/tbt/wta-rank/write \
+            --write-partitions \
+            --write-history-dir .cache/tbt/wta-rank/history
+
+      - name: Validate and publish changed canonical partitions
+        if: env.RANK_MODE == 'write'
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          from tbt.services.training import _enforce_rank_provenance
+
+          directory=Path(".cache/tbt/wta-rank/history")
+          report=json.loads(Path(".cache/tbt/wta-rank/write/report.json").read_text())
+          c=report.get("counts") or {}
+          for key in ("identity_missing","identity_changed","invalid_incoming","point_in_time_rejected","duplicate_or_missing_match_id"):
+              if int(c.get(key) or 0):
+                  raise SystemExit(f"Write rejected rows: {key}={c.get(key)}")
+          years=[int(x) for x in report.get("changed_years") or []]
+          if not years:
+              raise SystemExit("No changed WTA rank partitions")
+
+          matches,safety=sanitize_history_identities(load_partitions(directory))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Identity safety failed after WTA rank import")
+          _,rank_report=_enforce_rank_provenance(matches)
+          if int(rank_report.get("stripped_rows") or 0):
+              raise SystemExit(f"Unverified ranks remain after import: {rank_report}")
+
+          paths=[directory/f"history-{year:04d}.parquet" for year in years]
+          paths.append(directory/"history_manifest.json")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",directory).upload_bundle(paths)
+          print("Published WTA rank gap-fill years=",years,"rank_report=",rank_report)
+          PY
+
       - name: Validate audit
         run: |
           python - <<'PY'
@@ -126,5 +193,7 @@ jobs:
           path: |
             .cache/tbt/wta-rank/audit/report.json
             .cache/tbt/wta-rank/audit/rank-fill-candidates.jsonl
+            .cache/tbt/wta-rank/dry/report.json
+            .cache/tbt/wta-rank/write/report.json
           if-no-files-found: error
           retention-days: 14
