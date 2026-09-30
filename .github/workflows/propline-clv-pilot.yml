@@ -1,6 +1,11 @@
 name: PropLine CLV research pilot
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/propline-clv-pilot.yml"
+      - "scripts/propline_clv_collect.py"
   workflow_dispatch:
     inputs:
       events_per_run:
@@ -21,6 +26,7 @@ jobs:
     timeout-minutes: 12
     env:
       PROPL: ${{ secrets.PROPL }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       CLV_EVENTS_PER_RUN: ${{ inputs.events_per_run || '12' }}
@@ -41,7 +47,7 @@ jobs:
           retention-days: 14
 
   report:
-    if: github.event_name == 'workflow_dispatch'
+    if: needs.collect.result == 'success'
     needs: collect
     runs-on: ubuntu-latest
     timeout-minutes: 12

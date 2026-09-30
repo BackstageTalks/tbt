@@ -725,6 +725,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          gh workflow run propline-clv-pilot.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f events_per_run=12
           gh workflow run the-odds-clv.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f reason=publication
 

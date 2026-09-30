@@ -13,8 +13,11 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
+
+from release_store import ReleaseStore
 
 API = "https://api.prop-line.com/v1"
 GH_API = "https://api.github.com"
@@ -86,8 +89,60 @@ def parse_time(value):
     except (ValueError, TypeError):
         return None
 
-def pick_events(events, now):
+def norm_name(value):
+    text = unicodedata.normalize("NFKD", str(value or "")).encode(
+        "ascii", "ignore"
+    ).decode("ascii").lower()
+    return " ".join("".join(ch if ch.isalnum() else " " for ch in text).split())
+
+
+def player_pair(a, b):
+    values = sorted((norm_name(a), norm_name(b)))
+    return tuple(values) if all(values) else None
+
+
+def blinq_priority_pairs(now):
+    """Read the compact current public-offer snapshot; no provider requests."""
+    directory = Path(".cache/tbt/propline-clv-predictions")
+    try:
+        store = ReleaseStore(DATA_REPO, "tbt-predictions-v1", directory)
+        if "daily_offer_snapshot.json" not in store._asset_names():
+            return set()
+        store.download(
+            extra_names=("daily_offer_snapshot.json",),
+            required_names=("daily_offer_snapshot.json",),
+        )
+        payload = json.loads(
+            (directory / "daily_offer_snapshot.json").read_text(encoding="utf-8")
+        )
+    except Exception:
+        return set()
+
+    pairs = set()
+    if not isinstance(payload, dict):
+        return pairs
+    for rows in payload.values():
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+            p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+            pair = player_pair(p1.get("name"), p2.get("name"))
+            kickoff = parse_time(row.get("scheduled_at"))
+            if pair is None or kickoff is None:
+                continue
+            hours = (kickoff - now).total_seconds() / 3600
+            if 0 < hours <= 48:
+                pairs.add(pair)
+    return pairs
+
+
+def pick_events(events, now, priority_pairs=()):
     buckets = [[], [], [], []]
+    all_items = []
+    priority_pairs = set(priority_pairs or ())
     for event in events:
         if not isinstance(event, dict):
             continue
@@ -98,22 +153,41 @@ def pick_events(events, now):
         hours = (kickoff - now).total_seconds() / 3600
         if not 0 < hours <= 48:
             continue
+        pair = player_pair(event.get("home_team"), event.get("away_team"))
+        priority = 0 if pair in priority_pairs else 1
         tier = 0 if any(word in str(event).lower() for word in
                         ('"atp"', '"wta"', 'atp ', 'wta ')) else 1
-        bucket = 0 if hours <= 3 else 1 if hours <= 12 else 2 if hours <= 24 else 3
-        buckets[bucket].append((tier, kickoff, event_id, event))
+        bucket_idx = 0 if hours <= 3 else 1 if hours <= 12 else 2 if hours <= 24 else 3
+        item = (priority, tier, kickoff, event_id, event)
+        buckets[bucket_idx].append(item)
+        all_items.append(item)
+
     for bucket in buckets:
-        bucket.sort(key=lambda item: (item[0], item[1]))
-    selected = []
-    # Capture both the early price and the approach to kickoff.
+        bucket.sort(key=lambda item: (item[0], item[1], item[2]))
+
+    # Published/current BlinQ pairs always get first claim on the bounded budget.
+    selected = sorted(
+        (item for item in all_items if item[0] == 0),
+        key=lambda item: (item[2], item[1]),
+    )[:MAX_EVENTS]
+    used = {item[3] for item in selected}
+
+    # Then preserve timing diversity so we capture early and near-start prices.
     for bucket in buckets:
-        selected.extend(bucket[:3])
+        for item in bucket:
+            if len(selected) >= MAX_EVENTS:
+                break
+            if item[3] not in used:
+                selected.append(item)
+                used.add(item[3])
+
     if len(selected) < MAX_EVENTS:
-        used = {item[2] for item in selected}
-        rest = sorted((item for bucket in buckets for item in bucket if item[2] not in used),
-                      key=lambda item: (item[0], item[1]))
+        rest = sorted(
+            (item for item in all_items if item[3] not in used),
+            key=lambda item: (item[0], item[1], item[2]),
+        )
         selected.extend(rest[:MAX_EVENTS-len(selected)])
-    return selected[:MAX_EVENTS], sum(map(len, buckets))
+    return selected[:MAX_EVENTS], len(all_items)
 
 def today_usage(folder):
     entries = github(folder, missing_ok=True) or []
@@ -152,16 +226,20 @@ def main():
         report["status"] = "Daily local research budget exhausted"
     else:
         try:
+            priority_pairs = blinq_priority_pairs(now)
             events = unpack(prop("/sports/tennis/events"), ("events", "data", "results"))
-            selected, eligible = pick_events(events, now)
+            selected, eligible = pick_events(events, now, priority_pairs)
             report["board_events"] = len(events)
             report["eligible_upcoming"] = eligible
+            report["blinq_priority_pairs"] = len(priority_pairs)
+            report["selected_blinq_matches"] = sum(item[0] == 0 for item in selected)
             # 2 calls/event for discovery + priced lines. No retries.
-            for _, kickoff, event_id, event in selected[:min(MAX_EVENTS, (remaining - api_calls)//2)]:
+            for priority, _, kickoff, event_id, event in selected[:min(MAX_EVENTS, (remaining - api_calls)//2)]:
                 if int(quota.get("X-Daily-Remaining", "9999")) < MIN_PROVIDER_REMAINING:
                     report["status"] = "Provider quota reserve reached"
                     break
                 row = {"event_id": event_id, "commence_time": kickoff.isoformat(),
+                       "blinq_priority": priority == 0,
                        "home_team": event.get("home_team"), "away_team": event.get("away_team"),
                        "tournament": event.get("tournament_name") or event.get("tournament"),
                        "captured_at": datetime.now(timezone.utc).isoformat(),
