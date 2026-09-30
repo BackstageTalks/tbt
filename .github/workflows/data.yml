@@ -295,6 +295,15 @@ jobs:
             )
             if [[ "$PROMOTE" == true ]]; then args+=(--promote); fi
             if [[ "$MORNING_REFRESH" == true ]]; then args+=(--morning-refresh); fi
+            if [[ "$MODE" == train ]]; then
+              # Train is always preceded by the same fail-closed point-in-time
+              # leakage audit used by production-preflight. This intentionally
+              # happens before fitting or writing any model candidate.
+              python scripts/download_production_preflight_inputs.py
+              python scripts/audit_training_leakage.py \
+                --history-dir .cache/tbt/history \
+                --report .cache/tbt/production/leakage_audit_report.json
+            fi
             python scripts/pipeline.py "${args[@]}"
           fi
 
@@ -322,7 +331,13 @@ jobs:
 
           report = read_json(".cache/tbt/model/training_report.json", {})
           history = read_json(".cache/tbt/model/promotion_history.json", [])
-          decision = history[-1] if isinstance(history, list) and history else None
+          decision = (
+              report.get("promotion_decision")
+              if isinstance(report, dict)
+              else None
+          )
+          if decision is None:
+              decision = history[-1] if isinstance(history, list) and history else None
           audit = {
               "schema": 1,
               "generated_at_utc": datetime.now(timezone.utc).isoformat(),
@@ -353,6 +368,7 @@ jobs:
           path: |
             .cache/tbt/model/training_report.json
             .cache/tbt/model/promotion_history.json
+            .cache/tbt/production/leakage_audit_report.json
           if-no-files-found: warn
           retention-days: 14
 
