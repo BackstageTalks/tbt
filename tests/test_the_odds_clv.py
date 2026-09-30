@@ -135,6 +135,8 @@ def test_workflow_is_externally_hourly_bounded_and_publication_triggered():
     data = (ROOT / ".github/workflows/data.yml").read_text(encoding="utf-8")
     status = (ROOT / ".github/workflows/match-status.yml").read_text(encoding="utf-8")
     assert "workflow_dispatch:" in workflow
+    assert "  push:" in workflow
+    assert '"scripts/the_odds_clv_collect.py"' in workflow
     assert "  schedule:" not in workflow
     assert 'CLV_DAILY_CREDIT_CAP: "700"' in workflow
     assert 'CLV_MAX_SPORTS_PER_RUN: "28"' in workflow
