@@ -1,6 +1,12 @@
 name: The Odds API tennis CLV collector
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/the-odds-clv.yml"
+      - "scripts/the_odds_clv_collect.py"
+      - "scripts/the_odds_clv_report.py"
   workflow_dispatch:
     inputs:
       reason:
@@ -29,7 +35,7 @@ jobs:
       CLV_MAX_SPORTS_PER_RUN: "28"
       CLV_PROVIDER_RESERVE: "250"
       CLV_LOOKBACK_DAYS: "7"
-      CLV_CAPTURE_REASON: ${{ inputs.reason || 'manual' }}
+      CLV_CAPTURE_REASON: ${{ github.event_name == 'push' && 'bootstrap' || inputs.reason || 'manual' }}
       PYTHONPATH: api:scripts
     steps:
       - uses: actions/checkout@v4
