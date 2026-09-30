@@ -31,8 +31,8 @@ jobs:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
-      CLV_DAILY_CREDIT_CAP: "700"
-      CLV_MAX_SPORTS_PER_RUN: "28"
+      CLV_DAILY_CREDIT_CAP: "12"
+      CLV_MAX_SPORTS_PER_RUN: "6"
       CLV_PROVIDER_RESERVE: "250"
       CLV_LOOKBACK_DAYS: "7"
       CLV_CAPTURE_REASON: ${{ github.event_name == 'push' && 'bootstrap' || inputs.reason || 'manual' }}
