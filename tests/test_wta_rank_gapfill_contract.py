@@ -6,7 +6,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def test_wta_rank_audit_is_read_only_and_pinned():
     request=json.loads((ROOT/".github/wta-rank-gapfill-request.json").read_text())
-    assert request["mode"] == "audit"
+    assert request["mode"] == "write"
     assert request["expected_sha256"] == "cedbf748e111e1f14317a09f561f267bc4861e60dbbafa5500f2826c6d5a4c72"
     assert request["zero_provider_api_requests"] is True
     assert request["production_mutated"] is False
@@ -27,3 +27,11 @@ def test_wta_rank_audit_only_stages_exact_day_both_missing_pairs():
     assert "rank-fill-candidates.jsonl" in script
     assert "canonical_rank1=None" in script
     assert "canonical_rank2=None" in script
+
+
+def test_wta_rank_importer_preserves_point_in_time_provenance_contract():
+    script=(ROOT/"scripts/import_offline_wta_rank_fill.py").read_text()
+    assert '"point_in_time": True' in script
+    assert '"_tbt_rank_provenance"' in script
+    assert "source_date.date() != scheduled.date()" in script
+    assert "match.player1_rank is not None or match.player2_rank is not None" in script
