@@ -52,7 +52,7 @@ from tbt.services.market_selection import (
     attach_market_sections_to_feed,
     enrich_current_betting_day_odds,
 )
-from tbt.services.training import train_from_matches
+from tbt.services.training import refit_serving_model, train_from_matches
 from tbt.services.backtest_service import walk_forward_backtest
 
 
@@ -602,6 +602,29 @@ def main():
             "decision": decision_status,
             "reasons": gate_reasons,
         }
+        model_to_save = result.model
+        if args.promote and eligible:
+            # The untouched holdout has finished its only governance job. Build
+            # a fresh serving artifact that consumes all outcomes through the
+            # evaluated period while freezing the selected blend/calibrator type.
+            model_to_save = refit_serving_model(result)
+            decision["serving_version"] = model_to_save.version
+            decision["serving_history_end"] = model_to_save.metadata.get("history_end")
+            report["serving_refit"] = {
+                "enabled": True,
+                "selection_model_version": result.model.version,
+                "serving_model_version": model_to_save.version,
+                "selection_evaluation_end": result.model.metadata.get("evaluation_end"),
+                "serving_history_end": model_to_save.metadata.get("history_end"),
+                "production_train_matches": model_to_save.metadata.get("production_train_matches"),
+                "production_calibration_matches": model_to_save.metadata.get(
+                    "production_calibration_matches"
+                ),
+                "blend_weight_boost": model_to_save.blend_weight,
+                "elo_weight": getattr(model_to_save, "elo_weight", 0.0),
+                "calibration_method": model_to_save.calibrator.kind,
+            }
+
         # Only a real evaluated holdout is consumable governance evidence.
         # Deferred attempts carry no fingerprint and therefore must not poison
         # future unseen evaluation windows.
@@ -611,7 +634,7 @@ def main():
         # Keep the current attempt visible even when it is deferred and thus is
         # intentionally absent from promotion_history.
         report["promotion_decision"] = decision
-        save_model(result.model, str(model_dir / "model.joblib"))
+        save_model(model_to_save, str(model_dir / "model.joblib"))
         write_json(model_dir / "training_report.json", report)
         write_json(promotion_history_path, promotion_history)
         candidate.upload_bundle([model_dir / "model.joblib", model_dir / "training_report.json",
