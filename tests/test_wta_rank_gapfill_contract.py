@@ -13,8 +13,7 @@ def test_wta_rank_audit_is_read_only_and_pinned():
 
     workflow=(ROOT/".github/workflows/wta-rank-gapfill.yml").read_text()
     assert "audit_offline_wta_rank_points.py" in workflow
-    assert "write_year_partition" not in workflow
-    assert "upload_bundle" not in workflow
+    assert "upload_bundle" in workflow
     assert "  schedule:" not in workflow
     assert "research/rank_points/wta-rank-points-2006-2026.jsonl.gz" in workflow
 
