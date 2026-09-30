@@ -217,6 +217,13 @@ def collect(*, key, available_credits, now=None, max_sports=MAX_SPORTS,
         return report
 
     sports, quota = _get("/sports/", {"apiKey": key}, opener=opener)
+    report["provider_remaining"] = quota["remaining"]
+    if quota["remaining"] is None:
+        report["status"] = "unknown_provider_quota_stop"
+        return report
+    if quota["remaining"] <= provider_reserve:
+        report["status"] = "provider_reserve_reached"
+        return report
     active = _active_tennis_sports(sports, list(priority_terms))
     report["active_tennis_sports"] = len(active)
 
