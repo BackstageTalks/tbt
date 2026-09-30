@@ -53,3 +53,6 @@ def test_clv_routing_uses_propline_hourly_and_sparse_the_odds_consensus():
     assert 'CLV_DAILY_CREDIT_CAP: "12"' in odds
     assert 'CLV_MAX_SPORTS_PER_RUN: "6"' in odds
     assert "GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}" in propline
+    assert "  push:" in propline
+    assert '"scripts/propline_clv_collect.py"' in propline
+    assert "if: needs.collect.result == 'success'" in propline
