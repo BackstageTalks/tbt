@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import the_odds_clv_collect as collect_mod
 from the_odds_clv_collect import collect
-from the_odds_clv_report import evaluate
+from the_odds_clv_report import _norm, evaluate
 
 
 class FakeResponse:
@@ -25,6 +25,11 @@ class FakeResponse:
 
     def __exit__(self, *args):
         return False
+
+
+def test_player_identity_normalization_handles_diacritics():
+    assert _norm("Rebecca Šramková") == _norm("Rebecca Sramkova")
+    assert _norm("Karolína Muchová") == _norm("Karolina Muchova")
 
 
 def test_collector_uses_one_region_one_h2h_market_and_bounds_credits():
