@@ -293,3 +293,58 @@ def test_ui_snapshot_id_validation_is_fail_closed():
             pass
         else:
             raise AssertionError("An untrusted snapshot key must be rejected")
+
+
+def test_info_result_history_is_independent_and_can_be_corrected(monkeypatch):
+    class MultiTable:
+        def __init__(self):
+            self.rows = {}
+        def get_entity(self, partition_key, row_key):
+            key=(partition_key,row_key)
+            if key not in self.rows:
+                raise KeyError(row_key)
+            return dict(self.rows[key])
+        def upsert_entity(self, entity, mode=None):
+            self.rows[(entity["PartitionKey"],entity["RowKey"])] = dict(entity)
+        def query_entities(self, query_filter=None):
+            rows=list(self.rows.values())
+            marker="PartitionKey eq '"
+            if query_filter and marker in query_filter:
+                key=query_filter.split(marker,1)[1].split("'",1)[0]
+                rows=[row for row in rows if row.get("PartitionKey")==key]
+            return [dict(row) for row in rows]
+        def delete_entity(self, partition_key, row_key):
+            key=(partition_key,row_key)
+            if key not in self.rows:
+                raise KeyError(row_key)
+            del self.rows[key]
+
+    table=MultiTable()
+    table.rows[("insights","msg-info-1")]={
+        "PartitionKey":"insights","RowKey":"msg-info-1",
+        "title":"POR vyhrá aspoň jeden polčas","body":"POR -1.50",
+        "type":"vip","priority":"normal","levels_json":'["rookie"]',
+        "match_id":"event-1","active":True,"pinned":False,
+        "active_from":"","active_until":"",
+        "created_at":"2026-10-01T18:00:00+00:00","updated_at":"2026-10-01T18:00:00+00:00",
+        "created_by":"admin","read_count":0,
+    }
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+
+    first=admin_storage.save_info_result("msg-info-1","win",actor_id="admin")
+    assert first["outcome"]=="win"
+    assert first["source_id"]=="msg-info-1"
+    assert len(admin_storage.list_info_results())==1
+
+    corrected=admin_storage.save_info_result("msg-info-1","loss",actor_id="admin")
+    assert corrected["id"]==first["id"]
+    assert admin_storage.list_info_results()[0]["outcome"]=="loss"
+
+    table.delete_entity("insights","msg-info-1")
+    history=admin_storage.list_info_results()
+    assert len(history)==1
+    assert history[0]["title"]=="POR vyhrá aspoň jeden polčas"
+
+    removed=admin_storage.delete_info_result(first["id"],actor_id="admin")
+    assert removed["deleted"] is True
+    assert admin_storage.list_info_results()==[]

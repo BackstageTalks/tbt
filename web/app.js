@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -3486,6 +3486,26 @@
     catch(error){if(generation!==feedGeneration)return;state.adminInsights=[];state.adminInsightsError=error.status===503?'INFO/LIVE história nemá trvalé úložisko. Nastav BLINQ_STORAGE_CONNECTION_STRING na existujúci Azure Storage účet (alebo zapni Firestore).':error.message;}
     finally{if(generation===feedGeneration){state.adminInsightsLoading=false;rerenderAdmin();}}
   }
+  async function loadAdminInfoResults(force=false){
+    const generation=feedGeneration;
+    if(state.adminInfoResultsLoading||(!force&&Array.isArray(state.adminInfoResults)))return;
+    state.adminInfoResultsLoading=true;state.adminInfoResultsError='';rerenderAdmin();
+    try{
+      const data=await BlinqAuth.adminInfoResults();
+      if(generation!==feedGeneration)return;
+      state.adminInfoResults=Array.isArray(data?.items)?data.items:[];
+    }catch(error){
+      if(generation!==feedGeneration)return;
+      state.adminInfoResults=null;
+      state.adminInfoResultsError=error.status===503
+        ?'Úložisko INFO výsledkov momentálne nie je dostupné.'
+        :(error.message||'INFO výsledky sa nepodarilo načítať.');
+    }finally{
+      if(generation===feedGeneration){
+        state.adminInfoResultsLoading=false;rerenderAdmin();
+      }
+    }
+  }
   async function loadAdminLiveResults(force=false){
     const generation=feedGeneration;
     if(state.adminLiveResultsLoading||(!force&&Array.isArray(state.adminLiveResults)))return;
@@ -3560,6 +3580,27 @@
         :'INFO publikum sa riadi presne levelmi zvolenými pri tejto správe.';
     }
   }
+  function adminInsightMessageHtml(index,value={}){
+    const n=Number(index)||0;
+    return `<div class="admin-insight-message-card" data-insight-message>
+      <div class="admin-insight-message-head"><div><small>SPRÁVA <b data-insight-message-number>${n+1}</b></small><span>Nadpis + text sa odošlú ako samostatná INFO/LIVE správa.</span></div><button type="button" class="admin-insight-message-remove" data-admin-action="insight-message-remove" aria-label="Odstrániť správu">×</button></div>
+      <label>Nadpis<input data-insight-title maxlength="140" required value="${escapeHtml(value.title||'')}"></label>
+      <label>Správa<textarea data-insight-body maxlength="4000" required rows="5">${escapeHtml(value.body||'')}</textarea></label>
+      <label>Event ID / zápas <span>(voliteľné)</span><input data-insight-match-id value="${escapeHtml(value.match_id||'')}"></label>
+    </div>`;
+  }
+  function syncAdminInsightBatchComposer(form){
+    if(!form)return;
+    const blocks=[...form.querySelectorAll('[data-insight-message]')];
+    blocks.forEach((block,index)=>{
+      const number=block.querySelector('[data-insight-message-number]');if(number)number.textContent=String(index+1);
+      const remove=block.querySelector('[data-admin-action="insight-message-remove"]');if(remove)remove.hidden=blocks.length<=1||form.dataset.editing==='1';
+    });
+    const add=form.querySelector('[data-admin-action="insight-message-add"]');if(add)add.disabled=blocks.length>=5||form.dataset.editing==='1';
+    const count=form.querySelector('[data-insight-message-count]');if(count)count.textContent=`${blocks.length}/5`;
+    const submit=form.querySelector('#adminInsightSubmit');
+    if(submit)submit.textContent=form.dataset.editing==='1'?'Uložiť':blocks.length===1?'Publikovať':'Publikovať '+blocks.length+' správy';
+  }
   function renderAdminInsights(){
     const item=adminInsightDraft(),levels=Array.isArray(item.levels)?item.levels:[];const list=Array.isArray(state.adminInsights)?state.adminInsights:[];
     const notificationCfg=notificationAudienceConfig(),
@@ -3589,18 +3630,45 @@
     const liveTypes=new Set(['alert','live_watch','set2']);
     const infoEntries=list.filter(row=>!liveTypes.has(String(row.type||'').toLowerCase()));
     const liveEntries=list.filter(row=>liveTypes.has(String(row.type||'').toLowerCase()));
-    const insightRow=(row,allowEdit=true)=>`<article class="admin-insight-row ${row.active===false?'is-inactive':''} priority-${escapeHtml(row.priority||'normal')}">
-      <div><span>${escapeHtml(insightTypeLabel(row.type))}${row.pinned?' · PIN':''}</span>
-        <strong>${escapeHtml(row.title)}</strong><p>${escapeHtml(row.body)}</p>
-        <small>${escapeHtml(insightAudienceText(row.levels))} · ${escapeHtml(row.created_at?fmtDate(row.created_at)+' '+fmtTime(row.created_at):'')} · ${Number(row.read_count)||0} prečítaní</small>
-      </div>
-      <div class="admin-insight-row-actions">
-        ${allowEdit? `<button type="button" class="btn btn-ghost" data-admin-action="insight-edit" data-insight-id="${escapeHtml(row.id)}">Upraviť</button>`:''}
-        <button type="button" class="btn btn-ghost danger" data-admin-action="insight-delete" data-insight-id="${escapeHtml(row.id)}">Zmazať</button>
-      </div>
-    </article>`;
+    const infoResults=Array.isArray(state.adminInfoResults)?state.adminInfoResults:[];
+    const infoResultBySource=new Map(infoResults.map(row=>[String(row.source_id||''),row]));
+    const outcomeText=value=>({win:'WIN',loss:'LOSS',void:'VOID'})[String(value||'').toLowerCase()]||'';
+    const insightRow=(row,allowEdit=true)=>{
+      const isLive=liveTypes.has(String(row.type||'').toLowerCase());
+      const result=!isLive?infoResultBySource.get(String(row.id||'')):null;
+      const outcome=String(result?.outcome||'').toLowerCase();
+      const evaluation=!isLive?`<div class="admin-info-outcome-actions" role="group" aria-label="Vyhodnotenie INFO betu">
+        ${['win','loss','void'].map(value=>`<button type="button" class="admin-outcome-btn outcome-${value}${outcome===value?' is-selected':''}" data-admin-action="info-result-set" data-insight-id="${escapeHtml(row.id)}" data-info-outcome="${value}">${value.toUpperCase()}</button>`).join('')}
+      </div>`:'';
+      return `<article class="admin-insight-row ${row.active===false?'is-inactive':''} priority-${escapeHtml(row.priority||'normal')}">
+        <div><span>${escapeHtml(insightTypeLabel(row.type))}${row.pinned?' · PIN':''}${outcome?' · '+outcomeText(outcome):''}</span>
+          <strong>${escapeHtml(row.title)}</strong><p>${escapeHtml(row.body)}</p>
+          <small>${escapeHtml(insightAudienceText(row.levels))} · ${escapeHtml(row.created_at?fmtDate(row.created_at)+' '+fmtTime(row.created_at):'')} · ${Number(row.read_count)||0} prečítaní</small>
+        </div>
+        <div class="admin-insight-row-actions">${evaluation}
+          ${allowEdit? `<button type="button" class="btn btn-ghost" data-admin-action="insight-edit" data-insight-id="${escapeHtml(row.id)}">Upraviť</button>`:''}
+          <button type="button" class="btn btn-ghost danger" data-admin-action="insight-delete" data-insight-id="${escapeHtml(row.id)}">Zmazať</button>
+        </div>
+      </article>`;
+    };
     const rows=infoEntries.map(row=>insightRow(row)).join('');
     const liveRows=liveEntries.map(row=>insightRow(row,!String(row.id||'').startsWith('live-'))).join('');
+    const resultCard=row=>`<article class="admin-insight-row admin-info-result-row outcome-${escapeHtml(row.outcome||'')}" data-admin-info-result="${escapeHtml(row.id)}">
+      <div><span>INFO · ${escapeHtml(outcomeText(row.outcome))}</span><strong>${escapeHtml(row.title||row.source_id)}</strong><p>${escapeHtml(row.body||'')}</p><small>${row.match_id?`Event ${escapeHtml(row.match_id)} · `:''}${escapeHtml(row.settled_at?fmtDate(row.settled_at)+' '+fmtTime(row.settled_at):'')}</small></div>
+      <div class="admin-insight-row-actions"><button type="button" class="btn btn-ghost danger" data-admin-action="info-result-delete" data-info-result-id="${escapeHtml(row.id)}">Zmazať výsledok</button></div>
+    </article>`;
+    const resultColumn=(outcome,label)=>{
+      const group=infoResults.filter(row=>row.outcome===outcome);
+      return `<div><h3>${label} (${group.length})</h3>${group.map(resultCard).join('')||'<div class="admin-note">Žiadne výsledky.</div>'}</div>`;
+    };
+    const infoManagement=`<section class="admin-info-management" aria-label="Vyhodnotenie INFO betov">
+      <div class="admin-subsection-heading"><div><strong>Vyhodnotené INFO bety</strong><span>${state.adminInfoResultsLoading?'Načítavam…':infoResults.length+' výsledkov'}</span></div></div>
+      <p class="admin-live-delete-help">Pri publikovanej INFO správe klikni WIN, LOSS alebo VOID. Výsledok sa uloží samostatne a zostane v histórii aj po zmazaní alebo expirácii pôvodnej správy.</p>
+      ${state.adminInfoResultsError?`<div class="admin-runtime-note is-error">${escapeHtml(state.adminInfoResultsError)}</div>`:''}
+      ${state.adminInfoResultsLoading?'<div class="admin-note">Načítavam INFO výsledky…</div>':
+        state.adminInfoResults===null?'<div class="admin-note">INFO výsledky zatiaľ nie sú načítané.</div>':
+        `<div class="admin-info-results-columns">${resultColumn('win','WIN')}${resultColumn('loss','LOSS')}${resultColumn('void','VOID')}</div>`}
+    </section>`;
     const results=Array.isArray(state.adminLiveResults)?state.adminLiveResults:[];
     const liveResults=(kind)=>results.filter(row=>row.kind===kind).map(row=>`
       <article class="admin-insight-row admin-live-result-row" data-admin-live-result="${escapeHtml(row.id)}">
@@ -3636,7 +3704,25 @@
     const liveOptions=membershipHierarchy.map(level=>`<option value="${level}"${level===liveMin?' selected':''}>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,'').toUpperCase())}+</option>`).join('');
     const infoOptions=membershipHierarchy.map(level=>`<option value="${level}"${level===infoMin?' selected':''}>${escapeHtml(String(state.ui?.plans?.[level]?.label||level).replace(/^BlinQ\s+/i,'').toUpperCase())}+</option>`).join('');
     const audiencePresets=[['all','VŠETCI'],['pro+','PRO+'],['elite+','ELITE+'],['legend+','LEGEND+'],['goat','GOAT']].map(([value,label])=>`<button type="button" class="btn btn-ghost" data-admin-action="insight-audience-preset" data-audience-preset="${value}">${label}</button>`).join('');
-    return `<section class="admin-ux-section admin-insights-section"><div class="admin-ux-heading"><div><small>SPRÁVY & LIVE</small><h2>Info & Comeback LIVE</h2><p>LIVE má globálne minimum prístupu. INFO má publikum pri každej správe samostatne.</p></div><button type="button" class="btn btn-ghost" data-admin-action="insight-new">Nová správa</button></div>${state.adminInsightsError?`<div class="admin-runtime-note is-error"><strong>Feed nie je dostupný</strong><span>${escapeHtml(state.adminInsightsError)}</span></div>`:''}<div class="admin-notification-access-grid"><div class="admin-live-access-rule"><div><small>PREDVOLENÉ INFO PUBLIKUM</small><strong>Predvolené INFO od ${escapeHtml(infoLabel)}</strong><span>Toto nastaví predvolený rozsah pri novej INFO správe. Konkrétne publikum môžeš potom vybrať ručne vrátane FREE.</span></div><label><span>Predvolene od levelu</span><select id="adminInfoMinLevel">${infoOptions}</select></label><button class="btn btn-primary" type="button" data-admin-action="save-info-access">Uložiť INFO predvoľbu</button></div><div class="admin-live-access-rule"><div><small>PRÍSTUP K LIVE</small><strong>Comeback LIVE od ${escapeHtml(liveLabel)}</strong><span>Automatický radar, ručné LIVE správy aj zámok v headeri používajú toto pravidlo. ADMIN má vždy plný prístup.</span></div><label><span>Minimálny level</span><select id="adminLiveMinLevel">${liveOptions}</select></label><button class="btn btn-primary" type="button" data-admin-action="save-live-access">Uložiť LIVE pravidlo</button></div></div><div class="admin-live-radar-card${radarTone}"><div><small>COMEBACK LIVE RADAR</small><strong>PRIME pool → prehratý 1. set → potvrdený návrat</strong><span>${escapeHtml(radarText)}</span></div><button type="button" class="btn btn-ghost" data-admin-action="live-radar-scan" ${state.adminLiveRadarLoading?'disabled':''}>${state.adminLiveRadarLoading?'Skenujem…':'Scan LIVE teraz'}</button></div><div class="admin-insights-grid"><form id="adminInsightForm" class="admin-insight-composer"><div class="admin-insight-composer-head"><div><small>${item.id?'UPRAVIŤ':'NOVÁ SPRÁVA'}</small><h3>${item.id?escapeHtml(item.title):'Napíš INFO alebo ručné LIVE upozornenie'}</h3></div><span>${escapeHtml(insightAudienceText([...selectedLevels]))}</span></div><label>Nadpis<input id="adminInsightTitle" maxlength="140" required value="${escapeHtml(item.title||'')}"></label><label>Správa<textarea id="adminInsightBody" maxlength="4000" required rows="7">${escapeHtml(item.body||'')}</textarea></label><div class="admin-form-grid"><label>Typ<select id="adminInsightType"><option value="vip"${String(item.type||'vip')==='vip'?' selected':''}>INFO</option><option value="alert"${item.type==='alert'?' selected':''}>LIVE</option></select></label><label>Priorita<select id="adminInsightPriority"><option value="normal"${item.priority==='normal'?' selected':''}>Normal</option><option value="important"${item.priority==='important'?' selected':''}>Important</option><option value="critical"${item.priority==='critical'?' selected':''}>Critical</option></select></label></div><fieldset class="admin-insight-audience"><legend>Publikum</legend><div>${levelChecks}</div><div class="admin-insight-audience-presets">${audiencePresets}<button type="button" class="btn btn-ghost" data-admin-action="insight-audience-preset" data-audience-preset="live-default">LIVE PRAVIDLO</button></div><small data-insight-audience-hint>${itemIsLive?`LIVE rešpektuje globálne minimum ${escapeHtml(liveLabel)}. Pre konkrétnu správu môžeš publikum iba zúžiť.`:`INFO publikum určuješ pri každej správe samostatne. Predvolený rozsah začína od ${escapeHtml(infoLabel)}, ale pri správe môžeš vybrať aj FREE.`}</small></fieldset><div class="admin-form-grid"><label>Event ID / zápas (voliteľné)<input id="adminInsightMatchId" value="${escapeHtml(item.match_id||'')}"></label><label>Text odkazu<input id="adminInsightLinkLabel" maxlength="80" value="${escapeHtml(item.link_label||'')}"></label><label class="span-2">Odkaz (voliteľné)<input id="adminInsightLink" value="${escapeHtml(item.link||'')}"></label><label>Aktívne od<input id="adminInsightFrom" type="datetime-local" value="${escapeHtml(adminDatetimeValue(item.active_from))}"></label><label>Aktívne do<input id="adminInsightUntil" type="datetime-local" data-info-auto="${item.id?'0':'1'}" value="${escapeHtml(adminDatetimeValue(item.active_until))}"></label></div><div class="admin-insight-flags"><label><input id="adminInsightActive" type="checkbox" ${item.active!==false?'checked':''}> Aktívna</label><label><input id="adminInsightPinned" type="checkbox" ${item.pinned?'checked':''}> Pripnúť hore</label></div><div class="admin-insight-actions"><button class="btn btn-primary" type="submit">${item.id?'Uložiť':'Publikovať'}</button>${item.id?'<button class="btn btn-ghost" type="button" data-admin-action="insight-new">Zrušiť</button>':''}<span id="adminInsightMessage"></span></div></form><div class="admin-insight-list"><div class="admin-subsection-heading"><div><strong>Publikované</strong><span>${state.adminInsightsLoading?'Načítavam…':`${infoEntries.length} správ`}</span></div></div>${state.adminInsightsLoading?'<div class="admin-note"><strong>Načítavam…</strong></div>':rows||'<div class="admin-note"><strong>Zatiaľ žiadne INFO správy.</strong></div>'}</div></div>${liveManagement}</section>`;
+    const composerMessages=adminInsightMessageHtml(0,{title:item.title||'',body:item.body||'',match_id:item.match_id||''});
+    const addMessage=item.id?'':`<div class="admin-insight-batch-add"><button type="button" class="btn btn-ghost" data-admin-action="insight-message-add">+ Pridať ďalšiu správu</button><span data-insight-message-count>1/5</span></div>`;
+    return `<section class="admin-ux-section admin-insights-section">
+      <div class="admin-ux-heading"><div><small>SPRÁVY & LIVE</small><h2>Info & Comeback LIVE</h2><p>LIVE má globálne minimum prístupu. INFO má publikum pri každej správe samostatne.</p></div><button type="button" class="btn btn-ghost" data-admin-action="insight-new">Nová správa</button></div>
+      ${state.adminInsightsError?`<div class="admin-runtime-note is-error"><strong>Feed nie je dostupný</strong><span>${escapeHtml(state.adminInsightsError)}</span></div>`:''}
+      <div class="admin-notification-access-grid"><div class="admin-live-access-rule"><div><small>PREDVOLENÉ INFO PUBLIKUM</small><strong>Predvolené INFO od ${escapeHtml(infoLabel)}</strong><span>Toto nastaví predvolený rozsah pri novej INFO správe. Konkrétne publikum môžeš potom vybrať ručne vrátane FREE.</span></div><label><span>Predvolene od levelu</span><select id="adminInfoMinLevel">${infoOptions}</select></label><button class="btn btn-primary" type="button" data-admin-action="save-info-access">Uložiť INFO predvoľbu</button></div><div class="admin-live-access-rule"><div><small>PRÍSTUP K LIVE</small><strong>Comeback LIVE od ${escapeHtml(liveLabel)}</strong><span>Automatický radar, ručné LIVE správy aj zámok v headeri používajú toto pravidlo. ADMIN má vždy plný prístup.</span></div><label><span>Minimálny level</span><select id="adminLiveMinLevel">${liveOptions}</select></label><button class="btn btn-primary" type="button" data-admin-action="save-live-access">Uložiť LIVE pravidlo</button></div></div>
+      <div class="admin-live-radar-card${radarTone}"><div><small>COMEBACK LIVE RADAR</small><strong>PRIME pool → prehratý 1. set → potvrdený návrat</strong><span>${escapeHtml(radarText)}</span></div><button type="button" class="btn btn-ghost" data-admin-action="live-radar-scan" ${state.adminLiveRadarLoading?'disabled':''}>${state.adminLiveRadarLoading?'Skenujem…':'Scan LIVE teraz'}</button></div>
+      <div class="admin-insights-grid"><form id="adminInsightForm" class="admin-insight-composer" data-editing="${item.id?'1':'0'}"><div class="admin-insight-composer-head"><div><small>${item.id?'UPRAVIŤ':'NOVÁ SPRÁVA'}</small><h3>${item.id?escapeHtml(item.title):'Napíš naraz až 5 INFO / LIVE správ'}</h3></div><span>${escapeHtml(insightAudienceText([...selectedLevels]))}</span></div>
+        <div class="admin-insight-message-list">${composerMessages}</div>${addMessage}
+        <div class="admin-insight-shared-title"><div><small>SPOLOČNÉ NASTAVENIA</small><strong>Platia pre všetky správy v tejto dávke</strong></div></div>
+        <div class="admin-form-grid"><label>Typ<select id="adminInsightType"><option value="vip"${String(item.type||'vip')==='vip'?' selected':''}>INFO</option><option value="alert"${item.type==='alert'?' selected':''}>LIVE</option></select></label><label>Priorita<select id="adminInsightPriority"><option value="normal"${item.priority==='normal'?' selected':''}>Normal</option><option value="important"${item.priority==='important'?' selected':''}>Important</option><option value="critical"${item.priority==='critical'?' selected':''}>Critical</option></select></label></div>
+        <fieldset class="admin-insight-audience"><legend>Publikum</legend><div>${levelChecks}</div><div class="admin-insight-audience-presets">${audiencePresets}<button type="button" class="btn btn-ghost" data-admin-action="insight-audience-preset" data-audience-preset="live-default">LIVE PRAVIDLO</button></div><small data-insight-audience-hint>${itemIsLive?`LIVE rešpektuje globálne minimum ${escapeHtml(liveLabel)}. Pre konkrétnu správu môžeš publikum iba zúžiť.`:`INFO publikum určuješ pri každej správe samostatne. Predvolený rozsah začína od ${escapeHtml(infoLabel)}, ale pri správe môžeš vybrať aj FREE.`}</small></fieldset>
+        <div class="admin-form-grid"><label>Text odkazu<input id="adminInsightLinkLabel" maxlength="80" value="${escapeHtml(item.link_label||'')}"></label><label>Odkaz <span>(voliteľné)</span><input id="adminInsightLink" value="${escapeHtml(item.link||'')}"></label><label>Aktívne od<input id="adminInsightFrom" type="datetime-local" value="${escapeHtml(adminDatetimeValue(item.active_from))}"></label><label>Aktívne do<input id="adminInsightUntil" type="datetime-local" data-info-auto="${item.id?'0':'1'}" value="${escapeHtml(adminDatetimeValue(item.active_until))}"></label></div>
+        <div class="admin-insight-flags"><label><input id="adminInsightActive" type="checkbox" ${item.active!==false?'checked':''}> Aktívna</label><label><input id="adminInsightPinned" type="checkbox" ${item.pinned?'checked':''}> Pripnúť hore</label></div>
+        <div class="admin-insight-actions"><button id="adminInsightSubmit" class="btn btn-primary" type="submit">${item.id?'Uložiť':'Publikovať'}</button>${item.id?'<button class="btn btn-ghost" type="button" data-admin-action="insight-new">Zrušiť</button>':''}<span id="adminInsightMessage"></span></div>
+      </form>
+      <div class="admin-insight-list"><div class="admin-subsection-heading"><div><strong>Publikované</strong><span>${state.adminInsightsLoading?'Načítavam…':`${infoEntries.length} správ`}</span></div></div>${state.adminInsightsLoading?'<div class="admin-note"><strong>Načítavam…</strong></div>':rows||'<div class="admin-note"><strong>Zatiaľ žiadne INFO správy.</strong></div>'}</div></div>
+      ${infoManagement}${liveManagement}
+    </section>`;
   }
   function auditDiffLabel(item){
     const before=item?.before||{},after=item?.after||{};const changes=[];
@@ -4205,7 +4291,7 @@
     const host=$('routePanel'); if(!host)return;
     decorateAdminMediaUploads(host);
     host.onclick=async event=>{
-      const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='insights'){loadAdminInsights();loadAdminLiveResults();}if(state.adminTab==='system')loadAdminDiagnostics(true);return;}
+      const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='insights'){loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();}if(state.adminTab==='system')loadAdminDiagnostics(true);return;}
       const tgAction=event.target.closest('[data-admin-action="tg-add"],[data-admin-action="tg-remove"]');if(tgAction){const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]};cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];if(tgAction.dataset.adminAction==='tg-add'){cfg.groups.push({id:`group_${Date.now()}`,enabled:true,badge:'KOMUNITA',title:'Telegram skupina',description:'',cta:'Otvoriť Telegram',url:'',min_plan:'rookie'});}else{const index=Number(tgAction.dataset.tgIndex);if(Number.isInteger(index)&&index>=0)cfg.groups.splice(index,1);}renderTelegramGroupsPanel();rerenderAdmin();return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
       const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.tab_enabled=true;rule.row_overrides={};if(preset==='full'){rule.display_state='active';rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.display_state='active';rule.visible_rows=3;rule.selection_mode='first';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='rookie2'){rule.display_state='active';rule.visible_rows=tab==='daily'?2:Math.min(1,Number(rule.visible_rows)||1);rule.selection_mode='stable_random';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='blurred'){rule.display_state='blurred';rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.display_state='hidden';rule.visible_rows=0;rule.blur_remaining=false;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Zobrazenie · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
@@ -4220,6 +4306,41 @@
       const quick=event.target.closest('[data-admin-user-plan]');if(quick){const input=$('adminUserPlan');if(input){input.value=quick.dataset.adminUserPlan;host.querySelectorAll('[data-admin-user-plan]').forEach(btn=>btn.classList.toggle('active',btn===quick));setAdminPlanDefaults(input.value,false);}return;}
       const expiryQuick=event.target.closest('[data-admin-expiry-days]');if(expiryQuick){adminAddDaysToExpiry(Number(expiryQuick.dataset.adminExpiryDays));return;}
       const actionNode=event.target.closest('[data-admin-action]');const action=actionNode?.dataset.adminAction;if(!action)return;
+      if(action==='insight-message-add'){
+        const form=$('adminInsightForm'),list=form?.querySelector('.admin-insight-message-list');if(!form||!list)return;
+        const count=list.querySelectorAll('[data-insight-message]').length;if(count>=5)return;
+        list.insertAdjacentHTML('beforeend',adminInsightMessageHtml(count));syncAdminInsightBatchComposer(form);
+        list.lastElementChild?.querySelector('[data-insight-title]')?.focus();return;
+      }
+      if(action==='insight-message-remove'){
+        const form=$('adminInsightForm'),block=actionNode.closest('[data-insight-message]');if(!form||!block)return;
+        if(form.querySelectorAll('[data-insight-message]').length<=1)return;
+        block.remove();syncAdminInsightBatchComposer(form);return;
+      }
+      if(action==='info-result-set'){
+        const id=String(actionNode.dataset.insightId||''),outcome=String(actionNode.dataset.infoOutcome||'').toLowerCase();
+        if(!id||!['win','loss','void'].includes(outcome))return;
+        actionNode.disabled=true;
+        try{
+          const saved=await BlinqAuth.adminSettleInfoResult(id,outcome);
+          const rest=(state.adminInfoResults||[]).filter(row=>String(row.source_id)!==id);
+          state.adminInfoResults=[saved,...rest];
+          rerenderAdmin();showStatus(`INFO bet bol označený ako ${outcome.toUpperCase()}.`);
+        }catch(error){showStatus(error.message||'INFO výsledok sa nepodarilo uložiť.');actionNode.disabled=false;}
+        return;
+      }
+      if(action==='info-result-delete'){
+        const id=String(actionNode.dataset.infoResultId||'');if(!id)return;
+        if(!window.confirm('Zmazať toto vyhodnotenie INFO betu? Pôvodná INFO správa zostane zachovaná.'))return;
+        actionNode.disabled=true;
+        try{
+          const removed=await BlinqAuth.adminDeleteInfoResult(id);
+          if(!removed?.deleted)throw new Error('INFO výsledok sa nenašiel alebo už bol zmazaný.');
+          state.adminInfoResults=(state.adminInfoResults||[]).filter(row=>String(row.id)!==id);
+          rerenderAdmin();showStatus('INFO výsledok bol odstránený.');
+        }catch(error){showStatus(error.message||'INFO výsledok sa nepodarilo odstrániť.');actionNode.disabled=false;}
+        return;
+      }
       if(action==='insight-new'){state.adminInsightEditingId='';rerenderAdmin();return;}
       if(action==='insight-edit'){state.adminInsightEditingId=String(actionNode.dataset.insightId||'');rerenderAdmin();return;}
       if(action==='insight-delete'){
@@ -4372,7 +4493,58 @@
       state.adminUsers=(state.adminUsers||[]).map(row=>row.id===updated.id?updated:row);state.adminSelectedUser=updated;message.textContent='Účet bol uložený.';setTimeout(()=>{rerenderAdmin();adminApplyUserFilters();},300);
     }catch(error){message.textContent=error.message||'Účet sa nepodarilo uložiť.';}};
 
-    const insightForm=$('adminInsightForm');if(insightForm){const typeSelect=$('adminInsightType'),fromInput=$('adminInsightFrom'),untilInput=$('adminInsightUntil');if(typeSelect)typeSelect.onchange=()=>{syncAdminInsightAudienceForType(insightForm,true);syncAdminInsightDefaultExpiry(insightForm);};if(fromInput)fromInput.onchange=()=>syncAdminInsightDefaultExpiry(insightForm);if(untilInput)untilInput.oninput=()=>{untilInput.dataset.infoAuto='0';};syncAdminInsightAudienceForType(insightForm,false);}if(insightForm)insightForm.onsubmit=async event=>{event.preventDefault();const message=$('adminInsightMessage');if(message)message.textContent='Publikujem…';try{const levels=[...insightForm.querySelectorAll('input[name="insight_level"]:checked')].map(node=>node.value);if(!levels.length)throw new Error('Vyber aspoň jeden level.');const payload={title:$('adminInsightTitle').value.trim(),body:$('adminInsightBody').value.trim(),type:$('adminInsightType').value,priority:$('adminInsightPriority').value,levels,link:$('adminInsightLink').value.trim(),link_label:$('adminInsightLinkLabel').value.trim(),match_id:$('adminInsightMatchId').value.trim(),active:Boolean($('adminInsightActive').checked),pinned:Boolean($('adminInsightPinned').checked),active_from:$('adminInsightFrom').value?new Date($('adminInsightFrom').value).toISOString():'',active_until:$('adminInsightUntil').value?new Date($('adminInsightUntil').value).toISOString():''};if(state.adminInsightEditingId)await BlinqAuth.adminUpdateInsight(state.adminInsightEditingId,payload);else await BlinqAuth.adminCreateInsight(payload);state.adminInsightEditingId='';state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);showStatus('BlinQ Insight bol publikovaný.');}catch(error){if(message)message.textContent=error.message;}};
+    const insightForm=$('adminInsightForm');
+    if(insightForm){
+      const typeSelect=$('adminInsightType'),fromInput=$('adminInsightFrom'),untilInput=$('adminInsightUntil');
+      if(typeSelect)typeSelect.onchange=()=>{syncAdminInsightAudienceForType(insightForm,true);syncAdminInsightDefaultExpiry(insightForm);};
+      if(fromInput)fromInput.onchange=()=>syncAdminInsightDefaultExpiry(insightForm);
+      if(untilInput)untilInput.oninput=()=>{untilInput.dataset.infoAuto='0';};
+      syncAdminInsightAudienceForType(insightForm,false);
+      syncAdminInsightBatchComposer(insightForm);
+      insightForm.onsubmit=async event=>{
+        event.preventDefault();
+        const message=$('adminInsightMessage'),submit=$('adminInsightSubmit');if(message)message.textContent=state.adminInsightEditingId?'Ukladám…':'Publikujem…';
+        if(submit)submit.disabled=true;
+        try{
+          const levels=[...insightForm.querySelectorAll('input[name="insight_level"]:checked')].map(node=>node.value);
+          if(!levels.length)throw new Error('Vyber aspoň jeden level.');
+          const blocks=[...insightForm.querySelectorAll('[data-insight-message]')];
+          if(!blocks.length||blocks.length>5)throw new Error('Naraz môžeš publikovať 1 až 5 správ.');
+          const messages=blocks.map((block,index)=>({
+            title:String(block.querySelector('[data-insight-title]')?.value||'').trim(),
+            body:String(block.querySelector('[data-insight-body]')?.value||'').trim(),
+            match_id:String(block.querySelector('[data-insight-match-id]')?.value||'').trim(),
+            index:index+1,
+          }));
+          const invalid=messages.find(row=>!row.title||!row.body);
+          if(invalid)throw new Error(`Správa ${invalid.index}: doplň nadpis aj text.`);
+          const shared={
+            type:$('adminInsightType').value,priority:$('adminInsightPriority').value,levels,
+            link:$('adminInsightLink').value.trim(),link_label:$('adminInsightLinkLabel').value.trim(),
+            active:Boolean($('adminInsightActive').checked),pinned:Boolean($('adminInsightPinned').checked),
+            active_from:$('adminInsightFrom').value?new Date($('adminInsightFrom').value).toISOString():'',
+            active_until:$('adminInsightUntil').value?new Date($('adminInsightUntil').value).toISOString():''
+          };
+          if(state.adminInsightEditingId){
+            const row=messages[0];
+            await BlinqAuth.adminUpdateInsight(state.adminInsightEditingId,{...shared,title:row.title,body:row.body,match_id:row.match_id});
+            state.adminInsightEditingId='';
+            state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);
+            showStatus('BlinQ Insight bol uložený.');
+          }else{
+            const settled=await Promise.allSettled(messages.map(row=>BlinqAuth.adminCreateInsight({...shared,title:row.title,body:row.body,match_id:row.match_id})));
+            const ok=settled.filter(row=>row.status==='fulfilled').length,failed=settled.filter(row=>row.status==='rejected');
+            state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);
+            if(failed.length){
+              const reason=failed[0]?.reason?.message||'neznáma chyba';
+              throw new Error(`Publikované ${ok}/${messages.length}. ${failed.length} správa/y zlyhali: ${reason}`);
+            }
+            showStatus(messages.length===1?'BlinQ Insight bol publikovaný.':`Publikovaných ${messages.length} samostatných správ naraz.`);
+          }
+        }catch(error){if(message)message.textContent=error.message||'Publikovanie zlyhalo.';}
+        finally{if(submit)submit.disabled=false;}
+      };
+    }
   }
   function planAvatarHtml(id,p={}){
     const style=String(p.avatar||id||'').toLowerCase(),src=marketingAvatarUrl(style);

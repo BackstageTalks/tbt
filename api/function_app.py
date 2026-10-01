@@ -63,6 +63,9 @@ from tbt.services.admin_storage import (
     list_insights,
     save_insight,
     delete_insight,
+    list_info_results,
+    save_info_result,
+    delete_info_result,
     mark_insight_read,
     save_live_worker_status,
     load_live_worker_status,
@@ -2378,6 +2381,72 @@ def admin_insight_item(req):
         return response({"error": "admin_storage_unavailable"}, 503)
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/info-results", methods=["GET"])
+def admin_info_results(req):
+    try:
+        _, failure = _admin_user(req)
+        if failure:
+            return failure
+        return response({"items": list_info_results(limit=250)})
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/insights/{insight_id}/result", methods=["POST"])
+def admin_info_result_settle(req):
+    try:
+        admin, failure = _admin_user(req)
+        if failure:
+            return failure
+        insight_id = str((req.route_params or {}).get("insight_id") or "")
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        outcome = str((payload or {}).get("outcome") or "")
+        item = save_info_result(
+            insight_id, outcome, actor_id=str(admin.get("id") or "")
+        )
+        record_system_event(
+            "info", "insights", "Admin settled INFO result",
+            details={
+                "source_id": insight_id,
+                "result_id": item.get("id"),
+                "outcome": item.get("outcome"),
+                "actor": str(admin.get("id") or ""),
+            },
+        )
+        return response(item)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/info-results/{result_id}", methods=["DELETE"])
+def admin_info_result_delete(req):
+    try:
+        admin, failure = _admin_user(req)
+        if failure:
+            return failure
+        result_id = str((req.route_params or {}).get("result_id") or "")
+        item = delete_info_result(
+            result_id, actor_id=str(admin.get("id") or "")
+        )
+        return response(item)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
 
 @app.route(route="v1/admin/ui-config/snapshots", methods=["GET"])
 def admin_ui_config_snapshots(req):
