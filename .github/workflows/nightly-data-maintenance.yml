@@ -1,0 +1,337 @@
+name: Nightly data maintenance (no TennisAPI)
+
+on:
+  schedule:
+    # GitHub cron is UTC. Both entries are intentional; the plan job keeps only
+    # the one that resolves to 00:30 Europe/Bratislava across DST.
+    - cron: '30 22 * * *'
+    - cron: '30 23 * * *'
+  workflow_dispatch:
+    inputs:
+      start:
+        description: "History start date for offline/environment maintenance"
+        required: true
+        default: "2021-01-01"
+        type: string
+      open_meteo_max_requests:
+        description: "Nightly Open-Meteo/geocoder cap (never TennisAPI)"
+        required: true
+        default: "1200"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.window.outputs.should_run }}
+      env_stop_at: ${{ steps.window.outputs.env_stop_at }}
+      hard_stop_at: ${{ steps.window.outputs.hard_stop_at }}
+      scope_end: ${{ steps.window.outputs.scope_end }}
+      local_date: ${{ steps.window.outputs.local_date }}
+    steps:
+      - id: window
+        name: Resolve Bratislava night window
+        shell: bash
+        env:
+          BLINQ_EVENT_NAME: ${{ github.event_name }}
+          BLINQ_EVENT_SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from datetime import datetime, time, timedelta, timezone
+          from zoneinfo import ZoneInfo
+
+          now_utc = datetime.now(timezone.utc)
+          zone = ZoneInfo("Europe/Bratislava")
+          local = now_utc.astimezone(zone)
+          event = os.environ.get("BLINQ_EVENT_NAME", "")
+          schedule = os.environ.get("BLINQ_EVENT_SCHEDULE", "")
+
+          if event == "schedule":
+              offset_hours = int(local.utcoffset().total_seconds() // 3600)
+              expected = "30 22 * * *" if offset_hours >= 2 else "30 23 * * *"
+              should_run = schedule == expected
+              env_stop_local = datetime.combine(local.date(), time(4, 0), tzinfo=zone)
+              hard_stop_local = datetime.combine(local.date(), time(5, 0), tzinfo=zone)
+              if local >= hard_stop_local:
+                  should_run = False
+          else:
+              should_run = True
+              env_stop_local = local + timedelta(hours=3, minutes=30)
+              hard_stop_local = local + timedelta(hours=4, minutes=30)
+
+          scope_end = local.date() + timedelta(days=1)
+          print("Event:", event, "schedule:", schedule)
+          print("Local now:", local.isoformat())
+          print("Night maintenance selected:", should_run)
+          print("Environment stop:", env_stop_local.isoformat())
+          print("Hard stop:", hard_stop_local.isoformat())
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"should_run={'true' if should_run else 'false'}\n")
+              fh.write(f"env_stop_at={env_stop_local.astimezone(timezone.utc).isoformat()}\n")
+              fh.write(f"hard_stop_at={hard_stop_local.astimezone(timezone.utc).isoformat()}\n")
+              fh.write(f"scope_end={scope_end.isoformat()}\n")
+              fh.write(f"local_date={local.date().isoformat()}\n")
+          PY
+
+  maintain:
+    needs: plan
+    if: ${{ needs.plan.outputs.should_run == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 270
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      BLINQ_START: ${{ inputs.start || '2021-01-01' }}
+      BLINQ_SCOPE_END: ${{ needs.plan.outputs.scope_end }}
+      BLINQ_ENV_STOP_AT: ${{ needs.plan.outputs.env_stop_at }}
+      BLINQ_HARD_STOP_AT: ${{ needs.plan.outputs.hard_stop_at }}
+      BLINQ_OPEN_METEO_MAX: ${{ inputs.open_meteo_max_requests || '1200' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install dependencies and preflight private data
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)"
+          test "$visibility" = "PRIVATE" || { echo 'Refusing non-private data repository'; exit 1; }
+          # Intentionally no RAPIDAPI_KEY in this workflow.
+          python - <<'PY'
+          import os
+          cap=int(os.environ["BLINQ_OPEN_METEO_MAX"])
+          assert 1 <= cap <= 12000
+          print("Nightly job uses zero TennisAPI requests; Open-Meteo/geocoder cap:", cap)
+          PY
+
+      - name: Phase 1 - reuse verified environment cache (zero network)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/enrich_environment_snapshot.py \
+            --start "$BLINQ_START" \
+            --end "$BLINQ_SCOPE_END" \
+            --limit 0 \
+            --static-only \
+            --complete-static \
+            --cache-only \
+            --max-requests 1 \
+            --max-runtime-minutes 90 \
+            --stop-at "$BLINQ_ENV_STOP_AT" \
+            --data-repository "$TBT_DATA_REPOSITORY"
+          mkdir -p .cache/tbt/nightly
+          cp .cache/tbt/history/environment_enrichment_report.json \
+            .cache/tbt/nightly/environment-cache-pass.json
+
+      - name: Phase 2 - positive-only unique geocoding
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/enrich_environment_snapshot.py \
+            --start "$BLINQ_START" \
+            --end "$BLINQ_SCOPE_END" \
+            --limit 0 \
+            --static-only \
+            --complete-static \
+            --unique-geocode \
+            --retry-unresolved \
+            --max-requests "$BLINQ_OPEN_METEO_MAX" \
+            --max-runtime-minutes 210 \
+            --stop-at "$BLINQ_ENV_STOP_AT" \
+            --yield-guard-after-requests 200 \
+            --min-geocoder-success-rate 0.005 \
+            --data-repository "$TBT_DATA_REPOSITORY"
+          cp .cache/tbt/history/environment_enrichment_report.json \
+            .cache/tbt/nightly/environment-geocode-pass.json
+
+      - name: Phase 3 - rebuild offline derived coverage and masters
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/nightly/history .cache/tbt/nightly/derived
+          remaining="$(python - <<'PY'
+          import os
+          from datetime import datetime, timezone
+          stop=datetime.fromisoformat(os.environ["BLINQ_HARD_STOP_AT"])
+          print(max(60, int((stop-datetime.now(timezone.utc)).total_seconds())))
+          PY
+          )"
+          echo "Offline derivation has up to $remaining seconds before 05:00 Bratislava."
+          set +e
+          timeout --signal=TERM "${remaining}s" bash -c '
+            set -euo pipefail
+            export PYTHONPATH="api:scripts"
+            python scripts/audit_environment_release.py \
+              --data-repository "$TBT_DATA_REPOSITORY" \
+              --history-dir .cache/tbt/nightly/history \
+              --report .cache/tbt/nightly/derived/environment_audit.json
+            python scripts/audit_statistics_inventory.py \
+              --history-dir .cache/tbt/nightly/history \
+              --out .cache/tbt/nightly/derived/statistics_inventory.json
+            python scripts/audit_feature_v3_coverage.py \
+              --history-dir .cache/tbt/nightly/history \
+              --out .cache/tbt/nightly/derived/feature_v3_coverage.json
+            python scripts/build_player_master.py \
+              --history-dir .cache/tbt/nightly/history \
+              --out .cache/tbt/nightly/derived/player_master.json \
+              --csv .cache/tbt/nightly/derived/player_master.csv \
+              --report .cache/tbt/nightly/derived/player_master_report.json
+            python scripts/build_tournament_venue_master.py \
+              --history-dir .cache/tbt/nightly/history \
+              --tournaments-out .cache/tbt/nightly/derived/tournament_master.json \
+              --tournaments-csv .cache/tbt/nightly/derived/tournament_master.csv \
+              --venues-out .cache/tbt/nightly/derived/venue_master.json \
+              --venues-csv .cache/tbt/nightly/derived/venue_master.csv \
+              --report .cache/tbt/nightly/derived/tournament_venue_report.json
+            python scripts/build_production_training_table.py \
+              --history-dir .cache/tbt/nightly/history \
+              --out .cache/tbt/nightly/derived/training_table.parquet \
+              --report .cache/tbt/nightly/derived/training_table_report.json
+            python scripts/audit_training_leakage.py \
+              --history-dir .cache/tbt/nightly/history \
+              --report .cache/tbt/nightly/derived/leakage_audit_report.json
+            python scripts/build_production_readiness_report.py \
+              --player-report .cache/tbt/nightly/derived/player_master_report.json \
+              --tournament-report .cache/tbt/nightly/derived/tournament_venue_report.json \
+              --training-report .cache/tbt/nightly/derived/training_table_report.json \
+              --leakage-report .cache/tbt/nightly/derived/leakage_audit_report.json \
+              --statistics-report .cache/tbt/nightly/derived/statistics_inventory.json \
+              --out .cache/tbt/nightly/derived/readiness_report.json \
+              --markdown .cache/tbt/nightly/derived/readiness_report.md
+          '
+          rc=$?
+          set -e
+          if [[ "$rc" == "124" ]]; then
+            echo "Offline derivation reached the 05:00 Bratislava stop; partial reports are retained."
+          elif [[ "$rc" != "0" ]]; then
+            exit "$rc"
+          fi
+
+      - name: Build nightly summary
+        if: always()
+        shell: bash
+        env:
+          BLINQ_LOCAL_DATE: ${{ needs.plan.outputs.local_date }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          root=Path(".cache/tbt/nightly")
+          def read(name):
+              p=root/name
+              if not p.is_file():
+                  return None
+              try:
+                  return json.loads(p.read_text(encoding="utf-8"))
+              except Exception:
+                  return None
+
+          cache=read("environment-cache-pass.json") or {}
+          geo=read("environment-geocode-pass.json") or {}
+          derived=root/"derived"
+          def read_derived(name):
+              p=derived/name
+              if not p.is_file():
+                  return None
+              try:
+                  return json.loads(p.read_text(encoding="utf-8"))
+              except Exception:
+                  return None
+
+          summary={
+              "schema":1,
+              "local_date":os.environ.get("BLINQ_LOCAL_DATE"),
+              "tennisapi_requests":0,
+              "environment":{
+                  "cache_resolved":cache.get("resolved_from_history_cache",0),
+                  "geocoder_resolved":geo.get("resolved_from_geocoder",0),
+                  "geonames_resolved":geo.get("resolved_from_geonames",0),
+                  "open_meteo_requests":geo.get("open_meteo_requests",0),
+                  "changed_years":geo.get("changed_years",[]),
+                  "stopped_reason":geo.get("stopped_reason"),
+              },
+              "reports":{
+                  "environment":read_derived("environment_audit.json"),
+                  "statistics":read_derived("statistics_inventory.json"),
+                  "feature_v3":read_derived("feature_v3_coverage.json"),
+                  "player_master":read_derived("player_master_report.json"),
+                  "tournament_venue":read_derived("tournament_venue_report.json"),
+                  "training_table":read_derived("training_table_report.json"),
+                  "leakage":read_derived("leakage_audit_report.json"),
+                  "readiness":read_derived("readiness_report.json"),
+              },
+          }
+          (root/"nightly_summary.json").write_text(
+              json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8"
+          )
+          print(json.dumps({
+              "tennisapi_requests":0,
+              "environment":summary["environment"],
+              "derived_reports":[k for k,v in summary["reports"].items() if v is not None],
+          }, ensure_ascii=False, indent=2))
+          PY
+
+      - name: Persist latest nightly reports and derived masters
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          upload() {
+            local path="$1" file="$2"
+            [[ -s "$file" ]] || return 0
+            local encoded sha
+            encoded="$(base64 -w0 "$file")"
+            sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            if [[ -n "$sha" ]]; then
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+                -f message="Update nightly BlinQ data maintenance" \
+                -f content="$encoded" -f sha="$sha" >/dev/null
+            else
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+                -f message="Add nightly BlinQ data maintenance" \
+                -f content="$encoded" >/dev/null
+            fi
+          }
+          upload audit/nightly-data-maintenance-latest.json .cache/tbt/nightly/nightly_summary.json
+          upload audit/nightly-environment-latest.json .cache/tbt/nightly/derived/environment_audit.json
+          upload audit/nightly-statistics-latest.json .cache/tbt/nightly/derived/statistics_inventory.json
+          upload audit/nightly-feature-v3-latest.json .cache/tbt/nightly/derived/feature_v3_coverage.json
+          upload audit/nightly-readiness-latest.json .cache/tbt/nightly/derived/readiness_report.json
+          upload derived/nightly/player_master.json .cache/tbt/nightly/derived/player_master.json
+          upload derived/nightly/tournament_master.json .cache/tbt/nightly/derived/tournament_master.json
+          upload derived/nightly/venue_master.json .cache/tbt/nightly/derived/venue_master.json
+
+      - name: Upload nightly maintenance artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-nightly-data-maintenance-${{ github.run_id }}
+          path: |
+            .cache/tbt/nightly/nightly_summary.json
+            .cache/tbt/nightly/environment-cache-pass.json
+            .cache/tbt/nightly/environment-geocode-pass.json
+            .cache/tbt/nightly/derived/*.json
+            .cache/tbt/nightly/derived/*.md
+          if-no-files-found: warn
