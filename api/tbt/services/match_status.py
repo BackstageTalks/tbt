@@ -24,25 +24,13 @@ from zoneinfo import ZoneInfo
 
 TERMINAL_STATUSES = {"win", "loss", "retired", "void"}
 
-_FEED_ROW_KEYS = (
-    "upcoming",
+_PUBLIC_MATCH_WINNER_KEYS = (
     "prime_picks",
     "top_daily_picks",
-    "top_daily",
-    "daily_picks",
     "value_picks",
-    "value",
     "doubles_picks",
-    "doubles",
-    "ace_picks",
-    "aces",
-    "ace_markets",
-    "sg_picks",
-    "sets_games",
-    "set_game_picks",
-    "board_upcoming",
-    "board_results",
 )
+LEGACY_PENDING_CARRY_HOURS = 48
 
 
 def _event_id(row: Any) -> str:
@@ -80,7 +68,7 @@ def _player_id(row: dict[str, Any], key: str) -> str:
 
 
 def prediction_rows(feed: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Return one best representative row per provider event id."""
+    """Return published Match Winner rows that need runtime settlement."""
     out: dict[str, dict[str, Any]] = {}
 
     def add_rows(rows: Any) -> None:
@@ -103,13 +91,8 @@ def prediction_rows(feed: dict[str, Any]) -> dict[str, dict[str, Any]]:
             if existing is None or quality > old_quality:
                 out[eid] = row
 
-    for key in _FEED_ROW_KEYS:
+    for key in _PUBLIC_MATCH_WINNER_KEYS:
         add_rows(feed.get(key))
-
-    markets = feed.get("markets")
-    if isinstance(markets, dict):
-        for rows in markets.values():
-            add_rows(rows)
 
     return out
 
@@ -464,13 +447,22 @@ def scan_match_statuses(
     prior_pending = prior.get("pending")
     prior_pending = prior_pending if isinstance(prior_pending, dict) else {}
 
-    # Keep unfinished fixtures even when a fresh feed replaces yesterday's rows.
-    # Pending fixtures do not expire after any fixed number of hours or days.
+    # Carry only pending rows that were created by the public-pick worker.
+    # Legacy snapshots used to include the entire model/board feed, which created
+    # a large stale backlog unrelated to published bets. Unmarked legacy rows are
+    # intentionally dropped. Marked public picks may survive a feed rollover for
+    # up to 48 hours so yesterday's late/unfinished matches can still settle.
+    carry_cutoff = now - timedelta(hours=LEGACY_PENDING_CARRY_HOURS)
     for eid, saved in prior_pending.items():
         if eid in rows or not isinstance(saved, dict):
             continue
-        if not (_parse_time(saved.get("t")) and saved.get("s")
-                and saved.get("a") and saved.get("b")):
+        scheduled = _parse_time(saved.get("t"))
+        if (
+            str(saved.get("p") or "") != "1"
+            or scheduled is None
+            or scheduled < carry_cutoff
+            or not (saved.get("s") and saved.get("a") and saved.get("b"))
+        ):
             continue
         rows[eid] = {
             "event_id": eid, "scheduled_at": saved["t"], "winner_id": saved["s"],
@@ -502,6 +494,7 @@ def scan_match_statuses(
         compact = {
             "t": scheduled.isoformat(), "s": selection,
             "a": player1, "b": player2, "c": str(old.get("c") or "")[:64],
+            "p": "1",
         }
         # Keep postponed fixtures in the queue, without querying future starts.
         if eid in prior_pending:
