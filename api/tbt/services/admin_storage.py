@@ -1800,6 +1800,111 @@ def list_live_radar_results(
     items.sort(key=lambda row: row.get("settled_at") or "", reverse=True)
     return items[:max(1, min(200, int(limit or 60)))]
 
+
+_INFO_RESULT_PARTITION = "info-results"
+_INFO_RESULT_OUTCOMES = {"win", "loss", "void"}
+
+
+def _info_result_from_entity(entity: dict) -> dict:
+    return {
+        "id": str(entity.get("RowKey") or ""),
+        "source_id": str(entity.get("source_id") or ""),
+        "outcome": str(entity.get("outcome") or ""),
+        "title": str(entity.get("title") or ""),
+        "body": str(entity.get("body") or ""),
+        "match_id": str(entity.get("match_id") or ""),
+        "published_at": str(entity.get("published_at") or ""),
+        "settled_at": str(entity.get("settled_at") or ""),
+        "settled_by": str(entity.get("settled_by") or ""),
+    }
+
+
+def save_info_result(insight_id: str, outcome: str, *, actor_id: str = "") -> dict:
+    """Manually settle one INFO post as win/loss/void.
+
+    Results are stored independently from the INFO row, so the evaluation
+    history survives later message expiry or deletion and can be corrected by
+    settling the same source again.
+    """
+    insight_id = str(insight_id or "").strip()
+    outcome = str(outcome or "").strip().lower()
+    if not _VALID_ID.fullmatch(insight_id):
+        raise ValueError("Invalid insight id")
+    if outcome not in _INFO_RESULT_OUTCOMES:
+        raise ValueError("Invalid INFO result outcome")
+    try:
+        source = _table(INSIGHTS_TABLE).get_entity(
+            partition_key="insights", row_key=insight_id
+        )
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            raise ValueError("Unknown insight") from exc
+        raise AdminStorageUnavailable("Unable to load INFO insight") from exc
+    item = _insight_from_entity(source)
+    if str(item.get("type") or "").lower() in {"alert", "live_watch", "set2"}:
+        raise ValueError("LIVE insights use LIVE result settlement")
+    now = datetime.now(timezone.utc).isoformat()
+    result_id = f"info-result-{insight_id}"
+    if len(result_id) > 96:
+        result_id = f"info-result-{uuid.uuid5(uuid.NAMESPACE_URL, insight_id).hex}"
+    entity = {
+        "PartitionKey": _INFO_RESULT_PARTITION,
+        "RowKey": result_id,
+        "source_id": insight_id,
+        "outcome": outcome,
+        "title": str(item.get("title") or "")[:140],
+        "body": str(item.get("body") or "")[:4000],
+        "match_id": str(item.get("match_id") or "")[:96],
+        "published_at": str(item.get("created_at") or "")[:64],
+        "settled_at": now,
+        "settled_by": str(actor_id or "")[:256],
+    }
+    try:
+        _table(INSIGHTS_TABLE).upsert_entity(entity, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save INFO result") from exc
+    return _info_result_from_entity(entity)
+
+
+def list_info_results(*, limit: int = 250) -> list[dict]:
+    try:
+        rows = list(_table(INSIGHTS_TABLE).query_entities(
+            query_filter=f"PartitionKey eq '{_INFO_RESULT_PARTITION}'"
+        ))
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to list INFO results") from exc
+    items = [_info_result_from_entity(row) for row in rows]
+    items.sort(key=lambda row: row.get("settled_at") or "", reverse=True)
+    return items[:max(1, min(500, int(limit or 250)))]
+
+
+def delete_info_result(result_id: str, *, actor_id: str = "") -> dict:
+    result_id = str(result_id or "").strip()
+    if not _VALID_ID.fullmatch(result_id) or not result_id.startswith("info-result-"):
+        raise ValueError("Invalid INFO result id")
+    client = _table(INSIGHTS_TABLE)
+    try:
+        existing = client.get_entity(
+            partition_key=_INFO_RESULT_PARTITION, row_key=result_id
+        )
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            return {"deleted": False, "id": result_id}
+        raise AdminStorageUnavailable("Unable to load INFO result") from exc
+    try:
+        client.delete_entity(
+            partition_key=_INFO_RESULT_PARTITION, row_key=result_id
+        )
+    except Exception as exc:
+        if not _is_missing_entity(exc):
+            raise AdminStorageUnavailable("Unable to delete INFO result") from exc
+    return {
+        "deleted": True,
+        "id": result_id,
+        "source_id": str(existing.get("source_id") or ""),
+        "deleted_by": str(actor_id or "")[:256],
+    }
+
 def save_automated_insight(payload: object, *, actor_id: str = "automation", insight_id: str) -> tuple[dict, bool]:
     """Create or refresh one deterministic system insight idempotently.
 
