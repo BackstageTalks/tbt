@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     # Stay alive until the real data.yml refresh finishes; wrapper success must
     # mean the paid refresh/deploy itself succeeded, not only that dispatch worked.
-    timeout-minutes: 180
+    timeout-minutes: 240
     env:
       GH_TOKEN: ${{ github.token }}
       MORNING_MAX_REQUESTS: ${{ inputs.max_requests || vars.TBT_MORNING_REFRESH_MAX_REQUESTS || '300' }}
@@ -94,8 +94,6 @@ jobs:
           set -euo pipefail
           mkdir -p .cache/tbt/morning
           workflow_runs_api="repos/$GITHUB_REPOSITORY/actions/workflows/data.yml/runs?event=workflow_dispatch&branch=main&per_page=50"
-          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
-
           dispatch_child () {
             local attempt="$1"
             local before=".cache/tbt/morning/before-$attempt.txt"
@@ -108,8 +106,6 @@ jobs:
               while IFS= read -r candidate; do
                 [[ -n "$candidate" ]] || continue
                 grep -qx "$candidate" "$before" && continue
-                candidate_sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate" --jq .head_sha)"
-                [[ "$candidate_sha" == "$main_sha" ]] || continue
                 CHILD_RUN_ID="$candidate"
                 break
               done < <(gh api "$workflow_runs_api" --jq '.workflow_runs[].id')
