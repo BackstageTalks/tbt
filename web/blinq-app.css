@@ -8347,3 +8347,15 @@ body#blinqPremium.blinq-admin .admin-insight-row-actions{flex-wrap:wrap;justify-
   body#blinqPremium.blinq-admin .admin-info-outcome-actions{width:100%;grid-template-columns:repeat(3,1fr)}
   body#blinqPremium.blinq-admin .admin-outcome-btn{width:100%}
 }
+
+
+/* INFO drawer type hierarchy tweak — 2026-10-01.
+   Message content gets slightly more visual weight; generic FREE title recedes. */
+body#blinqPremium .insight-feed-item h3{
+  font-size:11.5px;
+  line-height:1.25;
+}
+body#blinqPremium .insight-feed-item p{
+  font-size:10.5px;
+  line-height:1.55;
+}
