@@ -27,7 +27,7 @@ def test_parse_ace_double_fault_semantics():
 
 
 def test_parse_tiebreak_service_changes():
-    parsed, error = _parse_pbp("S/RR/SS/RR")
+    parsed, error = _parse_pbp("SS/RR/SS/RR")
     assert error == ""
     assert parsed is not None
     assert parsed[0]["service_points"] > 0
