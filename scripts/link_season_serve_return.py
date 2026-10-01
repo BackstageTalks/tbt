@@ -262,17 +262,17 @@ def _incoming(source: SourceMatch, orientation: str) -> dict[str, float]:
 
 
 def _conflicts(existing: dict[str, Any], incoming: dict[str, float]) -> list[str]:
+    # Only a material disagreement in the serve/return quality fields can veto
+    # the link. Ace/DF counts are secondary enrichment: if canonical already has
+    # a count, the staged clean set simply leaves that count untouched.
     out = []
     for key, value in incoming.items():
+        if not key.endswith(("service_points_won", "return_points_won")):
+            continue
         if existing.get(key) is None:
             continue
         current = _number(existing.get(key))
-        tolerance = (
-            RATE_CONFLICT_TOLERANCE
-            if key.endswith(("service_points_won", "return_points_won"))
-            else 0.0
-        )
-        if current is None or abs(current - value) > tolerance:
+        if current is None or abs(current - value) > RATE_CONFLICT_TOLERANCE:
             out.append(key)
     return out
 
