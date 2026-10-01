@@ -63,6 +63,7 @@ def test_oversized_match_status_snapshot_roundtrips_without_truncation(monkeypat
         "pending": pending,
         "tracked": len(pending) + 1,
         "due": len(pending),
+        "budget_paused": True,
     })
 
     assert saved["pending_count"] == len(pending)
@@ -79,6 +80,7 @@ def test_oversized_match_status_snapshot_roundtrips_without_truncation(monkeypat
     assert all(len(str(row["payload"]).encode("utf-16-le")) < 60_000 for row in chunks)
 
     restored = admin_storage.load_match_status_snapshot()
+    assert restored["budget_paused"] is True
     assert restored["statuses"]["resolved"]["status"] == "win"
     assert restored["pending_count"] == len(pending)
     assert restored["pending"]["4999"]["s"] == pending["4999"]["s"]
