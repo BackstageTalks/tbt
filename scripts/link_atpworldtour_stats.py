@@ -1,4 +1,4 @@
-"""Fail-closed linker for ATP World Tour score/stat archives (2019-2022).
+"""Fail-closed linker for ATP World Tour score/stat archives.
 
 The serve-and-volley archive exposes tournament windows, score identities and
 match-stat rows in separate headerless CSVs.  Stats are first joined to scores
@@ -223,6 +223,8 @@ def _load_sources(
     score_paths: list[str],
     stats_paths: list[str],
     counts: Counter,
+    min_year: int,
+    max_year: int,
 ) -> list[SourceMatch]:
     tournaments: dict[str, dict[str, str]] = {}
     for path in tournament_paths:
@@ -259,8 +261,8 @@ def _load_sources(
                 year = int(score.get("start_year") or 0)
             except ValueError:
                 year = 0
-            if year < 2019 or year > 2022:
-                counts["filtered_outside_2019_2022"] += 1
+            if year < min_year or year > max_year:
+                counts["filtered_outside_requested_years"] += 1
                 continue
 
             start = _parse_dot_date(score.get("start_date"))
@@ -410,8 +412,13 @@ def main() -> None:
     ap.add_argument("--tournaments-csv", action="append", required=True)
     ap.add_argument("--scores-csv", action="append", required=True)
     ap.add_argument("--stats-csv", action="append", required=True)
+    ap.add_argument("--min-year", type=int, default=2019)
+    ap.add_argument("--max-year", type=int, default=2022)
     ap.add_argument("--out-dir", required=True)
     args = ap.parse_args()
+
+    if args.min_year > args.max_year:
+        ap.error("--min-year must be <= --max-year")
 
     out = Path(args.out_dir)
     out.mkdir(parents=True, exist_ok=True)
@@ -425,6 +432,8 @@ def main() -> None:
         args.scores_csv,
         args.stats_csv,
         counts,
+        args.min_year,
+        args.max_year,
     )
 
     by_pair = defaultdict(list)
@@ -570,7 +579,7 @@ def main() -> None:
         "quality_ready_projected_added": quality_after - quality_before,
         "production_mutated": False,
         "api_requests": 0,
-        "source_policy": "serve-and-volley pinned archive 2019-2022",
+        "source_policy": f"serve-and-volley pinned archive {args.min_year}-{args.max_year}",
         "link_policy": "pair+tournament_window+winner+surface+round+tournament",
     }
     (out / "report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
