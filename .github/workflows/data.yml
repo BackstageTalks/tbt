@@ -73,7 +73,9 @@ permissions:
   actions: write
 concurrency:
   group: tbt-history-data-writer
-  cancel-in-progress: false
+  # One-shot recovery marker only. Reverted immediately after the replacement
+  # run acquires the lock; ordinary history writers remain non-cancellable.
+  cancel-in-progress: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[replace-current-refresh]') }}
 jobs:
   pipeline:
     if: (github.event_name == 'push' && (contains(github.event.head_commit.message, '[refresh-now]') || contains(github.event.head_commit.message, '[data-request]'))) || github.event_name == 'workflow_dispatch'
