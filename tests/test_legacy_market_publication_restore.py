@@ -162,3 +162,35 @@ def test_conflicting_legacy_snapshots_with_tied_first_issue_still_fail_closed():
 
     with pytest.raises(RuntimeError, match="prime event 17201971"):
         restore_published_market_snapshots(feed, ledger)
+
+
+def test_tied_conflicting_prime_can_be_quarantined_for_daily_offer_recovery():
+    feed = {
+        "top_daily_picks": [],
+        "prime_picks": [_feed_row()],
+        "value_picks": [],
+        "doubles_picks": [],
+        "ace_picks": [],
+        "sg_picks": [],
+    }
+    first = _legacy_publication(odds=1.84)
+    conflict = _legacy_publication(odds=1.91)
+    ledger = [{
+        "event_id": "17201971",
+        "market_publications": [first, conflict],
+    }]
+    quarantine = []
+
+    restored = restore_published_market_snapshots(
+        feed,
+        ledger,
+        quarantine_report=quarantine,
+    )
+
+    assert restored["prime_picks"] == []
+    assert quarantine == [{
+        "event_id": "17201971",
+        "market": "match_winner",
+        "section": "prime",
+        "reason": "ambiguous_issued_legacy_match_winner_snapshots",
+    }]
