@@ -8261,3 +8261,89 @@ body#blinqPremium.blinq-route .results-betting-day-toggle small{
   body#blinqPremium:not(.blinq-admin) .mobile-tabs a{height:46px!important}
   body#blinqPremium:not(.blinq-admin) .app-shell{padding-bottom:calc(82px + env(safe-area-inset-bottom,0px))!important}
 }
+
+
+/* Admin > INFO batch composer + manual settlement history (2026-10-01). */
+body#blinqPremium.blinq-admin .admin-insight-message-list{display:grid;gap:10px}
+body#blinqPremium.blinq-admin .admin-insight-message-card{
+  display:grid;gap:9px;padding:12px;border:1px solid rgba(53,122,112,.46);
+  border-radius:10px;background:linear-gradient(180deg,rgba(7,29,34,.96),rgba(4,20,29,.94));
+}
+body#blinqPremium.blinq-admin .admin-insight-message-card>label{
+  display:grid;gap:5px;color:#7593a5;font-size:8px;font-weight:800;
+}
+body#blinqPremium.blinq-admin .admin-insight-message-card>label>span{font-weight:650;color:#587887}
+body#blinqPremium.blinq-admin .admin-insight-message-head{
+  display:flex;justify-content:space-between;align-items:flex-start;gap:10px;padding-bottom:7px;
+  border-bottom:1px solid rgba(67,121,116,.2);
+}
+body#blinqPremium.blinq-admin .admin-insight-message-head>div{display:grid;gap:2px}
+body#blinqPremium.blinq-admin .admin-insight-message-head small{
+  color:#8d71f3;font-size:7px;font-weight:900;letter-spacing:.12em;
+}
+body#blinqPremium.blinq-admin .admin-insight-message-head small b{color:#d7cdff}
+body#blinqPremium.blinq-admin .admin-insight-message-head span{color:#688794;font-size:7px;line-height:1.35}
+body#blinqPremium.blinq-admin .admin-insight-message-remove{
+  width:26px;height:26px;border:1px solid rgba(117,65,79,.72);border-radius:7px;
+  background:rgba(49,18,29,.7);color:#f0a6b5;font-size:17px;line-height:1;cursor:pointer;
+}
+body#blinqPremium.blinq-admin .admin-insight-message-remove[hidden]{display:none!important}
+body#blinqPremium.blinq-admin .admin-insight-batch-add{
+  display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 1px 0;
+}
+body#blinqPremium.blinq-admin .admin-insight-batch-add>span{
+  color:#6c8a97;font-size:8px;font-weight:850;letter-spacing:.08em;
+}
+body#blinqPremium.blinq-admin .admin-insight-shared-title{
+  margin-top:2px;padding:9px 10px;border:1px solid rgba(92,78,151,.34);
+  border-radius:9px;background:rgba(29,22,63,.25);
+}
+body#blinqPremium.blinq-admin .admin-insight-shared-title small{
+  display:block;color:#987df5;font-size:7px;font-weight:900;letter-spacing:.11em;
+}
+body#blinqPremium.blinq-admin .admin-insight-shared-title strong{
+  display:block;margin-top:3px;color:#d5dbe1;font-size:9px;font-weight:750;
+}
+body#blinqPremium.blinq-admin .admin-info-outcome-actions{
+  display:grid;grid-template-columns:repeat(3,auto);gap:4px;align-items:center;
+}
+body#blinqPremium.blinq-admin .admin-outcome-btn{
+  min-width:43px;height:28px;padding:0 7px;border:1px solid #315365;border-radius:7px;
+  background:#071b26;color:#8fa9b6;font-size:7px;font-weight:950;letter-spacing:.06em;cursor:pointer;
+}
+body#blinqPremium.blinq-admin .admin-outcome-btn.outcome-win{border-color:rgba(54,185,124,.48);color:#71e5ad}
+body#blinqPremium.blinq-admin .admin-outcome-btn.outcome-loss{border-color:rgba(206,87,104,.5);color:#ef9aaa}
+body#blinqPremium.blinq-admin .admin-outcome-btn.outcome-void{border-color:rgba(182,153,79,.48);color:#dcc985}
+body#blinqPremium.blinq-admin .admin-outcome-btn.is-selected{
+  box-shadow:inset 0 0 0 1px currentColor,0 0 0 1px rgba(255,255,255,.03);
+  background:rgba(14,35,38,.98);
+}
+body#blinqPremium.blinq-admin .admin-info-management{
+  margin:19px 0 0;padding:16px;border:1px solid rgba(115,92,194,.28);
+  border-radius:12px;background:rgba(17,13,39,.34);display:grid;gap:12px;
+}
+body#blinqPremium.blinq-admin .admin-info-management>.admin-subsection-heading{
+  margin:0;padding-bottom:9px;border-bottom:1px solid rgba(121,100,189,.2);
+}
+body#blinqPremium.blinq-admin .admin-info-results-columns{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;
+}
+body#blinqPremium.blinq-admin .admin-info-results-columns>div{
+  min-width:0;display:grid;gap:9px;align-content:start;
+}
+body#blinqPremium.blinq-admin .admin-info-results-columns h3{
+  margin:0;padding:5px 0;font-size:12px;font-weight:900;color:#d8d0fa;letter-spacing:.04em;
+}
+body#blinqPremium.blinq-admin .admin-info-result-row.outcome-win{border-color:rgba(54,185,124,.38)}
+body#blinqPremium.blinq-admin .admin-info-result-row.outcome-loss{border-color:rgba(206,87,104,.38)}
+body#blinqPremium.blinq-admin .admin-info-result-row.outcome-void{border-color:rgba(182,153,79,.36)}
+body#blinqPremium.blinq-admin .admin-insight-row-actions{flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:980px){
+  body#blinqPremium.blinq-admin .admin-info-results-columns{grid-template-columns:minmax(0,1fr)}
+}
+@media(max-width:740px){
+  body#blinqPremium.blinq-admin .admin-insight-message-card{padding:10px}
+  body#blinqPremium.blinq-admin .admin-info-management{padding:11px}
+  body#blinqPremium.blinq-admin .admin-info-outcome-actions{width:100%;grid-template-columns:repeat(3,1fr)}
+  body#blinqPremium.blinq-admin .admin-outcome-btn{width:100%}
+}
