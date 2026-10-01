@@ -13,39 +13,37 @@ from tbt.providers.rapidapi import RapidTennisClient
 NOW = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
 
 
-def test_independent_purpose_ceilings_share_global_hard_cap():
+def test_all_purposes_share_provider_day_pool_with_500_reserve():
     ledger = None
-    ledger, result = shared_budget.calculate(ledger, "live", 2500, now=NOW)
-    assert result["remaining"]["live"] == 0
-    with pytest.raises(shared_budget.SharedBudgetExhausted):
-        shared_budget.calculate(ledger, "live", 1, now=NOW)
+    for purpose, amount in (
+        ("live", 2500),
+        ("refresh", 2500),
+        ("match", 1000),
+        ("history", 8500),
+    ):
+        ledger, result = shared_budget.calculate(ledger, purpose, amount, now=NOW)
 
-    # Refresh may use otherwise idle capacity; its ceiling is no longer a tiny
-    # fixed partition of the global pool.
-    ledger, result = shared_budget.calculate(ledger, "refresh", 2500, now=NOW)
-    assert result["remaining"]["refresh"] == 0
-    ledger, result = shared_budget.calculate(ledger, "match", 1000, now=NOW)
-    assert result["remaining"]["match"] == 0
-
-    # The hard combined stop remains 12,000, preserving 3,000 provider headroom.
-    for chunk in (3000, 3000):
-        ledger, result = shared_budget.calculate(ledger, "history", chunk, now=NOW)
-    assert result["global_spent"] == 12000
+    assert result["provider_plan_limit"] == 15000
+    assert result["global_limit"] == 14500
+    assert result["global_spent"] == 14500
     assert result["global_remaining"] == 0
-    assert result["reserved_provider_headroom"] == 3000
+    assert result["reserved_provider_headroom"] == 500
     with pytest.raises(shared_budget.SharedBudgetExhausted):
-        shared_budget.calculate(ledger, "history", 1, now=NOW)
+        shared_budget.calculate(ledger, "refresh", 1, now=NOW)
 
 
-def test_rolling_24_hours_keeps_boundary_bucket_conservatively():
-    ledger, _ = shared_budget.calculate(None, "live", 1, now=NOW)
-    with pytest.raises(shared_budget.SharedBudgetExhausted):
-        shared_budget.calculate(ledger, "live", 2500, now=NOW + timedelta(hours=24))
-    ledger, result = shared_budget.calculate(
-        ledger, "live", 2500,
-        now=NOW + timedelta(hours=24, minutes=5),
-    )
-    assert result["spent"]["live"] == 2500
+def test_provider_day_resets_at_1910_bratislava():
+    # 2026-09-27 is CEST, so 19:10 Europe/Bratislava == 17:10 UTC.
+    before_reset = datetime(2026, 9, 27, 17, 9, tzinfo=timezone.utc)
+    at_reset = datetime(2026, 9, 27, 17, 10, tzinfo=timezone.utc)
+
+    ledger, result = shared_budget.calculate(None, "refresh", 1000, now=before_reset)
+    assert result["global_spent"] == 1000
+
+    ledger, result = shared_budget.calculate(ledger, "refresh", 1000, now=at_reset)
+    assert result["global_spent"] == 1000
+    assert result["global_remaining"] == 13500
+    assert result["window"] == "provider_day_19_10_europe_bratislava"
 
 
 def test_corrupt_ledger_and_bad_request_fail_closed():
@@ -100,7 +98,7 @@ def test_parallel_reservations_never_overspend(monkeypatch):
     table = AtomicFakeTable()
     monkeypatch.setattr(shared_budget, "GLOBAL_CEILING", 10)
     monkeypatch.setattr(shared_budget, "PURPOSE_CAPS",
-                        {"live": 10, "match": 1000, "refresh": 2500, "history": 8500})
+                        {"live": 10, "match": 10, "refresh": 10, "history": 10})
     monkeypatch.setattr(shared_budget, "MAX_RETRIES", 40)
 
     def attempt(_):
