@@ -19,7 +19,10 @@ from .budget import RequestBudgetExceeded
 WINDOW_SLOTS = 288  # 24 hours * 12 five-minute buckets
 SLOT_SECONDS = 300
 GLOBAL_CEILING = 12000  # 15,000 plan minus 3,000 emergency headroom
-PURPOSE_CAPS = {"live": 2500, "match": 1000, "refresh": 750, "history": 7750}
+# Per-purpose ceilings are independent safety rails, not a partition of the
+# 12,000 global ceiling. This allows low-total-use jobs to borrow otherwise idle
+# capacity while the global hard stop still preserves 3,000 provider headroom.
+PURPOSE_CAPS = {"live": 2500, "match": 1000, "refresh": 2500, "history": 8500}
 PURPOSE_INDEX = {name: pos + 1 for pos, name in enumerate(PURPOSE_CAPS)}
 TABLE = "BlinQApiBudget"
 PARTITION = "rapidapi"
