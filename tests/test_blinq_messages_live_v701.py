@@ -37,3 +37,15 @@ def test_admin_info_schedule_renders_utc_as_browser_local_datetime():
     assert 'date.getHours()' in block
     assert "replace('Z','')" not in block
     assert "new Date($('adminInsightFrom').value).toISOString()" in app
+
+def test_new_info_defaults_to_local_end_of_day_without_overwriting_manual_edit():
+    app=(ROOT/'web/app.js').read_text(encoding='utf-8')
+    draft=app.split('function adminInsightDraft()',1)[1].split('function adminDatetimeValue',1)[0]
+    assert "active_until:adminInsightEndOfDayIso()" in draft
+    helper=app.split('function adminInsightEndOfDayIso',1)[1].split('function adminDatetimeValue',1)[0]
+    assert 'date.setHours(23,59,0,0)' in helper
+    assert 'data-info-auto="${item.id?\'0\':\'1\'}"' in app
+    wire=app.split("const insightForm=$('adminInsightForm')",1)[1].split("if(insightForm)insightForm.onsubmit",1)[0]
+    assert "fromInput.onchange=()=>syncAdminInsightDefaultExpiry(insightForm)" in wire
+    assert "untilInput.dataset.infoAuto='0'" in wire
+    assert "syncAdminInsightDefaultExpiry(insightForm)" in wire
