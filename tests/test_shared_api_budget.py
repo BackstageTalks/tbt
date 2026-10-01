@@ -23,9 +23,9 @@ def test_independent_live_and_morning_caps_preserve_emergency_headroom():
     ledger, result = shared_budget.calculate(ledger, "refresh", 750, now=NOW)
     assert result["remaining"]["refresh"] == 0
     assert result["global_remaining"] == 8750
-    for chunk in (3000, 3000, 2500):
+    for chunk in (3000, 3000, 1750):
         ledger, result = shared_budget.calculate(ledger, "history", chunk, now=NOW)
-    ledger, result = shared_budget.calculate(ledger, "match", 250, now=NOW)
+    ledger, result = shared_budget.calculate(ledger, "match", 1000, now=NOW)
     assert result["global_spent"] == 12000
     assert result["global_remaining"] == 0
     assert result["reserved_provider_headroom"] == 3000
@@ -94,7 +94,7 @@ def test_parallel_reservations_never_overspend(monkeypatch):
     table = AtomicFakeTable()
     monkeypatch.setattr(shared_budget, "GLOBAL_CEILING", 10)
     monkeypatch.setattr(shared_budget, "PURPOSE_CAPS",
-                        {"live": 10, "match": 250, "refresh": 750, "history": 8500})
+                        {"live": 10, "match": 1000, "refresh": 750, "history": 7750})
     monkeypatch.setattr(shared_budget, "MAX_RETRIES", 40)
 
     def attempt(_):
