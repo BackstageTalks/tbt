@@ -9,7 +9,7 @@ on:
     inputs:
       mode:
         type: choice
-        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, top-audit, market-audit, results-rebuild, deploy-current, train, backtest, refresh]
+        options: [mega-data, doubles-data, sg-rebuild, feature-audit, history, statistics, ace-statistics, sg-scores, provider-probe, environment-static, history-audit, history-manifest-repair, history-integrity-repair, history-repair, history-self-match-repair, production-preflight, production-audit, top-audit, market-audit, results-rebuild, deploy-current, current-refresh, train, backtest, refresh]
         default: history
         required: true
       start:
@@ -72,7 +72,10 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: tbt-history-data-writer
+  # current-refresh reads canonical history without mutating it, so it may run
+  # beside long history/environment audits. All publication writes remain
+  # serialized by the tbt-production-deploy job lock below.
+  group: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[current-refresh]')) && format('tbt-current-refresh-{0}', github.run_id) || 'tbt-history-data-writer' }}
   cancel-in-progress: false
 jobs:
   pipeline:
@@ -95,7 +98,7 @@ jobs:
       BLINQ_SHARED_API_BUDGET_PURPOSE: ${{ (github.event_name == 'push' || inputs.mode == 'refresh') && 'refresh' || 'history' }}
       PROPL: ${{ secrets.PROPL }}
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
-      MODE: ${{ inputs.mode || (github.event_name == 'push' && 'refresh') }}
+      MODE: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[current-refresh]') && 'current-refresh') || inputs.mode || (github.event_name == 'push' && 'refresh') }}
       START_DATE: ${{ inputs.start }}
       LOOKBACK_DAYS: ${{ inputs.lookback_days || 1095 }}
       END_DATE: ${{ inputs.end }}
@@ -594,7 +597,7 @@ jobs:
             --max-tournament-logo-requests "$BLINQ_ENRICH_LOGO_CAP"
 
       - name: Prepare refreshed serving feed and cached player assets
-        if: env.MODE == 'refresh' || env.MODE == 'results-rebuild' || env.MODE == 'deploy-current'
+        if: env.MODE == 'refresh' || env.MODE == 'current-refresh' || env.MODE == 'results-rebuild' || env.MODE == 'deploy-current'
         shell: bash
         run: |
           set -euo pipefail
