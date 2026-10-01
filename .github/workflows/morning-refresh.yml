@@ -1,11 +1,10 @@
 name: BlinQ morning prediction refresh
 
 on:
-  schedule:
-    # GitHub cron is UTC. Run both possible UTC hours and keep only the
-    # invocation that resolves to 05:00 in Europe/Bratislava (CET/CEST safe).
-    - cron: "0 3 * * *"
-    - cron: "0 4 * * *"
+  push:
+    branches: [main]
+    paths:
+      - ".github/morning-refresh-request.json"
   workflow_dispatch:
     inputs:
       max_requests:
@@ -29,7 +28,7 @@ concurrency:
 
 jobs:
   dispatch:
-    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'push'
     runs-on: ubuntu-latest
     # Stay alive until the real data.yml refresh finishes; wrapper success must
     # mean the paid refresh/deploy itself succeeded, not only that dispatch worked.
@@ -38,22 +37,38 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       MORNING_MAX_REQUESTS: ${{ inputs.max_requests || vars.TBT_MORNING_REFRESH_MAX_REQUESTS || '300' }}
     steps:
-      - name: Resolve Bratislava morning window
+      - name: Validate external morning request
         id: morning_window
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import datetime
-          import os
+          import datetime, json, os
           from pathlib import Path
           from zoneinfo import ZoneInfo
 
           event=os.environ.get("GITHUB_EVENT_NAME","")
           local=datetime.datetime.now(ZoneInfo("Europe/Bratislava"))
-          # Manual dispatch remains available at any time. Scheduled runs are
-          # accepted only at 05:xx Bratislava, so the paired UTC crons are DST-safe.
-          should_run = event == "workflow_dispatch" or local.hour == 5
+          should_run=True
+          if event=="push":
+              p=Path(".github/morning-refresh-request.json")
+              if not p.is_file():
+                  raise SystemExit("Missing morning refresh request marker")
+              req=json.loads(p.read_text(encoding="utf-8"))
+              if req.get("schema") != 1 or req.get("mode") != "morning-refresh":
+                  raise SystemExit("Invalid morning refresh request marker")
+              if req.get("timezone") != "Europe/Bratislava":
+                  raise SystemExit("Unexpected morning refresh timezone")
+              requested=str(req.get("requested_for_local_date") or "")
+              if requested != local.date().isoformat():
+                  raise SystemExit(
+                      f"Stale morning refresh request: {requested} != {local.date().isoformat()}"
+                  )
+              # External scheduler targets 05:00 local. Allow a bounded window
+              # for scheduler delay, but never accept stale daytime pushes.
+              should_run = local.hour == 5
+              if not should_run:
+                  raise SystemExit(f"Morning request outside 05:xx Bratislava: {local.isoformat()}")
           print(f"event={event} local={local.isoformat()} should_run={should_run}")
           with Path(os.environ["GITHUB_OUTPUT"]).open("a") as handle:
               handle.write("run=" + str(should_run).lower() + "\n")
@@ -99,7 +114,7 @@ jobs:
               current_id = int(os.environ["GITHUB_RUN_ID"])
               previous = [
                   run for run in payload.get("workflow_runs", [])
-                  if run.get("event") == "workflow_dispatch"
+                  if run.get("event") in {"workflow_dispatch", "push"}
                   and int(run.get("id") or 0) != current_id
                   and run.get("conclusion") == "success"
                   and datetime.datetime.fromisoformat(
