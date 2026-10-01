@@ -27,6 +27,8 @@ from ..utils import (
 
 logger = logging.getLogger(__name__)
 
+PROVIDER_REQUEST_RESERVE = 500
+
 
 def _merge_matches(*groups):
     """Import the history merge helper only for data/training flows.
@@ -193,8 +195,11 @@ class RapidTennisClient:
             # Reserve outside the retry block: budget/storage failures fail closed.
             if self.request_limit is not None and self.request_count >= self.request_limit:
                 raise RequestBudgetExceeded("Per-run request limit exhausted")
-            if self.rate_limit_remaining == 0:
-                raise RequestBudgetExceeded("Provider reports no remaining requests")
+            if (self.rate_limit_remaining is not None
+                    and self.rate_limit_remaining <= PROVIDER_REQUEST_RESERVE):
+                raise RequestBudgetExceeded(
+                    f"Provider reserve reached; keeping {PROVIDER_REQUEST_RESERVE} requests unused"
+                )
             if self.request_budget is not None:
                 self.request_budget(self.client, self.cfg, enrichment=enrichment)
 
