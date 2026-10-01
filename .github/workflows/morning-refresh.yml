@@ -1,6 +1,11 @@
 name: BlinQ morning prediction refresh
 
 on:
+  schedule:
+    # GitHub cron is UTC. Run both possible UTC hours and keep only the
+    # invocation that resolves to 05:00 in Europe/Bratislava (CET/CEST safe).
+    - cron: "0 3 * * *"
+    - cron: "0 4 * * *"
   workflow_dispatch:
     inputs:
       max_requests:
@@ -24,8 +29,7 @@ concurrency:
 
 jobs:
   dispatch:
-    # Only external/manual workflow_dispatch may start the paid refresh.
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
     runs-on: ubuntu-latest
     # Stay alive until the real data.yml refresh finishes; wrapper success must
     # mean the paid refresh/deploy itself succeeded, not only that dispatch worked.
@@ -34,7 +38,29 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       MORNING_MAX_REQUESTS: ${{ inputs.max_requests || vars.TBT_MORNING_REFRESH_MAX_REQUESTS || '300' }}
     steps:
+      - name: Resolve Bratislava morning window
+        id: morning_window
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import datetime
+          import os
+          from pathlib import Path
+          from zoneinfo import ZoneInfo
+
+          event=os.environ.get("GITHUB_EVENT_NAME","")
+          local=datetime.datetime.now(ZoneInfo("Europe/Bratislava"))
+          # Manual dispatch remains available at any time. Scheduled runs are
+          # accepted only at 05:xx Bratislava, so the paired UTC crons are DST-safe.
+          should_run = event == "workflow_dispatch" or local.hour == 5
+          print(f"event={event} local={local.isoformat()} should_run={should_run}")
+          with Path(os.environ["GITHUB_OUTPUT"]).open("a") as handle:
+              handle.write("run=" + str(should_run).lower() + "\n")
+          PY
+
       - name: Validate daily request cap
+        if: steps.morning_window.outputs.run == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -45,6 +71,7 @@ jobs:
           fi
 
       - name: Prevent a second paid morning dispatch
+        if: steps.morning_window.outputs.run == 'true'
         id: daily_guard
         shell: bash
         env:
@@ -88,7 +115,7 @@ jobs:
           PY
 
       - name: Dispatch and supervise prediction refresh
-        if: steps.daily_guard.outputs.dispatch == 'true'
+        if: steps.morning_window.outputs.run == 'true' && steps.daily_guard.outputs.dispatch == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -169,7 +196,7 @@ jobs:
           echo "Morning refresh completed successfully in child run $final_child."
 
       - name: Upload morning supervision evidence
-        if: always() && steps.daily_guard.outputs.dispatch == 'true'
+        if: always() && steps.morning_window.outputs.run == 'true' && steps.daily_guard.outputs.dispatch == 'true'
         continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
