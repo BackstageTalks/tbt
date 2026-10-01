@@ -369,6 +369,7 @@ def _publish_predictions(
     *, odds_report=None, ace_picks=None, ace_report=None,
     sg_picks=None, sg_report=None, doubles_picks=None, doubles_report=None,
     doubles_matches=None, doubles_upcoming=None, prior_feed=None, prior_snapshot=None,
+    settlement_matches=None,
     betting_day_start_hour=6, morning_refresh=False,
 ):
     # This stage publishes a pending deployment candidate. `issued_at` stays
@@ -382,8 +383,9 @@ def _publish_predictions(
     ledger_predictions = annotate_market_publication_candidates(
         ledger_predictions, ace_picks=ace_picks, sg_picks=sg_picks, doubles_picks=doubles_picks
     )
-    settlement_matches = list(matches) + list(doubles_matches or [])
-    records = reconcile_ledger(ledger, ledger_predictions, settlement_matches, now)
+    settlement_source = matches if settlement_matches is None else settlement_matches
+    settlement_rows = list(settlement_source) + list(doubles_matches or [])
+    records = reconcile_ledger(ledger, ledger_predictions, settlement_rows, now)
     feed_upcoming = list(upcoming) + list(doubles_upcoming or [])
     feed = serving_feed(records, model, matches, report, feed_upcoming, now)
     # Market presentation fields are derived from current odds-backed predictions
@@ -849,7 +851,7 @@ def main():
             doubles_history, doubles_upcoming, now=now
         )
         doubles_odds_report = {}
-        if args.doubles_odds_max_events and doubles_predictions:
+        if args.doubles_odds_max_events and doubles_predictions and not current_only:
             doubles_predictions, doubles_odds_report = enrich_current_betting_day_odds(
                 provider, doubles_predictions, now=selection_now,
                 max_events=args.doubles_odds_max_events, provider_id=1,
@@ -913,6 +915,11 @@ def main():
                 }, ensure_ascii=False), flush=True)
 
         projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        if current_only:
+            # Serving recovery prioritizes current Match Winner publication.
+            # A small real-odds sample is enough for TOP/PRIME/VALUE recovery;
+            # the full projection/CLV enrichment belongs to the normal refresh.
+            projection_odds_cap = min(40, projection_odds_cap)
         projection_odds_report = {}
         projection_market_cache = {}
         available_projection_markets = {}
@@ -968,7 +975,7 @@ def main():
             # calls/day. The separate hourly CLV pilot is capped at 250/day,
             # leaving >=146 of the shared 1000/day budget unallocated.
             prop_key = os.getenv("PROPL", "").strip()
-            if prop_key and args.propline_max_events:
+            if prop_key and args.propline_max_events and not current_only:
                 prop_client = PropLineClient(
                     prop_key, max_calls=1 + 2 * args.propline_max_events,
                     min_remaining=150,
@@ -1131,6 +1138,21 @@ def main():
         if delay:
             print(json.dumps({"morning_publish_wait_seconds": round(delay, 1)}), flush=True)
             time.sleep(delay)
+    settlement_history = matches
+    if current_only:
+        settlement_cutoff = now - timedelta(days=14)
+        settlement_history = [
+            match for match in matches
+            if match.scheduled_at >= settlement_cutoff
+        ]
+        print(json.dumps({
+            "current_refresh_settlement": {
+                "history_matches_total": len(matches),
+                "history_matches_checked": len(settlement_history),
+                "cutoff": settlement_cutoff.isoformat(),
+            }
+        }), flush=True)
+
     feed = _publish_predictions(
         prediction_store, prediction_ledger,
         predictions, matches, model, report, upcoming,
@@ -1139,6 +1161,7 @@ def main():
         doubles_picks=doubles_picks, doubles_report=doubles_report,
         doubles_matches=doubles_completed, doubles_upcoming=doubles_upcoming,
         prior_feed=prior_feed, prior_snapshot=prior_snapshot,
+        settlement_matches=settlement_history,
         betting_day_start_hour=args.betting_day_start_hour,
         morning_refresh=args.morning_refresh,
     )
