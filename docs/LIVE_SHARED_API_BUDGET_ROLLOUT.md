@@ -13,11 +13,12 @@ before initial activation; start with a clean provider quota window.
 | Purpose | Rolling allocation |
 | --- | ---: |
 | LIVE Radar | 2,500 |
-| Hourly Match Status | 250 |
+| Hourly Match Status | 1,000 |
 | Morning Refresh (including optional enrichment) | 750 |
-| History, manual statistics and other enrichment | 8,500 |
+| History, manual statistics and other enrichment | 7,750 |
 | **Combined, hard** | **12,000** |
 
+This allocation keeps the same 12,000 combined ceiling while giving the hourly Match Status worker enough room to operate during normal low-utilization days.\n
 An API request is reserved before the paid upstream attempt, including retries.
 Cancelled or timed-out calls are never refunded: a lost reservation is safer
 than an uncounted billable request. For the initial rollout, all in-repository
