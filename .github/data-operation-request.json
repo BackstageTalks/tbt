@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "mode": "train",
+  "mode": "deploy-current",
   "promote": false,
-  "purpose": "Retrain from current canonical tbt-data-v1 after offline data integration; do not promote automatically.",
-  "requested_at_utc": "2026-09-29T05:48:00Z",
-  "training_scope": "canonical_history_current_release",
+  "purpose": "No-provider deployment after canonical data closure; initialize/validate private challenger shadow storage and redeploy the current verified prediction generation without changing the production model.",
+  "requested_at_utc": "2026-10-01T01:32:00Z",
+  "training_scope": "none",
   "historical_match_winner_odds_as_model_feature": false
 }
