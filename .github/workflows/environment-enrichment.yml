@@ -1,6 +1,10 @@
 name: Environment enrichment
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/nightly-environment-request.json'
   workflow_dispatch:
     inputs:
       start:
@@ -58,31 +62,97 @@ jobs:
     outputs:
       stop_at: ${{ steps.deadline.outputs.stop_at }}
       stop_at_local: ${{ steps.deadline.outputs.stop_at_local }}
+      should_run: ${{ steps.deadline.outputs.should_run }}
+      start: ${{ steps.deadline.outputs.start }}
+      end: ${{ steps.deadline.outputs.end }}
+      limit: ${{ steps.deadline.outputs.limit }}
+      mode: ${{ steps.deadline.outputs.mode }}
+      static_only: ${{ steps.deadline.outputs.static_only }}
+      force: ${{ steps.deadline.outputs.force }}
+      retry_unresolved: ${{ steps.deadline.outputs.retry_unresolved }}
+      max_requests: ${{ steps.deadline.outputs.max_requests }}
+      weather_max_requests: ${{ steps.deadline.outputs.weather_max_requests }}
     steps:
+      - uses: actions/checkout@v4
       - id: deadline
-        name: Plan 10-hour enrichment window
+        name: Resolve request and plan Bratislava night window
         shell: bash
+        env:
+          INPUT_START: ${{ inputs.start }}
+          INPUT_END: ${{ inputs.end }}
+          INPUT_LIMIT: ${{ inputs.limit }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_STATIC_ONLY: ${{ inputs.static_only }}
+          INPUT_FORCE: ${{ inputs.force }}
+          INPUT_RETRY_UNRESOLVED: ${{ inputs.retry_unresolved }}
+          INPUT_MAX_REQUESTS: ${{ inputs.max_requests }}
         run: |
           set -euo pipefail
           python - <<'PY'
+          import json
           import os
           from datetime import datetime, timedelta, timezone
+          from pathlib import Path
           from zoneinfo import ZoneInfo
 
-          started_at = datetime.now(timezone.utc)
-          stop_utc = started_at + timedelta(hours=10)
-          stop_local = stop_utc.astimezone(ZoneInfo("Europe/Bratislava"))
+          tz = ZoneInfo("Europe/Bratislava")
+          now_utc = datetime.now(timezone.utc)
+          local_now = now_utc.astimezone(tz)
+          nightly = os.environ.get("GITHUB_EVENT_NAME") == "push"
+
+          if nightly:
+              cfg = json.loads(Path(".github/nightly-environment-request.json").read_text(encoding="utf-8"))
+              start = str(cfg.get("start") or "2021-01-01")
+              end = str(cfg.get("end") or "")
+              limit = str(int(cfg.get("limit") or 0))
+              mode = "write"
+              static_only = "true"
+              force = "false"
+              retry_unresolved = "true" if cfg.get("retry_unresolved", True) else "false"
+              max_requests = str(max(1, min(12000, int(cfg.get("static_max_requests") or 4000))))
+              weather_max_requests = str(max(1, min(12000, int(cfg.get("weather_max_requests") or 2000))))
+              should_run = local_now.hour >= 20 or local_now.hour < 5
+              stop_local = local_now.replace(hour=5, minute=0, second=0, microsecond=0)
+              if stop_local <= local_now:
+                  stop_local += timedelta(days=1)
+              stop_utc = stop_local.astimezone(timezone.utc)
+          else:
+              start = os.environ.get("INPUT_START") or "2021-01-01"
+              end = os.environ.get("INPUT_END") or ""
+              limit = os.environ.get("INPUT_LIMIT") or "0"
+              mode = os.environ.get("INPUT_MODE") or "dry-run"
+              static_only = (os.environ.get("INPUT_STATIC_ONLY") or "true").lower()
+              force = (os.environ.get("INPUT_FORCE") or "false").lower()
+              retry_unresolved = (os.environ.get("INPUT_RETRY_UNRESOLVED") or "false").lower()
+              max_requests = os.environ.get("INPUT_MAX_REQUESTS") or "500"
+              weather_max_requests = "0"
+              should_run = True
+              stop_utc = now_utc + timedelta(hours=10)
+              stop_local = stop_utc.astimezone(tz)
+
+          values = {
+              "stop_at": stop_utc.isoformat(),
+              "stop_at_local": stop_local.isoformat(),
+              "should_run": "true" if should_run else "false",
+              "start": start, "end": end, "limit": limit, "mode": mode,
+              "static_only": static_only, "force": force,
+              "retry_unresolved": retry_unresolved,
+              "max_requests": max_requests,
+              "weather_max_requests": weather_max_requests,
+          }
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write(f"stop_at={stop_utc.isoformat()}\n")
-              fh.write(f"stop_at_local={stop_local.isoformat()}\n")
+              for key, value in values.items():
+                  fh.write(f"{key}={value}\n")
           print(
-              f"Environment may run for 10 hours, through "
-              f"{stop_local.isoformat()} Bratislava time ({stop_utc.isoformat()} UTC)."
+              f"nightly={nightly} gate={should_run} local={local_now.isoformat()} "
+              f"deadline={stop_local.isoformat()} static_requests={max_requests} "
+              f"weather_requests={weather_max_requests}"
           )
           PY
 
   enrich-environment-1:
     needs: plan-window
+    if: ${{ needs.plan-window.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       requests_used: ${{ steps.pass1-summary.outputs.requests_used }}
@@ -109,7 +179,7 @@ jobs:
       - name: Preflight
         shell: bash
         env:
-          BLINQ_INPUT_STATIC_ONLY: ${{ inputs.static_only }}
+          BLINQ_INPUT_STATIC_ONLY: ${{ needs.plan-window.outputs.static_only }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
@@ -121,14 +191,14 @@ jobs:
       - name: Enrich GitHub history - pass 1
         shell: bash
         env:
-          BLINQ_INPUT_START: ${{ inputs.start }}
-          BLINQ_INPUT_END: ${{ inputs.end }}
-          BLINQ_INPUT_LIMIT: ${{ inputs.limit }}
-          BLINQ_INPUT_MAX_REQUESTS: ${{ inputs.max_requests }}
-          BLINQ_INPUT_MODE: ${{ inputs.mode }}
-          BLINQ_INPUT_STATIC_ONLY: ${{ inputs.static_only }}
-          BLINQ_INPUT_FORCE: ${{ inputs.force }}
-          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ inputs.retry_unresolved }}
+          BLINQ_INPUT_START: ${{ needs.plan-window.outputs.start }}
+          BLINQ_INPUT_END: ${{ needs.plan-window.outputs.end }}
+          BLINQ_INPUT_LIMIT: ${{ needs.plan-window.outputs.limit }}
+          BLINQ_INPUT_MAX_REQUESTS: ${{ needs.plan-window.outputs.max_requests }}
+          BLINQ_INPUT_MODE: ${{ needs.plan-window.outputs.mode }}
+          BLINQ_INPUT_STATIC_ONLY: ${{ needs.plan-window.outputs.static_only }}
+          BLINQ_INPUT_FORCE: ${{ needs.plan-window.outputs.force }}
+          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ needs.plan-window.outputs.retry_unresolved }}
           BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
         run: |
           set -euo pipefail
@@ -198,14 +268,14 @@ jobs:
       - name: Enrich GitHub history - continuation
         shell: bash
         env:
-          BLINQ_INPUT_START: ${{ inputs.start }}
-          BLINQ_INPUT_END: ${{ inputs.end }}
-          BLINQ_INPUT_LIMIT: ${{ inputs.limit }}
-          BLINQ_INPUT_MAX_REQUESTS: ${{ inputs.max_requests }}
-          BLINQ_INPUT_MODE: ${{ inputs.mode }}
-          BLINQ_INPUT_STATIC_ONLY: ${{ inputs.static_only }}
-          BLINQ_INPUT_FORCE: ${{ inputs.force }}
-          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ inputs.retry_unresolved }}
+          BLINQ_INPUT_START: ${{ needs.plan-window.outputs.start }}
+          BLINQ_INPUT_END: ${{ needs.plan-window.outputs.end }}
+          BLINQ_INPUT_LIMIT: ${{ needs.plan-window.outputs.limit }}
+          BLINQ_INPUT_MAX_REQUESTS: ${{ needs.plan-window.outputs.max_requests }}
+          BLINQ_INPUT_MODE: ${{ needs.plan-window.outputs.mode }}
+          BLINQ_INPUT_STATIC_ONLY: ${{ needs.plan-window.outputs.static_only }}
+          BLINQ_INPUT_FORCE: ${{ needs.plan-window.outputs.force }}
+          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ needs.plan-window.outputs.retry_unresolved }}
           BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
           BLINQ_REQUESTS_USED: ${{ needs.enrich-environment-1.outputs.requests_used || '0' }}
         run: |
@@ -244,3 +314,91 @@ jobs:
           name: blinq-environment-enrichment-pass2-${{ github.run_id }}
           path: .cache/tbt/history/environment_enrichment_report.json
           if-no-files-found: warn
+
+  enrich-weather-nightly:
+    needs: [plan-window, enrich-environment-1, enrich-environment-2]
+    if: >-
+      github.event_name == 'push' &&
+      needs.plan-window.outputs.should_run == 'true' &&
+      needs.enrich-environment-2.result == 'success' &&
+      vars.TBT_WEATHER_RESEARCH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 260
+    env:
+      PYTHONPATH: api
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_WEATHER_RESEARCH: ${{ vars.TBT_WEATHER_RESEARCH }}
+      BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
+      BLINQ_WEATHER_MAX_REQUESTS: ${{ needs.plan-window.outputs.weather_max_requests }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install dependencies
+        run: python -m pip install -r api/requirements-train.txt
+      - name: Fill historical weather until 05:00 Bratislava
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/enrich_environment_snapshot.py \
+            --start "${{ needs.plan-window.outputs.start }}" \
+            --end "$(date -u +%F)" \
+            --limit "0" \
+            --max-requests "$BLINQ_WEATHER_MAX_REQUESTS" \
+            --max-runtime-minutes "240" \
+            --stop-at "$BLINQ_STOP_AT" \
+            --retry-unresolved \
+            --data-repository "$TBT_DATA_REPOSITORY"
+      - name: Upload weather enrichment report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-environment-weather-${{ github.run_id }}
+          path: .cache/tbt/history/environment_enrichment_report.json
+          if-no-files-found: warn
+
+  nightly-data-audit:
+    needs: [plan-window, enrich-environment-1, enrich-environment-2, enrich-weather-nightly]
+    if: >-
+      always() &&
+      github.event_name == 'push' &&
+      needs.plan-window.outputs.should_run == 'true' &&
+      needs.enrich-environment-1.result == 'success' &&
+      needs.enrich-environment-2.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: api
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install dependencies
+        run: python -m pip install -r api/requirements-train.txt
+      - name: Audit environment and serve-return gaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/nightly-audit
+          python scripts/audit_environment_release.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --report .cache/tbt/nightly-audit/environment.json
+          python scripts/audit_serve_return_gaps.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --out .cache/tbt/nightly-audit/serve-return.json
+      - name: Upload nightly data audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-nightly-data-audit-${{ github.run_id }}
+          path: .cache/tbt/nightly-audit
+          if-no-files-found: warn
+
