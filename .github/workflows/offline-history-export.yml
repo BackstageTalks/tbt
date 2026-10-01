@@ -20,6 +20,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Install history reader dependencies
+        run: python -m pip install -r api/requirements.txt -r api/requirements-train.txt
+
       - name: Download verified canonical history
         env:
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
@@ -42,6 +45,41 @@ jobs:
               print(path, path.stat().st_size)
           PY
 
+      - name: Export canonical audit JSONL
+        env:
+          PYTHONPATH: api
+        run: |
+          python - <<'PY'
+          import gzip
+          import json
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          matches, safety = sanitize_history_identities(load_partitions(".cache/tbt/history"))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Canonical history identity quarantine is non-empty")
+          target = Path(".cache/tbt/history/canonical_audit.jsonl.gz")
+          with gzip.open(target, "wt", encoding="utf-8") as handle:
+              for m in matches:
+                  row = {
+                      "match_id": str(m.match_id),
+                      "tour": str(m.tour or "").lower(),
+                      "scheduled_at": m.scheduled_at.isoformat(),
+                      "player1_id": str(m.player1_id or ""),
+                      "player1_name": str(m.player1_name or ""),
+                      "player2_id": str(m.player2_id or ""),
+                      "player2_name": str(m.player2_name or ""),
+                      "winner_id": str(m.winner_id or ""),
+                      "surface": str(m.surface or ""),
+                      "tournament": str(m.tournament or ""),
+                      "round_name": str(m.round_name or ""),
+                      "stats": dict(m.stats or {}),
+                  }
+                  handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
+          print(json.dumps({"rows": len(matches), "bytes": target.stat().st_size, "identity_safety": safety}, indent=2))
+          PY
+
       - name: Upload full canonical history
         uses: actions/upload-artifact@v4
         with:
@@ -52,3 +90,4 @@ jobs:
             .cache/tbt/history/history-*.parquet
             .cache/tbt/history/history_manifest.json
             .cache/tbt/history/_tbt_bundle_manifest.json
+            .cache/tbt/history/canonical_audit.jsonl.gz
