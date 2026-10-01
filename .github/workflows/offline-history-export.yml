@@ -42,16 +42,13 @@ jobs:
               print(path, path.stat().st_size)
           PY
 
-      - name: Upload 2021-2026 canonical partitions
+      - name: Upload full canonical history
         uses: actions/upload-artifact@v4
         with:
-          name: canonical-history-2021-2026
+          name: canonical-history-full
           retention-days: 1
           if-no-files-found: error
           path: |
-            .cache/tbt/history/history-2021.parquet
-            .cache/tbt/history/history-2022.parquet
-            .cache/tbt/history/history-2023.parquet
-            .cache/tbt/history/history-2024.parquet
-            .cache/tbt/history/history-2025.parquet
-            .cache/tbt/history/history-2026.parquet
+            .cache/tbt/history/history-*.parquet
+            .cache/tbt/history/history_manifest.json
+            .cache/tbt/history/_tbt_bundle_manifest.json
