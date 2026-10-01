@@ -79,11 +79,24 @@ def _count(value: object) -> float | None:
 
 def _tour(row: dict[str, Any], path: Path) -> str | None:
     raw = str(row.get("tour_type") or "").strip()
+    # Provider tour_type is authoritative for the season exports:
+    # 1 ATP Tour, 2 WTA Tour, 3 ATP Challenger, 4 WTA Challenger,
+    # 5 ATP exhibition. Exhibitions must never enter canonical training history.
+    if raw in {"1", "3"}:
+        return "atp"
+    if raw in {"2", "4"}:
+        return "wta"
+    if raw:
+        return None
+
+    # Fail-closed fallback for legacy exports that predate tour_type.
     human = norm_text(row.get("tour_type_human"))
     name = path.name.lower()
-    if raw == "1" or "atp" in human or "-atp-" in name:
+    if "exhib" in human:
+        return None
+    if "atp" in human or "-atp-" in name:
         return "atp"
-    if raw == "2" or "wta" in human or "-wta-" in name:
+    if "wta" in human or "-wta-" in name:
         return "wta"
     return None
 
