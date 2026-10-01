@@ -125,8 +125,10 @@ jobs:
               if int(data.get(key) or 0) <= 0:
                   raise SystemExit(f"Missing {key} partition")
           holdout=r.get("holdout") or {}
-          if int(holdout.get("n") or 0) <= 0:
-              raise SystemExit("Candidate has no evaluated holdout")
+          eligibility=(r.get("evaluation_governance") or {}).get("eligibility_reason")
+          holdout_n=int(holdout.get("n") or 0)
+          if holdout_n <= 0 and eligibility != "no_eligible_unseen_evaluation_rows":
+              raise SystemExit(f"Candidate has no governed holdout: {eligibility}")
           if decision.get("promotion_requested") is not False:
               raise SystemExit("Training unexpectedly requested production promotion")
           print(json.dumps({
