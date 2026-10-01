@@ -1,11 +1,10 @@
 name: Environment enrichment
 
 on:
-  # GitHub cron is UTC. Both candidate hours are scheduled and plan-window
-  # admits only the one that is exactly 20:00 in Europe/Bratislava, so DST is safe.
-  schedule:
-    - cron: '0 18 * * *'
-    - cron: '0 19 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/nightly-environment-request.json'
   workflow_dispatch:
     inputs:
       start:
@@ -64,37 +63,90 @@ jobs:
       stop_at: ${{ steps.deadline.outputs.stop_at }}
       stop_at_local: ${{ steps.deadline.outputs.stop_at_local }}
       should_run: ${{ steps.deadline.outputs.should_run }}
+      start: ${{ steps.deadline.outputs.start }}
+      end: ${{ steps.deadline.outputs.end }}
+      limit: ${{ steps.deadline.outputs.limit }}
+      mode: ${{ steps.deadline.outputs.mode }}
+      static_only: ${{ steps.deadline.outputs.static_only }}
+      force: ${{ steps.deadline.outputs.force }}
+      retry_unresolved: ${{ steps.deadline.outputs.retry_unresolved }}
+      max_requests: ${{ steps.deadline.outputs.max_requests }}
+      weather_max_requests: ${{ steps.deadline.outputs.weather_max_requests }}
     steps:
+      - uses: actions/checkout@v4
       - id: deadline
-        name: Plan Bratislava night enrichment window
+        name: Resolve request and plan Bratislava night window
         shell: bash
+        env:
+          INPUT_START: ${{ inputs.start }}
+          INPUT_END: ${{ inputs.end }}
+          INPUT_LIMIT: ${{ inputs.limit }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_STATIC_ONLY: ${{ inputs.static_only }}
+          INPUT_FORCE: ${{ inputs.force }}
+          INPUT_RETRY_UNRESOLVED: ${{ inputs.retry_unresolved }}
+          INPUT_MAX_REQUESTS: ${{ inputs.max_requests }}
         run: |
           set -euo pipefail
           python - <<'PY'
+          import json
           import os
           from datetime import datetime, timedelta, timezone
+          from pathlib import Path
           from zoneinfo import ZoneInfo
 
           tz = ZoneInfo("Europe/Bratislava")
-          started_at = datetime.now(timezone.utc)
-          local_now = started_at.astimezone(tz)
-          scheduled = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
-          should_run = (not scheduled) or local_now.hour == 20
-          if scheduled:
+          now_utc = datetime.now(timezone.utc)
+          local_now = now_utc.astimezone(tz)
+          nightly = os.environ.get("GITHUB_EVENT_NAME") == "push"
+
+          if nightly:
+              cfg = json.loads(Path(".github/nightly-environment-request.json").read_text(encoding="utf-8"))
+              start = str(cfg.get("start") or "2021-01-01")
+              end = str(cfg.get("end") or "")
+              limit = str(int(cfg.get("limit") or 0))
+              mode = "write"
+              static_only = "true"
+              force = "false"
+              retry_unresolved = "true" if cfg.get("retry_unresolved", True) else "false"
+              max_requests = str(max(1, min(12000, int(cfg.get("static_max_requests") or 4000))))
+              weather_max_requests = str(max(1, min(12000, int(cfg.get("weather_max_requests") or 2000))))
+              should_run = local_now.hour >= 20 or local_now.hour < 5
               stop_local = local_now.replace(hour=5, minute=0, second=0, microsecond=0)
               if stop_local <= local_now:
                   stop_local += timedelta(days=1)
               stop_utc = stop_local.astimezone(timezone.utc)
           else:
-              stop_utc = started_at + timedelta(hours=10)
+              start = os.environ.get("INPUT_START") or "2021-01-01"
+              end = os.environ.get("INPUT_END") or ""
+              limit = os.environ.get("INPUT_LIMIT") or "0"
+              mode = os.environ.get("INPUT_MODE") or "dry-run"
+              static_only = (os.environ.get("INPUT_STATIC_ONLY") or "true").lower()
+              force = (os.environ.get("INPUT_FORCE") or "false").lower()
+              retry_unresolved = (os.environ.get("INPUT_RETRY_UNRESOLVED") or "false").lower()
+              max_requests = os.environ.get("INPUT_MAX_REQUESTS") or "500"
+              weather_max_requests = "0"
+              should_run = True
+              stop_utc = now_utc + timedelta(hours=10)
               stop_local = stop_utc.astimezone(tz)
+
+          values = {
+              "stop_at": stop_utc.isoformat(),
+              "stop_at_local": stop_local.isoformat(),
+              "should_run": "true" if should_run else "false",
+              "start": start, "end": end, "limit": limit, "mode": mode,
+              "static_only": static_only, "force": force,
+              "retry_unresolved": retry_unresolved,
+              "max_requests": max_requests,
+              "weather_max_requests": weather_max_requests,
+          }
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
-              fh.write(f"stop_at={stop_utc.isoformat()}\n")
-              fh.write(f"stop_at_local={stop_local.isoformat()}\n")
-              fh.write(f"should_run={'true' if should_run else 'false'}\n")
+              for key, value in values.items():
+                  fh.write(f"{key}={value}\n")
           print(
-              f"Night enrichment gate={should_run}; local start={local_now.isoformat()}; "
-              f"deadline={stop_local.isoformat()} Bratislava ({stop_utc.isoformat()} UTC)."
+              f"nightly={nightly} gate={should_run} local={local_now.isoformat()} "
+              f"deadline={stop_local.isoformat()} static_requests={max_requests} "
+              f"weather_requests={weather_max_requests}"
           )
           PY
 
@@ -127,7 +179,7 @@ jobs:
       - name: Preflight
         shell: bash
         env:
-          BLINQ_INPUT_STATIC_ONLY: ${{ github.event_name == 'schedule' && 'true' || inputs.static_only }}
+          BLINQ_INPUT_STATIC_ONLY: ${{ needs.plan-window.outputs.static_only }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
@@ -139,14 +191,14 @@ jobs:
       - name: Enrich GitHub history - pass 1
         shell: bash
         env:
-          BLINQ_INPUT_START: ${{ github.event_name == 'schedule' && '2021-01-01' || inputs.start }}
-          BLINQ_INPUT_END: ${{ inputs.end }}
-          BLINQ_INPUT_LIMIT: ${{ github.event_name == 'schedule' && '0' || inputs.limit }}
-          BLINQ_INPUT_MAX_REQUESTS: ${{ github.event_name == 'schedule' && '4000' || inputs.max_requests }}
-          BLINQ_INPUT_MODE: ${{ github.event_name == 'schedule' && 'write' || inputs.mode }}
-          BLINQ_INPUT_STATIC_ONLY: ${{ github.event_name == 'schedule' && 'true' || inputs.static_only }}
-          BLINQ_INPUT_FORCE: ${{ github.event_name == 'schedule' && 'false' || inputs.force }}
-          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ github.event_name == 'schedule' && 'true' || inputs.retry_unresolved }}
+          BLINQ_INPUT_START: ${{ needs.plan-window.outputs.start }}
+          BLINQ_INPUT_END: ${{ needs.plan-window.outputs.end }}
+          BLINQ_INPUT_LIMIT: ${{ needs.plan-window.outputs.limit }}
+          BLINQ_INPUT_MAX_REQUESTS: ${{ needs.plan-window.outputs.max_requests }}
+          BLINQ_INPUT_MODE: ${{ needs.plan-window.outputs.mode }}
+          BLINQ_INPUT_STATIC_ONLY: ${{ needs.plan-window.outputs.static_only }}
+          BLINQ_INPUT_FORCE: ${{ needs.plan-window.outputs.force }}
+          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ needs.plan-window.outputs.retry_unresolved }}
           BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
         run: |
           set -euo pipefail
@@ -216,14 +268,14 @@ jobs:
       - name: Enrich GitHub history - continuation
         shell: bash
         env:
-          BLINQ_INPUT_START: ${{ github.event_name == 'schedule' && '2021-01-01' || inputs.start }}
-          BLINQ_INPUT_END: ${{ inputs.end }}
-          BLINQ_INPUT_LIMIT: ${{ github.event_name == 'schedule' && '0' || inputs.limit }}
-          BLINQ_INPUT_MAX_REQUESTS: ${{ github.event_name == 'schedule' && '4000' || inputs.max_requests }}
-          BLINQ_INPUT_MODE: ${{ github.event_name == 'schedule' && 'write' || inputs.mode }}
-          BLINQ_INPUT_STATIC_ONLY: ${{ github.event_name == 'schedule' && 'true' || inputs.static_only }}
-          BLINQ_INPUT_FORCE: ${{ github.event_name == 'schedule' && 'false' || inputs.force }}
-          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ github.event_name == 'schedule' && 'true' || inputs.retry_unresolved }}
+          BLINQ_INPUT_START: ${{ needs.plan-window.outputs.start }}
+          BLINQ_INPUT_END: ${{ needs.plan-window.outputs.end }}
+          BLINQ_INPUT_LIMIT: ${{ needs.plan-window.outputs.limit }}
+          BLINQ_INPUT_MAX_REQUESTS: ${{ needs.plan-window.outputs.max_requests }}
+          BLINQ_INPUT_MODE: ${{ needs.plan-window.outputs.mode }}
+          BLINQ_INPUT_STATIC_ONLY: ${{ needs.plan-window.outputs.static_only }}
+          BLINQ_INPUT_FORCE: ${{ needs.plan-window.outputs.force }}
+          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ needs.plan-window.outputs.retry_unresolved }}
           BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
           BLINQ_REQUESTS_USED: ${{ needs.enrich-environment-1.outputs.requests_used || '0' }}
         run: |
@@ -266,7 +318,7 @@ jobs:
   enrich-weather-nightly:
     needs: [plan-window, enrich-environment-1, enrich-environment-2]
     if: >-
-      github.event_name == 'schedule' &&
+      github.event_name == 'push' &&
       needs.plan-window.outputs.should_run == 'true' &&
       needs.enrich-environment-2.result == 'success' &&
       vars.TBT_WEATHER_RESEARCH == 'true'
@@ -278,6 +330,7 @@ jobs:
       GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
       TBT_WEATHER_RESEARCH: ${{ vars.TBT_WEATHER_RESEARCH }}
       BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
+      BLINQ_WEATHER_MAX_REQUESTS: ${{ needs.plan-window.outputs.weather_max_requests }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -292,10 +345,10 @@ jobs:
         run: |
           set -euo pipefail
           python scripts/enrich_environment_snapshot.py \
-            --start "2021-01-01" \
+            --start "${{ needs.plan-window.outputs.start }}" \
             --end "$(date -u +%F)" \
             --limit "0" \
-            --max-requests "2000" \
+            --max-requests "$BLINQ_WEATHER_MAX_REQUESTS" \
             --max-runtime-minutes "240" \
             --stop-at "$BLINQ_STOP_AT" \
             --retry-unresolved \
@@ -312,6 +365,7 @@ jobs:
     needs: [plan-window, enrich-environment-1, enrich-environment-2, enrich-weather-nightly]
     if: >-
       always() &&
+      github.event_name == 'push' &&
       needs.plan-window.outputs.should_run == 'true' &&
       needs.enrich-environment-1.result == 'success' &&
       needs.enrich-environment-2.result == 'success'
