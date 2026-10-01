@@ -635,7 +635,7 @@ def save_match_status_snapshot(payload: object) -> dict:
             continue
         key = str(eid or "").strip()[:64]
         entry = {field: str(item.get(field) or "").strip()[:64]
-                 for field in ("t", "s", "a", "b", "c")}
+                 for field in ("t", "s", "a", "b", "c", "p")}
         if key and all(entry[field] for field in ("t", "s", "a", "b")):
             pending[key] = entry
     safe = {
