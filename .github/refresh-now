@@ -1,1 +1,1 @@
-Final post-deploy refresh after API budget rebalance; refresh current feed and start challenger shadow capture. 2026-10-01.
+Emergency production refresh to replace stale 2026-09-30 feed while Environment audit-only is read-only. 2026-10-01.
