@@ -840,3 +840,21 @@ def test_match_status_worker_returns_200_for_budget_pause_before_generic_degrade
     assert block.index(budget_branch) < block.index(degraded_branch)
     assert '"shared_budget_exhausted_safe_skip"' in block
     assert '"match_status_provider_unavailable"' in block
+
+
+def test_match_status_worker_uses_higher_bounded_throughput():
+    source = (
+        Path(__file__).resolve().parents[1] / "api" / "function_app.py"
+    ).read_text(encoding="utf-8")
+    block = source.split(
+        'def internal_match_status_worker(req):', 1
+    )[1].split(
+        '@app.route(route="v1/internal/account-inactivity-worker"', 1
+    )[0]
+    assert 'BLINQ_MATCH_STATUS_REQUEST_LIMIT", "24"' in block
+    assert 'min(24, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT"' in block
+    assert 'BLINQ_MATCH_STATUS_MAX_CHECKS", "20"' in block
+    assert 'min(20, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS"' in block
+    assert 'BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "20"' in block
+    assert 'min(20, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS"' in block
+    assert 'max_wall_seconds=22.0' in block
