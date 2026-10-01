@@ -1,8 +1,0 @@
-{
-  "schema": 1,
-  "mode": "rich-ablation",
-  "purpose": "Parallel paired walk-forward rich Match Charting v2 ON vs OFF ablation across 2023-2026, including any/majority/full prospective rich-data subsets; read-only, zero provider API.",
-  "source_enrichment_run_id": "36471908489",
-  "source_backtest_run_id": "36473454791",
-  "requested_at_utc": "2026-09-28T20:22:00Z"
-}
