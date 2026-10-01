@@ -25,7 +25,9 @@ permissions:
 
 # Cache-only writes may not overlap MegaData/Statistics/Environment writers.
 concurrency:
-  group: tbt-history-data-writer
+  # Only cache-write mutates canonical history. Audit-only is fully read-only
+  # after checkout and must not block the production refresh writer.
+  group: ${{ inputs.mode == 'cache-write' && 'tbt-history-data-writer' || 'tbt-environment-audit-readonly' }}
   cancel-in-progress: false
 
 jobs:
