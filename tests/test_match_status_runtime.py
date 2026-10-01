@@ -783,3 +783,58 @@ def test_large_backlog_prioritizes_current_betting_day_without_more_requests():
     assert provider.previous_calls[4] == ("2000", 0)
     # Request budget is unchanged: one LIVE lookup plus five history lookups.
     assert result["provider_requests"] == 6
+
+
+def test_shared_budget_exhaustion_is_safe_pause_without_provider_calls():
+    now = datetime(2026, 10, 1, 2, 30, tzinfo=timezone.utc)
+
+    class SharedBudgetExhausted(Exception):
+        pass
+
+    class BudgetPausedProvider(_Provider):
+        def __init__(self):
+            super().__init__()
+            self.request_count = 0
+
+        def live_events(self):
+            raise SharedBudgetExhausted("shared daily budget exhausted")
+
+        def previous_player_matches(self, player_id, page=0):
+            raise AssertionError("history lookup must not run after shared budget pause")
+
+    row = _row("budget-1", "11", (now - timedelta(hours=1)).isoformat())
+    provider = BudgetPausedProvider()
+    result = scan_match_statuses(
+        {"upcoming": [row]},
+        provider,
+        now=now,
+        max_checks=5,
+        max_near_checks=5,
+    )
+
+    assert result["budget_paused"] is True
+    assert result["degraded"] is False
+    assert result["provider_requests"] == 0
+    assert result["checked"] == 0
+    assert result["provider_errors"] == {"SharedBudgetExhausted": 1}
+    assert result["pending_count"] == 1
+    assert result["next_due_id"] == "budget-1"
+    assert result["statuses"] == {}
+
+
+def test_match_status_worker_returns_200_for_budget_pause_before_generic_degraded_error():
+    source = (
+        Path(__file__).resolve().parents[1] / "api" / "function_app.py"
+    ).read_text(encoding="utf-8")
+    block = source.split(
+        'def internal_match_status_worker(req):', 1
+    )[1].split(
+        '@app.route(route="v1/internal/account-inactivity-worker"', 1
+    )[0]
+    budget_branch = 'if saved.get("budget_paused"):'
+    degraded_branch = 'if saved.get("degraded"):'
+    assert budget_branch in block
+    assert degraded_branch in block
+    assert block.index(budget_branch) < block.index(degraded_branch)
+    assert '"shared_budget_exhausted_safe_skip"' in block
+    assert '"match_status_provider_unavailable"' in block
