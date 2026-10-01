@@ -125,7 +125,7 @@ jobs:
           test -s "$request" || { echo "Missing controlled data request"; exit 1; }
           mode="$(jq -r '.mode // empty' "$request")"
           case "$mode" in
-            train|backtest|feature-audit|production-preflight|deploy-current) ;;
+            train|backtest|feature-audit|production-preflight|deploy-current|ace-statistics) ;;
             *) echo "Push data request forbids mode: $mode"; exit 1 ;;
           esac
           promote="$(jq -r '.promote // false' "$request")"
