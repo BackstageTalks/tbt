@@ -1,0 +1,88 @@
+name: Discover TennisData season download
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.head_ref == 'integrate/season-history-20261001' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Discover download implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/season-discovery/js
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/129 Safari/537.36'
+          curl -fsSL --retry 3 -A "$UA" https://tennisdata.app/downloads/ -o .cache/season-discovery/page.html
+          python - <<'PY'
+          from pathlib import Path
+          import re, urllib.parse
+          html=Path(".cache/season-discovery/page.html").read_text(errors="replace")
+          srcs=re.findall(r'<script[^>]+src=["\']([^"\']+)', html, flags=re.I)
+          links=re.findall(r'(?:href|action)=["\']([^"\']+)', html, flags=re.I)
+          base="https://tennisdata.app/downloads/"
+          urls=[urllib.parse.urljoin(base,x) for x in srcs]
+          Path(".cache/season-discovery/script_urls.txt").write_text("\n".join(urls))
+          Path(".cache/season-discovery/link_urls.txt").write_text("\n".join(sorted(set(links))))
+          print("scripts", len(urls))
+          print("\n".join(urls))
+          PY
+          while IFS= read -r url; do
+            [ -n "$url" ] || continue
+            name="$(printf '%s' "$url" | sha256sum | cut -c1-16).js"
+            curl -fsSL --retry 2 -A "$UA" "$url" -o ".cache/season-discovery/js/$name" || true
+          done < .cache/season-discovery/script_urls.txt
+          {
+            echo '=== page candidates ==='
+            grep -Eio '.{0,120}(csv|download|season).{0,200}' .cache/season-discovery/page.html | head -300 || true
+            echo '=== js candidates ==='
+            grep -RIEo '.{0,160}(csv|download|season).{0,260}' .cache/season-discovery/js | head -1000 || true
+            echo '=== absolute urls in js ==='
+            grep -RIEo 'https?://[^"'"'"' ]+' .cache/season-discovery/js | grep -Ei 'tennisdata|csv|download|season' | head -300 || true
+          } | tee .cache/season-discovery/discovery.txt
+
+      - name: Probe likely CSV endpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          UA='Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/129 Safari/537.36'
+          : > .cache/season-discovery/probes.txt
+          for path in             'downloads/2026-atp-season.csv'             'download/2026-atp-season.csv'             'data/2026-atp-season.csv'             'storage/2026-atp-season.csv'             'files/2026-atp-season.csv'             'api/download/2026-atp-season.csv'             'api/downloads/2026-atp-season.csv'; do
+            url="https://tennisdata.app/$path"
+            code="$(curl -A "$UA" -L -sS -o /tmp/probe --write-out '%{http_code}' "$url" || true)"
+            type="$(file -b --mime-type /tmp/probe 2>/dev/null || true)"
+            bytes="$(wc -c </tmp/probe 2>/dev/null || echo 0)"
+            printf '%s\t%s\t%s\t%s\n' "$code" "$type" "$bytes" "$url" | tee -a .cache/season-discovery/probes.txt
+          done
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo '# TennisData season endpoint discovery'
+            echo '## Probes'
+            echo '~~~'
+            cat .cache/season-discovery/probes.txt || true
+            echo '~~~'
+            echo '## Discovery excerpts'
+            echo '~~~'
+            tail -250 .cache/season-discovery/discovery.txt || true
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload discovery
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tennisdata-season-discovery-${{ github.run_id }}
+          retention-days: 3
+          path: .cache/season-discovery
