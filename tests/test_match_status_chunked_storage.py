@@ -100,14 +100,45 @@ def test_small_match_status_snapshot_replaces_chunks_and_cleans_old_rows(monkeyp
         "pending": {
             "101": {
                 "t": "2026-10-01T03:00:00+00:00",
-                "s": "11", "a": "11", "b": "22", "c": "",
+                "s": "11", "a": "11", "b": "22", "c": "", "p": "1",
             }
         }
     })
     restored = admin_storage.load_match_status_snapshot()
     assert restored["pending_count"] == 1
     assert restored["pending"]["101"]["b"] == "22"
+    assert restored["pending"]["101"]["p"] == "1"
     assert not any(
         str(row.get("RowKey") or "").startswith("match-status-worker-chunk-")
         for row in table.rows.values()
     )
+
+
+def test_match_status_snapshot_keeps_backlog_priority_diagnostics(monkeypatch):
+    table = ChunkTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+
+    saved = admin_storage.save_match_status_snapshot({
+        "pending": {
+            "101": {
+                "t": "2026-10-01T08:00:00+00:00",
+                "s": "11", "a": "11", "b": "22", "c": "",
+            }
+        },
+        "priority_mode": True,
+        "betting_day_start": "2026-10-01T04:00:00+00:00",
+        "current_betting_day_due": 17,
+        "backlog_due": 946,
+        "runtime_limited": True,
+    })
+
+    assert saved["priority_mode"] is True
+    assert saved["betting_day_start"] == "2026-10-01T04:00:00+00:00"
+    assert saved["current_betting_day_due"] == 17
+    assert saved["backlog_due"] == 946
+    assert saved["runtime_limited"] is True
+
+    restored = admin_storage.load_match_status_snapshot()
+    assert restored["priority_mode"] is True
+    assert restored["current_betting_day_due"] == 17
+    assert restored["backlog_due"] == 946

@@ -635,7 +635,7 @@ def save_match_status_snapshot(payload: object) -> dict:
             continue
         key = str(eid or "").strip()[:64]
         entry = {field: str(item.get(field) or "").strip()[:64]
-                 for field in ("t", "s", "a", "b", "c")}
+                 for field in ("t", "s", "a", "b", "c", "p")}
         if key and all(entry[field] for field in ("t", "s", "a", "b")):
             pending[key] = entry
     safe = {
@@ -649,6 +649,11 @@ def save_match_status_snapshot(payload: object) -> dict:
         "window_candidates": max(0, int(data.get("window_candidates") or 0)),
         "window_min_age_minutes": max(0, int(data.get("window_min_age_minutes") or 0)),
         "window_max_age_minutes": max(0, int(data.get("window_max_age_minutes") or 0)),
+        "priority_mode": bool(data.get("priority_mode", False)),
+        "betting_day_start": str(data.get("betting_day_start") or "")[:64],
+        "current_betting_day_due": max(0, int(data.get("current_betting_day_due") or 0)),
+        "backlog_due": max(0, int(data.get("backlog_due") or 0)),
+        "runtime_limited": bool(data.get("runtime_limited", False)),
         "checked": max(0, int(data.get("checked") or 0)),
         "skipped_live": max(0, int(data.get("skipped_live") or 0)),
         "provider_requests": max(0, int(data.get("provider_requests") or 0)),
