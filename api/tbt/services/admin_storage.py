@@ -670,38 +670,126 @@ def save_match_status_snapshot(payload: object) -> dict:
         "terminal": len(statuses),
     }
     payload_json = json.dumps(safe, ensure_ascii=False, separators=(",", ":"))
-    # Azure Table limits string properties to 64 KiB (UTF-16).
+    # Azure Table limits string properties to 64 KiB (UTF-16).  Most snapshots
+    # fit in one row after gzip+base64.  A long-lived pending backlog can still
+    # exceed that ceiling, so store the encoded snapshot transactionally in
+    # versioned chunks rather than dropping unfinished matches.
     payload_text = (_encode_runtime_ui_payload(safe)
                     if len(payload_json.encode("utf-16-le")) > 40_000
                     else payload_json)
-    if len(payload_text.encode("utf-16-le")) > 60_000:
-        # Fail loudly: never silently truncate unfinished matches or results.
-        raise AdminStorageUnavailable("Match status snapshot exceeds storage property limit")
-    entity = {
-        "PartitionKey": "runtime",
-        "RowKey": "match-status-worker",
-        "payload": payload_text,
-        "updated_at": now,
-    }
+    table = _table(UI_TABLE)
     try:
-        _table(UI_TABLE).upsert_entity(entity, mode="replace")
+        if len(payload_text.encode("utf-16-le")) <= 60_000:
+            table.upsert_entity({
+                "PartitionKey": "runtime",
+                "RowKey": "match-status-worker",
+                "payload": payload_text,
+                "updated_at": now,
+            }, mode="replace")
+            current_prefix = ""
+        else:
+            encoded = _encode_runtime_ui_payload(safe)
+            version = uuid.uuid4().hex[:16]
+            # 24k characters are at most 48 KiB as UTF-16, leaving generous
+            # headroom below Azure Table's per-string-property limit.
+            chunk_size = 24_000
+            chunks = [
+                encoded[offset:offset + chunk_size]
+                for offset in range(0, len(encoded), chunk_size)
+            ]
+            if not chunks:
+                raise AdminStorageUnavailable("Unable to encode match status snapshot")
+            current_prefix = f"match-status-worker-chunk-{version}-"
+            # Write all immutable versioned chunks first.  The manifest row is
+            # replaced last, so readers either see the previous complete
+            # snapshot or the new complete snapshot, never a partial write.
+            for index, chunk in enumerate(chunks):
+                table.upsert_entity({
+                    "PartitionKey": "runtime",
+                    "RowKey": f"{current_prefix}{index:04d}",
+                    "version": version,
+                    "chunk_index": index,
+                    "payload": chunk,
+                    "updated_at": now,
+                }, mode="replace")
+            manifest = {
+                "__match_status_chunks__": 1,
+                "version": version,
+                "chunks": len(chunks),
+                "updated_at": now,
+            }
+            table.upsert_entity({
+                "PartitionKey": "runtime",
+                "RowKey": "match-status-worker",
+                "payload": json.dumps(manifest, separators=(",", ":")),
+                "updated_at": now,
+            }, mode="replace")
+    except AdminStorageUnavailable:
+        raise
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to save match status snapshot") from exc
+
+    # Best-effort cleanup happens only after the authoritative manifest/single
+    # row has been committed.  A cleanup failure cannot invalidate the snapshot.
+    try:
+        for row in table.query_entities("PartitionKey eq 'runtime'"):
+            row_key = str(row.get("RowKey") or "")
+            if not row_key.startswith("match-status-worker-chunk-"):
+                continue
+            if current_prefix and row_key.startswith(current_prefix):
+                continue
+            table.delete_entity(partition_key="runtime", row_key=row_key)
+    except Exception:
+        pass
     return safe
 
 
 def load_match_status_snapshot() -> dict | None:
     """Load the last compact hourly match-status snapshot."""
     try:
-        entity = _table(UI_TABLE).get_entity(
+        table = _table(UI_TABLE)
+        entity = table.get_entity(
             partition_key="runtime", row_key="match-status-worker"
         )
     except Exception as exc:
         if _storage_not_found(exc):
             return None
         raise AdminStorageUnavailable("Unable to load match status snapshot") from exc
-    # Accept both legacy JSON and gzip-encoded large snapshots.
-    return _decode_runtime_ui_payload(str(entity.get("payload") or "{}"))
+
+    payload = _decode_runtime_ui_payload(str(entity.get("payload") or "{}"))
+    if not isinstance(payload, dict):
+        return None
+    if int(payload.get("__match_status_chunks__") or 0) != 1:
+        # Accept both legacy JSON and gzip-encoded single-row snapshots.
+        return payload
+
+    version = str(payload.get("version") or "").strip()
+    try:
+        chunk_count = int(payload.get("chunks") or 0)
+    except (TypeError, ValueError):
+        chunk_count = 0
+    if not re.fullmatch(r"[a-f0-9]{16}", version) or not (1 <= chunk_count <= 512):
+        raise AdminStorageUnavailable("Invalid chunked match status manifest")
+
+    prefix = f"match-status-worker-chunk-{version}-"
+    parts: list[str] = []
+    try:
+        for index in range(chunk_count):
+            row = table.get_entity(
+                partition_key="runtime", row_key=f"{prefix}{index:04d}"
+            )
+            if str(row.get("version") or "") != version:
+                raise AdminStorageUnavailable("Mismatched match status snapshot chunk")
+            parts.append(str(row.get("payload") or ""))
+    except AdminStorageUnavailable:
+        raise
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to load match status snapshot chunks") from exc
+
+    restored = _decode_runtime_ui_payload("".join(parts))
+    if not isinstance(restored, dict):
+        raise AdminStorageUnavailable("Invalid chunked match status snapshot")
+    return restored
 
 
 def save_account_worker_status(payload: object) -> dict:
