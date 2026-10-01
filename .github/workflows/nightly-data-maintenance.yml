@@ -111,7 +111,7 @@ jobs:
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
           visibility="$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)"
           test "$visibility" = "PRIVATE" || { echo 'Refusing non-private data repository'; exit 1; }
-          # Intentionally no RAPIDAPI_KEY in this workflow.
+          # Intentionally no TennisAPI credential is exposed to this workflow.
           python - <<'PY'
           import os
           cap=int(os.environ["BLINQ_OPEN_METEO_MAX"])
