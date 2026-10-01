@@ -704,6 +704,24 @@ def main():
             shadow_ledger = prior_shadow
         elif shadow_assets & shadow_required:
             raise FileNotFoundError("Incomplete private shadow evaluation release")
+        elif not shadow_assets:
+            # Bootstrap the private shadow release immediately.  A later provider
+            # failure (for example shared-budget exhaustion) must never leave a
+            # created release with no ledger/report assets.
+            initial_report = build_shadow_report(
+                [],
+                production_model_version=str(getattr(model, "version", "") or ""),
+                challenger_model_version=challenger_version,
+            )
+            initial_report["generated_at_utc"] = datetime.now(timezone.utc).isoformat()
+            initial_report["status"] = "initialized_waiting_for_first_pre_match_snapshot"
+            write_json(shadow_dir / "shadow_ledger.json", [])
+            write_json(shadow_dir / "shadow_report.json", clean(initial_report))
+            shadow_store.upload_bundle([
+                shadow_dir / "shadow_ledger.json",
+                shadow_dir / "shadow_report.json",
+            ])
+            shadow_assets = shadow_required
 
         shadow_enabled = bool(
             challenger_model is not None
