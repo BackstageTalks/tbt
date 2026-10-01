@@ -1,1 +1,1 @@
-Current-day serving recovery refresh after 06:00 betting-day rollover. Canonical history read-only; refresh prediction feed and shadow only. 2026-10-01.
+Current-day serving recovery after 06:00 rollover. Canonical history read-only; publish current prediction feed only. 2026-10-01 clean retry.
