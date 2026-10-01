@@ -86,10 +86,17 @@ jobs:
       - name: Verify canonical baseline before linking
         run: |
           set -euo pipefail
-          python scripts/audit_serve_return_gaps.py > .cache/tbt/baseline.json
           python - <<'PY'
           import json, os
-          r=json.load(open(".cache/tbt/baseline.json"))
+          from pathlib import Path
+          from scripts.audit_serve_return_gaps import analyze
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          matches,safety=sanitize_history_identities(load_partitions(Path(".cache/tbt/history")))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Canonical identity quarantine is non-empty")
+          r=analyze(matches)
+          Path(".cache/tbt/baseline.json").write_text(json.dumps(r,indent=2),encoding="utf-8")
           c=r["overall"]
           exp_rows=int(os.environ["EXPECTED_CANONICAL_ROWS"])
           exp_ready=int(os.environ["EXPECTED_BASELINE_READY"])
@@ -168,10 +175,17 @@ jobs:
       - name: Validate full history after local write
         run: |
           set -euo pipefail
-          python scripts/audit_serve_return_gaps.py > .cache/tbt/after.json
           python - <<'PY'
           import json, os
-          r=json.load(open(".cache/tbt/after.json"))
+          from pathlib import Path
+          from scripts.audit_serve_return_gaps import analyze
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          matches,safety=sanitize_history_identities(load_partitions(Path(".cache/tbt/history")))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Post-write identity quarantine is non-empty")
+          r=analyze(matches)
+          Path(".cache/tbt/after.json").write_text(json.dumps(r,indent=2),encoding="utf-8")
           c=r["overall"]
           expected=int(os.environ["EXPECTED_BASELINE_READY"])+int(os.environ["EXPECTED_QUALITY_ADDED"])
           if c["completed"] != int(os.environ["EXPECTED_CANONICAL_ROWS"]):
@@ -216,10 +230,17 @@ jobs:
           out=Path(".cache/tbt/verify")
           ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",out).download(require_bundle_manifest=True)
           PY
-          python scripts/audit_serve_return_gaps.py > .cache/tbt/verify_report.json
           python - <<'PY'
           import json, os
-          r=json.load(open(".cache/tbt/verify_report.json"))
+          from pathlib import Path
+          from scripts.audit_serve_return_gaps import analyze
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          matches,safety=sanitize_history_identities(load_partitions(Path(".cache/tbt/verify")))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Committed release identity quarantine is non-empty")
+          r=analyze(matches)
+          Path(".cache/tbt/verify_report.json").write_text(json.dumps(r,indent=2),encoding="utf-8")
           c=r["overall"]
           expected=int(os.environ["EXPECTED_BASELINE_READY"])+int(os.environ["EXPECTED_QUALITY_ADDED"])
           if c["completed"] != int(os.environ["EXPECTED_CANONICAL_ROWS"]) or c["both_ready"] != expected:
