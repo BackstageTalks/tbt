@@ -21,9 +21,9 @@ def test_parse_ace_double_fault_semantics():
     assert error == ""
     assert parsed is not None
     assert parsed[0]["service_points"] == 4
-    assert parsed[0]["service_won"] == 3
+    assert parsed[0]["service_points_won"] == 0.75
     assert parsed[1]["service_points"] == 4
-    assert parsed[1]["service_won"] == 3
+    assert parsed[1]["service_points_won"] == 0.75
 
 
 def test_parse_tiebreak_service_changes():
