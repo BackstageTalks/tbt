@@ -540,6 +540,21 @@
   async function adminDeleteInsight(insightId) {
     return apiWithSession(`/api/v1/admin/insights/${encodeURIComponent(insightId)}`, {method: 'DELETE'});
   }
+  async function adminInfoResults() {
+    return apiWithSession('/api/v1/admin/info-results');
+  }
+  async function adminSettleInfoResult(insightId, outcome) {
+    return apiWithSession(
+      `/api/v1/admin/insights/${encodeURIComponent(insightId)}/result`,
+      {method: 'POST', body: JSON.stringify({outcome})}
+    );
+  }
+  async function adminDeleteInfoResult(resultId) {
+    return apiWithSession(
+      `/api/v1/admin/info-results/${encodeURIComponent(resultId)}`,
+      {method: 'DELETE'}
+    );
+  }
   async function adminDiagnostics() {
     return apiWithSession('/api/v1/admin/diagnostics');
   }
@@ -610,7 +625,7 @@
 
   window.BlinqAuth = {
     init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, matchIntelligence,
-    insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight,
+    insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
