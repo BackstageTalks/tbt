@@ -2,8 +2,8 @@
   "schema": 1,
   "mode": "deploy-current",
   "promote": false,
-  "purpose": "No-provider deployment after canonical data closure; shadow storage is initialized and current verified prediction generation should be redeployed without changing the production model.",
-  "requested_at_utc": "2026-10-01T01:56:00Z",
+  "purpose": "Immediate no-provider deploy of current verified BlinQ data/feed after shadow bootstrap repair; bypass only the unrelated history-writer lock, retain production deploy serialization, do not retrain or promote.",
+  "requested_at_utc": "2026-10-01T01:59:00Z",
   "training_scope": "none",
   "historical_match_winner_odds_as_model_feature": false
 }
