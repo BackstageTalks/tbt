@@ -118,5 +118,6 @@ jobs:
             .cache/tbt/audit/pbp/report.json
             .cache/tbt/audit/pbp/review.jsonl
             .cache/tbt/audit/atpworld/report.json
+            .cache/tbt/audit/atpworld/auto_linked.jsonl
             .cache/tbt/audit/atpworld/review.jsonl
             .cache/tbt/audit/atpworld/quarantine.jsonl
