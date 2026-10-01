@@ -72,7 +72,10 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  group: tbt-history-data-writer
+  # deploy-current does not mutate canonical history. Let it bypass long-running
+  # history/environment writers while retaining the dedicated production-deploy
+  # lock at the job level below.
+  group: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[deploy-current]')) && format('tbt-deploy-current-{0}', github.run_id) || 'tbt-history-data-writer' }}
   cancel-in-progress: false
 jobs:
   pipeline:
