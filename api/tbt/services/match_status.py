@@ -91,8 +91,15 @@ def prediction_rows(feed: dict[str, Any]) -> dict[str, dict[str, Any]]:
             if existing is None or quality > old_quality:
                 out[eid] = row
 
-    for key in _PUBLIC_MATCH_WINNER_KEYS:
-        add_rows(feed.get(key))
+    public_contract_present = any(key in feed for key in _PUBLIC_MATCH_WINNER_KEYS)
+    if public_contract_present:
+        for key in _PUBLIC_MATCH_WINNER_KEYS:
+            add_rows(feed.get(key))
+    else:
+        # Compatibility fallback for focused tests/legacy payloads that predate
+        # the public market-section contract. Production feeds carry the public
+        # keys above, so generic model-board rows are never queued there.
+        add_rows(feed.get("upcoming"))
 
     return out
 
