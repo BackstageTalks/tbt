@@ -14,8 +14,8 @@ before initial activation; start with a clean provider quota window.
 | --- | ---: |
 | LIVE Radar | 2,500 |
 | Hourly Match Status | 1,000 |
-| Morning Refresh (including optional enrichment) | 750 |
-| History, manual statistics and other enrichment | 7,750 |
+| Morning Refresh (including optional enrichment) | 2,500 |
+| History, manual statistics and other enrichment | 8,500 |
 | **Combined, hard** | **12,000** |
 
 This allocation keeps the same 12,000 combined ceiling while giving the hourly Match Status worker enough room to operate during normal low-utilization days.\n
