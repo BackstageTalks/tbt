@@ -49,3 +49,30 @@ def test_new_info_defaults_to_local_end_of_day_without_overwriting_manual_edit()
     assert "fromInput.onchange=()=>syncAdminInsightDefaultExpiry(insightForm)" in wire
     assert "untilInput.dataset.infoAuto='0'" in wire
     assert "syncAdminInsightDefaultExpiry(insightForm)" in wire
+
+
+def test_admin_info_batch_composer_publishes_up_to_five_separate_messages():
+    app=(ROOT/'web/app.js').read_text(encoding='utf-8')
+    assert 'adminInsightMessageHtml' in app
+    assert 'data-admin-action="insight-message-add"' in app
+    assert "if(count>=5)return" in app
+    assert "Promise.allSettled(messages.map(row=>BlinqAuth.adminCreateInsight" in app
+    assert "Naraz môžeš publikovať 1 až 5 správ." in app
+    assert "SPOLOČNÉ NASTAVENIA" in app
+
+
+def test_admin_info_manual_win_loss_void_history_contract():
+    app=(ROOT/'web/app.js').read_text(encoding='utf-8')
+    auth=(ROOT/'web/auth.js').read_text(encoding='utf-8')
+    api=(ROOT/'api/function_app.py').read_text(encoding='utf-8')
+    storage=(ROOT/'api/tbt/services/admin_storage.py').read_text(encoding='utf-8')
+    for outcome in ('win','loss','void'):
+        assert f"'{outcome}'" in app
+    assert 'admin-info-results-columns' in app
+    assert 'adminSettleInfoResult' in auth
+    assert 'adminDeleteInfoResult' in auth
+    assert 'route="v1/admin/info-results"' in api
+    assert 'route="v1/admin/insights/{insight_id}/result"' in api
+    assert 'def save_info_result' in storage
+    assert 'def list_info_results' in storage
+    assert 'Results are stored independently from the INFO row' in storage
