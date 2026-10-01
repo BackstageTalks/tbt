@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from scripts.link_season_serve_return import _parse_row, _percent
+from scripts.link_season_serve_return import _conflicts, _parse_row, _percent
 
 
 def _row(**overrides):
@@ -96,3 +96,15 @@ def test_parse_wta_tour_and_source_identity():
     assert parsed is not None
     assert parsed.tour == "wta"
     assert parsed.source_id == "season:wta:69894353"
+
+
+def test_count_disagreement_does_not_block_quality_fill():
+    existing = {"p1_aces": 5.0, "p1_service_points_won": 0.61}
+    incoming = {"p1_aces": 7.0, "p1_service_points_won": 0.60}
+    assert _conflicts(existing, incoming) == []
+
+
+def test_material_quality_disagreement_is_rejected():
+    existing = {"p1_service_points_won": 0.70}
+    incoming = {"p1_service_points_won": 0.60}
+    assert _conflicts(existing, incoming) == ["p1_service_points_won"]
