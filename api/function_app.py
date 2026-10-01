@@ -1988,8 +1988,8 @@ def admin_diagnostics(req):
                 {"name": name, "percent": int(100 * spent / cap)}
                 for name, spent, cap in (
                     ("global", api_budget["global_spent"], api_budget["global_limit"]),
-                    *((kind, used, {"live": 2500, "match": 250,
-                                     "refresh": 750, "history": 8500}[kind])
+                    *((kind, used, {"live": 2500, "match": 1000,
+                                     "refresh": 750, "history": 7750}[kind])
                       for kind, used in api_budget["spent"].items()),
                 )
                 if spent * 100 >= cap * 80
