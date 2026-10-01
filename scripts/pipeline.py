@@ -472,7 +472,7 @@ def _publish_predictions(
 
 def main():
     parser = argparse.ArgumentParser(description="Offline BlinQ training and prediction publication")
-    parser.add_argument("mode", choices=["train", "refresh", "backtest"])
+    parser.add_argument("mode", choices=["train", "refresh", "current-refresh", "backtest"])
     parser.add_argument("--data-repository", default=os.getenv("TBT_DATA_REPOSITORY", "BackstageTalks/tbt-data"))
     parser.add_argument("--max-requests", type=int, default=750)
     parser.add_argument(
@@ -757,13 +757,21 @@ def main():
     doubles_dir = cache / "doubles"
     doubles_store = ReleaseStore(args.data_repository, "tbt-doubles-data-v1", doubles_dir)
     doubles_history = _load_doubles_history(doubles_store)
+    current_only = args.mode == "current-refresh"
     budget_path = history_dir / "request_budget.json"
-    ledger, allowance = reserve_allocation(read_json(budget_path, {}), args.max_requests,
-        run_id=os.getenv("GITHUB_RUN_ID", "manual"), purpose="refresh")
-    if not allowance:
-        raise SystemExit("Refresh budget exhausted; previously deployed feed stays available with its timestamp")
-    write_json(budget_path, ledger)
-    history_store.upload_bundle([budget_path])
+    if current_only:
+        # Emergency/current-day serving refresh is deliberately read-only with
+        # respect to canonical history. The durable shared API guard remains the
+        # hard quota authority; do not mutate the history release just to reserve
+        # a local allowance.
+        allowance = args.max_requests
+    else:
+        ledger, allowance = reserve_allocation(read_json(budget_path, {}), args.max_requests,
+            run_id=os.getenv("GITHUB_RUN_ID", "manual"), purpose="refresh")
+        if not allowance:
+            raise SystemExit("Refresh budget exhausted; previously deployed feed stays available with its timestamp")
+        write_json(budget_path, ledger)
+        history_store.upload_bundle([budget_path])
     budget = LocalRequestBudget(history_dir / "local_request_budget.sqlite", duration_seconds=1800)
     provider = RapidTennisClient(request_budget=budget)
     provider.request_limit = allowance
@@ -780,13 +788,24 @@ def main():
     doubles_completed = []
     doubles_upcoming = []
     try:
-        matches = _refresh_history(
-            provider, matches, history_dir, history_store,
-            now.date() - timedelta(days=7), now.date()
-        )
-        skipped_history_days = set(
-            getattr(provider, "_tbt_skipped_history_days", set())
-        )
+        if current_only:
+            skipped_history_days = set()
+            print(json.dumps({
+                "current_refresh": {
+                    "canonical_history": "read_only",
+                    "history_matches": len(matches),
+                    "window_start": now.date().isoformat(),
+                    "window_end": (now.date() + timedelta(days=3)).isoformat(),
+                }
+            }), flush=True)
+        else:
+            matches = _refresh_history(
+                provider, matches, history_dir, history_store,
+                now.date() - timedelta(days=7), now.date()
+            )
+            skipped_history_days = set(
+                getattr(provider, "_tbt_skipped_history_days", set())
+            )
         for tour in ("atp", "wta"):
             upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
 
@@ -803,21 +822,28 @@ def main():
         # Doubles uses a separate pair/member model. The raw daily event calls are
         # already cached by the singles refresh above, so maintaining the recent
         # doubles history adds very little discovery traffic.
-        doubles_day = now.date() - timedelta(days=7)
-        while doubles_day <= now.date():
-            if doubles_day.isoformat() in skipped_history_days:
+        if current_only:
+            doubles_history_state = {
+                "status": "reused_existing_history",
+                "matches": len(doubles_history),
+                "recent_completed_refreshed": 0,
+            }
+        else:
+            doubles_day = now.date() - timedelta(days=7)
+            while doubles_day <= now.date():
+                if doubles_day.isoformat() in skipped_history_days:
+                    doubles_day += timedelta(days=1)
+                    continue
+                doubles_completed.extend(
+                    match for match in provider.doubles_for_day(doubles_day, historical=True)
+                    if match.is_completed
+                )
                 doubles_day += timedelta(days=1)
-                continue
-            doubles_completed.extend(
-                match for match in provider.doubles_for_day(doubles_day, historical=True)
-                if match.is_completed
+            doubles_history = merge_doubles_history(doubles_history, doubles_completed)
+            doubles_history_state = _save_doubles_history(
+                doubles_store, doubles_history,
+                extra_report={"recent_completed_refreshed": len(doubles_completed)},
             )
-            doubles_day += timedelta(days=1)
-        doubles_history = merge_doubles_history(doubles_history, doubles_completed)
-        doubles_history_state = _save_doubles_history(
-            doubles_store, doubles_history,
-            extra_report={"recent_completed_refreshed": len(doubles_completed)},
-        )
         doubles_upcoming = provider.doubles_upcoming(now.date(), now.date() + timedelta(days=3))
         doubles_predictions, doubles_model_report = build_doubles_predictions(
             doubles_history, doubles_upcoming, now=now
