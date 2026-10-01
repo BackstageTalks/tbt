@@ -818,7 +818,9 @@ def test_shared_budget_exhaustion_is_safe_pause_without_provider_calls():
     assert result["checked"] == 0
     assert result["provider_errors"] == {"SharedBudgetExhausted": 1}
     assert result["pending_count"] == 1
-    assert result["next_due_id"] == "budget-1"
+    # A single pending fixture needs no rotation cursor; it is naturally first
+    # on the next run and must simply remain unresolved.
+    assert result["next_due_id"] == ""
     assert result["statuses"] == {}
 
 
