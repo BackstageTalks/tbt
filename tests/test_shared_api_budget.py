@@ -13,22 +13,28 @@ from tbt.providers.rapidapi import RapidTennisClient
 NOW = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
 
 
-def test_independent_live_and_morning_caps_preserve_emergency_headroom():
+def test_independent_purpose_ceilings_share_global_hard_cap():
     ledger = None
     ledger, result = shared_budget.calculate(ledger, "live", 2500, now=NOW)
     assert result["remaining"]["live"] == 0
-    assert result["global_spent"] == 2500
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "live", 1, now=NOW)
-    ledger, result = shared_budget.calculate(ledger, "refresh", 750, now=NOW)
+
+    # Refresh may use otherwise idle capacity; its ceiling is no longer a tiny
+    # fixed partition of the global pool.
+    ledger, result = shared_budget.calculate(ledger, "refresh", 2500, now=NOW)
     assert result["remaining"]["refresh"] == 0
-    assert result["global_remaining"] == 8750
-    for chunk in (3000, 3000, 1750):
-        ledger, result = shared_budget.calculate(ledger, "history", chunk, now=NOW)
     ledger, result = shared_budget.calculate(ledger, "match", 1000, now=NOW)
+    assert result["remaining"]["match"] == 0
+
+    # The hard combined stop remains 12,000, preserving 3,000 provider headroom.
+    for chunk in (3000, 3000):
+        ledger, result = shared_budget.calculate(ledger, "history", chunk, now=NOW)
     assert result["global_spent"] == 12000
     assert result["global_remaining"] == 0
     assert result["reserved_provider_headroom"] == 3000
+    with pytest.raises(shared_budget.SharedBudgetExhausted):
+        shared_budget.calculate(ledger, "history", 1, now=NOW)
 
 
 def test_rolling_24_hours_keeps_boundary_bucket_conservatively():
@@ -94,7 +100,7 @@ def test_parallel_reservations_never_overspend(monkeypatch):
     table = AtomicFakeTable()
     monkeypatch.setattr(shared_budget, "GLOBAL_CEILING", 10)
     monkeypatch.setattr(shared_budget, "PURPOSE_CAPS",
-                        {"live": 10, "match": 1000, "refresh": 750, "history": 7750})
+                        {"live": 10, "match": 1000, "refresh": 2500, "history": 8500})
     monkeypatch.setattr(shared_budget, "MAX_RETRIES", 40)
 
     def attempt(_):
