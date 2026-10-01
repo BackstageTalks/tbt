@@ -553,6 +553,7 @@ def scan_match_statuses(
     provider_errors: dict[str, int] = {}
     live_by_id: dict[str, dict[str, Any]] = {}
     nominal_requests = 0
+    budget_paused = False
     request_count_before = getattr(provider, "request_count", None)
     if due:
         try:
@@ -566,6 +567,11 @@ def scan_match_statuses(
         except Exception as exc:
             code = _provider_error_code(exc)
             provider_errors[code] = provider_errors.get(code, 0) + 1
+            if type(exc).__name__ == "SharedBudgetExhausted":
+                # The shared daily quota guard stopped the call before it reached
+                # the tennis provider. Preserve every pending fixture and exit
+                # cleanly instead of retrying the same exhausted reservation.
+                budget_paused = True
 
     checked = skipped_live = successful_history = matched_events = 0
     newly_resolved = consecutive_errors = near_attempts = unmatched = 0
@@ -615,7 +621,11 @@ def scan_match_statuses(
             skipped_live += 1
 
     runtime_limited = False
+    if budget_paused and ordered:
+        next_due_id = ordered[0][1]
     for position, (_, eid, row) in enumerate(ordered):
+        if budget_paused:
+            break
         if eid in statuses or eid in live_by_id:
             continue
         if deadline is not None and time.monotonic() >= deadline:
@@ -639,7 +649,9 @@ def scan_match_statuses(
 
         player_id = _player_id(row, "player1")
         checked += 1
+        previous_checked_at = ""
         if eid in pending:
+            previous_checked_at = str(pending[eid].get("c") or "")
             pending[eid]["c"] = now.isoformat()
         payload = None
         near_used = False
@@ -665,6 +677,13 @@ def scan_match_statuses(
         except Exception as exc:
             error_code = _provider_error_code(exc)
             provider_errors[error_code] = provider_errors.get(error_code, 0) + 1
+            if type(exc).__name__ == "SharedBudgetExhausted":
+                budget_paused = True
+                checked = max(0, checked - 1)
+                if eid in pending:
+                    pending[eid]["c"] = previous_checked_at
+                next_due_id = eid
+                break
             if (
                 not prefer_near and error_code.endswith("_HTTP_404")
                 and callable(near_method) and near_attempts < max_near_checks
@@ -687,6 +706,13 @@ def scan_match_statuses(
                 except Exception as fallback_exc:
                     code = _provider_error_code(fallback_exc)
                     provider_errors[code] = provider_errors.get(code, 0) + 1
+                    if type(fallback_exc).__name__ == "SharedBudgetExhausted":
+                        budget_paused = True
+                        checked = max(0, checked - 1)
+                        if eid in pending:
+                            pending[eid]["c"] = previous_checked_at
+                        next_due_id = eid
+                        break
                     if type(fallback_exc).__name__ == "RequestBudgetExceeded":
                         break
             elif type(exc).__name__ == "RequestBudgetExceeded":
@@ -728,7 +754,10 @@ def scan_match_statuses(
         provider_requests = nominal_requests
 
     failed_history = checked - successful_history
-    degraded = checked > 0 and successful_history == 0 and failed_history > 0
+    degraded = (
+        checked > 0 and successful_history == 0 and failed_history > 0
+        and not budget_paused
+    )
     # Preserve a successful near-route preference, but never store private
     # provider payloads, player names or error text.
     return {
@@ -756,6 +785,7 @@ def scan_match_statuses(
         "failed_history": failed_history,
         "matched_events": matched_events,
         "provider_errors": provider_errors,
+        "budget_paused": budget_paused,
         "degraded": degraded,
         "preferred_route": "near" if prefer_near else "history",
         "near_attempts": near_attempts,
