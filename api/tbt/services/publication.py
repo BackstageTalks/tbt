@@ -509,6 +509,25 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                         matches = list(earliest_unique.values())
 
                 if len(matches) != 1:
+                    # A current selector row must never block the whole betting-day
+                    # publication only because a legacy ledger contains conflicting
+                    # already-issued Match Winner snapshots. In the pipeline we have
+                    # an immutable prior daily-offer source immediately afterwards;
+                    # quarantine only this current row and let carry-forward restore
+                    # the exact previously displayed card when ledger evidence
+                    # matches it byte-for-byte. Direct callers without an explicit
+                    # quarantine sink remain strict/fail-closed.
+                    if (
+                        quarantine_report is not None
+                        and section in {"top_daily", "prime", "doubles"}
+                    ):
+                        quarantine_report.append({
+                            "event_id": commitment[0],
+                            "market": "match_winner",
+                            "section": section,
+                            "reason": "ambiguous_issued_legacy_match_winner_snapshots",
+                        })
+                        continue
                     raise RuntimeError(f"Market feed/ledger mismatch for {section} event {commitment[0]}; no unique issued snapshot")
 
             snapshot = matches[0]
