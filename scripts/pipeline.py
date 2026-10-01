@@ -914,8 +914,8 @@ def main():
                     }
                 }, ensure_ascii=False), flush=True)
 
-        market_odds_cap = max(0, int(args.market_odds_max_events or 0))
-        projection_odds_cap = market_odds_cap
+        projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        market_odds_cap = projection_odds_cap
         if current_only:
             # Recovery must restore the public Match Winner inventory first.
             # Projection discovery can consume dozens of the same globally-capped
