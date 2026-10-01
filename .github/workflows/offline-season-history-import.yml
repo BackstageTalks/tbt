@@ -1,0 +1,583 @@
+name: Integrate season 2021-2026 serve-return
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/offline-season-import-request.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 210
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      STAGE_BRANCH: staging/season-2021-2026-20261001
+      EXPECTED_CANONICAL_ROWS: "739596"
+      EXPECTED_BASELINE_READY: "245939"
+      EXPECTED_STAGE_ROWS: "11689"
+      EXPECTED_QUALITY_ADDED: "11689"
+      EXPECTED_POST_READY: "257628"
+      EXPECTED_STAGE_SHA256: "0e6e84c421427058425ea43e39fb73439482015702100f9f9b76c33bc37cd4a7"
+      EXPECTED_CANONICAL_SIGNATURE_DIGEST: "3b7b16b36dcc17563efccacd8fe1d391a339aab472659edc5d0dd04776271ed7"
+      BACKTEST_CUTOFF_UTC: "2026-09-30T01:30:00+00:00"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            api/requirements.txt
+            api/requirements-train.txt
+
+      - name: Verify controlled request
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path(".github/offline-season-import-request.json")
+          r=json.loads(p.read_text())
+          expected={
+            "schema":1,
+            "mode":"write_rebuild_audit_baseline",
+            "source":"tennisdata_app_season_2021_2026",
+            "stage_branch":"staging/season-2021-2026-20261001",
+            "expected_stage_rows":11689,
+            "expected_quality_added":11689,
+          }
+          for k,v in expected.items():
+              if r.get(k)!=v:
+                  raise SystemExit(f"Controlled request mismatch for {k}: {r.get(k)!r} != {v!r}")
+          print("controlled request verified")
+          PY
+
+      - name: Install dependencies
+        run: python -m pip install --retries 8 --timeout 60 -r api/requirements.txt -r api/requirements-train.txt
+
+      - name: Verify private data repository
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download checksum-verified canonical history
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.release_store import ReleaseStore
+          out=Path(".cache/tbt/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",out).download(require_bundle_manifest=True)
+          print("partitions",len(list(out.glob("history-*.parquet"))))
+          PY
+
+      - name: Verify post-ATP canonical baseline
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.audit_serve_return_gaps import analyze
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          matches,safety=sanitize_history_identities(load_partitions(Path(".cache/tbt/history")))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Canonical identity quarantine is non-empty")
+          r=analyze(matches)
+          Path(".cache/tbt/baseline.json").write_text(json.dumps(r,indent=2),encoding="utf-8")
+          c=r["overall"]
+          if c["completed"] != int(os.environ["EXPECTED_CANONICAL_ROWS"]):
+              raise SystemExit(f"Canonical rows drifted: {c['completed']}")
+          if c["both_ready"] != int(os.environ["EXPECTED_BASELINE_READY"]):
+              raise SystemExit(f"Serve/return baseline drifted: {c['both_ready']}")
+          print("baseline verified", c)
+          PY
+
+      - name: Fetch private verified season stage and old benchmark
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/season-stage .cache/tbt/baseline-audit
+          gh api -H "Accept: application/vnd.github.raw+json"             "repos/$TBT_DATA_REPOSITORY/contents/staging/season-2021-2026/season_compact.csv?ref=$STAGE_BRANCH"             > .cache/tbt/season-stage/season_compact.csv
+          gh api -H "Accept: application/vnd.github.raw+json"             "repos/$TBT_DATA_REPOSITORY/contents/staging/season-2021-2026/manifest.json?ref=$STAGE_BRANCH"             > .cache/tbt/season-stage/manifest.json
+          gh api -H "Accept: application/vnd.github.raw+json"             "repos/$TBT_DATA_REPOSITORY/contents/audit/model-backtest-latest.json"             > .cache/tbt/baseline-audit/model-backtest-latest.json
+          gh api -H "Accept: application/vnd.github.raw+json"             "repos/$TBT_DATA_REPOSITORY/contents/audit/feature-v3-latest.json"             > .cache/tbt/baseline-audit/feature-v3-latest.json
+
+      - name: Reconstruct strict signed import stage
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv, hashlib, json, os
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          compact=Path(".cache/tbt/season-stage/season_compact.csv")
+          manifest=json.loads(Path(".cache/tbt/season-stage/manifest.json").read_text())
+          digest=hashlib.sha256(compact.read_bytes()).hexdigest()
+          if digest != os.environ["EXPECTED_STAGE_SHA256"]:
+              raise SystemExit(f"Stage SHA drift: {digest}")
+          if manifest.get("stage_sha256") != digest:
+              raise SystemExit("Private stage manifest does not match stage bytes")
+
+          matches,safety=sanitize_history_identities(load_partitions(".cache/tbt/history"))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Identity quarantine before season reconstruction")
+          by_id={str(m.match_id):m for m in matches}
+
+          def signature(m):
+              return {
+                  "tour":str(m.tour or "").lower(),
+                  "scheduled_date_utc":m.scheduled_at.date().isoformat(),
+                  "player1_id":str(m.player1_id),
+                  "player1_name":str(m.player1_name),
+                  "player2_id":str(m.player2_id),
+                  "player2_name":str(m.player2_name),
+                  "surface":str(m.surface or ""),
+                  "tournament":str(m.tournament or ""),
+                  "round_name":str(m.round_name or ""),
+                  "winner_id":str(m.winner_id or ""),
+              }
+
+          rows=[]
+          sigrows=[]
+          seen=set()
+          with compact.open(newline="",encoding="utf-8") as handle:
+              for n,values in enumerate(csv.reader(handle),start=1):
+                  if len(values)!=9:
+                      raise SystemExit(f"Bad compact width line {n}: {len(values)}")
+                  mid=values[0].strip()
+                  if not mid or mid in seen:
+                      raise SystemExit(f"Missing/duplicate match id line {n}")
+                  seen.add(mid)
+                  m=by_id.get(mid)
+                  if m is None:
+                      raise SystemExit(f"Canonical match missing: {mid}")
+                  nums=[]
+                  for i,v in enumerate(values[1:5],start=1):
+                      try: pct=int(v)
+                      except Exception: raise SystemExit(f"Bad quality percent {mid} col {i}")
+                      if not 0 <= pct <= 100:
+                          raise SystemExit(f"Out of range quality percent {mid}")
+                      nums.append(pct/100.0)
+                  counts=[]
+                  for v in values[5:9]:
+                      if v=="":
+                          counts.append(None)
+                      else:
+                          try: x=int(v)
+                          except Exception: raise SystemExit(f"Bad count {mid}")
+                          if x < 0:
+                              raise SystemExit(f"Negative count {mid}")
+                          counts.append(float(x))
+                  incoming={
+                      "p1_service_points_won":nums[0],
+                      "p1_return_points_won":nums[1],
+                      "p2_service_points_won":nums[2],
+                      "p2_return_points_won":nums[3],
+                  }
+                  for key,value in zip(
+                      ("p1_aces","p1_double_faults","p2_aces","p2_double_faults"),
+                      counts,
+                  ):
+                      if value is not None:
+                          incoming[key]=value
+                  c=signature(m)
+                  sigrows.append(mid+"\t"+json.dumps(c,sort_keys=True,separators=(",",":"),ensure_ascii=False))
+                  rows.append({
+                      "schema":1,
+                      "match_id":mid,
+                      "canonical":c,
+                      "incoming_stats":incoming,
+                      "source":{
+                          "kind":"tennisdata_app_season_2021_2026",
+                          "private_stage_branch":os.environ["STAGE_BRANCH"],
+                          "compact_stage_sha256":digest,
+                      },
+                      "import_ready":True,
+                  })
+
+          if len(rows) != int(os.environ["EXPECTED_STAGE_ROWS"]):
+              raise SystemExit(f"Stage rows drifted: {len(rows)}")
+          sig_payload="\n".join(sorted(sigrows))+"\n"
+          identity_digest=hashlib.sha256(sig_payload.encode()).hexdigest()
+          if identity_digest != os.environ["EXPECTED_CANONICAL_SIGNATURE_DIGEST"]:
+              raise SystemExit(f"Canonical identity set changed: {identity_digest}")
+
+          out=Path(".cache/tbt/season-stage/auto_linked.jsonl")
+          with out.open("w",encoding="utf-8") as handle:
+              for row in rows:
+                  handle.write(json.dumps(row,ensure_ascii=False,separators=(",",":"))+"\n")
+          summary={
+              "rows":len(rows),
+              "compact_sha256":digest,
+              "canonical_signature_set_sha256":identity_digest,
+              "production_mutated":False,
+              "api_requests":0,
+          }
+          Path(".cache/tbt/season-stage/reconstruction.json").write_text(
+              json.dumps(summary,indent=2),encoding="utf-8"
+          )
+          print(json.dumps(summary,indent=2))
+          PY
+
+      - name: Dry-run strict importer
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/season-stage/auto_linked.jsonl             --history-dir .cache/tbt/history             --out-dir .cache/tbt/season-dry
+          python - <<'PY'
+          import json, os
+          r=json.load(open(".cache/tbt/season-dry/report.json"))
+          c=r.get("counts") or {}
+          checks={
+              "stage_rows":(r.get("stage_rows"),int(os.environ["EXPECTED_STAGE_ROWS"])),
+              "updated":(c.get("updated",0),int(os.environ["EXPECTED_STAGE_ROWS"])),
+              "quality_ready_added":(r.get("quality_ready_added"),int(os.environ["EXPECTED_QUALITY_ADDED"])),
+              "identity_missing":(c.get("identity_missing",0),0),
+              "identity_changed":(c.get("identity_changed",0),0),
+              "stat_conflicts":(c.get("stat_conflicts",0),0),
+              "invalid_stats":(c.get("invalid_stats",0),0),
+          }
+          bad=[f"{k}:{a}!={b}" for k,(a,b) in checks.items() if a!=b]
+          if bad: raise SystemExit("Season dry-run contract failed: "+"; ".join(bad))
+          print("dry-run contract verified")
+          PY
+
+      - name: Apply season stage to local canonical copy
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/season-stage/auto_linked.jsonl             --history-dir .cache/tbt/history             --out-dir .cache/tbt/season-import             --write-partitions             --write-history-dir .cache/tbt/history
+          python - <<'PY'
+          import json, os
+          r=json.load(open(".cache/tbt/season-import/report.json"))
+          c=r.get("counts") or {}
+          if r.get("quality_ready_added") != int(os.environ["EXPECTED_QUALITY_ADDED"]):
+              raise SystemExit(f"Importer quality add drift: {r.get('quality_ready_added')}")
+          if c.get("stat_conflicts",0) or c.get("identity_changed",0) or c.get("invalid_stats",0):
+              raise SystemExit(f"Importer safety failure: {c}")
+          if sorted(r.get("changed_years") or []) != [2021,2022,2023,2024,2025,2026]:
+              raise SystemExit(f"Unexpected changed years: {r.get('changed_years')}")
+          print("local write verified",r)
+          PY
+
+      - name: Validate post-write canonical coverage
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.audit_serve_return_gaps import analyze
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          matches,safety=sanitize_history_identities(load_partitions(".cache/tbt/history"))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Post-write identity quarantine is non-empty")
+          r=analyze(matches)
+          Path(".cache/tbt/season-after.json").write_text(json.dumps(r,indent=2),encoding="utf-8")
+          c=r["overall"]
+          if c["completed"] != int(os.environ["EXPECTED_CANONICAL_ROWS"]):
+              raise SystemExit(f"Canonical row count changed: {c['completed']}")
+          if c["both_ready"] != int(os.environ["EXPECTED_POST_READY"]):
+              raise SystemExit(f"Post-write serve/return ready drift: {c['both_ready']}")
+          print("post-write coverage verified",c)
+          PY
+
+      - name: Rebuild chronological training table and feature coverage
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/season-derived
+          python scripts/build_production_training_table.py             --history-dir .cache/tbt/history             --out .cache/tbt/season-derived/training_table.parquet             --report .cache/tbt/season-derived/training_table_report.json
+          python scripts/audit_training_leakage.py             --history-dir .cache/tbt/history             --report .cache/tbt/season-derived/leakage_audit_report.json
+          python scripts/audit_statistics_inventory.py             --history-dir .cache/tbt/history             --out .cache/tbt/season-derived/statistics_inventory_report.json
+          python scripts/audit_feature_v3_coverage.py             --history-dir .cache/tbt/history             --out .cache/tbt/season-derived/feature_v3_coverage.json
+
+      - name: Enforce leakage-safe point-in-time rebuild
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          leak=json.load(open(".cache/tbt/season-derived/leakage_audit_report.json"))
+          if leak.get("status") not in {"PASS","pass"} and leak.get("passed") is not True:
+              failures=leak.get("failures") or leak.get("checks") or leak
+              raise SystemExit(f"Leakage audit did not pass: {failures}")
+          train=json.load(open(".cache/tbt/season-derived/training_table_report.json"))
+          if not train.get("rows") and not train.get("training_rows") and not (train.get("counts") or {}).get("rows"):
+              # build_production_training_table has evolved; a non-empty parquet is the final fallback.
+              from pathlib import Path
+              if Path(".cache/tbt/season-derived/training_table.parquet").stat().st_size <= 0:
+                  raise SystemExit("Training table is empty")
+          print("point-in-time training rebuild and leakage audit passed")
+          PY
+
+      - name: Backtest enriched history on fixed pre-existing evaluation horizon
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          from tbt.services.backtest_service import walk_forward_backtest
+
+          cutoff=datetime.fromisoformat(os.environ["BACKTEST_CUTOFF_UTC"])
+          matches,safety=sanitize_history_identities(load_partitions(".cache/tbt/history"))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Identity quarantine before backtest")
+          scoped=[m for m in matches if m.scheduled_at <= cutoff]
+          report=walk_forward_backtest(scoped,first_test_year=2023)
+          Path(".cache/tbt/season-derived/backtest_enriched.json").write_text(
+              json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8"
+          )
+          print(json.dumps({
+              "tested_matches":report.get("tested_matches"),
+              "overall":report.get("overall"),
+              "elo_baseline_overall":report.get("elo_baseline_overall"),
+          },indent=2))
+          PY
+
+      - name: Compare old and enriched training baseline
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          old_wrap=json.load(open(".cache/tbt/baseline-audit/model-backtest-latest.json"))
+          old=old_wrap.get("report") or old_wrap
+          new=json.load(open(".cache/tbt/season-derived/backtest_enriched.json"))
+          old_feat=json.load(open(".cache/tbt/baseline-audit/feature-v3-latest.json"))
+          new_feat=json.load(open(".cache/tbt/season-derived/feature_v3_coverage.json"))
+          before=json.load(open(".cache/tbt/baseline.json"))
+          after=json.load(open(".cache/tbt/season-after.json"))
+
+          def metric(m,key):
+              v=(m.get("overall") or {}).get(key)
+              return float(v) if v is not None else None
+          keys=("accuracy","log_loss","brier_score","ece_10","roc_auc")
+          deltas={}
+          for k in keys:
+              a,b=metric(old,k),metric(new,k)
+              deltas[k]=(b-a) if a is not None and b is not None else None
+
+          comparison={
+              "schema":1,
+              "reference":"last_recorded_model_backtest_vs_same_cutoff_enriched_history",
+              "evaluation_cutoff_utc":"2026-09-30T01:30:00+00:00",
+              "old_tested_matches":old.get("tested_matches"),
+              "new_tested_matches":new.get("tested_matches"),
+              "old_overall":old.get("overall"),
+              "new_overall":new.get("overall"),
+              "metric_delta_new_minus_old":deltas,
+              "old_data_quality":old.get("data_quality"),
+              "new_data_quality":new.get("data_quality"),
+              "serve_return_ready_before":before["overall"]["both_ready"],
+              "serve_return_ready_after":after["overall"]["both_ready"],
+              "serve_return_ready_added":after["overall"]["both_ready"]-before["overall"]["both_ready"],
+              "feature_v3_before":old_feat.get("coverage"),
+              "feature_v3_after":new_feat.get("coverage"),
+              "note":"The old recorded benchmark predates the ATP-official + season enrichment cycle; the new benchmark uses the same fixed evaluation cutoff and current enriched canonical history.",
+          }
+          Path(".cache/tbt/season-derived/comparison.json").write_text(
+              json.dumps(comparison,ensure_ascii=False,indent=2),encoding="utf-8"
+          )
+          print(json.dumps({
+              "old_tested_matches":comparison["old_tested_matches"],
+              "new_tested_matches":comparison["new_tested_matches"],
+              "metric_delta_new_minus_old":deltas,
+              "serve_return_ready_added":comparison["serve_return_ready_added"],
+          },indent=2))
+          PY
+
+      - name: Publish only changed canonical partitions
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.release_store import ReleaseStore
+          report=json.load(open(".cache/tbt/season-import/report.json"))
+          years=[int(y) for y in report.get("changed_years") or []]
+          root=Path(".cache/tbt/history")
+          paths=[root/f"history-{y:04d}.parquet" for y in years]
+          paths.append(root/"history_manifest.json")
+          for p in paths:
+              if not p.is_file() or p.stat().st_size <= 0:
+                  raise SystemExit(f"Missing changed bundle asset: {p}")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle(paths)
+          print("published years",years)
+          PY
+
+      - name: Re-download and verify committed canonical release
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/verify
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.release_store import ReleaseStore
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",Path(".cache/tbt/verify")).download(require_bundle_manifest=True)
+          PY
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          from scripts.audit_serve_return_gaps import analyze
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          matches,safety=sanitize_history_identities(load_partitions(".cache/tbt/verify"))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Committed release identity quarantine")
+          r=analyze(matches)
+          Path(".cache/tbt/season-derived/verify_release.json").write_text(json.dumps(r,indent=2),encoding="utf-8")
+          c=r["overall"]
+          if c["completed"] != int(os.environ["EXPECTED_CANONICAL_ROWS"]) or c["both_ready"] != int(os.environ["EXPECTED_POST_READY"]):
+              raise SystemExit(f"Committed release verification failed: {c}")
+          manifest=Path(".cache/tbt/verify/history_manifest.json")
+          Path(".cache/tbt/season-derived/release_manifest_sha256.txt").write_text(
+              hashlib.sha256(manifest.read_bytes()).hexdigest()+"\n",encoding="utf-8"
+          )
+          print("committed release verified",c)
+          PY
+          python scripts/audit_training_leakage.py             --history-dir .cache/tbt/verify             --report .cache/tbt/season-derived/leakage_verify_release.json
+
+      - name: Mark canonical training baseline in private repository
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          comparison=json.load(open(".cache/tbt/season-derived/comparison.json"))
+          training=json.load(open(".cache/tbt/season-derived/training_table_report.json"))
+          leakage=json.load(open(".cache/tbt/season-derived/leakage_verify_release.json"))
+          coverage=json.load(open(".cache/tbt/season-derived/feature_v3_coverage.json"))
+          verify=json.load(open(".cache/tbt/season-derived/verify_release.json"))
+          import_report=json.load(open(".cache/tbt/season-import/report.json"))
+          release_sha=Path(".cache/tbt/season-derived/release_manifest_sha256.txt").read_text().strip()
+
+          leak_pass=(leakage.get("status") in {"PASS","pass"} or leakage.get("passed") is True)
+          if not leak_pass:
+              raise SystemExit("Refusing baseline marker: committed release leakage audit failed")
+          baseline={
+              "schema":1,
+              "status":"canonical_training_baseline",
+              "generated_at_utc":datetime.now(timezone.utc).isoformat(),
+              "canonical_rows":verify["overall"]["completed"],
+              "serve_return_complete":verify["overall"]["both_ready"],
+              "serve_return_complete_rate":verify["overall"]["both_ready"]/verify["overall"]["completed"],
+              "season_stage_rows":11689,
+              "changed_years":import_report.get("changed_years"),
+              "history_manifest_sha256":release_sha,
+              "training_table_report":training,
+              "leakage_audit":leakage,
+              "feature_v3_coverage":coverage,
+              "backtest_comparison":comparison,
+              "feature_rebuild_policy":{
+                  "chronological_point_in_time":True,
+                  "current_match_stats_used_for_same_match":False,
+                  "elo_recomputed_from_canonical_history":True,
+                  "precomputed_elo_imported":False,
+                  "global_and_surface_elo":"FeatureBuilder chronological replay",
+                  "form_h2h_serve_return":"FeatureBuilder chronological replay",
+              },
+              "excluded_from_baseline":["PBP current strict linker (+0 safe new matches)"],
+              "provider_api_requests":0,
+              "model_promoted":False,
+          }
+          Path(".cache/tbt/season-derived/canonical_training_baseline.json").write_text(
+              json.dumps(baseline,ensure_ascii=False,indent=2),encoding="utf-8"
+          )
+          PY
+
+          put_json () {
+            local src="$1"
+            local path="$2"
+            local msg="$3"
+            local sha
+            sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            local encoded
+            encoded="$(base64 -w0 "$src")"
+            if [[ -n "$sha" ]]; then
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"                 -f message="$msg" -f content="$encoded" -f sha="$sha" >/dev/null
+            else
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"                 -f message="$msg" -f content="$encoded" >/dev/null
+            fi
+          }
+
+          put_json .cache/tbt/season-derived/canonical_training_baseline.json             audit/canonical-training-baseline.json             "Mark enriched canonical training baseline"
+          put_json .cache/tbt/season-import/report.json             audit/season-history-import-20261001.json             "Audit season 2021-2026 history import"
+          put_json .cache/tbt/season-derived/backtest_enriched.json             audit/model-backtest-season-enriched-20261001.json             "Archive enriched-history fixed-horizon backtest"
+          put_json .cache/tbt/season-derived/comparison.json             audit/model-backtest-season-comparison-20261001.json             "Compare enriched training baseline"
+          put_json .cache/tbt/season-derived/leakage_verify_release.json             audit/training-leakage-season-enriched-20261001.json             "Audit enriched training leakage"
+          put_json .cache/tbt/season-derived/feature_v3_coverage.json             audit/feature-v3-season-enriched-20261001.json             "Audit enriched feature coverage"
+
+      - name: Publish completion summary
+        if: success()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          b=json.load(open(".cache/tbt/season-derived/canonical_training_baseline.json"))
+          c=b["backtest_comparison"]
+          print("# Season 2021-2026 training integration complete")
+          print(f"- canonical rows: {b['canonical_rows']:,}")
+          print(f"- complete serve+return: {b['serve_return_complete']:,} ({b['serve_return_complete_rate']:.2%})")
+          print(f"- season stage rows: {b['season_stage_rows']:,}")
+          print(f"- leakage audit: PASS")
+          print("- precomputed Elo imported: no")
+          print("- same-match post-match stats used as features: no")
+          print("- model promoted: no")
+          print("## Fixed-horizon model comparison")
+          for k,v in c["metric_delta_new_minus_old"].items():
+              print(f"- {k} delta (new-old): {v}")
+          PY
+
+      - name: Upload full integration evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: season-history-integration-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            .cache/tbt/baseline.json
+            .cache/tbt/season-stage/manifest.json
+            .cache/tbt/season-stage/reconstruction.json
+            .cache/tbt/season-dry/report.json
+            .cache/tbt/season-dry/review.jsonl
+            .cache/tbt/season-import/report.json
+            .cache/tbt/season-import/review.jsonl
+            .cache/tbt/season-after.json
+            .cache/tbt/season-derived/training_table_report.json
+            .cache/tbt/season-derived/leakage_audit_report.json
+            .cache/tbt/season-derived/statistics_inventory_report.json
+            .cache/tbt/season-derived/feature_v3_coverage.json
+            .cache/tbt/season-derived/backtest_enriched.json
+            .cache/tbt/season-derived/comparison.json
+            .cache/tbt/season-derived/verify_release.json
+            .cache/tbt/season-derived/leakage_verify_release.json
+            .cache/tbt/season-derived/canonical_training_baseline.json
