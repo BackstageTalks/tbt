@@ -791,11 +791,49 @@ def main():
     doubles_upcoming = []
     try:
         if current_only:
+            # Recovery refreshes keep canonical history read-only, but they still
+            # need the latest completed matches in memory. Otherwise yesterday's
+            # issued picks cannot settle and today's model misses the most recent
+            # form. Fetch only yesterday + today and merge safely without writing
+            # or publishing history partitions.
             skipped_history_days = set()
+            recent_completed = 0
+            recent_start = now.date() - timedelta(days=1)
+            recent_day = recent_start
+            while recent_day <= now.date():
+                day_failed = False
+                for tour in ("atp", "wta"):
+                    try:
+                        incoming = [
+                            match for match in provider.matches_for_day(
+                                tour, recent_day, historical=True
+                            )
+                            if match.is_completed
+                        ]
+                    except ProviderError as exc:
+                        if recent_day >= now.date():
+                            raise
+                        skipped_history_days.add(recent_day.isoformat())
+                        day_failed = True
+                        print(json.dumps({
+                            "warning": "current_refresh_recent_day_skipped",
+                            "day": recent_day.isoformat(),
+                            "tour": tour,
+                            "reason": str(exc)[:300],
+                        }, ensure_ascii=False), flush=True)
+                        break
+                    matches, accepted = _merge_refresh_batch_safely(
+                        matches, incoming, day=recent_day, tour=tour
+                    )
+                    recent_completed += len(accepted)
+                recent_day += timedelta(days=1)
             print(json.dumps({
                 "current_refresh": {
                     "canonical_history": "read_only",
                     "history_matches": len(matches),
+                    "recent_completed_refreshed_in_memory": recent_completed,
+                    "recent_window_start": recent_start.isoformat(),
+                    "recent_window_end": now.date().isoformat(),
                     "window_start": now.date().isoformat(),
                     "window_end": (now.date() + timedelta(days=3)).isoformat(),
                 }
@@ -825,10 +863,30 @@ def main():
         # already cached by the singles refresh above, so maintaining the recent
         # doubles history adds very little discovery traffic.
         if current_only:
+            # Keep the doubles release read-only during recovery, but merge the
+            # latest completed matches in memory so Results and today's doubles
+            # model do not lag a day behind.
+            doubles_day = now.date() - timedelta(days=1)
+            while doubles_day <= now.date():
+                if doubles_day.isoformat() in skipped_history_days:
+                    doubles_day += timedelta(days=1)
+                    continue
+                try:
+                    doubles_completed.extend(
+                        match for match in provider.doubles_for_day(
+                            doubles_day, historical=True
+                        )
+                        if match.is_completed
+                    )
+                except ProviderError:
+                    if doubles_day >= now.date():
+                        raise
+                doubles_day += timedelta(days=1)
+            doubles_history = merge_doubles_history(doubles_history, doubles_completed)
             doubles_history_state = {
-                "status": "reused_existing_history",
+                "status": "reused_plus_recent_in_memory",
                 "matches": len(doubles_history),
-                "recent_completed_refreshed": 0,
+                "recent_completed_refreshed": len(doubles_completed),
             }
         else:
             doubles_day = now.date() - timedelta(days=7)
@@ -851,7 +909,7 @@ def main():
             doubles_history, doubles_upcoming, now=now
         )
         doubles_odds_report = {}
-        if args.doubles_odds_max_events and doubles_predictions and not current_only:
+        if args.doubles_odds_max_events and doubles_predictions:
             doubles_predictions, doubles_odds_report = enrich_current_betting_day_odds(
                 provider, doubles_predictions, now=selection_now,
                 max_events=args.doubles_odds_max_events, provider_id=1,
@@ -916,42 +974,16 @@ def main():
 
         projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
         market_odds_cap = projection_odds_cap
-        if current_only:
-            # Recovery must restore the public Match Winner inventory first.
-            # Projection discovery can consume dozens of the same globally-capped
-            # RapidAPI requests before TOP/PRIME/VALUE are priced, which can leave
-            # TOP empty simply because the first small sample skews short-priced.
-            # Skip projection discovery here and spend the remaining request budget
-            # directly on Match Winner candidates. The normal refresh still does
-            # the full projection/CLV enrichment.
-            projection_odds_cap = 0
+        # current-refresh now uses the same complete market discovery as a normal
+        # refresh. The shared provider budget and per-run cap are the safety rails;
+        # public market coverage must not be reduced merely to save requests.
         projection_odds_report = {}
         projection_market_cache = {}
         available_projection_markets = {}
         projection_discovery_report = {}
         bookmaker_lines_by_event = {}
         prop_market_payloads = {}
-        if current_only and market_odds_cap:
-            remaining_total = (
-                max(0, int(provider.request_limit) - int(provider.request_count))
-                if provider.request_limit is not None else market_odds_cap
-            )
-            match_winner_cap = min(market_odds_cap, remaining_total)
-            predictions, odds_report = enrich_current_betting_day_odds(
-                provider, predictions, now=selection_now,
-                max_events=match_winner_cap, provider_id=1,
-                timezone_name="Europe/Bratislava",
-                start_hour=args.betting_day_start_hour,
-                prefetched_payloads={},
-            )
-            projection_discovery_report = {
-                "enabled": False,
-                "reason": "current_refresh_match_winner_priority",
-                "remaining_request_budget_at_start": remaining_total,
-                "match_winner_event_cap": match_winner_cap,
-                "requested_event_cap": market_odds_cap,
-            }
-        elif projection_odds_cap:
+        if projection_odds_cap:
             # Both market discovery and Match Winner share the SAME global
             # RapidAPI limit. Reserve a third of the available quota (up to 40
             # requests) for otherwise-unpriced Match Winner candidates; the
@@ -996,11 +1028,11 @@ def main():
             # Paid/API requests only run as part of an explicitly authorized
             # refresh (the existing workflow auto-refresh gate is unchanged).
             # This secret already powers the separate research-only CLV job.
-            # Budget upper bound: 4 x (1 board + 2 x 75 fixtures) = 604
-            # calls/day. The separate hourly CLV pilot is capped at 250/day,
-            # leaving >=146 of the shared 1000/day budget unallocated.
+            # PropLine has its own independent call cap. Tennis RapidAPI remains
+            # protected by the shared 15k provider-day ledger, 500-request reserve
+            # and the workflow's per-run request limit.
             prop_key = os.getenv("PROPL", "").strip()
-            if prop_key and args.propline_max_events and not current_only:
+            if prop_key and args.propline_max_events:
                 prop_client = PropLineClient(
                     prop_key, max_calls=1 + 2 * args.propline_max_events,
                     min_remaining=150,
