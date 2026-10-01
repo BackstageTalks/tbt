@@ -100,13 +100,14 @@ def test_small_match_status_snapshot_replaces_chunks_and_cleans_old_rows(monkeyp
         "pending": {
             "101": {
                 "t": "2026-10-01T03:00:00+00:00",
-                "s": "11", "a": "11", "b": "22", "c": "",
+                "s": "11", "a": "11", "b": "22", "c": "", "p": "1",
             }
         }
     })
     restored = admin_storage.load_match_status_snapshot()
     assert restored["pending_count"] == 1
     assert restored["pending"]["101"]["b"] == "22"
+    assert restored["pending"]["101"]["p"] == "1"
     assert not any(
         str(row.get("RowKey") or "").startswith("match-status-worker-chunk-")
         for row in table.rows.values()
