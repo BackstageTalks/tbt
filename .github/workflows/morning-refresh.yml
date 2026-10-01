@@ -27,7 +27,9 @@ jobs:
     # Only external/manual workflow_dispatch may start the paid refresh.
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Stay alive until the real data.yml refresh finishes; wrapper success must
+    # mean the paid refresh/deploy itself succeeded, not only that dispatch worked.
+    timeout-minutes: 180
     env:
       GH_TOKEN: ${{ github.token }}
       MORNING_MAX_REQUESTS: ${{ inputs.max_requests || vars.TBT_MORNING_REFRESH_MAX_REQUESTS || '300' }}
@@ -79,26 +81,102 @@ jobs:
               ]
               should_dispatch = not previous
               if previous:
-                  print("::notice::Morning refresh already dispatched today: " +
+                  print("::notice::Morning refresh already completed today: " +
                         str(previous[0]["id"]) + "; skipping duplicate.")
           with Path(os.environ["GITHUB_OUTPUT"]).open("a") as handle:
               handle.write("dispatch=" + str(should_dispatch).lower() + "\n")
           PY
 
-      - name: Dispatch existing prediction refresh and deployment
+      - name: Dispatch and supervise prediction refresh
         if: steps.daily_guard.outputs.dispatch == 'true'
         shell: bash
         run: |
           set -euo pipefail
-          # Reuse data.yml instead of running an independent writer. This
-          # preserves its history/publication concurrency locks, request
-          # accounting, release validation and production deploy guards.
-          gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main \
-            -f mode=refresh \
-            -f morning_refresh=true \
-            -f max_requests="$MORNING_MAX_REQUESTS" \
-            -f market_odds_max_events=90 \
-            -f doubles_odds_max_events=25 \
-            -f betting_day_start_hour=6
-          echo "Morning data.yml refresh dispatched with max_requests=$MORNING_MAX_REQUESTS."
-          echo "Track the actual refresh/deploy result in the Tennis data and predictions workflow."
+          mkdir -p .cache/tbt/morning
+          workflow_runs_api="repos/$GITHUB_REPOSITORY/actions/workflows/data.yml/runs?event=workflow_dispatch&branch=main&per_page=50"
+          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+
+          dispatch_child () {
+            local attempt="$1"
+            local before=".cache/tbt/morning/before-$attempt.txt"
+            gh api "$workflow_runs_api" --jq '.workflow_runs[].id' > "$before"
+
+            gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main -f mode=refresh -f morning_refresh=true -f max_requests="$MORNING_MAX_REQUESTS" -f market_odds_max_events=90 -f doubles_odds_max_events=25 -f betting_day_start_hour=6
+
+            CHILD_RUN_ID=""
+            for _ in $(seq 1 30); do
+              while IFS= read -r candidate; do
+                [[ -n "$candidate" ]] || continue
+                grep -qx "$candidate" "$before" && continue
+                candidate_sha="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$candidate" --jq .head_sha)"
+                [[ "$candidate_sha" == "$main_sha" ]] || continue
+                CHILD_RUN_ID="$candidate"
+                break
+              done < <(gh api "$workflow_runs_api" --jq '.workflow_runs[].id')
+              [[ -n "$CHILD_RUN_ID" ]] && break
+              sleep 2
+            done
+
+            if [[ -z "$CHILD_RUN_ID" ]]; then
+              echo "::error::Unable to identify the dispatched morning data.yml run."
+              exit 1
+            fi
+            echo "Morning data.yml child run: $CHILD_RUN_ID (attempt $attempt)"
+          }
+
+          wait_child () {
+            local child="$1"
+            while true; do
+              payload="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$child")"
+              status="$(jq -r '.status' <<<"$payload")"
+              conclusion="$(jq -r '.conclusion // ""' <<<"$payload")"
+              echo "data.yml run $child status=$status conclusion=$conclusion"
+              if [[ "$status" == "completed" ]]; then
+                CHILD_CONCLUSION="$conclusion"
+                return 0
+              fi
+              sleep 20
+            done
+          }
+
+          # One retry is allowed only if the cancelled run never created a job.
+          # In that case no paid refresh code could have executed.
+          dispatch_child 1
+          first_child="$CHILD_RUN_ID"
+          wait_child "$first_child"
+
+          final_child="$first_child"
+          if [[ "$CHILD_CONCLUSION" == "cancelled" ]]; then
+            jobs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$first_child/jobs?filter=all&per_page=100" --jq '.total_count')"
+            if [[ "$jobs" == "0" ]]; then
+              echo "::warning::Morning child was cancelled before a job started; retrying once without duplicate API use."
+              sleep 10
+              dispatch_child 2
+              final_child="$CHILD_RUN_ID"
+              wait_child "$final_child"
+            fi
+          fi
+
+          final_payload="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$final_child")"
+          final_status="$(jq -r '.status' <<<"$final_payload")"
+          final_conclusion="$(jq -r '.conclusion // ""' <<<"$final_payload")"
+          final_url="$(jq -r '.html_url' <<<"$final_payload")"
+
+          jq -n --arg child_run_id "$final_child" --arg conclusion "$final_conclusion" --arg url "$final_url" --arg max_requests "$MORNING_MAX_REQUESTS" '{schema:1, child_run_id:($child_run_id|tonumber), child_conclusion:$conclusion, child_url:$url, max_requests:($max_requests|tonumber), morning_refresh:true, betting_day_start_hour:6}' > .cache/tbt/morning/supervision.json
+
+          if [[ "$final_status" != "completed" || "$final_conclusion" != "success" ]]; then
+            echo "::error::Morning data.yml run $final_child finished with conclusion=$final_conclusion"
+            echo "::error::Child run: $final_url"
+            exit 1
+          fi
+
+          echo "Morning refresh completed successfully in child run $final_child."
+
+      - name: Upload morning supervision evidence
+        if: always() && steps.daily_guard.outputs.dispatch == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-morning-supervision-${{ github.run_id }}
+          path: .cache/tbt/morning/supervision.json
+          if-no-files-found: warn
+          retention-days: 7
