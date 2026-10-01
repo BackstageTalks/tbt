@@ -48,9 +48,10 @@ def test_b28_environment_inputs_are_data_not_shell_source():
     enrich = _text(".github/workflows/environment-enrichment.yml")
     assert 'END_VALUE="${{ inputs.end }}"' not in enrich
     assert '--start "${{ inputs.start }}"' not in enrich
-    assert "BLINQ_INPUT_START: ${{ inputs.start }}" in enrich
-    assert "BLINQ_INPUT_END: ${{ inputs.end }}" in enrich
+    assert "BLINQ_INPUT_START: ${{ needs.plan-window.outputs.start }}" in enrich
+    assert "BLINQ_INPUT_END: ${{ needs.plan-window.outputs.end }}" in enrich
     assert '--start "$BLINQ_INPUT_START"' in enrich
+    assert 'Path(".github/nightly-environment-request.json").read_text' in enrich
 
 
 def test_b16_budget_planner_never_exceeds_total():
