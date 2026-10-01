@@ -2,8 +2,8 @@
   "schema": 1,
   "mode": "deploy-current",
   "promote": false,
-  "purpose": "No-provider deployment after canonical data closure; initialize/validate private challenger shadow storage and redeploy the current verified prediction generation without changing the production model.",
-  "requested_at_utc": "2026-10-01T01:32:00Z",
+  "purpose": "No-provider deployment after canonical data closure; shadow storage is initialized and current verified prediction generation should be redeployed without changing the production model.",
+  "requested_at_utc": "2026-10-01T01:56:00Z",
   "training_scope": "none",
   "historical_match_winner_odds_as_model_feature": false
 }
