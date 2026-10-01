@@ -193,7 +193,9 @@ jobs:
     needs: checks
     if: >-
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'push' && vars.TBT_DEPLOY_ENABLED == 'true')
+      (github.event_name == 'push' &&
+       (vars.TBT_DEPLOY_ENABLED == 'true' ||
+        contains(github.event.head_commit.message, '[deploy-current]')))
     # Web/API deployment only reads committed prediction/player-asset releases.
     # It must not queue behind long-running history/environment writers.
     # Keep production deployments serialized only against other deployments.
