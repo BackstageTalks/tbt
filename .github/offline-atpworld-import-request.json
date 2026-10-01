@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "source": "atpworld_official_1991_2018",
+  "source_commit": "a92c6192c5e775df9d6be81d3ef978052b012cd9",
+  "expected_newly_complete": 5650,
+  "requested_at_utc": "2026-10-01T19:58:00Z"
+}
