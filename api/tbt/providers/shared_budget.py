@@ -19,7 +19,7 @@ from .budget import RequestBudgetExceeded
 WINDOW_SLOTS = 288  # 24 hours * 12 five-minute buckets
 SLOT_SECONDS = 300
 GLOBAL_CEILING = 12000  # 15,000 plan minus 3,000 emergency headroom
-PURPOSE_CAPS = {"live": 2500, "match": 250, "refresh": 750, "history": 8500}
+PURPOSE_CAPS = {"live": 2500, "match": 1000, "refresh": 750, "history": 7750}
 PURPOSE_INDEX = {name: pos + 1 for pos, name in enumerate(PURPOSE_CAPS)}
 TABLE = "BlinQApiBudget"
 PARTITION = "rapidapi"
