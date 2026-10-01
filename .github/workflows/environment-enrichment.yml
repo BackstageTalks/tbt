@@ -1,6 +1,11 @@
 name: Environment enrichment
 
 on:
+  # GitHub cron is UTC. Both candidate hours are scheduled and plan-window
+  # admits only the one that is exactly 20:00 in Europe/Bratislava, so DST is safe.
+  schedule:
+    - cron: '0 18 * * *'
+    - cron: '0 19 * * *'
   workflow_dispatch:
     inputs:
       start:
@@ -58,9 +63,10 @@ jobs:
     outputs:
       stop_at: ${{ steps.deadline.outputs.stop_at }}
       stop_at_local: ${{ steps.deadline.outputs.stop_at_local }}
+      should_run: ${{ steps.deadline.outputs.should_run }}
     steps:
       - id: deadline
-        name: Plan 10-hour enrichment window
+        name: Plan Bratislava night enrichment window
         shell: bash
         run: |
           set -euo pipefail
@@ -69,20 +75,32 @@ jobs:
           from datetime import datetime, timedelta, timezone
           from zoneinfo import ZoneInfo
 
+          tz = ZoneInfo("Europe/Bratislava")
           started_at = datetime.now(timezone.utc)
-          stop_utc = started_at + timedelta(hours=10)
-          stop_local = stop_utc.astimezone(ZoneInfo("Europe/Bratislava"))
+          local_now = started_at.astimezone(tz)
+          scheduled = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+          should_run = (not scheduled) or local_now.hour == 20
+          if scheduled:
+              stop_local = local_now.replace(hour=5, minute=0, second=0, microsecond=0)
+              if stop_local <= local_now:
+                  stop_local += timedelta(days=1)
+              stop_utc = stop_local.astimezone(timezone.utc)
+          else:
+              stop_utc = started_at + timedelta(hours=10)
+              stop_local = stop_utc.astimezone(tz)
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
               fh.write(f"stop_at={stop_utc.isoformat()}\n")
               fh.write(f"stop_at_local={stop_local.isoformat()}\n")
+              fh.write(f"should_run={'true' if should_run else 'false'}\n")
           print(
-              f"Environment may run for 10 hours, through "
-              f"{stop_local.isoformat()} Bratislava time ({stop_utc.isoformat()} UTC)."
+              f"Night enrichment gate={should_run}; local start={local_now.isoformat()}; "
+              f"deadline={stop_local.isoformat()} Bratislava ({stop_utc.isoformat()} UTC)."
           )
           PY
 
   enrich-environment-1:
     needs: plan-window
+    if: ${{ needs.plan-window.outputs.should_run == 'true' }}
     runs-on: ubuntu-latest
     outputs:
       requests_used: ${{ steps.pass1-summary.outputs.requests_used }}
@@ -109,7 +127,7 @@ jobs:
       - name: Preflight
         shell: bash
         env:
-          BLINQ_INPUT_STATIC_ONLY: ${{ inputs.static_only }}
+          BLINQ_INPUT_STATIC_ONLY: ${{ github.event_name == 'schedule' && 'true' || inputs.static_only }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
@@ -121,14 +139,14 @@ jobs:
       - name: Enrich GitHub history - pass 1
         shell: bash
         env:
-          BLINQ_INPUT_START: ${{ inputs.start }}
+          BLINQ_INPUT_START: ${{ github.event_name == 'schedule' && '2021-01-01' || inputs.start }}
           BLINQ_INPUT_END: ${{ inputs.end }}
-          BLINQ_INPUT_LIMIT: ${{ inputs.limit }}
-          BLINQ_INPUT_MAX_REQUESTS: ${{ inputs.max_requests }}
-          BLINQ_INPUT_MODE: ${{ inputs.mode }}
-          BLINQ_INPUT_STATIC_ONLY: ${{ inputs.static_only }}
-          BLINQ_INPUT_FORCE: ${{ inputs.force }}
-          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ inputs.retry_unresolved }}
+          BLINQ_INPUT_LIMIT: ${{ github.event_name == 'schedule' && '0' || inputs.limit }}
+          BLINQ_INPUT_MAX_REQUESTS: ${{ github.event_name == 'schedule' && '4000' || inputs.max_requests }}
+          BLINQ_INPUT_MODE: ${{ github.event_name == 'schedule' && 'write' || inputs.mode }}
+          BLINQ_INPUT_STATIC_ONLY: ${{ github.event_name == 'schedule' && 'true' || inputs.static_only }}
+          BLINQ_INPUT_FORCE: ${{ github.event_name == 'schedule' && 'false' || inputs.force }}
+          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ github.event_name == 'schedule' && 'true' || inputs.retry_unresolved }}
           BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
         run: |
           set -euo pipefail
@@ -198,14 +216,14 @@ jobs:
       - name: Enrich GitHub history - continuation
         shell: bash
         env:
-          BLINQ_INPUT_START: ${{ inputs.start }}
+          BLINQ_INPUT_START: ${{ github.event_name == 'schedule' && '2021-01-01' || inputs.start }}
           BLINQ_INPUT_END: ${{ inputs.end }}
-          BLINQ_INPUT_LIMIT: ${{ inputs.limit }}
-          BLINQ_INPUT_MAX_REQUESTS: ${{ inputs.max_requests }}
-          BLINQ_INPUT_MODE: ${{ inputs.mode }}
-          BLINQ_INPUT_STATIC_ONLY: ${{ inputs.static_only }}
-          BLINQ_INPUT_FORCE: ${{ inputs.force }}
-          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ inputs.retry_unresolved }}
+          BLINQ_INPUT_LIMIT: ${{ github.event_name == 'schedule' && '0' || inputs.limit }}
+          BLINQ_INPUT_MAX_REQUESTS: ${{ github.event_name == 'schedule' && '4000' || inputs.max_requests }}
+          BLINQ_INPUT_MODE: ${{ github.event_name == 'schedule' && 'write' || inputs.mode }}
+          BLINQ_INPUT_STATIC_ONLY: ${{ github.event_name == 'schedule' && 'true' || inputs.static_only }}
+          BLINQ_INPUT_FORCE: ${{ github.event_name == 'schedule' && 'false' || inputs.force }}
+          BLINQ_INPUT_RETRY_UNRESOLVED: ${{ github.event_name == 'schedule' && 'true' || inputs.retry_unresolved }}
           BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
           BLINQ_REQUESTS_USED: ${{ needs.enrich-environment-1.outputs.requests_used || '0' }}
         run: |
@@ -244,3 +262,89 @@ jobs:
           name: blinq-environment-enrichment-pass2-${{ github.run_id }}
           path: .cache/tbt/history/environment_enrichment_report.json
           if-no-files-found: warn
+
+  enrich-weather-nightly:
+    needs: [plan-window, enrich-environment-1, enrich-environment-2]
+    if: >-
+      github.event_name == 'schedule' &&
+      needs.plan-window.outputs.should_run == 'true' &&
+      needs.enrich-environment-2.result == 'success' &&
+      vars.TBT_WEATHER_RESEARCH == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 260
+    env:
+      PYTHONPATH: api
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_WEATHER_RESEARCH: ${{ vars.TBT_WEATHER_RESEARCH }}
+      BLINQ_STOP_AT: ${{ needs.plan-window.outputs.stop_at }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install dependencies
+        run: python -m pip install -r api/requirements-train.txt
+      - name: Fill historical weather until 05:00 Bratislava
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/enrich_environment_snapshot.py \
+            --start "2021-01-01" \
+            --end "$(date -u +%F)" \
+            --limit "0" \
+            --max-requests "2000" \
+            --max-runtime-minutes "240" \
+            --stop-at "$BLINQ_STOP_AT" \
+            --retry-unresolved \
+            --data-repository "$TBT_DATA_REPOSITORY"
+      - name: Upload weather enrichment report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-environment-weather-${{ github.run_id }}
+          path: .cache/tbt/history/environment_enrichment_report.json
+          if-no-files-found: warn
+
+  nightly-data-audit:
+    needs: [plan-window, enrich-environment-1, enrich-environment-2, enrich-weather-nightly]
+    if: >-
+      always() &&
+      needs.plan-window.outputs.should_run == 'true' &&
+      needs.enrich-environment-1.result == 'success' &&
+      needs.enrich-environment-2.result == 'success'
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: api
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install dependencies
+        run: python -m pip install -r api/requirements-train.txt
+      - name: Audit environment and serve-return gaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/nightly-audit
+          python scripts/audit_environment_release.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --report .cache/tbt/nightly-audit/environment.json
+          python scripts/audit_serve_return_gaps.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --out .cache/tbt/nightly-audit/serve-return.json
+      - name: Upload nightly data audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-nightly-data-audit-${{ github.run_id }}
+          path: .cache/tbt/nightly-audit
+          if-no-files-found: warn
+
