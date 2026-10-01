@@ -1465,6 +1465,18 @@ def internal_match_status_worker(req):
             logging.warning("LIVE Radar result storage unavailable during match settlement")
         except Exception:
             logging.exception("LIVE Radar result settlement failed")
+        if saved.get("budget_paused"):
+            logging.info(
+                "Hourly match status safely paused by shared API budget: due=%s checked=%s",
+                saved.get("due"),
+                saved.get("checked"),
+            )
+            return response({
+                **saved,
+                "autonomous": True,
+                "status": "shared_budget_exhausted_safe_skip",
+                "live_results": live_results,
+            })
         if saved.get("degraded"):
             logging.warning(
                 "Hourly match status provider failed: checked=%s requests=%s codes=%s",
