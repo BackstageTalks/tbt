@@ -1,11 +1,10 @@
 name: Nightly data maintenance (no TennisAPI)
 
 on:
-  schedule:
-    # GitHub cron is UTC. Both entries are intentional; the plan job keeps only
-    # the one that resolves to 00:30 Europe/Bratislava across DST.
-    - cron: '30 22 * * *'
-    - cron: '30 23 * * *'
+  push:
+    branches: [main]
+    paths:
+      - '.github/nightly-data-maintenance-request.json'
   workflow_dispatch:
     inputs:
       start:
@@ -41,7 +40,6 @@ jobs:
         shell: bash
         env:
           BLINQ_EVENT_NAME: ${{ github.event_name }}
-          BLINQ_EVENT_SCHEDULE: ${{ github.event.schedule }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -53,23 +51,20 @@ jobs:
           zone = ZoneInfo("Europe/Bratislava")
           local = now_utc.astimezone(zone)
           event = os.environ.get("BLINQ_EVENT_NAME", "")
-          schedule = os.environ.get("BLINQ_EVENT_SCHEDULE", "")
 
-          if event == "schedule":
-              offset_hours = int(local.utcoffset().total_seconds() // 3600)
-              expected = "30 22 * * *" if offset_hours >= 2 else "30 23 * * *"
-              should_run = schedule == expected
+          if event == "push":
               env_stop_local = datetime.combine(local.date(), time(4, 0), tzinfo=zone)
               hard_stop_local = datetime.combine(local.date(), time(5, 0), tzinfo=zone)
-              if local >= hard_stop_local:
-                  should_run = False
+              # External scheduler is expected around 00:30 Bratislava. A stale
+              # daytime request must not start a multi-hour writer accidentally.
+              should_run = local < hard_stop_local and local.hour < 5
           else:
               should_run = True
               env_stop_local = local + timedelta(hours=3, minutes=30)
               hard_stop_local = local + timedelta(hours=4, minutes=30)
 
           scope_end = local.date() + timedelta(days=1)
-          print("Event:", event, "schedule:", schedule)
+          print("Event:", event)
           print("Local now:", local.isoformat())
           print("Night maintenance selected:", should_run)
           print("Environment stop:", env_stop_local.isoformat())
