@@ -108,3 +108,31 @@ def test_material_quality_disagreement_is_rejected():
     existing = {"p1_service_points_won": 0.70}
     incoming = {"p1_service_points_won": 0.60}
     assert _conflicts(existing, incoming) == ["p1_service_points_won"]
+
+
+def test_tour_mapping_includes_challengers_and_excludes_exhibitions():
+    atp_chall, reason = _parse_row(
+        _row(tour_type="3", tour_type_human="ATP Chall"),
+        path=Path("2026-atp-season.csv"),
+        source_sha256="abc",
+    )
+    assert reason == "ok"
+    assert atp_chall is not None
+    assert atp_chall.tour == "atp"
+
+    wta_chall, reason = _parse_row(
+        _row(tour_type="4", tour_type_human="WTA Chall"),
+        path=Path("2026-wta-season.csv"),
+        source_sha256="abc",
+    )
+    assert reason == "ok"
+    assert wta_chall is not None
+    assert wta_chall.tour == "wta"
+
+    exhibition, reason = _parse_row(
+        _row(tour_type="5", tour_type_human="ATP Exhib"),
+        path=Path("2026-atp-season.csv"),
+        source_sha256="abc",
+    )
+    assert exhibition is None
+    assert reason == "invalid_identity"
