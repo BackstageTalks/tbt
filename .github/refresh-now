@@ -1,1 +1,1 @@
-Full production refresh: restore yesterday settlement plus VALUE, ACES, Double Faults, Doubles, Games and Sets using the 1000-request run budget. 2026-10-01.
+Verify merged full current-refresh: settle recent completed matches and publish VALUE, ACES, Double Faults, Doubles, Games and Sets under shared quota guard. 2026-10-01.
