@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   export-history:
-    if: \${{ github.head_ref == 'audit/library-gap-sources-20261001' }}
+    if: ${{ github.head_ref == 'audit/library-gap-sources-20261001' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -22,8 +22,8 @@ jobs:
 
       - name: Download verified canonical history
         env:
-          GH_TOKEN: \${{ secrets.TBT_DATA_GH_TOKEN }}
-          TBT_DATA_REPOSITORY: \${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
