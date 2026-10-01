@@ -72,10 +72,7 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  # Normal refresh/history jobs serialize on the canonical writer lock.
-  # A one-shot [readonly-overlap-refresh] marker may bypass an already-running
-  # Environment audit-only job after its write step is confirmed skipped.
-  group: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[readonly-overlap-refresh]')) && format('tbt-history-readonly-overlap-{0}', github.run_id) || 'tbt-history-data-writer' }}
+  group: tbt-history-data-writer
   cancel-in-progress: false
 jobs:
   pipeline:
