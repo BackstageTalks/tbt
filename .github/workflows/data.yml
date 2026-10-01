@@ -72,10 +72,7 @@ permissions:
   contents: read
   actions: write
 concurrency:
-  # current-refresh reads canonical history without mutating it, so it may run
-  # beside long history/environment audits. All publication writes remain
-  # serialized by the tbt-production-deploy job lock below.
-  group: ${{ (github.event_name == 'push' && contains(github.event.head_commit.message, '[current-refresh]')) && format('tbt-current-refresh-{0}', github.run_id) || 'tbt-history-data-writer' }}
+  group: tbt-history-data-writer
   cancel-in-progress: false
 jobs:
   pipeline:
