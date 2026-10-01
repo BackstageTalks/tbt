@@ -914,19 +914,44 @@ def main():
                     }
                 }, ensure_ascii=False), flush=True)
 
-        projection_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        market_odds_cap = max(0, int(args.market_odds_max_events or 0))
+        projection_odds_cap = market_odds_cap
         if current_only:
-            # Serving recovery prioritizes current Match Winner publication.
-            # A small real-odds sample is enough for TOP/PRIME/VALUE recovery;
-            # the full projection/CLV enrichment belongs to the normal refresh.
-            projection_odds_cap = min(40, projection_odds_cap)
+            # Recovery must restore the public Match Winner inventory first.
+            # Projection discovery can consume dozens of the same globally-capped
+            # RapidAPI requests before TOP/PRIME/VALUE are priced, which can leave
+            # TOP empty simply because the first small sample skews short-priced.
+            # Skip projection discovery here and spend the remaining request budget
+            # directly on Match Winner candidates. The normal refresh still does
+            # the full projection/CLV enrichment.
+            projection_odds_cap = 0
         projection_odds_report = {}
         projection_market_cache = {}
         available_projection_markets = {}
         projection_discovery_report = {}
         bookmaker_lines_by_event = {}
         prop_market_payloads = {}
-        if projection_odds_cap:
+        if current_only and market_odds_cap:
+            remaining_total = (
+                max(0, int(provider.request_limit) - int(provider.request_count))
+                if provider.request_limit is not None else market_odds_cap
+            )
+            match_winner_cap = min(market_odds_cap, remaining_total)
+            predictions, odds_report = enrich_current_betting_day_odds(
+                provider, predictions, now=selection_now,
+                max_events=match_winner_cap, provider_id=1,
+                timezone_name="Europe/Bratislava",
+                start_hour=args.betting_day_start_hour,
+                prefetched_payloads={},
+            )
+            projection_discovery_report = {
+                "enabled": False,
+                "reason": "current_refresh_match_winner_priority",
+                "remaining_request_budget_at_start": remaining_total,
+                "match_winner_event_cap": match_winner_cap,
+                "requested_event_cap": market_odds_cap,
+            }
+        elif projection_odds_cap:
             # Both market discovery and Match Winner share the SAME global
             # RapidAPI limit. Reserve a third of the available quota (up to 40
             # requests) for otherwise-unpriced Match Winner candidates; the
