@@ -1,7 +1,0 @@
-{
-  "schema": 1,
-  "mode": "legacy-score-write",
-  "purpose": "Retry strict legacy score write after correcting projected set1/set2 games coverage; same verified rows only; zero provider API.",
-  "zero_provider_api_requests": true,
-  "requested_at_utc": "2026-09-28T21:57:30Z"
-}

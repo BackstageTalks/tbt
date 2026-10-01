@@ -45,14 +45,12 @@ def test_b05_player_enrichment_no_longer_mutates_prediction_release():
 
 
 def test_b28_environment_inputs_are_data_not_shell_source():
-    audit = _text(".github/workflows/environment-audit.yml")
     enrich = _text(".github/workflows/environment-enrichment.yml")
-    assert 'ARGS+=(--start "${{ inputs.start }}")' not in audit
-    assert 'ARGS+=(--end "${{ inputs.end }}")' not in audit
     assert 'END_VALUE="${{ inputs.end }}"' not in enrich
     assert '--start "${{ inputs.start }}"' not in enrich
-    assert "BLINQ_INPUT_START: ${{ inputs.start }}" in audit
     assert "BLINQ_INPUT_START: ${{ inputs.start }}" in enrich
+    assert "BLINQ_INPUT_END: ${{ inputs.end }}" in enrich
+    assert '--start "$BLINQ_INPUT_START"' in enrich
 
 
 def test_b16_budget_planner_never_exceeds_total():

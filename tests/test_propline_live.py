@@ -167,18 +167,18 @@ def test_wide_market_discovery_reports_advertised_versus_genuine_two_sided_quote
     assert set(found["rapid-133"]) == {"aces", "double_faults", "games", "sets"}
 
 
-def test_shared_free_tier_quota_budget_and_explicit_wider_workflow_defaults():
+def test_shared_free_tier_quota_budget_and_active_clv_defaults():
     from pathlib import Path
     root = Path(__file__).resolve().parents[1]
     refresh = (root / ".github/workflows/data.yml").read_text(encoding="utf-8")
     clv = (root / "scripts/propline_clv_collect.py").read_text(encoding="utf-8")
-    diagnostic = (root / ".github/workflows/propline-wider-market-audit.yml").read_text(encoding="utf-8")
+    active_workflow = (root / ".github/workflows/propline-clv-pilot.yml").read_text(encoding="utf-8")
     assert "default: 75" in refresh
     assert "DAILY_LIMIT = 250" in clv
     assert "MIN_PROVIDER_REMAINING = 150" in clv
-    assert "contains(github.event.head_commit.message, '[propline-audit-once]')" in diagnostic
-    assert "scripts/propline_wide_audit.py --max-events" in diagnostic
-    assert 4 * (1 + 2 * 75) + 250 == 854 < 1000
+    assert "propline_clv_collect.py" in active_workflow
+    assert "workflow_dispatch:" in active_workflow
+    assert "  schedule:" not in active_workflow
 
 
 def test_propline_abbreviated_names_match_both_players_without_spending_api():

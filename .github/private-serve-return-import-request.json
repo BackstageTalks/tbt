@@ -1,7 +1,0 @@
-{
-  "schema": 1,
-  "mode": "write",
-  "artifact_run_id": "36346469109",
-  "purpose": "Publish only identity-verified Serve/Return rows after successful dry-run review: 471 updates, 469 quality-ready additions; 5 conflicts and 2 unverified orientations remain quarantined.",
-  "requested_at_utc": "2026-09-28T12:35:00Z"
-}
