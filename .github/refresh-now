@@ -1,1 +1,1 @@
-Final replacement current-day recovery from latest main. Cancel stale refresh, publish today's feed, deploy. 2026-10-01.
+Queue definitive current-day publish after the active recovery releases the history lock. Latest main only. 2026-10-01.
