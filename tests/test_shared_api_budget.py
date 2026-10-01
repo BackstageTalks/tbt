@@ -19,7 +19,9 @@ def test_all_purposes_share_provider_day_pool_with_500_reserve():
         ("live", 2500),
         ("refresh", 2500),
         ("match", 1000),
-        ("history", 8500),
+        ("history", 3000),
+        ("history", 3000),
+        ("history", 2500),
     ):
         ledger, result = shared_budget.calculate(ledger, purpose, amount, now=NOW)
 
