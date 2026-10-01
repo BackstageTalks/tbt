@@ -858,3 +858,86 @@ def test_match_status_worker_uses_higher_bounded_throughput():
     assert 'BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "20"' in block
     assert 'min(20, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS"' in block
     assert 'max_wall_seconds=22.0' in block
+
+
+def test_production_status_queue_ignores_generic_upcoming_board():
+    now = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+    generic = [
+        _row(
+            f"board-{i}", "11",
+            (now - timedelta(hours=1, minutes=i)).isoformat(),
+        )
+        for i in range(100)
+    ]
+    top = _row("top-1", "11", (now - timedelta(hours=1)).isoformat())
+    prime = _row("prime-1", "11", (now - timedelta(hours=2)).isoformat())
+    value = _row("value-1", "11", (now - timedelta(hours=3)).isoformat())
+    doubles = _row("doubles-1", "11", (now - timedelta(hours=4)).isoformat())
+    feed = {
+        "upcoming": generic,
+        "top_daily_picks": [top],
+        "prime_picks": [prime],
+        "value_picks": [value],
+        "doubles_picks": [doubles],
+    }
+
+    result = scan_match_statuses(feed, _Provider(), now=now, max_checks=20)
+
+    assert result["tracked"] == 4
+    assert result["due"] == 4
+    assert result["pending_count"] == 4
+    assert result["checked"] == 4
+    assert not any(key.startswith("board-") for key in result["pending"])
+
+
+def test_legacy_unmarked_pending_backlog_is_dropped_on_public_feed():
+    now = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+    previous = {
+        "pending": {
+            "legacy-board": {
+                "t": (now - timedelta(hours=3)).isoformat(),
+                "s": "11", "a": "11", "b": "22", "c": "",
+            }
+        }
+    }
+    feed = {
+        "top_daily_picks": [],
+        "prime_picks": [],
+        "value_picks": [],
+        "doubles_picks": [],
+    }
+
+    result = scan_match_statuses(feed, _Provider(), previous, now=now)
+
+    assert result["tracked"] == 0
+    assert result["due"] == 0
+    assert result["pending_count"] == 0
+
+
+def test_marked_public_pending_survives_rollover_for_48_hours_only():
+    now = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
+    previous = {
+        "pending": {
+            "recent-public": {
+                "t": (now - timedelta(hours=30)).isoformat(),
+                "s": "11", "a": "11", "b": "22", "c": "", "p": "1",
+            },
+            "stale-public": {
+                "t": (now - timedelta(hours=60)).isoformat(),
+                "s": "11", "a": "11", "b": "22", "c": "", "p": "1",
+            },
+        }
+    }
+    feed = {
+        "top_daily_picks": [],
+        "prime_picks": [],
+        "value_picks": [],
+        "doubles_picks": [],
+    }
+
+    result = scan_match_statuses(feed, _Provider(), previous, now=now, max_checks=20)
+
+    assert result["tracked"] == 1
+    assert result["due"] == 1
+    assert "recent-public" in result["pending"]
+    assert "stale-public" not in result["pending"]
