@@ -1434,7 +1434,7 @@ def internal_match_status_worker(req):
         # An earlier run hit the HTTP gateway after ~45s. This worker uses
         # short batches and a bounded latency/request budget; all other users
         # of RapidTennisClient retain their existing retry policy.
-        client.request_limit = max(4, min(12, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT", "8"))))
+        client.request_limit = max(8, min(24, int(os.getenv("BLINQ_MATCH_STATUS_REQUEST_LIMIT", "24"))))
         client.retry_attempts = 1
         client.client.timeout = 4.0
         try:
@@ -1444,11 +1444,11 @@ def internal_match_status_worker(req):
                 previous,
                 max_checks=max(
                     1,
-                    min(5, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS", "5"))),
+                    min(20, int(os.getenv("BLINQ_MATCH_STATUS_MAX_CHECKS", "20"))),
                 ),
                 max_near_checks=max(
                     1,
-                    min(5, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "5"))),
+                    min(20, int(os.getenv("BLINQ_MATCH_STATUS_NEAR_MAX_CHECKS", "20"))),
                 ),
                 max_wall_seconds=22.0,
             )
