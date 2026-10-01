@@ -1,0 +1,57 @@
+name: Offline canonical history export
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  export-history:
+    if: \${{ github.head_ref == 'audit/library-gap-sources-20261001' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download verified canonical history
+        env:
+          GH_TOKEN: \${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: \${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.release_store import ReleaseStore
+
+          out = Path(".cache/tbt/history")
+          store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", out)
+          store.download()
+          for year in range(2021, 2027):
+              path = out / f"history-{year}.parquet"
+              if not path.is_file():
+                  raise SystemExit(f"Missing canonical partition: {path}")
+              print(path, path.stat().st_size)
+          PY
+
+      - name: Upload 2021-2026 canonical partitions
+        uses: actions/upload-artifact@v4
+        with:
+          name: canonical-history-2021-2026
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            .cache/tbt/history/history-2021.parquet
+            .cache/tbt/history/history-2022.parquet
+            .cache/tbt/history/history-2023.parquet
+            .cache/tbt/history/history-2024.parquet
+            .cache/tbt/history/history-2025.parquet
+            .cache/tbt/history/history-2026.parquet
