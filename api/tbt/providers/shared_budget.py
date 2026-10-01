@@ -1,28 +1,31 @@
-"""Conservative, shared rolling Tennis RapidAPI budget.
+"""Shared Tennis RapidAPI budget aligned to the provider subscription day.
 
-One ETag-protected Azure Table / Firestore row is the source of truth across
-Azure Functions and GitHub Actions. Five-minute buckets retain an extra bucket
-at the 24h boundary to avoid ever undercounting a rolling 24-hour window.
-Reserve BEFORE every billable attempt, including retries; never refund an
-ambiguous network failure. Missing storage must fail closed.
+The provider allowance resets at 19:10 Europe/Bratislava. One ETag-protected
+Azure Table row coordinates every BlinQ TennisAPI caller. Reserve BEFORE every
+billable attempt, including retries; never refund an ambiguous network failure.
+A 500-request provider reserve is kept untouched.
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 import time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from .budget import RequestBudgetExceeded
 
-WINDOW_SLOTS = 288  # 24 hours * 12 five-minute buckets
 SLOT_SECONDS = 300
-GLOBAL_CEILING = 12000  # 15,000 plan minus 3,000 emergency headroom
-# Per-purpose ceilings are independent safety rails, not a partition of the
-# 12,000 global ceiling. This allows low-total-use jobs to borrow otherwise idle
-# capacity while the global hard stop still preserves 3,000 provider headroom.
-PURPOSE_CAPS = {"live": 2500, "match": 1000, "refresh": 2500, "history": 8500}
+PROVIDER_PLAN_LIMIT = 15000
+PROVIDER_RESERVE = 500
+GLOBAL_CEILING = PROVIDER_PLAN_LIMIT - PROVIDER_RESERVE
+RESET_TIMEZONE = ZoneInfo("Europe/Bratislava")
+RESET_HOUR = 19
+RESET_MINUTE = 10
+# Purpose counters are observability labels only. Every TennisAPI workload shares
+# the same provider-day pool and may use available capacity up to the global stop.
+PURPOSE_CAPS = {name: GLOBAL_CEILING for name in ("live", "match", "refresh", "history")}
 PURPOSE_INDEX = {name: pos + 1 for pos, name in enumerate(PURPOSE_CAPS)}
 TABLE = "BlinQApiBudget"
 PARTITION = "rapidapi"
@@ -45,6 +48,28 @@ def _now_slot(now: datetime | None = None) -> int:
     return int(now.timestamp()) // SLOT_SECONDS
 
 
+def _provider_day_start_slot(slot: int) -> int:
+    now_utc = datetime.fromtimestamp(slot * SLOT_SECONDS, tz=timezone.utc)
+    local = now_utc.astimezone(RESET_TIMEZONE)
+    start_local = local.replace(
+        hour=RESET_HOUR, minute=RESET_MINUTE, second=0, microsecond=0
+    )
+    if local < start_local:
+        start_local -= timedelta(days=1)
+    return int(start_local.astimezone(timezone.utc).timestamp()) // SLOT_SECONDS
+
+
+def _provider_day_next_reset(slot: int) -> datetime:
+    start_utc = datetime.fromtimestamp(
+        _provider_day_start_slot(slot) * SLOT_SECONDS, tz=timezone.utc
+    )
+    start_local = start_utc.astimezone(RESET_TIMEZONE)
+    next_local = (start_local + timedelta(days=1)).replace(
+        hour=RESET_HOUR, minute=RESET_MINUTE, second=0, microsecond=0
+    )
+    return next_local.astimezone(timezone.utc)
+
+
 def _normalized(raw: object, slot: int) -> list[list[int]]:
     if raw is None:
         return []
@@ -53,6 +78,7 @@ def _normalized(raw: object, slot: int) -> list[list[int]]:
     buckets = raw.get("buckets", [])
     if not isinstance(buckets, list):
         raise SharedBudgetUnavailable("Invalid budget ledger")
+    start_slot = _provider_day_start_slot(slot)
     values: dict[int, list[int]] = {}
     for entry in buckets:
         if not isinstance(entry, list) or len(entry) != 5:
@@ -61,8 +87,7 @@ def _normalized(raw: object, slot: int) -> list[list[int]]:
         minute_slot = numbers[0]
         if any(v < 0 for v in numbers[1:]) or minute_slot > slot:
             raise SharedBudgetUnavailable("Corrupt or future-dated budget bucket")
-        # Retain one extra bucket at the rolling boundary (fail safe).
-        if minute_slot >= slot - WINDOW_SLOTS:
+        if minute_slot >= start_slot:
             if minute_slot in values:
                 raise SharedBudgetUnavailable("Duplicate budget bucket")
             values[minute_slot] = numbers
@@ -73,16 +98,20 @@ def _summary(buckets: list[list[int]], slot: int) -> dict[str, Any]:
     spent = {name: sum(item[idx] for item in buckets)
              for name, idx in PURPOSE_INDEX.items()}
     total = sum(spent.values())
+    global_remaining = max(0, GLOBAL_CEILING - total)
     return {
         "schema": 1,
-        "window": "rolling_24h_conservative_5min",
+        "window": "provider_day_19_10_europe_bratislava",
         "updated_slot": slot,
+        "provider_day_start_slot": _provider_day_start_slot(slot),
+        "next_reset_utc": _provider_day_next_reset(slot).isoformat(),
+        "provider_plan_limit": PROVIDER_PLAN_LIMIT,
         "global_limit": GLOBAL_CEILING,
         "global_spent": total,
-        "global_remaining": max(0, GLOBAL_CEILING - total),
-        "reserved_provider_headroom": 3000,
+        "global_remaining": global_remaining,
+        "reserved_provider_headroom": PROVIDER_RESERVE,
         "spent": spent,
-        "remaining": {name: max(0, PURPOSE_CAPS[name] - spent[name])
+        "remaining": {name: min(global_remaining, max(0, PURPOSE_CAPS[name] - spent[name]))
                       for name in PURPOSE_CAPS},
     }
 
