@@ -170,6 +170,7 @@ jobs:
 
       - name: Upload morning supervision evidence
         if: always() && steps.daily_guard.outputs.dispatch == 'true'
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: blinq-morning-supervision-${{ github.run_id }}
