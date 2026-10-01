@@ -108,7 +108,7 @@ jobs:
                 grep -qx "$candidate" "$before" && continue
                 CHILD_RUN_ID="$candidate"
                 break
-              done < <(gh api "$workflow_runs_api" --jq '.workflow_runs[].id')
+              done < <(gh api "$workflow_runs_api" --jq '.workflow_runs | reverse | .[].id')
               [[ -n "$CHILD_RUN_ID" ]] && break
               sleep 2
             done
