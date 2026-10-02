@@ -67,6 +67,12 @@ from tbt.services.admin_storage import (
     save_info_result,
     delete_info_result,
     mark_insight_read,
+    list_project_groups,
+    save_project_group,
+    delete_project_group,
+    join_project_group,
+    leave_project_group,
+    set_project_member_payment,
     save_live_worker_status,
     load_live_worker_status,
     save_match_status_snapshot,
@@ -1047,6 +1053,13 @@ def feed(req):
             data["dashboard_kpi_cards"] = selected_dashboard_cards(source_feed, runtime_ui)
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
+        try:
+            project_payload = list_project_groups(user_id=str(user.get("id") or ""), include_inactive=False)
+            account_data["project_groups"] = [
+                item for item in project_payload.get("items", []) if bool(item.get("joined"))
+            ]
+        except AdminStorageUnavailable:
+            account_data["project_groups"] = []
         data["account"] = account_data
         data["entitlements"] = entitlements
         # Match outcomes are a tiny runtime overlay. They never mutate the
@@ -1656,6 +1669,53 @@ def push_subscription(req):
         return response({"error": str(exc)}, 400)
     except AdminStorageUnavailable:
         return response({"error": "push_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/project-groups", methods=["GET"])
+def project_groups_feed(req):
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if not bool(user.get("email_verified", False)):
+            return response({"error": "email_not_verified"}, 403)
+        if is_suspended(user):
+            return response({"error": "account_suspended"}, 403)
+        account_data = public_account(user, cfg=settings, profile=_profile_for(user))
+        if str(account_data.get("status") or "").lower() not in {"active", "lifetime"}:
+            return response({"items": []})
+        payload = list_project_groups(user_id=str(user.get("id") or ""), include_inactive=False)
+        return response(payload)
+    except AdminStorageUnavailable:
+        return response({"items": [], "storage_unavailable": True}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/project-groups/{group_id}/join", methods=["POST", "DELETE"])
+def project_group_membership(req):
+    try:
+        user = _verified_user(req)
+        if not user:
+            return response({"error": "unauthorized"}, 401)
+        if not bool(user.get("email_verified", False)):
+            return response({"error": "email_not_verified"}, 403)
+        if is_suspended(user):
+            return response({"error": "account_suspended"}, 403)
+        account_data = public_account(user, cfg=settings, profile=_profile_for(user))
+        if str(account_data.get("status") or "").lower() not in {"active", "lifetime"}:
+            return response({"error": "account_inactive"}, 403)
+        group_id = str((req.route_params or {}).get("group_id") or "").strip()
+        uid = str(user.get("id") or "")
+        if req.method == "DELETE":
+            return response(leave_project_group(group_id, uid))
+        return response(join_project_group(group_id, uid, admin=False), 201)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
     except AuthUnavailable:
         return response({"error": "auth_unavailable"}, 503)
 
@@ -2332,6 +2392,90 @@ def admin_audit(req):
         return response({"error": "admin_storage_unavailable"}, 503)
 
 
+
+
+@app.route(route="v1/admin/project-groups", methods=["GET", "POST"])
+def admin_project_groups(req):
+    try:
+        admin, failure = _admin_user(req)
+        if failure:
+            return failure
+        if req.method == "GET":
+            return response(list_project_groups(include_inactive=True, include_members=True))
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        return response(save_project_group(payload, actor_id=str(admin.get("id") or "")), 201)
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/project-groups/{group_id}", methods=["PUT", "DELETE"])
+def admin_project_group_item(req):
+    try:
+        admin, failure = _admin_user(req)
+        if failure:
+            return failure
+        group_id = str((req.route_params or {}).get("group_id") or "").strip()
+        if req.method == "DELETE":
+            return response(delete_project_group(group_id))
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        return response(save_project_group(payload, actor_id=str(admin.get("id") or ""), group_id=group_id))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/project-groups/{group_id}/members/{user_id}", methods=["PUT", "DELETE"])
+def admin_project_group_member(req):
+    try:
+        _, failure = _admin_user(req)
+        if failure:
+            return failure
+        group_id = str((req.route_params or {}).get("group_id") or "").strip()
+        user_id = str((req.route_params or {}).get("user_id") or "").strip()
+        if req.method == "DELETE":
+            return response(leave_project_group(group_id, user_id))
+        get_user(settings, user_id)
+        return response(join_project_group(group_id, user_id, admin=True))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
+
+
+@app.route(route="v1/admin/project-groups/{group_id}/members/{user_id}/payment", methods=["PUT"])
+def admin_project_group_member_payment(req):
+    try:
+        _, failure = _admin_user(req)
+        if failure:
+            return failure
+        group_id = str((req.route_params or {}).get("group_id") or "").strip()
+        user_id = str((req.route_params or {}).get("user_id") or "").strip()
+        try:
+            payload = req.get_json()
+        except ValueError:
+            return response({"error": "invalid_json"}, 400)
+        return response(set_project_member_payment(group_id, user_id, str((payload or {}).get("status") or "")))
+    except ValueError as exc:
+        return response({"error": str(exc)}, 400)
+    except AdminStorageUnavailable:
+        return response({"error": "admin_storage_unavailable"}, 503)
+    except AuthUnavailable:
+        return response({"error": "auth_unavailable"}, 503)
 
 
 @app.route(route="v1/admin/insights", methods=["GET", "POST"])
