@@ -24,8 +24,8 @@ def value_row():
         "surface": "hard",
         "round": "R16",
         "competition": "ATP",
-        "player1": {"id": "A", "name": "Alpha", "probability": .70, "rank": 120},
-        "player2": {"id": "B", "name": "Beta", "probability": .30, "rank": 180},
+        "player1": {"id": "A", "name": "Alpha", "probability": .70, "rank": 320},
+        "player2": {"id": "B", "name": "Beta", "probability": .30, "rank": 380},
         "winner_id": "A",
         "confidence": .70,
         "data_depth": .82,
@@ -71,6 +71,7 @@ def build():
     ledger = [{**candidate, "market_publications": candidate["market_publication_candidates"]}]
     ledger[0].pop("market_publication_candidates", None)
     feed = {
+        "top200_picks": sections["top200_picks"],
         "top_daily_picks": sections["top_daily_picks"],
         "prime_picks": sections["prime_picks"],
         "value_picks": sections["value_picks"],
