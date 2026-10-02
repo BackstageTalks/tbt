@@ -103,7 +103,8 @@ def test_prime_top_core68_fallback65_and_value65_policy():
         row('p649-prime', .649, 1.40, 3.10, depth=1.0),
         row('p649-top', .649, 1.70, 2.20, depth=1.0),
         row('v599', .599, 1.90, 2.00, depth=1.0),
-        row('v600', .60, 1.90, 2.00, depth=1.0),\n        row('v650', .65, 1.90, 2.00, depth=1.0),
+        row('v600', .60, 1.90, 2.00, depth=1.0),
+        row('v650', .65, 1.90, 2.00, depth=1.0),
         row('p650', .65, 1.60, 2.30, depth=1.0),
     ]
     sections = select_market_sections(rows, prime_min_probability=.50, top_min_probability=.50, value_min_probability=.50)
