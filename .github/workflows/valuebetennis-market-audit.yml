@@ -40,6 +40,14 @@ jobs:
             curl --fail --location --retry 4 --retry-all-errors               "https://www.valuebetennis.com/datasets/valuebetennis-matchs-${y}.csv"               -o ".cache/tbt/valuebetennis/valuebetennis-matchs-${y}.csv"
             test -s ".cache/tbt/valuebetennis/valuebetennis-matchs-${y}.csv"
           done
+          python - <<'PY'
+          import csv, json
+          from pathlib import Path
+          for p in sorted(Path(".cache/tbt/valuebetennis").glob("*.csv")):
+              with p.open(encoding="utf-8-sig", newline="") as h:
+                  r=csv.reader(h); header=next(r); first=next(r)
+              print("VALUEBET_SCHEMA", p.name, json.dumps(header,ensure_ascii=False), json.dumps(first,ensure_ascii=False))
+          PY
       - name: Link fail closed
         run: |
           set -euo pipefail
@@ -56,6 +64,8 @@ jobs:
           a=json.load(open(".cache/tbt/valuebetennis-audit/report.json"))
           d=json.load(open(".cache/tbt/valuebetennis-dry/report.json"))
           ac=a.get("counts",{}); dc=d.get("counts",{})
+          if ac.get("invalid_source_rows",0) == ac.get("source_rows",0): raise SystemExit("All Valuebetennis rows rejected by parser")
+          if ac.get("staged_matches",0) <= 0: raise SystemExit("Zero Valuebetennis rows staged")
           if ac.get("ambiguous",0): raise SystemExit(f"Ambiguous links: {ac['ambiguous']}")
           if dc.get("identity_changed",0) or dc.get("invalid_market_history",0) or dc.get("market_conflicts",0):
               raise SystemExit(f"Importer safety failure: {dc}")
