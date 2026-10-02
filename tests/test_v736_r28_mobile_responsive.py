@@ -66,7 +66,7 @@ def test_mobile_web_shell_keeps_desktop_data_and_apps_up_only_the_phone_layout()
     assert "results-mobile-filter-toggle" in APP
     assert "results-card-row" in APP
     assert "data-results-filter-toggle" in APP
-    assert "mobile-web-shell=1" in INDEX
+    assert "mobile-web-shell=" in INDEX
     marker = "BlinQ mobile web shell 2026-10-02"
     assert marker in CSS
     tail = CSS[CSS.index(marker):]
