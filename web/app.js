@@ -1030,7 +1030,7 @@
     const panelEyebrow=publicText(Object.prototype.hasOwnProperty.call(cfg,'eyebrow')?String(cfg.eyebrow||'').trim():'BLINQ COMMUNITY');
     host.hidden=false;host.innerHTML=`<div class="tg-panel-head"><div>${panelEyebrow?`<small>${escapeHtml(panelEyebrow)}</small>`:''}<h2>${escapeHtml(publicText(String(cfg.title||'Telegram skupiny')))}</h2><p>${escapeHtml(publicText(String(cfg.description||'')))}</p></div></div><div class="tg-group-grid">${cards}</div>`;
   }
-  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeroBanner(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); renderTelegramGroupsPanel(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); renderSystemFooterStatus(); translatePublicDom(document.body); }
+  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeroBanner(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); renderTelegramGroupsPanel(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); renderProjectGroupBar(); renderSystemFooterStatus(); translatePublicDom(document.body); }
 
   function auth(mode='login'){
     feedGeneration++;
@@ -1482,6 +1482,76 @@
     }
     return {candidates,priced,eligible:Math.max(0,eligible)};
   }
+  function projectGroupColor(value){
+    const color=String(value||'blue').toLowerCase();
+    return ['blue','orange','purple','green','teal','pink','gray'].includes(color)?color:'blue';
+  }
+  function joinedProjectGroups(){
+    return (Array.isArray(state.feed?.account?.project_groups)?state.feed.account.project_groups:[]).filter(item=>item&&item.joined!==false&&item.active!==false);
+  }
+  function insightMatchesCurrentChannel(item){
+    if(state.insightChannel==='live')return isLiveInsight(item);
+    if(state.insightChannel==='project'){
+      return !isLiveInsight(item)
+        &&String(item?.audience_mode||'levels')==='groups'
+        &&Array.isArray(item?.group_ids)
+        &&item.group_ids.map(String).includes(String(state.activeProjectGroupId||''));
+    }
+    return !isLiveInsight(item)&&String(item?.audience_mode||'levels')!=='groups';
+  }
+  function renderProjectGroupBar(){
+    const host=$('projectGroupBar');if(!host)return;
+    const groups=joinedProjectGroups();
+    host.hidden=!groups.length;
+    if(!groups.length){host.innerHTML='';return;}
+    host.innerHTML=groups.map(group=>{
+      const unread=state.insights.filter(item=>!item.read&&!isLiveInsight(item)&&String(item?.audience_mode||'levels')==='groups'&&Array.isArray(item?.group_ids)&&item.group_ids.map(String).includes(String(group.id))).length;
+      return `<button type="button" class="project-group-chip is-${escapeHtml(projectGroupColor(group.color))}${String(state.activeProjectGroupId)===String(group.id)&&state.insightDrawerOpen&&state.insightChannel==='project'?' is-active':''}" data-project-group-open="${escapeHtml(group.id)}"><span aria-hidden="true">◆</span><strong>${escapeHtml(group.name||'Projekt')}</strong>${unread?`<b>${Math.min(99,unread)}</b>`:''}</button>`;
+    }).join('');
+  }
+  function formatProjectMoney(cents,currency='EUR'){
+    const value=Math.max(0,Number(cents)||0)/100;
+    try{return new Intl.NumberFormat(localeTag,{style:'currency',currency:String(currency||'EUR')}).format(value);}
+    catch{return value.toFixed(2)+' '+String(currency||'EUR');}
+  }
+  async function loadProjectGroups(force=false){
+    if(state.projectGroupsLoading||(!force&&state.projectGroups.length))return;
+    state.projectGroupsLoading=true;state.projectGroupsError='';renderProjectGroupsDialog();
+    try{
+      const data=await BlinqAuth.projectGroups();
+      state.projectGroups=Array.isArray(data?.items)?data.items:[];
+    }catch(error){
+      state.projectGroupsError=error?.message||'Projektové skupiny sa nepodarilo načítať.';
+    }finally{
+      state.projectGroupsLoading=false;renderProjectGroupsDialog();
+    }
+  }
+  function renderProjectGroupsDialog(){
+    const list=$('projectGroupsDialogList'),status=$('projectGroupsDialogStatus');if(!list||!status)return;
+    if(state.projectGroupsLoading){status.textContent='Načítavam projektové skupiny…';list.innerHTML='';return;}
+    if(state.projectGroupsError){status.textContent=state.projectGroupsError;list.innerHTML='';return;}
+    const groups=Array.isArray(state.projectGroups)?state.projectGroups:[];
+    status.textContent=groups.length?`${groups.filter(g=>g.joined).length} moje · ${groups.length} dostupných`:'Momentálne nie sú otvorené žiadne projekty.';
+    list.innerHTML=groups.map(group=>{
+      const full=Number(group.member_count)>=Number(group.capacity),joined=Boolean(group.joined),canJoin=Boolean(group.self_join_enabled)&&!full;
+      const contribution=Number(group.contribution_cents)>0?`${formatProjectMoney(group.contribution_cents,group.currency)} / osoba`:'Bez spoločného príspevku';
+      return `<article class="project-directory-card is-${escapeHtml(projectGroupColor(group.color))}"><header><div><small>PROJEKT</small><strong>${escapeHtml(group.name||'Projekt')}</strong></div><span>${Number(group.member_count)||0}/${Number(group.capacity)||0}</span></header><p>${escapeHtml(group.description||'')}</p><div class="project-directory-meta"><span>${escapeHtml(contribution)}</span>${Number(group.total_cost_cents)>0?`<span>${escapeHtml(formatProjectMoney(group.total_cost_cents,group.currency))} spolu</span>`:''}</div><footer>${joined?`<button type="button" class="btn btn-ghost" data-project-group-open="${escapeHtml(group.id)}">Otvoriť INFO</button><button type="button" class="btn btn-ghost danger" data-project-leave="${escapeHtml(group.id)}">Odísť</button>`:`<button type="button" class="btn btn-primary" data-project-join="${escapeHtml(group.id)}" ${canJoin?'':'disabled'}>${full?'Skupina je plná':group.self_join_enabled?'Pridať sa':'Len na pozvanie'}</button>`}</footer></article>`;
+    }).join('');
+  }
+  function openProjectGroupsDialog(){
+    closeProfileMenu();
+    const dialog=$('projectGroupsDialog');if(!dialog)return;
+    if(!dialog.open)dialog.showModal();
+    loadProjectGroups(true);
+  }
+  function openProjectGroupMessages(groupId){
+    const group=joinedProjectGroups().find(item=>String(item.id)===String(groupId));
+    if(!group){openProjectGroupsDialog();return;}
+    state.activeProjectGroupId=String(group.id);
+    setInsightDrawer(true,'project');
+    renderProjectGroupBar();
+  }
+
   function renderInsightBell(){
     const bell=$('insightBell'),badge=$('insightUnread'),shortcut=$('insightShortcut'),shortcutLabel=$('insightShortcutLabel'),shortcutCount=$('insightShortcutCount');if(!bell||!badge)return;
     const plan=accountPlan(),notificationCfg=notificationAudienceConfig(),liveMin=notificationCfg.live_min_level;
@@ -1505,7 +1575,7 @@
     }
     if(shortcutCount){const n=confirmed?Number(radar.signals)||0:watching?Number(radar.candidates)||0:0;shortcutCount.textContent=String(n);shortcutCount.hidden=!n||!liveEligible;}
     if(shortcutLabel){shortcutLabel.textContent=liveEligible?(confirmed?'CONFIRMED':watching?'WATCH':'RADAR'):'RADAR';shortcutLabel.hidden=false;}
-    const infoUnread=state.insights.filter(item=>!item.read&&!isLiveInsight(item)).length;
+    const infoUnread=state.insights.filter(item=>!item.read&&!isLiveInsight(item)&&String(item?.audience_mode||'levels')!=='groups').length;
     badge.textContent=infoUnread>99?'99+':String(infoUnread);badge.hidden=!infoUnread||!infoEligible;
     bell.classList.toggle('has-unread',infoUnread>0);bell.setAttribute('aria-expanded',state.insightDrawerOpen&&state.insightChannel==='info'?'true':'false');
   }
@@ -1514,14 +1584,14 @@
   }
   function renderInsightDrawer(){
     const drawer=$('insightDrawer'),list=$('insightDrawerList'),status=$('insightDrawerStatus'),toolbar=$('insightDrawerToolbar');if(!drawer||!list||!status)return;
-    const channel=state.insightChannel==='live'?'live':'info';
+    const channel=state.insightChannel==='live'?'live':state.insightChannel==='project'?'project':'info';
     const filter=state.insightFilter||'all';
     const liveTab=['set2','results'].includes(state.liveRadarTab)?state.liveRadarTab:'comeback';
     // INFO messages are not subject to the LIVE-only subtab filter. The old
     // "channel !== 'live' || ... ? false : ..." ternary accidentally removed
     // every INFO item, even when the header badge correctly counted it.
     const channelRows=state.insights
-      .filter(item=>channel==='live'?isLiveInsight(item):!isLiveInsight(item))
+      .filter(item=>insightMatchesCurrentChannel(item))
       .filter(item=>channel!=='live'
         ?true
         :liveTab==='results'
@@ -1532,10 +1602,11 @@
     const rows=channelRows.filter(item=>filter==='unread'?!item.read:filter==='pinned'?Boolean(item.pinned):true);
     const channelUnread=channelRows.filter(item=>!item.read).length;
     const title=$('insightDrawerTitle'),eyebrow=$('insightDrawerEyebrow');
-    if(title)title.textContent=channel==='live'?'LIVE Radar':'BlinQ Info';
+    const activeProject=joinedProjectGroups().find(group=>String(group.id)===String(state.activeProjectGroupId));
+    if(title)title.textContent=channel==='live'?'LIVE Radar':channel==='project'?(activeProject?.name||'Projekt'):'BlinQ Info';
     // INFO already has the "BlinQ Info" title; avoid the duplicate green eyebrow.
     // Keep the separate LIVE label when opening the LIVE Radar drawer.
-    if(eyebrow){eyebrow.hidden=channel!=='live';eyebrow.textContent=channel==='live'?'BLINQ LIVE':'';}
+    if(eyebrow){eyebrow.hidden=channel==='info';eyebrow.textContent=channel==='live'?'BLINQ LIVE':channel==='project'?'PROJEKTOVÁ SKUPINA':'';}
     drawer.dataset.channel=channel;
     if(state.insightsLoading) status.innerHTML=`<span class="insight-status-dot is-loading"></span><strong>${escapeHtml(lcopy('Loading private feed…','Načítavam súkromný feed…','Načítám soukromý feed…'))}</strong>`;
     else if(state.insightsStorageUnavailable) status.innerHTML=`<span class="insight-status-dot is-offline"></span><strong>${escapeHtml(lcopy('Private feed is temporarily unavailable.','Súkromný feed je dočasne nedostupný.','Soukromý feed je dočasně nedostupný.'))}</strong>`;
@@ -1586,7 +1657,7 @@
       else{list.innerHTML=`<div class="insight-feed-empty insight-feed-offline"><i>!</i><strong>${escapeHtml(uiCopy('private_feed.info_title_offline',lcopy('Premium Info temporarily unavailable','Premium Info je dočasne nedostupné','Premium Info je dočasně nedostupné')))}</strong><p>${escapeHtml(infoCopy)}</p></div>`;}
       return;
     }
-    if(!rows.length){const set2Empty=channel==='live'&&state.liveRadarTab==='set2';const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):set2Empty?lcopy('No eligible set-2 candidate is active right now.','Momentálne nie je aktívny žiadny kvalifikovaný kandidát pre 2. set.','Momentálně není aktivní žádný kvalifikovaný kandidát pro 2. set.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');const emptyDetail=set2Empty?lcopy('The set-2 radar waits for an eligible Short Odds candidate after a lost first set; a real live set-2 price is shown when the provider offers it.','Radar 2. setu čaká na kvalifikovaného Short Odds kandidáta po prehratom 1. sete; reálny LIVE kurz na 2. set zobrazí, keď ho provider ponúkne.','Radar 2. setu čeká na kvalifikovaného Short Odds kandidáta po prohraném 1. setu; reálný LIVE kurz na 2. set zobrazí, když ho provider nabídne.'):channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.');list.innerHTML=radarPanel+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(emptyDetail)}</p></div>`;return;}
+    if(!rows.length){const set2Empty=channel==='live'&&state.liveRadarTab==='set2';const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):set2Empty?lcopy('No eligible set-2 candidate is active right now.','Momentálne nie je aktívny žiadny kvalifikovaný kandidát pre 2. set.','Momentálně není aktivní žádný kvalifikovaný kandidát pro 2. set.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):channel==='project'?lcopy('No project messages yet.','V tejto projektovej skupine zatiaľ nie sú žiadne správy.','V této projektové skupině zatím nejsou žádné zprávy.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');const emptyDetail=set2Empty?lcopy('The set-2 radar waits for an eligible Short Odds candidate after a lost first set; a real live set-2 price is shown when the provider offers it.','Radar 2. setu čaká na kvalifikovaného Short Odds kandidáta po prehratom 1. sete; reálny LIVE kurz na 2. set zobrazí, keď ho provider ponúkne.','Radar 2. setu čeká na kvalifikovaného Short Odds kandidáta po prohraném 1. setu; reálný LIVE kurz na 2. set zobrazí, když ho provider nabídne.'):channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.');list.innerHTML=radarPanel+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(emptyDetail)}</p></div>`;return;}
     list.innerHTML=radarPanel+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon type-${escapeHtml(item.type||'insight')}">${escapeHtml(insightTypeIcon(item.type))}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p><footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
   }
   async function loadInsights(force=false){
@@ -1603,7 +1674,7 @@
       if(generation!==feedGeneration)return;
       state.insights=[];state.insightsUnread=0;state.insightsStorageUnavailable=true;
     }finally{
-      if(generation===feedGeneration){state.insightsLoading=false;renderInsightBell();renderInsightDrawer();renderSystemFooterStatus();}
+      if(generation===feedGeneration){state.insightsLoading=false;renderInsightBell();renderProjectGroupBar();renderInsightDrawer();renderSystemFooterStatus();}
     }
   }
   async function refreshPrivateUpdates(force=false){
@@ -1624,9 +1695,9 @@
   }
   function setInsightDrawer(open,channel=null){
     const drawer=$('insightDrawer'),backdrop=$('insightBackdrop');if(!drawer||!backdrop)return;
-    if(channel&&channel!==state.insightChannel){state.insightChannel=channel==='live'?'live':'info';state.insightFilter='all';}
+    if(channel&&channel!==state.insightChannel){state.insightChannel=['live','project'].includes(channel)?channel:'info';state.insightFilter='all';}
     state.insightDrawerOpen=Boolean(open);drawer.hidden=!state.insightDrawerOpen;backdrop.hidden=!state.insightDrawerOpen;document.body.classList.toggle('insight-open',state.insightDrawerOpen);
-    renderInsightBell();renderInsightDrawer();
+    renderInsightBell();renderProjectGroupBar();renderInsightDrawer();
     if(state.insightDrawerOpen){loadInsights(true);if(state.insightChannel==='live')loadUserLiveRadarStatus(true);}
   }
   function toggleInsightChannel(channel){
