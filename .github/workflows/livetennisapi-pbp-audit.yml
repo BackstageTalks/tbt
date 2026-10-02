@@ -1,0 +1,207 @@
+name: Audit LiveTennisAPI academic PBP enrichment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/livetennisapi-pbp-audit-request.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      ZENODO_RECORD: "22048731"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - run: python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt
+
+      - name: Verify controlled audit request
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          request=json.loads(Path(".github/livetennisapi-pbp-audit-request.json").read_text())
+          expected={
+            "schema":1,
+            "mode":"audit",
+            "source":"livetennisapi_academic_pbp",
+            "zenodo_record":22048731,
+            "license":"CC BY-NC 4.0",
+            "raw_redistribution":False,
+          }
+          for key,value in expected.items():
+              if request.get(key)!=value:
+                  raise SystemExit(f"Request mismatch {key}: {request.get(key)!r} != {value!r}")
+          print("controlled audit request verified")
+          PY
+
+      - name: Download checksum-verified canonical history
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.release_store import ReleaseStore
+
+          out=Path(".cache/tbt/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",out).download(
+              require_bundle_manifest=True
+          )
+          PY
+
+      - name: Download pinned Zenodo public sample
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/livetennisapi-source
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import urllib.request
+          from pathlib import Path
+
+          record=os.environ["ZENODO_RECORD"]
+          api=f"https://zenodo.org/api/records/{record}"
+          with urllib.request.urlopen(api, timeout=60) as response:
+              metadata=json.load(response)
+
+          files=metadata.get("files") or []
+          wanted=[]
+          for item in files:
+              key=str(item.get("key") or item.get("filename") or "")
+              if key in {"matches.csv.gz","players.csv.gz"} or re.fullmatch(r"points_sample_.*\.csv\.gz",key):
+                  wanted.append(item)
+
+          keys={str(x.get("key") or x.get("filename") or "") for x in wanted}
+          if "matches.csv.gz" not in keys or "players.csv.gz" not in keys:
+              raise SystemExit(f"Zenodo sample missing match/player files: {sorted(keys)}")
+          if not any(k.startswith("points_sample_") for k in keys):
+              raise SystemExit(f"Zenodo sample missing point files: {sorted(keys)}")
+
+          root=Path(".cache/tbt/livetennisapi-source")
+          manifest={
+              "record_id":metadata.get("id"),
+              "doi":(metadata.get("pids") or {}).get("doi",{}).get("identifier"),
+              "updated":metadata.get("updated"),
+              "files":[],
+          }
+
+          for item in wanted:
+              key=str(item.get("key") or item.get("filename") or "")
+              links=item.get("links") or {}
+              url=links.get("content") or links.get("self")
+              if not url:
+                  raise SystemExit(f"No download link for {key}")
+              target=root/key
+              with urllib.request.urlopen(url, timeout=120) as response, target.open("wb") as handle:
+                  while True:
+                      block=response.read(1024*1024)
+                      if not block:
+                          break
+                      handle.write(block)
+              if not target.is_file() or target.stat().st_size <= 0:
+                  raise SystemExit(f"Empty Zenodo file {key}")
+
+              digest=hashlib.md5(target.read_bytes()).hexdigest()
+              checksum=str(item.get("checksum") or "")
+              if checksum.startswith("md5:") and digest != checksum.split(":",1)[1]:
+                  raise SystemExit(f"Checksum mismatch for {key}")
+              manifest["files"].append({
+                  "key":key,
+                  "size":target.stat().st_size,
+                  "checksum":checksum or f"md5:{digest}",
+              })
+
+          (root/"source-manifest.json").write_text(
+              json.dumps(manifest,indent=2),encoding="utf-8"
+          )
+          print(json.dumps(manifest,indent=2))
+          PY
+
+      - name: Audit strict full-tape serve-return linkage
+        run: |
+          set -euo pipefail
+          version="$(python - <<'PY'
+          import json
+          m=json.load(open(".cache/tbt/livetennisapi-source/source-manifest.json"))
+          print(f"zenodo:{m.get('record_id')}:{m.get('updated') or 'unknown'}")
+          PY
+          )"
+          mapfile -t point_files < <(find .cache/tbt/livetennisapi-source -maxdepth 1 -name 'points_sample_*.csv.gz' -print | sort)
+          test "${#point_files[@]}" -gt 0
+          python scripts/link_livetennisapi_pbp_serve_return.py \
+            --history-dir .cache/tbt/history \
+            --matches .cache/tbt/livetennisapi-source/matches.csv.gz \
+            --players .cache/tbt/livetennisapi-source/players.csv.gz \
+            --points "${point_files[@]}" \
+            --source-version "$version" \
+            --out-dir .cache/tbt/livetennisapi-audit
+
+      - name: Validate audit contract
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+
+          report=json.load(open(".cache/tbt/livetennisapi-audit/report.json"))
+          if report.get("production_mutated") is not False:
+              raise SystemExit("Audit mutated production")
+          if report.get("api_requests") != 0:
+              raise SystemExit("Provider API must not be used")
+          if report.get("raw_redistributed") is not False:
+              raise SystemExit("Raw redistribution contract violated")
+          if report.get("license") != "CC BY-NC 4.0":
+              raise SystemExit("Unexpected dataset license")
+          if int(report.get("canonical_rows") or 0) <= 0:
+              raise SystemExit("Canonical history missing")
+          counts=report.get("counts") or {}
+          if int(counts.get("point_state_rows") or 0) <= 0:
+              raise SystemExit("Point sample was not parsed")
+          print(json.dumps(report,indent=2))
+          PY
+
+      - name: Persist derived audit only
+        run: |
+          set -euo pipefail
+          path="audit/livetennisapi-pbp-coverage-latest.json"
+          encoded="$(base64 -w0 .cache/tbt/livetennisapi-audit/report.json)"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+              -f message="Update LiveTennisAPI academic PBP coverage audit" \
+              -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+              -f message="Add LiveTennisAPI academic PBP coverage audit" \
+              -f content="$encoded" >/dev/null
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: livetennisapi-pbp-audit-${{ github.run_id }}
+          retention-days: 14
+          path: |
+            .cache/tbt/livetennisapi-audit/report.json
+            .cache/tbt/livetennisapi-audit/review.jsonl
+            .cache/tbt/livetennisapi-source/source-manifest.json
