@@ -7,10 +7,10 @@ permissions:
   contents: read
 
 jobs:
-  export-history:
-    if: ${{ github.head_ref == 'audit/library-gap-sources-20261001' }}
+  export-wta-stats:
+    if: ${{ github.head_ref == 'data/wta-stats-2010-2026-export' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -20,74 +20,31 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install history reader dependencies
-        run: python -m pip install -r api/requirements.txt -r api/requirements-train.txt
+      - name: Install dependency
+        run: python -m pip install requests
 
-      - name: Download verified canonical history
-        env:
-          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
-          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
-        run: |
-          set -euo pipefail
-          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
-          python - <<'PY'
-          import os
-          from pathlib import Path
-          from scripts.release_store import ReleaseStore
+      - name: Export WTA Stats Zone 2010-2026
+        run: python scripts/export_wta_stats_2010_2026.py
 
-          out = Path(".cache/tbt/history")
-          store = ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", out)
-          store.download()
-          for year in range(2021, 2027):
-              path = out / f"history-{year}.parquet"
-              if not path.is_file():
-                  raise SystemExit(f"Missing canonical partition: {path}")
-              print(path, path.stat().st_size)
-          PY
-
-      - name: Export canonical audit JSONL
-        env:
-          PYTHONPATH: api
+      - name: Validate CSV
         run: |
           python - <<'PY'
-          import gzip
-          import json
+          import csv
           from pathlib import Path
-          from tbt.data.history_snapshot import load_partitions
-          from tbt.data.history_safety import sanitize_history_identities
-
-          matches, safety = sanitize_history_identities(load_partitions(".cache/tbt/history"))
-          if safety.get("quarantined_rows"):
-              raise SystemExit("Canonical history identity quarantine is non-empty")
-          target = Path(".cache/tbt/history/canonical_audit.jsonl.gz")
-          with gzip.open(target, "wt", encoding="utf-8") as handle:
-              for m in matches:
-                  row = {
-                      "match_id": str(m.match_id),
-                      "tour": str(m.tour or "").lower(),
-                      "scheduled_at": m.scheduled_at.isoformat(),
-                      "player1_id": str(m.player1_id or ""),
-                      "player1_name": str(m.player1_name or ""),
-                      "player2_id": str(m.player2_id or ""),
-                      "player2_name": str(m.player2_name or ""),
-                      "winner_id": str(m.winner_id or ""),
-                      "surface": str(m.surface or ""),
-                      "tournament": str(m.tournament or ""),
-                      "round_name": str(m.round_name or ""),
-                      "stats": dict(m.stats or {}),
-                  }
-                  handle.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
-          print(json.dumps({"rows": len(matches), "bytes": target.stat().st_size, "identity_safety": safety}, indent=2))
+          p=Path('artifacts/wta_stats_2010_2026.csv')
+          rows=list(csv.DictReader(p.open(encoding='utf-8-sig')))
+          years=sorted({int(r['season']) for r in rows})
+          assert years == list(range(2010, 2027)), years
+          assert rows
+          print({'rows':len(rows),'years':years,'columns':len(rows[0])})
           PY
 
-      - name: Upload full canonical history
+      - name: Upload WTA CSV artifact
         uses: actions/upload-artifact@v4
         with:
-          name: canonical-history-full
-          retention-days: 1
-          if-no-files-found: error
+          name: wta-stats-2010-2026
           path: |
-            .cache/tbt/history/history-*.parquet
-            .cache/tbt/history/history_manifest.json
-            .cache/tbt/history/_tbt_bundle_manifest.json
-            .cache/tbt/history/canonical_audit.jsonl.gz
+            artifacts/wta_stats_2010_2026.csv
+            artifacts/wta_stats_2010_2026_summary.csv
+          if-no-files-found: error
+          retention-days: 7
