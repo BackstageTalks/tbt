@@ -1,0 +1,25 @@
+name: Final redesign visual gate
+run-name: "Final redesign · ${{ github.sha }}"
+on:
+  push:
+    branches:
+      - redesign/premium-dark-final-20261002
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install playwright==1.57.0
+      - run: python -m playwright install chromium
+      - run: python tests/capture_final_redesign.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: final-redesign-screens
+          path: artifacts/final-redesign/*.png
+          if-no-files-found: error
