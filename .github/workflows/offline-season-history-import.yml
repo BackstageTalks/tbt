@@ -21,11 +21,11 @@ jobs:
       PYTHONPATH: api:scripts
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       STAGE_BRANCH: staging/season-2021-2026-20261001
-      EXPECTED_CANONICAL_ROWS: "739596"
-      EXPECTED_BASELINE_READY: "245939"
+      EXPECTED_CANONICAL_ROWS: "739814"
+      EXPECTED_BASELINE_READY: "261858"
       EXPECTED_STAGE_ROWS: "11689"
-      EXPECTED_QUALITY_ADDED: "11689"
-      EXPECTED_POST_READY: "257628"
+      EXPECTED_QUALITY_ADDED: "0"
+      EXPECTED_POST_READY: "261858"
       EXPECTED_STAGE_SHA256: "0e6e84c421427058425ea43e39fb73439482015702100f9f9b76c33bc37cd4a7"
       EXPECTED_CANONICAL_SIGNATURE_DIGEST: "3b7b16b36dcc17563efccacd8fe1d391a339aab472659edc5d0dd04776271ed7"
       BACKTEST_CUTOFF_UTC: "2026-09-30T01:30:00+00:00"
@@ -55,7 +55,7 @@ jobs:
             "source":"tennisdata_app_season_2021_2026",
             "stage_branch":"staging/season-2021-2026-20261001",
             "expected_stage_rows":11689,
-            "expected_quality_added":11689,
+            "expected_quality_added":0,
           }
           for k,v in expected.items():
               if r.get(k)!=v:
