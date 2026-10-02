@@ -8759,6 +8759,9 @@ body#blinqPremium .header-upgrade-icon{display:none}
     background:#03110f!important;
     padding-bottom:0!important;
   }
+  body#blinqPremium.blinq-home:not(.blinq-admin){
+    background:#03110f!important;background-image:none!important;background-attachment:scroll!important;
+  }
   body#blinqPremium:not(.blinq-admin) .anti-share-watermarks{display:none!important}
   body#blinqPremium:not(.blinq-admin) .app-shell{
     width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;overflow:visible!important;
@@ -8883,6 +8886,9 @@ body#blinqPremium .header-upgrade-icon{display:none}
     background:#03110f!important;background-image:none!important;
     color:#edf7f3!important;-webkit-text-size-adjust:100%!important;
     padding:0!important;
+  }
+  body#blinqPremium.blinq-home:not(.blinq-admin){
+    background:#03110f!important;background-image:none!important;background-attachment:scroll!important;
   }
   body#blinqPremium:not(.blinq-admin) .anti-share-watermarks{display:none!important}
   body#blinqPremium:not(.blinq-admin) .app-shell{
