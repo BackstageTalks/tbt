@@ -1526,16 +1526,37 @@
       state.projectGroupsLoading=false;renderProjectGroupsDialog();
     }
   }
+  function projectEntryLabel(group){
+    const mode=String(group?.effective_entry_mode||group?.entry_mode||'open');
+    if(mode==='locked')return 'UZAVRETÁ';
+    if(mode==='request')return 'NA ŽIADOSŤ';
+    return 'OTVORENÁ';
+  }
+  function projectLockLabel(group){
+    const reason=String(group?.lock_reason||'');
+    if(reason==='full')return '🔒 Skupina je plná';
+    if(reason==='deadline')return '🔒 Vstup je ukončený';
+    if(reason==='inactive')return '🔒 Projekt nie je aktívny';
+    return '🔒 Vstup je uzavretý';
+  }
   function renderProjectGroupsDialog(){
     const list=$('projectGroupsDialogList'),status=$('projectGroupsDialogStatus');if(!list||!status)return;
     if(state.projectGroupsLoading){status.textContent='Načítavam projektové skupiny…';list.innerHTML='';return;}
     if(state.projectGroupsError){status.textContent=state.projectGroupsError;list.innerHTML='';return;}
     const groups=Array.isArray(state.projectGroups)?state.projectGroups:[];
-    status.textContent=groups.length?`${groups.filter(g=>g.joined).length} moje · ${groups.length} dostupných`:'Momentálne nie sú otvorené žiadne projekty.';
+    status.textContent=groups.length?`${groups.filter(g=>g.joined).length} moje · ${groups.length} projektov`:'Momentálne nie sú vytvorené žiadne projekty.';
     list.innerHTML=groups.map(group=>{
-      const full=Number(group.member_count)>=Number(group.capacity),joined=Boolean(group.joined),canJoin=Boolean(group.self_join_enabled)&&!full;
+      const joined=Boolean(group.joined),requested=String(group.request_status||'')==='requested';
       const contribution=Number(group.contribution_cents)>0?`${formatProjectMoney(group.contribution_cents,group.currency)} / osoba`:'Bez spoločného príspevku';
-      return `<article class="project-directory-card is-${escapeHtml(projectGroupColor(group.color))}"><header><div><small>PROJEKT</small><strong>${escapeHtml(group.name||'Projekt')}</strong></div><span>${Number(group.member_count)||0}/${Number(group.capacity)||0}</span></header><p>${escapeHtml(group.description||'')}</p><div class="project-directory-meta"><span>${escapeHtml(contribution)}</span>${Number(group.total_cost_cents)>0?`<span>${escapeHtml(formatProjectMoney(group.total_cost_cents,group.currency))} spolu</span>`:''}</div><footer>${joined?`<button type="button" class="btn btn-ghost" data-project-group-open="${escapeHtml(group.id)}">Otvoriť INFO</button><button type="button" class="btn btn-ghost danger" data-project-leave="${escapeHtml(group.id)}">Odísť</button>`:`<button type="button" class="btn btn-primary" data-project-join="${escapeHtml(group.id)}" ${canJoin?'':'disabled'}>${full?'Skupina je plná':group.self_join_enabled?'Pridať sa':'Len na pozvanie'}</button>`}</footer></article>`;
+      const deadline=group.join_deadline?`<span>Vstup do ${escapeHtml(fmtDate(group.join_deadline))} · ${escapeHtml(fmtTime(group.join_deadline))}</span>`:'';
+      let action='';
+      if(joined)action=`<button type="button" class="btn btn-ghost" data-project-group-open="${escapeHtml(group.id)}">Otvoriť INFO</button><button type="button" class="btn btn-ghost danger" data-project-leave="${escapeHtml(group.id)}">Odísť</button>`;
+      else if(requested)action=`<button type="button" class="btn btn-ghost" disabled>Žiadosť odoslaná</button><button type="button" class="btn btn-ghost danger" data-project-leave="${escapeHtml(group.id)}">Zrušiť žiadosť</button>`;
+      else if(group.locked)action=`<button type="button" class="btn btn-ghost project-locked-button" disabled>${escapeHtml(projectLockLabel(group))}</button>`;
+      else if(group.can_request)action=`<button type="button" class="btn btn-primary" data-project-join="${escapeHtml(group.id)}">Chcem sa pridať</button>`;
+      else if(group.can_join)action=`<button type="button" class="btn btn-primary" data-project-join="${escapeHtml(group.id)}">Pridať sa</button>`;
+      else action=`<button type="button" class="btn btn-ghost project-locked-button" disabled>🔒 Vstup je uzavretý</button>`;
+      return `<article class="project-directory-card is-${escapeHtml(projectGroupColor(group.color))}${group.locked&&!joined?' is-locked':''}"><header><div><small>PROJEKT · ${escapeHtml(projectEntryLabel(group))}</small><strong>${escapeHtml(group.name||'Projekt')}</strong></div><span>${Number(group.member_count)||0}/${Number(group.capacity)||0}</span></header><p>${escapeHtml(group.description||'')}</p><div class="project-directory-meta"><span>${escapeHtml(contribution)}</span>${Number(group.total_cost_cents)>0?`<span>${escapeHtml(formatProjectMoney(group.total_cost_cents,group.currency))} spolu</span>`:''}${deadline}</div><footer>${action}</footer></article>`;
     }).join('');
   }
   function openProjectGroupsDialog(){
