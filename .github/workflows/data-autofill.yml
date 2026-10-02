@@ -1,0 +1,169 @@
+name: Data quota autofill
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Data mode. auto rotates through the highest-value API backfills."
+        required: true
+        default: auto
+        type: choice
+        options: [auto, mega-data, statistics, ace-statistics, sg-scores]
+      max_requests:
+        description: "Per-run Tennis RapidAPI cap. Shared provider-day budget remains authoritative."
+        required: true
+        default: "1000"
+        type: choice
+        options: ["250", "500", "1000"]
+      environment:
+        description: "Also dispatch a static environment gap-fill."
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: tbt-data-autofill-orchestrator
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.plan.outputs.should_run }}
+      mode: ${{ steps.plan.outputs.mode }}
+      max_requests: ${{ steps.plan.outputs.max_requests }}
+      environment: ${{ steps.plan.outputs.environment }}
+      local_now: ${{ steps.plan.outputs.local_now }}
+    steps:
+      - id: plan
+        name: Plan API and environment fill
+        shell: bash
+        env:
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_MAX_REQUESTS: ${{ inputs.max_requests }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from datetime import datetime, timezone
+          from zoneinfo import ZoneInfo
+
+          local = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Bratislava"))
+          automatic = requested_mode = (os.environ.get("INPUT_MODE") or "auto").strip()
+
+          # Reserved daily production window. Automatic external dispatches do not start work here.
+          minute = local.hour * 60 + local.minute
+          blocked = 5 * 60 <= minute < 6 * 60 + 30
+
+          if requested_mode not in {"auto", "mega-data", "statistics", "ace-statistics", "sg-scores"}:
+              raise SystemExit(f"Unsupported mode: {requested_mode}")
+
+          if requested_mode == "auto":
+              # Rotate complementary gaps instead of repeatedly scanning the same slice.
+              modes = ("statistics", "mega-data", "ace-statistics", "sg-scores")
+              mode = modes[local.hour % len(modes)]
+          else:
+              mode = requested_mode
+
+          raw_cap = os.environ.get("INPUT_MAX_REQUESTS") or "1000"
+          try:
+              max_requests = int(raw_cap)
+          except ValueError as exc:
+              raise SystemExit("max_requests must be an integer") from exc
+          if max_requests not in {250, 500, 1000}:
+              raise SystemExit("max_requests must be one of 250, 500, 1000")
+
+          # Environment is zero Tennis RapidAPI usage. Scheduled fills run a few
+          # times overnight/evening; the underlying writer is fill-missing-only.
+          environment = local.hour in {2, 20, 23} or (os.environ.get("INPUT_ENVIRONMENT") or "false").lower() == "true"
+
+          # The normal external trigger uses mode=auto and is blocked during the morning production window.
+          # An explicitly selected manual mode is treated as an operator override.
+          should_run = not (requested_mode == "auto" and blocked)
+          values = {
+              "should_run": str(should_run).lower(),
+              "mode": mode,
+              "max_requests": str(max_requests),
+              "environment": str(environment and should_run).lower(),
+              "local_now": local.isoformat(),
+          }
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              for key, value in values.items():
+                  fh.write(f"{key}={value}\n")
+
+          print(
+              f"local={local.isoformat()} automatic={requested_mode == 'auto'} blocked={blocked} "
+              f"mode={mode} max_requests={max_requests} environment={environment}"
+          )
+          PY
+
+  dispatch-tennis-fill:
+    needs: plan
+    if: ${{ needs.plan.outputs.should_run == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch existing guarded data pipeline
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ needs.plan.outputs.mode }}
+          MAX_REQUESTS: ${{ needs.plan.outputs.max_requests }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f mode="$MODE" \
+            -f max_requests="$MAX_REQUESTS" \
+            -f lookback_days=1095 \
+            -f ace_target_samples=18 \
+            -f ace_lookback_days=550 \
+            -f sg_target_samples=24 \
+            -f sg_lookback_days=730 \
+            -f promote=false
+          echo "Queued $MODE with max_requests=$MAX_REQUESTS."
+          echo "The existing shared API budget service remains authoritative and preserves its provider-day reserve."
+
+  dispatch-environment-fill:
+    needs: plan
+    if: ${{ needs.plan.outputs.environment == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch fill-missing static environment enrichment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run environment-enrichment.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f start=2021-01-01 \
+            -f end='' \
+            -f limit=0 \
+            -f mode=write \
+            -f force=false \
+            -f retry_unresolved=true \
+            -f static_only=true \
+            -f max_requests=4000
+          echo "Queued static environment gap-fill (zero Tennis RapidAPI usage)."
+
+  summary:
+    needs: [plan, dispatch-tennis-fill, dispatch-environment-fill]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write summary
+        shell: bash
+        run: |
+          {
+            echo "# BlinQ data autofill"
+            echo "- Bratislava time: ${{ needs.plan.outputs.local_now }}"
+            echo "- API fill allowed: ${{ needs.plan.outputs.should_run }}"
+            echo "- Tennis mode: ${{ needs.plan.outputs.mode }}"
+            echo "- Per-run Tennis API cap: ${{ needs.plan.outputs.max_requests }}"
+            echo "- Environment fill: ${{ needs.plan.outputs.environment }}"
+            echo "- Reserved no-autofill window: 05:00–06:30 Europe/Bratislava"
+            echo "- Tennis API quota protection: existing shared provider-day budget guard"
+          } >> "$GITHUB_STEP_SUMMARY"
