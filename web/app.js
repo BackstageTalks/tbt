@@ -5010,10 +5010,12 @@
     state.adminUsers=null;state.adminUsersLoading=false;state.adminUsersError='';state.adminUsersWarning='';state.adminSelectedUser=null;
     state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
     state.railMatch=null;state.previewPlan=null;state.demoFeedBackup=null;state.demoMode=false;state.dashboardVisibility=null;state.pushConfig=null;state.pushBusy=false;
+    state.projectGroups=[];state.projectGroupsLoading=false;state.projectGroupsError='';state.activeProjectGroupId='';
+    state.adminProjectGroups=null;state.adminProjectGroupsLoading=false;state.adminProjectGroupsError='';state.adminProjectGroupId='';
     state.route='predictions';state.page=0;state.resultsPage=0;state.dailyHubExpanded=false;state.dashboardSearch='';
     Object.keys(state.marketPage||{}).forEach(key=>{state.marketPage[key]=0;});
     setInsightDrawer(false);closeProfileMenu();
-    ['matchDialog','accountDialog','upgradeDialog'].forEach(id=>{const dialog=$(id);if(dialog?.open)dialog.close();});
+    ['matchDialog','accountDialog','upgradeDialog','projectGroupsDialog'].forEach(id=>{const dialog=$(id);if(dialog?.open)dialog.close();});
     const shell=$('appShell');if(shell)shell.hidden=true;
   }
   async function signOutCurrentSession(){
@@ -5117,7 +5119,29 @@
     $('prevPick').onclick=()=>{state.page=Math.max(0,state.page-1);renderPredictions()}; $('nextPick').onclick=()=>{state.page+=1;renderPredictions()}; $('dialogClose').onclick=()=>$('matchDialog').close(); $('matchDialog').addEventListener('click',e=>{if(e.target===$('matchDialog'))$('matchDialog').close()}); const accountDialog=$('accountDialog'); if($('accountDialogClose'))$('accountDialogClose').onclick=()=>accountDialog.close(); if(accountDialog)accountDialog.addEventListener('click',e=>{if(e.target===accountDialog)accountDialog.close()}); $('profileButton').onclick=e=>{e.stopPropagation();if(window.matchMedia('(max-width:900px)').matches){toggleProfileMenu();return;}closeProfileMenu();openAccountDialog();};
     $('profileMenuToggle').onclick=e=>{e.stopPropagation();toggleProfileMenu();};
     $('profileAccountLink').onclick=()=>{closeProfileMenu();openAccountDialog();};
+    if($('profileProjectsLink'))$('profileProjectsLink').onclick=()=>openProjectGroupsDialog();
     $('profileAdminLink').onclick=()=>closeProfileMenu();
+    const projectDialog=$('projectGroupsDialog');
+    if($('projectGroupsClose'))$('projectGroupsClose').onclick=()=>projectDialog?.close();
+    if(projectDialog)projectDialog.addEventListener('click',e=>{if(e.target===projectDialog)projectDialog.close();});
+    if($('projectGroupBar'))$('projectGroupBar').onclick=event=>{const button=event.target.closest('[data-project-group-open]');if(button)openProjectGroupMessages(button.dataset.projectGroupOpen);};
+    if($('projectGroupsDialogList'))$('projectGroupsDialogList').onclick=async event=>{
+      const open=event.target.closest('[data-project-group-open]');
+      if(open){projectDialog?.close();openProjectGroupMessages(open.dataset.projectGroupOpen);return;}
+      const join=event.target.closest('[data-project-join]');
+      const leave=event.target.closest('[data-project-leave]');
+      const groupId=String(join?.dataset.projectJoin||leave?.dataset.projectLeave||'');if(!groupId)return;
+      const button=join||leave;button.disabled=true;
+      try{
+        if(join)await BlinqAuth.joinProjectGroup(groupId);
+        else await BlinqAuth.leaveProjectGroup(groupId);
+        state.projectGroups=[];
+        await loadProjectGroups(true);
+        if(state.feed?.account)state.feed.account.project_groups=state.projectGroups.filter(group=>group.joined);
+        renderProjectGroupBar();
+        await loadInsights(true);
+      }catch(error){showStatus(error?.message||'Projektovú skupinu sa nepodarilo upraviť.');button.disabled=false;}
+    };
     document.addEventListener('click',e=>{const menu=$('profileMenu');if(menu&&!menu.hidden&&!menu.contains(e.target)&&!$('profileShell')?.contains(e.target))closeProfileMenu();});
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('profileMenu')?.hidden){closeProfileMenu();$('profileButton')?.focus();}});
     $('headerLogoutButton').onclick=signOutCurrentSession;$('upgradeDialogClose').onclick=()=>$('upgradeDialog').close();$('upgradeDialog').addEventListener('click',e=>{if(e.target===$('upgradeDialog'))$('upgradeDialog').close()});
@@ -5126,7 +5150,7 @@
     document.querySelectorAll('[data-open-insights]').forEach(node=>node.addEventListener('click',()=>setInsightDrawer(true,'info')));
     if($('insightDrawerClose'))$('insightDrawerClose').onclick=()=>setInsightDrawer(false);
     if($('insightBackdrop'))$('insightBackdrop').onclick=()=>setInsightDrawer(false);
-    if($('insightDrawerToolbar'))$('insightDrawerToolbar').onclick=async event=>{const filter=event.target.closest('[data-insight-filter]');if(filter){state.insightFilter=filter.dataset.insightFilter||'all';renderInsightDrawer();return;}if(event.target.closest('[data-insight-read-all]')){const unread=state.insights.filter(item=>!item.read&&(state.insightChannel==='live'?isLiveInsight(item):!isLiveInsight(item)));for(const item of unread){await markInsightRead(item.id);}renderInsightDrawer();}};
+    if($('insightDrawerToolbar'))$('insightDrawerToolbar').onclick=async event=>{const filter=event.target.closest('[data-insight-filter]');if(filter){state.insightFilter=filter.dataset.insightFilter||'all';renderInsightDrawer();return;}if(event.target.closest('[data-insight-read-all]')){const unread=state.insights.filter(item=>!item.read&&insightMatchesCurrentChannel(item));for(const item of unread){await markInsightRead(item.id);}renderInsightDrawer();}};
     if($('insightDrawerList'))$('insightDrawerList').onclick=event=>{
       const liveTab=event.target.closest('[data-live-radar-tab]');if(liveTab){const tab=String(liveTab.dataset.liveRadarTab||'');state.liveRadarTab=['set2','results'].includes(tab)?tab:'comeback';state.insightFilter='all';renderInsightDrawer();return;}
       const article=event.target.closest('[data-insight-id]');if(article)markInsightRead(article.dataset.insightId);
