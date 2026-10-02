@@ -90,12 +90,13 @@ def main():
                 cards = page.locator('.dashboard-kpi')
                 sizes = [cards.nth(i).bounding_box() for i in range(3)]
                 assert max(b['width'] for b in sizes)-min(b['width'] for b in sizes) <= 1
-                if width > 760:
-                    assert abs(sizes[-1]['x']+sizes[-1]['width']-boxes[0]['x']-boxes[0]['width']) <= 1
-                    assert len({b['y'] for b in sizes}) == 1
+                assert abs(sizes[-1]['x']+sizes[-1]['width']-boxes[0]['x']-boxes[0]['width']) <= 1
+                assert len({b['y'] for b in sizes}) == 1, (width, sizes, page.locator('#dashboardKpis').evaluate('(e)=>getComputedStyle(e).gridTemplateColumns'))
+                body_background = page.locator('body').evaluate('(e)=>getComputedStyle(e).backgroundImage')
+                if width <= 900:
+                    assert body_background == 'none', (width, body_background)
                 else:
-                    assert len({b['y'] for b in sizes}) == 3, (width, sizes, page.locator('#dashboardKpis').evaluate('(e)=>getComputedStyle(e).gridTemplateColumns'))
-                assert page.locator('body').evaluate('(e)=>getComputedStyle(e).backgroundImage') == login_background
+                    assert body_background == login_background
                 # Homepage has no global, hero, footer or prediction watermarks.
                 assert page.locator('#dashboardHero').evaluate(
                     '(e) => getComputedStyle(e, "::after").display'
