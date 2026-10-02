@@ -41,7 +41,7 @@ def test_r28_final_mobile_contract_is_last_cascade_layer():
 def test_r28_mobile_cards_use_semantic_labels_not_column_guessing():
     assert "const mobileLabels=dailyHubColumns(tab);" in APP
     assert "cell.dataset.label=mobileLabels[i]||'';" in APP
-    tail = CSS[CSS.index("BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract"):]
+    tail = CSS[CSS.index("BlinQ mobile application shell — 2026-10-02"):]
     for cls in ("hub-rank", "hub-time", "hub-tournament-cell", "hub-match-cell", "hub-pick", "hub-odds", "hub-confidence-cell", "hub-action-cell"):
         assert f".{cls}" in tail
 
