@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "mode": "audit",
+  "source": "livetennisapi_academic_pbp",
+  "zenodo_record": 22048731,
+  "license": "CC BY-NC 4.0",
+  "raw_redistribution": false,
+  "requested_at_utc": "2026-10-02T15:35:00Z"
+}
