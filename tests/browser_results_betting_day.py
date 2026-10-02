@@ -99,13 +99,18 @@ def main():
                 const prevDate=new Date(Date.UTC(y,m-1,d-1));
                 const prev=`${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth()+1).padStart(2,'0')}-${String(prevDate.getUTCDate()).padStart(2,'0')}`;
                 const basePub=structuredClone(s.feed.results[0].market_publications[0]);
-                const mk=(event_id,betting_day)=>({
-                  event_id,tour:'ATP',surface:'hard',scheduled_at:new Date().toISOString(),tournament:'T',
+                const mk=(event_id,betting_day,scheduled_at=new Date().toISOString())=>({
+                  event_id,tour:'ATP',surface:'hard',scheduled_at,tournament:'T',winner_id:'p1',
+                  betting:{market:'match_winner',selection_id:'p1'},
                   player1:{id:'p1',name:'A'},player2:{id:'p2',name:'B'},
                   market_publications:[{...structuredClone(basePub),betting_day}]
                 });
+                const beforeSix=day+'T02:00:00Z';
+                const current=mk('current-day',day);
+                const staleExplicit=mk('before-six-but-explicit-current',day,beforeSix);
                 s.feed.entitlements={daily_pick_count:64};
-                s.feed.results=[mk('current-day',day),mk('previous-day',prev)];
+                s.feed.top_daily_picks=[structuredClone(current),structuredClone(staleExplicit)];
+                s.feed.results=[current,staleExplicit,mk('previous-day',prev)];
                 s.resultsFilters={category:'all',tour:'',surface:'',window:'today',
                   dateFrom:'',dateTo:'',bettingDay:true};
                 const host=document.querySelector('#routePanel');

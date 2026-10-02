@@ -468,6 +468,53 @@ def test_live_api_settles_results_beyond_30_history_checks():
     assert result["provider_requests"] == 31
 
 
+def test_production_worker_tracks_only_current_0600_betting_day_rows():
+    now = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
+    before_six_local = _row("old-day", "11", "2026-10-02T01:10:00+00:00")
+    current = _row("current-day", "11", "2026-10-02T08:00:00+00:00")
+    provider = _Provider()
+
+    result = scan_match_statuses(
+        {"top_daily_picks": [before_six_local, current]},
+        provider,
+        now=now,
+        max_checks=20,
+    )
+
+    assert result["tracked"] == 1
+    assert result["due"] == 1
+    assert set(result["pending"]) == {"current-day"}
+    assert provider.previous_calls == [("11", 0)]
+
+
+def test_production_worker_drops_prior_day_pending_and_terminal_snapshot_rows():
+    now = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
+    current = _row("current-day", "11", "2026-10-02T08:00:00+00:00")
+    previous = {
+        "pending": {
+            "old-day": {
+                "t": "2026-10-02T01:10:00+00:00",
+                "s": "11", "a": "11", "b": "22", "c": "", "p": "1",
+            }
+        },
+        "statuses": {
+            "old-finished": {"status": "win", "checked_at": "2026-10-02T02:00:00+00:00"},
+        },
+    }
+
+    result = scan_match_statuses(
+        {"top_daily_picks": [current]},
+        _Provider(),
+        previous,
+        now=now,
+        max_checks=20,
+    )
+
+    assert "old-day" not in result["pending"]
+    assert "old-finished" not in result["statuses"]
+    assert set(result["pending"]) == {"current-day"}
+
+
 def test_match_status_accepts_external_24_7_scheduler():
     from pathlib import Path
     workflow = (Path(__file__).resolve().parents[1] /
@@ -954,7 +1001,7 @@ def test_legacy_unmarked_pending_backlog_is_dropped_on_public_feed():
     assert result["pending_count"] == 0
 
 
-def test_marked_public_pending_survives_rollover_for_48_hours_only():
+def test_public_pending_is_not_carried_across_betting_day_rollover():
     now = datetime(2026, 10, 1, 12, 0, tzinfo=timezone.utc)
     previous = {
         "pending": {
@@ -977,7 +1024,8 @@ def test_marked_public_pending_survives_rollover_for_48_hours_only():
 
     result = scan_match_statuses(feed, _Provider(), previous, now=now, max_checks=20)
 
-    assert result["tracked"] == 1
-    assert result["due"] == 1
-    assert "recent-public" in result["pending"]
+    assert result["tracked"] == 0
+    assert result["due"] == 0
+    assert result["pending_count"] == 0
+    assert "recent-public" not in result["pending"]
     assert "stale-public" not in result["pending"]

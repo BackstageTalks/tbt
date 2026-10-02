@@ -3045,9 +3045,50 @@
     if(/^\d{4}-\d{2}-\d{2}$/.test(explicit))return explicit;
     return bratislavaBettingDayKey(row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0,6);
   }
-  function resultPublicationMatchesWindow(row,publication,filters,now=Date.now()){
+  function resultBetIdentity(row,publication,defaultMarket='match_winner'){
+    const betting=row?.betting&&typeof row.betting==='object'?row.betting:{};
+    const event=String(row?.event_id||row?.id||row?.match_id||'').trim();
+    let market=String(
+      publication?.market||publication?.projection_metric||betting?.market||row?.market||defaultMarket||''
+    ).trim().toLowerCase();
+    if(['top200','top','prime','value','daily'].includes(market))market='match_winner';
+    const scope=String(publication?.projection_scope||row?.projection_scope||'').trim().toLowerCase();
+    const metric=String(publication?.projection_metric||row?.projection_metric||'').trim().toLowerCase();
+    const selection=String(
+      publication?.selection_id||publication?.winner_id||publication?.pick_id
+      ||betting?.selection_id||row?.winner_id||row?.pick_id||row?.selection_id
+      ||publication?.selection||row?.pick||row?.selection||''
+    ).trim().toLowerCase();
+    return event&&market&&selection?[event,market,scope,metric,selection].join('::'):'';
+  }
+  function currentBettingDayPublishedKeys(now=Date.now()){
+    const currentDay=bratislavaBettingDayKey(now,6),keys=new Set();
+    const sources=[
+      ['top200_picks','match_winner'],['daily_picks','match_winner'],
+      ['top_daily_picks','match_winner'],['prime_picks','match_winner'],
+      ['value_picks','match_winner'],['doubles_picks','match_winner'],
+      ['ace_picks',''],['sg_picks','']
+    ];
+    sources.forEach(([feedKey,defaultMarket])=>{
+      const rows=Array.isArray(state.feed?.[feedKey])?state.feed[feedKey]:[];
+      rows.forEach(row=>{
+        const scheduled=row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0;
+        if(bratislavaBettingDayKey(scheduled,6)!==currentDay)return;
+        const key=resultBetIdentity(row,row,defaultMarket);
+        if(key)keys.add(key);
+      });
+    });
+    return keys;
+  }
+  function resultPublicationMatchesWindow(row,publication,filters,now=Date.now(),todayKeys=null){
     const window=String(filters?.window||'all');
-    if(window==='today')return resultPublicationBettingDay(row,publication)===bratislavaBettingDayKey(now,6);
+    if(window==='today'){
+      const scheduled=row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0;
+      if(bratislavaBettingDayKey(scheduled,6)!==bratislavaBettingDayKey(now,6))return false;
+      const key=resultBetIdentity(row,publication,'match_winner');
+      const cohort=todayKeys||currentBettingDayPublishedKeys(now);
+      return !!key&&cohort.has(key);
+    }
     const ts=new Date(row?.scheduled_at||row?.date||0).getTime();
     if(window==='custom'){
       const from=String(filters?.dateFrom||'').trim(),to=String(filters?.dateTo||'').trim();
@@ -3064,6 +3105,7 @@
   }
   function filteredResults(filtersOverride=null){
     const filters=filtersOverride||state.resultsFilters||{},now=Date.now();
+    const todayKeys=String(filters?.window||'all')==='today'?currentBettingDayPublishedKeys(now):null;
     return (state.feed.results||[]).filter(row=>{
       if(filters.tour&&String(row?.tour||'').toUpperCase()!==filters.tour)return false;
       // "All surfaces" really means all settled published rows. Unknown/missing
@@ -3071,7 +3113,7 @@
       if(filters.surface){const raw=String(row?.surface||'').toLowerCase();const mapped=raw==='indoor_hard'?'hard':raw;if(mapped!==filters.surface)return false;}
       const category=filters.category||'all';
       const pubs=publicResultPublications(row)
-        .filter(p=>resultPublicationMatchesWindow(row,p,filters,now))
+        .filter(p=>resultPublicationMatchesWindow(row,p,filters,now,todayKeys))
         .filter(p=>publicationOutcome(p).kind!=='pending');
       if(!pubs.length)return false;
       return category==='all'||pubs.some(p=>publicationMatchesResultCategory(p,category));
@@ -3141,9 +3183,10 @@
     const specific=['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
     const now=Date.now();
+    const todayKeys=String(filters?.window||'all')==='today'?currentBettingDayPublishedKeys(now):null;
     (rows||[]).forEach(row=>{
       const pubs=publicResultPublications(row)
-        .filter(p=>!filters||resultPublicationMatchesWindow(row,p,filters,now))
+        .filter(p=>!filters||resultPublicationMatchesWindow(row,p,filters,now,todayKeys))
         .filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category))
         .filter(p=>category!=='winners'||String(row?.prediction_family||'').toLowerCase()!=='doubles')
         .filter(p=>publicationOutcome(p).kind!=='pending');
