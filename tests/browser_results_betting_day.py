@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,wireResultsFilters};\n"
+            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,wireResultsFilters,bratislavaBettingDayKey};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -91,8 +91,34 @@ def main():
             # browser-local midnight behavior.
             assert result["midnight"] == ["before", "start"], result
             assert result["state"] is False, result
+
+            today = page.evaluate("""() => {
+                const t=bettingDayTest,s=t.state;
+                const day=t.bratislavaBettingDayKey(Date.now(),6);
+                const [y,m,d]=day.split('-').map(Number);
+                const prevDate=new Date(Date.UTC(y,m-1,d-1));
+                const prev=`${prevDate.getUTCFullYear()}-${String(prevDate.getUTCMonth()+1).padStart(2,'0')}-${String(prevDate.getUTCDate()).padStart(2,'0')}`;
+                const basePub=structuredClone(s.feed.results[0].market_publications[0]);
+                const mk=(event_id,betting_day)=>({
+                  event_id,tour:'ATP',surface:'hard',scheduled_at:new Date().toISOString(),tournament:'T',
+                  player1:{id:'p1',name:'A'},player2:{id:'p2',name:'B'},
+                  market_publications:[{...structuredClone(basePub),betting_day}]
+                });
+                s.feed.entitlements={daily_pick_count:64};
+                s.feed.results=[mk('current-day',day),mk('previous-day',prev)];
+                s.resultsFilters={category:'all',tour:'',surface:'',window:'today',
+                  dateFrom:'',dateTo:'',bettingDay:true};
+                const host=document.querySelector('#routePanel');
+                host.innerHTML=t.renderResultsFilters()+t.resultsSummary();
+                const ids=t.filteredResults().map(row=>row.event_id);
+                const sample=[...document.querySelectorAll('.metric-card')].at(-1)?.textContent||'';
+                return {ids,sample,window:s.resultsFilters.window};
+            }""")
+            assert today["ids"] == ["current-day"], today
+            assert today["window"] == "today", today
+            assert "1/64" in today["sample"], today
             assert not errors, errors
-            print("Results Betting day 06:00 Europe/Bratislava default + opt-out: PASS")
+            print("Results current betting-day cohort + 06:00 custom filter contract: PASS")
         finally:
             browser.close()
 
