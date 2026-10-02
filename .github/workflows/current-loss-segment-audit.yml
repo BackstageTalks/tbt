@@ -1,0 +1,68 @@
+name: Current loss segment audit
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    if: github.head_ref == 'ops/current-loss-audit-20261002' || github.ref_name == 'ops/current-loss-audit-20261002'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify private data access
+        run: |
+          test -n "$GH_TOKEN"
+          gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility
+      - name: Run issued-market audits
+        run: |
+          python scripts/audit_top_reliability.py             --data-repository "$TBT_DATA_REPOSITORY"             --window-days 90             --out .cache/tbt/current-loss/top.json
+          python scripts/audit_market_reliability.py             --data-repository "$TBT_DATA_REPOSITORY"             --window-days 90             --out .cache/tbt/current-loss/market.json             --markdown .cache/tbt/current-loss/market.md
+      - name: Print decision evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          top = json.loads(Path(".cache/tbt/current-loss/top.json").read_text())
+          market = json.loads(Path(".cache/tbt/current-loss/market.json").read_text())
+
+          def compact(m):
+              keys = ("published","settled","wins","losses","hit_rate","average_odds",
+                      "yield_flat_stake","calibration_n","mean_confidence",
+                      "observed_minus_predicted","brier","small_sample")
+              return {k:m.get(k) for k in keys}
+
+          out = {
+              "top_overall": compact(top["overall"]),
+              "top_by_competition": {k:compact(v) for k,v in top["subgroups"]["competition"].items()},
+              "top_by_confidence": {k:compact(v) for k,v in top["subgroups"]["confidence_band"].items()},
+              "top_by_stats": {k:compact(v) for k,v in top["subgroups"]["stats"].items()},
+              "top_by_surface_evidence": {k:compact(v) for k,v in top["subgroups"]["surface_evidence"].items()},
+              "top_by_picked_rank": {k:compact(v) for k,v in top["subgroups"]["picked_rank"].items()},
+              "market_sections": {k:compact(v["overall"]) for k,v in market["sections"].items()},
+              "top_market_by_depth": {k:compact(v) for k,v in market["sections"]["top_daily"]["by_data_depth"].items()},
+              "top_market_by_confidence": {k:compact(v) for k,v in market["sections"]["top_daily"]["by_confidence"].items()},
+              "value_by_depth": {k:compact(v) for k,v in market["sections"]["value"]["by_data_depth"].items()},
+              "high_confidence_top_losses": market["high_confidence_top_losses"],
+              "probability_market_discrepancies": market["probability_market_discrepancies"],
+              "recent_value_losses": market["value_audit"]["recent_losses"],
+              "diagnostics": market["diagnostics"],
+          }
+          print("BLINQ_CURRENT_LOSS_AUDIT_BEGIN")
+          print(json.dumps(out, indent=2, ensure_ascii=False))
+          print("BLINQ_CURRENT_LOSS_AUDIT_END")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: current-loss-segment-audit
+          path: .cache/tbt/current-loss/
+          retention-days: 3
