@@ -80,17 +80,58 @@ def main():
                 const betting=t.filteredResults().map(row=>row.event_id);
                 const checked=document.querySelector('#resultsBettingDay')?.checked;
                 const sample=[...document.querySelectorAll('.metric-card')].at(-1)?.textContent||'';
+                document.querySelector('[data-results-filter-toggle]').click();
                 document.querySelector('#resultsBettingDay').click();
-                const midnight=t.filteredResults().map(row=>row.event_id);
-                return {betting,midnight,checked,sample,state:s.resultsFilters.bettingDay};
+                const beforeApply=t.filteredResults().map(row=>row.event_id);
+                const stateBeforeApply=s.resultsFilters.bettingDay;
+                document.querySelector('#resultsFilterApply').click();
+                const afterApply=t.filteredResults().map(row=>row.event_id);
+                return {betting,beforeApply,afterApply,checked,sample,stateBeforeApply,state:s.resultsFilters.bettingDay};
             }""")
             assert result["betting"] == ["start", "inside"], result
             assert result["checked"] is True, result
             assert "2" in result["sample"], result
-            # Chromium CI runs in UTC: disabling Betting day restores the old
-            # browser-local midnight behavior.
-            assert result["midnight"] == ["before", "start"], result
+            # Phone filters are staged: changing a control never mutates the
+            # applied filter until the explicit Apply action.
+            assert result["beforeApply"] == ["start", "inside"], result
+            assert result["stateBeforeApply"] is True, result
+            # Chromium CI runs in UTC: after Apply, disabling Betting day
+            # restores the old browser-local midnight behavior.
+            assert result["afterApply"] == ["before", "start"], result
             assert result["state"] is False, result
+
+            staged = page.evaluate("""() => {
+                const t=bettingDayTest,s=t.state;
+                const host=document.querySelector('#routePanel');
+                s.resultsFilters={category:'all',tour:'',surface:'',window:'custom',
+                  dateFrom:'2026-09-27',dateTo:'2026-09-27',bettingDay:true};
+                host.innerHTML=t.renderResultsFilters()+t.resultsSummary();
+                t.wireResultsFilters();
+                const toggle=document.querySelector('[data-results-filter-toggle]');
+                toggle.click();
+                document.querySelector('#resultsTour').value='WTA';
+                document.querySelector('#resultsTour').dispatchEvent(new Event('change',{bubbles:true}));
+                const stagedState=s.resultsFilters.tour;
+                toggle.click();
+                toggle.click();
+                const discarded=document.querySelector('#resultsTour').value;
+                document.querySelector('#resultsFilterReset').click();
+                const resetDraft={
+                  category:document.querySelector('#resultsCategory').value,
+                  tour:document.querySelector('#resultsTour').value,
+                  window:document.querySelector('#resultsWindow').value,
+                  bettingDay:document.querySelector('#resultsBettingDay').checked
+                };
+                const beforeResetApply={...s.resultsFilters};
+                document.querySelector('#resultsFilterApply').click();
+                return {stagedState,discarded,resetDraft,beforeResetApply,afterResetApply:{...s.resultsFilters}};
+            }""")
+            assert staged["stagedState"] == "", staged
+            assert staged["discarded"] == "", staged
+            assert staged["resetDraft"] == {"category": "all", "tour": "", "window": "today", "bettingDay": True}, staged
+            assert staged["beforeResetApply"]["window"] == "custom", staged
+            assert staged["afterResetApply"]["window"] == "today", staged
+            assert staged["afterResetApply"]["bettingDay"] is True, staged
 
             today = page.evaluate("""() => {
                 const t=bettingDayTest,s=t.state;
