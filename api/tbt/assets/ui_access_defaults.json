@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "ui_revision": "7.3.6",
-  "ui_patch": "736-r62-top200",
+  "ui_patch": "736-r61",
   "access_contract_revision": 1,
   "info_contract_revision": 1,
   "elements": {
