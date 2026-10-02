@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'top200', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true}, resultsDraftFilters:null, resultsFilterOpen:false, resultsOutcomeTab:'all', resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'top200', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -3138,8 +3138,15 @@
     const required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
     return `<div class="results-access-lock" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}"><span aria-hidden="true">🔒</span><div><small>${escapeHtml(lcopy('LOCKED SECTION','UZAMKNUTÁ SEKCIA','UZAMČENÁ SEKCE'))}</small><strong>${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}</strong><p>${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od: ${required}`,`Dostupné od: ${required}`))}</p></div></div>`;
   }
+  function defaultResultsFilters(){
+    return {category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true};
+  }
+  function isPhoneResultsLayout(){
+    return Boolean(window.matchMedia&&window.matchMedia('(max-width: 767px)').matches);
+  }
   function renderResultsFilters(){
-    const rows=state.feed.results||[],filters=state.resultsFilters||{},hours=resultsHistoryHours();
+    const rows=state.feed.results||[],applied=state.resultsFilters||defaultResultsFilters(),hours=resultsHistoryHours();
+    const filters=state.resultsFilterOpen&&state.resultsDraftFilters?state.resultsDraftFilters:applied;
     const tours=[...new Set(rows.map(r=>String(r?.tour||'').toUpperCase()).filter(Boolean))].sort();
     const surfaces=[...new Set(rows.map(r=>{const v=String(r?.surface||'').toLowerCase();return v==='indoor_hard'?'hard':v;}).filter(v=>v&&v!=='unknown'))].sort();
     const option=(value,label,selected)=>`<option value="${escapeHtml(value)}"${value===selected?' selected':''}>${escapeHtml(label)}</option>`;
@@ -3149,23 +3156,29 @@
     const periodOptions=hours
       ?[todayOption,[String(fixedDays),fixedLabel]]
       :[todayOption,['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
-    if(!periodOptions.some(([value])=>value===String(state.resultsFilters.window||''))){
-      state.resultsFilters.window='today';
-      state.resultsFilters.dateFrom='';
-      state.resultsFilters.dateTo='';
+    if(!periodOptions.some(([value])=>value===String(applied.window||''))){
+      state.resultsFilters={...applied,window:'today',dateFrom:'',dateTo:''};
     }
-    const mobileFilterLabel=resultCategoryLabel(filters.category||'all');
-    return `<section class="results-filter-shell">
-      <button class="results-mobile-filter-toggle" type="button" data-results-filter-toggle aria-expanded="false">
-        <span class="results-mobile-filter-title"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16l-6.2 7.1v5.7l-3.6 1.7v-7.4z"></path></svg><strong>${escapeHtml(lcopy('Filters','Filtre','Filtry'))}</strong></span>
-        <span class="results-mobile-filter-current">${escapeHtml(mobileFilterLabel)}<i aria-hidden="true"></i></span>
+    const open=Boolean(state.resultsFilterOpen);
+    const filterButtonLabel=open?lcopy('Close filters','Zavrieť filtre','Zavřít filtry'):lcopy('Filters','Filtre','Filtry');
+    return `<div class="results-mobile-heading">
+      <h2>${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}</h2>
+      <button class="results-mobile-filter-toggle" type="button" data-results-filter-toggle aria-expanded="${open?'true':'false'}" aria-controls="resultsFilterPanel">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M7 12h10M10 18h4"></path><circle cx="8" cy="6" r="1.5"></circle><circle cx="15" cy="12" r="1.5"></circle><circle cx="12" cy="18" r="1.5"></circle></svg>
+        <span>${escapeHtml(filterButtonLabel)}</span>
       </button>
-      <div class="results-filter-bar results-filter-bar-v683">
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top200','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
-      ${hours?'':`<label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('From','Od','Od'))}</span><span class="date-shell"><input id="resultsDateFrom" type="date" value="${escapeHtml(filters.dateFrom||'')}"><i aria-hidden="true"></i></span></label><label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('To','Do','Do'))}</span><span class="date-shell"><input id="resultsDateTo" type="date" value="${escapeHtml(filters.dateTo||'')}"><i aria-hidden="true"></i></span></label><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava.','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava.','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava.'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
+    </div>
+    <section id="resultsFilterShell" class="results-filter-shell${open?' is-open':''}">
+      <div id="resultsFilterPanel" class="results-filter-bar results-filter-bar-v683" aria-hidden="${open?'false':'true'}">
+        <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top200','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
+        <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
+        <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
+        <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
+        ${hours?'':`<label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('From','Od','Od'))}</span><span class="date-shell"><input id="resultsDateFrom" type="date" value="${escapeHtml(filters.dateFrom||'')}"><i aria-hidden="true"></i></span></label><label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('To','Do','Do'))}</span><span class="date-shell"><input id="resultsDateTo" type="date" value="${escapeHtml(filters.dateTo||'')}"><i aria-hidden="true"></i></span></label><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava.','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava.','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava.'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
+        <div class="results-filter-actions">
+          <button id="resultsFilterReset" class="results-filter-reset" type="button"><span aria-hidden="true">↶</span>${escapeHtml(lcopy('Reset','Reset','Reset'))}</button>
+          <button id="resultsFilterApply" class="results-filter-apply" type="button"><span aria-hidden="true">✓</span>${escapeHtml(lcopy('Apply filters','Použiť filtre','Použít filtry'))}</button>
+        </div>
       </div>
     </section>`;
   }
@@ -3204,6 +3217,67 @@
       });
     });
     return [...unique.values()].sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
+  }
+  function publicResultPublicationsAnyState(row){
+    return (Array.isArray(row?.market_publications)?row.market_publications:[])
+      .filter(p=>p&&p.issued_at&&!p.excluded_reason&&isPublicResultPublication(p));
+  }
+  function isInProgressResult(row,publication){
+    const statuses=[
+      row?.status,row?.match_status,row?.lifecycle_status,row?.live_status,
+      publication?.status,publication?.result?.status,publication?.result?.outcome
+    ].map(v=>String(v||'').trim().toLowerCase().replace(/[\s-]+/g,'_')).filter(Boolean);
+    return statuses.some(v=>['live','in_progress','inplay','in_play','started','ongoing','prebieha','prebiehajuce','zacate','začaté'].includes(v));
+  }
+  function pendingPublishedEntries(category='all',filters=state.resultsFilters||defaultResultsFilters()){
+    const specific=['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
+    const unique=new Map(),now=Date.now();
+    const todayKeys=String(filters?.window||'all')==='today'?currentBettingDayPublishedKeys(now):null;
+    (state.feed.results||[]).forEach(row=>{
+      if(filters.tour&&String(row?.tour||'').toUpperCase()!==filters.tour)return;
+      if(filters.surface){const raw=String(row?.surface||'').toLowerCase(),mapped=raw==='indoor_hard'?'hard':raw;if(mapped!==filters.surface)return;}
+      const pubs=publicResultPublicationsAnyState(row)
+        .filter(p=>resultPublicationMatchesWindow(row,p,filters,now,todayKeys))
+        .filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category))
+        .filter(p=>category!=='winners'||String(row?.prediction_family||'').toLowerCase()!=='doubles')
+        .filter(p=>publicationOutcome(p).kind==='pending'&&isInProgressResult(row,p));
+      pubs.forEach((publication,index)=>{
+        const key=canonicalResultPublicationKey(row,publication,index);
+        const current=unique.get(key);
+        if(!current||new Date(publication.issued_at)<new Date(current.publication.issued_at))unique.set(key,{row,publication});
+      });
+    });
+    return [...unique.values()].sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
+  }
+  function resultEntriesForActiveTab(filters=state.resultsFilters||defaultResultsFilters()){
+    const rows=filteredResults(filters),category=filters.category||'all';
+    const settled=settledPublishedEntries(rows,category,filters);
+    const running=pendingPublishedEntries(category,filters);
+    if(!running.length&&state.resultsOutcomeTab==='running')state.resultsOutcomeTab='all';
+    const all=[...settled,...running].sort((a,b)=>new Date(b.row?.scheduled_at||0)-new Date(a.row?.scheduled_at||0));
+    const tab=state.resultsOutcomeTab||'all';
+    const entries=tab==='win'?settled.filter(x=>publicationOutcome(x.publication).kind==='win')
+      :tab==='loss'?settled.filter(x=>publicationOutcome(x.publication).kind==='loss')
+      :tab==='running'?running:all;
+    return {
+      entries,settled,running,
+      counts:{
+        all:all.length,
+        win:settled.filter(x=>publicationOutcome(x.publication).kind==='win').length,
+        loss:settled.filter(x=>publicationOutcome(x.publication).kind==='loss').length,
+        running:running.length
+      }
+    };
+  }
+  function resultsOutcomeTabs(){
+    const {counts}=resultEntriesForActiveTab();
+    const tabs=[
+      ['all',lcopy('All','Všetky','Všechny'),counts.all],
+      ['win',lcopy('Wins','Výhry','Výhry'),counts.win],
+      ['loss',lcopy('Losses','Prehry','Prohry'),counts.loss],
+      ...(counts.running?[['running',lcopy('In progress','Prebiehajúce','Probíhající'),counts.running]]:[])
+    ];
+    return `<div class="results-outcome-tabs" role="tablist" aria-label="${escapeHtml(lcopy('Result status','Stav výsledku','Stav výsledku'))}">${tabs.map(([key,label,count])=>`<button type="button" role="tab" data-results-outcome="${key}" aria-selected="${state.resultsOutcomeTab===key?'true':'false'}" class="${state.resultsOutcomeTab===key?'active':''}"><span>${escapeHtml(label)}</span><b>${count}</b></button>`).join('')}</div>`;
   }
   function resultVisibleOdds(publication){
     const actual=publication?.odds==null?NaN:Number(publication.odds);
@@ -3279,8 +3353,8 @@
     };
   }
   function renderResults(){
-    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
-    if(!entries.length){state.resultsPage=0;return '<div class="state-card">Zatiaľ nie sú dostupné vyhodnotené publikované predikcie/projekcie pre tento filter.</div>';}
+    const filters=state.resultsFilters||defaultResultsFilters(),{entries}=resultEntriesForActiveTab(filters);
+    if(!entries.length){state.resultsPage=0;return `<div class="state-card">${escapeHtml(lcopy('No published entries are available for this status and filter.','Pre tento stav a filter nie sú dostupné žiadne publikované záznamy.','Pro tento stav a filtr nejsou dostupné žádné publikované záznamy.'))}</div>`;}
     const allowedSizes=[50,100],pageSize=allowedSizes.includes(Number(state.resultsPageSize))?Number(state.resultsPageSize):50;
     state.resultsPageSize=pageSize;
     const pages=Math.max(1,Math.ceil(entries.length/pageSize));
@@ -3301,7 +3375,7 @@
         ?`<b class="correct">✓ ${escapeHtml(lcopy('WIN','VÝHRA','VÝHRA'))}</b>`
         :outcome.kind==='loss'
           ?`<b class="wrong">× ${escapeHtml(lcopy('LOSS','PREHRA','PREHRA'))}</b>`
-          :`<b class="${voidLabel==='SKREČ'?'retired':'void'}">○ ${escapeHtml(voidLabel)}</b>`;
+          :outcome.kind==='pending'?`<b class="running">● ${escapeHtml(lcopy('LIVE','PREBIEHA','PROBÍHÁ'))}</b>`:`<b class="${voidLabel==='SKREČ'?'retired':'void'}">○ ${escapeHtml(voidLabel)}</b>`;
       const p1Name=p1.name||'Player 1',p2Name=p2.name||'Player 2';
       const p1Photo=playerPhotoSource(r,p1,'player1');
       const p2Photo=playerPhotoSource(r,p2,'player2');
@@ -3361,19 +3435,84 @@
 
   function wireResultsFilters(){
     const rerender=()=>{state.resultsPage=0;renderRoute('results');};
-    const mobileFilterToggle=document.querySelector('[data-results-filter-toggle]');
-    if(mobileFilterToggle)mobileFilterToggle.onclick=()=>{
-      const shell=mobileFilterToggle.closest('.results-filter-shell');
-      const open=Boolean(shell?.classList.toggle('is-open'));
-      mobileFilterToggle.setAttribute('aria-expanded',open?'true':'false');
+    const phone=isPhoneResultsLayout();
+    const toggle=document.querySelector('[data-results-filter-toggle]');
+    if(toggle)toggle.onclick=()=>{
+      if(!phone)return;
+      if(state.resultsFilterOpen){
+        state.resultsFilterOpen=false;
+        state.resultsDraftFilters=null;
+      }else{
+        state.resultsFilterOpen=true;
+        state.resultsDraftFilters={...(state.resultsFilters||defaultResultsFilters())};
+      }
+      renderRoute('results');
     };
-    [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface']].forEach(([id,key])=>{const el=$(id);if(el)el.onchange=()=>{state.resultsFilters[key]=el.value;rerender();};});
-    const period=$('resultsWindow');if(period)period.onchange=()=>{state.resultsFilters.window=period.value||'all';if(state.resultsFilters.window!=='custom'){state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}rerender();};
+    const draft=()=>state.resultsDraftFilters||(state.resultsDraftFilters={...(state.resultsFilters||defaultResultsFilters())});
+    const applyField=(key,value)=>{
+      if(phone){draft()[key]=value;return;}
+      state.resultsFilters[key]=value;rerender();
+    };
+    [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface']].forEach(([id,key])=>{
+      const el=$(id);if(el)el.onchange=()=>applyField(key,el.value);
+    });
+    const period=$('resultsWindow');
+    if(period)period.onchange=()=>{
+      if(phone){
+        const d=draft();d.window=period.value||'all';
+        if(d.window!=='custom'){d.dateFrom='';d.dateTo='';if($('resultsDateFrom'))$('resultsDateFrom').value='';if($('resultsDateTo'))$('resultsDateTo').value='';}
+      }else{
+        state.resultsFilters.window=period.value||'all';
+        if(state.resultsFilters.window!=='custom'){state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}
+        rerender();
+      }
+    };
     const from=$('resultsDateFrom'),to=$('resultsDateTo'),bettingDay=$('resultsBettingDay');
-    if(from)from.onchange=()=>{state.resultsFilters.dateFrom=from.value||'';if(state.resultsFilters.dateTo&&state.resultsFilters.dateFrom>state.resultsFilters.dateTo)state.resultsFilters.dateTo=state.resultsFilters.dateFrom;state.resultsFilters.window='custom';rerender();};
-    if(to)to.onchange=()=>{state.resultsFilters.dateTo=to.value||'';if(state.resultsFilters.dateFrom&&state.resultsFilters.dateTo<state.resultsFilters.dateFrom)state.resultsFilters.dateFrom=state.resultsFilters.dateTo;state.resultsFilters.window='custom';rerender();};
-    if(bettingDay)bettingDay.onchange=()=>{state.resultsFilters.bettingDay=Boolean(bettingDay.checked);rerender();};
-    const clear=$('resultsDateClear');if(clear)clear.onclick=()=>{state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';state.resultsFilters.window='today';rerender();};
+    if(from)from.onchange=()=>{
+      if(phone){
+        const d=draft();d.dateFrom=from.value||'';
+        if(d.dateTo&&d.dateFrom>d.dateTo){d.dateTo=d.dateFrom;if(to)to.value=d.dateTo;}
+        d.window='custom';if(period)period.value='custom';
+      }else{
+        state.resultsFilters.dateFrom=from.value||'';
+        if(state.resultsFilters.dateTo&&state.resultsFilters.dateFrom>state.resultsFilters.dateTo)state.resultsFilters.dateTo=state.resultsFilters.dateFrom;
+        state.resultsFilters.window='custom';rerender();
+      }
+    };
+    if(to)to.onchange=()=>{
+      if(phone){
+        const d=draft();d.dateTo=to.value||'';
+        if(d.dateFrom&&d.dateTo<d.dateFrom){d.dateFrom=d.dateTo;if(from)from.value=d.dateFrom;}
+        d.window='custom';if(period)period.value='custom';
+      }else{
+        state.resultsFilters.dateTo=to.value||'';
+        if(state.resultsFilters.dateFrom&&state.resultsFilters.dateTo<state.resultsFilters.dateFrom)state.resultsFilters.dateFrom=state.resultsFilters.dateTo;
+        state.resultsFilters.window='custom';rerender();
+      }
+    };
+    if(bettingDay)bettingDay.onchange=()=>applyField('bettingDay',Boolean(bettingDay.checked));
+    const reset=$('resultsFilterReset');
+    if(reset)reset.onclick=()=>{
+      if(!phone){state.resultsFilters=defaultResultsFilters();rerender();return;}
+      state.resultsDraftFilters=defaultResultsFilters();
+      const d=state.resultsDraftFilters;
+      if($('resultsCategory'))$('resultsCategory').value=d.category;
+      if($('resultsTour'))$('resultsTour').value=d.tour;
+      if($('resultsSurface'))$('resultsSurface').value=d.surface;
+      if($('resultsWindow'))$('resultsWindow').value=d.window;
+      if($('resultsDateFrom'))$('resultsDateFrom').value=d.dateFrom;
+      if($('resultsDateTo'))$('resultsDateTo').value=d.dateTo;
+      if($('resultsBettingDay'))$('resultsBettingDay').checked=d.bettingDay;
+    };
+    const apply=$('resultsFilterApply');
+    if(apply)apply.onclick=()=>{
+      if(!phone)return;
+      state.resultsFilters={...(state.resultsDraftFilters||state.resultsFilters||defaultResultsFilters())};
+      state.resultsDraftFilters=null;state.resultsFilterOpen=false;state.resultsOutcomeTab='all';rerender();
+    };
+    document.querySelectorAll('[data-results-outcome]').forEach(button=>{
+      button.onclick=()=>{state.resultsOutcomeTab=button.dataset.resultsOutcome||'all';state.resultsPage=0;renderRoute('results');};
+    });
     const size=$('resultsPageSize');if(size)size.onchange=()=>{state.resultsPageSize=[50,100].includes(Number(size.value))?Number(size.value):50;state.resultsPage=0;renderRoute('results');};
     const prev=$('resultsPrevPage'),next=$('resultsNextPage');
     if(prev)prev.onclick=()=>{if(state.resultsPage>0){state.resultsPage-=1;renderRoute('results');window.scrollTo({top:0,behavior:'smooth'});}};
@@ -5201,7 +5340,7 @@
     else if(route==='ace') body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('Aces / Double Faults'))}</strong><span>${escapeHtml(lcopy(`Top ${Number(state.ui?.market_rules?.ace?.limit)||10} point-in-time count projections from stored event statistics. Projection score is not a calibrated win probability; odds/ROI stay blank until a verified price source exists.`,`Top ${Number(state.ui?.market_rules?.ace?.limit)||10} point-in-time projekcií z uložených štatistík zápasov. Skóre projekcie nie je kalibrovaná pravdepodobnosť výhry; kurz/ROI ostávajú prázdne, kým nebude dostupný overený zdroj kurzov.`,`Top ${Number(state.ui?.market_rules?.ace?.limit)||10} point-in-time projekcí z uložených statistik zápasů. Skóre projekce není kalibrovaná pravděpodobnost výhry; kurz/ROI zůstávají prázdné, dokud nebude dostupný ověřený zdroj kurzů.`))}</span></div>${detailCards(marketRows('ace'),'ace')}`;
     else if(route==='sg') body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('Sets / Games'))}</strong><span>${escapeHtml(lcopy('Point-in-time projections from structured historical set/game scores. Sets use long-match probability; Games use projected total versus the ATP/WTA best-of baseline. No odds/ROI are inferred yet.','Point-in-time projekcie zo štruktúrovaných historických skóre setov/hier. Sety používajú pravdepodobnosť dlhého zápasu; hry používajú projektovaný celkový počet oproti ATP/WTA baseline. Kurz/ROI sa zatiaľ neodvodzujú.','Point-in-time projekce ze strukturovaných historických skóre setů/her. Sety používají pravděpodobnost dlouhého zápasu; hry používají projektovaný celkový počet oproti ATP/WTA baseline. Kurz/ROI se zatím neodvozují.'))}</span></div>${detailCards(marketRows('sg'),'sg')}`;
     else if(route==='doubles') body=`<div class="route-sub route-rules"><strong>${escapeHtml(publicText('Doubles model'))}</strong><span>${escapeHtml(lcopy('Separate pair/team model only. Pair identity, pair history, individual strength, surface form and pair chemistry stay isolated from singles probabilities.','Iba samostatný model dvojíc/tímov. Identita dvojice, spoločná história, individuálna sila, forma na povrchu a súhra zostávajú oddelené od pravdepodobností dvojhry.','Pouze samostatný model dvojic/týmů. Identita dvojice, společná historie, individuální síla, forma na povrchu a souhra zůstávají oddělené od pravděpodobností dvouhry.'))}</span></div>${detailCards(marketRows('doubles'),'doubles')}`;
-    else if(route==='results') body=resultsAccessAllowed()?(renderResultsFilters()+resultsSummary()+`<div class="route-sub results-section-head results-section-clean">${renderResults()}</div>`):resultsLockedCard();
+    else if(route==='results') body=resultsAccessAllowed()?(renderResultsFilters()+resultsSummary()+resultsOutcomeTabs()+`<div class="route-sub results-section-head results-section-clean">${renderResults()}</div>`):resultsLockedCard();
     else if(route==='tournaments'){const names=[...new Set((feed.upcoming||[]).map(x=>x.tournament).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):escapeHtml(publicText('No upcoming tournament coverage is currently published.'))}</div>`;}
     else if(route==='players'){const names=[...new Set((feed.upcoming||[]).flatMap(x=>[x.player1?.name,x.player2?.name]).filter(Boolean))].sort();body=`<div class="static-copy">${names.length?names.map(x=>`<span class="data-pill">${escapeHtml(x)}</span>`).join(''):escapeHtml(publicText('No upcoming players are currently published.'))}</div>`;}
     else if(route==='stats') body=metricCards([[publicText('Vyhodnotené predikcie'),String(p.n??0),publicText('Published and scored')],[publicText('Accuracy'),p.accuracy!=null?pct(p.accuracy):'—',publicText('Observed results')],['Log loss',number(p.log_loss),publicText('Lower is better')],[publicText('Brier score'),number(p.brier_score),publicText('Probability quality')]])+`<div class="route-sub"><h3>${escapeHtml(publicText('Results'))}</h3>${renderResults()}</div>`;
