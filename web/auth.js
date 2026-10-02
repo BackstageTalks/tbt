@@ -509,6 +509,15 @@
     });
     return apiWithSession(`/api/v1/match-intelligence?${params.toString()}`);
   }
+  async function projectGroups() {
+    return apiWithSession('/api/v1/project-groups');
+  }
+  async function joinProjectGroup(groupId) {
+    return apiWithSession('/api/v1/project-groups/'+encodeURIComponent(groupId)+'/join', {method:'POST'});
+  }
+  async function leaveProjectGroup(groupId) {
+    return apiWithSession('/api/v1/project-groups/'+encodeURIComponent(groupId)+'/join', {method:'DELETE'});
+  }
   async function insights() {
     return apiWithSession('/api/v1/insights');
   }
@@ -527,6 +536,27 @@
   }
   async function markInsightRead(insightId) {
     return apiWithSession(`/api/v1/insights/${encodeURIComponent(insightId)}/read`, {method: 'POST'});
+  }
+  async function adminProjectGroups() {
+    return apiWithSession('/api/v1/admin/project-groups');
+  }
+  async function adminCreateProjectGroup(payload) {
+    return apiWithSession('/api/v1/admin/project-groups', {method:'POST', body:JSON.stringify(payload||{})});
+  }
+  async function adminUpdateProjectGroup(groupId, payload) {
+    return apiWithSession('/api/v1/admin/project-groups/'+encodeURIComponent(groupId), {method:'PUT', body:JSON.stringify(payload||{})});
+  }
+  async function adminDeleteProjectGroup(groupId) {
+    return apiWithSession('/api/v1/admin/project-groups/'+encodeURIComponent(groupId), {method:'DELETE'});
+  }
+  async function adminAddProjectMember(groupId, userId) {
+    return apiWithSession('/api/v1/admin/project-groups/'+encodeURIComponent(groupId)+'/members/'+encodeURIComponent(userId), {method:'PUT'});
+  }
+  async function adminRemoveProjectMember(groupId, userId) {
+    return apiWithSession('/api/v1/admin/project-groups/'+encodeURIComponent(groupId)+'/members/'+encodeURIComponent(userId), {method:'DELETE'});
+  }
+  async function adminSetProjectMemberPayment(groupId, userId, status) {
+    return apiWithSession('/api/v1/admin/project-groups/'+encodeURIComponent(groupId)+'/members/'+encodeURIComponent(userId)+'/payment', {method:'PUT', body:JSON.stringify({status})});
   }
   async function adminInsights() {
     return apiWithSession('/api/v1/admin/insights');
@@ -625,7 +655,9 @@
 
   window.BlinqAuth = {
     init, ensureReady, status, restore, signIn, signUp, resendVerification, reset, update, reactivateFree, signOut, feed, matchIntelligence,
-    insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead, adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult,
+    projectGroups, joinProjectGroup, leaveProjectGroup, insights, liveRadar, adminLiveRadar, adminLiveResults, adminDeleteLiveResult, markInsightRead,
+    adminProjectGroups, adminCreateProjectGroup, adminUpdateProjectGroup, adminDeleteProjectGroup, adminAddProjectMember, adminRemoveProjectMember, adminSetProjectMemberPayment,
+    adminInsights, adminCreateInsight, adminUpdateInsight, adminDeleteInsight, adminInfoResults, adminSettleInfoResult, adminDeleteInfoResult,
     adminDiagnostics, adminUsers, adminUpdateAccess, adminUpdateMetadata, adminUpdateUserProfile, adminDeleteUser,
     runtimeUiConfig, contentNews,
     bannerEvent, adminSaveUiConfig, adminUiSnapshots, adminUiSnapshot, pushConfig, pushSubscribe, pushUnsubscribe, adminUploadMedia, clear,
