@@ -40,6 +40,7 @@ def empty_feed():
         "generated_at": None,
         "model": None,
         "upcoming": [],
+        "top200_picks": [],
         "top_daily_picks": [],
         "prime_picks": [],
         "value_picks": [],
@@ -167,7 +168,7 @@ def visible_feed(payload, now=None):
     # Daily offer sections are betting-day snapshots, not a second upcoming list.
     # Hide an old day's rows after the boundary even when the last published feed
     # is stale, but do not remove a row merely because its scheduled time passed.
-    for key in ("top_daily_picks", "prime_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"):
+    for key in ("top200_picks", "top_daily_picks", "prime_picks", "value_picks", "doubles_picks", "ace_picks", "sg_picks"):
         rows = payload.get(key, [])
         if not isinstance(rows, list):
             continue
