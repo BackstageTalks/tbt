@@ -138,7 +138,7 @@ def _feed_player_ids(payload: dict) -> set[str]:
 def _feed_tournament_ids(payload: dict) -> set[str]:
     ids: set[str] = set()
     keys = (
-        "upcoming", "results", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
+        "upcoming", "results", "top200_picks", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
         "value_picks", "value", "doubles_picks", "doubles", "ace_picks", "aces", "ace_markets",
         "sg_picks", "sets_games", "set_game_picks",
     )
@@ -295,7 +295,7 @@ def _merge_player_profiles(payload: dict, profiles: dict[str, dict], photos: set
                             _merge_player_profile(member, profiles, photos)
 
     for key in (
-        "upcoming", "results", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
+        "upcoming", "results", "top200_picks", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
         "value_picks", "value", "doubles_picks", "doubles", "ace_picks", "aces", "ace_markets",
         "sg_picks", "sets_games", "set_game_picks",
     ):
@@ -321,7 +321,7 @@ def _merge_tournament_profiles(payload: dict, profiles: dict[str, dict], logos: 
             if logo_file and logo_file in logos:
                 row["tournament_logo_url"] = f"/assets/tournaments/{logo_file}"
     for key in (
-        "upcoming", "results", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
+        "upcoming", "results", "top200_picks", "prime_picks", "top_daily_picks", "top_daily", "daily_picks",
         "value_picks", "value", "doubles_picks", "doubles", "ace_picks", "aces", "ace_markets",
         "sg_picks", "sets_games", "set_game_picks",
     ):
