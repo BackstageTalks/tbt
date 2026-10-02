@@ -5050,26 +5050,35 @@
     }).join('');
     return `<div class="admin-table-wrap picks-table-wrap"><table class="admin-analytics-table picks-table"><thead><tr><th>Date</th><th>Match</th><th>Tournament</th><th>Prediction</th><th>Probability</th><th>Odds</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }
+  function todayPublishedPickCount(){
+    const n=Number(state.feed?.entitlements?.daily_pick_count);
+    return Number.isFinite(n)&&n>=0?Math.trunc(n):null;
+  }
   function renderDashboardResultsPreview(){
     const host=$('resultsPreviewContent');if(!host)return;
-    const rows=(state.feed?.results||[]).filter(row=>typeof row?.result?.correct==='boolean');
-    const wins=rows.filter(row=>row.result.correct===true).length,losses=Math.max(0,rows.length-wins),hit=rows.length?wins/rows.length:null;
-    const perf=state.feed?.betting_performance?.overall||state.feed?.performance?.betting?.overall||{};
-    const roi=Number(perf.roi),units=Number(perf.profit_units);
-    host.innerHTML=`<div class="results-preview-metrics"><span><small>${escapeHtml(publicText('Record'))}</small><strong>${wins}-${losses}</strong></span><span><small>${escapeHtml(publicText('Hit rate'))}</small><strong>${hit==null?'—':pct(hit)}</strong></span><span><small>ROI</small><strong>${Number.isFinite(roi)?pct(roi):'—'}</strong></span><span><small>${escapeHtml(publicText('Units'))}</small><strong>${Number.isFinite(units)?`${units>=0?'+':''}${units.toFixed(2)}u`:'—'}</strong></span></div>`;
-    const count=$('resultsPreviewCount');if(count)count.textContent=publicText(`${rows.length} settled`);const cardCount=$('resultsSeeAllCardCount');if(cardCount)cardCount.textContent=publicText(`${rows.length} settled`);
+    const filters={category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true};
+    const rows=filteredResults(filters),m=localResultMetrics(rows,'all',filters),total=todayPublishedPickCount();
+    host.innerHTML=`<div class="results-preview-metrics"><span><small>${escapeHtml(publicText('Record'))}</small><strong>${m.wins}-${m.losses}</strong></span><span><small>${escapeHtml(publicText('Hit rate'))}</small><strong>${m.hit==null?'—':pct(m.hit)}</strong></span><span><small>ROI</small><strong>${m.roi==null?'—':pct(m.roi)}</strong></span><span><small>${escapeHtml(publicText('Units'))}</small><strong>${m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—'}</strong></span></div>`;
+    const progress=total==null?`${m.sample}`:`${m.sample}/${total}`;
+    const progressText=lcopy(`${progress} settled today`,`${progress} vyhodnotených dnes`,`${progress} vyhodnocených dnes`);
+    const count=$('resultsPreviewCount');if(count)count.textContent=progressText;
+    const cardCount=$('resultsSeeAllCardCount');if(cardCount)cardCount.textContent=progressText;
   }
 
   function resultsSummary(){
-    const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category);
-    // Identical six-card Results KPI layout for ALL, ACES, DF, GAMES & SETS.
+    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',m=localResultMetrics(rows,category,filters);
+    const todayTotal=filters.window==='today'&&category==='all'?todayPublishedPickCount():null;
+    const sampleValue=todayTotal==null?String(m.sample):`${m.sample}/${todayTotal}`;
+    const sampleNote=todayTotal==null
+      ?lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')
+      :lcopy(`settled from ${todayTotal} published picks in the current betting day`,`vyhodnotené z ${todayTotal} dnešných publikovaných pickov`,`vyhodnocené z ${todayTotal} dnešních publikovaných tipů`);
     return metricCards([
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
       ['ROI',m.roi==null?'—':pct(m.roi),m.aceDfNormalizedKpis?lcopy('1u result ROI from normalized legacy / real API odds','1u výsledkové ROI z normalizovaných historických / reálnych API kurzov','1u výsledkové ROI z normalizovaných historických / reálných API kurzů'):lcopy('real settled stakes','reálne vyhodnotené vklady','reálné vyhodnocené vklady')],
       [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',m.aceDfNormalizedKpis?lcopy('1u per settled Aces/DF pick','1u na každý vyhodnotený pick ESÁ/DF','1u na každý vyhodnocený tip ESA/DF'):lcopy('settled profit','vyhodnotený zisk','vyhodnocený zisk')],
-      [publicText('Sample'),String(m.sample),lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')],
+      [publicText('Sample'),sampleValue,sampleNote],
     ]);
   }
   function primeDetailCard(m,index=0){
