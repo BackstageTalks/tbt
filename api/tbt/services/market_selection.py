@@ -458,6 +458,89 @@ def _is_close_odds_value(row: dict[str, Any], max_difference: float = VALUE_MAX_
     return difference is not None and difference <= float(max_difference) + 1e-12
 
 
+def _value_qualification_audit(
+    predictions: list[dict[str, Any]],
+    *,
+    min_probability: float,
+    min_data_depth: float,
+    min_surface_matches: int,
+    min_odds: float,
+    max_odds_difference: float,
+) -> dict[str, Any]:
+    """Explain why current Match Winner rows did or did not reach Value.
+
+    Failure counts are intentionally non-exclusive: one row may fail more than
+    one gate. This is diagnostics only and never changes selection.
+    """
+    model_rows = [
+        row for row in predictions
+        if isinstance(row, dict) and row.get("prediction_family") != "doubles"
+    ]
+    quoted = []
+    missing_quote = 0
+    for row in model_rows:
+        card = _market_card(row)
+        if card is None:
+            missing_quote += 1
+        else:
+            quoted.append(card)
+
+    failures = {
+        "probability_below_min": 0,
+        "data_depth_below_min": 0,
+        "surface_sample_below_min": 0,
+        "odds_below_min": 0,
+        "missing_two_way_market": 0,
+        "odds_spread_above_max": 0,
+    }
+    qualified = 0
+    for card in quoted:
+        probability_ok = _confidence(card) + 1e-12 >= float(min_probability)
+        depth_ok = _depth(card) + 1e-12 >= float(min_data_depth)
+        p1_surface, p2_surface = _surface_samples(card)
+        surface_ok = (
+            p1_surface >= int(min_surface_matches)
+            and p2_surface >= int(min_surface_matches)
+        )
+        odds = _number(card.get("odds"))
+        odds_ok = odds is not None and odds + 1e-12 >= float(min_odds)
+        difference = _market_odds_difference(card)
+        two_way_ok = difference is not None
+        spread_ok = two_way_ok and difference <= float(max_odds_difference) + 1e-12
+
+        if not probability_ok:
+            failures["probability_below_min"] += 1
+        if not depth_ok:
+            failures["data_depth_below_min"] += 1
+        if not surface_ok:
+            failures["surface_sample_below_min"] += 1
+        if not odds_ok:
+            failures["odds_below_min"] += 1
+        if not two_way_ok:
+            failures["missing_two_way_market"] += 1
+        elif not spread_ok:
+            failures["odds_spread_above_max"] += 1
+
+        if probability_ok and depth_ok and surface_ok and odds_ok and spread_ok:
+            qualified += 1
+
+    return {
+        "model_rows": len(model_rows),
+        "real_match_winner_quote_attached": len(quoted),
+        "missing_real_match_winner_quote": missing_quote,
+        "qualified": qualified,
+        "failure_counts_nonexclusive": failures,
+        "thresholds": {
+            "min_probability": float(min_probability),
+            "min_data_depth": float(min_data_depth),
+            "min_surface_matches_each": int(min_surface_matches),
+            "min_odds": float(min_odds),
+            "max_two_way_odds_difference": float(max_odds_difference),
+        },
+        "selection_unchanged": True,
+    }
+
+
 def _passes_candidate_gate(
     row: dict[str, Any],
     *,
@@ -894,6 +977,14 @@ def select_market_sections(
     fallback_floor = PRIME_TOP_FALLBACK_PROBABILITY
     top_fallback_floor = TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY
     value_floor = max(PUBLICATION_MIN_PROBABILITY, float(value_min_probability))
+    value_audit = _value_qualification_audit(
+        predictions,
+        min_probability=value_floor,
+        min_data_depth=value_min_data_depth,
+        min_surface_matches=value_min_surface_matches,
+        min_odds=value_min_odds,
+        max_odds_difference=VALUE_MAX_ODDS_DIFFERENCE,
+    )
 
     value_qualified: list[dict[str, Any]] = []
     prime_core: list[dict[str, Any]] = []
@@ -1083,6 +1174,7 @@ def select_market_sections(
                 "requires_real_match_winner_odds": True,
                 "published": len(doubles_picks or []),
             },
+            "value_audit": value_audit,
             "value_rule": {
                 "objective": "probability_plus_close_odds",
                 "probability_basis": "blinq_probability",
