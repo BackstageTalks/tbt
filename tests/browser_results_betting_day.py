@@ -61,6 +61,9 @@ def main():
                     document.querySelector('#bootSplash')?.remove();
                     document.querySelector('#cookieConsent')?.remove();
                     document.querySelector('#appShell').hidden=false;
+                    document.body.classList.remove('blinq-home','blinq-admin');
+                    document.body.classList.add('blinq-route');
+                    document.body.dataset.route='results';
                     s.feed.account={is_admin:true,role:'admin',plan:'admin',status:'active'};
                     s.feed.results=rows.map(([event_id,scheduled_at])=>({
                       event_id,tour:'ATP',surface:'hard',scheduled_at,tournament:'T',
