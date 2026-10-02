@@ -3749,7 +3749,7 @@
     const colors=['blue','orange','purple','green','teal','pink','gray'].map(color=>`<option value="${color}"${projectGroupColor(selected?.color)===color?' selected':''}>${color.toUpperCase()}</option>`).join('');
     const entryModes=[['open','OTVORENÁ · okamžitý vstup'],['request','NA ŽIADOSŤ · schvaľujem'],['locked','UZAVRETÁ · lock']].map(([value,label])=>`<option value="${value}"${String(selected?.entry_mode||'open')===value?' selected':''}>${label}</option>`).join('');
     const contribution=selected&&Number(selected.contribution_cents)>0?formatProjectMoney(selected.contribution_cents,selected.currency):'0 €';
-    const lockState=selected?.locked?`<span class="admin-project-lock-state">🔒 ${escapeHtml(projectLockLabel(selected))}</span>`:`<span class="admin-project-open-state">${escapeHtml(projectEntryLabel(selected))}</span>`;
+    const lockState=selected?.locked?`<span class="admin-project-lock-state">${escapeHtml(projectLockLabel(selected))}</span>`:`<span class="admin-project-open-state">${escapeHtml(projectEntryLabel(selected))}</span>`;
     const workspace=!selected?`<div class="admin-project-empty"><strong>Vytvor prvú projektovú skupinu</strong><span>Po kliknutí na + Nová skupina sa automaticky vytvorí kompletná štruktúra: členovia, INFO správy aj vyhodnotenia.</span></div>`:`
       <div class="admin-project-workspace">
         <section class="admin-project-info-composer">
