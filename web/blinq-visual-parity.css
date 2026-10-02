@@ -720,3 +720,15 @@ body#blinqPremium .reference-topbar .avatar{
     max-width:100%!important;
   }
 }
+
+
+/* Keep the mobile shell inside the physical viewport even when legacy
+   descendants contribute fractional/scrollable overflow. */
+@media (max-width:760px){
+  body#blinqPremium .app-shell{
+    width:calc(100% - 4px)!important;
+    max-width:calc(100vw - 4px)!important;
+    margin-left:auto!important;
+    margin-right:auto!important;
+  }
+}
