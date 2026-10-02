@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 
 SECTION_TO_FEED_KEY = {
+    "top200": "top200_picks",
     "prime": "prime_picks",
     "top_daily": "top_daily_picks",
     "value": "value_picks",
@@ -24,15 +25,15 @@ SECTION_TO_FEED_KEY = {
 
 _POLICY = {
     "expired": {
-        "daily": (0, False), "prime": (0, False), "top_daily": (0, False), "value": (0, False),
+        "daily": (0, False), "top200": (0, False), "prime": (0, False), "top_daily": (0, False), "value": (0, False),
         "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "rookie": {
-        "daily": (1, False), "prime": (1, False), "top_daily": (1, False), "value": (1, False),
+        "daily": (1, False), "top200": (1, False), "prime": (1, False), "top_daily": (1, False), "value": (1, False),
         "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "pro": {
-        "daily": (3, False), "prime": (3, False), "top_daily": (3, False), "value": (3, False),
+        "daily": (3, False), "top200": (3, False), "prime": (3, False), "top_daily": (3, False), "value": (3, False),
         "doubles": (0, False), "ace": (0, False), "sg": (0, False),
     },
     "elite": {key: ("ALL", True) for key in ["daily", *SECTION_TO_FEED_KEY]},
@@ -124,7 +125,7 @@ def _result_timestamp(row: dict) -> datetime | None:
     return None
 
 
-PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
+PUBLIC_RESULT_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 PUBLIC_RESULT_MARKETS = {"aces", "double_faults"}
 
 
@@ -258,7 +259,7 @@ def match_intelligence_row_authorized(
     p1, p2 = str(player1_id or ""), str(player2_id or "")
     event_id, custom_id = str(event_id or ""), str(custom_id or "")
     keys = (
-        "daily_picks", "prime_picks", "top_daily_picks", "value_picks",
+        "daily_picks", "top200_picks", "prime_picks", "top_daily_picks", "value_picks",
         "doubles_picks", "ace_picks", "sg_picks", "board_upcoming",
     )
     for key in keys:
@@ -660,7 +661,9 @@ def _source_rows_for_section(payload: dict, section: str) -> list[dict]:
     section=str(section or "")
     if section in {"daily","top_daily"}:
         return _daily_rows(payload)
-    if section=="prime":
+    if section=="top200":
+        rows=payload.get("top200_picks")
+    elif section=="prime":
         rows=payload.get("prime_picks")
     elif section=="value":
         rows=payload.get("value_picks")
@@ -691,7 +694,7 @@ def _published_daily_pick_count(payload: dict) -> int:
     """
     seen: set[tuple[str, str, str]] = set()
     for section in (
-        "daily", "prime", "value", "ace", "double_faults",
+        "daily", "top200", "prime", "value", "ace", "double_faults",
         "doubles", "games", "sets",
     ):
         for index, row in enumerate(_source_rows_for_section(payload, section)):
@@ -702,11 +705,11 @@ def _published_daily_pick_count(payload: dict) -> int:
             event = str(row.get("event_id") or row.get("id") or row.get("match_id") or "").strip()
             market = str(
                 row.get("market") or row.get("projection_metric") or betting.get("market")
-                or ("match_winner" if section in {"daily", "prime", "value"} else section)
+                or ("match_winner" if section in {"daily", "top200", "prime", "value"} else section)
             ).strip().lower()
             # Distinguish market types on one event while unifying duplicate
             # match-winner offers displayed in TOP and SHORT ODDS / VALUE.
-            if market in {"top", "prime", "value", "daily"}:
+            if market in {"top200", "top", "prime", "value", "daily"}:
                 market = "match_winner"
             selection = str(
                 row.get("winner_id") or row.get("pick_id") or row.get("selection_id")
@@ -731,7 +734,7 @@ def entitlement_manifest(access: dict, payload: dict | None = None, ui_config: d
     # Authorize it from the exact same canonical rows so one daily limit cannot
     # yield two different unlocked TOP picks in a single API response.
     source_map["top_daily"] = canonical_daily
-    tab_map={"daily":"daily","prime":"prime","top_daily":"daily","value":"value","doubles":"doubles","ace":"ace","sg":"games"}
+    tab_map={"daily":"daily","top200":"top200","prime":"prime","top_daily":"daily","value":"value","doubles":"doubles","ace":"ace","sg":"games"}
     for section, rows in source_map.items():
         default_limit, hard_see_all = policy.get(section, (0,False))
         runtime_rule=_admin_hub_rule(ui_config, tab_map[section], plan) if section in tab_map else None
@@ -1067,7 +1070,7 @@ def filter_feed_for_access(payload: dict, access: dict, ui_config: dict | None =
     result[SECTION_TO_FEED_KEY["sg"]]=authorized_sg
 
     if manifest["plan"] not in {"elite","legend","goat","admin"}:
-        permitted_ids={str(row.get("event_id") or "") for feed_key in ["daily_picks","prime_picks","top_daily_picks","value_picks","doubles_picks","ace_picks","sg_picks"] for row in result.get(feed_key,[]) if isinstance(row,dict)}
+        permitted_ids={str(row.get("event_id") or "") for feed_key in ["daily_picks","top200_picks","prime_picks","top_daily_picks","value_picks","doubles_picks","ace_picks","sg_picks"] for row in result.get(feed_key,[]) if isinstance(row,dict)}
         safe=[]
         for row in payload.get("upcoming",[]):
             if not isinstance(row,dict) or str(row.get("event_id") or "") not in permitted_ids: continue
