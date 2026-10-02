@@ -97,7 +97,7 @@ def main():
                 report = page.evaluate("""() => {
                     const css=s=>document.querySelector(s);
                     const rect=e=>{const r=e.getBoundingClientRect();
-                      return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width};
+                      return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};
                     };
                     const between=(a,b)=>Math.min(a.right,b.right)-Math.max(a.left,b.left);
                     const labels=[...document.querySelectorAll('.results-filter-field')].map(rect);
