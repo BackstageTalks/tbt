@@ -732,3 +732,20 @@ body#blinqPremium .reference-topbar .avatar{
     margin-right:auto!important;
   }
 }
+
+
+/* Normalize legacy sizing inside the mobile application surface. */
+@media (max-width:760px){
+  body#blinqPremium .app-shell,
+  body#blinqPremium .app-shell *,
+  body#blinqPremium .app-shell *::before,
+  body#blinqPremium .app-shell *::after{
+    box-sizing:border-box!important;
+  }
+  body#blinqPremium .app-shell > *,
+  body#blinqPremium .site-main > *,
+  body#blinqPremium .route-panel,
+  body#blinqPremium .route-heading{
+    max-width:100%!important;
+  }
+}
