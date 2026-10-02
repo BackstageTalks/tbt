@@ -61,12 +61,19 @@ def home(page):
         ['12:20','ATP Shanghai','Alejandro Tabilo','Arthur Rinderknech','Tabilo','1.62','68.4%'],
         ['13:05','WTA Beijing','Linda Noskova','Emma Navarro','Noskova','1.74','66.1%'],
         ['14:40','ATP Shanghai','Jannik Sinner','Tomas Machac','Sinner','1.28','81.7%']
-      ].map((r,i)=>'<tr>'+
+      ].map((r,i)=>'<tr data-hub-event="preview-'+i+'">'+
         '<td class="hub-rank">#'+(i+1)+'</td>'+
-        '<td><strong>'+r[0]+'</strong><small>02.10</small></td>'+
-        '<td><div class="hub-tournament"><span class="hub-tournament-logo">ATP</span><span class="hub-tournament-copy"><b>'+r[1]+'</b><small>HARD</small></span></div></td>'+
-        '<td><div class="hub-match"><span class="hub-player"><span class="hub-avatar"></span><span class="hub-player-copy"><strong>'+r[2]+'</strong><small>TOP 200</small></span></span><i>vs</i><span class="hub-player"><span class="hub-avatar"></span><span class="hub-player-copy"><strong>'+r[3]+'</strong><small>TOP 200</small></span></span></div></td>'+
-        '<td><strong>'+r[4]+'</strong></td><td><strong>'+r[5]+'</strong></td><td><strong class="hub-prob">'+r[6]+'</strong></td><td><button class="hub-detail">Detail</button></td>'+
+        '<td class="hub-time"><span class="hub-time-stack"><strong>'+r[0]+'</strong><small>02.10</small></span></td>'+
+        '<td class="hub-tournament-cell"><span class="hub-tournament hub-tournament-pro"><span class="hub-tournament-logo">ATP</span><span class="hub-tournament-copy"><b>'+r[1]+'</b><small><span>HARD</span></small></span></span></td>'+
+        '<td class="hub-match-cell"><span class="hub-match hub-match-pro">'+
+          '<span class="hub-match-player is-pick"><span class="hub-match-player-main"><span class="hub-avatar"></span><b>'+r[2]+'</b></span><small>#42</small></span>'+
+          '<i class="hub-match-divider"></i>'+
+          '<span class="hub-match-player"><span class="hub-match-player-main"><span class="hub-avatar"></span><b>'+r[3]+'</b></span><small>#68</small></span>'+
+        '</span></td>'+
+        '<td class="hub-pick" data-label="Predikcia"><span class="hub-pick-stack"><small>TOP200</small><strong>'+r[4]+'</strong></span></td>'+
+        '<td class="hub-odds hub-number-cell" data-label="Kurz"><span class="hub-number-stack"><strong>'+r[5]+'</strong><small>kurz</small></span></td>'+
+        '<td class="hub-confidence-cell" data-label="BlinQ %"><span class="hub-confidence"><strong>'+r[6]+'</strong><small class="hub-data-depth">DATA 100%</small></span></td>'+
+        '<td class="hub-action-cell"><button class="hub-detail">Detail</button></td>'+
       '</tr>').join('');
       const tg=document.querySelector('#telegramGroupsPanel');
       tg.hidden=false;
