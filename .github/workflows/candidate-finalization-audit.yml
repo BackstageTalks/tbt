@@ -71,10 +71,7 @@ jobs:
           summary={
               "candidate_model_version":getattr(cm,"version",None),
               "production_model_version":getattr(pm,"version",None),
-              "candidate_metadata":getattr(cm,"metadata",{}) or {},
-              "production_metadata":getattr(pm,"metadata",{}) or {},
               "data":cr.get("data"),
-              "periods":cr.get("periods"),
               "holdout":cr.get("holdout"),
               "elo_baseline_holdout":cr.get("elo_baseline_holdout"),
               "production_holdout":cr.get("production_holdout"),
@@ -83,7 +80,6 @@ jobs:
               "evaluation_governance":cr.get("evaluation_governance"),
               "promotion_decision":decision,
               "metric_gate_recheck":{"ok":gate_ok,"reasons":gate_reasons},
-              "candidate_history_matching_fingerprint":matching,
               "production_history_matching_fingerprint":already_prod,
           }
           print("FINALIZATION_AUDIT_JSON="+json.dumps(summary,sort_keys=True))
@@ -97,4 +93,129 @@ jobs:
               raise SystemExit(f"Expected exactly one candidate decision for fingerprint, got {len(matching)}")
           if already_prod:
               raise SystemExit("Holdout already appears in production promotion history")
+          if gate_ok or decision.get("eligible") is not False:
+              raise SystemExit("Safety expectation changed: candidate is no longer the known blocked candidate")
           PY
+
+  walk_forward:
+    needs: audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install training dependencies
+        run: python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt
+      - name: Run full calendar-year walk-forward backtest
+        run: |
+          set -euo pipefail
+          python scripts/pipeline.py backtest --data-repository "$TBT_DATA_REPOSITORY" --max-requests 1
+          test -s .cache/tbt/backtest.json
+      - name: Recompute promotion readiness
+        run: |
+          set -euo pipefail
+          python scripts/model_promotion_readiness.py             --data-repository "$TBT_DATA_REPOSITORY"             --minimum-gate-rows 200             --target-rows 1000             --minimum-days 3             --out .cache/tbt/model-readiness/readiness.json
+      - name: Build and persist final validation summary
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os, subprocess, base64
+          from pathlib import Path
+          from scripts.release_store import ReleaseStore
+          from tbt.models.artifact import load_model
+          from pipeline import _promotion_metric_gate
+
+          repo=os.environ["TBT_DATA_REPOSITORY"]
+          root=Path(".cache/tbt/finalization-summary")
+          cdir=root/"candidate"
+          pdir=root/"production"
+          candidate=ReleaseStore(repo,"tbt-model-candidate-v1",cdir)
+          production=ReleaseStore(repo,"tbt-model-production-v1",pdir)
+          candidate.download(
+              extra_names=("model.joblib","training_report.json"),
+              required_names=("model.joblib","training_report.json"),
+          )
+          production.download(
+              extra_names=("model.joblib","training_report.json"),
+              required_names=("model.joblib","training_report.json"),
+          )
+          cm=load_model(str(cdir/"model.joblib"))
+          pm=load_model(str(pdir/"model.joblib"))
+          train=json.loads((cdir/"training_report.json").read_text())
+          walk=json.loads(Path(".cache/tbt/backtest.json").read_text())
+          ready=json.loads(Path(".cache/tbt/model-readiness/readiness.json").read_text())
+          gate_ok, gate_reasons=_promotion_metric_gate(train)
+          summary={
+              "schema":1,
+              "candidate_model_version":getattr(cm,"version",None),
+              "production_model_version":getattr(pm,"version",None),
+              "candidate_holdout":train.get("holdout"),
+              "candidate_elo_holdout":train.get("elo_baseline_holdout"),
+              "candidate_production_holdout":train.get("production_holdout"),
+              "candidate_delta_vs_elo":train.get("delta_vs_elo"),
+              "candidate_delta_vs_production":train.get("delta_vs_production"),
+              "candidate_promotion_decision":train.get("promotion_decision"),
+              "metric_gate_recheck":{"ok":gate_ok,"reasons":gate_reasons},
+              "walk_forward":{
+                  "tested_matches":walk.get("tested_matches"),
+                  "first_test_year":walk.get("first_test_year"),
+                  "overall":walk.get("overall"),
+                  "elo_baseline_overall":walk.get("elo_baseline_overall"),
+                  "delta_vs_elo":walk.get("delta_vs_elo"),
+                  "folds":[
+                      {
+                          "year":f.get("year"),
+                          "test_rows":f.get("test_rows"),
+                          "model":f.get("model"),
+                          "elo_baseline":f.get("elo_baseline"),
+                          "delta_vs_elo":f.get("delta_vs_elo"),
+                      }
+                      for f in (walk.get("folds") or [])
+                  ],
+              },
+              "promotion_readiness":ready,
+              "production_promoted":False,
+              "promotion_blocked":True,
+              "promotion_blocked_reasons":gate_reasons,
+              "provider_requests":0,
+          }
+          out=Path(".cache/tbt/finalization-summary/full_training_summary.json")
+          out.parent.mkdir(parents=True,exist_ok=True)
+          out.write_text(json.dumps(summary,ensure_ascii=False,indent=2))
+          print("FINAL_VALIDATION_JSON="+json.dumps(summary,sort_keys=True))
+
+          path="audit/full-training-latest.json"
+          encoded=base64.b64encode(out.read_bytes()).decode()
+          try:
+              sha=subprocess.check_output(
+                  ["gh","api",f"repos/{repo}/contents/{path}","--jq",".sha"],
+                  text=True,stderr=subprocess.DEVNULL,
+              ).strip()
+          except subprocess.CalledProcessError:
+              sha=""
+          cmd=["gh","api","--method","PUT",f"repos/{repo}/contents/{path}",
+               "-f","message=Finalize BlinQ enriched model validation",
+               "-f",f"content={encoded}"]
+          if sha:
+              cmd += ["-f",f"sha={sha}"]
+          subprocess.check_call(cmd,stdout=subprocess.DEVNULL)
+          PY
+      - name: Upload final validation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-enriched-final-validation-${{ github.run_id }}
+          retention-days: 14
+          if-no-files-found: warn
+          path: |
+            .cache/tbt/backtest.json
+            .cache/tbt/model-readiness/readiness.json
+            .cache/tbt/finalization-summary/full_training_summary.json
