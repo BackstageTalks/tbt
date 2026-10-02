@@ -61,6 +61,106 @@ jobs:
           print(json.dumps(out, indent=2, ensure_ascii=False))
           print("BLINQ_CURRENT_LOSS_AUDIT_END")
           PY
+      - name: Isolate current champion cohorts
+        run: |
+          python - <<'PY'
+          import json, sys
+          from collections import defaultdict
+          from datetime import datetime, timedelta, timezone
+          from pathlib import Path
+          sys.path.insert(0, "scripts")
+          import audit_market_reliability as a
+
+          ledger = json.loads(Path(".cache/tbt/market-quality/input/ledger.json").read_text())
+          now = datetime.now(timezone.utc)
+          start = now - timedelta(days=90)
+          candidates = {}
+          for row in ledger:
+              if not isinstance(row, dict):
+                  continue
+              for pub in row.get("market_publications") or []:
+                  if not isinstance(pub, dict) or pub.get("section") not in {"top_daily", "value"}:
+                      continue
+                  if str(pub.get("market") or "").lower() != "match_winner":
+                      continue
+                  issued = a.timestamp(pub.get("issued_at"))
+                  result = pub.get("result") if isinstance(pub.get("result"), dict) else {}
+                  scheduled = a.timestamp(result.get("scheduled_at") or row.get("scheduled_at"))
+                  if issued is None or scheduled is None or not start <= scheduled < now:
+                      continue
+                  if issued >= scheduled or pub.get("excluded_reason") or pub.get("publication_status") in {"pending", "expired_unpublished"}:
+                      continue
+                  key = a._semantic_key(row, pub)
+                  if key is None:
+                      continue
+                  prior = candidates.get(key)
+                  if prior is None or issued < prior[2]:
+                      candidates[key] = (row, pub, issued, scheduled)
+
+          rows = []
+          for row, pub, issued, scheduled in candidates.values():
+              correct, status = a._outcome(pub)
+              if status not in {"win", "loss"}:
+                  continue
+              probability, source = a._probability(row, pub)
+              depth = a._depth(row, pub)
+              version, version_source = a._model_version(row, pub)
+              rows.append({
+                  "section": str(pub.get("section")),
+                  "correct": bool(correct),
+                  "probability": probability,
+                  "probability_source": source,
+                  "depth": depth,
+                  "competition": a.competition(row),
+                  "model_version": version,
+                  "model_version_source": version_source,
+                  "scheduled": scheduled,
+              })
+
+          versions = sorted({r["model_version"] for r in rows if r["model_version"] != "unverified"})
+          current = versions[-1] if versions else ""
+          current_rows = [r for r in rows if r["model_version"] == current]
+
+          def conf_band(p):
+              if p is None: return "unknown"
+              if p < .65: return "lt65"
+              if p < .68: return "65_68"
+              if p < .72: return "68_72"
+              if p < .75: return "72_75"
+              if p < .80: return "75_80"
+              return "80_plus"
+          def depth_band(d):
+              if d is None: return "unknown"
+              if d < .80: return "lt080"
+              if d < .90: return "080_090"
+              return "090_plus"
+          def summarize(xs):
+              n=len(xs); w=sum(r["correct"] for r in xs)
+              known=[r for r in xs if r["probability"] is not None]
+              return {"n":n,"wins":w,"losses":n-w,"hit_rate":w/n if n else None,
+                      "mean_probability":sum(r["probability"] for r in known)/len(known) if known else None,
+                      "known_probability_n":len(known)}
+          def grouped(xs, fn):
+              d=defaultdict(list)
+              for r in xs: d[fn(r)].append(r)
+              return {k:summarize(v) for k,v in sorted(d.items())}
+
+          out = {
+              "current_model_version": current,
+              "overall": summarize(current_rows),
+              "by_section": grouped(current_rows, lambda r:r["section"]),
+              "by_section_confidence": grouped(current_rows, lambda r:f"{r['section']}|{conf_band(r['probability'])}"),
+              "by_section_competition": grouped(current_rows, lambda r:f"{r['section']}|{r['competition']}"),
+              "by_section_competition_confidence": grouped(current_rows, lambda r:f"{r['section']}|{r['competition']}|{conf_band(r['probability'])}"),
+              "by_section_depth": grouped(current_rows, lambda r:f"{r['section']}|{depth_band(r['depth'])}"),
+              "last_7d": summarize([r for r in current_rows if r["scheduled"] >= now-timedelta(days=7)]),
+              "last_14d": summarize([r for r in current_rows if r["scheduled"] >= now-timedelta(days=14)]),
+          }
+          Path(".cache/tbt/current-loss/current_champion.json").write_text(json.dumps(out, indent=2, ensure_ascii=False))
+          print("BLINQ_CURRENT_CHAMPION_BEGIN")
+          print(json.dumps(out, indent=2, ensure_ascii=False))
+          print("BLINQ_CURRENT_CHAMPION_END")
+          PY
       - uses: actions/upload-artifact@v4
         with:
           name: current-loss-segment-audit
