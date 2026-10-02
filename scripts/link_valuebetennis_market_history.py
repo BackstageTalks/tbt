@@ -61,6 +61,7 @@ def main():
 
     counts, staged, review, quarantine = Counter(), [], [], []
     seen_source_ids = set()
+    staged_by_match_id = {}
     for filename in args.source_csv:
         path = Path(filename); sha = _sha256(path)
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -111,12 +112,31 @@ def main():
                     quarantine.append({"match_id": str(m.match_id), "source_match_id": source.source_match_id,
                                        "reason": "existing_market_history_preserved"})
                     continue
-                counts["staged_matches"] += 1
-                staged.append({"schema": 1, "match_id": str(m.match_id), "canonical": _signature(m),
+                stage_row = {"schema": 1, "match_id": str(m.match_id), "canonical": _signature(m),
                     "incoming_market_history": marker,
                     "source": {"row_number": number, "source_match_id": source.source_match_id,
                                "score": linked["score"], "evidence": linked["evidence"],
-                               "orientation": linked["orientation"]}, "import_ready": True})
+                               "orientation": linked["orientation"]}, "import_ready": True}
+                match_key = str(m.match_id)
+                previous = staged_by_match_id.get(match_key)
+                if previous is not None:
+                    counts["duplicate_canonical_links"] += 1
+                    quarantine.append({"match_id": match_key,
+                                       "source_match_ids": [previous["source"]["source_match_id"], source.source_match_id],
+                                       "reason": "multiple_source_rows_link_same_canonical_match"})
+                    if previous in staged:
+                        staged.remove(previous)
+                        counts["staged_matches"] -= 1
+                    staged_by_match_id[match_key] = None
+                    continue
+                if match_key in staged_by_match_id:
+                    counts["duplicate_canonical_links"] += 1
+                    quarantine.append({"match_id": match_key, "source_match_id": source.source_match_id,
+                                       "reason": "additional_source_row_for_quarantined_canonical_match"})
+                    continue
+                counts["staged_matches"] += 1
+                staged.append(stage_row)
+                staged_by_match_id[match_key] = stage_row
 
     report = {"schema": 1, "canonical_rows": len(matches), "counts": dict(counts),
               "production_mutated": False, "api_requests": 0,
