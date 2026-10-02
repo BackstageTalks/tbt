@@ -53,6 +53,7 @@ FIXTURE = """() => {
   document.body.classList.remove('blinq-home','blinq-admin');
   document.body.classList.add('blinq-route');
   document.body.dataset.route='results';
+  document.querySelector('#predictionsView').hidden=true;
   document.querySelector('#routePanel').hidden=false;
   document.querySelector('#routePanel').innerHTML=
     t.renderResultsFilters()+t.resultsSummary()+t.resultsOutcomeTabs()+
