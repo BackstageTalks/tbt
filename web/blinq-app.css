@@ -9151,6 +9151,16 @@ body#blinqPremium .header-upgrade-icon{display:none}
   body#blinqPremium.blinq-home:not(.blinq-admin) .daily-hub-table .hub-confidence-cell{
     grid-area:confidence!important;align-self:stretch!important;padding:8px 4px!important;text-align:right!important;
   }
+  body#blinqPremium.blinq-home:not(.blinq-admin) .daily-hub-table .hub-odds + .hub-odds{
+    grid-area:confidence!important;
+  }
+  body#blinqPremium.blinq-home:not(.blinq-admin) .daily-hub-table .hub-odds + .hub-odds + .hub-confidence-cell{
+    display:none!important;
+  }
+  body#blinqPremium.blinq-home:not(.blinq-admin) .daily-hub-table .hub-seeall-model-cell{
+    grid-area:confidence!important;align-self:stretch!important;padding:8px 4px!important;text-align:right!important;
+    color:#edf7f3!important;font-size:13px!important;
+  }
   body#blinqPremium.blinq-home:not(.blinq-admin) .daily-hub-table .hub-pick:before,
   body#blinqPremium.blinq-home:not(.blinq-admin) .daily-hub-table .hub-odds:before,
   body#blinqPremium.blinq-home:not(.blinq-admin) .daily-hub-table .hub-confidence-cell:before{
