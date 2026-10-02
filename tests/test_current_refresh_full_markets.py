@@ -15,3 +15,13 @@ def test_current_refresh_merges_recent_completed_matches_in_memory():
     assert '"canonical_history": "read_only"' in PIPELINE
     assert '"recent_completed_refreshed_in_memory": recent_completed' in PIPELINE
     assert "reused_plus_recent_in_memory" in PIPELINE
+
+
+def test_ace_df_settlement_statistics_are_targeted_before_new_market_discovery():
+    assert "def _pending_ace_df_settlement_requirements(ledger):" in PIPELINE
+    assert "provider.event_statistics(provider_event_id)" in PIPELINE
+    assert '"ace_df_settlement_statistics": ace_df_settlement_stats_report' in PIPELINE
+    call = "ace_df_settlement_stats_report = _enrich_pending_ace_df_settlement_stats("
+    assert call in PIPELINE
+    assert PIPELINE.index(call) < PIPELINE.index("projection_odds_cap = max(")
+    assert "market not in {\"aces\", \"double_faults\"}" in PIPELINE
