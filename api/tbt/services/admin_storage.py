@@ -1463,6 +1463,63 @@ def _project_member_row_key(user_id: object) -> str:
     return hashlib.sha256(uid.encode("utf-8")).hexdigest()[:64]
 
 
+def _project_deadline_iso(value: object) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError("Invalid project group deadline") from exc
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def _project_entry_mode(entity: dict) -> str:
+    raw = str(entity.get("entry_mode") or "").strip().lower()
+    if raw in _PROJECT_GROUP_ENTRY_MODES:
+        return raw
+    return "open" if bool(entity.get("self_join_enabled", True)) else "locked"
+
+
+def _project_group_access(entity: dict, member_count: int, *, now: datetime | None = None) -> dict:
+    now = now or datetime.now(timezone.utc)
+    capacity = max(1, int(entity.get("capacity") or 1))
+    mode = _project_entry_mode(entity)
+    active = bool(entity.get("active", True))
+    full = max(0, int(member_count or 0)) >= capacity
+    deadline_text = str(entity.get("join_deadline") or "").strip()
+    deadline_passed = False
+    if deadline_text:
+        try:
+            deadline = datetime.fromisoformat(deadline_text.replace("Z", "+00:00"))
+            if deadline.tzinfo is None:
+                deadline = deadline.replace(tzinfo=timezone.utc)
+            deadline_passed = deadline.astimezone(timezone.utc) <= now
+        except ValueError:
+            deadline_passed = True
+    locked = (not active) or mode == "locked" or full or deadline_passed
+    reason = ""
+    if not active:
+        reason = "inactive"
+    elif full:
+        reason = "full"
+    elif deadline_passed:
+        reason = "deadline"
+    elif mode == "locked":
+        reason = "manual"
+    return {
+        "entry_mode": mode,
+        "locked": locked,
+        "lock_reason": reason,
+        "full": full,
+        "deadline_passed": deadline_passed,
+        "can_join": active and not locked and mode == "open",
+        "can_request": active and not locked and mode == "request",
+    }
+
+
 def normalize_project_group(payload: object, *, existing: dict | None = None) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Invalid project group")
@@ -1494,6 +1551,14 @@ def normalize_project_group(payload: object, *, existing: dict | None = None) ->
     payment_note = str(payload.get("payment_note", base.get("payment_note", "")) or "").strip()
     if len(payment_note) > 1200:
         raise ValueError("Project group payment note is too long")
+    explicit_mode = payload.get("entry_mode", base.get("entry_mode"))
+    if explicit_mode is None:
+        entry_mode = "open" if bool(payload.get("self_join_enabled", base.get("self_join_enabled", True))) else "locked"
+    else:
+        entry_mode = str(explicit_mode or "").strip().lower()
+    if entry_mode not in _PROJECT_GROUP_ENTRY_MODES:
+        raise ValueError("Invalid project group entry mode")
+    join_deadline = _project_deadline_iso(payload.get("join_deadline", base.get("join_deadline", "")))
     return {
         "name": name,
         "description": description,
@@ -1502,16 +1567,20 @@ def normalize_project_group(payload: object, *, existing: dict | None = None) ->
         "total_cost_cents": total_cost_cents,
         "currency": currency,
         "payment_note": payment_note,
-        "self_join_enabled": bool(payload.get("self_join_enabled", base.get("self_join_enabled", True))),
+        "entry_mode": entry_mode,
+        "join_deadline": join_deadline,
+        # Legacy compatibility: self_join_enabled still means immediate self-join.
+        "self_join_enabled": entry_mode == "open",
         "active": bool(payload.get("active", base.get("active", True))),
     }
 
 
 def _project_group_from_entity(entity: dict, *, member_count: int = 0, joined: bool = False,
-                               payment_status: str = "") -> dict:
+                               payment_status: str = "", request_status: str = "") -> dict:
     capacity = max(1, int(entity.get("capacity") or 1))
     total = max(0, int(entity.get("total_cost_cents") or 0))
     contribution = (total + capacity - 1) // capacity if total else 0
+    access = _project_group_access(entity, member_count)
     return {
         "id": str(entity.get("RowKey") or ""),
         "name": str(entity.get("name") or ""),
@@ -1524,9 +1593,17 @@ def _project_group_from_entity(entity: dict, *, member_count: int = 0, joined: b
         "contribution_cents": contribution,
         "currency": str(entity.get("currency") or "EUR"),
         "payment_note": str(entity.get("payment_note") or ""),
-        "self_join_enabled": bool(entity.get("self_join_enabled", True)),
+        "entry_mode": access["entry_mode"],
+        "effective_entry_mode": "locked" if access["locked"] else access["entry_mode"],
+        "join_deadline": str(entity.get("join_deadline") or ""),
+        "locked": bool(access["locked"]),
+        "lock_reason": str(access["lock_reason"] or ""),
+        "can_join": bool(access["can_join"]),
+        "can_request": bool(access["can_request"]),
+        "self_join_enabled": bool(access["can_join"]),
         "active": bool(entity.get("active", True)),
         "joined": bool(joined),
+        "request_status": str(request_status or ""),
         "payment_status": str(payment_status or ""),
         "created_at": str(entity.get("created_at") or ""),
         "updated_at": str(entity.get("updated_at") or ""),
@@ -1546,14 +1623,18 @@ def _project_group_entity(group_id: str) -> dict:
         raise AdminStorageUnavailable("Unable to load project group") from exc
 
 
-def _project_group_members(group_id: str) -> list[dict]:
+def _project_group_rows(group_id: str) -> list[dict]:
     try:
-        rows = list(_table(PROJECT_GROUP_MEMBERS_TABLE).query_entities(
+        return list(_table(PROJECT_GROUP_MEMBERS_TABLE).query_entities(
             query_filter=f"PartitionKey eq 'group:{group_id}'"
         ))
     except Exception as exc:
         raise AdminStorageUnavailable("Unable to load project group members") from exc
-    return [row for row in rows if str(row.get("status") or "joined") == "joined"]
+
+
+def _project_group_members(group_id: str) -> list[dict]:
+    return [row for row in _project_group_rows(group_id)
+            if str(row.get("status") or "joined") == "joined"]
 
 
 def project_group_ids_for_user(user_id: object) -> set[str]:
@@ -1585,20 +1666,29 @@ def list_project_groups(*, user_id: str = "", include_inactive: bool = False,
         if not include_inactive and not bool(entity.get("active", True)):
             continue
         group_id = str(entity.get("RowKey") or "")
-        members = _project_group_members(group_id)
-        own = next((row for row in members if str(row.get("user_id") or "") == str(user_id or "")), None)
+        group_rows = _project_group_rows(group_id)
+        members = [row for row in group_rows if str(row.get("status") or "joined") == "joined"]
+        requests = [row for row in group_rows if str(row.get("status") or "") == "requested"]
+        own = next((row for row in group_rows if str(row.get("user_id") or "") == str(user_id or "")), None)
+        own_status = str((own or {}).get("status") or "")
         item = _project_group_from_entity(
             entity,
             member_count=len(members),
             joined=group_id in joined_ids,
             payment_status=str((own or {}).get("payment_status") or ""),
+            request_status=own_status if own_status == "requested" else "",
         )
+        item["request_count"] = len(requests)
         if include_members:
             item["members"] = [{
                 "user_id": str(row.get("user_id") or ""),
                 "joined_at": str(row.get("joined_at") or ""),
                 "payment_status": str(row.get("payment_status") or "pending"),
             } for row in members]
+            item["requests"] = [{
+                "user_id": str(row.get("user_id") or ""),
+                "requested_at": str(row.get("requested_at") or ""),
+            } for row in requests]
         items.append(item)
     items.sort(key=lambda row: (not bool(row.get("active")), str(row.get("name") or "").lower()))
     return {"items": items}
@@ -1632,10 +1722,10 @@ def save_project_group(payload: object, *, actor_id: str = "", group_id: str = "
 
 def delete_project_group(group_id: str) -> dict:
     entity = _project_group_entity(group_id)
-    members = _project_group_members(group_id)
+    rows = _project_group_rows(group_id)
     member_table = _table(PROJECT_GROUP_MEMBERS_TABLE)
     try:
-        for row in members:
+        for row in rows:
             uid = str(row.get("user_id") or "")
             member_table.delete_entity(partition_key=f"group:{group_id}", row_key=_project_member_row_key(uid))
             try:
@@ -1657,23 +1747,47 @@ def join_project_group(group_id: str, user_id: object, *, admin: bool = False) -
     entity = _project_group_entity(group_id)
     if not bool(entity.get("active", True)):
         raise ValueError("Project group is not active")
-    if not admin and not bool(entity.get("self_join_enabled", True)):
-        raise ValueError("Self-join is disabled for this project group")
-    members = _project_group_members(group_id)
-    existing = next((row for row in members if str(row.get("user_id") or "") == uid), None)
-    if not existing and len(members) >= max(1, int(entity.get("capacity") or 1)):
+    rows = _project_group_rows(group_id)
+    members = [row for row in rows if str(row.get("status") or "joined") == "joined"]
+    existing = next((row for row in rows if str(row.get("user_id") or "") == uid), None)
+    existing_status = str((existing or {}).get("status") or "")
+    if existing_status == "joined":
+        return _project_group_from_entity(
+            entity, member_count=len(members), joined=True,
+            payment_status=str((existing or {}).get("payment_status") or "pending"),
+        )
+    if len(members) >= max(1, int(entity.get("capacity") or 1)):
         raise ValueError("Project group is full")
+
+    access = _project_group_access(entity, len(members))
+    if admin:
+        new_status = "joined"
+    else:
+        if access["locked"]:
+            reason = access["lock_reason"]
+            if reason == "full":
+                raise ValueError("Project group is full")
+            if reason == "deadline":
+                raise ValueError("Project group joining deadline has passed")
+            raise ValueError("Project group is locked")
+        if access["entry_mode"] == "open":
+            new_status = "joined"
+        elif access["entry_mode"] == "request":
+            new_status = "requested"
+        else:
+            raise ValueError("Project group is locked")
+
     now = datetime.now(timezone.utc).isoformat()
-    joined_at = str((existing or {}).get("joined_at") or now)
     payment_status = str((existing or {}).get("payment_status") or "pending")
     row = {
         "PartitionKey": f"group:{group_id}",
         "RowKey": _project_member_row_key(uid),
         "group_id": group_id,
         "user_id": uid,
-        "status": "joined",
+        "status": new_status,
         "payment_status": payment_status if payment_status in _PROJECT_PAYMENT_STATES else "pending",
-        "joined_at": joined_at,
+        "requested_at": str((existing or {}).get("requested_at") or now) if new_status == "requested" else "",
+        "joined_at": str((existing or {}).get("joined_at") or now) if new_status == "joined" else "",
         "updated_at": now,
     }
     reverse = {
@@ -1686,10 +1800,15 @@ def join_project_group(group_id: str, user_id: object, *, admin: bool = False) -
         table.upsert_entity(row, mode="replace")
         table.upsert_entity(reverse, mode="replace")
     except Exception as exc:
-        raise AdminStorageUnavailable("Unable to join project group") from exc
-    members = _project_group_members(group_id)
-    return _project_group_from_entity(entity, member_count=len(members), joined=True,
-                                      payment_status=row["payment_status"])
+        raise AdminStorageUnavailable("Unable to update project group membership") from exc
+    members_after = len(members) + (1 if new_status == "joined" else 0)
+    return _project_group_from_entity(
+        entity,
+        member_count=members_after,
+        joined=new_status == "joined",
+        payment_status=row["payment_status"] if new_status == "joined" else "",
+        request_status=new_status if new_status == "requested" else "",
+    )
 
 
 def leave_project_group(group_id: str, user_id: object) -> dict:
@@ -1723,6 +1842,8 @@ def set_project_member_payment(group_id: str, user_id: object, status: str) -> d
         if _is_missing_entity(exc):
             raise ValueError("User is not in this project group") from exc
         raise AdminStorageUnavailable("Unable to load project member") from exc
+    if str(current.get("status") or "") != "joined":
+        raise ValueError("User is not an approved project member")
     current["payment_status"] = status
     current["updated_at"] = datetime.now(timezone.utc).isoformat()
     reverse = dict(current)
