@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'daily', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -1030,7 +1030,7 @@
     const panelEyebrow=publicText(Object.prototype.hasOwnProperty.call(cfg,'eyebrow')?String(cfg.eyebrow||'').trim():'BLINQ COMMUNITY');
     host.hidden=false;host.innerHTML=`<div class="tg-panel-head"><div>${panelEyebrow?`<small>${escapeHtml(panelEyebrow)}</small>`:''}<h2>${escapeHtml(publicText(String(cfg.title||'Telegram skupiny')))}</h2><p>${escapeHtml(publicText(String(cfg.description||'')))}</p></div></div><div class="tg-group-grid">${cards}</div>`;
   }
-  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeroBanner(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); renderTelegramGroupsPanel(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); renderSystemFooterStatus(); translatePublicDom(document.body); }
+  function renderAllUiContent(){ applyEditableUiCopy(); if(state.bannerObserver){state.bannerObserver.disconnect();state.bannerObserver=null;}state.bannerTimers=new WeakMap();renderNavigation(); wireDashboardSearch(); applyManagedPageBackground(); renderHeroBanner(); renderMarketSections(); renderDashboardResultsPreview(); renderDashboardComposition(); renderDashboardKpis(); renderTelegramGroupsPanel(); refreshTopPlanCta(); updateLanguageLinks(); applyAccessStates(); renderInsightBell(); renderProjectGroupBar(); renderSystemFooterStatus(); translatePublicDom(document.body); }
 
   function auth(mode='login'){
     feedGeneration++;
@@ -1482,6 +1482,76 @@
     }
     return {candidates,priced,eligible:Math.max(0,eligible)};
   }
+  function projectGroupColor(value){
+    const color=String(value||'blue').toLowerCase();
+    return ['blue','orange','purple','green','teal','pink','gray'].includes(color)?color:'blue';
+  }
+  function joinedProjectGroups(){
+    return (Array.isArray(state.feed?.account?.project_groups)?state.feed.account.project_groups:[]).filter(item=>item&&item.joined!==false&&item.active!==false);
+  }
+  function insightMatchesCurrentChannel(item){
+    if(state.insightChannel==='live')return isLiveInsight(item);
+    if(state.insightChannel==='project'){
+      return !isLiveInsight(item)
+        &&String(item?.audience_mode||'levels')==='groups'
+        &&Array.isArray(item?.group_ids)
+        &&item.group_ids.map(String).includes(String(state.activeProjectGroupId||''));
+    }
+    return !isLiveInsight(item)&&String(item?.audience_mode||'levels')!=='groups';
+  }
+  function renderProjectGroupBar(){
+    const host=$('projectGroupBar');if(!host)return;
+    const groups=joinedProjectGroups();
+    host.hidden=!groups.length;
+    if(!groups.length){host.innerHTML='';return;}
+    host.innerHTML=groups.map(group=>{
+      const unread=state.insights.filter(item=>!item.read&&!isLiveInsight(item)&&String(item?.audience_mode||'levels')==='groups'&&Array.isArray(item?.group_ids)&&item.group_ids.map(String).includes(String(group.id))).length;
+      return `<button type="button" class="project-group-chip is-${escapeHtml(projectGroupColor(group.color))}${String(state.activeProjectGroupId)===String(group.id)&&state.insightDrawerOpen&&state.insightChannel==='project'?' is-active':''}" data-project-group-open="${escapeHtml(group.id)}"><span aria-hidden="true">◆</span><strong>${escapeHtml(group.name||'Projekt')}</strong>${unread?`<b>${Math.min(99,unread)}</b>`:''}</button>`;
+    }).join('');
+  }
+  function formatProjectMoney(cents,currency='EUR'){
+    const value=Math.max(0,Number(cents)||0)/100;
+    try{return new Intl.NumberFormat(localeTag,{style:'currency',currency:String(currency||'EUR')}).format(value);}
+    catch{return value.toFixed(2)+' '+String(currency||'EUR');}
+  }
+  async function loadProjectGroups(force=false){
+    if(state.projectGroupsLoading||(!force&&state.projectGroups.length))return;
+    state.projectGroupsLoading=true;state.projectGroupsError='';renderProjectGroupsDialog();
+    try{
+      const data=await BlinqAuth.projectGroups();
+      state.projectGroups=Array.isArray(data?.items)?data.items:[];
+    }catch(error){
+      state.projectGroupsError=error?.message||'Projektové skupiny sa nepodarilo načítať.';
+    }finally{
+      state.projectGroupsLoading=false;renderProjectGroupsDialog();
+    }
+  }
+  function renderProjectGroupsDialog(){
+    const list=$('projectGroupsDialogList'),status=$('projectGroupsDialogStatus');if(!list||!status)return;
+    if(state.projectGroupsLoading){status.textContent='Načítavam projektové skupiny…';list.innerHTML='';return;}
+    if(state.projectGroupsError){status.textContent=state.projectGroupsError;list.innerHTML='';return;}
+    const groups=Array.isArray(state.projectGroups)?state.projectGroups:[];
+    status.textContent=groups.length?`${groups.filter(g=>g.joined).length} moje · ${groups.length} dostupných`:'Momentálne nie sú otvorené žiadne projekty.';
+    list.innerHTML=groups.map(group=>{
+      const full=Number(group.member_count)>=Number(group.capacity),joined=Boolean(group.joined),canJoin=Boolean(group.self_join_enabled)&&!full;
+      const contribution=Number(group.contribution_cents)>0?`${formatProjectMoney(group.contribution_cents,group.currency)} / osoba`:'Bez spoločného príspevku';
+      return `<article class="project-directory-card is-${escapeHtml(projectGroupColor(group.color))}"><header><div><small>PROJEKT</small><strong>${escapeHtml(group.name||'Projekt')}</strong></div><span>${Number(group.member_count)||0}/${Number(group.capacity)||0}</span></header><p>${escapeHtml(group.description||'')}</p><div class="project-directory-meta"><span>${escapeHtml(contribution)}</span>${Number(group.total_cost_cents)>0?`<span>${escapeHtml(formatProjectMoney(group.total_cost_cents,group.currency))} spolu</span>`:''}</div><footer>${joined?`<button type="button" class="btn btn-ghost" data-project-group-open="${escapeHtml(group.id)}">Otvoriť INFO</button><button type="button" class="btn btn-ghost danger" data-project-leave="${escapeHtml(group.id)}">Odísť</button>`:`<button type="button" class="btn btn-primary" data-project-join="${escapeHtml(group.id)}" ${canJoin?'':'disabled'}>${full?'Skupina je plná':group.self_join_enabled?'Pridať sa':'Len na pozvanie'}</button>`}</footer></article>`;
+    }).join('');
+  }
+  function openProjectGroupsDialog(){
+    closeProfileMenu();
+    const dialog=$('projectGroupsDialog');if(!dialog)return;
+    if(!dialog.open)dialog.showModal();
+    loadProjectGroups(true);
+  }
+  function openProjectGroupMessages(groupId){
+    const group=joinedProjectGroups().find(item=>String(item.id)===String(groupId));
+    if(!group){openProjectGroupsDialog();return;}
+    state.activeProjectGroupId=String(group.id);
+    setInsightDrawer(true,'project');
+    renderProjectGroupBar();
+  }
+
   function renderInsightBell(){
     const bell=$('insightBell'),badge=$('insightUnread'),shortcut=$('insightShortcut'),shortcutLabel=$('insightShortcutLabel'),shortcutCount=$('insightShortcutCount');if(!bell||!badge)return;
     const plan=accountPlan(),notificationCfg=notificationAudienceConfig(),liveMin=notificationCfg.live_min_level;
@@ -1505,7 +1575,7 @@
     }
     if(shortcutCount){const n=confirmed?Number(radar.signals)||0:watching?Number(radar.candidates)||0:0;shortcutCount.textContent=String(n);shortcutCount.hidden=!n||!liveEligible;}
     if(shortcutLabel){shortcutLabel.textContent=liveEligible?(confirmed?'CONFIRMED':watching?'WATCH':'RADAR'):'RADAR';shortcutLabel.hidden=false;}
-    const infoUnread=state.insights.filter(item=>!item.read&&!isLiveInsight(item)).length;
+    const infoUnread=state.insights.filter(item=>!item.read&&!isLiveInsight(item)&&String(item?.audience_mode||'levels')!=='groups').length;
     badge.textContent=infoUnread>99?'99+':String(infoUnread);badge.hidden=!infoUnread||!infoEligible;
     bell.classList.toggle('has-unread',infoUnread>0);bell.setAttribute('aria-expanded',state.insightDrawerOpen&&state.insightChannel==='info'?'true':'false');
   }
@@ -1514,14 +1584,14 @@
   }
   function renderInsightDrawer(){
     const drawer=$('insightDrawer'),list=$('insightDrawerList'),status=$('insightDrawerStatus'),toolbar=$('insightDrawerToolbar');if(!drawer||!list||!status)return;
-    const channel=state.insightChannel==='live'?'live':'info';
+    const channel=state.insightChannel==='live'?'live':state.insightChannel==='project'?'project':'info';
     const filter=state.insightFilter||'all';
     const liveTab=['set2','results'].includes(state.liveRadarTab)?state.liveRadarTab:'comeback';
     // INFO messages are not subject to the LIVE-only subtab filter. The old
     // "channel !== 'live' || ... ? false : ..." ternary accidentally removed
     // every INFO item, even when the header badge correctly counted it.
     const channelRows=state.insights
-      .filter(item=>channel==='live'?isLiveInsight(item):!isLiveInsight(item))
+      .filter(item=>insightMatchesCurrentChannel(item))
       .filter(item=>channel!=='live'
         ?true
         :liveTab==='results'
@@ -1532,10 +1602,11 @@
     const rows=channelRows.filter(item=>filter==='unread'?!item.read:filter==='pinned'?Boolean(item.pinned):true);
     const channelUnread=channelRows.filter(item=>!item.read).length;
     const title=$('insightDrawerTitle'),eyebrow=$('insightDrawerEyebrow');
-    if(title)title.textContent=channel==='live'?'LIVE Radar':'BlinQ Info';
+    const activeProject=joinedProjectGroups().find(group=>String(group.id)===String(state.activeProjectGroupId));
+    if(title)title.textContent=channel==='live'?'LIVE Radar':channel==='project'?(activeProject?.name||'Projekt'):'BlinQ Info';
     // INFO already has the "BlinQ Info" title; avoid the duplicate green eyebrow.
     // Keep the separate LIVE label when opening the LIVE Radar drawer.
-    if(eyebrow){eyebrow.hidden=channel!=='live';eyebrow.textContent=channel==='live'?'BLINQ LIVE':'';}
+    if(eyebrow){eyebrow.hidden=channel==='info';eyebrow.textContent=channel==='live'?'BLINQ LIVE':channel==='project'?'PROJEKTOVÁ SKUPINA':'';}
     drawer.dataset.channel=channel;
     if(state.insightsLoading) status.innerHTML=`<span class="insight-status-dot is-loading"></span><strong>${escapeHtml(lcopy('Loading private feed…','Načítavam súkromný feed…','Načítám soukromý feed…'))}</strong>`;
     else if(state.insightsStorageUnavailable) status.innerHTML=`<span class="insight-status-dot is-offline"></span><strong>${escapeHtml(lcopy('Private feed is temporarily unavailable.','Súkromný feed je dočasne nedostupný.','Soukromý feed je dočasně nedostupný.'))}</strong>`;
@@ -1586,7 +1657,7 @@
       else{list.innerHTML=`<div class="insight-feed-empty insight-feed-offline"><i>!</i><strong>${escapeHtml(uiCopy('private_feed.info_title_offline',lcopy('Premium Info temporarily unavailable','Premium Info je dočasne nedostupné','Premium Info je dočasně nedostupné')))}</strong><p>${escapeHtml(infoCopy)}</p></div>`;}
       return;
     }
-    if(!rows.length){const set2Empty=channel==='live'&&state.liveRadarTab==='set2';const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):set2Empty?lcopy('No eligible set-2 candidate is active right now.','Momentálne nie je aktívny žiadny kvalifikovaný kandidát pre 2. set.','Momentálně není aktivní žádný kvalifikovaný kandidát pro 2. set.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');const emptyDetail=set2Empty?lcopy('The set-2 radar waits for an eligible Short Odds candidate after a lost first set; a real live set-2 price is shown when the provider offers it.','Radar 2. setu čaká na kvalifikovaného Short Odds kandidáta po prehratom 1. sete; reálny LIVE kurz na 2. set zobrazí, keď ho provider ponúkne.','Radar 2. setu čeká na kvalifikovaného Short Odds kandidáta po prohraném 1. setu; reálný LIVE kurz na 2. set zobrazí, když ho provider nabídne.'):channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.');list.innerHTML=radarPanel+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(emptyDetail)}</p></div>`;return;}
+    if(!rows.length){const set2Empty=channel==='live'&&state.liveRadarTab==='set2';const msg=filter==='unread'?lcopy('You have read everything.','Všetko máš prečítané.','Všechno máš přečtené.'):filter==='pinned'?lcopy('No pinned messages yet.','Zatiaľ nemáš pripnuté správy.','Zatím nemáš připnuté zprávy.'):set2Empty?lcopy('No eligible set-2 candidate is active right now.','Momentálne nie je aktívny žiadny kvalifikovaný kandidát pre 2. set.','Momentálně není aktivní žádný kvalifikovaný kandidát pro 2. set.'):channel==='live'?lcopy('No LIVE signal is active right now.','Momentálne nie je aktívny žiadny LIVE signál.','Momentálně není aktivní žádný LIVE signál.'):channel==='project'?lcopy('No project messages yet.','V tejto projektovej skupine zatiaľ nie sú žiadne správy.','V této projektové skupině zatím nejsou žádné zprávy.'):lcopy('No messages for your membership yet.','Pre tvoju úroveň zatiaľ nie sú žiadne správy.','Pro tvoji úroveň zatím nejsou žádné zprávy.');const emptyDetail=set2Empty?lcopy('The set-2 radar waits for an eligible Short Odds candidate after a lost first set; a real live set-2 price is shown when the provider offers it.','Radar 2. setu čaká na kvalifikovaného Short Odds kandidáta po prehratom 1. sete; reálny LIVE kurz na 2. set zobrazí, keď ho provider ponúkne.','Radar 2. setu čeká na kvalifikovaného Short Odds kandidáta po prohraném 1. setu; reálný LIVE kurz na 2. set zobrazí, když ho provider nabídne.'):channel==='live'?lcopy('WATCH candidates and confirmed comeback signals will appear here.','WATCH kandidáti a potvrdené comeback signály sa zobrazia tu.','WATCH kandidáti a potvrzené comeback signály se zobrazí zde.'):lcopy('Important BlinQ updates and private member notes will appear here.','Dôležité BlinQ informácie a súkromné správy pre členov sa zobrazia tu.','Důležité BlinQ informace a soukromé zprávy pro členy se zobrazí zde.');list.innerHTML=radarPanel+`<div class="insight-feed-empty"><i>✦</i><strong>${escapeHtml(msg)}</strong><p>${escapeHtml(emptyDetail)}</p></div>`;return;}
     list.innerHTML=radarPanel+rows.map(item=>`<article class="insight-feed-item ${item.read?'is-read':'is-unread'} priority-${escapeHtml(item.priority||'normal')}" data-insight-id="${escapeHtml(item.id)}"><div class="insight-feed-icon type-${escapeHtml(item.type||'insight')}">${escapeHtml(insightTypeIcon(item.type))}</div><div class="insight-feed-content"><header><div><span>${escapeHtml(insightTypeLabel(item.type))}</span>${item.pinned?'<b>PRIPNUTÉ</b>':''}${!item.read?'<em>NEW</em>':''}</div><time>${escapeHtml(item.created_at?fmtDate(item.created_at)+' · '+fmtTime(item.created_at):'')}</time></header><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.body)}</p><footer><small>${escapeHtml(insightAudienceText(item.levels))}</small>${item.match_id?`<button type="button" data-insight-match="${escapeHtml(item.match_id)}">${escapeHtml(item.link_label||lcopy('Open match','Otvoriť zápas','Otevřít zápas'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></button>`:item.link?`<a href="${escapeHtml(item.link)}" ${isExternalLink(item.link)?'target="_blank" rel="noopener"':''}>${escapeHtml(item.link_label||lcopy('Open','Otvoriť','Otevřít'))}<svg viewBox="0 0 20 20" aria-hidden="true"><path d="m7 5 5 5-5 5"></path></svg></a>`:''}</footer></div></article>`).join('');
   }
   async function loadInsights(force=false){
@@ -1603,7 +1674,7 @@
       if(generation!==feedGeneration)return;
       state.insights=[];state.insightsUnread=0;state.insightsStorageUnavailable=true;
     }finally{
-      if(generation===feedGeneration){state.insightsLoading=false;renderInsightBell();renderInsightDrawer();renderSystemFooterStatus();}
+      if(generation===feedGeneration){state.insightsLoading=false;renderInsightBell();renderProjectGroupBar();renderInsightDrawer();renderSystemFooterStatus();}
     }
   }
   async function refreshPrivateUpdates(force=false){
@@ -1624,9 +1695,9 @@
   }
   function setInsightDrawer(open,channel=null){
     const drawer=$('insightDrawer'),backdrop=$('insightBackdrop');if(!drawer||!backdrop)return;
-    if(channel&&channel!==state.insightChannel){state.insightChannel=channel==='live'?'live':'info';state.insightFilter='all';}
+    if(channel&&channel!==state.insightChannel){state.insightChannel=['live','project'].includes(channel)?channel:'info';state.insightFilter='all';}
     state.insightDrawerOpen=Boolean(open);drawer.hidden=!state.insightDrawerOpen;backdrop.hidden=!state.insightDrawerOpen;document.body.classList.toggle('insight-open',state.insightDrawerOpen);
-    renderInsightBell();renderInsightDrawer();
+    renderInsightBell();renderProjectGroupBar();renderInsightDrawer();
     if(state.insightDrawerOpen){loadInsights(true);if(state.insightChannel==='live')loadUserLiveRadarStatus(true);}
   }
   function toggleInsightChannel(channel){
@@ -3601,6 +3672,97 @@
     const submit=form.querySelector('#adminInsightSubmit');
     if(submit)submit.textContent=form.dataset.editing==='1'?'Uložiť':blocks.length===1?'Publikovať':'Publikovať '+blocks.length+' správy';
   }
+  async function loadAdminProjectGroups(force=false){
+    const generation=feedGeneration;
+    if(state.adminProjectGroupsLoading||(!force&&Array.isArray(state.adminProjectGroups)))return;
+    state.adminProjectGroupsLoading=true;state.adminProjectGroupsError='';rerenderAdmin();
+    try{
+      const data=await BlinqAuth.adminProjectGroups();
+      if(generation!==feedGeneration)return;
+      state.adminProjectGroups=Array.isArray(data?.items)?data.items:[];
+      if(state.adminProjectGroupId&&!state.adminProjectGroups.some(group=>String(group.id)===String(state.adminProjectGroupId)))state.adminProjectGroupId='';
+      if(!state.adminProjectGroupId&&state.adminProjectGroups.length)state.adminProjectGroupId=String(state.adminProjectGroups[0].id);
+    }catch(error){
+      if(generation!==feedGeneration)return;
+      state.adminProjectGroups=[];
+      state.adminProjectGroupsError=error?.message||'Projektové skupiny sa nepodarilo načítať.';
+    }finally{
+      if(generation===feedGeneration){state.adminProjectGroupsLoading=false;rerenderAdmin();}
+    }
+  }
+  function adminProjectUserLabel(user){
+    return String(user?.telegram_nick||user?.email||user?.id||'Používateľ');
+  }
+  function renderAdminProjectGroups(){
+    const groups=Array.isArray(state.adminProjectGroups)?state.adminProjectGroups:[];
+    if(!state.adminProjectGroupId&&groups.length)state.adminProjectGroupId=String(groups[0].id);
+    const selected=groups.find(group=>String(group.id)===String(state.adminProjectGroupId))||null;
+    const users=Array.isArray(state.adminUsers)?state.adminUsers:[];
+    const insights=Array.isArray(state.adminInsights)?state.adminInsights:[];
+    const results=Array.isArray(state.adminInfoResults)?state.adminInfoResults:[];
+    const projectMessages=selected?insights.filter(row=>String(row.audience_mode||'levels')==='groups'&&Array.isArray(row.group_ids)&&row.group_ids.map(String).includes(String(selected.id))):[];
+    const projectResults=selected?results.filter(row=>String(row.audience_mode||'levels')==='groups'&&Array.isArray(row.group_ids)&&row.group_ids.map(String).includes(String(selected.id))):[];
+    const resultBySource=new Map(projectResults.map(row=>[String(row.source_id||''),row]));
+    const outcomeText=value=>({win:'WIN',loss:'LOSS',void:'VOID'})[String(value||'').toLowerCase()]||'';
+    const list=groups.map(group=>`<button type="button" class="admin-project-list-row${String(group.id)===String(state.adminProjectGroupId)?' is-active':''}" data-admin-action="project-select" data-project-id="${escapeHtml(group.id)}"><i class="is-${escapeHtml(projectGroupColor(group.color))}"></i><span><strong>${escapeHtml(group.name||'Projekt')}</strong><small>${Number(group.member_count)||0}/${Number(group.capacity)||0} členov · ${group.self_join_enabled?'self-join':'na pozvanie'}</small></span><b>›</b></button>`).join('');
+    const memberIds=new Set((selected?.members||[]).map(row=>String(row.user_id||'')));
+    const availableUsers=users.filter(user=>!memberIds.has(String(user.id)));
+    const userOptions=availableUsers.map(user=>`<option value="${escapeHtml(user.id)}">${escapeHtml(adminProjectUserLabel(user))} · ${escapeHtml(String(user.plan||'').toUpperCase())}</option>`).join('');
+    const memberRows=(selected?.members||[]).map(member=>{
+      const user=users.find(row=>String(row.id)===String(member.user_id));
+      const status=String(member.payment_status||'pending');
+      return `<div class="admin-project-member-row"><span><strong>${escapeHtml(adminProjectUserLabel(user)||member.user_id)}</strong><small>${escapeHtml(String(user?.plan||'').toUpperCase()||'—')} · od ${escapeHtml(member.joined_at?fmtDate(member.joined_at):'—')}</small></span><select data-project-payment-user="${escapeHtml(member.user_id)}"><option value="pending"${status==='pending'?' selected':''}>Platba čaká</option><option value="paid"${status==='paid'?' selected':''}>Zaplatené</option><option value="waived"${status==='waived'?' selected':''}>Bez platby</option></select><button type="button" class="btn btn-ghost danger" data-admin-action="project-member-remove" data-project-user="${escapeHtml(member.user_id)}">×</button></div>`;
+    }).join('');
+    const messageRows=projectMessages.map(row=>{
+      const result=resultBySource.get(String(row.id||'')),outcome=String(result?.outcome||'').toLowerCase();
+      return `<article class="admin-project-info-row"><div><small>INFO · ${escapeHtml(row.created_at?fmtDate(row.created_at)+' '+fmtTime(row.created_at):'')}${outcome?' · '+outcomeText(outcome):''}</small><strong>${escapeHtml(row.title||'')}</strong><p>${escapeHtml(row.body||'')}</p><span>${Number(row.read_count)||0} prečítaní</span></div><div class="admin-project-info-actions">${['win','loss','void'].map(value=>`<button type="button" class="admin-outcome-btn outcome-${value}${outcome===value?' is-selected':''}" data-admin-action="info-result-set" data-insight-id="${escapeHtml(row.id)}" data-info-outcome="${value}">${value.toUpperCase()}</button>`).join('')}<button type="button" class="btn btn-ghost danger" data-admin-action="insight-delete" data-insight-id="${escapeHtml(row.id)}">Zmazať</button></div></article>`;
+    }).join('');
+    const history=projectResults.map(row=>`<article class="admin-project-result-row outcome-${escapeHtml(row.outcome||'')}"><span>${escapeHtml(row.settled_at?fmtDate(row.settled_at)+' '+fmtTime(row.settled_at):'')}</span><strong>${escapeHtml(row.title||row.source_id||'INFO')}</strong><b>${escapeHtml(outcomeText(row.outcome))}</b></article>`).join('');
+    const colors=['blue','orange','purple','green','teal','pink','gray'].map(color=>`<option value="${color}"${projectGroupColor(selected?.color)===color?' selected':''}>${color.toUpperCase()}</option>`).join('');
+    const contribution=selected&&Number(selected.contribution_cents)>0?formatProjectMoney(selected.contribution_cents,selected.currency):'0 €';
+    const workspace=!selected?`<div class="admin-project-empty"><strong>Vytvor prvú projektovú skupinu</strong><span>Po kliknutí na + Nová skupina sa automaticky vytvorí kompletná štruktúra: členovia, INFO správy aj vyhodnotenia.</span></div>`:`
+      <div class="admin-project-workspace">
+        <section class="admin-project-info-composer">
+          <div class="admin-subsection-heading"><div><strong>${escapeHtml(selected.name)}</strong><span>Projektový INFO kanál</span></div></div>
+          <form id="adminProjectMessageForm">
+            <label>Nadpis<input id="adminProjectMessageTitle" maxlength="140" required placeholder="Napr. Dnešný projektový tip"></label>
+            <label>Správa<textarea id="adminProjectMessageBody" maxlength="4000" rows="5" required placeholder="Napíš správu pre členov tejto skupiny…"></textarea></label>
+            <label>Event ID / zápas <span>(voliteľné)</span><input id="adminProjectMessageMatch" maxlength="96"></label>
+            <div class="admin-insight-actions"><button class="btn btn-primary" type="submit">Poslať do skupiny</button><span id="adminProjectMessageStatus"></span></div>
+          </form>
+        </section>
+        <section class="admin-project-published">
+          <div class="admin-subsection-heading"><div><strong>Publikované</strong><span>${projectMessages.length} správ</span></div></div>
+          ${messageRows||'<div class="admin-note">Zatiaľ žiadne projektové INFO správy.</div>'}
+        </section>
+        <section class="admin-project-results">
+          <div class="admin-subsection-heading"><div><strong>Vyhodnotenia</strong><span>${projectResults.length} výsledkov</span></div></div>
+          <p class="admin-live-delete-help">WIN / LOSS / VOID sa ukladá samostatne. História zostáva zachovaná aj keď pôvodná INFO správa expiruje alebo ju neskôr zmažeš.</p>
+          ${history||'<div class="admin-note">Zatiaľ nič vyhodnotené.</div>'}
+        </section>
+        <details class="admin-project-settings">
+          <summary>Nastavenie skupiny · členovia · príspevok</summary>
+          <form id="adminProjectGroupForm">
+            <div class="admin-form-grid"><label>Názov<input id="adminProjectName" maxlength="80" required value="${escapeHtml(selected.name||'')}"></label><label>Farba<select id="adminProjectColor">${colors}</select></label><label>Kapacita<input id="adminProjectCapacity" type="number" min="1" max="500" value="${Number(selected.capacity)||10}"></label><label>Spolu €<input id="adminProjectTotalCost" type="number" min="0" step="0.01" value="${(Number(selected.total_cost_cents)||0)/100}"></label></div>
+            <label>Popis<textarea id="adminProjectDescription" maxlength="1200" rows="3">${escapeHtml(selected.description||'')}</textarea></label>
+            <label>Poznámka k platbe<textarea id="adminProjectPaymentNote" maxlength="1200" rows="2">${escapeHtml(selected.payment_note||'')}</textarea></label>
+            <div class="admin-project-cost-summary"><span>Obsadenosť <b>${Number(selected.member_count)||0}/${Number(selected.capacity)||0}</b></span><span>Príspevok pri plnej skupine <b>${escapeHtml(contribution)} / osoba</b></span></div>
+            <div class="admin-insight-flags"><label><input id="adminProjectSelfJoin" type="checkbox" ${selected.self_join_enabled?'checked':''}> Používatelia sa môžu pridať sami</label><label><input id="adminProjectActive" type="checkbox" ${selected.active!==false?'checked':''}> Aktívna skupina</label></div>
+            <div class="admin-insight-actions"><button class="btn btn-primary" type="submit">Uložiť skupinu</button><button type="button" class="btn btn-ghost danger" data-admin-action="project-delete">Zmazať skupinu</button><span id="adminProjectFormStatus"></span></div>
+          </form>
+          <div class="admin-project-members">
+            <div class="admin-subsection-heading"><div><strong>Členovia</strong><span>${(selected.members||[]).length} ľudí</span></div></div>
+            <div class="admin-project-add-member"><select id="adminProjectMemberSelect"><option value="">Vyber používateľa…</option>${userOptions}</select><button type="button" class="btn btn-ghost" data-admin-action="project-member-add" ${availableUsers.length?'':'disabled'}>+ Pridať</button></div>
+            <div>${memberRows||'<div class="admin-note">Skupina zatiaľ nemá členov.</div>'}</div>
+          </div>
+        </details>
+      </div>`;
+    return `<section class="admin-ux-section admin-projects"><div class="admin-ux-heading"><div><small>PROJEKTOVÉ SKUPINY</small><h2>Skupiny nezávislé od levelu</h2><p>Vytvor ľubovoľný počet skupín. Každá dostane vlastný INFO kanál a samostatnú históriu WIN / LOSS / VOID.</p></div><button class="btn btn-primary" type="button" data-admin-action="project-create">+ Nová skupina</button></div>
+      ${state.adminProjectGroupsError?`<div class="admin-runtime-note is-error">${escapeHtml(state.adminProjectGroupsError)}</div>`:''}
+      <div class="admin-project-layout"><aside class="admin-project-list">${state.adminProjectGroupsLoading?'<div class="admin-note">Načítavam…</div>':list||'<div class="admin-note">Žiadne skupiny.</div>'}</aside>${workspace}</div>
+    </section>`;
+  }
+
   function renderAdminInsights(){
     const item=adminInsightDraft(),levels=Array.isArray(item.levels)?item.levels:[];const list=Array.isArray(state.adminInsights)?state.adminInsights:[];
     const notificationCfg=notificationAudienceConfig(),
@@ -3628,9 +3790,9 @@
       <div class="admin-insight-actions"><button class="btn btn-primary" type="button" data-admin-action="save-live-history-access">Uložiť históriu LIVE</button></div>
     </div>`;
     const liveTypes=new Set(['alert','live_watch','set2']);
-    const infoEntries=list.filter(row=>!liveTypes.has(String(row.type||'').toLowerCase()));
+    const infoEntries=list.filter(row=>!liveTypes.has(String(row.type||'').toLowerCase())&&String(row.audience_mode||'levels')!=='groups');
     const liveEntries=list.filter(row=>liveTypes.has(String(row.type||'').toLowerCase()));
-    const infoResults=Array.isArray(state.adminInfoResults)?state.adminInfoResults:[];
+    const infoResults=(Array.isArray(state.adminInfoResults)?state.adminInfoResults:[]).filter(row=>String(row.audience_mode||'levels')!=='groups');
     const infoResultBySource=new Map(infoResults.map(row=>[String(row.source_id||''),row]));
     const outcomeText=value=>({win:'WIN',loss:'LOSS',void:'VOID'})[String(value||'').toLowerCase()]||'';
     const insightRow=(row,allowEdit=true)=>{
@@ -4145,12 +4307,13 @@
   }
 
   function renderAdminRoute(){
-    const tabs=[['accounts','Účty','Prístup · platnosť'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['system','Systém','Diagnostika']];
+    const tabs=[['accounts','Účty','Prístup · platnosť'],['projects','Projektové skupiny','Skupiny · INFO · výsledky'],['levels','Členstvá','Levely · odkazy'],['dashboard','Dashboard setting','3 karty · KPI'],['layout','Zobrazenie','Panely · riadky'],['banners','Bannery','Hero · pozadie'],['telegram','Telegram','Skupiny · odkazy'],['insights','Info & LIVE','Správy · radar'],['system','Systém','Diagnostika']];
     const valid=tabs.map(row=>row[0]);if(!valid.includes(state.adminTab))state.adminTab='accounts';
-    const renderers={accounts:renderAdminAccounts,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
-    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard setting','Nastavenie troch hlavných metrík bez zmeny grafiky.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
+    const renderers={accounts:renderAdminAccounts,projects:renderAdminProjectGroups,levels:renderAdminLevels,dashboard:renderAdminDashboardSettings,layout:renderAdminLayout,banners:renderAdminBanners,telegram:renderAdminTelegram,insights:renderAdminInsights,system:renderAdminSystem};const panel=renderers[state.adminTab]();const uiHistoryPanel=state.adminTab==='banners'?renderAdminUiHistory():'';
+    const info={accounts:['Účty','Používatelia, level a platnosť prístupu.'],projects:['Projektové skupiny','Samostatné skupiny bez ohľadu na level, ich INFO kanál a vyhodnotenia.'],levels:['Členstvá','Názvy, popisy, odkazy a dostupnosť levelov.'],dashboard:['Dashboard setting','Nastavenie troch hlavných metrík bez zmeny grafiky.'],layout:['Zobrazenie','SHOW / BLUR / HIDE pre panely a jednotlivé riadky.'],banners:['Bannery','Hero carousel, texty, odkazy, mobilný podklad a pozadie.'],telegram:['Telegram','Skupiny, odkazy a minimálna úroveň prístupu.'],insights:['Info & LIVE','Správy podľa levelu a Comeback radar.'],system:['Systém','Úložisko, API, feed a prevádzková diagnostika.']}[state.adminTab];
     let contextual='';
     if(state.adminTab==='accounts')contextual='<div class="admin-account-direct-note"><span></span>Zmeny účtov sa aplikujú okamžite</div>';
+    else if(state.adminTab==='projects')contextual='<div class="admin-account-direct-note"><span></span>Skupiny a správy sa ukladajú okamžite</div>';
     else if(state.adminTab==='insights')contextual='<div class="admin-account-direct-note"><span></span>Správy sa publikujú okamžite</div>';
     else if(state.adminTab==='system')contextual='<div class="admin-account-direct-note"><span></span>Kontrola je len čítacia diagnostika</div>';
     else contextual='<div class="admin-publish-hint"><span>Koncept</span><i></i><b>Live po publikovaní</b></div><button class="btn btn-ghost" type="button" data-admin-action="load-draft">Načítať koncept</button><button class="btn btn-ghost" type="button" data-admin-action="save-draft">Uložiť koncept</button><button class="btn btn-primary" type="button" data-admin-action="publish-config" '+(state.uiStorageAvailable===true?'':'disabled title="Publikovanie je pozastavené, kým sa neoverí Azure konfigurácia"')+'>Publikovať</button>';
@@ -4291,7 +4454,7 @@
     const host=$('routePanel'); if(!host)return;
     decorateAdminMediaUploads(host);
     host.onclick=async event=>{
-      const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='insights'){loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();}if(state.adminTab==='system')loadAdminDiagnostics(true);return;}
+      const tab=event.target.closest('[data-admin-tab]');if(tab){state.adminTab=tab.dataset.adminTab;rerenderAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='insights'){loadAdminInsights();loadAdminInfoResults();loadAdminLiveResults();}if(state.adminTab==='system')loadAdminDiagnostics(true);return;}
       const tgAction=event.target.closest('[data-admin-action="tg-add"],[data-admin-action="tg-remove"]');if(tgAction){const cfg=state.ui.telegram_groups=state.ui.telegram_groups||{schema:1,enabled:true,groups:[]};cfg.groups=Array.isArray(cfg.groups)?cfg.groups:[];if(tgAction.dataset.adminAction==='tg-add'){cfg.groups.push({id:`group_${Date.now()}`,enabled:true,badge:'KOMUNITA',title:'Telegram skupina',description:'',cta:'Otvoriť Telegram',url:'',min_plan:'rookie'});}else{const index=Number(tgAction.dataset.tgIndex);if(Number.isInteger(index)&&index>=0)cfg.groups.splice(index,1);}renderTelegramGroupsPanel();rerenderAdmin();return;}
       const planChip=event.target.closest('[data-admin-plan-chip]');if(planChip){state.adminPlan=planChip.dataset.adminPlanChip;rerenderAdmin();return;}
       const dailyPreset=event.target.closest('[data-admin-daily-preset]');if(dailyPreset){const preset=dailyPreset.dataset.adminDailyPreset,hub=state.ui.dashboard.daily_hub=state.ui.dashboard.daily_hub||{enabled:true,default_tab:'daily',preview_rows:10,expand_rows:20,tabs:{}};hub.tabs=hub.tabs||{};['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].forEach(tab=>{const tc=hub.tabs[tab]=hub.tabs[tab]||{enabled:true,plans:{}};tc.plans=tc.plans||{};const rule=tc.plans[state.adminPlan]=tc.plans[state.adminPlan]||{};rule.tab_enabled=true;rule.row_overrides={};if(preset==='full'){rule.display_state='active';rule.visible_rows='ALL';rule.selection_mode='first';rule.blur_remaining=false;rule.see_all=true;}else if(preset==='preview3'){rule.display_state='active';rule.visible_rows=3;rule.selection_mode='first';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='rookie2'){rule.display_state='active';rule.visible_rows=tab==='daily'?2:Math.min(1,Number(rule.visible_rows)||1);rule.selection_mode='stable_random';rule.blur_remaining=true;rule.see_all=false;}else if(preset==='blurred'){rule.display_state='blurred';rule.visible_rows=0;rule.blur_remaining=true;rule.see_all=false;}else if(preset==='hidden'){rule.display_state='hidden';rule.visible_rows=0;rule.blur_remaining=false;rule.see_all=false;}if(state.adminPlan==='rookie')tc.plans.trial=clone(rule);});renderAllUiContent();rerenderAdmin();showStatus(`Zobrazenie · ${accessLabel(state.adminPlan)} preset bol nastavený.`);return;}
@@ -4306,6 +4469,39 @@
       const quick=event.target.closest('[data-admin-user-plan]');if(quick){const input=$('adminUserPlan');if(input){input.value=quick.dataset.adminUserPlan;host.querySelectorAll('[data-admin-user-plan]').forEach(btn=>btn.classList.toggle('active',btn===quick));setAdminPlanDefaults(input.value,false);}return;}
       const expiryQuick=event.target.closest('[data-admin-expiry-days]');if(expiryQuick){adminAddDaysToExpiry(Number(expiryQuick.dataset.adminExpiryDays));return;}
       const actionNode=event.target.closest('[data-admin-action]');const action=actionNode?.dataset.adminAction;if(!action)return;
+      if(action==='project-create'){
+        actionNode.disabled=true;
+        try{
+          const index=(state.adminProjectGroups||[]).length+1;
+          const palette=['blue','orange','purple','green','teal','pink','gray'];
+          const saved=await BlinqAuth.adminCreateProjectGroup({name:`Projekt ${index}`,description:'',color:palette[(index-1)%palette.length],capacity:10,total_cost_cents:0,currency:'EUR',payment_note:'',self_join_enabled:true,active:true});
+          state.adminProjectGroupId=String(saved.id||'');state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Nová projektová skupina bola vytvorená.');
+        }catch(error){showStatus(error?.message||'Skupinu sa nepodarilo vytvoriť.');actionNode.disabled=false;}
+        return;
+      }
+      if(action==='project-select'){state.adminProjectGroupId=String(actionNode.dataset.projectId||'');rerenderAdmin();return;}
+      if(action==='project-delete'){
+        const group=(state.adminProjectGroups||[]).find(row=>String(row.id)===String(state.adminProjectGroupId));if(!group)return;
+        if(!window.confirm(`Zmazať projektovú skupinu „${group.name}“? Vyhodnotené INFO výsledky zostanú v histórii INFO, no skupina a členstvo sa odstránia.`))return;
+        actionNode.disabled=true;
+        try{await BlinqAuth.adminDeleteProjectGroup(group.id);state.adminProjectGroupId='';state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Projektová skupina bola zmazaná.');}
+        catch(error){showStatus(error?.message||'Skupinu sa nepodarilo zmazať.');actionNode.disabled=false;}
+        return;
+      }
+      if(action==='project-member-add'){
+        const groupId=String(state.adminProjectGroupId||''),userId=String($('adminProjectMemberSelect')?.value||'');if(!groupId||!userId)return;
+        actionNode.disabled=true;
+        try{await BlinqAuth.adminAddProjectMember(groupId,userId);state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Používateľ bol pridaný do projektu.');}
+        catch(error){showStatus(error?.message||'Používateľa sa nepodarilo pridať.');actionNode.disabled=false;}
+        return;
+      }
+      if(action==='project-member-remove'){
+        const groupId=String(state.adminProjectGroupId||''),userId=String(actionNode.dataset.projectUser||'');if(!groupId||!userId)return;
+        actionNode.disabled=true;
+        try{await BlinqAuth.adminRemoveProjectMember(groupId,userId);state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Používateľ bol odstránený z projektu.');}
+        catch(error){showStatus(error?.message||'Používateľa sa nepodarilo odstrániť.');actionNode.disabled=false;}
+        return;
+      }
       if(action==='insight-message-add'){
         const form=$('adminInsightForm'),list=form?.querySelector('.admin-insight-message-list');if(!form||!list)return;
         const count=list.querySelectorAll('[data-insight-message]').length;if(count>=5)return;
@@ -4492,6 +4688,55 @@
       updated=await BlinqAuth.adminUpdateAccess(user.id,{role,plan:accessPlan,status,expires_at});
       state.adminUsers=(state.adminUsers||[]).map(row=>row.id===updated.id?updated:row);state.adminSelectedUser=updated;message.textContent='Účet bol uložený.';setTimeout(()=>{rerenderAdmin();adminApplyUserFilters();},300);
     }catch(error){message.textContent=error.message||'Účet sa nepodarilo uložiť.';}};
+
+    const projectForm=$('adminProjectGroupForm');
+    if(projectForm){
+      projectForm.onsubmit=async event=>{
+        event.preventDefault();
+        const group=(state.adminProjectGroups||[]).find(row=>String(row.id)===String(state.adminProjectGroupId)),message=$('adminProjectFormStatus');if(!group)return;
+        if(message)message.textContent='Ukladám…';
+        try{
+          const totalEuros=Number($('adminProjectTotalCost')?.value||0);
+          const payload={
+            name:String($('adminProjectName')?.value||'').trim(),
+            description:String($('adminProjectDescription')?.value||'').trim(),
+            color:String($('adminProjectColor')?.value||'blue'),
+            capacity:Number($('adminProjectCapacity')?.value||10),
+            total_cost_cents:Math.max(0,Math.round((Number.isFinite(totalEuros)?totalEuros:0)*100)),
+            currency:'EUR',
+            payment_note:String($('adminProjectPaymentNote')?.value||'').trim(),
+            self_join_enabled:Boolean($('adminProjectSelfJoin')?.checked),
+            active:Boolean($('adminProjectActive')?.checked)
+          };
+          await BlinqAuth.adminUpdateProjectGroup(group.id,payload);
+          state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Projektová skupina bola uložená.');
+        }catch(error){if(message)message.textContent=error?.message||'Skupinu sa nepodarilo uložiť.';}
+      };
+      host.querySelectorAll('[data-project-payment-user]').forEach(select=>{
+        select.onchange=async()=>{
+          const groupId=String(state.adminProjectGroupId||''),userId=String(select.dataset.projectPaymentUser||''),status=String(select.value||'pending');
+          select.disabled=true;
+          try{await BlinqAuth.adminSetProjectMemberPayment(groupId,userId,status);state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Stav platby bol uložený.');}
+          catch(error){showStatus(error?.message||'Stav platby sa nepodarilo uložiť.');select.disabled=false;}
+        };
+      });
+    }
+    const projectMessageForm=$('adminProjectMessageForm');
+    if(projectMessageForm){
+      projectMessageForm.onsubmit=async event=>{
+        event.preventDefault();
+        const group=(state.adminProjectGroups||[]).find(row=>String(row.id)===String(state.adminProjectGroupId)),status=$('adminProjectMessageStatus');if(!group)return;
+        const title=String($('adminProjectMessageTitle')?.value||'').trim(),body=String($('adminProjectMessageBody')?.value||'').trim(),matchId=String($('adminProjectMessageMatch')?.value||'').trim();
+        if(!title||!body){if(status)status.textContent='Doplň nadpis aj správu.';return;}
+        if(status)status.textContent='Publikujem…';
+        const cfg=notificationAudienceConfig(),levels=(cfg.info_default_levels||membershipHierarchy).filter(level=>membershipHierarchy.includes(level));
+        try{
+          await BlinqAuth.adminCreateInsight({title,body,match_id:matchId,type:'vip',priority:'normal',audience_mode:'groups',group_ids:[group.id],levels:levels.length?levels:['rookie'],active:true,pinned:false,active_from:'',active_until:adminInsightEndOfDayIso()});
+          state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);
+          if(status)status.textContent='Správa bola odoslaná.';projectMessageForm.reset();showStatus(`INFO správa bola odoslaná do skupiny ${group.name}.`);
+        }catch(error){if(status)status.textContent=error?.message||'Správu sa nepodarilo odoslať.';}
+      };
+    }
 
     const insightForm=$('adminInsightForm');
     if(insightForm){
@@ -4756,7 +5001,7 @@
   }
   function renderRoute(route){
     const host=$('routePanel'),feed=state.feed,p=feed.performance||{},history=feed.history||{},report=feed.model?.report||{}; let body='';
-    if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='system')loadAdminDiagnostics();return;}
+    if(route==='admin'){host.innerHTML=renderAdminRoute();wireAdmin();if(state.adminTab==='accounts')loadAdminUsers();if(state.adminTab==='projects'){loadAdminProjectGroups();loadAdminUsers();loadAdminInsights();loadAdminInfoResults();}if(state.adminTab==='system')loadAdminDiagnostics();return;}
     if(route==='prime'){
       const r=state.ui?.market_rules?.prime||{};
       const desc=lcopy(`Accuracy first · model ${Math.round(Number(r.min_win_probability||.85)*100)}%+ · depth ${Math.round(Number(r.min_data_depth||.80)*100)}%+ · surface ${Number(r.min_surface_matches||5)}+/player · preferred odds ${Number(r.preferred_min_odds||1.20).toFixed(2)}–${Number(r.preferred_max_odds||1.50).toFixed(2)}, with model and data-quality guardrails.`,`Presnosť na prvom mieste · model ${Math.round(Number(r.min_win_probability||.85)*100)}%+ · hĺbka dát ${Math.round(Number(r.min_data_depth||.80)*100)}%+ · povrch ${Number(r.min_surface_matches||5)}+ zápasov/hráč · preferovaný kurz ${Number(r.preferred_min_odds||1.20).toFixed(2)}–${Number(r.preferred_max_odds||1.50).toFixed(2)} · pravidlá modelu a kvality dát zostávajú aktívne.`,`Přesnost na prvním místě · model ${Math.round(Number(r.min_win_probability||.85)*100)}%+ · hloubka dat ${Math.round(Number(r.min_data_depth||.80)*100)}%+ · povrch ${Number(r.min_surface_matches||5)}+ zápasů/hráč · preferovaný kurz ${Number(r.preferred_min_odds||1.20).toFixed(2)}–${Number(r.preferred_max_odds||1.50).toFixed(2)} · pravidla modelu a kvality dat zůstávají aktivní.`);
@@ -4939,10 +5184,12 @@
     state.adminUsers=null;state.adminUsersLoading=false;state.adminUsersError='';state.adminUsersWarning='';state.adminSelectedUser=null;
     state.adminDiagnostics=null;state.adminDiagnosticsLoading=false;state.adminInsights=null;state.adminInsightsLoading=false;state.adminInsightsError='';state.adminInsightEditingId='';state.adminLiveRadarStatus=null;state.adminLiveRadarLoading=false;
     state.railMatch=null;state.previewPlan=null;state.demoFeedBackup=null;state.demoMode=false;state.dashboardVisibility=null;state.pushConfig=null;state.pushBusy=false;
+    state.projectGroups=[];state.projectGroupsLoading=false;state.projectGroupsError='';state.activeProjectGroupId='';
+    state.adminProjectGroups=null;state.adminProjectGroupsLoading=false;state.adminProjectGroupsError='';state.adminProjectGroupId='';
     state.route='predictions';state.page=0;state.resultsPage=0;state.dailyHubExpanded=false;state.dashboardSearch='';
     Object.keys(state.marketPage||{}).forEach(key=>{state.marketPage[key]=0;});
     setInsightDrawer(false);closeProfileMenu();
-    ['matchDialog','accountDialog','upgradeDialog'].forEach(id=>{const dialog=$(id);if(dialog?.open)dialog.close();});
+    ['matchDialog','accountDialog','upgradeDialog','projectGroupsDialog'].forEach(id=>{const dialog=$(id);if(dialog?.open)dialog.close();});
     const shell=$('appShell');if(shell)shell.hidden=true;
   }
   async function signOutCurrentSession(){
@@ -5046,7 +5293,29 @@
     $('prevPick').onclick=()=>{state.page=Math.max(0,state.page-1);renderPredictions()}; $('nextPick').onclick=()=>{state.page+=1;renderPredictions()}; $('dialogClose').onclick=()=>$('matchDialog').close(); $('matchDialog').addEventListener('click',e=>{if(e.target===$('matchDialog'))$('matchDialog').close()}); const accountDialog=$('accountDialog'); if($('accountDialogClose'))$('accountDialogClose').onclick=()=>accountDialog.close(); if(accountDialog)accountDialog.addEventListener('click',e=>{if(e.target===accountDialog)accountDialog.close()}); $('profileButton').onclick=e=>{e.stopPropagation();if(window.matchMedia('(max-width:900px)').matches){toggleProfileMenu();return;}closeProfileMenu();openAccountDialog();};
     $('profileMenuToggle').onclick=e=>{e.stopPropagation();toggleProfileMenu();};
     $('profileAccountLink').onclick=()=>{closeProfileMenu();openAccountDialog();};
+    if($('profileProjectsLink'))$('profileProjectsLink').onclick=()=>openProjectGroupsDialog();
     $('profileAdminLink').onclick=()=>closeProfileMenu();
+    const projectDialog=$('projectGroupsDialog');
+    if($('projectGroupsClose'))$('projectGroupsClose').onclick=()=>projectDialog?.close();
+    if(projectDialog)projectDialog.addEventListener('click',e=>{if(e.target===projectDialog)projectDialog.close();});
+    if($('projectGroupBar'))$('projectGroupBar').onclick=event=>{const button=event.target.closest('[data-project-group-open]');if(button)openProjectGroupMessages(button.dataset.projectGroupOpen);};
+    if($('projectGroupsDialogList'))$('projectGroupsDialogList').onclick=async event=>{
+      const open=event.target.closest('[data-project-group-open]');
+      if(open){projectDialog?.close();openProjectGroupMessages(open.dataset.projectGroupOpen);return;}
+      const join=event.target.closest('[data-project-join]');
+      const leave=event.target.closest('[data-project-leave]');
+      const groupId=String(join?.dataset.projectJoin||leave?.dataset.projectLeave||'');if(!groupId)return;
+      const button=join||leave;button.disabled=true;
+      try{
+        if(join)await BlinqAuth.joinProjectGroup(groupId);
+        else await BlinqAuth.leaveProjectGroup(groupId);
+        state.projectGroups=[];
+        await loadProjectGroups(true);
+        if(state.feed?.account)state.feed.account.project_groups=state.projectGroups.filter(group=>group.joined);
+        renderProjectGroupBar();
+        await loadInsights(true);
+      }catch(error){showStatus(error?.message||'Projektovú skupinu sa nepodarilo upraviť.');button.disabled=false;}
+    };
     document.addEventListener('click',e=>{const menu=$('profileMenu');if(menu&&!menu.hidden&&!menu.contains(e.target)&&!$('profileShell')?.contains(e.target))closeProfileMenu();});
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('profileMenu')?.hidden){closeProfileMenu();$('profileButton')?.focus();}});
     $('headerLogoutButton').onclick=signOutCurrentSession;$('upgradeDialogClose').onclick=()=>$('upgradeDialog').close();$('upgradeDialog').addEventListener('click',e=>{if(e.target===$('upgradeDialog'))$('upgradeDialog').close()});
@@ -5055,7 +5324,7 @@
     document.querySelectorAll('[data-open-insights]').forEach(node=>node.addEventListener('click',()=>setInsightDrawer(true,'info')));
     if($('insightDrawerClose'))$('insightDrawerClose').onclick=()=>setInsightDrawer(false);
     if($('insightBackdrop'))$('insightBackdrop').onclick=()=>setInsightDrawer(false);
-    if($('insightDrawerToolbar'))$('insightDrawerToolbar').onclick=async event=>{const filter=event.target.closest('[data-insight-filter]');if(filter){state.insightFilter=filter.dataset.insightFilter||'all';renderInsightDrawer();return;}if(event.target.closest('[data-insight-read-all]')){const unread=state.insights.filter(item=>!item.read&&(state.insightChannel==='live'?isLiveInsight(item):!isLiveInsight(item)));for(const item of unread){await markInsightRead(item.id);}renderInsightDrawer();}};
+    if($('insightDrawerToolbar'))$('insightDrawerToolbar').onclick=async event=>{const filter=event.target.closest('[data-insight-filter]');if(filter){state.insightFilter=filter.dataset.insightFilter||'all';renderInsightDrawer();return;}if(event.target.closest('[data-insight-read-all]')){const unread=state.insights.filter(item=>!item.read&&insightMatchesCurrentChannel(item));for(const item of unread){await markInsightRead(item.id);}renderInsightDrawer();}};
     if($('insightDrawerList'))$('insightDrawerList').onclick=event=>{
       const liveTab=event.target.closest('[data-live-radar-tab]');if(liveTab){const tab=String(liveTab.dataset.liveRadarTab||'');state.liveRadarTab=['set2','results'].includes(tab)?tab:'comeback';state.insightFilter='all';renderInsightDrawer();return;}
       const article=event.target.closest('[data-insight-id]');if(article)markInsightRead(article.dataset.insightId);

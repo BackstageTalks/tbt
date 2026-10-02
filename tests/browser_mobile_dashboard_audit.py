@@ -38,7 +38,11 @@ FIXTURE = """() => {
   const live=document.querySelector('#insightShortcut');
   const bell=document.querySelector('#insightBell');
   const profile=document.querySelector('#profileShell');
+  const projects=document.querySelector('#projectGroupBar');
   upgrade.hidden=false; live.hidden=false; bell.hidden=false; profile.hidden=false;
+  projects.hidden=false;
+  projects.innerHTML=['ALPHA','TESTERI','PARTNER X','RESEARCH'].map((name,i)=>
+    '<button class="project-group-chip is-'+(['blue','orange','purple','green'][i])+'"><span>◆</span><strong>'+name+'</strong>'+(i===0?'<b>2</b>':'')+'</button>').join('');
   live.classList.add('is-access-locked');
   live.querySelector('#insightShortcutCount').hidden=false;
   live.querySelector('#insightShortcutCount').textContent='2';
@@ -136,7 +140,7 @@ def main():
                     viewport:{width:innerWidth,height:innerHeight},
                     docOverflow:document.documentElement.scrollWidth-innerWidth,
                     header:rect('.reference-topbar'),brand:rect('.reference-topbar .brand'),
-                    actions,hero:rect('#dashboardHero'),last,footer,nav,hint,status,langs,
+                    actions,projects:rect('#projectGroupBar'),projectChips:[...document.querySelectorAll('#projectGroupBar .project-group-chip')].map(rect),hero:rect('#dashboardHero'),last,footer,nav,hint,status,langs,
                     navVisible:visible('#mobileTabs'),
                     tableMaxHeight:getComputedStyle(document.querySelector('.table-scroller')).maxHeight,
                     lockTop:lockStyle.top,lockLeft:lockStyle.left,
@@ -144,6 +148,8 @@ def main():
                 }""")
                 assert report["docOverflow"] <= 2, (label, report)
                 assert report["brand"]["right"] <= width + 1, (label, report)
+                assert report["projects"]["left"] >= -1 and report["projects"]["right"] <= width + 1, (label, report)
+                assert report["projectChips"] and all(chip["width"] > 20 for chip in report["projectChips"]), (label, report)
                 actions = [x["r"] for x in report["actions"]]
                 for i, a in enumerate(actions):
                     assert a["left"] >= -1 and a["right"] <= width + 1, (label, report)

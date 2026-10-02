@@ -8359,3 +8359,221 @@ body#blinqPremium .insight-feed-item p{
   font-size:10.5px;
   line-height:1.55;
 }
+
+
+/* BlinQ 7.3.6-r62 — project groups, square compact controls and header mobile closeout. */
+body#blinqPremium:not(.blinq-admin) .reference-topbar .brand,
+body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade,
+body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut,
+body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-bell,
+body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{
+  border-radius:7px!important;
+}
+body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade,
+body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button{
+  border:1px solid rgba(57,221,156,.46)!important;
+  background:rgba(4,31,25,.72)!important;
+  box-shadow:none!important;
+}
+body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button{
+  min-width:74px!important;width:auto!important;max-width:none!important;padding:0 10px!important;
+}
+body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade{
+  min-width:70px!important;max-width:none!important;
+}
+body#blinqPremium .project-group-bar{
+  min-width:0;display:flex;align-items:center;gap:6px;overflow-x:auto;overscroll-behavior-inline:contain;
+  scrollbar-width:none;padding:2px 0;
+}
+body#blinqPremium .project-group-bar[hidden]{display:none!important}
+body#blinqPremium .project-group-bar::-webkit-scrollbar{display:none}
+body#blinqPremium .project-group-chip{
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;height:34px;max-width:150px;padding:0 9px;
+  border:1px solid #294f60;border-radius:6px;background:rgba(6,24,31,.9);color:#c9d9df;cursor:pointer;
+  font-size:9px;font-weight:850;letter-spacing:.01em;
+}
+body#blinqPremium .project-group-chip>span{font-size:8px}
+body#blinqPremium .project-group-chip>strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+body#blinqPremium .project-group-chip>b{
+  min-width:16px;height:16px;padding:0 4px;display:grid;place-items:center;border-radius:4px;
+  background:#0d75a4;color:#fff;font-size:7px;
+}
+body#blinqPremium .project-group-chip.is-blue{border-color:rgba(31,165,235,.52);color:#8fd8ff}
+body#blinqPremium .project-group-chip.is-orange{border-color:rgba(246,139,45,.52);color:#ffc17d}
+body#blinqPremium .project-group-chip.is-purple{border-color:rgba(145,91,246,.52);color:#c8a9ff}
+body#blinqPremium .project-group-chip.is-green{border-color:rgba(52,211,153,.52);color:#87efc2}
+body#blinqPremium .project-group-chip.is-teal{border-color:rgba(45,212,191,.52);color:#89eee0}
+body#blinqPremium .project-group-chip.is-pink{border-color:rgba(236,72,153,.52);color:#f6a8cf}
+body#blinqPremium .project-group-chip.is-gray{border-color:rgba(148,163,184,.48);color:#cbd5e1}
+body#blinqPremium .project-group-chip.is-active{background:rgba(14,45,48,.98);box-shadow:inset 0 -2px 0 #40e39c}
+
+@media(min-width:1181px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
+    grid-template-columns:108px minmax(180px,auto) minmax(120px,1fr) auto!important;
+    grid-template-areas:"brand nav projects actions"!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand{grid-area:brand}
+  body#blinqPremium:not(.blinq-admin) .reference-navigation{grid-area:nav}
+  body#blinqPremium:not(.blinq-admin) .project-group-bar{grid-area:projects}
+  body#blinqPremium:not(.blinq-admin) .header-actions{grid-area:actions}
+}
+@media(min-width:901px) and (max-width:1180px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
+    grid-template-columns:92px minmax(260px,1fr) auto!important;
+    grid-template-areas:"brand nav actions" "projects projects projects"!important;
+    height:auto!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand{grid-area:brand}
+  body#blinqPremium:not(.blinq-admin) .reference-navigation{grid-area:nav}
+  body#blinqPremium:not(.blinq-admin) .header-actions{grid-area:actions}
+  body#blinqPremium:not(.blinq-admin) .project-group-bar{grid-area:projects;padding:2px 0 4px}
+}
+@media(max-width:900px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
+    grid-template-columns:82px minmax(70px,1fr) auto!important;
+    grid-template-areas:"brand nav actions" "projects projects projects" "search search search"!important;
+    height:auto!important;min-height:0!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .project-group-bar{grid-area:projects;width:100%;padding:2px 0}
+  body#blinqPremium:not(.blinq-admin) .project-group-chip{height:31px;padding:0 8px;font-size:8px;max-width:132px}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-actions{gap:3px!important;min-width:0!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade{height:34px!important;min-width:54px!important;padding:0 5px!important;font-size:7px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button{height:34px!important;min-width:48px!important;width:48px!important;padding:0 4px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut-live{font-size:6px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #insightShortcutLabel{font-size:6.5px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-info-button{width:32px!important;min-width:32px!important;max-width:32px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{width:34px!important;min-width:34px!important;max-width:34px!important}
+}
+@media(max-width:480px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
+    grid-template-columns:64px minmax(62px,1fr) auto!important;padding-inline:7px!important;gap:5px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-navigation{gap:7px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-navigation a{padding:0 3px!important;font-size:8px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade{min-width:48px!important;max-width:48px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button{min-width:42px!important;width:42px!important;max-width:42px!important}
+}
+@media(max-width:340px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade{display:none!important}
+}
+
+/* Self-join project directory. */
+body#blinqPremium .project-groups-dialog{
+  width:min(780px,calc(100vw - 24px));max-height:min(86vh,760px);padding:0;border:1px solid rgba(64,164,132,.38);
+  border-radius:8px;background:#061b19;color:#eefaf5;box-shadow:0 24px 70px rgba(0,0,0,.55);overflow:hidden;
+}
+body#blinqPremium .project-groups-dialog::backdrop{background:rgba(0,8,9,.76);backdrop-filter:blur(5px)}
+body#blinqPremium .project-groups-dialog-card{display:grid;grid-template-rows:auto auto minmax(0,1fr);max-height:min(86vh,760px)}
+body#blinqPremium .project-groups-dialog-card>header{
+  display:flex;justify-content:space-between;gap:14px;align-items:flex-start;padding:18px;border-bottom:1px solid rgba(67,133,114,.25);
+}
+body#blinqPremium .project-groups-dialog-card>header small{display:block;color:#55dfa9;font-size:8px;font-weight:900;letter-spacing:.14em}
+body#blinqPremium .project-groups-dialog-card>header h2{margin:4px 0 3px;font-size:22px}
+body#blinqPremium .project-groups-dialog-card>header p{margin:0;color:#819d94;font-size:11px}
+body#blinqPremium #projectGroupsClose{width:32px;height:32px;border:1px solid #285346;border-radius:6px;background:#08241f;color:#a6c6bb;font-size:18px}
+body#blinqPremium .project-groups-dialog-status{padding:9px 18px;color:#7fa397;font-size:10px;border-bottom:1px solid rgba(67,133,114,.18)}
+body#blinqPremium .project-groups-dialog-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;padding:14px;overflow:auto}
+body#blinqPremium .project-directory-card{
+  min-width:0;padding:13px;border:1px solid #284a4d;border-left-width:3px;border-radius:7px;background:rgba(5,27,26,.82);
+}
+body#blinqPremium .project-directory-card.is-blue{border-left-color:#2aa7e8}
+body#blinqPremium .project-directory-card.is-orange{border-left-color:#f08a34}
+body#blinqPremium .project-directory-card.is-purple{border-left-color:#8e63ee}
+body#blinqPremium .project-directory-card.is-green{border-left-color:#35d394}
+body#blinqPremium .project-directory-card.is-teal{border-left-color:#2dd4bf}
+body#blinqPremium .project-directory-card.is-pink{border-left-color:#ec4899}
+body#blinqPremium .project-directory-card.is-gray{border-left-color:#94a3b8}
+body#blinqPremium .project-directory-card header{display:flex;justify-content:space-between;gap:10px}
+body#blinqPremium .project-directory-card header small{display:block;color:#6f9186;font-size:7px;font-weight:900;letter-spacing:.11em}
+body#blinqPremium .project-directory-card header strong{display:block;margin-top:3px;font-size:15px}
+body#blinqPremium .project-directory-card header>span{font-size:9px;color:#91aa9f}
+body#blinqPremium .project-directory-card p{min-height:32px;margin:9px 0;color:#9bb0aa;font-size:10px;line-height:1.45}
+body#blinqPremium .project-directory-meta{display:flex;flex-wrap:wrap;gap:6px;margin:7px 0}
+body#blinqPremium .project-directory-meta span{padding:4px 6px;border:1px solid #23473d;border-radius:5px;color:#99cbb8;font-size:8px}
+body#blinqPremium .project-directory-card footer{display:flex;gap:6px;margin-top:10px}
+@media(max-width:620px){
+  body#blinqPremium .project-groups-dialog{width:calc(100vw - 12px);max-height:92dvh}
+  body#blinqPremium .project-groups-dialog-list{grid-template-columns:1fr;padding:9px}
+}
+
+/* Admin project workspace. Deliberately squarer than the consumer cards. */
+body#blinqPremium.blinq-admin .admin-project-layout{display:grid;grid-template-columns:240px minmax(0,1fr);gap:12px;align-items:start}
+body#blinqPremium.blinq-admin .admin-project-list{
+  display:grid;gap:5px;max-height:calc(100dvh - 230px);overflow:auto;padding:6px;border:1px solid rgba(53,101,103,.5);
+  border-radius:7px;background:rgba(5,22,27,.72)
+}
+body#blinqPremium.blinq-admin .admin-project-list-row{
+  width:100%;min-width:0;display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:8px;padding:10px;
+  border:1px solid transparent;border-radius:6px;background:transparent;color:#c8d8dc;text-align:left;cursor:pointer
+}
+body#blinqPremium.blinq-admin .admin-project-list-row:hover,
+body#blinqPremium.blinq-admin .admin-project-list-row.is-active{border-color:rgba(56,204,153,.4);background:rgba(18,67,55,.34)}
+body#blinqPremium.blinq-admin .admin-project-list-row>i{width:6px;height:28px;border-radius:2px;background:#2aa7e8}
+body#blinqPremium.blinq-admin .admin-project-list-row>i.is-orange{background:#f08a34}
+body#blinqPremium.blinq-admin .admin-project-list-row>i.is-purple{background:#8e63ee}
+body#blinqPremium.blinq-admin .admin-project-list-row>i.is-green{background:#35d394}
+body#blinqPremium.blinq-admin .admin-project-list-row>i.is-teal{background:#2dd4bf}
+body#blinqPremium.blinq-admin .admin-project-list-row>i.is-pink{background:#ec4899}
+body#blinqPremium.blinq-admin .admin-project-list-row>i.is-gray{background:#94a3b8}
+body#blinqPremium.blinq-admin .admin-project-list-row strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px}
+body#blinqPremium.blinq-admin .admin-project-list-row small{display:block;margin-top:3px;color:#6e8d96;font-size:7.5px}
+body#blinqPremium.blinq-admin .admin-project-workspace{display:grid;gap:12px;min-width:0}
+body#blinqPremium.blinq-admin .admin-project-info-composer,
+body#blinqPremium.blinq-admin .admin-project-published,
+body#blinqPremium.blinq-admin .admin-project-results,
+body#blinqPremium.blinq-admin .admin-project-settings{
+  min-width:0;padding:13px;border:1px solid rgba(53,112,107,.46);border-radius:7px;background:rgba(5,25,29,.72)
+}
+body#blinqPremium.blinq-admin .admin-project-info-composer form{display:grid;gap:9px}
+body#blinqPremium.blinq-admin .admin-project-info-composer label,
+body#blinqPremium.blinq-admin .admin-project-settings label{display:grid;gap:5px;color:#7895a0;font-size:8px;font-weight:800}
+body#blinqPremium.blinq-admin .admin-project-info-composer input,
+body#blinqPremium.blinq-admin .admin-project-info-composer textarea,
+body#blinqPremium.blinq-admin .admin-project-settings input,
+body#blinqPremium.blinq-admin .admin-project-settings textarea,
+body#blinqPremium.blinq-admin .admin-project-settings select,
+body#blinqPremium.blinq-admin .admin-project-add-member select,
+body#blinqPremium.blinq-admin .admin-project-member-row select{
+  width:100%;min-width:0;border-radius:5px!important
+}
+body#blinqPremium.blinq-admin .admin-project-info-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;padding:11px 0;border-bottom:1px solid rgba(57,101,100,.22)
+}
+body#blinqPremium.blinq-admin .admin-project-info-row:last-child{border-bottom:0}
+body#blinqPremium.blinq-admin .admin-project-info-row small,
+body#blinqPremium.blinq-admin .admin-project-info-row span{color:#6f9098;font-size:8px}
+body#blinqPremium.blinq-admin .admin-project-info-row strong{display:block;margin:3px 0;font-size:12px;color:#e4f3ef}
+body#blinqPremium.blinq-admin .admin-project-info-row p{margin:0;color:#a8bdba;font-size:10px;line-height:1.5;overflow-wrap:anywhere}
+body#blinqPremium.blinq-admin .admin-project-info-actions{display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+body#blinqPremium.blinq-admin .admin-project-result-row{
+  display:grid;grid-template-columns:110px minmax(0,1fr) 48px;gap:9px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(57,101,100,.2);font-size:9px
+}
+body#blinqPremium.blinq-admin .admin-project-result-row span{color:#6f9098}
+body#blinqPremium.blinq-admin .admin-project-result-row b{text-align:center;padding:4px;border:1px solid #315365;border-radius:4px}
+body#blinqPremium.blinq-admin .admin-project-result-row.outcome-win b{color:#70e6ad;border-color:#277c5b}
+body#blinqPremium.blinq-admin .admin-project-result-row.outcome-loss b{color:#ff8e93;border-color:#873f49}
+body#blinqPremium.blinq-admin .admin-project-result-row.outcome-void b{color:#c0cbd0;border-color:#54656d}
+body#blinqPremium.blinq-admin .admin-project-settings>summary{cursor:pointer;color:#a9c6bd;font-size:10px;font-weight:850}
+body#blinqPremium.blinq-admin .admin-project-settings>form{display:grid;gap:10px;margin-top:12px}
+body#blinqPremium.blinq-admin .admin-project-cost-summary{display:flex;flex-wrap:wrap;gap:8px}
+body#blinqPremium.blinq-admin .admin-project-cost-summary span{padding:6px 8px;border:1px solid rgba(54,116,98,.45);border-radius:5px;color:#85a89c;font-size:8px}
+body#blinqPremium.blinq-admin .admin-project-members{margin-top:14px}
+body#blinqPremium.blinq-admin .admin-project-add-member{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px;margin-bottom:8px}
+body#blinqPremium.blinq-admin .admin-project-member-row{display:grid;grid-template-columns:minmax(0,1fr) 130px 32px;gap:7px;align-items:center;padding:7px 0;border-bottom:1px solid rgba(56,102,98,.18)}
+body#blinqPremium.blinq-admin .admin-project-member-row strong{display:block;font-size:9px}
+body#blinqPremium.blinq-admin .admin-project-member-row small{display:block;margin-top:2px;color:#6e8c94;font-size:7px}
+body#blinqPremium.blinq-admin .admin-project-empty{padding:28px;border:1px dashed rgba(70,135,119,.4);border-radius:7px;text-align:center;color:#78958d}
+body#blinqPremium.blinq-admin .admin-project-empty strong{display:block;color:#d2e6df;font-size:14px;margin-bottom:5px}
+
+@media(max-width:900px){
+  body#blinqPremium.blinq-admin .admin-project-layout{grid-template-columns:1fr}
+  body#blinqPremium.blinq-admin .admin-project-list{display:flex;max-height:none;overflow-x:auto;overflow-y:hidden}
+  body#blinqPremium.blinq-admin .admin-project-list-row{flex:0 0 210px}
+}
+@media(max-width:620px){
+  body#blinqPremium.blinq-admin .admin-project-info-row{grid-template-columns:1fr}
+  body#blinqPremium.blinq-admin .admin-project-info-actions{justify-content:flex-start}
+  body#blinqPremium.blinq-admin .admin-project-member-row{grid-template-columns:minmax(0,1fr) 105px 30px}
+  body#blinqPremium.blinq-admin .admin-project-result-row{grid-template-columns:82px minmax(0,1fr) 44px}
+}
+

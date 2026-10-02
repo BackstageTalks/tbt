@@ -33,6 +33,8 @@ _UI_SNAPSHOT_ID = re.compile(r"^before-\d{8}T\d{12}Z-[a-f0-9]{8}$")
 ANALYTICS_TABLE = "BlinQBannerAnalytics"
 INSIGHTS_TABLE = "BlinQInsights"
 INSIGHT_READS_TABLE = "BlinQInsightReads"
+PROJECT_GROUPS_TABLE = "BlinQProjectGroups"
+PROJECT_GROUP_MEMBERS_TABLE = "BlinQProjectGroupMembers"
 _VALID_ID = re.compile(r"^[A-Za-z0-9_.:-]{1,96}$")
 _VALID_BANNER_SLOT = re.compile(r"^HERO_BANNER_[1-5]$")
 
@@ -1442,6 +1444,298 @@ def info_alert_levels(config: dict | None = None) -> list[str]:
     # retained only as the Admin composer default; it is not an authorization gate.
     return list(_INSIGHT_LEVELS)
 
+
+_PROJECT_GROUP_COLORS = {"blue", "orange", "purple", "green", "teal", "pink", "gray"}
+_PROJECT_PAYMENT_STATES = {"pending", "paid", "waived"}
+
+
+def _project_user_partition(user_id: object) -> str:
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise ValueError("Invalid project-group user id")
+    return "user:" + hashlib.sha256(uid.encode("utf-8")).hexdigest()[:40]
+
+
+def _project_member_row_key(user_id: object) -> str:
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise ValueError("Invalid project-group user id")
+    return hashlib.sha256(uid.encode("utf-8")).hexdigest()[:64]
+
+
+def normalize_project_group(payload: object, *, existing: dict | None = None) -> dict:
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid project group")
+    base = dict(existing or {})
+    name = str(payload.get("name", base.get("name", "")) or "").strip()
+    if not name or len(name) > 80:
+        raise ValueError("Project group name must contain 1–80 characters")
+    description = str(payload.get("description", base.get("description", "")) or "").strip()
+    if len(description) > 1200:
+        raise ValueError("Project group description is too long")
+    color = str(payload.get("color", base.get("color", "blue")) or "blue").strip().lower()
+    if color not in _PROJECT_GROUP_COLORS:
+        raise ValueError("Invalid project group color")
+    try:
+        capacity = int(payload.get("capacity", base.get("capacity", 10)) or 10)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid project group capacity") from exc
+    if capacity < 1 or capacity > 500:
+        raise ValueError("Project group capacity must be between 1 and 500")
+    try:
+        total_cost_cents = int(payload.get("total_cost_cents", base.get("total_cost_cents", 0)) or 0)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Invalid project group total cost") from exc
+    if total_cost_cents < 0 or total_cost_cents > 100_000_000:
+        raise ValueError("Project group total cost is out of range")
+    currency = str(payload.get("currency", base.get("currency", "EUR")) or "EUR").strip().upper()
+    if not re.fullmatch(r"[A-Z]{3}", currency):
+        raise ValueError("Invalid project group currency")
+    payment_note = str(payload.get("payment_note", base.get("payment_note", "")) or "").strip()
+    if len(payment_note) > 1200:
+        raise ValueError("Project group payment note is too long")
+    return {
+        "name": name,
+        "description": description,
+        "color": color,
+        "capacity": capacity,
+        "total_cost_cents": total_cost_cents,
+        "currency": currency,
+        "payment_note": payment_note,
+        "self_join_enabled": bool(payload.get("self_join_enabled", base.get("self_join_enabled", True))),
+        "active": bool(payload.get("active", base.get("active", True))),
+    }
+
+
+def _project_group_from_entity(entity: dict, *, member_count: int = 0, joined: bool = False,
+                               payment_status: str = "") -> dict:
+    capacity = max(1, int(entity.get("capacity") or 1))
+    total = max(0, int(entity.get("total_cost_cents") or 0))
+    contribution = (total + capacity - 1) // capacity if total else 0
+    return {
+        "id": str(entity.get("RowKey") or ""),
+        "name": str(entity.get("name") or ""),
+        "description": str(entity.get("description") or ""),
+        "color": str(entity.get("color") or "blue"),
+        "capacity": capacity,
+        "member_count": max(0, int(member_count or 0)),
+        "spots_left": max(0, capacity - max(0, int(member_count or 0))),
+        "total_cost_cents": total,
+        "contribution_cents": contribution,
+        "currency": str(entity.get("currency") or "EUR"),
+        "payment_note": str(entity.get("payment_note") or ""),
+        "self_join_enabled": bool(entity.get("self_join_enabled", True)),
+        "active": bool(entity.get("active", True)),
+        "joined": bool(joined),
+        "payment_status": str(payment_status or ""),
+        "created_at": str(entity.get("created_at") or ""),
+        "updated_at": str(entity.get("updated_at") or ""),
+        "created_by": str(entity.get("created_by") or ""),
+    }
+
+
+def _project_group_entity(group_id: str) -> dict:
+    group_id = str(group_id or "").strip()
+    if not _VALID_ID.fullmatch(group_id):
+        raise ValueError("Invalid project group id")
+    try:
+        return _table(PROJECT_GROUPS_TABLE).get_entity(partition_key="groups", row_key=group_id)
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            raise ValueError("Unknown project group") from exc
+        raise AdminStorageUnavailable("Unable to load project group") from exc
+
+
+def _project_group_members(group_id: str) -> list[dict]:
+    try:
+        rows = list(_table(PROJECT_GROUP_MEMBERS_TABLE).query_entities(
+            query_filter=f"PartitionKey eq 'group:{group_id}'"
+        ))
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to load project group members") from exc
+    return [row for row in rows if str(row.get("status") or "joined") == "joined"]
+
+
+def project_group_ids_for_user(user_id: object) -> set[str]:
+    uid = str(user_id or "").strip()
+    if not uid:
+        return set()
+    try:
+        rows = list(_table(PROJECT_GROUP_MEMBERS_TABLE).query_entities(
+            query_filter=f"PartitionKey eq '{_project_user_partition(uid)}'"
+        ))
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to load user project groups") from exc
+    return {
+        str(row.get("group_id") or row.get("RowKey") or "")
+        for row in rows
+        if str(row.get("status") or "joined") == "joined"
+    }
+
+
+def list_project_groups(*, user_id: str = "", include_inactive: bool = False,
+                        include_members: bool = False) -> dict:
+    try:
+        rows = list(_table(PROJECT_GROUPS_TABLE).query_entities(query_filter="PartitionKey eq 'groups'"))
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to list project groups") from exc
+    joined_ids = project_group_ids_for_user(user_id) if user_id else set()
+    items = []
+    for entity in rows:
+        if not include_inactive and not bool(entity.get("active", True)):
+            continue
+        group_id = str(entity.get("RowKey") or "")
+        members = _project_group_members(group_id)
+        own = next((row for row in members if str(row.get("user_id") or "") == str(user_id or "")), None)
+        item = _project_group_from_entity(
+            entity,
+            member_count=len(members),
+            joined=group_id in joined_ids,
+            payment_status=str((own or {}).get("payment_status") or ""),
+        )
+        if include_members:
+            item["members"] = [{
+                "user_id": str(row.get("user_id") or ""),
+                "joined_at": str(row.get("joined_at") or ""),
+                "payment_status": str(row.get("payment_status") or "pending"),
+            } for row in members]
+        items.append(item)
+    items.sort(key=lambda row: (not bool(row.get("active")), str(row.get("name") or "").lower()))
+    return {"items": items}
+
+
+def save_project_group(payload: object, *, actor_id: str = "", group_id: str = "") -> dict:
+    client = _table(PROJECT_GROUPS_TABLE)
+    existing_entity = None
+    if group_id:
+        existing_entity = _project_group_entity(group_id)
+    existing = _project_group_from_entity(existing_entity) if existing_entity else None
+    clean = normalize_project_group(payload, existing=existing)
+    now = datetime.now(timezone.utc).isoformat()
+    row_key = group_id or f"pg-{int(datetime.now(timezone.utc).timestamp()*1000):013d}-{uuid.uuid4().hex[:8]}"
+    entity = {
+        "PartitionKey": "groups",
+        "RowKey": row_key,
+        **clean,
+        "created_at": (existing_entity or {}).get("created_at") or now,
+        "updated_at": now,
+        "created_by": (existing_entity or {}).get("created_by") or str(actor_id or "")[:256],
+        "updated_by": str(actor_id or "")[:256],
+    }
+    try:
+        client.upsert_entity(entity, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to save project group") from exc
+    members = _project_group_members(row_key)
+    return _project_group_from_entity(entity, member_count=len(members))
+
+
+def delete_project_group(group_id: str) -> dict:
+    entity = _project_group_entity(group_id)
+    members = _project_group_members(group_id)
+    member_table = _table(PROJECT_GROUP_MEMBERS_TABLE)
+    try:
+        for row in members:
+            uid = str(row.get("user_id") or "")
+            member_table.delete_entity(partition_key=f"group:{group_id}", row_key=_project_member_row_key(uid))
+            try:
+                member_table.delete_entity(partition_key=_project_user_partition(uid), row_key=group_id)
+            except Exception as exc:
+                if not _is_missing_entity(exc):
+                    raise
+        _table(PROJECT_GROUPS_TABLE).delete_entity(partition_key="groups", row_key=group_id)
+    except Exception as exc:
+        if not _is_missing_entity(exc):
+            raise AdminStorageUnavailable("Unable to delete project group") from exc
+    return {"deleted": True, "id": str(entity.get("RowKey") or group_id)}
+
+
+def join_project_group(group_id: str, user_id: object, *, admin: bool = False) -> dict:
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise ValueError("Invalid project-group user id")
+    entity = _project_group_entity(group_id)
+    if not bool(entity.get("active", True)):
+        raise ValueError("Project group is not active")
+    if not admin and not bool(entity.get("self_join_enabled", True)):
+        raise ValueError("Self-join is disabled for this project group")
+    members = _project_group_members(group_id)
+    existing = next((row for row in members if str(row.get("user_id") or "") == uid), None)
+    if not existing and len(members) >= max(1, int(entity.get("capacity") or 1)):
+        raise ValueError("Project group is full")
+    now = datetime.now(timezone.utc).isoformat()
+    joined_at = str((existing or {}).get("joined_at") or now)
+    payment_status = str((existing or {}).get("payment_status") or "pending")
+    row = {
+        "PartitionKey": f"group:{group_id}",
+        "RowKey": _project_member_row_key(uid),
+        "group_id": group_id,
+        "user_id": uid,
+        "status": "joined",
+        "payment_status": payment_status if payment_status in _PROJECT_PAYMENT_STATES else "pending",
+        "joined_at": joined_at,
+        "updated_at": now,
+    }
+    reverse = {
+        **row,
+        "PartitionKey": _project_user_partition(uid),
+        "RowKey": group_id,
+    }
+    try:
+        table = _table(PROJECT_GROUP_MEMBERS_TABLE)
+        table.upsert_entity(row, mode="replace")
+        table.upsert_entity(reverse, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to join project group") from exc
+    members = _project_group_members(group_id)
+    return _project_group_from_entity(entity, member_count=len(members), joined=True,
+                                      payment_status=row["payment_status"])
+
+
+def leave_project_group(group_id: str, user_id: object) -> dict:
+    uid = str(user_id or "").strip()
+    if not uid:
+        raise ValueError("Invalid project-group user id")
+    table = _table(PROJECT_GROUP_MEMBERS_TABLE)
+    try:
+        table.delete_entity(partition_key=f"group:{group_id}", row_key=_project_member_row_key(uid))
+    except Exception as exc:
+        if not _is_missing_entity(exc):
+            raise AdminStorageUnavailable("Unable to leave project group") from exc
+    try:
+        table.delete_entity(partition_key=_project_user_partition(uid), row_key=group_id)
+    except Exception as exc:
+        if not _is_missing_entity(exc):
+            raise AdminStorageUnavailable("Unable to leave project group") from exc
+    return {"left": True, "group_id": group_id}
+
+
+def set_project_member_payment(group_id: str, user_id: object, status: str) -> dict:
+    uid = str(user_id or "").strip()
+    status = str(status or "").strip().lower()
+    if status not in _PROJECT_PAYMENT_STATES:
+        raise ValueError("Invalid project payment status")
+    row_key = _project_member_row_key(uid)
+    table = _table(PROJECT_GROUP_MEMBERS_TABLE)
+    try:
+        current = table.get_entity(partition_key=f"group:{group_id}", row_key=row_key)
+    except Exception as exc:
+        if _is_missing_entity(exc):
+            raise ValueError("User is not in this project group") from exc
+        raise AdminStorageUnavailable("Unable to load project member") from exc
+    current["payment_status"] = status
+    current["updated_at"] = datetime.now(timezone.utc).isoformat()
+    reverse = dict(current)
+    reverse["PartitionKey"] = _project_user_partition(uid)
+    reverse["RowKey"] = group_id
+    try:
+        table.upsert_entity(current, mode="replace")
+        table.upsert_entity(reverse, mode="replace")
+    except Exception as exc:
+        raise AdminStorageUnavailable("Unable to update project payment state") from exc
+    return {"group_id": group_id, "user_id": uid, "payment_status": status}
+
+
 _INSIGHT_PRIORITIES = {"normal", "important", "critical"}
 
 
@@ -1474,6 +1768,26 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
         raise ValueError("Invalid insight type")
     if priority not in _INSIGHT_PRIORITIES:
         raise ValueError("Invalid insight priority")
+    audience_mode = str(payload.get("audience_mode", base.get("audience_mode", "levels")) or "levels").strip().lower()
+    if audience_mode not in {"levels", "groups"}:
+        raise ValueError("Invalid insight audience mode")
+    raw_group_ids = payload.get("group_ids", base.get("group_ids", []))
+    if not isinstance(raw_group_ids, list):
+        raise ValueError("Insight group_ids must be a list")
+    group_ids = []
+    for raw in raw_group_ids:
+        group_id = str(raw or "").strip()
+        if not _VALID_ID.fullmatch(group_id):
+            raise ValueError("Invalid insight project group")
+        if group_id not in group_ids:
+            group_ids.append(group_id)
+    if audience_mode == "groups":
+        if insight_type in {"alert", "live_watch", "set2"}:
+            raise ValueError("Project groups currently support INFO messages only")
+        if not group_ids:
+            raise ValueError("Select at least one project group")
+        for group_id in group_ids:
+            _project_group_entity(group_id)
     default_levels = live_alert_levels() if insight_type in {"alert", "live_watch", "set2"} else info_alert_levels()
     raw_levels = payload.get("levels", base.get("levels", default_levels))
     if not isinstance(raw_levels, list):
@@ -1520,6 +1834,8 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
         "body": body,
         "type": insight_type,
         "priority": priority,
+        "audience_mode": audience_mode,
+        "group_ids": group_ids,
         "levels": levels,
         "link": link,
         "link_label": link_label,
@@ -1533,16 +1849,23 @@ def normalize_insight(payload: object, *, existing: dict | None = None) -> dict:
 
 def _insight_from_entity(entity: dict) -> dict:
     levels = []
+    group_ids = []
     try:
         levels = json.loads(entity.get("levels_json") or "[]")
     except (TypeError, ValueError):
         levels = []
+    try:
+        group_ids = json.loads(entity.get("group_ids_json") or "[]")
+    except (TypeError, ValueError):
+        group_ids = []
     return {
         "id": str(entity.get("RowKey") or ""),
         "title": str(entity.get("title") or ""),
         "body": str(entity.get("body") or ""),
         "type": str(entity.get("type") or "insight"),
         "priority": str(entity.get("priority") or "normal"),
+        "audience_mode": str(entity.get("audience_mode") or "levels"),
+        "group_ids": [str(v) for v in group_ids if _VALID_ID.fullmatch(str(v))],
         "levels": [str(v) for v in levels if str(v) in _INSIGHT_LEVELS],
         "link": str(entity.get("link") or ""),
         "link_label": str(entity.get("link_label") or ""),
@@ -1579,8 +1902,9 @@ def save_insight(payload: object, *, actor_id: str = "", insight_id: str = "") -
     entity = {
         "PartitionKey": "insights",
         "RowKey": row_key,
-        **{k: v for k, v in clean.items() if k != "levels"},
+        **{k: v for k, v in clean.items() if k not in {"levels", "group_ids"}},
         "levels_json": json.dumps(clean["levels"], separators=(",", ":")),
+        "group_ids_json": json.dumps(clean["group_ids"], separators=(",", ":")),
         "created_at": (existing_entity or {}).get("created_at") or now,
         "updated_at": now,
         "created_by": (existing_entity or {}).get("created_by") or str(actor_id or "")[:256],
@@ -1594,7 +1918,7 @@ def save_insight(payload: object, *, actor_id: str = "", insight_id: str = "") -
     item = _insight_from_entity(entity)
     # Push is deliberately best-effort and only fires for a newly published
     # message. Durable INFO/LIVE storage remains the source of truth.
-    if not insight_id:
+    if not insight_id and str(item.get("audience_mode") or "levels") != "groups":
         try:
             from .push_notifications import dispatch_insight_push
             dispatch_insight_push(item)
@@ -1806,10 +2130,16 @@ _INFO_RESULT_OUTCOMES = {"win", "loss", "void"}
 
 
 def _info_result_from_entity(entity: dict) -> dict:
+    try:
+        group_ids = json.loads(entity.get("group_ids_json") or "[]")
+    except (TypeError, ValueError):
+        group_ids = []
     return {
         "id": str(entity.get("RowKey") or ""),
         "source_id": str(entity.get("source_id") or ""),
         "outcome": str(entity.get("outcome") or ""),
+        "audience_mode": str(entity.get("audience_mode") or "levels"),
+        "group_ids": [str(v) for v in group_ids if _VALID_ID.fullmatch(str(v))],
         "title": str(entity.get("title") or ""),
         "body": str(entity.get("body") or ""),
         "match_id": str(entity.get("match_id") or ""),
@@ -1855,6 +2185,8 @@ def save_info_result(insight_id: str, outcome: str, *, actor_id: str = "") -> di
         "title": str(item.get("title") or "")[:140],
         "body": str(item.get("body") or "")[:4000],
         "match_id": str(item.get("match_id") or "")[:96],
+        "audience_mode": str(item.get("audience_mode") or "levels")[:16],
+        "group_ids_json": json.dumps(item.get("group_ids") or [], separators=(",", ":")),
         "published_at": str(item.get("created_at") or "")[:64],
         "settled_at": now,
         "settled_by": str(actor_id or "")[:256],
@@ -1924,12 +2256,12 @@ def save_automated_insight(payload: object, *, actor_id: str = "automation", ins
     else:
         existing=_insight_from_entity(existing_entity)
         clean=normalize_insight(payload,existing=existing); now=datetime.now(timezone.utc).isoformat()
-        entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k!="levels"},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"created_at":existing_entity.get("created_at") or now,"updated_at":now,"created_by":existing_entity.get("created_by") or str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":int(existing_entity.get("read_count") or 0)}
+        entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k not in {"levels","group_ids"}},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"group_ids_json":json.dumps(clean["group_ids"],separators=(",",":")),"created_at":existing_entity.get("created_at") or now,"updated_at":now,"created_by":existing_entity.get("created_by") or str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":int(existing_entity.get("read_count") or 0)}
         try: client.upsert_entity(entity,mode="replace")
         except Exception as exc: raise AdminStorageUnavailable("Unable to refresh automated insight") from exc
         return _insight_from_entity(entity),False
     clean=normalize_insight(payload); now=datetime.now(timezone.utc).isoformat()
-    entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k!="levels"},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"created_at":now,"updated_at":now,"created_by":str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":0}
+    entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k not in {"levels","group_ids"}},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"group_ids_json":json.dumps(clean["group_ids"],separators=(",",":")),"created_at":now,"updated_at":now,"created_by":str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":0}
     try: client.create_entity(entity)
     except Exception as exc:
         try:return _insight_from_entity(client.get_entity(partition_key="insights",row_key=insight_id)),False
@@ -1985,6 +2317,7 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
     # With a large history this used to multiply UI-config storage reads by N.
     live_levels = set(live_alert_levels()) if plan and not include_inactive else set()
     info_levels = set(info_alert_levels()) if plan and not include_inactive else set()
+    user_group_ids = project_group_ids_for_user(user_id) if user_id and not include_inactive else set()
     deleted_live = _live_deletion_ids("insight")
     items = []
     for entity in rows:
@@ -1992,13 +2325,20 @@ def list_insights(*, plan: str = "", user_id: str = "", include_inactive: bool =
         if item["id"] in deleted_live:
             continue
         if not include_inactive:
-            if not item["active"] or (plan and plan not in item["levels"]):
+            if not item["active"]:
                 continue
             item_type = str(item.get("type") or "").lower()
-            if plan and item_type in {"alert", "live_watch", "set2"} and plan not in live_levels:
-                continue
-            if plan and item_type not in {"alert", "live_watch", "set2"} and plan not in info_levels:
-                continue
+            audience_mode = str(item.get("audience_mode") or "levels")
+            if audience_mode == "groups":
+                if not user_id or not user_group_ids.intersection(set(item.get("group_ids") or [])):
+                    continue
+            else:
+                if plan and plan not in item["levels"]:
+                    continue
+                if plan and item_type in {"alert", "live_watch", "set2"} and plan not in live_levels:
+                    continue
+                if plan and item_type not in {"alert", "live_watch", "set2"} and plan not in info_levels:
+                    continue
             try:
                 starts = datetime.fromisoformat(item["active_from"]) if item["active_from"] else None
                 ends = datetime.fromisoformat(item["active_until"]) if item["active_until"] else None
