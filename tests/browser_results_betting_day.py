@@ -78,19 +78,29 @@ def main():
             result = page.evaluate("""() => {
                 const t=bettingDayTest,s=t.state;
                 const betting=t.filteredResults().map(row=>row.event_id);
-                const checked=document.querySelector('#resultsBettingDay')?.checked;
                 const sample=[...document.querySelectorAll('.metric-card')].at(-1)?.textContent||'';
+                document.querySelector('[data-results-filter-toggle]').click();
+                const checked=document.querySelector('#resultsBettingDay')?.checked;
                 document.querySelector('#resultsBettingDay').click();
+                const beforeApply=t.filteredResults().map(row=>row.event_id);
+                const draft=s.resultsDraftFilters?.bettingDay;
+                const appliedBefore=s.resultsFilters.bettingDay;
+                document.querySelector('#resultsFilterApply').click();
                 const midnight=t.filteredResults().map(row=>row.event_id);
-                return {betting,midnight,checked,sample,state:s.resultsFilters.bettingDay};
+                return {betting,beforeApply,midnight,checked,sample,draft,
+                        appliedBefore,state:s.resultsFilters.bettingDay,
+                        open:s.resultsFilterOpen};
             }""")
             assert result["betting"] == ["start", "inside"], result
             assert result["checked"] is True, result
             assert "2" in result["sample"], result
-            # Chromium CI runs in UTC: disabling Betting day restores the old
-            # browser-local midnight behavior.
+            # Mobile changes stay draft-only until explicit Apply.
+            assert result["beforeApply"] == ["start", "inside"], result
+            assert result["draft"] is False and result["appliedBefore"] is True, result
+            # Chromium CI runs in UTC: applying the disabled Betting day toggle
+            # restores the old browser-local midnight behavior.
             assert result["midnight"] == ["before", "start"], result
-            assert result["state"] is False, result
+            assert result["state"] is False and result["open"] is False, result
 
             today = page.evaluate("""() => {
                 const t=bettingDayTest,s=t.state;
