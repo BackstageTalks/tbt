@@ -64,7 +64,7 @@ def main():
     for filename in args.source_csv:
         path = Path(filename); sha = _sha256(path)
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
-            for number, raw in enumerate(csv.DictReader(handle), start=2):
+            for number, raw in enumerate(csv.DictReader(handle, delimiter=";"), start=2):
                 counts["source_rows"] += 1
                 source = parse_valuebet_row(raw, row_number=number)
                 if source is None:
