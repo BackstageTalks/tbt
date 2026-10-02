@@ -135,11 +135,7 @@ def main():
                       filterBarDisplay:filterBar?getComputedStyle(filterBar).display:'',
                       cardClass:first?.classList.contains('results-card-row')||false,
                       navVisible:nav&&getComputedStyle(nav).display!=='none',
-                      rows:table.tBodies[0].rows.length,
-                      overflowElements:[...document.querySelectorAll('#appShell *')].map((el)=>{
-                        const r=el.getBoundingClientRect();
-                        return {tag:el.tagName,id:el.id||'',cls:String(el.className||'').slice(0,100),left:r.left,right:r.right,width:r.width,scrollWidth:el.scrollWidth,clientWidth:el.clientWidth,position:getComputedStyle(el).position,overflowX:getComputedStyle(el).overflowX};
-                      }).filter(x=>x.right>innerWidth+2||x.left<-2||x.scrollWidth>x.clientWidth+2).sort((a,b)=>Math.max(b.right-innerWidth,b.scrollWidth-b.clientWidth)-Math.max(a.right-innerWidth,a.scrollWidth-a.clientWidth)).slice(0,20)
+                      rows:table.tBodies[0].rows.length
                     };
                 }""")
                 assert report["rows"]==7,(width,report)
