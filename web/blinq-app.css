@@ -8933,7 +8933,9 @@ body#blinqPremium .header-upgrade-icon{display:none}
     color:#24e8ac!important;border-color:rgba(36,232,172,.48)!important;
   }
   body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut-live{
-    font-size:11px!important;font-weight:900!important;letter-spacing:.02em!important;
+    display:block!important;width:12px!important;height:12px!important;border-radius:50%!important;
+    background:#24e8ac!important;box-shadow:0 0 0 5px rgba(36,232,172,.08),0 0 14px rgba(36,232,172,.34)!important;
+    font-size:0!important;line-height:0!important;color:transparent!important;
   }
   body#blinqPremium:not(.blinq-admin) .reference-topbar #insightShortcutLabel,
   body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-info-label,
@@ -9003,6 +9005,10 @@ body#blinqPremium .header-upgrade-icon{display:none}
   body#blinqPremium:not(.blinq-admin) .site-footer.site-footer-minimal{
     position:relative!important;width:100%!important;margin:12px 0 0!important;padding:12px!important;
     border:1px solid #20463b!important;border-radius:12px!important;background:#061a16!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .state-card{
+    min-height:88px!important;padding:16px!important;border:1px solid #20463b!important;border-radius:13px!important;
+    background:#08201b!important;color:#a0b7ae!important;font-size:13px!important;line-height:1.45!important;
   }
 
   /* Predictions: compact hero, 3 KPIs, scrolling categories and card-like rows. */
