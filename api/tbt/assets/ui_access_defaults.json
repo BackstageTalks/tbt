@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "ui_revision": "7.3.6",
-  "ui_patch": "736-r46",
+  "ui_patch": "736-r62-top200",
   "access_contract_revision": 1,
   "info_contract_revision": 1,
   "elements": {
@@ -792,6 +792,75 @@
               "row_overrides": {}
             }
           }
+        },
+        "top200": {
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 2,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "stable_random",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "rookie": {
+              "visible_rows": 1,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "stable_random",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "pro": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            }
+          },
+          "label": "TOP200"
         }
       }
     }
