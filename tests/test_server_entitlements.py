@@ -13,6 +13,7 @@ def feed(n=8):
     # Public market-selection output is disjoint across Value/TOP. Keep the
     # entitlement fixture realistic so the canonical TOP alias is exercised.
     payload = {
+        "top200_picks": [row(50 + i) for i in range(n)],
         "prime_picks": [row(100 + i) for i in range(n)],
         "top_daily_picks": [row(i) for i in range(n)],
         "value_picks": [row(200 + i) for i in range(n)],
@@ -36,6 +37,7 @@ def test_suspended_is_denied():
 
 def test_rookie_never_receives_hidden_rows():
     data, manifest = filter_feed_for_access(feed(), {"status": "active", "plan": "rookie"})
+    assert len(data["top200_picks"]) == 1
     assert len(data["prime_picks"]) == 1
     assert len(data["top_daily_picks"]) == 1
     assert len(data["value_picks"]) == 1
@@ -51,6 +53,7 @@ def test_trial_inherits_rookie_server_side():
 
 def test_expired_has_only_explicit_free_subset():
     data, _ = filter_feed_for_access(feed(), {"status": "expired", "plan": "expired"})
+    assert len(data["top200_picks"]) == 0
     assert len(data["prime_picks"]) == 0
     assert len(data["top_daily_picks"]) == 0
     assert len(data["ace_picks"]) == 0
@@ -58,6 +61,7 @@ def test_expired_has_only_explicit_free_subset():
 
 def test_elite_gets_full_curated_feed():
     data, _ = filter_feed_for_access(feed(), {"status": "active", "plan": "elite"})
+    assert len(data["top200_picks"]) == 8
     assert len(data["prime_picks"]) == 8
     assert len(data["sg_picks"]) == 8
 
@@ -68,6 +72,7 @@ def test_admin_runtime_can_set_zero_to_ten_rows_per_category():
             "daily_hub": {
                 "enabled": True,
                 "tabs": {
+                    "top200": {"enabled": True, "plans": {"rookie": {"visible_rows": 5, "blur_remaining": True, "tab_enabled": True, "see_all": False}}},
                     "prime": {"enabled": True, "plans": {"rookie": {"visible_rows": 7, "blur_remaining": True, "tab_enabled": True, "see_all": False}}},
                     "daily": {"enabled": True, "plans": {"rookie": {"visible_rows": 10, "blur_remaining": True, "tab_enabled": True, "see_all": False}}},
                     "value": {"enabled": True, "plans": {"rookie": {"visible_rows": 4, "blur_remaining": True, "tab_enabled": True, "see_all": False}}},
@@ -79,6 +84,7 @@ def test_admin_runtime_can_set_zero_to_ten_rows_per_category():
         }
     }
     data, manifest = filter_feed_for_access(feed(12), {"status": "active", "plan": "rookie"}, cfg)
+    assert len(data["top200_picks"]) == 5
     assert len(data["prime_picks"]) == 7
     assert len(data["top_daily_picks"]) == 10
     assert len(data["value_picks"]) == 4
