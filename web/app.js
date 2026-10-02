@@ -3790,9 +3790,9 @@
       <div class="admin-insight-actions"><button class="btn btn-primary" type="button" data-admin-action="save-live-history-access">Uložiť históriu LIVE</button></div>
     </div>`;
     const liveTypes=new Set(['alert','live_watch','set2']);
-    const infoEntries=list.filter(row=>!liveTypes.has(String(row.type||'').toLowerCase()));
+    const infoEntries=list.filter(row=>!liveTypes.has(String(row.type||'').toLowerCase())&&String(row.audience_mode||'levels')!=='groups');
     const liveEntries=list.filter(row=>liveTypes.has(String(row.type||'').toLowerCase()));
-    const infoResults=Array.isArray(state.adminInfoResults)?state.adminInfoResults:[];
+    const infoResults=(Array.isArray(state.adminInfoResults)?state.adminInfoResults:[]).filter(row=>String(row.audience_mode||'levels')!=='groups');
     const infoResultBySource=new Map(infoResults.map(row=>[String(row.source_id||''),row]));
     const outcomeText=value=>({win:'WIN',loss:'LOSS',void:'VOID'})[String(value||'').toLowerCase()]||'';
     const insightRow=(row,allowEdit=true)=>{
@@ -4688,6 +4688,55 @@
       updated=await BlinqAuth.adminUpdateAccess(user.id,{role,plan:accessPlan,status,expires_at});
       state.adminUsers=(state.adminUsers||[]).map(row=>row.id===updated.id?updated:row);state.adminSelectedUser=updated;message.textContent='Účet bol uložený.';setTimeout(()=>{rerenderAdmin();adminApplyUserFilters();},300);
     }catch(error){message.textContent=error.message||'Účet sa nepodarilo uložiť.';}};
+
+    const projectForm=$('adminProjectGroupForm');
+    if(projectForm){
+      projectForm.onsubmit=async event=>{
+        event.preventDefault();
+        const group=(state.adminProjectGroups||[]).find(row=>String(row.id)===String(state.adminProjectGroupId)),message=$('adminProjectFormStatus');if(!group)return;
+        if(message)message.textContent='Ukladám…';
+        try{
+          const totalEuros=Number($('adminProjectTotalCost')?.value||0);
+          const payload={
+            name:String($('adminProjectName')?.value||'').trim(),
+            description:String($('adminProjectDescription')?.value||'').trim(),
+            color:String($('adminProjectColor')?.value||'blue'),
+            capacity:Number($('adminProjectCapacity')?.value||10),
+            total_cost_cents:Math.max(0,Math.round((Number.isFinite(totalEuros)?totalEuros:0)*100)),
+            currency:'EUR',
+            payment_note:String($('adminProjectPaymentNote')?.value||'').trim(),
+            self_join_enabled:Boolean($('adminProjectSelfJoin')?.checked),
+            active:Boolean($('adminProjectActive')?.checked)
+          };
+          await BlinqAuth.adminUpdateProjectGroup(group.id,payload);
+          state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Projektová skupina bola uložená.');
+        }catch(error){if(message)message.textContent=error?.message||'Skupinu sa nepodarilo uložiť.';}
+      };
+      host.querySelectorAll('[data-project-payment-user]').forEach(select=>{
+        select.onchange=async()=>{
+          const groupId=String(state.adminProjectGroupId||''),userId=String(select.dataset.projectPaymentUser||''),status=String(select.value||'pending');
+          select.disabled=true;
+          try{await BlinqAuth.adminSetProjectMemberPayment(groupId,userId,status);state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Stav platby bol uložený.');}
+          catch(error){showStatus(error?.message||'Stav platby sa nepodarilo uložiť.');select.disabled=false;}
+        };
+      });
+    }
+    const projectMessageForm=$('adminProjectMessageForm');
+    if(projectMessageForm){
+      projectMessageForm.onsubmit=async event=>{
+        event.preventDefault();
+        const group=(state.adminProjectGroups||[]).find(row=>String(row.id)===String(state.adminProjectGroupId)),status=$('adminProjectMessageStatus');if(!group)return;
+        const title=String($('adminProjectMessageTitle')?.value||'').trim(),body=String($('adminProjectMessageBody')?.value||'').trim(),matchId=String($('adminProjectMessageMatch')?.value||'').trim();
+        if(!title||!body){if(status)status.textContent='Doplň nadpis aj správu.';return;}
+        if(status)status.textContent='Publikujem…';
+        const cfg=notificationAudienceConfig(),levels=(cfg.info_default_levels||membershipHierarchy).filter(level=>membershipHierarchy.includes(level));
+        try{
+          await BlinqAuth.adminCreateInsight({title,body,match_id:matchId,type:'vip',priority:'normal',audience_mode:'groups',group_ids:[group.id],levels:levels.length?levels:['rookie'],active:true,pinned:false,active_from:'',active_until:adminInsightEndOfDayIso()});
+          state.adminInsights=null;await loadAdminInsights(true);await loadInsights(true);
+          if(status)status.textContent='Správa bola odoslaná.';projectMessageForm.reset();showStatus(`INFO správa bola odoslaná do skupiny ${group.name}.`);
+        }catch(error){if(status)status.textContent=error?.message||'Správu sa nepodarilo odoslať.';}
+      };
+    }
 
     const insightForm=$('adminInsightForm');
     if(insightForm){
