@@ -64,15 +64,23 @@ def test_r28_hero_is_responsive_and_non_primary_slides_are_lazy():
 def test_mobile_web_shell_keeps_desktop_data_and_apps_up_only_the_phone_layout():
     assert "results-filter-shell" in APP
     assert "results-mobile-filter-toggle" in APP
-    assert "results-card-row" in APP
-    assert "data-results-filter-toggle" in APP
+    assert "resultsDraftFilters" in APP
+    assert "resultsFilterApply" in APP
+    assert "resultsOutcomeTabs" in APP
     assert "mobile-web-shell=" in INDEX
     marker = "BlinQ mobile web shell 2026-10-02"
     assert marker in CSS
     tail = CSS[CSS.index(marker):]
-    assert '@media(max-width:900px)' in tail
-    assert 'grid-template-areas:"brand projects actions"' in tail
-    assert '.insight-shortcut.insight-live-button' in tail
-    assert 'width:30px!important' in tail
-    assert '.results-filter-shell.is-open .results-filter-bar.results-filter-bar-v683' in tail
-    assert '.results-table tbody tr.results-card-row' in tail
+    assert "@media (max-width:767px)" in tail
+    assert "@media (min-width:768px) and (max-width:900px)" in tail
+    assert 'grid-template-areas:"brand actions"' in tail
+    assert ".project-group-bar{display:none!important}" in tail
+    assert "width:44px!important" in tail
+    assert ".results-filter-shell.is-open .results-filter-bar.results-filter-bar-v683" in tail
+    assert ".results-outcome-tabs" in tail
+    assert ".results-table tbody tr.results-card-row" in tail
+    assert "grid-template-columns:repeat(3,minmax(0,1fr))!important" in tail
+    assert "min-height:44px!important" in tail
+    assert "font-size:6px!important" not in tail
+    assert "font-size:7px!important" not in tail
+
