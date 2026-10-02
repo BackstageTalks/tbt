@@ -205,7 +205,7 @@ class _OddsProvider:
 def test_odds_enrichment_covers_all_65_percent_value_candidates_before_prices_are_known():
     provider = _OddsProvider()
     rows = [
-        row('eligible', .65, 1.60, 2.20, depth=.80, surface1=5, surface2=5),
+        row('eligible', .70, 1.60, 2.20, depth=.80, surface1=5, surface2=5),
         row('weak', .64, 1.60, 2.20, depth=1.0, surface1=20, surface2=20),
         row('shallow', .80, 1.60, 2.20, depth=.74, surface1=20, surface2=20),
         row('surface', .80, 1.60, 2.20, depth=1.0, surface1=2, surface2=20),
