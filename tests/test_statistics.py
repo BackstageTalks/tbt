@@ -77,6 +77,44 @@ def test_valid_statistics_with_only_unsupported_fields_is_cached_as_unavailable(
     enricher.close()
 
 
+def test_missing_unambiguous_all_period_is_cached_as_unavailable(match_factory, tmp_path):
+    class Provider:
+        calls = []
+
+        def _get(self, path, **kwargs):
+            self.calls.append(path)
+            if path.endswith("/statistics"):
+                return {"statistics": [
+                    {"period": "1", "groups": [{"statisticsItems": [
+                        {"name": "Aces", "home": "4", "away": "2"},
+                    ]}]},
+                    {"period": "2", "groups": [{"statisticsItems": [
+                        {"name": "Aces", "home": "3", "away": "1"},
+                    ]}]},
+                ]}
+            return {"event": {
+                "homeTeam": {"id": "A"}, "awayTeam": {"id": "B"},
+                "status": {"type": "finished"},
+            }}
+
+    provider = Provider()
+    match = match_factory("missing-all", "A", "B", "A")
+    match.provider_payload = {"id": "123"}
+    enricher = StatisticsEnricher(provider, tmp_path / "missing-all.sqlite")
+
+    assert enricher.enrich(match) == "unavailable"
+    marker = match.provider_payload["_tbt_statistics"]
+    assert marker["status"] == "unavailable"
+    assert marker["reason"] == "missing_unambiguous_all_period"
+    assert marker["period_labels"] == ["1", "2"]
+    assert match.stats == {}
+
+    # The event-level miss is persisted and does not kill/re-query the batch.
+    assert enricher.enrich(match) == "cached"
+    assert provider.calls == ["/api/tennis/event/123", "/api/tennis/event/123/statistics"]
+    enricher.close()
+
+
 def test_enrichment_cache_identity_and_parquet_roundtrip(match_factory, tmp_path):
     class Provider:
         calls = 0
