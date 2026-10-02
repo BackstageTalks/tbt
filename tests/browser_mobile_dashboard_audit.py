@@ -4,6 +4,7 @@ Covers small phones, common Android/iPhone portrait sizes, tablet width and
 landscape viewport shrinkage. No live API or network is used.
 """
 import os
+from pathlib import Path
 from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright
@@ -128,6 +129,10 @@ def main():
                 page.wait_for_function("window.mobileAudit")
                 page.evaluate(FIXTURE)
                 page.wait_for_timeout(80)
+                if width == 390 and height == 844:
+                    preview_dir=Path("/tmp/blinq-mobile-previews")
+                    preview_dir.mkdir(parents=True,exist_ok=True)
+                    page.screenshot(path=str(preview_dir/"predictions-390.png"),full_page=False)
                 report = page.evaluate("""() => {
                   const rect=sel=>{const e=typeof sel==='string'?document.querySelector(sel):sel;if(!e)return null;const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
                   const visible=sel=>{const e=document.querySelector(sel);return e&&!e.hidden&&getComputedStyle(e).display!=='none';};
