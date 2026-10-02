@@ -380,8 +380,8 @@ if "Kopírovať nastavenie z iného levelu" in _app or "data-admin-action=\"copy
     fail("retired copy-from-level admin tool is still present")
 if "admin-see-all-rule-note" in _app or "const rows=['top200','daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].map" not in _app:
     fail("unified SEE ALL controls are missing")
-if "BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract" not in css:
-    fail("r28 final responsive stability layer is missing")
+if "BlinQ mobile application shell — 2026-10-02" not in css:
+    fail("unified mobile application shell is missing")
 if "blinq-mobile-keyboard-open" not in responsive or "--bq-viewport-height" not in responsive:
     fail("r28 dynamic mobile viewport/keyboard handling is missing")
 if "const mobileLabels=dailyHubColumns(tab);" not in _app:
