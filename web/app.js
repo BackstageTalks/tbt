@@ -3317,7 +3317,7 @@
     if(from)from.onchange=()=>{state.resultsFilters.dateFrom=from.value||'';if(state.resultsFilters.dateTo&&state.resultsFilters.dateFrom>state.resultsFilters.dateTo)state.resultsFilters.dateTo=state.resultsFilters.dateFrom;state.resultsFilters.window='custom';rerender();};
     if(to)to.onchange=()=>{state.resultsFilters.dateTo=to.value||'';if(state.resultsFilters.dateFrom&&state.resultsFilters.dateTo<state.resultsFilters.dateFrom)state.resultsFilters.dateFrom=state.resultsFilters.dateTo;state.resultsFilters.window='custom';rerender();};
     if(bettingDay)bettingDay.onchange=()=>{state.resultsFilters.bettingDay=Boolean(bettingDay.checked);rerender();};
-    const clear=$('resultsDateClear');if(clear)clear.onclick=()=>{state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';state.resultsFilters.window='all';rerender();};
+    const clear=$('resultsDateClear');if(clear)clear.onclick=()=>{state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';state.resultsFilters.window='today';rerender();};
     const size=$('resultsPageSize');if(size)size.onchange=()=>{state.resultsPageSize=[50,100].includes(Number(size.value))?Number(size.value):50;state.resultsPage=0;renderRoute('results');};
     const prev=$('resultsPrevPage'),next=$('resultsNextPage');
     if(prev)prev.onclick=()=>{if(state.resultsPage>0){state.resultsPage-=1;renderRoute('results');window.scrollTo({top:0,behavior:'smooth'});}};
@@ -4239,7 +4239,7 @@
     const signed=value=>`${value>=0?'+':''}${value.toFixed(2)}u`;
     const window=filters.window==='custom'
       ?`${filters.dateFrom||'…'} – ${filters.dateTo||'…'}`
-      :filters.window==='all'?'Celé obdobie':`${filters.window||'all'} dní`;
+      :filters.window==='today'?'Dnes · betting day 06:00–06:00':filters.window==='all'?'Celé obdobie':`${filters.window||'all'} dní`;
     const selection=[resultCategoryLabel(filters.category||'all'),window,
       filters.tour||'',filters.surface||''].filter(Boolean).join(' · ');
     const roi=m.roi==null?'—':pct(m.roi);
