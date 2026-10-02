@@ -722,18 +722,6 @@ body#blinqPremium .reference-topbar .avatar{
 }
 
 
-/* Keep the mobile shell inside the physical viewport even when legacy
-   descendants contribute fractional/scrollable overflow. */
-@media (max-width:760px){
-  body#blinqPremium .app-shell{
-    width:calc(100% - 4px)!important;
-    max-width:calc(100vw - 4px)!important;
-    margin-left:auto!important;
-    margin-right:auto!important;
-  }
-}
-
-
 /* Normalize legacy sizing inside the mobile application surface. */
 @media (max-width:760px){
   body#blinqPremium .app-shell,
@@ -751,9 +739,57 @@ body#blinqPremium .reference-topbar .avatar{
 }
 
 
-/* Final mobile width guard: no legacy descendant may widen the app shell. */
+/* Mobile action sizing: the legacy 30px profile shell was narrower than the
+   icon button. LIVE is intentionally a breathing status dot, not a text badge. */
 @media (max-width:760px){
-  body#blinqPremium .app-shell *{
-    max-width:100%!important;
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{
+    width:38px!important;
+    min-width:38px!important;
+    max-width:38px!important;
+    height:38px!important;
+    min-height:38px!important;
+    max-height:38px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-button{
+    width:38px!important;
+    min-width:38px!important;
+    max-width:38px!important;
+    height:38px!important;
+    min-height:38px!important;
+    max-height:38px!important;
+    padding:3px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button{
+    width:28px!important;
+    min-width:28px!important;
+    max-width:28px!important;
+    padding:0!important;
+    overflow:hidden!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut-live{
+    width:10px!important;
+    min-width:10px!important;
+    max-width:10px!important;
+    height:10px!important;
+    display:block!important;
+    overflow:hidden!important;
+    border-radius:50%!important;
+    background:var(--vp-green)!important;
+    color:transparent!important;
+    font-size:0!important;
+    box-shadow:0 0 0 0 rgba(32,231,131,.45);
+    animation:vp-live-breathe 1.8s ease-in-out infinite!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #insightShortcutLabel{
+    display:none!important;
+  }
+}
+@keyframes vp-live-breathe{
+  0%,100%{transform:scale(.82);opacity:.72;box-shadow:0 0 0 0 rgba(32,231,131,.32)}
+  50%{transform:scale(1);opacity:1;box-shadow:0 0 0 5px rgba(32,231,131,0)}
+}
+@media (prefers-reduced-motion:reduce){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut-live{
+    animation:none!important;
   }
 }
