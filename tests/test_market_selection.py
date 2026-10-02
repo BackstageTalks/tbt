@@ -9,7 +9,7 @@ from tbt.services.market_selection import (
 )
 
 
-def row(event_id, probability, odds, opponent_odds, *, depth=.9, surface1=12, surface2=12, matches1=50, matches2=50):
+def row(event_id, probability, odds, opponent_odds, *, depth=.9, surface1=12, surface2=12, matches1=50, matches2=50, rank1=None, rank2=None):
     p1 = probability
     p2 = 1 - probability
     winner = 'p1' if p1 >= p2 else 'p2'
@@ -28,8 +28,8 @@ def row(event_id, probability, odds, opponent_odds, *, depth=.9, surface1=12, su
         'event_id': event_id,
         'scheduled_at': '2026-09-07T12:00:00+00:00',
         'tour': 'ATP', 'tournament': 'Test', 'surface': 'hard',
-        'player1': {'id': 'p1', 'name': 'Alpha', 'probability': p1},
-        'player2': {'id': 'p2', 'name': 'Beta', 'probability': p2},
+        'player1': {'id': 'p1', 'name': 'Alpha', 'probability': p1, 'rank': rank1},
+        'player2': {'id': 'p2', 'name': 'Beta', 'probability': p2, 'rank': rank2},
         'winner_id': winner,
         'confidence': model_probability,
         'data_depth': depth,
@@ -80,6 +80,51 @@ def test_betting_day_uses_six_am_bratislava_boundary():
     assert end.isoformat() == '2026-09-07T04:00:00+00:00'
 
 
+def test_top200_claims_ranked_matches_before_all_price_buckets():
+    rows = [
+        row('ranked-short', .75, 1.30, 3.40, depth=1.0, rank1=150, rank2=420),
+        row('ranked-value', .72, 1.90, 2.00, depth=1.0, rank1=360, rank2=88),
+        row('ranked-top', .70, 1.60, 2.50, depth=1.0, rank1=199, rank2=260),
+    ]
+    sections = select_market_sections(rows)
+    assert [item['event_id'] for item in sections['top200_picks']] == [
+        'ranked-short', 'ranked-value', 'ranked-top',
+    ]
+    assert sections['prime_picks'] == []
+    assert sections['value_picks'] == []
+    assert sections['top_daily_picks'] == []
+    rule = sections['market_selection']['top200_rule']
+    assert rule['max_rank'] == 200
+    assert rule['max_selected'] == 5
+    assert rule['force_fill'] is False
+
+
+def test_top200_is_capped_at_five_and_releases_remainder_to_normal_categories():
+    rows = [
+        row(f'ranked-{i}', .80 - i * .01, 1.60, 2.50, depth=1.0, rank1=100 + i, rank2=500)
+        for i in range(7)
+    ]
+    sections = select_market_sections(rows)
+    assert [item['event_id'] for item in sections['top200_picks']] == [
+        'ranked-0', 'ranked-1', 'ranked-2', 'ranked-3', 'ranked-4',
+    ]
+    assert [item['event_id'] for item in sections['top_daily_picks']] == ['ranked-5', 'ranked-6']
+    assert len(sections['top200_picks']) == 5
+
+
+def test_top200_fails_closed_on_rank_and_keeps_quality_floor():
+    no_rank = row('no-rank', .72, 1.30, 3.20, depth=1.0)
+    outside = row('outside-200', .72, 1.30, 3.20, depth=1.0, rank1=201, rank2=500)
+    low_probability = row('ranked-low-p', .64, 1.30, 3.20, depth=1.0, rank1=50, rank2=500)
+    low_depth = row('ranked-low-depth', .85, 1.30, 3.20, depth=.79, rank1=50, rank2=500)
+    low_surface = row('ranked-low-surface', .85, 1.30, 3.20, depth=1.0, surface1=4, rank1=50, rank2=500)
+
+    sections = select_market_sections([no_rank, outside, low_probability, low_depth, low_surface])
+    assert sections['top200_picks'] == []
+    # Existing category flow remains available when TOP200 does not qualify.
+    assert [item['event_id'] for item in sections['prime_picks']] == ['no-rank', 'outside-200']
+
+
 def test_probability_first_odds_buckets_match_product_policy():
     rows = [
         row('prime', .72, 1.30, 2.70),
@@ -92,8 +137,8 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'probability_first_odds_buckets_v14_value65_top_min3_dynamic_fixed_150'
-    assert meta['value_rule']['assignment_priority'] == 1
+    assert meta['selection_policy'] == 'top200_priority_v15_then_value_top_prime'
+    assert meta['value_rule']['assignment_priority'] == 2
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
 
@@ -148,7 +193,7 @@ def test_value_has_priority_over_top_when_both_qualify():
     sections = select_market_sections([row('both', .80, 1.90, 2.00, depth=.95, surface1=20, surface2=20)])
     assert [x['event_id'] for x in sections['value_picks']] == ['both']
     assert sections['top_daily_picks'] == []
-    assert sections['market_selection']['exclusive_assignment']['priority'][0] == 'value'
+    assert sections['market_selection']['exclusive_assignment']['priority'][:2] == ['top200', 'value']
 
 
 
@@ -187,7 +232,7 @@ def test_ev_and_edge_do_not_control_publication():
 def test_sections_remain_mutually_exclusive():
     rows = [row(f'e{i}', .70 + i*.01, 1.85 + i*.01, 1.95 + i*.01) for i in range(5)]
     sections = select_market_sections(rows)
-    all_rows = sections['prime_picks'] + sections['top_daily_picks'] + sections['value_picks']
+    all_rows = sections['top200_picks'] + sections['prime_picks'] + sections['top_daily_picks'] + sections['value_picks']
     identities = {(x['event_id'], x['betting']['selection_id']) for x in all_rows}
     assert len(all_rows) == len(identities)
 
