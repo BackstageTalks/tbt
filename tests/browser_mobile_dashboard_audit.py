@@ -141,6 +141,7 @@ def main():
                     docOverflow:document.documentElement.scrollWidth-innerWidth,
                     header:rect('.reference-topbar'),brand:rect('.reference-topbar .brand'),
                     actions,projects:rect('#projectGroupBar'),projectChips:[...document.querySelectorAll('#projectGroupBar .project-group-chip')].map(rect),hero:rect('#dashboardHero'),last,footer,nav,hint,status,langs,
+                    projectsVisible:visible('#projectGroupBar'),
                     navVisible:visible('#mobileTabs'),
                     tableMaxHeight:getComputedStyle(document.querySelector('.table-scroller')).maxHeight,
                     lockTop:lockStyle.top,lockLeft:lockStyle.left,
@@ -148,11 +149,12 @@ def main():
                 }""")
                 assert report["docOverflow"] <= 2, (label, report)
                 assert report["brand"]["right"] <= width + 1, (label, report)
-                assert report["projects"]["left"] >= -1 and report["projects"]["right"] <= width + 1, (label, report)
-                assert report["projectChips"] and all(chip["width"] > 20 for chip in report["projectChips"]), (label, report)
+                assert report["projectsVisible"] is False, (label, report)
                 actions = [x["r"] for x in report["actions"]]
                 for i, a in enumerate(actions):
                     assert a["left"] >= -1 and a["right"] <= width + 1, (label, report)
+                    if width <= 767:
+                        assert a["width"] >= 43 and a["height"] >= 43, (label, report)
                     for b in actions[i + 1:]:
                         assert not overlap(a, b), (label, report)
                 assert report["hero"]["top"] >= report["header"]["bottom"] - 2, (label, report)
