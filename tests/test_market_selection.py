@@ -236,3 +236,38 @@ def test_top_dynamic_fallback_stops_at_first_tier_reaching_five():
     assert meta=={'step':2,'min_probability':.66,'min_odds':1.50}
     assert sections['market_selection']['top_daily_rule']['fallback_min_odds']==1.50
     assert sections['market_selection']['top_daily_rule']['fallback_only_if_core_count_below']==5
+
+
+def test_value_audit_reports_filter_bottlenecks_without_changing_selection():
+    good = row('value-good', .72, 1.90, 2.00, depth=.90, surface1=10, surface2=10)
+    low_odds = row('value-low-odds', .72, 1.70, 1.80, depth=.90, surface1=10, surface2=10)
+    wide_market = row('value-wide', .72, 1.90, 2.50, depth=.90, surface1=10, surface2=10)
+    shallow = row('value-shallow', .72, 1.90, 2.00, depth=.60, surface1=10, surface2=10)
+    poor_surface = row('value-surface', .72, 1.90, 2.00, depth=.90, surface1=2, surface2=10)
+    no_quote = row('value-no-quote', .72, 1.90, 2.00, depth=.90, surface1=10, surface2=10)
+    no_quote.pop('betting', None)
+    no_quote.pop('match_winner_market', None)
+
+    sections = select_market_sections([
+        good, low_odds, wide_market, shallow, poor_surface, no_quote,
+    ])
+
+    assert [item['event_id'] for item in sections['value_picks']] == ['value-good']
+    audit = sections['market_selection']['value_audit']
+    assert audit['selection_unchanged'] is True
+    assert audit['model_rows'] == 6
+    assert audit['real_match_winner_quote_attached'] == 5
+    assert audit['missing_real_match_winner_quote'] == 1
+    assert audit['qualified'] == 1
+    assert audit['thresholds'] == {
+        'min_probability': .60,
+        'min_data_depth': .75,
+        'min_surface_matches_each': 3,
+        'min_odds': 1.80,
+        'max_two_way_odds_difference': .15,
+    }
+    failures = audit['failure_counts_nonexclusive']
+    assert failures['odds_below_min'] >= 1
+    assert failures['odds_spread_above_max'] >= 1
+    assert failures['data_depth_below_min'] >= 1
+    assert failures['surface_sample_below_min'] >= 1
