@@ -685,6 +685,46 @@ def test_runtime_status_overlay_adds_only_match_winner_results_and_dedupes_alias
     assert abs(publication["result"]["profit_units"] - .62) < 1e-12
 
 
+
+def test_top200_is_tracked_and_runtime_settled_like_other_match_winner_sections():
+    now = datetime(2026, 10, 2, 12, 0, tzinfo=timezone.utc)
+    row = _row("top200-1", "11", (now-timedelta(hours=2)).isoformat())
+    row["betting"] = {"selection_id": "11", "odds": 1.55, "betting_day": "2026-10-02"}
+    row["market_publications"] = [{
+        "issued_at": "2026-10-02T06:00:00+00:00",
+        "publication_status": "published",
+        "section": "top200",
+        "market": "match_winner",
+        "selection_id": "11",
+        "odds": 1.55,
+        "betting_day": "2026-10-02",
+        "result": None,
+    }]
+    event = _event("top200-1", winner_code=1)
+    provider = _Provider(previous={"11": [event]})
+
+    snapshot = scan_match_statuses(
+        {"top200_picks": [row]},
+        provider,
+        now=now,
+        max_checks=5,
+    )
+    assert snapshot["tracked"] == 1
+    assert snapshot["due"] == 1
+    assert snapshot["statuses"]["top200-1"]["status"] == "win"
+
+    settled = runtime_settled_results(
+        {"top200_picks": [row], "results": []},
+        snapshot["statuses"],
+    )
+    assert len(settled) == 1
+    publication = settled[0]["market_publications"][0]
+    assert publication["section"] == "top200"
+    assert publication["result"]["correct"] is True
+    assert publication["result"]["runtime_source"] == "match_status_snapshot"
+    assert abs(publication["result"]["profit_units"] - .55) < 1e-12
+
+
 def test_runtime_status_overlay_keeps_roi_fail_closed_without_real_odds():
     row = _row("202", "11", "2026-09-29T13:00:00+00:00")
     row["market_publications"] = [{

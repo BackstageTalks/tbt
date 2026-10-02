@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'top200', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'top200', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -3022,27 +3022,59 @@
     }
     return guess;
   }
-  function filteredResults(){
-    const filters=state.resultsFilters||{},now=Date.now(),windowDays=Number(filters.window);
-    const from=String(filters.dateFrom||'').trim(),to=String(filters.dateTo||'').trim();
-    const bettingDay=filters.bettingDay!==false;
-    const fromTs=from?(bettingDay?bratislavaBoundaryTimestamp(from,6):new Date(`${from}T00:00:00`).getTime()):null;
-    const toTsExclusive=to?(bettingDay?bratislavaBoundaryTimestamp(dateOnlyAddDays(to,1),6):new Date(`${to}T23:59:59.999`).getTime()+1):null;
+  function bratislavaBettingDayKey(value=Date.now(),hour=6){
+    const date=value instanceof Date?value:new Date(value);
+    if(Number.isNaN(date.getTime()))return '';
+    const formatter=new Intl.DateTimeFormat('en-GB',{
+      timeZone:'Europe/Bratislava',year:'numeric',month:'2-digit',day:'2-digit',
+      hour:'2-digit',hourCycle:'h23'
+    });
+    const parts=Object.fromEntries(formatter.formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
+    let key=`${parts.year}-${parts.month}-${parts.day}`;
+    if(Number(parts.hour)<Number(hour||0))key=dateOnlyAddDays(key,-1);
+    return key;
+  }
+  function resultPublicationBettingDay(row,publication){
+    const explicit=String(
+      publication?.betting_day
+      ||publication?.issued_snapshot?.betting_day
+      ||row?.betting_day
+      ||row?.betting?.betting_day
+      ||''
+    ).trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(explicit))return explicit;
+    return bratislavaBettingDayKey(row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0,6);
+  }
+  function resultPublicationMatchesWindow(row,publication,filters,now=Date.now()){
+    const window=String(filters?.window||'all');
+    if(window==='today')return resultPublicationBettingDay(row,publication)===bratislavaBettingDayKey(now,6);
+    const ts=new Date(row?.scheduled_at||row?.date||0).getTime();
+    if(window==='custom'){
+      const from=String(filters?.dateFrom||'').trim(),to=String(filters?.dateTo||'').trim();
+      const bettingDay=filters?.bettingDay!==false;
+      const fromTs=from?(bettingDay?bratislavaBoundaryTimestamp(from,6):new Date(`${from}T00:00:00`).getTime()):null;
+      const toTsExclusive=to?(bettingDay?bratislavaBoundaryTimestamp(dateOnlyAddDays(to,1),6):new Date(`${to}T23:59:59.999`).getTime()+1):null;
+      if(fromTs!==null&&(!Number.isFinite(ts)||ts<fromTs))return false;
+      if(toTsExclusive!==null&&(!Number.isFinite(ts)||ts>=toTsExclusive))return false;
+      return true;
+    }
+    const windowDays=Number(window);
+    return !(Number.isFinite(windowDays)&&windowDays>0)
+      ||(Number.isFinite(ts)&&ts>=now-windowDays*86400000);
+  }
+  function filteredResults(filtersOverride=null){
+    const filters=filtersOverride||state.resultsFilters||{},now=Date.now();
     return (state.feed.results||[]).filter(row=>{
       if(filters.tour&&String(row?.tour||'').toUpperCase()!==filters.tour)return false;
       // "All surfaces" really means all settled published rows. Unknown/missing
       // surface metadata must never hide a valid historical result.
       if(filters.surface){const raw=String(row?.surface||'').toLowerCase();const mapped=raw==='indoor_hard'?'hard':raw;if(mapped!==filters.surface)return false;}
-      const ts=new Date(row?.scheduled_at||0).getTime();
-      if(filters.window==='custom'){
-        if(fromTs!==null&&(!Number.isFinite(ts)||ts<fromTs))return false;
-        if(toTsExclusive!==null&&(!Number.isFinite(ts)||ts>=toTsExclusive))return false;
-      }else if(Number.isFinite(windowDays)&&windowDays>0){if(!Number.isFinite(ts)||ts<now-windowDays*86400000)return false;}
       const category=filters.category||'all';
-      const pubs=publicResultPublications(row);
+      const pubs=publicResultPublications(row)
+        .filter(p=>resultPublicationMatchesWindow(row,p,filters,now))
+        .filter(p=>publicationOutcome(p).kind!=='pending');
       if(!pubs.length)return false;
-      if(category!=='all'&&!pubs.some(p=>publicationMatchesResultCategory(p,category)&&publicationOutcome(p).kind!=='pending'))return false;
-      return pubs.some(p=>publicationOutcome(p).kind!=='pending');
+      return category==='all'||pubs.some(p=>publicationMatchesResultCategory(p,category));
     });
   }
   function resultsHistoryHours(){
@@ -3069,15 +3101,22 @@
     const tours=[...new Set(rows.map(r=>String(r?.tour||'').toUpperCase()).filter(Boolean))].sort();
     const surfaces=[...new Set(rows.map(r=>{const v=String(r?.surface||'').toLowerCase();return v==='indoor_hard'?'hard':v;}).filter(v=>v&&v!=='unknown'))].sort();
     const option=(value,label,selected)=>`<option value="${escapeHtml(value)}"${value===selected?' selected':''}>${escapeHtml(label)}</option>`;
-    if(hours){state.resultsFilters.window=String(hours/24);state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}
     const fixedDays=hours?hours/24:null;
     const fixedLabel=hours?(hours===24?lcopy('Last 24 hours','Posledných 24 hodín','Posledních 24 hodin'):hours===48?lcopy('Last 48 hours','Posledných 48 hodín','Posledních 48 hodin'):lcopy(`Last ${fixedDays} days`,`Posledných ${fixedDays} dní`,`Posledních ${fixedDays} dní`)):'';
-    const periodOptions=hours?[[String(fixedDays),fixedLabel]]:[['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
+    const todayOption=['today',lcopy('Today · betting day 06:00–06:00','Dnes · betting day 06:00–06:00','Dnes · betting day 06:00–06:00')];
+    const periodOptions=hours
+      ?[todayOption,[String(fixedDays),fixedLabel]]
+      :[todayOption,['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
+    if(!periodOptions.some(([value])=>value===String(state.resultsFilters.window||''))){
+      state.resultsFilters.window='today';
+      state.resultsFilters.dateFrom='';
+      state.resultsFilters.dateTo='';
+    }
     return `<div class="results-filter-bar results-filter-bar-v683">
       <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top200','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow" ${hours?'disabled':''}>${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
+      <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
       ${hours?'':`<label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('From','Od','Od'))}</span><span class="date-shell"><input id="resultsDateFrom" type="date" value="${escapeHtml(filters.dateFrom||'')}"><i aria-hidden="true"></i></span></label><label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('To','Do','Do'))}</span><span class="date-shell"><input id="resultsDateTo" type="date" value="${escapeHtml(filters.dateTo||'')}"><i aria-hidden="true"></i></span></label><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava.','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava.','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava.'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
     </div>`;
   }
@@ -3098,11 +3137,16 @@
     if((scheduled||players)&&selection)return `${scheduled}::${players}::${market}::${scope}::${metric}::${selection}`;
     return String(publication?.selection_key||publication?.publication_key||`${scheduled}::${players}::${publication?.section||''}::${selection||index}`);
   }
-  function settledPublishedEntries(rows,category='all'){
+  function settledPublishedEntries(rows,category='all',filters=null){
     const specific=['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
+    const now=Date.now();
     (rows||[]).forEach(row=>{
-      const pubs=publicResultPublications(row).filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category)).filter(p=>category!=='winners'||String(row?.prediction_family||'').toLowerCase()!=='doubles').filter(p=>publicationOutcome(p).kind!=='pending');
+      const pubs=publicResultPublications(row)
+        .filter(p=>!filters||resultPublicationMatchesWindow(row,p,filters,now))
+        .filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category))
+        .filter(p=>category!=='winners'||String(row?.prediction_family||'').toLowerCase()!=='doubles')
+        .filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
         const key=canonicalResultPublicationKey(row,publication,index);
         const current=unique.get(key);
@@ -3128,8 +3172,8 @@
       return outcome.kind==='win'?odds-1:-1;
     return NaN;
   }
-  function localResultMetrics(rows,category){
-    const entries=settledPublishedEntries(rows,category);
+  function localResultMetrics(rows,category,filters=null){
+    const entries=settledPublishedEntries(rows,category,filters);
     const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
     const voids=entries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
@@ -3185,7 +3229,7 @@
     };
   }
   function renderResults(){
-    const rows=filteredResults(),category=state.resultsFilters?.category||'all',entries=settledPublishedEntries(rows,category);
+    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
     if(!entries.length){state.resultsPage=0;return '<div class="state-card">Zatiaľ nie sú dostupné vyhodnotené publikované predikcie/projekcie pre tento filter.</div>';}
     const allowedSizes=[50,100],pageSize=allowedSizes.includes(Number(state.resultsPageSize))?Number(state.resultsPageSize):50;
     state.resultsPageSize=pageSize;
@@ -3273,7 +3317,7 @@
     if(from)from.onchange=()=>{state.resultsFilters.dateFrom=from.value||'';if(state.resultsFilters.dateTo&&state.resultsFilters.dateFrom>state.resultsFilters.dateTo)state.resultsFilters.dateTo=state.resultsFilters.dateFrom;state.resultsFilters.window='custom';rerender();};
     if(to)to.onchange=()=>{state.resultsFilters.dateTo=to.value||'';if(state.resultsFilters.dateFrom&&state.resultsFilters.dateTo<state.resultsFilters.dateFrom)state.resultsFilters.dateFrom=state.resultsFilters.dateTo;state.resultsFilters.window='custom';rerender();};
     if(bettingDay)bettingDay.onchange=()=>{state.resultsFilters.bettingDay=Boolean(bettingDay.checked);rerender();};
-    const clear=$('resultsDateClear');if(clear)clear.onclick=()=>{state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';state.resultsFilters.window='all';rerender();};
+    const clear=$('resultsDateClear');if(clear)clear.onclick=()=>{state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';state.resultsFilters.window='today';rerender();};
     const size=$('resultsPageSize');if(size)size.onchange=()=>{state.resultsPageSize=[50,100].includes(Number(size.value))?Number(size.value):50;state.resultsPage=0;renderRoute('results');};
     const prev=$('resultsPrevPage'),next=$('resultsNextPage');
     if(prev)prev.onclick=()=>{if(state.resultsPage>0){state.resultsPage-=1;renderRoute('results');window.scrollTo({top:0,behavior:'smooth'});}};
@@ -4191,11 +4235,11 @@
     // Uses the exact same filter, dedupe and ROI function as the visible
     // Results page. This diagnostic never changes the public Results layout.
     const filters=state.resultsFilters||{};
-    const m=localResultMetrics(filteredResults(),filters.category||'all');
+    const m=localResultMetrics(filteredResults(filters),filters.category||'all',filters);
     const signed=value=>`${value>=0?'+':''}${value.toFixed(2)}u`;
     const window=filters.window==='custom'
       ?`${filters.dateFrom||'…'} – ${filters.dateTo||'…'}`
-      :filters.window==='all'?'Celé obdobie':`${filters.window||'all'} dní`;
+      :filters.window==='today'?'Dnes · betting day 06:00–06:00':filters.window==='all'?'Celé obdobie':`${filters.window||'all'} dní`;
     const selection=[resultCategoryLabel(filters.category||'all'),window,
       filters.tour||'',filters.surface||''].filter(Boolean).join(' · ');
     const roi=m.roi==null?'—':pct(m.roi);
@@ -5006,26 +5050,35 @@
     }).join('');
     return `<div class="admin-table-wrap picks-table-wrap"><table class="admin-analytics-table picks-table"><thead><tr><th>Date</th><th>Match</th><th>Tournament</th><th>Prediction</th><th>Probability</th><th>Odds</th></tr></thead><tbody>${body}</tbody></table></div>`;
   }
+  function todayPublishedPickCount(){
+    const n=Number(state.feed?.entitlements?.daily_pick_count);
+    return Number.isFinite(n)&&n>=0?Math.trunc(n):null;
+  }
   function renderDashboardResultsPreview(){
     const host=$('resultsPreviewContent');if(!host)return;
-    const rows=(state.feed?.results||[]).filter(row=>typeof row?.result?.correct==='boolean');
-    const wins=rows.filter(row=>row.result.correct===true).length,losses=Math.max(0,rows.length-wins),hit=rows.length?wins/rows.length:null;
-    const perf=state.feed?.betting_performance?.overall||state.feed?.performance?.betting?.overall||{};
-    const roi=Number(perf.roi),units=Number(perf.profit_units);
-    host.innerHTML=`<div class="results-preview-metrics"><span><small>${escapeHtml(publicText('Record'))}</small><strong>${wins}-${losses}</strong></span><span><small>${escapeHtml(publicText('Hit rate'))}</small><strong>${hit==null?'—':pct(hit)}</strong></span><span><small>ROI</small><strong>${Number.isFinite(roi)?pct(roi):'—'}</strong></span><span><small>${escapeHtml(publicText('Units'))}</small><strong>${Number.isFinite(units)?`${units>=0?'+':''}${units.toFixed(2)}u`:'—'}</strong></span></div>`;
-    const count=$('resultsPreviewCount');if(count)count.textContent=publicText(`${rows.length} settled`);const cardCount=$('resultsSeeAllCardCount');if(cardCount)cardCount.textContent=publicText(`${rows.length} settled`);
+    const filters={category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true};
+    const rows=filteredResults(filters),m=localResultMetrics(rows,'all',filters),total=todayPublishedPickCount();
+    host.innerHTML=`<div class="results-preview-metrics"><span><small>${escapeHtml(publicText('Record'))}</small><strong>${m.wins}-${m.losses}</strong></span><span><small>${escapeHtml(publicText('Hit rate'))}</small><strong>${m.hit==null?'—':pct(m.hit)}</strong></span><span><small>ROI</small><strong>${m.roi==null?'—':pct(m.roi)}</strong></span><span><small>${escapeHtml(publicText('Units'))}</small><strong>${m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—'}</strong></span></div>`;
+    const progress=total==null?`${m.sample}`:`${m.sample}/${total}`;
+    const progressText=lcopy(`${progress} settled today`,`${progress} vyhodnotených dnes`,`${progress} vyhodnocených dnes`);
+    const count=$('resultsPreviewCount');if(count)count.textContent=progressText;
+    const cardCount=$('resultsSeeAllCardCount');if(cardCount)cardCount.textContent=progressText;
   }
 
   function resultsSummary(){
-    const rows=filteredResults(),category=state.resultsFilters?.category||'all',m=localResultMetrics(rows,category);
-    // Identical six-card Results KPI layout for ALL, ACES, DF, GAMES & SETS.
+    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',m=localResultMetrics(rows,category,filters);
+    const todayTotal=filters.window==='today'&&category==='all'?todayPublishedPickCount():null;
+    const sampleValue=todayTotal==null?String(m.sample):`${m.sample}/${todayTotal}`;
+    const sampleNote=todayTotal==null
+      ?lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')
+      :lcopy(`settled from ${todayTotal} published picks in the current betting day`,`vyhodnotené z ${todayTotal} dnešných publikovaných pickov`,`vyhodnocené z ${todayTotal} dnešních publikovaných tipů`);
     return metricCards([
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
       ['ROI',m.roi==null?'—':pct(m.roi),m.aceDfNormalizedKpis?lcopy('1u result ROI from normalized legacy / real API odds','1u výsledkové ROI z normalizovaných historických / reálnych API kurzov','1u výsledkové ROI z normalizovaných historických / reálných API kurzů'):lcopy('real settled stakes','reálne vyhodnotené vklady','reálné vyhodnocené vklady')],
       [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',m.aceDfNormalizedKpis?lcopy('1u per settled Aces/DF pick','1u na každý vyhodnotený pick ESÁ/DF','1u na každý vyhodnocený tip ESA/DF'):lcopy('settled profit','vyhodnotený zisk','vyhodnocený zisk')],
-      [publicText('Sample'),String(m.sample),lcopy('settled published rows','vyhodnotené publikované záznamy','vyhodnocené publikované záznamy')],
+      [publicText('Sample'),sampleValue,sampleNote],
     ]);
   }
   function primeDetailCard(m,index=0){
