@@ -3101,15 +3101,22 @@
     const tours=[...new Set(rows.map(r=>String(r?.tour||'').toUpperCase()).filter(Boolean))].sort();
     const surfaces=[...new Set(rows.map(r=>{const v=String(r?.surface||'').toLowerCase();return v==='indoor_hard'?'hard':v;}).filter(v=>v&&v!=='unknown'))].sort();
     const option=(value,label,selected)=>`<option value="${escapeHtml(value)}"${value===selected?' selected':''}>${escapeHtml(label)}</option>`;
-    if(hours){state.resultsFilters.window=String(hours/24);state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}
     const fixedDays=hours?hours/24:null;
     const fixedLabel=hours?(hours===24?lcopy('Last 24 hours','Posledných 24 hodín','Posledních 24 hodin'):hours===48?lcopy('Last 48 hours','Posledných 48 hodín','Posledních 48 hodin'):lcopy(`Last ${fixedDays} days`,`Posledných ${fixedDays} dní`,`Posledních ${fixedDays} dní`)):'';
-    const periodOptions=hours?[[String(fixedDays),fixedLabel]]:[['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
+    const todayOption=['today',lcopy('Today · betting day 06:00–06:00','Dnes · betting day 06:00–06:00','Dnes · betting day 06:00–06:00')];
+    const periodOptions=hours
+      ?[todayOption,[String(fixedDays),fixedLabel]]
+      :[todayOption,['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
+    if(!periodOptions.some(([value])=>value===String(state.resultsFilters.window||''))){
+      state.resultsFilters.window='today';
+      state.resultsFilters.dateFrom='';
+      state.resultsFilters.dateTo='';
+    }
     return `<div class="results-filter-bar results-filter-bar-v683">
       <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top200','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow" ${hours?'disabled':''}>${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
+      <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
       ${hours?'':`<label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('From','Od','Od'))}</span><span class="date-shell"><input id="resultsDateFrom" type="date" value="${escapeHtml(filters.dateFrom||'')}"><i aria-hidden="true"></i></span></label><label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('To','Do','Do'))}</span><span class="date-shell"><input id="resultsDateTo" type="date" value="${escapeHtml(filters.dateTo||'')}"><i aria-hidden="true"></i></span></label><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava.','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava.','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava.'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
     </div>`;
   }
