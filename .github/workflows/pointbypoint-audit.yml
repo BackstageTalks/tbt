@@ -1,0 +1,129 @@
+name: Audit legacy tennis_pointbypoint enrichment
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/pointbypoint-audit-request.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      SOURCE_SHA: 3d3bfc602ed0551352f9e984c1f51240811c8db6
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - run: python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt
+
+      - name: Verify controlled audit request
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          request=json.loads(Path(".github/pointbypoint-audit-request.json").read_text())
+          expected={
+            "schema":1,
+            "mode":"audit",
+            "source":"jeff_sackmann_tennis_pointbypoint",
+            "source_mirror":"ppaulojr/tennis_pointbypoint",
+            "source_sha":"3d3bfc602ed0551352f9e984c1f51240811c8db6",
+          }
+          for key,value in expected.items():
+              if request.get(key)!=value:
+                  raise SystemExit(f"Request mismatch {key}: {request.get(key)!r} != {value!r}")
+          print("controlled audit request verified")
+          PY
+
+      - name: Download checksum-verified canonical history
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.release_store import ReleaseStore
+
+          out=Path(".cache/tbt/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",out).download(
+              require_bundle_manifest=True
+          )
+          PY
+
+      - name: Fetch pinned legacy PBP source
+        run: |
+          set -euo pipefail
+          git clone -q --filter=blob:none --no-checkout \
+            https://github.com/ppaulojr/tennis_pointbypoint.git \
+            .cache/tbt/pointbypoint-src
+          git -C .cache/tbt/pointbypoint-src checkout -q "$SOURCE_SHA"
+          test "$(git -C .cache/tbt/pointbypoint-src rev-parse HEAD)" = "$SOURCE_SHA"
+          test -n "$(find .cache/tbt/pointbypoint-src -maxdepth 1 -name 'pbp_matches_*.csv' -print -quit)"
+
+      - name: Audit strict legacy PBP linkage
+        run: |
+          set -euo pipefail
+          python scripts/link_pointbypoint_serve_return.py \
+            --history-dir .cache/tbt/history \
+            --source-dir .cache/tbt/pointbypoint-src \
+            --out-dir .cache/tbt/pointbypoint-audit
+
+      - name: Validate audit contract
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+
+          report=json.load(open(".cache/tbt/pointbypoint-audit/report.json"))
+          if report.get("production_mutated") is not False or report.get("api_requests") != 0:
+              raise SystemExit("Safety contract violated")
+          if int(report.get("canonical_rows") or 0) <= 0:
+              raise SystemExit("Canonical history missing")
+          if int(report.get("quality_ready_before") or 0) <= 0:
+              raise SystemExit("Canonical serve/return baseline missing")
+          counts=report.get("counts") or {}
+          if int(counts.get("source_files") or 0) < 10:
+              raise SystemExit("Unexpectedly small source file set")
+          print(json.dumps(report,indent=2))
+          PY
+
+      - name: Persist latest audit privately
+        run: |
+          set -euo pipefail
+          path="audit/pointbypoint-coverage-latest.json"
+          encoded="$(base64 -w0 .cache/tbt/pointbypoint-audit/report.json)"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+              -f message="Update legacy PBP coverage audit" \
+              -f content="$encoded" \
+              -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" \
+              -f message="Add legacy PBP coverage audit" \
+              -f content="$encoded" >/dev/null
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pointbypoint-audit-${{ github.run_id }}
+          retention-days: 14
+          path: .cache/tbt/pointbypoint-audit/

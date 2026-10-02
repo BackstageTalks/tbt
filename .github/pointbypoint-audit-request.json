@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "mode": "audit",
+  "source": "jeff_sackmann_tennis_pointbypoint",
+  "source_mirror": "ppaulojr/tennis_pointbypoint",
+  "source_sha": "3d3bfc602ed0551352f9e984c1f51240811c8db6",
+  "requested_at_utc": "2026-10-02T15:00:00Z"
+}
