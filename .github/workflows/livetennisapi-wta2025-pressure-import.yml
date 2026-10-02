@@ -23,7 +23,7 @@ jobs:
       STAGE_PATH: internal/livetennisapi/wta-2025-reconstructed-pressure.csv
       MANIFEST_PATH: internal/livetennisapi/wta-2025-reconstructed-pressure-manifest.json
       EXPECTED_STAGE_ROWS: "3899"
-      EXPECTED_STAGE_SHA256: "3910872a6bb4cf7f9defd03f0a16f990afdbbc2a7bde440b1ab5d9bc8e8c0f83"
+      EXPECTED_STAGE_SHA256: "eeab2226d202748a6f47f87c45d4a61afca80a603e20bb9b481d73a218b3614f"
       EXPECTED_SOURCE_TAR_SHA256: "0bc3385d2f9aa860b5945a485a7cf27a64b6075cf0908844a92d47cb86dd3c58"
 
     steps:
@@ -520,7 +520,7 @@ jobs:
               "generated_at_utc":datetime.now(timezone.utc).isoformat(),
               "source":"livetennisapi_reconstructed_wta_2025_singles",
               "source_tar_sha256":"0bc3385d2f9aa860b5945a485a7cf27a64b6075cf0908844a92d47cb86dd3c58",
-              "derived_stage_sha256":"3910872a6bb4cf7f9defd03f0a16f990afdbbc2a7bde440b1ab5d9bc8e8c0f83",
+              "derived_stage_sha256":"eeab2226d202748a6f47f87c45d4a61afca80a603e20bb9b481d73a218b3614f",
               "citation_doi":"10.5281/zenodo.22048730",
               "raw_redistributed":False,
               "stage_rows":stage_rows,
