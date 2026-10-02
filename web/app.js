@@ -1551,8 +1551,8 @@
       const deadline=group.join_deadline?`<span>Vstup do ${escapeHtml(fmtDate(group.join_deadline))} · ${escapeHtml(fmtTime(group.join_deadline))}</span>`:'';
       let action='';
       if(joined)action=`<button type="button" class="btn btn-ghost" data-project-group-open="${escapeHtml(group.id)}">Otvoriť INFO</button><button type="button" class="btn btn-ghost danger" data-project-leave="${escapeHtml(group.id)}">Odísť</button>`;
-      else if(requested)action=`<button type="button" class="btn btn-ghost" disabled>Žiadosť odoslaná</button><button type="button" class="btn btn-ghost danger" data-project-leave="${escapeHtml(group.id)}">Zrušiť žiadosť</button>`;
       else if(group.locked)action=`<button type="button" class="btn btn-ghost project-locked-button" disabled>${escapeHtml(projectLockLabel(group))}</button>`;
+      else if(requested)action=`<button type="button" class="btn btn-ghost" disabled>Žiadosť odoslaná</button><button type="button" class="btn btn-ghost danger" data-project-leave="${escapeHtml(group.id)}">Zrušiť žiadosť</button>`;
       else if(group.can_request)action=`<button type="button" class="btn btn-primary" data-project-join="${escapeHtml(group.id)}">Chcem sa pridať</button>`;
       else if(group.can_join)action=`<button type="button" class="btn btn-primary" data-project-join="${escapeHtml(group.id)}">Pridať sa</button>`;
       else action=`<button type="button" class="btn btn-ghost project-locked-button" disabled>🔒 Vstup je uzavretý</button>`;
