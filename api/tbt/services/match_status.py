@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 TERMINAL_STATUSES = {"win", "loss", "retired", "void"}
 
 _PUBLIC_MATCH_WINNER_KEYS = (
+    "top200_picks",
     "prime_picks",
     "top_daily_picks",
     "value_picks",
@@ -109,6 +110,7 @@ def event_ids_from_feed(feed: dict[str, Any]) -> set[str]:
 
 
 _RUNTIME_RESULT_SOURCE_KEYS = (
+    "top200_picks",
     "daily_picks",
     "prime_picks",
     "top_daily_picks",
@@ -184,7 +186,7 @@ def runtime_settled_results(
                     continue
                 section = str(publication.get("section") or "").strip().lower()
                 market = str(publication.get("market") or "").strip().lower()
-                if not market and section in {"top_daily", "prime", "value", "doubles"}:
+                if not market and section in {"top200", "top_daily", "prime", "value", "doubles"}:
                     market = "match_winner"
                 if market != "match_winner":
                     continue
