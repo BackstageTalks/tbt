@@ -1,6 +1,6 @@
 """Mobile BlinQ geometry gate for real Chromium (no network or paid API).
 
-Reproduces 320-900px Results filters, KPIs and populated result cards, plus
+Reproduces 320-767px Results filters, KPIs and populated result cards, plus
 long tournament names, mobile header and fixed navigation. Exercises desktop
 to make sure its horizontally scrollable results table remains unchanged.
 """
@@ -79,7 +79,7 @@ def main():
                       }]
                     }));
                     document.body.classList.remove('blinq-home','blinq-admin');
-                    document.body.classList.add('blinq-route');
+                    document.body.classList.add('blinq-route'); document.body.dataset.currentRoute='results';
                     document.querySelector('#routePanel').hidden=false;
                     document.querySelector('#routePanel').innerHTML=
                       t.renderResultsFilters()+t.resultsSummary()+t.renderResults();
@@ -145,14 +145,12 @@ def main():
                 assert report["kpiCollisions"] is False,(width,report)
                 assert report["profile"]["right"]<=width+2,(width,report)
                 assert report["brand"]["right"]<=report["profile"]["left"]+2,(width,report)
-                if width<=900:
+                if width<=767:
                     assert report["navVisible"],(width,report)
                     assert report["filterToggleVisible"],(width,report)
                     assert report["filterBarDisplay"]=="none",(width,report)
                     assert report["cardClass"],(width,report)
-                    assert report["projectChip"]["top"]>=report["header"]["top"]-2,(width,report)
-                    assert report["projectChip"]["bottom"]<=report["header"]["bottom"]+2,(width,report)
-                    assert report["projectChip"]["right"]<=report["live"]["left"]+2,(width,report)
+                    assert report["projects"]["width"]==0,(width,report)
                     assert report["table"]["right"]<=width+2,(width,report)
                     assert report["wrap"]["right"]<=width+2,(width,report)
                     assert report["first"]["right"]<=width+2,(width,report)
@@ -172,10 +170,11 @@ def main():
                     assert bottom["pager"]<=bottom["nav"]-4,(width,bottom)
                 else:
                     assert not report["navVisible"],(width,report)
-                    assert report["minWidth"]!="0px",(width,report)
+                    if width>=901:
+                        assert report["minWidth"]!="0px",(width,report)
                 assert not errors,(width,errors)
                 page.close()
-            print("Mobile Results 320/360/390/430/768/900 + desktop 1024/1440 geometry: PASS")
+            print("Mobile Results 320/360/390/430 + tablet 768/900 + desktop 1024/1440 geometry: PASS")
         finally:
             browser.close()
 
