@@ -1319,7 +1319,7 @@
     const totalToday=Number.isSafeInteger(suppliedTotal)&&suppliedTotal>=0
       ?suppliedTotal
       :Math.max(dailyHubRows('see_all').length,
-        ['daily','prime','value','ace','double_faults','doubles','games','sets']
+        ['top200','daily','prime','value','ace','double_faults','doubles','games','sets']
           .reduce((sum,tab)=>sum+Math.max(0,Number(dailyHubEntitlement(tab)?.total)||0),0));
     const odds=rows.map(r=>Number(r?.odds??r?.betting?.odds)).filter(v=>Number.isFinite(v)&&v>1);
     const perf=state.feed?.performance||{};
@@ -1383,11 +1383,11 @@
     host.innerHTML=cards.map(([icon,label,value,note,trend])=>`<article class="dashboard-kpi"><span>${icon}</span><div><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}${trend?`<em class="kpi-trend">↗ ${escapeHtml(trend)}</em>`:''}</strong>${note?`<p>${escapeHtml(note)}</p>`:''}</div></article>`).join('');
   }
   function highlightRow(){
-    return dashboardDailyRows()[0]||dailyHubRows('top')[0]||dailyHubRows('value')[0]||null;
+    return dailyHubRows('top200')[0]||dashboardDailyRows()[0]||dailyHubRows('top')[0]||dailyHubRows('value')[0]||null;
   }
   function findRowByEventId(id){
     const target=String(id||'');
-    for(const tab of ['daily','prime','top','value','ace','double_faults','games','sets','doubles']){
+    for(const tab of ['top200','daily','prime','top','value','ace','double_faults','games','sets','doubles']){
       const row=(dailyHubRows(tab)||[]).find(item=>eventKey(item)===target);
       if(row)return {row,tab};
     }
@@ -1915,6 +1915,7 @@
   function leanSeeAllRows(){
     const rows=[],seen=new Set();
     const add=row=>{const id=dailyPickIdentity(row);if(!row||!id||seen.has(id))return;seen.add(id);rows.push(row);};
+    (marketRows('top200')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'top200'}));
     (marketRows('prime')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'prime'}));
     (marketRows('value')||[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'value'}));
     (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible).forEach(row=>add({...row,_hub_source:'daily'}));
@@ -1930,6 +1931,7 @@
       // Do not re-merge the legacy prime/top arrays here or a low tier could receive extra rows.
       return (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible);
     }
+    if(tab==='top200')return marketRows('top200').filter(offerSurfaceEligible);
     if(tab==='prime')return marketRows('prime').filter(offerSurfaceEligible);
     if(tab==='value')return marketRows('value').filter(offerSurfaceEligible);
     if(tab==='ace')return marketRows('ace').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()==='aces');
@@ -1965,7 +1967,7 @@
     });
   }
   function dailyHubTabLabel(tab){
-    return {daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ACES',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
+    return {top200:'TOP200',daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ACES',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
   }
   function dailyHubIsComingSoon(tab){return false;}
   function dailyHubColumns(tab){
@@ -2511,7 +2513,7 @@
   function renderDailyHub(){
     const host=$('dailyHub'); if(!host)return; wireDailyHub();
     const cfg=dailyHubConfig(); host.hidden=cfg.enabled===false; if(host.hidden)return;
-    const tabs=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];
+    const tabs=['top200','daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];
     if(!tabs.includes(state.dailyHubTab))state.dailyHubTab='daily';
     const plan=accountPlan();
     const visibleTabs=tabs.filter(tab=>dailyHubEntitlement(tab).enabled!==false);
@@ -2870,7 +2872,7 @@
   function issuedMarketPublications(row){
     return (Array.isArray(row?.market_publications)?row.market_publications:[]).filter(p=>p&&p.issued_at&&p.result&&!p.excluded_reason);
   }
-  const publicResultSections=new Set(['top_daily','prime','value','doubles','ace','double_faults','sets','games']);
+  const publicResultSections=new Set(['top200','top_daily','prime','value','doubles','ace','double_faults','sets','games']);
   const publicResultMarkets=new Set(['aces','double_faults']);
   function isPublicResultPublication(publication){
     if(!publication||typeof publication!=='object')return false;
@@ -2973,10 +2975,10 @@
     }
     return primary;
   }
-  function resultCategoryLabel(value){const en=({all:'All published',prime:'Short Odds',top_daily:'TOP',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP':'TOP','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP':'TOP','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
+  function resultCategoryLabel(value){const en=({all:'All published',top200:'TOP200',prime:'Short Odds',top_daily:'TOP',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP':'TOP','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP':'TOP','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
   function resultPublication(row,category='all'){
     const pubs=publicResultPublications(row);
-    const filtered=['prime','top_daily','value','doubles','ace','double_faults','sg','sets','games'].includes(category)?pubs.filter(p=>publicationMatchesResultCategory(p,category)):pubs;
+    const filtered=['top200','prime','top_daily','value','doubles','ace','double_faults','sg','sets','games'].includes(category)?pubs.filter(p=>publicationMatchesResultCategory(p,category)):pubs;
     return filtered.sort((a,b)=>new Date(a.issued_at)-new Date(b.issued_at))[0]||null;
   }
   function publicationOutcome(publication){
@@ -3072,7 +3074,7 @@
     const fixedLabel=hours?(hours===24?lcopy('Last 24 hours','Posledných 24 hodín','Posledních 24 hodin'):hours===48?lcopy('Last 48 hours','Posledných 48 hodín','Posledních 48 hodin'):lcopy(`Last ${fixedDays} days`,`Posledných ${fixedDays} dní`,`Posledních ${fixedDays} dní`)):'';
     const periodOptions=hours?[[String(fixedDays),fixedLabel]]:[['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
     return `<div class="results-filter-bar results-filter-bar-v683">
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
+      <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top200','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow" ${hours?'disabled':''}>${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
@@ -3097,7 +3099,7 @@
     return String(publication?.selection_key||publication?.publication_key||`${scheduled}::${players}::${publication?.section||''}::${selection||index}`);
   }
   function settledPublishedEntries(rows,category='all'){
-    const specific=['prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
+    const specific=['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
     (rows||[]).forEach(row=>{
       const pubs=publicResultPublications(row).filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category)).filter(p=>category!=='winners'||String(row?.prediction_family||'').toLowerCase()!=='doubles').filter(p=>publicationOutcome(p).kind!=='pending');
@@ -4143,7 +4145,7 @@
       const supplied=Number(feed.entitlements?.daily_pick_count);
       const total=Number.isSafeInteger(supplied)&&supplied>=0?supplied:
         Math.max(dailyHubRows('see_all').length,
-          ['daily','prime','value','ace','double_faults','doubles','games','sets']
+          ['top200','daily','prime','value','ace','double_faults','doubles','games','sets']
             .reduce((sum,tab)=>sum+Math.max(0,Number(dailyHubEntitlement(tab)?.total)||0),0));
       return {text:String(total),available:true};
     }
@@ -4995,7 +4997,7 @@
     if(key==='ace'&&rows.some(row=>row?.price_status==='projection_only'))return aceProjectionTable(rows);
     if(key==='sg'&&rows.some(row=>row?.price_status==='projection_only'))return sgProjectionTable(rows);
     if(!rows.length)return '<div class="state-card">No published data are available for this section yet.</div>';
-    if(key==='top_daily'){const body=rows.map(row=>{const p1=row?.p1||row?.player1?.name||row?.player1_name||'Player 1',p2=row?.p2||row?.player2?.name||row?.player2_name||'Player 2';const probability=marketProbability(row),depth=Number(row?.data_depth),q=row?.quality||{},s1=Number(q?.player1?.surface_matches),s2=Number(q?.player2?.surface_matches),m1=Number(q?.player1?.matches),m2=Number(q?.player2?.matches),odds=Number(row?.odds),pick=row?.pick||row?.selection||row?.prediction||'—';return `<tr><td>${escapeHtml(fmtDate(row?.date||row?.scheduled_at))}<small>${escapeHtml(fmtTime(row?.date||row?.scheduled_at))}</small></td><td><strong>${escapeHtml(p1)}</strong><small>vs ${escapeHtml(p2)}</small></td><td>${escapeHtml(row?.tournament||row?.competition||'—')}</td><td>${escapeHtml(pick)}</td><td>${probability==null?'—':pct(probability)}</td><td>${Number.isFinite(depth)?pct(depth):'—'}</td><td>${Number.isFinite(s1)&&Number.isFinite(s2)?`${s1}/${s2}`:'—'}</td><td>${Number.isFinite(m1)&&Number.isFinite(m2)?`${m1}/${m2}`:'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td></tr>`}).join('');return `<div class="admin-table-wrap picks-table-wrap"><table class="admin-analytics-table picks-table"><thead><tr><th>Date</th><th>Match</th><th>Tournament</th><th>Prediction</th><th>Probability</th><th>Data depth</th><th>Surface sample</th><th>Overall sample</th><th>Odds</th></tr></thead><tbody>${body}</tbody></table></div><div class="results-limit-note">TOP predictions are confidence-first. Elo, surface Elo, H2H and form are already represented inside model probability.</div>`;}
+    if(key==='top_daily'||key==='top200'){const body=rows.map(row=>{const p1=row?.p1||row?.player1?.name||row?.player1_name||'Player 1',p2=row?.p2||row?.player2?.name||row?.player2_name||'Player 2';const probability=marketProbability(row),depth=Number(row?.data_depth),q=row?.quality||{},s1=Number(q?.player1?.surface_matches),s2=Number(q?.player2?.surface_matches),m1=Number(q?.player1?.matches),m2=Number(q?.player2?.matches),odds=Number(row?.odds),pick=row?.pick||row?.selection||row?.prediction||'—';return `<tr><td>${escapeHtml(fmtDate(row?.date||row?.scheduled_at))}<small>${escapeHtml(fmtTime(row?.date||row?.scheduled_at))}</small></td><td><strong>${escapeHtml(p1)}</strong><small>vs ${escapeHtml(p2)}</small></td><td>${escapeHtml(row?.tournament||row?.competition||'—')}</td><td>${escapeHtml(pick)}</td><td>${probability==null?'—':pct(probability)}</td><td>${Number.isFinite(depth)?pct(depth):'—'}</td><td>${Number.isFinite(s1)&&Number.isFinite(s2)?`${s1}/${s2}`:'—'}</td><td>${Number.isFinite(m1)&&Number.isFinite(m2)?`${m1}/${m2}`:'—'}</td><td>${Number.isFinite(odds)?odds.toFixed(2):'—'}</td></tr>`}).join('');return `<div class="admin-table-wrap picks-table-wrap"><table class="admin-analytics-table picks-table"><thead><tr><th>Date</th><th>Match</th><th>Tournament</th><th>Prediction</th><th>Probability</th><th>Data depth</th><th>Surface sample</th><th>Overall sample</th><th>Odds</th></tr></thead><tbody>${body}</tbody></table></div><div class="results-limit-note">TOP predictions are confidence-first. Elo, surface Elo, H2H and form are already represented inside model probability.</div>`;}
     const body=rows.map(row=>{
       const p1=row?.p1||row?.player1?.name||row?.player1_name||'Player 1',p2=row?.p2||row?.player2?.name||row?.player2_name||'Player 2';
       const rawProb=row?.probability!=null?Number(row.probability):marketProbability(row); const probability=Number.isFinite(rawProb)?(rawProb>1?rawProb/100:rawProb):null; const pick=row?.pick||row?.selection||row?.prediction||'—';
