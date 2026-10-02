@@ -3725,14 +3725,21 @@
     const projectResults=selected?results.filter(row=>String(row.audience_mode||'levels')==='groups'&&Array.isArray(row.group_ids)&&row.group_ids.map(String).includes(String(selected.id))):[];
     const resultBySource=new Map(projectResults.map(row=>[String(row.source_id||''),row]));
     const outcomeText=value=>({win:'WIN',loss:'LOSS',void:'VOID'})[String(value||'').toLowerCase()]||'';
-    const list=groups.map(group=>`<button type="button" class="admin-project-list-row${String(group.id)===String(state.adminProjectGroupId)?' is-active':''}" data-admin-action="project-select" data-project-id="${escapeHtml(group.id)}"><i class="is-${escapeHtml(projectGroupColor(group.color))}"></i><span><strong>${escapeHtml(group.name||'Projekt')}</strong><small>${Number(group.member_count)||0}/${Number(group.capacity)||0} členov · ${group.self_join_enabled?'self-join':'na pozvanie'}</small></span><b>›</b></button>`).join('');
-    const memberIds=new Set((selected?.members||[]).map(row=>String(row.user_id||'')));
-    const availableUsers=users.filter(user=>!memberIds.has(String(user.id)));
+    const list=groups.map(group=>{
+      const requests=Number(group.request_count)||0;
+      return `<button type="button" class="admin-project-list-row${String(group.id)===String(state.adminProjectGroupId)?' is-active':''}" data-admin-action="project-select" data-project-id="${escapeHtml(group.id)}"><i class="is-${escapeHtml(projectGroupColor(group.color))}"></i><span><strong>${escapeHtml(group.name||'Projekt')}</strong><small>${Number(group.member_count)||0}/${Number(group.capacity)||0} členov · ${escapeHtml(projectEntryLabel(group))}${requests?` · ${requests} žiadostí`:''}</small></span><b>›</b></button>`;
+    }).join('');
+    const occupiedIds=new Set([...(selected?.members||[]),...(selected?.requests||[])].map(row=>String(row.user_id||'')));
+    const availableUsers=users.filter(user=>!occupiedIds.has(String(user.id)));
     const userOptions=availableUsers.map(user=>`<option value="${escapeHtml(user.id)}">${escapeHtml(adminProjectUserLabel(user))} · ${escapeHtml(String(user.plan||'').toUpperCase())}</option>`).join('');
     const memberRows=(selected?.members||[]).map(member=>{
       const user=users.find(row=>String(row.id)===String(member.user_id));
       const status=String(member.payment_status||'pending');
       return `<div class="admin-project-member-row"><span><strong>${escapeHtml(adminProjectUserLabel(user)||member.user_id)}</strong><small>${escapeHtml(String(user?.plan||'').toUpperCase()||'—')} · od ${escapeHtml(member.joined_at?fmtDate(member.joined_at):'—')}</small></span><select data-project-payment-user="${escapeHtml(member.user_id)}"><option value="pending"${status==='pending'?' selected':''}>Platba čaká</option><option value="paid"${status==='paid'?' selected':''}>Zaplatené</option><option value="waived"${status==='waived'?' selected':''}>Bez platby</option></select><button type="button" class="btn btn-ghost danger" data-admin-action="project-member-remove" data-project-user="${escapeHtml(member.user_id)}">×</button></div>`;
+    }).join('');
+    const requestRows=(selected?.requests||[]).map(request=>{
+      const user=users.find(row=>String(row.id)===String(request.user_id));
+      return `<div class="admin-project-request-row"><span><strong>${escapeHtml(adminProjectUserLabel(user)||request.user_id)}</strong><small>${escapeHtml(String(user?.plan||'').toUpperCase()||'—')} · žiadosť ${escapeHtml(request.requested_at?fmtDate(request.requested_at)+' '+fmtTime(request.requested_at):'—')}</small></span><div><button type="button" class="btn btn-primary" data-admin-action="project-request-approve" data-project-user="${escapeHtml(request.user_id)}">Schváliť</button><button type="button" class="btn btn-ghost danger" data-admin-action="project-request-reject" data-project-user="${escapeHtml(request.user_id)}">Zamietnuť</button></div></div>`;
     }).join('');
     const messageRows=projectMessages.map(row=>{
       const result=resultBySource.get(String(row.id||'')),outcome=String(result?.outcome||'').toLowerCase();
@@ -3740,11 +3747,13 @@
     }).join('');
     const history=projectResults.map(row=>`<article class="admin-project-result-row outcome-${escapeHtml(row.outcome||'')}"><span>${escapeHtml(row.settled_at?fmtDate(row.settled_at)+' '+fmtTime(row.settled_at):'')}</span><strong>${escapeHtml(row.title||row.source_id||'INFO')}</strong><b>${escapeHtml(outcomeText(row.outcome))}</b></article>`).join('');
     const colors=['blue','orange','purple','green','teal','pink','gray'].map(color=>`<option value="${color}"${projectGroupColor(selected?.color)===color?' selected':''}>${color.toUpperCase()}</option>`).join('');
+    const entryModes=[['open','OTVORENÁ · okamžitý vstup'],['request','NA ŽIADOSŤ · schvaľujem'],['locked','UZAVRETÁ · lock']].map(([value,label])=>`<option value="${value}"${String(selected?.entry_mode||'open')===value?' selected':''}>${label}</option>`).join('');
     const contribution=selected&&Number(selected.contribution_cents)>0?formatProjectMoney(selected.contribution_cents,selected.currency):'0 €';
+    const lockState=selected?.locked?`<span class="admin-project-lock-state">🔒 ${escapeHtml(projectLockLabel(selected))}</span>`:`<span class="admin-project-open-state">${escapeHtml(projectEntryLabel(selected))}</span>`;
     const workspace=!selected?`<div class="admin-project-empty"><strong>Vytvor prvú projektovú skupinu</strong><span>Po kliknutí na + Nová skupina sa automaticky vytvorí kompletná štruktúra: členovia, INFO správy aj vyhodnotenia.</span></div>`:`
       <div class="admin-project-workspace">
         <section class="admin-project-info-composer">
-          <div class="admin-subsection-heading"><div><strong>${escapeHtml(selected.name)}</strong><span>Projektový INFO kanál</span></div></div>
+          <div class="admin-subsection-heading"><div><strong>${escapeHtml(selected.name)}</strong><span>Projektový INFO kanál · ${lockState}</span></div></div>
           <form id="adminProjectMessageForm">
             <label>Nadpis<input id="adminProjectMessageTitle" maxlength="140" required placeholder="Napr. Dnešný projektový tip"></label>
             <label>Správa<textarea id="adminProjectMessageBody" maxlength="4000" rows="5" required placeholder="Napíš správu pre členov tejto skupiny…"></textarea></label>
@@ -3761,16 +3770,22 @@
           <p class="admin-live-delete-help">WIN / LOSS / VOID sa ukladá samostatne. História zostáva zachovaná aj keď pôvodná INFO správa expiruje alebo ju neskôr zmažeš.</p>
           ${history||'<div class="admin-note">Zatiaľ nič vyhodnotené.</div>'}
         </section>
-        <details class="admin-project-settings">
-          <summary>Nastavenie skupiny · členovia · príspevok</summary>
+        <details class="admin-project-settings" ${(selected.requests||[]).length?'open':''}>
+          <summary>Nastavenie skupiny · vstup · členovia · príspevok</summary>
           <form id="adminProjectGroupForm">
             <div class="admin-form-grid"><label>Názov<input id="adminProjectName" maxlength="80" required value="${escapeHtml(selected.name||'')}"></label><label>Farba<select id="adminProjectColor">${colors}</select></label><label>Kapacita<input id="adminProjectCapacity" type="number" min="1" max="500" value="${Number(selected.capacity)||10}"></label><label>Spolu €<input id="adminProjectTotalCost" type="number" min="0" step="0.01" value="${(Number(selected.total_cost_cents)||0)/100}"></label></div>
+            <div class="admin-form-grid admin-project-entry-grid"><label>Režim vstupu<select id="adminProjectEntryMode">${entryModes}</select></label><label>Prijímanie do <span>(voliteľné)</span><input id="adminProjectJoinDeadline" type="datetime-local" value="${escapeHtml(adminDatetimeValue(selected.join_deadline))}"></label></div>
+            <p class="admin-live-delete-help">Pri naplnení kapacity alebo po termíne sa používateľom automaticky zobrazí LOCK. Existujúci členovia zostávajú v projekte.</p>
             <label>Popis<textarea id="adminProjectDescription" maxlength="1200" rows="3">${escapeHtml(selected.description||'')}</textarea></label>
             <label>Poznámka k platbe<textarea id="adminProjectPaymentNote" maxlength="1200" rows="2">${escapeHtml(selected.payment_note||'')}</textarea></label>
-            <div class="admin-project-cost-summary"><span>Obsadenosť <b>${Number(selected.member_count)||0}/${Number(selected.capacity)||0}</b></span><span>Príspevok pri plnej skupine <b>${escapeHtml(contribution)} / osoba</b></span></div>
-            <div class="admin-insight-flags"><label><input id="adminProjectSelfJoin" type="checkbox" ${selected.self_join_enabled?'checked':''}> Používatelia sa môžu pridať sami</label><label><input id="adminProjectActive" type="checkbox" ${selected.active!==false?'checked':''}> Aktívna skupina</label></div>
+            <div class="admin-project-cost-summary"><span>Obsadenosť <b>${Number(selected.member_count)||0}/${Number(selected.capacity)||0}</b></span><span>Príspevok pri plnej skupine <b>${escapeHtml(contribution)} / osoba</b></span><span>Vstup <b>${escapeHtml(projectEntryLabel(selected))}</b></span></div>
+            <div class="admin-insight-flags"><label><input id="adminProjectActive" type="checkbox" ${selected.active!==false?'checked':''}> Aktívna skupina</label></div>
             <div class="admin-insight-actions"><button class="btn btn-primary" type="submit">Uložiť skupinu</button><button type="button" class="btn btn-ghost danger" data-admin-action="project-delete">Zmazať skupinu</button><span id="adminProjectFormStatus"></span></div>
           </form>
+          <div class="admin-project-requests">
+            <div class="admin-subsection-heading"><div><strong>Žiadosti o vstup</strong><span>${(selected.requests||[]).length} čaká</span></div></div>
+            <div>${requestRows||'<div class="admin-note">Žiadne čakajúce žiadosti.</div>'}</div>
+          </div>
           <div class="admin-project-members">
             <div class="admin-subsection-heading"><div><strong>Členovia</strong><span>${(selected.members||[]).length} ľudí</span></div></div>
             <div class="admin-project-add-member"><select id="adminProjectMemberSelect"><option value="">Vyber používateľa…</option>${userOptions}</select><button type="button" class="btn btn-ghost" data-admin-action="project-member-add" ${availableUsers.length?'':'disabled'}>+ Pridať</button></div>
@@ -3778,7 +3793,7 @@
           </div>
         </details>
       </div>`;
-    return `<section class="admin-ux-section admin-projects"><div class="admin-ux-heading"><div><small>PROJEKTOVÉ SKUPINY</small><h2>Skupiny nezávislé od levelu</h2><p>Vytvor ľubovoľný počet skupín. Každá dostane vlastný INFO kanál a samostatnú históriu WIN / LOSS / VOID.</p></div><button class="btn btn-primary" type="button" data-admin-action="project-create">+ Nová skupina</button></div>
+    return `<section class="admin-ux-section admin-projects"><div class="admin-ux-heading"><div><small>PROJEKTOVÉ SKUPINY</small><h2>Skupiny nezávislé od levelu</h2><p>OTVORENÁ = okamžitý vstup · NA ŽIADOSŤ = schvaľuješ · UZAVRETÁ = používateľ vidí lock. Kapacita a deadline locknú vstup automaticky.</p></div><button class="btn btn-primary" type="button" data-admin-action="project-create">+ Nová skupina</button></div>
       ${state.adminProjectGroupsError?`<div class="admin-runtime-note is-error">${escapeHtml(state.adminProjectGroupsError)}</div>`:''}
       <div class="admin-project-layout"><aside class="admin-project-list">${state.adminProjectGroupsLoading?'<div class="admin-note">Načítavam…</div>':list||'<div class="admin-note">Žiadne skupiny.</div>'}</aside>${workspace}</div>
     </section>`;
