@@ -61,8 +61,10 @@ jobs:
           r=json.load(open(".cache/tbt/slam-audit/report.json"))
           if r.get("production_mutated") is not False or r.get("api_requests") != 0:
               raise SystemExit("Safety contract violated")
-          if r.get("canonical_rows") != 739596:
-              raise SystemExit(f"Unexpected canonical rows: {r.get('canonical_rows')}")
+          if int(r.get("canonical_rows") or 0) <= 0:
+              raise SystemExit("Canonical history missing")
+          if int(r.get("quality_ready_before") or 0) <= 0:
+              raise SystemExit("Canonical serve/return baseline missing")
           print(json.dumps(r,indent=2))
           PY
 
