@@ -23,6 +23,8 @@ from tbt.data.history_snapshot import (
 from tbt.data.history_safety import sanitize_history_identities, merge_trusted_history_batch
 from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
+from tbt.providers.budget import RequestBudgetExceeded
+from tbt.providers.statistics import NoSupportedStatisticsError, parse_statistics
 from tbt.services.engine import predict, reconcile_ledger, serving_feed
 from tbt.services.publication import (
     validate_market_publication_candidate,
@@ -320,6 +322,147 @@ def _save_doubles_history(store, rows, *, extra_report=None):
     })
     write_json(store.directory / DOUBLES_REPORT_ASSET, report)
     store.upload_bundle([store.directory / DOUBLES_HISTORY_ASSET, store.directory / DOUBLES_REPORT_ASSET])
+    return report
+
+
+def _pending_ace_df_settlement_requirements(ledger):
+    """Return issued ACES/DF markets that still need a result, keyed by event."""
+    required = {}
+    for row in ledger if isinstance(ledger, list) else []:
+        if not isinstance(row, dict):
+            continue
+        event_id = str(row.get("event_id") or row.get("id") or row.get("match_id") or "").strip()
+        if not event_id:
+            continue
+        for publication in row.get("market_publications", []) or []:
+            if not isinstance(publication, dict) or not publication.get("issued_at"):
+                continue
+            market = str(publication.get("market") or "").strip().lower()
+            if market not in {"aces", "double_faults"}:
+                continue
+            result = publication.get("result")
+            if isinstance(result, dict):
+                status = str(result.get("status") or "").strip().lower()
+                if status in {"hit", "miss", "void"}:
+                    continue
+            required.setdefault(event_id, set()).add(market)
+    return required
+
+
+def _ace_df_required_counts_ready(match, markets):
+    stats = match.stats if isinstance(getattr(match, "stats", None), dict) else {}
+    keys = []
+    if "aces" in markets:
+        keys.extend(("p1_aces", "p2_aces"))
+    if "double_faults" in markets:
+        keys.extend(("p1_double_faults", "p2_double_faults"))
+    for key in keys:
+        try:
+            value = float(stats.get(key))
+        except (TypeError, ValueError):
+            return False
+        if not math.isfinite(value) or value < 0:
+            return False
+    return True
+
+
+def _enrich_pending_ace_df_settlement_stats(provider, ledger, matches):
+    """Fetch post-match counts only for issued ACES/DF bets that cannot settle yet.
+
+    This is deliberately narrow: no board-wide statistics sweep and no relaxed
+    publication rules. A provider miss leaves the bet pending for the next run.
+    """
+    requirements = _pending_ace_df_settlement_requirements(ledger)
+    report = {
+        "pending_events": len(requirements),
+        "pending_aces": sum("aces" in markets for markets in requirements.values()),
+        "pending_double_faults": sum("double_faults" in markets for markets in requirements.values()),
+        "completed_candidates": 0,
+        "already_ready": 0,
+        "enriched": 0,
+        "partial_or_unavailable": 0,
+        "missing_match": 0,
+        "missing_provider_event_id": 0,
+        "identity_unavailable": 0,
+        "errors": 0,
+        "budget_stopped": False,
+        "requests_used": 0,
+    }
+    if not requirements:
+        return report
+
+    before_requests = int(getattr(provider, "request_count", 0) or 0)
+    by_match_id = {
+        str(getattr(match, "match_id", "") or ""): match
+        for match in matches
+        if getattr(match, "match_id", None)
+    }
+
+    for event_id, markets in sorted(requirements.items()):
+        match = by_match_id.get(event_id)
+        if match is None:
+            report["missing_match"] += 1
+            continue
+        if not getattr(match, "is_completed", False):
+            continue
+        report["completed_candidates"] += 1
+        if _ace_df_required_counts_ready(match, markets):
+            report["already_ready"] += 1
+            continue
+
+        provider_event_id = _provider_event_id(match)
+        if provider_event_id is None:
+            report["missing_provider_event_id"] += 1
+            continue
+
+        try:
+            raw = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+            identity = raw.get("_tbt_event_identity") if isinstance(raw.get("_tbt_event_identity"), dict) else {}
+            home = str(identity.get("home") or "")
+            away = str(identity.get("away") or "")
+            if (
+                identity.get("event_id") != str(provider_event_id)
+                or identity.get("status") != "finished"
+                or {home, away} != {str(match.player1_id), str(match.player2_id)}
+                or not home or home == away
+            ):
+                detail = provider._get(f"/api/tennis/event/{provider_event_id}", enrichment=True)
+                event = detail.get("event", detail) if isinstance(detail, dict) else {}
+                home = str((event.get("homeTeam") or {}).get("id") or "")
+                away = str((event.get("awayTeam") or {}).get("id") or "")
+                if (
+                    str((event.get("status") or {}).get("type") or "") != "finished"
+                    or {home, away} != {str(match.player1_id), str(match.player2_id)}
+                    or not home or home == away
+                ):
+                    report["identity_unavailable"] += 1
+                    continue
+
+            payload = provider.event_statistics(provider_event_id)
+            stats = parse_statistics(payload, home_is_player1=home == str(match.player1_id))
+            match.stats = {**(match.stats if isinstance(match.stats, dict) else {}), **stats}
+            if _ace_df_required_counts_ready(match, markets):
+                report["enriched"] += 1
+            else:
+                report["partial_or_unavailable"] += 1
+        except NoSupportedStatisticsError:
+            report["partial_or_unavailable"] += 1
+        except RequestBudgetExceeded:
+            report["budget_stopped"] = True
+            break
+        except ProviderError as exc:
+            report["errors"] += 1
+            if report["errors"] <= 5:
+                print(json.dumps({
+                    "warning": "ace_df_settlement_statistics_error",
+                    "event_id": event_id,
+                    "provider_event_id": str(provider_event_id),
+                    "reason": str(exc)[:300],
+                }, ensure_ascii=False), flush=True)
+
+    report["requests_used"] = max(
+        0, int(getattr(provider, "request_count", 0) or 0) - before_requests
+    )
     return report
 
 
@@ -788,6 +931,7 @@ def main():
     doubles_picks = []
     doubles_report = None
     doubles_completed = []
+    ace_df_settlement_stats_report = {}
     doubles_upcoming = []
     try:
         if current_only:
@@ -846,6 +990,15 @@ def main():
             skipped_history_days = set(
                 getattr(provider, "_tbt_skipped_history_days", set())
             )
+
+        # Settlement has priority over fresh market discovery: fetch whole-match
+        # Aces/DF counts only for already-issued, still-pending ACES/DF bets.
+        ace_df_settlement_stats_report = _enrich_pending_ace_df_settlement_stats(
+            provider, prediction_ledger, matches
+        )
+        print(json.dumps({
+            "ace_df_settlement_statistics": ace_df_settlement_stats_report
+        }, ensure_ascii=False), flush=True)
         for tour in ("atp", "wta"):
             upcoming.extend(provider.upcoming(tour, now.date(), now.date() + timedelta(days=3)))
 
@@ -1233,6 +1386,7 @@ def main():
         "value": len(feed.get("value_picks", [])),
         "ace": len(feed.get("ace_picks", [])),
         "ace_projection": ace_report or {},
+        "ace_df_settlement_statistics": ace_df_settlement_stats_report or {},
         "sg": len(feed.get("sg_picks", [])),
         "sg_projection": sg_report or {},
         "doubles": len(feed.get("doubles_picks", [])),
