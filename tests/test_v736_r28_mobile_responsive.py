@@ -21,28 +21,27 @@ def test_r28_release_and_cache_identity():
 
 
 def test_r28_final_mobile_contract_is_last_cascade_layer():
-    marker = "BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract"
-    # r27 still carried a malformed desktop @media/comment pair. It trapped the
-    # runtime visual rules inside min-width:1081px, which is why Telegram/header
-    # styling vanished on phones. r28 closes that block before shared rules.
-    assert "wrapper swallowed the grid gap{" not in CSS
-    assert "placeholder closed so every runtime rule below remains global. */" in CSS
+    marker = "BlinQ mobile application shell — 2026-10-02"
     assert marker in CSS
     tail = CSS[CSS.index(marker):]
-    assert "@media (max-width:900px)" in tail
-    assert ".reference-topbar .reference-navigation{display:none!important}" in tail
-    assert ".daily-tabs{display:flex!important" in tail
-    assert "overflow-x:auto!important" in tail
-    assert ".daily-hub-table tbody tr:not(.hub-row-locked){display:grid!important" in tail
-    assert ".results-table thead{display:none!important}" in tail
-    assert ".mobile-tabs a>svg path{fill:none!important" in tail
-    assert ".tg-group-icon svg path{fill:currentColor!important" in tail
-
+    assert "@media (max-width:767px)" in tail
+    assert "@media (min-width:768px) and (max-width:900px)" in tail
+    assert "grid-template-areas:\"brand actions\"" in tail
+    assert ".project-group-bar{display:none!important}" in tail
+    assert "width:44px" in tail
+    assert "#03110f" in tail.lower()
+    assert "#08201b" in tail.lower()
+    assert "#20463b" in tail.lower()
+    assert "#24e8ac" in tail.lower()
+    assert ".results-filter-shell.is-open .results-filter-bar.results-filter-bar-v683{display:grid}" in tail
+    assert ".results-outcome-tabs" in tail
+    assert ".results-table tbody tr.results-card-row" in tail
+    assert ".daily-hub-table tbody tr:not(.hub-row-locked)" in tail
 
 def test_r28_mobile_cards_use_semantic_labels_not_column_guessing():
     assert "const mobileLabels=dailyHubColumns(tab);" in APP
     assert "cell.dataset.label=mobileLabels[i]||'';" in APP
-    tail = CSS[CSS.index("BlinQ runtime patch 7.3.6-r28 — mobile-first stability contract"):]
+    tail = CSS[CSS.index("BlinQ mobile application shell — 2026-10-02"):]
     for cls in ("hub-rank", "hub-time", "hub-tournament-cell", "hub-match-cell", "hub-pick", "hub-odds", "hub-confidence-cell", "hub-action-cell"):
         assert f".{cls}" in tail
 
@@ -64,15 +63,20 @@ def test_r28_hero_is_responsive_and_non_primary_slides_are_lazy():
 def test_mobile_web_shell_keeps_desktop_data_and_apps_up_only_the_phone_layout():
     assert "results-filter-shell" in APP
     assert "results-mobile-filter-toggle" in APP
+    assert "resultsFilterApply" in APP
+    assert "resultsFilterReset" in APP
     assert "results-card-row" in APP
     assert "data-results-filter-toggle" in APP
-    assert "mobile-web-shell=" in INDEX
-    marker = "BlinQ mobile web shell 2026-10-02"
+    assert "mobile-web-shell=3" in INDEX
+    assert "const staged=window.matchMedia('(max-width:767px)').matches;" in APP
+    assert "phoneOutcome=window.matchMedia('(max-width:767px)').matches" in APP
+    marker = "BlinQ mobile application shell — 2026-10-02"
     assert marker in CSS
     tail = CSS[CSS.index(marker):]
-    assert '@media(max-width:900px)' in tail
-    assert 'grid-template-areas:"brand projects actions"' in tail
-    assert '.insight-shortcut.insight-live-button' in tail
-    assert 'width:30px!important' in tail
-    assert '.results-filter-shell.is-open .results-filter-bar.results-filter-bar-v683' in tail
+    assert "@media (max-width:767px)" in tail
+    assert "@media (min-width:768px) and (max-width:900px)" in tail
+    assert 'grid-template-areas:"brand actions"' in tail
+    assert '.project-group-bar{display:none!important}' in tail
+    assert '.results-filter-actions' in tail
     assert '.results-table tbody tr.results-card-row' in tail
+    assert '.mobile-tabs' in tail
