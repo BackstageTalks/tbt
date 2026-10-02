@@ -28,7 +28,7 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME keeps its current short-price fallback. TOP uses a staged daily probability fallback: start at 68% and relax only until at least five TOP picks exist, never below 65%. The TOP odds boundary is fixed at >=1.50 and never moves. Value keeps a 65% floor.
+# PRIME keeps its current short-price fallback. TOP uses a staged daily probability fallback: start at 68% and relax only until at least three TOP picks exist, never below 65%. The TOP odds boundary is fixed at >=1.50 and never moves. Value keeps a 65% floor.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
@@ -65,7 +65,7 @@ TOP_STANDARD_PROBABILITY = 0.76
 TOP_FALLBACK_PROBABILITIES = (0.74, 0.72, 0.70, 0.68)
 TOP_MIN_PROBABILITY = PRIME_TOP_CORE_PROBABILITY
 TOP_TARGET_COUNT = 10
-TOP_MIN_COUNT = 5
+TOP_MIN_COUNT = 3
 TOP_MIN_DATA_DEPTH = 0.80
 TOP_MIN_SURFACE_MATCHES = 5
 TOP_MIN_ODDS: float | None = 1.50
@@ -876,7 +876,7 @@ def select_market_sections(
 ) -> dict[str, Any]:
     """Split priced Match Winner predictions by BlinQ Probability and odds.
 
-    TOP starts at 68% / 1.50. If fewer than five TOP picks remain after Value
+    TOP starts at 68% / 1.50. If fewer than three TOP picks remain after Value
     priority, the selector relaxes probability stepwise to a 65% hard floor,
     while the odds boundary remains fixed at >=1.50. PRIME keeps its current
     short-price fallback. Value remains 65%+ with >=1.80 odds. EV/edge never
@@ -995,7 +995,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 14,
-            "selection_policy": "probability_first_odds_buckets_v13_value65_top_probability_dynamic_fixed_150",
+            "selection_policy": "probability_first_odds_buckets_v14_value65_top_min3_dynamic_fixed_150",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "prime_core_68_plus": len(prime_core),
@@ -1007,7 +1007,7 @@ def select_market_sections(
                 "prime": len(prime), "top_daily": len(top), "value": len(value),
                 "duplicates_removed": sum(duplicate_removed.values()),
                 "limited_out": sum(limited_out.values()),
-                "daily_minimum_target": 5,
+                "daily_minimum_target": TOP_MIN_COUNT,
                 "daily_preferred_target": 10,
                 "minimum_shortfall": {
                     "prime": max(0, PRIME_MIN_COUNT-len(prime)),
@@ -1035,7 +1035,7 @@ def select_market_sections(
                 "top_dynamic_fallback_tiers": [
                     {"min_probability": p, "min_odds": o} for p, o in TOP_DYNAMIC_FALLBACK_TIERS
                 ],
-                "fallback_only_if_section_below": 5,
+                "fallback_only_if_section_below": TOP_MIN_COUNT,
                 "probability_basis": "blinq_probability=data_depth_shrunk_calibrated_model_probability",
                 "edge_filter": False,
             },

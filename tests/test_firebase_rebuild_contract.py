@@ -39,10 +39,10 @@ def test_rebuild_keeps_probability_first_market_policy():
     assert "PRIME_MAX_ODDS_EXCLUSIVE = 1.50" in source
     assert "TOP_MIN_ODDS: float | None = 1.50" in source
     assert "TOP_FALLBACK_MIN_ODDS = 1.50" in source
-    assert "TOP_MIN_COUNT = 5" in source
+    assert "TOP_MIN_COUNT = 3" in source
     assert "VALUE_MIN_ODDS = 1.80" in source
     assert "VALUE_MAX_ODDS_DIFFERENCE = 0.15" in source
-    assert "probability_first_odds_buckets_v13_value65_top_probability_dynamic_fixed_150" in source
+    assert "probability_first_odds_buckets_v14_value65_top_min3_dynamic_fixed_150" in source
 
 
 def test_firebase_runtime_dependency_and_api_routes_are_present():

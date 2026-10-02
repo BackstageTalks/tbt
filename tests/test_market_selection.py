@@ -92,7 +92,7 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'probability_first_odds_buckets_v13_value65_top_probability_dynamic_fixed_150'
+    assert meta['selection_policy'] == 'probability_first_odds_buckets_v14_value65_top_min3_dynamic_fixed_150'
     assert meta['value_rule']['assignment_priority'] == 1
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
@@ -152,14 +152,14 @@ def test_value_has_priority_over_top_when_both_qualify():
 
 
 
-def test_top_keeps_relaxing_when_only_three_core_picks_exist():
+def test_top_does_not_relax_when_three_core_picks_exist():
     rows = [row(f'core{i}', .70 + i*.01, 1.60 + i*.01, 2.60, depth=1.0) for i in range(3)]
     rows += [row('fallback', .67, 1.70, 2.50, depth=1.0)]
     sections = select_market_sections(rows)
     ids = [x['event_id'] for x in sections['top_daily_picks']]
-    assert 'fallback' in ids
-    assert len(ids) == 4
-    assert sections['market_selection']['selection_counts']['top_fallback_added'] == 1
+    assert 'fallback' not in ids
+    assert len(ids) == 3
+    assert sections['market_selection']['selection_counts']['top_fallback_added'] == 0
 
 
 def test_odds_150_belongs_to_top_not_prime():
@@ -220,7 +220,7 @@ def test_odds_enrichment_covers_all_65_percent_value_candidates_before_prices_ar
     assert next(x for x in enriched if x['event_id'] == 'eligible').get('betting')
 
 
-def test_top_dynamic_fallback_stops_at_first_tier_reaching_five():
+def test_top_dynamic_fallback_stops_at_first_tier_reaching_three():
     rows=[
         row('core1',.74,1.60,2.40,depth=1.0),row('core2',.72,1.55,2.50,depth=1.0),
         row('f67',.67,1.50,3.00,depth=1.0),row('short66',.66,1.49,3.00,depth=1.0),
@@ -229,11 +229,11 @@ def test_top_dynamic_fallback_stops_at_first_tier_reaching_five():
     ]
     sections=select_market_sections(rows)
     ids=[x['event_id'] for x in sections['top_daily_picks']]
-    assert ids==['core1','core2','f67','f66a','f66b']
+    assert ids==['core1','core2','f67']
     assert 'short66' not in ids
     assert [x['event_id'] for x in sections['prime_picks']] == ['short66']
     assert 'below-stop' not in ids
     meta=sections['market_selection']['selection_counts']['top_fallback_applied']
-    assert meta=={'step':2,'min_probability':.66,'min_odds':1.50}
+    assert meta=={'step':1,'min_probability':.67,'min_odds':1.50}
     assert sections['market_selection']['top_daily_rule']['fallback_min_odds']==1.50
-    assert sections['market_selection']['top_daily_rule']['fallback_only_if_core_count_below']==5
+    assert sections['market_selection']['top_daily_rule']['fallback_only_if_core_count_below']==3
