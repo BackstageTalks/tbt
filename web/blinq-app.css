@@ -8018,34 +8018,7 @@ body#blinqPremium .project-group-chip.is-active{background:rgba(14,45,48,.98);bo
   body#blinqPremium:not(.blinq-admin) .header-actions{grid-area:actions}
   body#blinqPremium:not(.blinq-admin) .project-group-bar{grid-area:projects;padding:2px 0 4px}
 }
-@media(max-width:900px){
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
-    grid-template-columns:82px minmax(70px,1fr) auto!important;
-    grid-template-areas:"brand nav actions" "projects projects projects" "search search search"!important;
-    height:auto!important;min-height:0!important;
-  }
-  body#blinqPremium:not(.blinq-admin) .project-group-bar{grid-area:projects;width:100%;padding:2px 0}
-  body#blinqPremium:not(.blinq-admin) .project-group-chip{height:31px;padding:0 8px;font-size:8px;max-width:132px}
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-actions{gap:3px!important;min-width:0!important}
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade{height:34px!important;min-width:54px!important;padding:0 5px!important;font-size:7px!important}
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button{height:34px!important;min-width:48px!important;width:48px!important;padding:0 4px!important}
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut-live{font-size:6px!important}
-  body#blinqPremium:not(.blinq-admin) .reference-topbar #insightShortcutLabel{font-size:6.5px!important}
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-info-button{width:32px!important;min-width:32px!important;max-width:32px!important}
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{width:34px!important;min-width:34px!important;max-width:34px!important}
-}
-@media(max-width:480px){
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
-    grid-template-columns:64px minmax(62px,1fr) auto!important;padding-inline:7px!important;gap:5px!important;
-  }
-  body#blinqPremium:not(.blinq-admin) .reference-navigation{gap:7px!important}
-  body#blinqPremium:not(.blinq-admin) .reference-navigation a{padding:0 3px!important;font-size:8px!important}
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade{min-width:48px!important;max-width:48px!important}
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button{min-width:42px!important;width:42px!important;max-width:42px!important}
-}
-@media(max-width:340px){
-  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade{display:none!important}
-}
+/* <=900px project/header overrides moved to the unified mobile application shell. */
 
 /* Self-join project directory. */
 body#blinqPremium .project-groups-dialog{
