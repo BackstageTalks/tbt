@@ -2130,10 +2130,16 @@ _INFO_RESULT_OUTCOMES = {"win", "loss", "void"}
 
 
 def _info_result_from_entity(entity: dict) -> dict:
+    try:
+        group_ids = json.loads(entity.get("group_ids_json") or "[]")
+    except (TypeError, ValueError):
+        group_ids = []
     return {
         "id": str(entity.get("RowKey") or ""),
         "source_id": str(entity.get("source_id") or ""),
         "outcome": str(entity.get("outcome") or ""),
+        "audience_mode": str(entity.get("audience_mode") or "levels"),
+        "group_ids": [str(v) for v in group_ids if _VALID_ID.fullmatch(str(v))],
         "title": str(entity.get("title") or ""),
         "body": str(entity.get("body") or ""),
         "match_id": str(entity.get("match_id") or ""),
@@ -2179,6 +2185,8 @@ def save_info_result(insight_id: str, outcome: str, *, actor_id: str = "") -> di
         "title": str(item.get("title") or "")[:140],
         "body": str(item.get("body") or "")[:4000],
         "match_id": str(item.get("match_id") or "")[:96],
+        "audience_mode": str(item.get("audience_mode") or "levels")[:16],
+        "group_ids_json": json.dumps(item.get("group_ids") or [], separators=(",", ":")),
         "published_at": str(item.get("created_at") or "")[:64],
         "settled_at": now,
         "settled_by": str(actor_id or "")[:256],
@@ -2253,7 +2261,7 @@ def save_automated_insight(payload: object, *, actor_id: str = "automation", ins
         except Exception as exc: raise AdminStorageUnavailable("Unable to refresh automated insight") from exc
         return _insight_from_entity(entity),False
     clean=normalize_insight(payload); now=datetime.now(timezone.utc).isoformat()
-    entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k!="levels"},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"created_at":now,"updated_at":now,"created_by":str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":0}
+    entity={"PartitionKey":"insights","RowKey":insight_id,**{k:v for k,v in clean.items() if k not in {"levels","group_ids"}},"levels_json":json.dumps(clean["levels"],separators=(",",":")),"group_ids_json":json.dumps(clean["group_ids"],separators=(",",":")),"created_at":now,"updated_at":now,"created_by":str(actor_id or "automation")[:256],"updated_by":str(actor_id or "automation")[:256],"read_count":0}
     try: client.create_entity(entity)
     except Exception as exc:
         try:return _insight_from_entity(client.get_entity(partition_key="insights",row_key=insight_id)),False
