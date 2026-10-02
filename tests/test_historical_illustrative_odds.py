@@ -96,9 +96,9 @@ def test_ace_df_results_kpis_use_displayed_normalized_or_real_api_odds_without_r
     assert "const unitsText=Number.isFinite(displayUnits)?" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits>0?'correct'" in APP
     assert "Number.isFinite(displayUnits)&&displayUnits<0?'wrong'" in APP
-    assert "const entries=settledPublishedEntries(rows,category)" in APP
+    assert "const entries=settledPublishedEntries(rows,category,filters)" in APP
     assert "const realStake=publication?.result?.staked_units" in APP
-    assert "function localResultMetrics(rows,category)" in APP
+    assert "function localResultMetrics(rows,category,filters=null)" in APP
     assert "return metricCards([" in APP[APP.index("function resultsSummary()"):APP.index("function primeDetailCard(")]
     # The legacy feed/ledger remains untouched; normalization is a Results presentation KPI.
     assert "historical_display_placeholder_scope" in historical_display_placeholder(publication(), event_id="1001")
