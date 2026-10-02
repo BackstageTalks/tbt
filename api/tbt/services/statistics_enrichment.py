@@ -101,6 +101,31 @@ class StatisticsEnricher:
                 "unsupported_keys": keys[:40],
             }}
             return "unavailable"
+        except ProviderError as exc:
+            # Some completed provider events expose only set-level statistics or
+            # duplicate/non-canonical period labels and therefore have no single
+            # trustworthy whole-match ALL block. That is an event-level coverage
+            # miss, not a reason to abort a multi-thousand-match enrichment batch.
+            # Keep all other ProviderError cases fatal (identity, envelope,
+            # conflicting values) so the adapter remains fail-closed.
+            if str(exc) != "Missing unambiguous ALL period in statistics":
+                raise
+            periods = payload.get("statistics") if isinstance(payload, dict) else None
+            period_labels = []
+            if isinstance(periods, list):
+                for period in periods:
+                    if not isinstance(period, dict):
+                        continue
+                    label = str(period.get("period") or "").strip()
+                    if label and label not in period_labels:
+                        period_labels.append(label)
+            match.provider_payload = {**raw, "_tbt_statistics": {
+                "schema": STATISTICS_SCHEMA_VERSION, "event_id": str(event_id), "source": "tennisapi1",
+                "fetched_at": datetime.now(timezone.utc).isoformat(),
+                "status": "unavailable", "reason": "missing_unambiguous_all_period",
+                "period_labels": period_labels[:20],
+            }}
+            return "unavailable"
 
         match.stats = {**match.stats, **stats}
         match.provider_payload = {**raw, "_tbt_statistics": {
