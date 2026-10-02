@@ -8,5 +8,7 @@
   "expected_stage_sha256": "eeab2226d202748a6f47f87c45d4a61afca80a603e20bb9b481d73a218b3614f",
   "source_tar_sha256": "0bc3385d2f9aa860b5945a485a7cf27a64b6075cf0908844a92d47cb86dd3c58",
   "raw_redistribution": false,
-  "requested_at_utc": "2026-10-02T21:35:00Z"
+  "requested_at_utc": "2026-10-02T21:42:00Z",
+  "provider_bridge_path": "internal/livetennisapi/wta-2025-reconstructed-provider-bridge.csv",
+  "expected_provider_bridge_rows": 3870
 }
