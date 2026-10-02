@@ -931,10 +931,13 @@ def validate_ui_config(payload: object) -> dict:
             if not isinstance(period, str) or period not in ALLOWED_PERIODS[metric]:
                 raise ValueError(f"Invalid Dashboard setting period {index + 1}")
     sections = dashboard.get("sections") or {}
-    pick_section_order = ["prime", "top_daily", "value", "doubles", "ace", "sg"]
+    base_pick_section_order = ["prime", "top_daily", "value", "doubles", "ace", "sg"]
+    pick_section_order = (["top200"] if isinstance(sections, dict) and "top200" in sections else []) + base_pick_section_order
     section_order = dashboard.get("section_order") or []
-    if not isinstance(section_order, list) or set(section_order) != {"prime", "top_daily", "value", "doubles", "ace", "sg", "results"}:
-        raise ValueError("Dashboard section order must contain each public section exactly once")
+    legacy_section_set = {"prime", "top_daily", "value", "doubles", "ace", "sg", "results"}
+    top200_section_set = legacy_section_set | {"top200"}
+    if not isinstance(section_order, list) or set(section_order) not in (legacy_section_set, top200_section_set):
+        raise ValueError("Dashboard section order must contain each configured public section exactly once")
     visible_slots = dashboard.get("visible_slots")
     if not isinstance(visible_slots, int) or not 1 <= visible_slots <= 6:
         raise ValueError("Dashboard visible_slots must be between 1 and 6")
@@ -973,7 +976,7 @@ def validate_ui_config(payload: object) -> dict:
     daily_hub = dashboard.get("daily_hub") or {}
     if not isinstance(daily_hub, dict) or not isinstance(daily_hub.get("enabled"), bool):
         raise ValueError("Invalid Daily Picks hub configuration")
-    if daily_hub.get("default_tab") not in {"daily", "prime", "top", "value", "ace", "double_faults", "games", "sets", "doubles", "board", "see_all"}:
+    if daily_hub.get("default_tab") not in {"daily", "top200", "prime", "top", "value", "ace", "double_faults", "games", "sets", "doubles", "board", "see_all"}:
         raise ValueError("Invalid Daily Picks default tab")
     for field in ("preview_rows", "expand_rows"):
         value = daily_hub.get(field)
@@ -981,7 +984,7 @@ def validate_ui_config(payload: object) -> dict:
             raise ValueError(f"Invalid Daily Picks setting: {field}")
     hub_tabs = daily_hub.get("tabs") or {}
     required_hub_tabs = {"daily", "value", "ace", "double_faults", "games", "sets"}
-    allowed_hub_tabs = required_hub_tabs | {"prime", "top", "doubles", "board", "see_all"}
+    allowed_hub_tabs = required_hub_tabs | {"top200", "prime", "top", "doubles", "board", "see_all"}
     if not isinstance(hub_tabs, dict) or not required_hub_tabs.issubset(hub_tabs) or not set(hub_tabs).issubset(allowed_hub_tabs):
         raise ValueError("Daily Picks hub must contain the core tabs and only supported consolidated tabs")
     for tab_id, tab in hub_tabs.items():
@@ -1024,12 +1027,17 @@ def validate_ui_config(payload: object) -> dict:
         if not isinstance(info_defaults, list) or not info_defaults or any(str(level).lower() not in _INSIGHT_LEVELS for level in info_defaults):
             raise ValueError("Invalid INFO default audience")
 
-    valid_dashboard_sections = {"prime", "top_daily", "value", "doubles", "ace", "sg", "results"}
-    if not isinstance(sections, dict) or not valid_dashboard_sections.issubset(sections):
+    required_dashboard_sections = {"prime", "top_daily", "value", "doubles", "ace", "sg", "results"}
+    allowed_dashboard_sections = required_dashboard_sections | {"top200"}
+    if (
+        not isinstance(sections, dict)
+        or not required_dashboard_sections.issubset(sections)
+        or not set(sections).issubset(allowed_dashboard_sections)
+    ):
         raise ValueError("Invalid dashboard section configuration")
     active_pick_windows = [key for key in pick_section_order if isinstance(sections.get(key), dict) and sections[key].get("dashboard_enabled") is True]
     expected_dashboard_orders = {}
-    for section_id in valid_dashboard_sections:
+    for section_id in sections:
         section = sections.get(section_id)
         if not isinstance(section, dict):
             raise ValueError(f"Invalid dashboard section: {section_id}")
