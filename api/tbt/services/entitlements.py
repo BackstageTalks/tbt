@@ -376,9 +376,9 @@ def _daily_rows(payload: dict) -> list[dict]:
     try:
         core_floor=float(rule.get("core_min_probability",0.68))
         core_floor=core_floor/100 if core_floor>1 else core_floor
-        core_minimum=max(1,int(rule.get("fallback_only_if_core_count_below",5)))
+        core_minimum=max(1,int(rule.get("fallback_only_if_core_count_below",3)))
     except (TypeError,ValueError):
-        core_floor,core_minimum=0.68,5
+        core_floor,core_minimum=0.68,3
 
     core=[row for row in out if _row_probability(row)+1e-12>=core_floor]
     if len(core)>=core_minimum:
