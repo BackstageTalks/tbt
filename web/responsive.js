@@ -94,10 +94,11 @@
       const vv=window.visualViewport;
       const width=Math.round(vv?.width||window.innerWidth||document.documentElement.clientWidth||0);
       const height=Math.round(vv?.height||window.innerHeight||document.documentElement.clientHeight||0);
-      const mobile=width<=900;
+      const phone=width<=767,compact=width<=900,tablet=width>=768&&width<=900;
       document.documentElement.style.setProperty('--bq-viewport-height',`${height}px`);
-      document.body.classList.toggle('blinq-mobile-layout',mobile);
-      const keyboardOpen=Boolean(mobile&&vv&&window.innerHeight&&vv.height<window.innerHeight*.78);
+      document.body.classList.toggle('blinq-mobile-layout',phone);
+      document.body.classList.toggle('blinq-tablet-layout',tablet);
+      const keyboardOpen=Boolean(compact&&vv&&window.innerHeight&&vv.height<window.innerHeight*.78);
       document.body.classList.toggle('blinq-mobile-keyboard-open',keyboardOpen);
     });
   }
