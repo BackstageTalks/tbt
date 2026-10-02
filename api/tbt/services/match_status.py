@@ -34,6 +34,24 @@ _PUBLIC_MATCH_WINNER_KEYS = (
 LEGACY_PENDING_CARRY_HOURS = 48
 
 
+def _current_betting_day_bounds(now: datetime) -> tuple[datetime, datetime]:
+    """Return the active 06:00 Europe/Bratislava betting-day UTC bounds."""
+    local_now = now.astimezone(ZoneInfo("Europe/Bratislava"))
+    start_local = local_now.replace(hour=6, minute=0, second=0, microsecond=0)
+    if local_now < start_local:
+        start_local -= timedelta(days=1)
+    end_local = start_local + timedelta(days=1)
+    return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
+
+def _scheduled_in_current_betting_day(row: dict[str, Any], now: datetime) -> bool:
+    scheduled = _parse_time(row.get("scheduled_at") or row.get("date"))
+    if scheduled is None:
+        return False
+    start, end = _current_betting_day_bounds(now)
+    return start <= scheduled < end
+
+
 def _event_id(row: Any) -> str:
     if not isinstance(row, dict):
         return ""
@@ -68,9 +86,18 @@ def _player_id(row: dict[str, Any], key: str) -> str:
     return str(player.get("id") or "").strip()
 
 
-def prediction_rows(feed: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    """Return published Match Winner rows that need runtime settlement."""
+def prediction_rows(
+    feed: dict[str, Any], *, now: datetime | None = None
+) -> dict[str, dict[str, Any]]:
+    """Return published Match Winner rows that need runtime settlement.
+
+    Production feeds are restricted to the active 06:00–06:00 Bratislava
+    betting day. Historical results rows and stale prior-day snapshots are
+    never part of the hourly queue. The legacy upcoming fallback remains
+    unrestricted only for focused compatibility tests / old payloads.
+    """
     out: dict[str, dict[str, Any]] = {}
+    now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
 
     def add_rows(rows: Any) -> None:
         if not isinstance(rows, list):
@@ -95,7 +122,12 @@ def prediction_rows(feed: dict[str, Any]) -> dict[str, dict[str, Any]]:
     public_contract_present = any(key in feed for key in _PUBLIC_MATCH_WINNER_KEYS)
     if public_contract_present:
         for key in _PUBLIC_MATCH_WINNER_KEYS:
-            add_rows(feed.get(key))
+            rows = feed.get(key)
+            if isinstance(rows, list):
+                add_rows([
+                    row for row in rows
+                    if isinstance(row, dict) and _scheduled_in_current_betting_day(row, now)
+                ])
     else:
         # Compatibility fallback for focused tests/legacy payloads that predate
         # the public market-section contract. Production feeds carry the public
@@ -451,40 +483,43 @@ def scan_match_statuses(
     deadline = (time.monotonic() + max(0.0, max_wall_seconds)
                 if max_wall_seconds is not None else None)
     time_budget_exhausted = False
-    rows = prediction_rows(feed)
+    public_contract_present = any(key in feed for key in _PUBLIC_MATCH_WINNER_KEYS)
+    rows = prediction_rows(feed, now=now)
     prior = previous_snapshot if isinstance(previous_snapshot, dict) else {}
     prior_pending = prior.get("pending")
     prior_pending = prior_pending if isinstance(prior_pending, dict) else {}
 
-    # Carry only pending rows that were created by the public-pick worker.
-    # Legacy snapshots used to include the entire model/board feed, which created
-    # a large stale backlog unrelated to published bets. Unmarked legacy rows are
-    # intentionally dropped. Marked public picks may survive a feed rollover for
-    # up to 48 hours so yesterday's late/unfinished matches can still settle.
-    carry_cutoff = now - timedelta(hours=LEGACY_PENDING_CARRY_HOURS)
-    for eid, saved in prior_pending.items():
-        if eid in rows or not isinstance(saved, dict):
-            continue
-        scheduled = _parse_time(saved.get("t"))
-        if (
-            str(saved.get("p") or "") != "1"
-            or scheduled is None
-            or scheduled < carry_cutoff
-            or not (saved.get("s") and saved.get("a") and saved.get("b"))
-        ):
-            continue
-        rows[eid] = {
-            "event_id": eid, "scheduled_at": saved["t"], "winner_id": saved["s"],
-            "player1": {"id": saved["a"]}, "player2": {"id": saved["b"]},
-        }
+    # Production must evaluate only the currently published betting-day cohort.
+    # Never carry yesterday's pending rows into today's worker. The historical
+    # fallback is retained only for legacy payloads that do not have public
+    # market-section keys.
+    if not public_contract_present:
+        carry_cutoff = now - timedelta(hours=LEGACY_PENDING_CARRY_HOURS)
+        for eid, saved in prior_pending.items():
+            if eid in rows or not isinstance(saved, dict):
+                continue
+            scheduled = _parse_time(saved.get("t"))
+            if (
+                str(saved.get("p") or "") != "1"
+                or scheduled is None
+                or scheduled < carry_cutoff
+                or not (saved.get("s") and saved.get("a") and saved.get("b"))
+            ):
+                continue
+            rows[eid] = {
+                "event_id": eid, "scheduled_at": saved["t"], "winner_id": saved["s"],
+                "player1": {"id": saved["a"]}, "player2": {"id": saved["b"]},
+            }
 
     existing = prior.get("statuses")
     existing = existing if isinstance(existing, dict) else {}
+    tracked_ids = set(rows)
     statuses: dict[str, dict[str, Any]] = {
         str(eid): dict(value)
         for eid, value in existing.items()
         if isinstance(value, dict)
         and str(value.get("status") or "") in TERMINAL_STATUSES
+        and (not public_contract_present or str(eid) in tracked_ids)
     }
 
     due: list[tuple[datetime, str, dict[str, Any]]] = []
