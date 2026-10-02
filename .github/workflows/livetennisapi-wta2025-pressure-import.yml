@@ -1,0 +1,563 @@
+name: Integrate LiveTennisAPI WTA 2025 reconstructed pressure
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/livetennisapi-wta2025-pressure-import-request.json"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      STAGE_PATH: internal/livetennisapi/wta-2025-reconstructed-pressure.csv
+      MANIFEST_PATH: internal/livetennisapi/wta-2025-reconstructed-pressure-manifest.json
+      EXPECTED_STAGE_ROWS: "3899"
+      EXPECTED_STAGE_SHA256: "3910872a6bb4cf7f9defd03f0a16f990afdbbc2a7bde440b1ab5d9bc8e8c0f83"
+      EXPECTED_SOURCE_TAR_SHA256: "0bc3385d2f9aa860b5945a485a7cf27a64b6075cf0908844a92d47cb86dd3c58"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install dependencies
+        run: python -m pip install --retries 8 --timeout 60 -r api/requirements-train.txt
+
+      - name: Verify controlled request and private destination
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+
+          request=json.loads(Path(".github/livetennisapi-wta2025-pressure-import-request.json").read_text())
+          expected={
+              "schema":1,
+              "mode":"write",
+              "source":"livetennisapi_reconstructed_wta_2025_singles",
+              "private_stage_path":os.environ["STAGE_PATH"],
+              "private_manifest_path":os.environ["MANIFEST_PATH"],
+              "expected_stage_rows":int(os.environ["EXPECTED_STAGE_ROWS"]),
+              "expected_stage_sha256":os.environ["EXPECTED_STAGE_SHA256"],
+              "source_tar_sha256":os.environ["EXPECTED_SOURCE_TAR_SHA256"],
+              "raw_redistribution":False,
+          }
+          for key,value in expected.items():
+              if request.get(key) != value:
+                  raise SystemExit(f"Controlled request mismatch {key}: {request.get(key)!r} != {value!r}")
+          print("controlled request verified")
+          PY
+
+      - name: Download current canonical history
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from scripts.release_store import ReleaseStore
+          ReleaseStore(
+              os.environ["TBT_DATA_REPOSITORY"],
+              "tbt-data-v1",
+              Path(".cache/tbt/history"),
+          ).download(require_bundle_manifest=True)
+          PY
+
+      - name: Fetch and verify private derived stage
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/livetennisapi-wta2025
+          gh api -H "Accept: application/vnd.github.raw+json"             "repos/$TBT_DATA_REPOSITORY/contents/$STAGE_PATH"             > .cache/tbt/livetennisapi-wta2025/stage.csv
+          gh api -H "Accept: application/vnd.github.raw+json"             "repos/$TBT_DATA_REPOSITORY/contents/$MANIFEST_PATH"             > .cache/tbt/livetennisapi-wta2025/manifest.json
+          python - <<'PY'
+          import csv, hashlib, json, os
+          from pathlib import Path
+
+          stage=Path(".cache/tbt/livetennisapi-wta2025/stage.csv")
+          manifest=json.loads(Path(".cache/tbt/livetennisapi-wta2025/manifest.json").read_text())
+          digest=hashlib.sha256(stage.read_bytes()).hexdigest()
+          rows=sum(1 for _ in csv.DictReader(stage.open(encoding="utf-8-sig",newline="")))
+          checks={
+              "stage_sha256":(digest,os.environ["EXPECTED_STAGE_SHA256"]),
+              "stage_rows":(rows,int(os.environ["EXPECTED_STAGE_ROWS"])),
+              "manifest_stage_sha256":(manifest.get("derived_stage_sha256"),os.environ["EXPECTED_STAGE_SHA256"]),
+              "manifest_source_tar_sha256":(manifest.get("source_tar_sha256"),os.environ["EXPECTED_SOURCE_TAR_SHA256"]),
+              "manifest_rows":(manifest.get("rows"),int(os.environ["EXPECTED_STAGE_ROWS"])),
+              "raw_redistributed":(manifest.get("raw_redistributed"),False),
+          }
+          bad=[f"{k}:{a!r}!={b!r}" for k,(a,b) in checks.items() if a != b]
+          if bad:
+              raise SystemExit("Private stage verification failed: "+"; ".join(bad))
+          print(json.dumps({"rows":rows,"sha256":digest},indent=2))
+          PY
+
+      - name: Record baseline feature coverage
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/livetennisapi-wta2025/baseline
+          python scripts/audit_feature_v3_coverage.py             --history-dir .cache/tbt/history             --out .cache/tbt/livetennisapi-wta2025/baseline/feature_coverage.json
+
+      - name: Link derived pressure stage to current canonical
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv, json, math, os
+          from collections import Counter, defaultdict
+          from datetime import datetime
+          from pathlib import Path
+
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          from link_offline_serve_return import _norm_name, _norm_round, _norm_surface, _tournament_score
+
+          root=Path(".cache/tbt/livetennisapi-wta2025")
+          matches,safety=sanitize_history_identities(load_partitions(".cache/tbt/history"))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Canonical identity quarantine is non-empty")
+
+          def signature(match):
+              return {
+                  "tour":str(match.tour or "").lower(),
+                  "scheduled_date_utc":match.scheduled_at.date().isoformat(),
+                  "player1_id":str(match.player1_id),
+                  "player1_name":str(match.player1_name),
+                  "player2_id":str(match.player2_id),
+                  "player2_name":str(match.player2_name),
+                  "surface":str(match.surface or ""),
+                  "tournament":str(match.tournament or ""),
+                  "round_name":str(match.round_name or ""),
+                  "winner_id":str(match.winner_id or ""),
+              }
+
+          def canonical_winner_name(match):
+              wid=str(match.winner_id or "")
+              if wid and wid == str(match.player1_id):
+                  return _norm_name(match.player1_name)
+              if wid and wid == str(match.player2_id):
+                  return _norm_name(match.player2_name)
+              return ""
+
+          index=defaultdict(list)
+          by_id={}
+          for match in matches:
+              by_id[str(match.match_id)]=match
+              if str(match.tour or "").lower() != "wta":
+                  continue
+              pair=tuple(sorted((_norm_name(match.player1_name),_norm_name(match.player2_name))))
+              index[(match.scheduled_at.date().isoformat(),pair)].append(match)
+
+          counts=Counter()
+          review=[]
+          staged=[]
+          field_counts=Counter()
+          seen_source=set()
+
+          with (root/"stage.csv").open(encoding="utf-8-sig",newline="") as handle:
+              for row in csv.DictReader(handle):
+                  counts["source_rows"] += 1
+                  source_id=str(row.get("source_match_id") or "").strip()
+                  if not source_id or source_id in seen_source:
+                      counts["source_identity_invalid"] += 1
+                      continue
+                  seen_source.add(source_id)
+
+                  day=str(row.get("scheduled_date_utc") or "").strip()
+                  p1=str(row.get("player1_name") or "").strip()
+                  p2=str(row.get("player2_name") or "").strip()
+                  if not day or not p1 or not p2:
+                      counts["source_identity_invalid"] += 1
+                      continue
+                  pair=tuple(sorted((_norm_name(p1),_norm_name(p2))))
+                  candidates=list(index.get((day,pair),[]))
+                  if not candidates:
+                      counts["unmatched"] += 1
+                      continue
+
+                  source_surface=_norm_surface(row.get("surface"))
+                  if source_surface not in ("","unknown"):
+                      equal=[m for m in candidates if _norm_surface(m.surface) == source_surface]
+                      if equal:
+                          candidates=equal
+                      elif all(_norm_surface(m.surface) not in ("","unknown") for m in candidates):
+                          counts["surface_conflict"] += 1
+                          review.append({"source_match_id":source_id,"reason":"surface_conflict"})
+                          continue
+
+                  winner_side=str(row.get("winner") or "").strip()
+                  source_winner=""
+                  if winner_side == "1":
+                      source_winner=_norm_name(p1)
+                  elif winner_side == "2":
+                      source_winner=_norm_name(p2)
+                  if source_winner:
+                      exact=[m for m in candidates if canonical_winner_name(m) == source_winner]
+                      unknown=[m for m in candidates if not canonical_winner_name(m)]
+                      if exact:
+                          candidates=exact
+                      elif not unknown:
+                          counts["winner_conflict"] += 1
+                          review.append({"source_match_id":source_id,"reason":"winner_conflict"})
+                          continue
+
+                  source_round=_norm_round(row.get("round"))
+                  if len(candidates) > 1 and source_round:
+                      exact=[m for m in candidates if _norm_round(m.round_name) == source_round]
+                      if exact:
+                          candidates=exact
+
+                  if len(candidates) > 1:
+                      tournament=str(row.get("tournament") or "")
+                      scored=[]
+                      for m in candidates:
+                          score,evidence=_tournament_score(tournament,m.tournament)
+                          scored.append((score,m,evidence))
+                      scored.sort(key=lambda x:x[0],reverse=True)
+                      if scored and scored[0][0] > 0:
+                          top=[x for x in scored if x[0] == scored[0][0]]
+                          if len(top) == 1:
+                              candidates=[top[0][1]]
+
+                  if len(candidates) != 1:
+                      counts["ambiguous"] += 1
+                      review.append({
+                          "source_match_id":source_id,
+                          "reason":"ambiguous",
+                          "candidate_match_ids":[str(m.match_id) for m in candidates],
+                      })
+                      continue
+
+                  match=candidates[0]
+                  a,b=_norm_name(p1),_norm_name(p2)
+                  c1,c2=_norm_name(match.player1_name),_norm_name(match.player2_name)
+                  if a == c1 and b == c2:
+                      mapping={1:"p1",2:"p2"}
+                  elif a == c2 and b == c1:
+                      mapping={1:"p2",2:"p1"}
+                  else:
+                      counts["orientation_unverified"] += 1
+                      continue
+
+                  incoming={}
+                  for source_side in (1,2):
+                      dest=mapping[source_side]
+                      for field in ("break_point_serve_win","break_point_return_win"):
+                          raw=str(row.get(f"p{source_side}_{field}") or "").strip()
+                          if raw == "":
+                              continue
+                          try:
+                              value=float(raw)
+                          except ValueError:
+                              counts["invalid_rate"] += 1
+                              continue
+                          if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                              counts["invalid_rate"] += 1
+                              continue
+                          incoming[f"{dest}_{field}"]=value
+
+                  if not incoming:
+                      counts["no_supported_stats"] += 1
+                      continue
+
+                  existing=dict(match.stats or {})
+                  clean={}
+                  conflicts=[]
+                  for key,value in incoming.items():
+                      old=existing.get(key)
+                      if old is None:
+                          clean[key]=value
+                      elif abs(float(old)-float(value)) <= 1e-6:
+                          counts["already_present_fields"] += 1
+                      else:
+                          conflicts.append({"key":key,"existing":old,"incoming":value})
+                          counts["field_conflicts"] += 1
+
+                  if conflicts:
+                      review.append({
+                          "source_match_id":source_id,
+                          "match_id":str(match.match_id),
+                          "reason":"existing_stat_conflict",
+                          "conflicts":conflicts,
+                      })
+
+                  if not clean:
+                      counts["no_net_new_fields"] += 1
+                      continue
+
+                  field_counts.update(clean.keys())
+                  staged.append({
+                      "schema":1,
+                      "match_id":str(match.match_id),
+                      "canonical":signature(match),
+                      "incoming_stats":clean,
+                      "sources":[{
+                          "source":"livetennisapi_reconstructed_wta_2025_singles",
+                          "source_match_id":source_id,
+                          "source_stage_sha256":os.environ["EXPECTED_STAGE_SHA256"],
+                          "source_tar_sha256":os.environ["EXPECTED_SOURCE_TAR_SHA256"],
+                          "citation_doi":"10.5281/zenodo.22048730",
+                          "raw_redistributed":False,
+                          "evidence":[
+                              "exact_utc_calendar_date",
+                              "exact_normalized_player_pair",
+                              "unique_canonical_candidate",
+                              "strict_internal_tape_validation",
+                          ],
+                      }],
+                      "import_ready":True,
+                  })
+                  counts["staged_matches"] += 1
+
+          if counts["source_rows"] != int(os.environ["EXPECTED_STAGE_ROWS"]):
+              raise SystemExit(f"Source row drift: {counts['source_rows']}")
+          if not staged:
+              raise SystemExit("No net-new pressure rows linked to canonical")
+
+          with (root/"auto_linked.jsonl").open("w",encoding="utf-8") as handle:
+              for row in staged:
+                  handle.write(json.dumps(row,ensure_ascii=False,separators=(",",":"))+"\n")
+          with (root/"review.jsonl").open("w",encoding="utf-8") as handle:
+              for row in review:
+                  handle.write(json.dumps(row,ensure_ascii=False,separators=(",",":"))+"\n")
+
+          report={
+              "schema":1,
+              "source":"livetennisapi_reconstructed_wta_2025_singles",
+              "source_stage_sha256":os.environ["EXPECTED_STAGE_SHA256"],
+              "source_tar_sha256":os.environ["EXPECTED_SOURCE_TAR_SHA256"],
+              "raw_redistributed":False,
+              "canonical_rows":len(matches),
+              "counts":dict(counts),
+              "staged_field_counts":dict(sorted(field_counts.items())),
+              "production_mutated":False,
+              "api_requests":0,
+              "link_policy":"exact UTC calendar date + exact normalized player pair; unique canonical candidate after safe metadata disambiguation",
+          }
+          (root/"link-report.json").write_text(json.dumps(report,indent=2),encoding="utf-8")
+          print(json.dumps(report,indent=2))
+          PY
+
+      - name: Dry-run strict importer
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/livetennisapi-wta2025/auto_linked.jsonl             --history-dir .cache/tbt/history             --out-dir .cache/tbt/livetennisapi-wta2025/dry
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          stage_rows=sum(1 for line in Path(".cache/tbt/livetennisapi-wta2025/auto_linked.jsonl").open() if line.strip())
+          report=json.load(open(".cache/tbt/livetennisapi-wta2025/dry/report.json"))
+          counts=report.get("counts") or {}
+          checks={
+              "stage_rows":(report.get("stage_rows"),stage_rows),
+              "updated":(counts.get("updated",0),stage_rows),
+              "identity_missing":(counts.get("identity_missing",0),0),
+              "identity_changed":(counts.get("identity_changed",0),0),
+              "stat_conflicts":(counts.get("stat_conflicts",0),0),
+              "invalid_stats":(counts.get("invalid_stats",0),0),
+          }
+          bad=[f"{k}:{a}!={b}" for k,(a,b) in checks.items() if a != b]
+          if bad:
+              raise SystemExit("Dry-run contract failed: "+"; ".join(bad))
+          print(json.dumps({"stage_rows":stage_rows,"dry_run":"PASS"},indent=2))
+          PY
+
+      - name: Apply pressure stage locally
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/livetennisapi-wta2025/auto_linked.jsonl             --history-dir .cache/tbt/history             --out-dir .cache/tbt/livetennisapi-wta2025/import             --write-partitions             --write-history-dir .cache/tbt/history
+          python - <<'PY'
+          import json
+          report=json.load(open(".cache/tbt/livetennisapi-wta2025/import/report.json"))
+          counts=report.get("counts") or {}
+          if not report.get("changed_years"):
+              raise SystemExit("No canonical partition changed")
+          if any(counts.get(k,0) for k in ("identity_missing","identity_changed","stat_conflicts","invalid_stats")):
+              raise SystemExit(f"Importer safety failure: {counts}")
+          print(json.dumps(report,indent=2))
+          PY
+
+      - name: Validate history, leakage and feature coverage
+        run: |
+          set -euo pipefail
+          python scripts/audit_training_leakage.py             --history-dir .cache/tbt/history             --report .cache/tbt/livetennisapi-wta2025/leakage.json
+          python scripts/audit_feature_v3_coverage.py             --history-dir .cache/tbt/history             --out .cache/tbt/livetennisapi-wta2025/feature_coverage_after.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          leak=json.load(open(".cache/tbt/livetennisapi-wta2025/leakage.json"))
+          if leak.get("status") not in {"PASS","pass"} and leak.get("passed") is not True:
+              raise SystemExit(f"Leakage audit failed: {leak}")
+
+          matches,safety=sanitize_history_identities(load_partitions(".cache/tbt/history"))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Post-import canonical identity quarantine is non-empty")
+          by_id={str(m.match_id):m for m in matches}
+
+          checked=0
+          for line in Path(".cache/tbt/livetennisapi-wta2025/auto_linked.jsonl").open(encoding="utf-8"):
+              if not line.strip():
+                  continue
+              row=json.loads(line)
+              match=by_id.get(str(row["match_id"]))
+              if match is None:
+                  raise SystemExit(f"Imported match missing: {row['match_id']}")
+              stats=dict(match.stats or {})
+              for key,value in row["incoming_stats"].items():
+                  actual=stats.get(key)
+                  if actual is None or abs(float(actual)-float(value)) > 1e-9:
+                      raise SystemExit(f"Imported stat verification failed {row['match_id']} {key}: {actual} != {value}")
+              checked += 1
+          if checked <= 0:
+              raise SystemExit("No imported rows verified")
+          print(json.dumps({"verified_imported_matches":checked,"leakage":"PASS"},indent=2))
+          PY
+
+      - name: Publish changed canonical partitions
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.release_store import ReleaseStore
+
+          report=json.load(open(".cache/tbt/livetennisapi-wta2025/import/report.json"))
+          years=[int(x) for x in report.get("changed_years") or []]
+          root=Path(".cache/tbt/history")
+          paths=[root/f"history-{year:04d}.parquet" for year in years] + [root/"history_manifest.json"]
+          for path in paths:
+              if not path.is_file() or path.stat().st_size <= 0:
+                  raise SystemExit(f"Missing publish asset {path}")
+          ReleaseStore(
+              os.environ["TBT_DATA_REPOSITORY"],
+              "tbt-data-v1",
+              root,
+          ).upload_bundle(paths)
+          print("published",years)
+          PY
+
+      - name: Verify committed private release
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          verify=Path(".cache/tbt/livetennisapi-wta2025/verify")
+          ReleaseStore(
+              os.environ["TBT_DATA_REPOSITORY"],
+              "tbt-data-v1",
+              verify,
+          ).download(require_bundle_manifest=True)
+
+          matches,safety=sanitize_history_identities(load_partitions(verify))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Committed release identity quarantine is non-empty")
+          by_id={str(m.match_id):m for m in matches}
+          checked=0
+          for line in Path(".cache/tbt/livetennisapi-wta2025/auto_linked.jsonl").open(encoding="utf-8"):
+              if not line.strip():
+                  continue
+              row=json.loads(line)
+              match=by_id.get(str(row["match_id"]))
+              if match is None:
+                  raise SystemExit(f"Committed match missing: {row['match_id']}")
+              for key,value in row["incoming_stats"].items():
+                  actual=(match.stats or {}).get(key)
+                  if actual is None or abs(float(actual)-float(value)) > 1e-9:
+                      raise SystemExit(f"Committed stat mismatch {row['match_id']} {key}")
+              checked += 1
+          print(json.dumps({"committed_verified_matches":checked},indent=2))
+          PY
+
+      - name: Persist private import audit
+        env:
+          GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          link=json.load(open(".cache/tbt/livetennisapi-wta2025/link-report.json"))
+          imp=json.load(open(".cache/tbt/livetennisapi-wta2025/import/report.json"))
+          before=json.load(open(".cache/tbt/livetennisapi-wta2025/baseline/feature_coverage.json"))
+          after=json.load(open(".cache/tbt/livetennisapi-wta2025/feature_coverage_after.json"))
+          stage_rows=sum(1 for line in Path(".cache/tbt/livetennisapi-wta2025/auto_linked.jsonl").open() if line.strip())
+          audit={
+              "schema":1,
+              "generated_at_utc":datetime.now(timezone.utc).isoformat(),
+              "source":"livetennisapi_reconstructed_wta_2025_singles",
+              "source_tar_sha256":"0bc3385d2f9aa860b5945a485a7cf27a64b6075cf0908844a92d47cb86dd3c58",
+              "derived_stage_sha256":"3910872a6bb4cf7f9defd03f0a16f990afdbbc2a7bde440b1ab5d9bc8e8c0f83",
+              "citation_doi":"10.5281/zenodo.22048730",
+              "raw_redistributed":False,
+              "stage_rows":stage_rows,
+              "link_counts":link.get("counts"),
+              "staged_field_counts":link.get("staged_field_counts"),
+              "import_counts":imp.get("counts"),
+              "changed_years":imp.get("changed_years"),
+              "feature_coverage_before":before,
+              "feature_coverage_after":after,
+              "provider_api_requests":0,
+              "model_promoted":False,
+          }
+          Path(".cache/tbt/livetennisapi-wta2025/import-audit.json").write_text(
+              json.dumps(audit,indent=2),encoding="utf-8"
+          )
+          PY
+
+          path="audit/livetennisapi-wta2025-pressure-import-latest.json"
+          encoded="$(base64 -w0 .cache/tbt/livetennisapi-wta2025/import-audit.json)"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Update WTA 2025 reconstructed pressure import audit"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Add WTA 2025 reconstructed pressure import audit"               -f content="$encoded" >/dev/null
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: livetennisapi-wta2025-pressure-${{ github.run_id }}
+          retention-days: 14
+          path: |
+            .cache/tbt/livetennisapi-wta2025/link-report.json
+            .cache/tbt/livetennisapi-wta2025/review.jsonl
+            .cache/tbt/livetennisapi-wta2025/dry/report.json
+            .cache/tbt/livetennisapi-wta2025/import/report.json
+            .cache/tbt/livetennisapi-wta2025/leakage.json
+            .cache/tbt/livetennisapi-wta2025/baseline/feature_coverage.json
+            .cache/tbt/livetennisapi-wta2025/feature_coverage_after.json
+            .cache/tbt/livetennisapi-wta2025/import-audit.json
