@@ -1,12 +1,12 @@
 {
   "schema": 1,
-  "mode": "ace-statistics",
+  "mode": "statistics",
   "promote": false,
-  "purpose": "New provider-day targeted Aces/Double Faults enrichment for current BlinQ board players; shared provider budget and 500-request reserve remain authoritative.",
-  "requested_at_utc": "2026-10-01T18:42:00Z",
-  "max_requests": 1000,
-  "ace_target_samples": 18,
-  "ace_lookback_days": 550,
-  "training_scope": "none",
+  "purpose": "Use remaining provider-day capacity for targeted recent historical statistics backfill before reset; newest matches first; shared budget and provider 500-request reserve remain authoritative.",
+  "requested_on": "2026-10-02",
+  "start": "2022-01-01",
+  "end": "2026-10-01",
+  "max_requests": 11000,
+  "training_scope": "data_only_no_model_promotion",
   "historical_match_winner_odds_as_model_feature": false
 }
