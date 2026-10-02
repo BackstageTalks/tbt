@@ -174,6 +174,35 @@ def main():
                       nav:document.querySelector('#mobileTabs').getBoundingClientRect().top
                     })""")
                     assert bottom["footer"] <= bottom["nav"] - 2, (label, bottom)
+                page.evaluate("""() => {
+                  const dialog=document.querySelector('#projectGroupsDialog');
+                  const list=document.querySelector('#projectGroupsDialogList');
+                  const status=document.querySelector('#projectGroupsDialogStatus');
+                  status.textContent='1 moje · 4 projekty';
+                  list.innerHTML=[
+                    ['OTVORENÁ','ALPHA RESEARCH PROJECT','Pridať sa'],
+                    ['NA ŽIADOSŤ','PARTNER DATA GROUP WITH LONG NAME','Chcem sa pridať'],
+                    ['UZAVRETÁ','PAID DATA PROJECT','🔒 Skupina je plná'],
+                    ['UZAVRETÁ','DEADLINE PROJECT','🔒 Vstup je ukončený']
+                  ].map((row,i)=>'<article class="project-directory-card is-'+(['blue','orange','purple','green'][i])+(i>1?' is-locked':'')+'"><header><div><small>PROJEKT · '+row[0]+'</small><strong>'+row[1]+'</strong></div><span>'+(i+7)+'/10</span></header><p>Dlhší popis projektu pre mobilný audit bez rozbitia layoutu.</p><div class="project-directory-meta"><span>1,00 € / osoba</span><span>10,00 € spolu</span><span>Vstup do 05.10. · 20:00</span></div><footer><button class="btn '+(i>1?'btn-ghost project-locked-button':'btn-primary')+'">'+row[2]+'</button></footer></article>').join('');
+                  dialog.showModal();
+                }""")
+                page.wait_for_timeout(40)
+                modal = page.evaluate("""() => {
+                  const rect=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom,width:r.width,height:r.height};};
+                  const dialog=document.querySelector('#projectGroupsDialog');
+                  const list=document.querySelector('#projectGroupsDialogList');
+                  return {
+                    dialog:rect(dialog),
+                    list:rect(list),
+                    listOverflow:list.scrollWidth-list.clientWidth,
+                    cards:[...list.querySelectorAll('.project-directory-card')].map(rect),
+                  };
+                }""")
+                assert modal["dialog"]["left"] >= -1 and modal["dialog"]["right"] <= width + 1, (label, modal)
+                assert modal["listOverflow"] <= 2, (label, modal)
+                assert all(card["left"] >= modal["dialog"]["left"] - 1 and card["right"] <= modal["dialog"]["right"] + 1 for card in modal["cards"]), (label, modal)
+                page.evaluate("document.querySelector('#projectGroupsDialog')?.close()")
                 assert not errors, (label, errors)
                 context.close()
             print("Mobile dashboard 320-844 portrait/landscape + Brave-class Chromium + tablet: PASS")
