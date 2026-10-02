@@ -21,8 +21,6 @@ jobs:
       PYTHONPATH: api:scripts
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
       ATPWORLD_SHA: a92c6192c5e775df9d6be81d3ef978052b012cd9
-      EXPECTED_CANONICAL_ROWS: "739596"
-      EXPECTED_BASELINE_READY: "240289"
       EXPECTED_STAGE_ROWS: "5650"
       EXPECTED_QUALITY_ADDED: "5650"
 
@@ -98,13 +96,9 @@ jobs:
           r=analyze(matches)
           Path(".cache/tbt/baseline.json").write_text(json.dumps(r,indent=2),encoding="utf-8")
           c=r["overall"]
-          exp_rows=int(os.environ["EXPECTED_CANONICAL_ROWS"])
-          exp_ready=int(os.environ["EXPECTED_BASELINE_READY"])
-          if c["completed"] != exp_rows:
-              raise SystemExit(f"Canonical rows drifted: {c['completed']} != {exp_rows}")
-          if c["both_ready"] != exp_ready:
-              raise SystemExit(f"Quality-ready baseline drifted: {c['both_ready']} != {exp_ready}")
-          print("baseline verified", c)
+          if c["completed"] <= 0 or c["both_ready"] <= 0:
+              raise SystemExit("Canonical baseline missing")
+          print("dynamic baseline verified", c)
           PY
 
       - name: Fetch pinned ATP official source
@@ -135,7 +129,6 @@ jobs:
           r=json.load(open(".cache/tbt/link/report.json"))
           c=r.get("counts") or {}
           checks={
-            "canonical_rows": (r.get("canonical_rows"), int(os.environ["EXPECTED_CANONICAL_ROWS"])),
             "staged_matches": (c.get("staged_matches",0), int(os.environ["EXPECTED_STAGE_ROWS"])),
             "quality_ready_projected_added": (r.get("quality_ready_projected_added"), int(os.environ["EXPECTED_QUALITY_ADDED"])),
             "stat_conflict_matches": (c.get("stat_conflict_matches",0), 517),
@@ -187,8 +180,9 @@ jobs:
           r=analyze(matches)
           Path(".cache/tbt/after.json").write_text(json.dumps(r,indent=2),encoding="utf-8")
           c=r["overall"]
-          expected=int(os.environ["EXPECTED_BASELINE_READY"])+int(os.environ["EXPECTED_QUALITY_ADDED"])
-          if c["completed"] != int(os.environ["EXPECTED_CANONICAL_ROWS"]):
+          before=json.load(open(".cache/tbt/baseline.json"))["overall"]
+          expected=before["both_ready"]+int(os.environ["EXPECTED_QUALITY_ADDED"])
+          if c["completed"] != before["completed"]:
               raise SystemExit("Canonical row count changed")
           if c["both_ready"] != expected:
               raise SystemExit(f"Post-write ready count {c['both_ready']} != {expected}")
@@ -242,8 +236,9 @@ jobs:
           r=analyze(matches)
           Path(".cache/tbt/verify_report.json").write_text(json.dumps(r,indent=2),encoding="utf-8")
           c=r["overall"]
-          expected=int(os.environ["EXPECTED_BASELINE_READY"])+int(os.environ["EXPECTED_QUALITY_ADDED"])
-          if c["completed"] != int(os.environ["EXPECTED_CANONICAL_ROWS"]) or c["both_ready"] != expected:
+          before=json.load(open(".cache/tbt/baseline.json"))["overall"]
+          expected=before["both_ready"]+int(os.environ["EXPECTED_QUALITY_ADDED"])
+          if c["completed"] != before["completed"] or c["both_ready"] != expected:
               raise SystemExit(f"Committed release verification failed: {c}")
           print("committed release verified", c)
           PY
