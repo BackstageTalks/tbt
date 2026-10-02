@@ -35,6 +35,15 @@ def test_all_surfaces_does_not_hide_unknown_surface_results():
     assert 'Unknown/missing' in APP and 'surface metadata must never hide' in APP
 
 
+def test_live_results_default_to_current_publication_betting_day_not_history_transport():
+    assert "resultsFilters:{category:'all',tour:'',surface:'',window:'today'" in APP
+    assert "function resultPublicationBettingDay(row,publication)" in APP
+    assert "publication?.betting_day" in APP
+    assert "window==='today'" in APP
+    assert "todayPublishedPickCount" in APP
+    assert "daily_pick_count" in APP
+
+
 def test_backend_metrics_collapse_legacy_duplicate_publication_keys():
     row = {
         "event_id": "evt-1",
