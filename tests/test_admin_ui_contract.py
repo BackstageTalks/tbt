@@ -15,7 +15,7 @@ def test_admin_layout_has_current_inventory_and_access_states():
     elements = cfg["elements"]
     assert {f"HERO_BANNER_{i}" for i in range(1, 6)} <= set(elements)
     assert {
-        "PRIME_PICKS_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
+        "PRIME_PICKS_PANEL", "TOP200_PANEL", "TOP_DAILY_PANEL", "VALUE_PICKS_PANEL",
         "ACE_PICKS_PANEL", "SG_PICKS_PANEL", "DOUBLES_PANEL", "RESULTS_PANEL",
     } <= set(elements)
     retired = {
@@ -212,14 +212,22 @@ def test_dashboard_market_structure_matches_approved_order_and_rules():
     assert rules["value"]["limit"] is None
     assert rules["value"]["presentation_preview_limit"] == 10
     assert rules["doubles"]["model_branch"] == "separate"
+    assert rules["top200"]["label"] == "TOP200"
+    assert rules["top200"]["max_player_rank"] == 200
+    assert rules["top200"]["min_probability"] == 0.65
+    assert rules["top200"]["min_data_depth"] == 0.80
+    assert rules["top200"]["min_surface_matches"] == 5
+    assert rules["top200"]["limit"] == 5
+    assert rules["top200"]["force_fill"] is False
     assert rules["match_winner_assignment"]["exclusive"] is True
-    assert rules["match_winner_assignment"]["priority"] == ["value", "prime", "top_daily"]
+    assert rules["match_winner_assignment"]["priority"] == ["top200", "value", "top_daily", "prime"]
     assert set(rules["ace"]["markets"]) == {"aces", "double_faults"}
     assert set(rules["sg"]["markets"]) == {"sets", "games"}
     assert "btts" not in rules
     dashboard = cfg["dashboard"]
-    assert set(dashboard["section_order"]) == {"prime", "top_daily", "value", "doubles", "ace", "sg", "results"}
-    assert len(dashboard["section_order"]) == 7
+    assert set(dashboard["section_order"]) == {"top200", "prime", "top_daily", "value", "doubles", "ace", "sg", "results"}
+    assert dashboard["section_order"][0] == "top200"
+    assert len(dashboard["section_order"]) == 8
     assert dashboard["visible_slots"] == 6
     assert dashboard["user_switches"] is False
 
@@ -246,7 +254,8 @@ def test_current_section_access_inventory_and_public_header_are_clean():
         key=lambda item: item["order"],
     )
     nav = {item["content"]["route"]: item["content"]["label"] for item in nav_items}
-    assert list(nav) == ["prime", "top_daily", "value", "doubles", "ace", "sg", "results"]
+    assert list(nav) == ["top200", "prime", "top_daily", "value", "doubles", "ace", "sg", "results"]
+    assert nav["top200"] == "TOP200"
     assert nav["prime"] == "Short Odds"
     assert "predictions" not in nav  # old SIDEBAR_PREDICTIONS access stub is retired
     for removed in ("tournaments", "players", "stats", "model", "backtests", "account"):

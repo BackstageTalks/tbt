@@ -21,10 +21,10 @@ def test_r33_identity_and_cache_revision():
 
 
 def test_results_are_filtered_to_real_blinq_public_categories_client_and_server():
-    assert "const publicResultSections=new Set(['top_daily','prime','value','doubles','ace','double_faults','sets','games'])" in APP
+    assert "const publicResultSections=new Set(['top200','top_daily','prime','value','doubles','ace','double_faults','sets','games'])" in APP
     assert "function publicResultPublications(row)" in APP
     assert "const pubs=publicResultPublications(row);" in APP
-    assert 'PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}' in ENTITLEMENTS
+    assert 'PUBLIC_RESULT_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}' in ENTITLEMENTS
     assert "def _public_result_publications(row: dict)" in ENTITLEMENTS
     assert 'copy["market_publications"] = publications' in ENTITLEMENTS
 

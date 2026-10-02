@@ -30,7 +30,7 @@ def test_sets_are_total_match_sets_not_direction_probability():
 
 
 def test_results_only_expose_separate_sets_and_games_filters():
-    visible_filter = "['all','top_daily','prime','value','ace','double_faults','sets','games','doubles']"
+    visible_filter = "['all','top200','top_daily','prime','value','ace','double_faults','sets','games','doubles']"
     assert visible_filter in APP
     assert "['all','top_daily','prime','value','ace','double_faults','sets','games','sg','doubles']" not in APP
 

@@ -169,6 +169,7 @@ def confirm_publication(ledger, published_rows, now=None):
 
 
 _MARKET_SECTION_KEYS = {
+    "top200": "top200_picks",
     "top_daily": "top_daily_picks",
     "prime": "prime_picks",
     "value": "value_picks",
@@ -629,6 +630,7 @@ def _market_row_section(key, row):
     if key == "sg_picks":
         return market if market in {"games", "sets"} else ""
     return {
+        "top200_picks": "top200",
         "top_daily_picks": "top_daily",
         "prime_picks": "prime",
         "value_picks": "value",

@@ -38,13 +38,13 @@ def test_r32_top_short_odds_boundary_is_gapless_and_only_probability_relaxes():
     assert [x["min_probability"] for x in top["dynamic_fallback_tiers"]] == [.67, .66, .65]
     assert {x["min_odds"] for x in top["dynamic_fallback_tiers"]} == {1.5}
     assert UI["market_rules"]["match_winner_assignment"]["exclusive"] is True
-    assert UI["market_rules"]["match_winner_assignment"]["priority"][0] == "value"
+    assert UI["market_rules"]["match_winner_assignment"]["priority"][:2] == ["top200", "value"]
 
 
 def test_r32_results_are_public_categories_only_and_admin_window_is_configurable():
     engine = (ROOT / "api" / "tbt" / "services" / "engine.py").read_text(encoding="utf-8")
     entitlements = (ROOT / "api" / "tbt" / "services" / "entitlements.py").read_text(encoding="utf-8")
-    assert 'PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}' in engine
+    assert 'PUBLIC_RESULT_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}' in engine
     assert 'str(p.get("section") or "").strip().lower() in PUBLIC_RESULT_SECTIONS' in engine
     assert '"model"' not in engine.split("PUBLIC_RESULT_SECTIONS =", 1)[1].split("\n", 1)[0]
     for value in ('"24h": 24', '"48h": 48', '"3d": 72', '"7d": 168', '"14d": 336', '"30d": 720', '"all": None'):

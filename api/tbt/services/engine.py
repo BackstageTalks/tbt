@@ -858,7 +858,7 @@ def betting_performance(results):
     canonical_publications = [publication for _, publication in canonical_entries]
 
     sections = {}
-    for section in ("top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"):
+    for section in ("top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"):
         section_entries = [(row, p) for row, p in canonical_entries if p.get("section") == section]
         sections[section] = _betting_metrics([p for _, p in section_entries])
     markets = {}
@@ -883,7 +883,7 @@ def betting_performance(results):
         },
     }
 
-PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
+PUBLIC_RESULT_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 
 PERFORMANCE_WINDOWS_DAYS = (3, 7, 10, 14, 30, 180, 365)
 # Explicit 180-day cards must not silently change the old auto-selected KPI.
@@ -953,6 +953,7 @@ def performance_windows(winner_results, public_results, *, now):
         best_days = best_accuracy = best_n = None
         mode = "no_settled_model_results"
     category_map = {
+        "top200": ("betting", "sections", "top200"),
         "top_daily": ("betting", "sections", "top_daily"),
         "prime": ("betting", "sections", "prime"),
         "value": ("betting", "sections", "value"),
