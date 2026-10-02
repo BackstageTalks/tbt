@@ -24,10 +24,10 @@ def value_row():
         "surface": "hard",
         "round": "R16",
         "competition": "ATP",
-        "player1": {"id": "A", "name": "Alpha", "probability": .66, "rank": 120},
-        "player2": {"id": "B", "name": "Beta", "probability": .34, "rank": 180},
+        "player1": {"id": "A", "name": "Alpha", "probability": .70, "rank": 120},
+        "player2": {"id": "B", "name": "Beta", "probability": .30, "rank": 180},
         "winner_id": "A",
-        "confidence": .66,
+        "confidence": .70,
         "data_depth": .82,
         "quality": {
             "player1": {"matches": 40, "surface_matches": 12},
@@ -46,11 +46,11 @@ def value_row():
             "selection_id": "A",
             "odds": 1.90,
             "fair_implied_probability": .51,
-            "model_probability": .66,
-            "blinq_probability": .64,
+            "model_probability": .70,
+            "blinq_probability": .664,
             "probability_reliability": .82,
-            "edge": .15,
-            "expected_value": .254,
+            "edge": .19,
+            "expected_value": .33,
             "provider_id": 1,
             "captured_at": "2026-09-28T08:00:00+00:00",
             "betting_day": "2026-09-28",
@@ -94,7 +94,7 @@ def test_complete_value_evidence_validates_and_freezes_exact_issue_snapshot():
     snapshot = publication["issued_snapshot"]
     assert snapshot["source"] == "deployed_feed_at_issuance"
     assert snapshot["captured_at"] == publication["issued_at"]
-    assert snapshot["model_probability"] == pytest.approx(.66)
+    assert snapshot["model_probability"] == pytest.approx(.70)
     assert snapshot["quality"]["player1"]["surface_matches"] == 12
     assert snapshot["quality"]["player2"]["surface_matches"] == 11
     assert snapshot["data_depth"] == pytest.approx(.82)
