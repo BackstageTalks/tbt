@@ -1,9 +1,6 @@
 name: Data quota autofill
 
 on:
-  schedule:
-    # GitHub cron is UTC; the planner below applies the Europe/Bratislava guard.
-    - cron: '17 * * * *'
   workflow_dispatch:
     inputs:
       mode:
@@ -57,13 +54,12 @@ jobs:
           from zoneinfo import ZoneInfo
 
           local = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Bratislava"))
-          scheduled = os.environ.get("GITHUB_EVENT_NAME") == "schedule"
+          automatic = requested_mode = (os.environ.get("INPUT_MODE") or "auto").strip()
 
-          # Reserved daily production window. No automatic data-fill job starts here.
+          # Reserved daily production window. Automatic external dispatches do not start work here.
           minute = local.hour * 60 + local.minute
           blocked = 5 * 60 <= minute < 6 * 60 + 30
 
-          requested_mode = (os.environ.get("INPUT_MODE") or "auto").strip()
           if requested_mode not in {"auto", "mega-data", "statistics", "ace-statistics", "sg-scores"}:
               raise SystemExit(f"Unsupported mode: {requested_mode}")
 
@@ -84,12 +80,11 @@ jobs:
 
           # Environment is zero Tennis RapidAPI usage. Scheduled fills run a few
           # times overnight/evening; the underlying writer is fill-missing-only.
-          if scheduled:
-              environment = local.hour in {2, 20, 23}
-          else:
-              environment = (os.environ.get("INPUT_ENVIRONMENT") or "false").lower() == "true"
+          environment = local.hour in {2, 20, 23} or (os.environ.get("INPUT_ENVIRONMENT") or "false").lower() == "true"
 
-          should_run = not (scheduled and blocked)
+          # The normal external trigger uses mode=auto and is blocked during the morning production window.
+          # An explicitly selected manual mode is treated as an operator override.
+          should_run = not (requested_mode == "auto" and blocked)
           values = {
               "should_run": str(should_run).lower(),
               "mode": mode,
@@ -102,7 +97,7 @@ jobs:
                   fh.write(f"{key}={value}\n")
 
           print(
-              f"local={local.isoformat()} scheduled={scheduled} blocked={blocked} "
+              f"local={local.isoformat()} automatic={requested_mode == 'auto'} blocked={blocked} "
               f"mode={mode} max_requests={max_requests} environment={environment}"
           )
           PY
