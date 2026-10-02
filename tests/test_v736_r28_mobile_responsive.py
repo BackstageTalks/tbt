@@ -59,3 +59,20 @@ def test_r28_hero_is_responsive_and_non_primary_slides_are_lazy():
     assert 'media="(max-width: 900px)"' in APP
     assert "loading=\"${first?'eager':'lazy'}\"" in APP
     assert "fetchpriority=\"high\"" in APP
+
+
+def test_mobile_web_shell_keeps_desktop_data_and_apps_up_only_the_phone_layout():
+    assert "results-filter-shell" in APP
+    assert "results-mobile-filter-toggle" in APP
+    assert "results-card-row" in APP
+    assert "data-results-filter-toggle" in APP
+    assert "mobile-web-shell=1" in INDEX
+    marker = "BlinQ mobile web shell 2026-10-02"
+    assert marker in CSS
+    tail = CSS[CSS.index(marker):]
+    assert '@media(max-width:900px)' in tail
+    assert 'grid-template-areas:"brand projects actions"' in tail
+    assert '.insight-shortcut.insight-live-button' in tail
+    assert 'width:30px!important' in tail
+    assert '.results-filter-shell.is-open .results-filter-bar.results-filter-bar-v683' in tail
+    assert '.results-table tbody tr.results-card-row' in tail
