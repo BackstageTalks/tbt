@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "source": "livetennisapi_reconstructed_wta_2025_singles",
+  "stage_branch": "staging/livetennisapi-wta-2025-reconstructed-20261002",
+  "expected_stage_rows": 3899,
+  "raw_redistributed": false,
+  "model_promoted": false,
+  "source_tar_sha256": "0bc3385d2f9aa860b5945a485a7cf27a64b6075cf0908844a92d47cb86dd3c58",
+  "citation_doi": "10.5281/zenodo.22048730"
+}
