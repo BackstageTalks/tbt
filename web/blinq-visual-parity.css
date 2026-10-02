@@ -739,9 +739,9 @@ body#blinqPremium .reference-topbar .avatar{
 }
 
 
-/* Mobile action sizing: the legacy 30px profile shell was narrower than the
+/* Mobile/tablet action sizing: legacy profile shells were narrower than the
    icon button. LIVE is intentionally a breathing status dot, not a text badge. */
-@media (max-width:760px){
+@media (max-width:900px){
   body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{
     width:38px!important;
     min-width:38px!important;
