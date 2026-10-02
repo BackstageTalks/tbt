@@ -86,6 +86,11 @@ def main():
                     window.BlinqUI.prepareRoute(document.querySelector('#routePanel'));
                     document.querySelector('#profileName').textContent='@BackstageTalks';
                     document.querySelector('#profileRegisteredEmail').textContent='long-account-email@example.org';
+                    const projects=document.querySelector('#projectGroupBar');
+                    projects.hidden=false;
+                    projects.innerHTML='<button class="project-group-chip is-purple is-active" type="button"><span>◆</span><strong>Platba PO</strong></button>';
+                    document.querySelector('#insightShortcut').hidden=false;
+                    document.querySelector('#topUpgradeButton').hidden=false;
                     t.renderInsightBell();
                 }""")
                 page.wait_for_selector("#routePanel .results-table tbody tr")
@@ -105,6 +110,11 @@ def main():
                     const brand=css('.reference-topbar .brand');
                     const info=css('#insightBell');
                     const nav=css('.mobile-tabs');
+                    const projects=css('#projectGroupBar');
+                    const projectChip=css('#projectGroupBar .project-group-chip');
+                    const live=css('#insightShortcut');
+                    const filterToggle=css('.results-mobile-filter-toggle');
+                    const filterBar=css('.results-filter-bar-v683');
                     const minWidth=getComputedStyle(table).minWidth;
                     const collisions=items=>items.some((a,i)=>items.slice(i+1).some(b=>
                       between(a,b)>2 && Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>2));
@@ -120,6 +130,10 @@ def main():
                       whiteSpace:tournament?getComputedStyle(tournament).whiteSpace:'',
                       filterCollisions:collisions(labels),kpiCollisions:collisions(kpis),
                       header:rect(header),brand:rect(brand),profile:rect(profile),info:rect(info),
+                      projects:rect(projects),projectChip:rect(projectChip),live:rect(live),
+                      filterToggleVisible:filterToggle&&getComputedStyle(filterToggle).display!=='none',
+                      filterBarDisplay:filterBar?getComputedStyle(filterBar).display:'',
+                      cardClass:first?.classList.contains('results-card-row')||false,
                       navVisible:nav&&getComputedStyle(nav).display!=='none',
                       rows:table.tBodies[0].rows.length
                     };
@@ -133,6 +147,12 @@ def main():
                 assert report["brand"]["right"]<=report["profile"]["left"]+2,(width,report)
                 if width<=900:
                     assert report["navVisible"],(width,report)
+                    assert report["filterToggleVisible"],(width,report)
+                    assert report["filterBarDisplay"]=="none",(width,report)
+                    assert report["cardClass"],(width,report)
+                    assert report["projectChip"]["top"]>=report["header"]["top"]-2,(width,report)
+                    assert report["projectChip"]["bottom"]<=report["header"]["bottom"]+2,(width,report)
+                    assert report["projectChip"]["right"]<=report["live"]["left"]+2,(width,report)
                     assert report["table"]["right"]<=width+2,(width,report)
                     assert report["wrap"]["right"]<=width+2,(width,report)
                     assert report["first"]["right"]<=width+2,(width,report)
