@@ -426,6 +426,76 @@ def _charting_rows(path: str) -> Iterable[OfflineMatch]:
                         stats_b=stats(b_raw, p2),
                     )
 
+
+def _livetennisapi_reconstructed_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
+    """Read private, derived LiveTennisAPI reconstructed pressure stages.
+
+    The raw reconstructed tapes are intentionally not accepted here. This
+    parser consumes only an internal derived CSV whose rows carry match
+    identity plus bounded break-point serve/return rates. The raw source stays
+    outside the repository and the derived stage is fetched from private
+    tbt-data by the guarded workflow.
+    """
+    for raw_path in paths:
+        path = Path(raw_path)
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            for idx, row in enumerate(csv.DictReader(handle), start=2):
+                source_match_id = str(row.get("source_match_id") or "").strip()
+                day_text = str(row.get("scheduled_date_utc") or "").strip()
+                p1 = str(row.get("player1_name") or "").strip()
+                p2 = str(row.get("player2_name") or "").strip()
+                if not source_match_id or not day_text or not p1 or not p2:
+                    continue
+                try:
+                    event_day = datetime.strptime(day_text, "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+
+                def rate(key: str) -> float | None:
+                    value = _num(row.get(key))
+                    if value is None or not 0.0 <= value <= 1.0:
+                        return None
+                    return float(value)
+
+                a_stats = {}
+                b_stats = {}
+                for field, key in (
+                    ("break_point_serve_win", "p1_break_point_serve_win"),
+                    ("break_point_return_win", "p1_break_point_return_win"),
+                ):
+                    value = rate(key)
+                    if value is not None:
+                        a_stats[field] = value
+                for field, key in (
+                    ("break_point_serve_win", "p2_break_point_serve_win"),
+                    ("break_point_return_win", "p2_break_point_return_win"),
+                ):
+                    value = rate(key)
+                    if value is not None:
+                        b_stats[field] = value
+                if not a_stats and not b_stats:
+                    continue
+
+                winner_side = str(row.get("winner") or "").strip()
+                winner = p1 if winner_side == "1" else p2 if winner_side == "2" else ""
+                best_of = _num(row.get("best_of"))
+                yield OfflineMatch(
+                    source=f"livetennisapi-reconstructed:{path.name}",
+                    source_match_id=source_match_id,
+                    tour="wta",
+                    event_date=event_day,
+                    player_a=p1,
+                    player_b=p2,
+                    winner=winner,
+                    tournament=str(row.get("tournament") or ""),
+                    surface=_norm_surface(row.get("surface")),
+                    round_name=_norm_round(row.get("round")),
+                    best_of=int(best_of) if best_of in (3.0, 5.0) else None,
+                    stats_a=a_stats,
+                    stats_b=b_stats,
+                )
+
+
 def _tournament_score(a: str, b: str) -> tuple[int, str]:
     na, nb = _norm_text(a), _norm_text(b)
     if not na or not nb:
@@ -528,6 +598,10 @@ def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]
             and corroboration_points >= 3
             and score >= 7
         )
+    elif source.source.startswith("livetennisapi-reconstructed:"):
+        # Restricted reconstructed stages are date-exact and winner-verified.
+        # Rows with an honest missing winner stay out of the automatic stage.
+        accepted = "date_exact" in evidence and "winner" in evidence and score >= 8
     else:
         accepted = "winner" in evidence and score >= 8
     return score, evidence, accepted
@@ -565,6 +639,7 @@ def main() -> None:
     ap.add_argument("--history-dir", required=True)
     ap.add_argument("--source-csv", action="append", default=[])
     ap.add_argument("--charting-zip", default="")
+    ap.add_argument("--livetennisapi-reconstructed-csv", action="append", default=[])
     ap.add_argument("--out-dir", required=True)
     args = ap.parse_args()
 
@@ -583,6 +658,7 @@ def main() -> None:
     sources: list[OfflineMatch] = list(_sackmann_rows(args.source_csv))
     if args.charting_zip:
         sources.extend(_charting_rows(args.charting_zip))
+    sources.extend(_livetennisapi_reconstructed_rows(args.livetennisapi_reconstructed_csv))
 
     counts = Counter()
     per_source = Counter()
