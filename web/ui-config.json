@@ -366,7 +366,7 @@
       "label": "Short Odds",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 2,
+      "order": 3,
       "content": {
         "label": "Short Odds",
         "route": "prime",
@@ -391,7 +391,7 @@
       "label": "TOP Predictions",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 3,
+      "order": 4,
       "content": {
         "label": "TOP Predictions",
         "route": "top_daily",
@@ -416,7 +416,7 @@
       "label": "Value Predictions",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 4,
+      "order": 5,
       "content": {
         "label": "Value Predictions",
         "route": "value",
@@ -441,7 +441,7 @@
       "label": "Ace Predictions",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 6,
+      "order": 7,
       "content": {
         "label": "Ace Predictions",
         "route": "ace",
@@ -466,7 +466,7 @@
       "label": "S/G Predictions",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 7,
+      "order": 8,
       "content": {
         "label": "S/G Predictions",
         "route": "sg",
@@ -491,7 +491,7 @@
       "label": "Results",
       "zone": "sidebar",
       "kind": "navigation",
-      "order": 8,
+      "order": 9,
       "content": {
         "label": "Results",
         "route": "results",
@@ -622,7 +622,7 @@
         "goat": "active"
       },
       "label": "Doubles",
-      "order": 5,
+      "order": 6,
       "content": {
         "label": "Doubles",
         "route": "doubles",
@@ -862,6 +862,54 @@
         "opacity": 0.42,
         "size": 1
       }
+    },
+    "SIDEBAR_TOP200": {
+      "label": "TOP200",
+      "zone": "sidebar",
+      "kind": "navigation",
+      "order": 2,
+      "content": {
+        "label": "TOP200",
+        "route": "top200",
+        "icon": "200"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "locked",
+        "expired": "locked",
+        "rookie": "locked",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
+    },
+    "TOP200_PANEL": {
+      "label": "TOP200 panel",
+      "zone": "predictions",
+      "kind": "panel",
+      "order": 55,
+      "content": {
+        "label": "TOP200 panel"
+      },
+      "watermark": {
+        "enabled": false,
+        "text": "COMING SOON",
+        "preset": "default"
+      },
+      "access": {
+        "trial": "active",
+        "expired": "locked",
+        "rookie": "active",
+        "pro": "active",
+        "elite": "active",
+        "legend": "active",
+        "goat": "active"
+      }
     }
   },
   "admin": {
@@ -1038,9 +1086,10 @@
     "match_winner_assignment": {
       "exclusive": true,
       "priority": [
+        "top200",
         "value",
-        "prime",
-        "top_daily"
+        "top_daily",
+        "prime"
       ],
       "dedupe_key": "market:betting_day:event_id:selection_id"
     },
@@ -1050,6 +1099,26 @@
       "enabled": false,
       "presentation_preview_limit": 10,
       "note": "Separate doubles model; singles predictions are never reused."
+    },
+    "top200": {
+      "label": "TOP200",
+      "internal_key": "top200",
+      "markets": [
+        "match_winner"
+      ],
+      "requires_odds": true,
+      "objective": "rank_first_quality_guarded",
+      "max_player_rank": 200,
+      "rank_rule": "at_least_one_player_point_in_time_rank_1_to_200",
+      "min_probability": 0.65,
+      "min_data_depth": 0.8,
+      "min_surface_matches": 5,
+      "min_odds": null,
+      "max_odds": null,
+      "limit": 5,
+      "force_fill": false,
+      "sort": "probability_desc_then_data_depth_then_surface_sample_then_overall_sample",
+      "presentation_preview_limit": 5
     }
   },
   "assets": {
@@ -1109,50 +1178,50 @@
         "sidebar_element": "SIDEBAR_PRIME",
         "sidebar_enabled": false,
         "dashboard_enabled": false,
-        "dashboard_order": 1,
+        "dashboard_order": 2,
         "preview_limit": 5,
         "plans": {
           "trial": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
-            "order": 1
+            "order": 2
           },
           "expired": {
             "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
-            "order": 1
+            "order": 2
           },
           "rookie": {
             "visible_picks": 1,
             "blur_remaining": true,
             "see_all": false,
-            "order": 1
+            "order": 2
           },
           "pro": {
             "visible_picks": 3,
             "blur_remaining": true,
             "see_all": false,
-            "order": 1
+            "order": 2
           },
           "elite": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 1
+            "order": 2
           },
           "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 1
+            "order": 2
           },
           "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 1
+            "order": 2
           }
         }
       },
@@ -1162,50 +1231,50 @@
         "sidebar_element": "SIDEBAR_TOP_DAILY",
         "sidebar_enabled": true,
         "dashboard_enabled": true,
-        "dashboard_order": 2,
+        "dashboard_order": 3,
         "preview_limit": 5,
         "plans": {
           "trial": {
             "visible_picks": 2,
             "blur_remaining": true,
             "see_all": false,
-            "order": 2
+            "order": 3
           },
           "expired": {
             "visible_picks": 0,
             "blur_remaining": true,
             "see_all": false,
-            "order": 2
+            "order": 3
           },
           "rookie": {
             "visible_picks": 2,
             "blur_remaining": true,
             "see_all": false,
-            "order": 2
+            "order": 3
           },
           "pro": {
             "visible_picks": 3,
             "blur_remaining": true,
             "see_all": false,
-            "order": 2
+            "order": 3
           },
           "elite": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 2
+            "order": 3
           },
           "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 2
+            "order": 3
           },
           "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 2
+            "order": 3
           }
         }
       },
@@ -1268,59 +1337,6 @@
         "sidebar_element": "SIDEBAR_ACE",
         "sidebar_enabled": true,
         "dashboard_enabled": true,
-        "dashboard_order": 3,
-        "preview_limit": 5,
-        "plans": {
-          "trial": {
-            "visible_picks": 0,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 3
-          },
-          "expired": {
-            "visible_picks": 0,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 3
-          },
-          "rookie": {
-            "visible_picks": 0,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 3
-          },
-          "pro": {
-            "visible_picks": 0,
-            "blur_remaining": true,
-            "see_all": false,
-            "order": 3
-          },
-          "elite": {
-            "visible_picks": "ALL",
-            "blur_remaining": false,
-            "see_all": true,
-            "order": 3
-          },
-          "legend": {
-            "visible_picks": "ALL",
-            "blur_remaining": false,
-            "see_all": true,
-            "order": 3
-          },
-          "goat": {
-            "visible_picks": "ALL",
-            "blur_remaining": false,
-            "see_all": true,
-            "order": 3
-          }
-        }
-      },
-      "sg": {
-        "label": "S/G Predictions",
-        "panel_id": "sgPanel",
-        "sidebar_element": "SIDEBAR_SG",
-        "sidebar_enabled": true,
-        "dashboard_enabled": true,
         "dashboard_order": 6,
         "preview_limit": 5,
         "plans": {
@@ -1365,6 +1381,59 @@
             "blur_remaining": false,
             "see_all": true,
             "order": 6
+          }
+        }
+      },
+      "sg": {
+        "label": "S/G Predictions",
+        "panel_id": "sgPanel",
+        "sidebar_element": "SIDEBAR_SG",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 7,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 0,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 7
+          },
+          "expired": {
+            "visible_picks": 0,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 7
+          },
+          "rookie": {
+            "visible_picks": 0,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 7
+          },
+          "pro": {
+            "visible_picks": 0,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 7
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 7
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 7
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 7
           }
         }
       },
@@ -1427,56 +1496,110 @@
         "sidebar_element": "SIDEBAR_RESULTS",
         "sidebar_enabled": true,
         "dashboard_enabled": false,
-        "dashboard_order": 7,
+        "dashboard_order": 8,
         "preview_limit": 5,
         "plans": {
           "trial": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": false,
-            "order": 7
+            "order": 8
           },
           "expired": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": false,
-            "order": 7
+            "order": 8
           },
           "rookie": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": false,
-            "order": 7
+            "order": 8
           },
           "pro": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 7
+            "order": 8
           },
           "elite": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 7
+            "order": 8
           },
           "legend": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 7
+            "order": 8
           },
           "goat": {
             "visible_picks": "ALL",
             "blur_remaining": false,
             "see_all": true,
-            "order": 7
+            "order": 8
+          }
+        }
+      },
+      "top200": {
+        "label": "TOP200",
+        "panel_id": "top200Panel",
+        "sidebar_element": "SIDEBAR_TOP200",
+        "sidebar_enabled": true,
+        "dashboard_enabled": true,
+        "dashboard_order": 1,
+        "preview_limit": 5,
+        "plans": {
+          "trial": {
+            "visible_picks": 2,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 1
+          },
+          "expired": {
+            "visible_picks": 0,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 1
+          },
+          "rookie": {
+            "visible_picks": 2,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 1
+          },
+          "pro": {
+            "visible_picks": 3,
+            "blur_remaining": true,
+            "see_all": false,
+            "order": 1
+          },
+          "elite": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 1
+          },
+          "legend": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 1
+          },
+          "goat": {
+            "visible_picks": "ALL",
+            "blur_remaining": false,
+            "see_all": true,
+            "order": 1
           }
         }
       }
     },
     "show_live_chip": false,
     "section_order": [
+      "top200",
       "prime",
       "top_daily",
       "ace",
@@ -1494,7 +1617,7 @@
     "detail_pick_limit": 5,
     "daily_hub": {
       "enabled": true,
-      "default_tab": "daily",
+      "default_tab": "top200",
       "preview_rows": 10,
       "expand_rows": 20,
       "tabs": {
@@ -2256,6 +2379,75 @@
               "row_overrides": {}
             }
           }
+        },
+        "top200": {
+          "label": "TOP200",
+          "enabled": true,
+          "plans": {
+            "trial": {
+              "visible_rows": 2,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "stable_random",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "expired": {
+              "visible_rows": 0,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "rookie": {
+              "visible_rows": 1,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "stable_random",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "pro": {
+              "visible_rows": 3,
+              "blur_remaining": true,
+              "tab_enabled": true,
+              "see_all": false,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "elite": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "legend": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            },
+            "goat": {
+              "visible_rows": "ALL",
+              "blur_remaining": false,
+              "tab_enabled": true,
+              "see_all": true,
+              "selection_mode": "first",
+              "display_state": "active",
+              "row_overrides": {}
+            }
+          }
         }
       }
     },
@@ -2460,7 +2652,7 @@
       }
     }
   },
-  "ui_patch": "736-r61",
+  "ui_patch": "736-r62-top200",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 30,
