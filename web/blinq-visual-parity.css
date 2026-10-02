@@ -1,0 +1,651 @@
+/* BlinQ visual parity layer — 2026-10-02
+   Purpose: align production UI with the approved product visuals without touching data/API logic. */
+
+:root{
+  --vp-bg:#08121d;
+  --vp-header:#0b1722;
+  --vp-header-2:#0d1d2a;
+  --vp-canvas:#f7f9fb;
+  --vp-card:#ffffff;
+  --vp-soft:#f0f3f6;
+  --vp-line:#e2e7ec;
+  --vp-text:#0b1726;
+  --vp-muted:#667487;
+  --vp-green:#20e783;
+  --vp-green-dark:#0d9f5a;
+  --vp-green-soft:#dff9e9;
+  --vp-danger:#ef4f5f;
+  --vp-shadow:0 14px 34px rgba(7,18,31,.10);
+  --vp-radius:16px;
+  --vp-radius-sm:12px;
+}
+
+/* Shared shell */
+body#blinqPremium{
+  background:linear-gradient(180deg,var(--vp-bg),#0b1520)!important;
+}
+body#blinqPremium .app-shell{
+  width:min(calc(100% - 24px),1480px)!important;
+  margin:0 auto!important;
+}
+body#blinqPremium .site-header.reference-topbar{
+  background:rgba(10,23,34,.96)!important;
+  border-bottom:1px solid rgba(255,255,255,.06)!important;
+  box-shadow:0 10px 32px rgba(3,10,18,.18)!important;
+  backdrop-filter:blur(18px)!important;
+}
+body#blinqPremium .reference-topbar .header-top{
+  min-height:66px!important;
+  height:66px!important;
+  padding:0 18px!important;
+}
+body#blinqPremium .reference-topbar .brand-source-logo{
+  width:92px!important;
+  max-height:34px!important;
+}
+body#blinqPremium .reference-navigation a{
+  font-size:12px!important;
+  font-weight:750!important;
+}
+body#blinqPremium .reference-navigation .active:after{
+  height:3px!important;
+  border-radius:999px 999px 0 0!important;
+}
+
+/* Header actions should read as product icons, not form controls. */
+body#blinqPremium .reference-topbar .header-actions{
+  gap:8px!important;
+}
+body#blinqPremium .reference-topbar .insight-live-button,
+body#blinqPremium .reference-topbar .header-upgrade,
+body#blinqPremium .reference-topbar .insight-bell,
+body#blinqPremium .reference-topbar .profile-button{
+  min-height:40px!important;
+  height:40px!important;
+  border:1px solid rgba(255,255,255,.08)!important;
+  border-radius:12px!important;
+  background:rgba(255,255,255,.055)!important;
+  color:#f4f8fb!important;
+  box-shadow:none!important;
+}
+body#blinqPremium .reference-topbar .insight-live-button{
+  padding:0 12px!important;
+}
+body#blinqPremium .reference-topbar .insight-shortcut-live{
+  color:var(--vp-green)!important;
+}
+body#blinqPremium .reference-topbar .header-upgrade{
+  width:40px!important;
+  min-width:40px!important;
+  padding:0!important;
+  font-size:0!important;
+}
+body#blinqPremium .reference-topbar .header-upgrade:before{
+  content:"◆";
+  font-size:15px;
+  color:#a88cff;
+}
+body#blinqPremium .reference-topbar .insight-bell{
+  width:40px!important;
+  min-width:40px!important;
+}
+body#blinqPremium .reference-topbar .insight-info-label,
+body#blinqPremium .reference-topbar .profile-copy,
+body#blinqPremium .reference-topbar .profile-toggle{
+  display:none!important;
+}
+body#blinqPremium .reference-topbar .profile-button{
+  width:40px!important;
+  min-width:40px!important;
+  padding:3px!important;
+}
+body#blinqPremium .reference-topbar .avatar{
+  width:32px!important;
+  height:32px!important;
+  border-radius:50%!important;
+}
+
+/* Desktop content */
+@media (min-width:761px){
+  body#blinqPremium .site-main{
+    margin-top:14px!important;
+    padding:18px!important;
+    border-radius:22px!important;
+    background:var(--vp-canvas)!important;
+    color:var(--vp-text)!important;
+    box-shadow:var(--vp-shadow)!important;
+  }
+  body#blinqPremium .route-heading{
+    padding:8px 4px 18px!important;
+  }
+  body#blinqPremium .route-heading h1{
+    color:var(--vp-text)!important;
+    font-size:30px!important;
+  }
+  body#blinqPremium .hero-shell{
+    height:210px!important;
+    border:0!important;
+    border-radius:18px!important;
+    box-shadow:0 12px 28px rgba(15,28,42,.14)!important;
+  }
+  body#blinqPremium .dashboard-content-grid{
+    margin-top:14px!important;
+  }
+  body#blinqPremium .dashboard-kpi{
+    min-height:86px!important;
+    border:1px solid var(--vp-line)!important;
+    border-radius:14px!important;
+    background:var(--vp-card)!important;
+    box-shadow:0 5px 16px rgba(18,31,45,.05)!important;
+  }
+  body#blinqPremium .dashboard-kpi>span{
+    background:var(--vp-green-soft)!important;
+    color:var(--vp-green-dark)!important;
+    border-radius:12px!important;
+  }
+  body#blinqPremium .dashboard-kpi small,
+  body#blinqPremium .dashboard-kpi p{
+    color:var(--vp-muted)!important;
+  }
+  body#blinqPremium .dashboard-kpi strong{
+    color:var(--vp-text)!important;
+  }
+  body#blinqPremium .daily-panel{
+    border:1px solid var(--vp-line)!important;
+    border-radius:16px!important;
+    background:var(--vp-card)!important;
+    box-shadow:0 7px 24px rgba(18,31,45,.06)!important;
+  }
+  body#blinqPremium .daily-tabs-row{
+    border-bottom:1px solid var(--vp-line)!important;
+    background:var(--vp-header)!important;
+    border-radius:15px 15px 0 0!important;
+  }
+  body#blinqPremium .daily-hub-tab{
+    border-color:rgba(255,255,255,.08)!important;
+    background:rgba(255,255,255,.05)!important;
+    color:#eaf1f6!important;
+    border-radius:999px!important;
+  }
+  body#blinqPremium .daily-hub-tab.active{
+    background:var(--vp-green)!important;
+    border-color:var(--vp-green)!important;
+    color:#07150f!important;
+  }
+  body#blinqPremium .daily-hub-table th{
+    color:var(--vp-muted)!important;
+    background:#f8fafb!important;
+  }
+  body#blinqPremium .daily-hub-table td{
+    color:var(--vp-text)!important;
+    border-color:var(--vp-line)!important;
+  }
+  body#blinqPremium .daily-hub-table tbody tr:hover{
+    background:#f7faf9!important;
+  }
+}
+
+/* Mobile = app-like surface matching the approved visual direction. */
+@media (max-width:760px){
+  body#blinqPremium{
+    background:var(--vp-header)!important;
+    color:var(--vp-text)!important;
+  }
+  body#blinqPremium .app-shell{
+    width:100%!important;
+    padding:0 0 74px!important;
+  }
+  body#blinqPremium .site-header.reference-topbar{
+    position:sticky!important;
+    top:0!important;
+    z-index:120!important;
+    border-radius:0!important;
+  }
+  body#blinqPremium .reference-topbar .header-top{
+    min-height:64px!important;
+    height:64px!important;
+    grid-template-columns:94px minmax(0,1fr)!important;
+    gap:8px!important;
+    padding:0 12px!important;
+  }
+  body#blinqPremium .reference-topbar .brand{
+    width:90px!important;
+    min-width:90px!important;
+    height:64px!important;
+  }
+  body#blinqPremium .reference-topbar .brand-source-logo{
+    width:84px!important;
+  }
+  body#blinqPremium .reference-navigation{
+    display:none!important;
+  }
+  body#blinqPremium .reference-topbar .header-actions{
+    justify-content:flex-end!important;
+    height:64px!important;
+    min-height:64px!important;
+    gap:6px!important;
+  }
+  body#blinqPremium .reference-topbar .insight-live-button,
+  body#blinqPremium .reference-topbar .header-upgrade,
+  body#blinqPremium .reference-topbar .insight-bell,
+  body#blinqPremium .reference-topbar .profile-button{
+    width:38px!important;
+    min-width:38px!important;
+    height:38px!important;
+    min-height:38px!important;
+    padding:0!important;
+    border-radius:11px!important;
+  }
+  body#blinqPremium .reference-topbar .insight-live-button{
+    width:auto!important;
+    padding:0 9px!important;
+  }
+  body#blinqPremium .reference-topbar .insight-shortcut-label,
+  body#blinqPremium .reference-topbar .insight-shortcut-live + b + span{
+    display:none!important;
+  }
+  body#blinqPremium .project-group-bar{
+    position:absolute!important;
+    right:144px!important;
+    top:12px!important;
+    width:38px!important;
+    min-width:38px!important;
+    height:38px!important;
+    min-height:38px!important;
+    padding:0!important;
+    z-index:3!important;
+  }
+  body#blinqPremium .project-group-chip{
+    width:38px!important;
+    min-width:38px!important;
+    max-width:38px!important;
+    height:38px!important;
+    padding:0!important;
+    border-radius:11px!important;
+    overflow:hidden!important;
+    color:transparent!important;
+    font-size:0!important;
+    background:rgba(255,255,255,.055)!important;
+    border:1px solid rgba(255,255,255,.08)!important;
+  }
+  body#blinqPremium .project-group-chip:before{
+    content:"◆";
+    color:#a88cff;
+    font-size:14px;
+  }
+
+  body#blinqPremium .site-main{
+    width:100%!important;
+    min-height:calc(100vh - 64px)!important;
+    margin:0!important;
+    padding:12px 10px 22px!important;
+    border-radius:20px 20px 0 0!important;
+    background:var(--vp-canvas)!important;
+    color:var(--vp-text)!important;
+  }
+  body#blinqPremium .route-heading{
+    padding:6px 4px 12px!important;
+  }
+  body#blinqPremium .route-heading h1{
+    margin:0!important;
+    color:var(--vp-text)!important;
+    font-size:26px!important;
+    line-height:1.08!important;
+    letter-spacing:-.035em!important;
+  }
+  body#blinqPremium .hero-shell{
+    height:112px!important;
+    margin:0 0 12px!important;
+    border:0!important;
+    border-radius:14px!important;
+    box-shadow:0 8px 22px rgba(14,28,42,.12)!important;
+  }
+  body#blinqPremium .hero-shell .dashboard-hero-copy,
+  body#blinqPremium .hero-shell .hero-copy{
+    left:18px!important;
+    max-width:70%!important;
+  }
+  body#blinqPremium .hero-shell .dashboard-hero-copy h2,
+  body#blinqPremium .hero-shell .hero-copy h2{
+    font-size:19px!important;
+  }
+  body#blinqPremium .hero-shell .dashboard-hero-copy p,
+  body#blinqPremium .hero-shell .hero-copy p{
+    display:none!important;
+  }
+  body#blinqPremium .hero-shell .hero-actions{
+    margin-top:8px!important;
+  }
+  body#blinqPremium .hero-shell .hero-actions a,
+  body#blinqPremium .hero-shell .hero-actions button{
+    padding:6px 10px!important;
+    border-radius:999px!important;
+    background:var(--vp-green)!important;
+    color:#07150f!important;
+    font-size:9px!important;
+  }
+
+  body#blinqPremium .dashboard-content-grid{
+    display:block!important;
+    margin-top:0!important;
+  }
+  body#blinqPremium .dashboard-kpis{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:7px!important;
+    margin:0 0 10px!important;
+  }
+  body#blinqPremium .dashboard-kpi{
+    min-height:92px!important;
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:flex-start!important;
+    justify-content:center!important;
+    gap:7px!important;
+    padding:10px!important;
+    border:1px solid var(--vp-line)!important;
+    border-radius:13px!important;
+    background:var(--vp-card)!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium .dashboard-kpi>span{
+    width:28px!important;
+    height:28px!important;
+    flex:0 0 28px!important;
+    border-radius:9px!important;
+    background:var(--vp-green-soft)!important;
+    color:var(--vp-green-dark)!important;
+    font-size:14px!important;
+  }
+  body#blinqPremium .dashboard-kpi small{
+    color:var(--vp-muted)!important;
+    font-size:7px!important;
+    letter-spacing:.06em!important;
+  }
+  body#blinqPremium .dashboard-kpi strong{
+    color:var(--vp-text)!important;
+    font-size:20px!important;
+  }
+  body#blinqPremium .dashboard-kpi p{
+    display:none!important;
+  }
+
+  body#blinqPremium .daily-panel{
+    border:0!important;
+    border-radius:0!important;
+    background:transparent!important;
+    box-shadow:none!important;
+    overflow:visible!important;
+  }
+  body#blinqPremium .daily-panel-head{
+    display:flex!important;
+    padding:6px 4px 10px!important;
+  }
+  body#blinqPremium .daily-title-group{
+    gap:7px!important;
+  }
+  body#blinqPremium .daily-mark{
+    width:26px!important;
+    height:26px!important;
+    border-width:1px!important;
+  }
+  body#blinqPremium .daily-title-group h2{
+    color:var(--vp-text)!important;
+    font-size:18px!important;
+  }
+  body#blinqPremium .daily-title-group h2 span{
+    display:none!important;
+  }
+  body#blinqPremium .daily-meta{
+    display:none!important;
+  }
+  body#blinqPremium .daily-tabs-row{
+    margin:0 -10px 10px!important;
+    padding:8px 10px!important;
+    overflow-x:auto!important;
+    border:0!important;
+    background:var(--vp-header)!important;
+    scrollbar-width:none!important;
+  }
+  body#blinqPremium .daily-tabs{
+    flex-wrap:nowrap!important;
+    min-width:max-content!important;
+    gap:6px!important;
+  }
+  body#blinqPremium .daily-hub-tab{
+    border:0!important;
+    border-radius:999px!important;
+    background:rgba(255,255,255,.05)!important;
+    color:#ecf2f6!important;
+    padding:8px 12px!important;
+    font-size:9px!important;
+    white-space:nowrap!important;
+  }
+  body#blinqPremium .daily-hub-tab.active{
+    background:var(--vp-green)!important;
+    color:#07150f!important;
+  }
+  body#blinqPremium .daily-hub-tab b{
+    display:none!important;
+  }
+  body#blinqPremium .daily-toolbar{
+    display:none!important;
+  }
+  body#blinqPremium .table-scroller{
+    overflow:visible!important;
+    border:0!important;
+  }
+  body#blinqPremium .daily-hub-table{
+    display:block!important;
+    min-width:0!important;
+    width:100%!important;
+  }
+  body#blinqPremium .daily-hub-table thead{
+    display:none!important;
+  }
+  body#blinqPremium .daily-hub-table tbody{
+    display:grid!important;
+    gap:8px!important;
+  }
+  body#blinqPremium .daily-hub-table tbody tr{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) auto!important;
+    gap:5px 10px!important;
+    padding:10px 12px!important;
+    border:1px solid var(--vp-line)!important;
+    border-radius:13px!important;
+    background:var(--vp-card)!important;
+    box-shadow:0 4px 14px rgba(18,31,45,.05)!important;
+  }
+  body#blinqPremium .daily-hub-table td{
+    width:auto!important;
+    height:auto!important;
+    min-width:0!important;
+    padding:2px 0!important;
+    border:0!important;
+    color:var(--vp-text)!important;
+    background:transparent!important;
+    font-size:10px!important;
+  }
+
+  /* Results: collapsed filters, compact KPIs, card rows. */
+  body#blinqPremium .route-panel{
+    width:100%!important;
+    max-width:none!important;
+    padding:0!important;
+    border:0!important;
+    background:transparent!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium .results-filter-shell{
+    margin-bottom:9px!important;
+  }
+  body#blinqPremium .results-mobile-filter-toggle{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:space-between!important;
+    width:100%!important;
+    min-height:48px!important;
+    padding:0 13px!important;
+    border:1px solid var(--vp-line)!important;
+    border-radius:13px!important;
+    background:var(--vp-card)!important;
+    color:var(--vp-text)!important;
+  }
+  body#blinqPremium .results-filter-bar.results-filter-bar-v683{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:7px!important;
+    margin:7px 0 0!important;
+    padding:10px!important;
+    border:1px solid var(--vp-line)!important;
+    border-radius:13px!important;
+    background:var(--vp-card)!important;
+  }
+  body#blinqPremium .results-filter-shell:not(.is-open) .results-filter-bar{
+    display:none!important;
+  }
+  body#blinqPremium .results-filter-field>span:first-child{
+    color:var(--vp-muted)!important;
+    font-size:7px!important;
+  }
+  body#blinqPremium .results-filter-field select,
+  body#blinqPremium .results-filter-field input[type="date"]{
+    height:38px!important;
+    min-height:38px!important;
+    border:1px solid var(--vp-line)!important;
+    border-radius:10px!important;
+    background:#f8fafb!important;
+    color:var(--vp-text)!important;
+    font-size:10px!important;
+  }
+  body#blinqPremium .results-date-field,
+  body#blinqPremium .results-betting-day-toggle{
+    display:none!important;
+  }
+  body#blinqPremium .results-filter-bar:has(#resultsWindow option[value="custom"]:checked) .results-date-field{
+    display:grid!important;
+  }
+  body#blinqPremium .results-filter-bar:has(#resultsWindow option[value="custom"]:checked) .results-betting-day-toggle{
+    display:flex!important;
+    grid-column:1/-1!important;
+  }
+  body#blinqPremium .metric-cards{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:7px!important;
+    margin:0 0 10px!important;
+  }
+  body#blinqPremium .metric-card{
+    min-height:76px!important;
+    padding:10px!important;
+    border:1px solid var(--vp-line)!important;
+    border-radius:13px!important;
+    background:var(--vp-card)!important;
+    box-shadow:none!important;
+  }
+  body#blinqPremium .metric-card small{
+    color:var(--vp-muted)!important;
+    font-size:7px!important;
+    letter-spacing:.05em!important;
+  }
+  body#blinqPremium .metric-card strong{
+    color:var(--vp-text)!important;
+    font-size:18px!important;
+  }
+  body#blinqPremium .metric-card span{
+    display:none!important;
+  }
+  body#blinqPremium .results-table-wrap{
+    border:0!important;
+    background:transparent!important;
+    overflow:visible!important;
+  }
+  body#blinqPremium .results-table,
+  body#blinqPremium .results-table tbody{
+    display:block!important;
+    width:100%!important;
+  }
+  body#blinqPremium .results-table thead{
+    display:none!important;
+  }
+  body#blinqPremium .results-table tbody{
+    display:grid!important;
+    gap:8px!important;
+  }
+  body#blinqPremium .results-table tbody tr{
+    display:grid!important;
+    grid-template-columns:78px minmax(0,1fr) 74px!important;
+    gap:6px 10px!important;
+    padding:10px 11px!important;
+    border:1px solid var(--vp-line)!important;
+    border-radius:13px!important;
+    background:var(--vp-card)!important;
+    box-shadow:0 4px 14px rgba(18,31,45,.045)!important;
+  }
+  body#blinqPremium .results-table tbody td{
+    min-width:0!important;
+    padding:0!important;
+    border:0!important;
+    color:var(--vp-text)!important;
+    background:transparent!important;
+    font-size:9px!important;
+  }
+  body#blinqPremium .results-table tbody td:nth-child(4){
+    grid-column:2/4!important;
+    grid-row:1/3!important;
+  }
+  body#blinqPremium .results-table tbody td:nth-child(5){
+    grid-column:2/3!important;
+    padding:6px 8px!important;
+    border-radius:8px!important;
+    background:var(--vp-green-soft)!important;
+    color:#087744!important;
+    font-weight:800!important;
+  }
+  body#blinqPremium .results-table tbody td:nth-child(6),
+  body#blinqPremium .results-table tbody td:nth-child(7){
+    color:var(--vp-muted)!important;
+  }
+  body#blinqPremium .results-table .result-status.correct,
+  body#blinqPremium .results-table .correct{
+    color:var(--vp-green-dark)!important;
+  }
+  body#blinqPremium .results-table .result-status.wrong,
+  body#blinqPremium .results-table .wrong{
+    color:var(--vp-danger)!important;
+  }
+
+  /* Bottom nav: only Home + Results. Account remains available from top avatar. */
+  body#blinqPremium .mobile-tabs{
+    left:10px!important;
+    right:10px!important;
+    bottom:8px!important;
+    grid-template-columns:repeat(2,1fr)!important;
+    gap:4px!important;
+    padding:5px!important;
+    border:1px solid rgba(255,255,255,.08)!important;
+    border-radius:16px!important;
+    background:rgba(10,23,34,.96)!important;
+    box-shadow:0 10px 28px rgba(0,0,0,.24)!important;
+    backdrop-filter:blur(18px)!important;
+  }
+  body#blinqPremium .mobile-tabs a{
+    min-height:48px!important;
+    justify-content:center!important;
+    gap:3px!important;
+    border-radius:11px!important;
+    color:#92a2b2!important;
+  }
+  body#blinqPremium .mobile-tabs a.active{
+    background:rgba(32,231,131,.12)!important;
+    color:var(--vp-green)!important;
+  }
+  body#blinqPremium .mobile-tabs a:nth-child(3){
+    display:none!important;
+  }
+  body#blinqPremium .mobile-tabs svg{
+    width:20px!important;
+    height:20px!important;
+  }
+  body#blinqPremium .site-footer{
+    display:none!important;
+  }
+}
