@@ -5,8 +5,8 @@
   "private_stage_path": "internal/livetennisapi/wta-2025-reconstructed-pressure.csv",
   "private_manifest_path": "internal/livetennisapi/wta-2025-reconstructed-pressure-manifest.json",
   "expected_stage_rows": 3899,
-  "expected_stage_sha256": "3910872a6bb4cf7f9defd03f0a16f990afdbbc2a7bde440b1ab5d9bc8e8c0f83",
+  "expected_stage_sha256": "eeab2226d202748a6f47f87c45d4a61afca80a603e20bb9b481d73a218b3614f",
   "source_tar_sha256": "0bc3385d2f9aa860b5945a485a7cf27a64b6075cf0908844a92d47cb86dd3c58",
   "raw_redistribution": false,
-  "requested_at_utc": "2026-10-02T21:30:00Z"
+  "requested_at_utc": "2026-10-02T21:35:00Z"
 }
