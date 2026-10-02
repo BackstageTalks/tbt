@@ -4,5 +4,6 @@
   "source": "jeff_sackmann_slam_pointbypoint",
   "source_sha": "83733587353df8a41f2fd4f516147d5aa83f5a8d",
   "max_audited_stage_rows": 1456,
-  "requested_at_utc": "2026-10-02T10:46:00Z"
+  "requested_at_utc": "2026-10-02T18:30:00Z",
+  "finalize_policy": "training_ready_or_delete"
 }
