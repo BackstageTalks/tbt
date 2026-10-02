@@ -104,6 +104,28 @@ def _confidence_band(value):
     return "80_plus"
 
 
+def _fine_confidence_band(value):
+    """Finer descriptive bands for the currently deployed singles model.
+
+    These cohorts are audit output only. They never become publication gates
+    automatically, which prevents short-term result noise from retuning live
+    selection without an explicit reviewed change.
+    """
+    if value is None:
+        return "unknown"
+    if value < .65:
+        return "below_65"
+    if value < .68:
+        return "65_68"
+    if value < .72:
+        return "68_72"
+    if value < .75:
+        return "72_75"
+    if value < .80:
+        return "75_80"
+    return "80_plus"
+
+
 def _gap_band(value):
     if value is None:
         return "unknown"
@@ -239,6 +261,7 @@ def analyze(ledger, *, now=None, window_days=90):
             "probability_source": probability_source, "implied_probability": implied,
             "implied_source": implied_source, "probability_market_gap": gap,
             "odds_gap_band": _gap_band(gap), "confidence_band": _confidence_band(probability),
+            "fine_confidence_band": _fine_confidence_band(probability),
             "data_depth_band": _depth_band(depth), "competition": competition(row),
             "exact_issue_snapshot": snapshot is not None,
             "min_surface_matches_at_issue": min_surface_at_issue,
@@ -394,10 +417,43 @@ def analyze(ledger, *, now=None, window_days=90):
         })
     concentration.sort(key=lambda e: (-e["both_loss_pairs"], -e["context_count"], e["event_id"]))
 
+    verified_singles = [
+        e for e in entries
+        if e["section"] in {"top_daily", "value"}
+        and e["model_version"] != "unverified"
+        and e["model_version_source"] != "unverified"
+    ]
+    latest_verified_version = (
+        max(verified_singles, key=lambda e: e["issued_at"])["model_version"]
+        if verified_singles else None
+    )
+    latest_rows = [
+        e for e in verified_singles if e["model_version"] == latest_verified_version
+    ]
+    latest_sections = {}
+    for section in ("top_daily", "value"):
+        section_rows = [e for e in latest_rows if e["section"] == section]
+        latest_sections[section] = {
+            "overall": summarize(section_rows),
+            "by_competition": _group(section_rows, "competition"),
+            "by_fine_confidence": _group(section_rows, "fine_confidence_band"),
+            "by_data_depth": _group(section_rows, "data_depth_band"),
+        }
+    latest_model_focus = {
+        "model_version": latest_verified_version,
+        "settled_population": summarize(latest_rows),
+        "sections": latest_sections,
+        "meaning": (
+            "Descriptive immutable issued results for the most recently observed "
+            "verified singles model; never an automatic selector retuning rule."
+        ),
+    }
+
     return {
         "schema": 1, "window_days": window_days, "start": start.isoformat(), "end": now.isoformat(),
         "selection_scope": list(PRIMARY), "excluded_from_independent_betting_analysis": ["prime", "short_odds"],
         "sections": section_reports,
+        "latest_verified_singles_model": latest_model_focus,
         "value_audit": value_audit,
         "diagnostics": dict(sorted(diagnostics.items())),
         "high_confidence_top_losses": {

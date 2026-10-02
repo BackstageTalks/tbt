@@ -102,6 +102,9 @@ def test_exact_published_snapshot_survives_changed_first_prediction():
     assert report["high_confidence_top_losses"]["total"] == 1
     assert report["probability_market_discrepancies"]["total"] == 1
     assert top["exact_probability_snapshots"] == 1
+    current = report["latest_verified_singles_model"]
+    assert current["model_version"] == "new"
+    assert current["sections"]["top_daily"]["by_fine_confidence"]["80_plus"]["losses"] == 1
 
 
 def test_missing_snapshots_and_bad_odds_fail_conservatively():
