@@ -3164,7 +3164,7 @@
           <span>${escapeHtml(lcopy('Filters','Filtre','Filtry'))}</span>
         </button>
       </div>
-      <div id="resultsFilterPanel" class="results-filter-bar results-filter-bar-v683" aria-hidden="true">
+      <div id="resultsFilterPanel" class="results-filter-bar results-filter-bar-v683">
         <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top200','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),applied.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
         <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),applied.tour||'')}${tours.map(v=>option(v,v,applied.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
         <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),applied.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),applied.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
@@ -3290,7 +3290,8 @@
     const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',allEntries=settledPublishedEntries(rows,category,filters);
     const outcomeCounts={all:allEntries.length,win:0,loss:0};
     allEntries.forEach(({publication})=>{const kind=publicationOutcome(publication).kind;if(kind==='win')outcomeCounts.win+=1;else if(kind==='loss')outcomeCounts.loss+=1;});
-    const activeOutcome=['win','loss'].includes(state.resultsOutcomeFilter)?state.resultsOutcomeFilter:'all';
+    const phoneOutcome=window.matchMedia('(max-width:767px)').matches;
+    const activeOutcome=phoneOutcome&&['win','loss'].includes(state.resultsOutcomeFilter)?state.resultsOutcomeFilter:'all';
     const entries=activeOutcome==='all'?allEntries:allEntries.filter(({publication})=>publicationOutcome(publication).kind===activeOutcome);
     const outcomeTabs=`<div class="results-outcome-tabs" role="tablist" aria-label="${escapeHtml(lcopy('Result status','Stav výsledku','Stav výsledku'))}"><button type="button" data-results-outcome="all" class="${activeOutcome==='all'?'active':''}" role="tab" aria-selected="${activeOutcome==='all'}">${escapeHtml(lcopy('All','Všetky','Všechny'))} <span>${outcomeCounts.all}</span></button><button type="button" data-results-outcome="win" class="${activeOutcome==='win'?'active':''}" role="tab" aria-selected="${activeOutcome==='win'}">${escapeHtml(lcopy('Wins','Výhry','Výhry'))} <span>${outcomeCounts.win}</span></button><button type="button" data-results-outcome="loss" class="${activeOutcome==='loss'?'active':''}" role="tab" aria-selected="${activeOutcome==='loss'}">${escapeHtml(lcopy('Losses','Prehry','Prohry'))} <span>${outcomeCounts.loss}</span></button></div>`;
     if(!allEntries.length){state.resultsPage=0;return `${outcomeTabs}<div class="state-card">Zatiaľ nie sú dostupné vyhodnotené publikované predikcie/projekcie pre tento filter.</div>`;}
@@ -3374,11 +3375,13 @@
   }
 
   function wireResultsFilters(){
+    const staged=window.matchMedia('(max-width:767px)').matches;
     const applied=()=>({...defaultResultsFilters(),...(state.resultsFilters||{})});
     let draft=applied();
     const shell=document.querySelector('.results-filter-shell');
     const panel=$('resultsFilterPanel');
     const toggle=document.querySelector('[data-results-filter-toggle]');
+    const rerender=()=>{state.resultsPage=0;renderRoute('results');};
     const syncControls=()=>{
       const set=(id,value)=>{const el=$(id);if(el)el.value=value??'';};
       set('resultsCategory',draft.category||'all');set('resultsTour',draft.tour||'');set('resultsSurface',draft.surface||'');set('resultsWindow',draft.window||'today');
@@ -3386,22 +3389,54 @@
       if($('resultsBettingDay'))$('resultsBettingDay').checked=draft.bettingDay!==false;
     };
     const setOpen=open=>{
+      if(!staged)return;
       shell?.classList.toggle('is-open',open);
       if(toggle)toggle.setAttribute('aria-expanded',open?'true':'false');
       if(panel)panel.setAttribute('aria-hidden',open?'false':'true');
       if(open){draft=applied();syncControls();}
       else draft=applied();
     };
+    if(panel){
+      if(staged)panel.setAttribute('aria-hidden','true');
+      else panel.removeAttribute('aria-hidden');
+    }
     if(toggle)toggle.onclick=()=>setOpen(!shell?.classList.contains('is-open'));
-    [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface']].forEach(([id,key])=>{const el=$(id);if(el)el.onchange=()=>{draft[key]=el.value;};});
-    const period=$('resultsWindow');if(period)period.onchange=()=>{draft.window=period.value||'today';if(draft.window!=='custom'){draft.dateFrom='';draft.dateTo='';syncControls();}};
+    [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface']].forEach(([id,key])=>{
+      const el=$(id);if(el)el.onchange=()=>{
+        if(staged){draft[key]=el.value;return;}
+        state.resultsFilters[key]=el.value;rerender();
+      };
+    });
+    const period=$('resultsWindow');if(period)period.onchange=()=>{
+      if(staged){
+        draft.window=period.value||'today';
+        if(draft.window!=='custom'){draft.dateFrom='';draft.dateTo='';syncControls();}
+        return;
+      }
+      state.resultsFilters.window=period.value||'all';
+      if(state.resultsFilters.window!=='custom'){state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}
+      rerender();
+    };
     const from=$('resultsDateFrom'),to=$('resultsDateTo'),bettingDay=$('resultsBettingDay');
-    if(from)from.onchange=()=>{draft.dateFrom=from.value||'';if(draft.dateTo&&draft.dateFrom>draft.dateTo)draft.dateTo=draft.dateFrom;draft.window='custom';syncControls();};
-    if(to)to.onchange=()=>{draft.dateTo=to.value||'';if(draft.dateFrom&&draft.dateTo<draft.dateFrom)draft.dateFrom=draft.dateTo;draft.window='custom';syncControls();};
-    if(bettingDay)bettingDay.onchange=()=>{draft.bettingDay=Boolean(bettingDay.checked);};
-    const reset=$('resultsFilterReset');if(reset)reset.onclick=()=>{draft=defaultResultsFilters();syncControls();};
-    const apply=$('resultsFilterApply');if(apply)apply.onclick=()=>{state.resultsFilters={...draft};state.resultsPage=0;state.resultsOutcomeFilter='all';renderRoute('results');};
-    document.querySelectorAll('[data-results-outcome]').forEach(button=>button.onclick=()=>{state.resultsOutcomeFilter=button.dataset.resultsOutcome||'all';state.resultsPage=0;renderRoute('results');});
+    if(from)from.onchange=()=>{
+      if(staged){
+        draft.dateFrom=from.value||'';if(draft.dateTo&&draft.dateFrom>draft.dateTo)draft.dateTo=draft.dateFrom;draft.window='custom';syncControls();return;
+      }
+      state.resultsFilters.dateFrom=from.value||'';if(state.resultsFilters.dateTo&&state.resultsFilters.dateFrom>state.resultsFilters.dateTo)state.resultsFilters.dateTo=state.resultsFilters.dateFrom;state.resultsFilters.window='custom';rerender();
+    };
+    if(to)to.onchange=()=>{
+      if(staged){
+        draft.dateTo=to.value||'';if(draft.dateFrom&&draft.dateTo<draft.dateFrom)draft.dateFrom=draft.dateTo;draft.window='custom';syncControls();return;
+      }
+      state.resultsFilters.dateTo=to.value||'';if(state.resultsFilters.dateFrom&&state.resultsFilters.dateTo<state.resultsFilters.dateFrom)state.resultsFilters.dateFrom=state.resultsFilters.dateTo;state.resultsFilters.window='custom';rerender();
+    };
+    if(bettingDay)bettingDay.onchange=()=>{
+      if(staged){draft.bettingDay=Boolean(bettingDay.checked);return;}
+      state.resultsFilters.bettingDay=Boolean(bettingDay.checked);rerender();
+    };
+    const reset=$('resultsFilterReset');if(reset)reset.onclick=()=>{if(!staged)return;draft=defaultResultsFilters();syncControls();};
+    const apply=$('resultsFilterApply');if(apply)apply.onclick=()=>{if(!staged)return;state.resultsFilters={...draft};state.resultsPage=0;state.resultsOutcomeFilter='all';renderRoute('results');};
+    document.querySelectorAll('[data-results-outcome]').forEach(button=>button.onclick=()=>{if(!staged)return;state.resultsOutcomeFilter=button.dataset.resultsOutcome||'all';state.resultsPage=0;renderRoute('results');});
     const size=$('resultsPageSize');if(size)size.onchange=()=>{state.resultsPageSize=[50,100].includes(Number(size.value))?Number(size.value):50;state.resultsPage=0;renderRoute('results');};
     const prev=$('resultsPrevPage'),next=$('resultsNextPage');
     if(prev)prev.onclick=()=>{if(state.resultsPage>0){state.resultsPage-=1;renderRoute('results');window.scrollTo({top:0,behavior:'smooth'});}};
