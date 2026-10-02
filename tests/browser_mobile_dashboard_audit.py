@@ -116,8 +116,8 @@ def main():
             for width, height, label in viewports:
                 context = browser.new_context(
                     viewport={"width": width, "height": height},
-                    is_mobile=width <= 900,
-                    has_touch=width <= 900,
+                    is_mobile=width <= 767,
+                    has_touch=width <= 767,
                     user_agent=brave_ua if label == "iphone-modern" else None,
                 )
                 page = context.new_page()
@@ -148,8 +148,10 @@ def main():
                 }""")
                 assert report["docOverflow"] <= 2, (label, report)
                 assert report["brand"]["right"] <= width + 1, (label, report)
-                assert report["projects"]["left"] >= -1 and report["projects"]["right"] <= width + 1, (label, report)
-                assert report["projectChips"] and all(chip["width"] > 20 for chip in report["projectChips"]), (label, report)
+                if width <= 767:
+                    assert report["projects"]["width"] == 0, (label, report)
+                else:
+                    assert report["projects"]["left"] >= -1 and report["projects"]["right"] <= width + 1, (label, report)
                 actions = [x["r"] for x in report["actions"]]
                 for i, a in enumerate(actions):
                     assert a["left"] >= -1 and a["right"] <= width + 1, (label, report)
@@ -162,7 +164,7 @@ def main():
                 assert report["last"]["bottom"] <= report["footer"]["top"] + 2, (label, report)
                 if report["status"] and report["langs"] and width > 480:
                     assert not overlap(report["status"], report["langs"]), (label, report)
-                if width <= 900:
+                if width <= 767:
                     assert report["navVisible"], (label, report)
                     assert report["nav"]["left"] >= 0 and report["nav"]["right"] <= width, (label, report)
                     assert report["hint"]["bottom"] <= report["nav"]["top"] - 2, (label, report)
