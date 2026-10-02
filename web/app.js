@@ -4510,7 +4510,7 @@
         try{
           const index=(state.adminProjectGroups||[]).length+1;
           const palette=['blue','orange','purple','green','teal','pink','gray'];
-          const saved=await BlinqAuth.adminCreateProjectGroup({name:`Projekt ${index}`,description:'',color:palette[(index-1)%palette.length],capacity:10,total_cost_cents:0,currency:'EUR',payment_note:'',self_join_enabled:true,active:true});
+          const saved=await BlinqAuth.adminCreateProjectGroup({name:`Projekt ${index}`,description:'',color:palette[(index-1)%palette.length],capacity:10,total_cost_cents:0,currency:'EUR',payment_note:'',entry_mode:'open',join_deadline:'',active:true});
           state.adminProjectGroupId=String(saved.id||'');state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Nová projektová skupina bola vytvorená.');
         }catch(error){showStatus(error?.message||'Skupinu sa nepodarilo vytvoriť.');actionNode.disabled=false;}
         return;
@@ -4529,6 +4529,20 @@
         actionNode.disabled=true;
         try{await BlinqAuth.adminAddProjectMember(groupId,userId);state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Používateľ bol pridaný do projektu.');}
         catch(error){showStatus(error?.message||'Používateľa sa nepodarilo pridať.');actionNode.disabled=false;}
+        return;
+      }
+      if(action==='project-request-approve'){
+        const groupId=String(state.adminProjectGroupId||''),userId=String(actionNode.dataset.projectUser||'');if(!groupId||!userId)return;
+        actionNode.disabled=true;
+        try{await BlinqAuth.adminAddProjectMember(groupId,userId);state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Žiadosť bola schválená a používateľ je členom projektu.');}
+        catch(error){showStatus(error?.message||'Žiadosť sa nepodarilo schváliť.');actionNode.disabled=false;}
+        return;
+      }
+      if(action==='project-request-reject'){
+        const groupId=String(state.adminProjectGroupId||''),userId=String(actionNode.dataset.projectUser||'');if(!groupId||!userId)return;
+        actionNode.disabled=true;
+        try{await BlinqAuth.adminRemoveProjectMember(groupId,userId);state.adminProjectGroups=null;await loadAdminProjectGroups(true);showStatus('Žiadosť bola zamietnutá.');}
+        catch(error){showStatus(error?.message||'Žiadosť sa nepodarilo zamietnuť.');actionNode.disabled=false;}
         return;
       }
       if(action==='project-member-remove'){
@@ -4741,7 +4755,8 @@
             total_cost_cents:Math.max(0,Math.round((Number.isFinite(totalEuros)?totalEuros:0)*100)),
             currency:'EUR',
             payment_note:String($('adminProjectPaymentNote')?.value||'').trim(),
-            self_join_enabled:Boolean($('adminProjectSelfJoin')?.checked),
+            entry_mode:String($('adminProjectEntryMode')?.value||'open'),
+            join_deadline:$('adminProjectJoinDeadline')?.value?new Date($('adminProjectJoinDeadline').value).toISOString():'',
             active:Boolean($('adminProjectActive')?.checked)
           };
           await BlinqAuth.adminUpdateProjectGroup(group.id,payload);
