@@ -113,6 +113,8 @@ def main():
                     const projects=css('#projectGroupBar');
                     const projectChip=css('#projectGroupBar .project-group-chip');
                     const live=css('#insightShortcut');
+                    const controls=['#insightShortcut','#topUpgradeButton','#insightBell','#profileShell']
+                      .map(css).filter(Boolean).map(rect);
                     const filterToggle=css('.results-mobile-filter-toggle');
                     const filterBar=css('.results-filter-bar-v683');
                     const minWidth=getComputedStyle(table).minWidth;
@@ -130,7 +132,8 @@ def main():
                       whiteSpace:tournament?getComputedStyle(tournament).whiteSpace:'',
                       filterCollisions:collisions(labels),kpiCollisions:collisions(kpis),
                       header:rect(header),brand:rect(brand),profile:rect(profile),info:rect(info),
-                      projects:rect(projects),projectChip:rect(projectChip),live:rect(live),
+                      projects:rect(projects),projectChip:rect(projectChip),live:rect(live),controls,
+                      projectsVisible:projects&&getComputedStyle(projects).display!=='none',
                       filterToggleVisible:filterToggle&&getComputedStyle(filterToggle).display!=='none',
                       filterBarDisplay:filterBar?getComputedStyle(filterBar).display:'',
                       cardClass:first?.classList.contains('results-card-row')||false,
@@ -147,22 +150,11 @@ def main():
                 assert report["brand"]["right"]<=report["profile"]["left"]+2,(width,report)
                 if width<=900:
                     assert report["navVisible"],(width,report)
-                    assert report["filterToggleVisible"],(width,report)
-                    assert report["filterBarDisplay"]=="none",(width,report)
-                    assert report["cardClass"],(width,report)
-                    assert report["projectChip"]["top"]>=report["header"]["top"]-2,(width,report)
-                    assert report["projectChip"]["bottom"]<=report["header"]["bottom"]+2,(width,report)
-                    assert report["projectChip"]["right"]<=report["live"]["left"]+2,(width,report)
+                    assert report["projectsVisible"] is False,(width,report)
+                    assert all(c["width"]>=43 and c["height"]>=43 for c in report["controls"]),(width,report)
                     assert report["table"]["right"]<=width+2,(width,report)
                     assert report["wrap"]["right"]<=width+2,(width,report)
-                    assert report["first"]["right"]<=width+2,(width,report)
-                    assert report["minWidth"]=="0px",(width,report)
-                    assert report["tbodyDisplay"]=="grid",(width,report)
-                    assert report["whiteSpace"]=="normal",(width,report)
-                    assert report["clamp"]=="2",(width,report)
                     assert report["appOverflow"]<=2,(width,report)
-                    # Even when the user scrolls right to the end of a long
-                    # Results page, the last pager is above the fixed nav.
                     page.evaluate("window.scrollTo(0,document.documentElement.scrollHeight)")
                     page.wait_for_timeout(60)
                     bottom=page.evaluate("""() => ({
@@ -170,9 +162,31 @@ def main():
                       nav:document.querySelector('.mobile-tabs').getBoundingClientRect().top
                     })""")
                     assert bottom["pager"]<=bottom["nav"]-4,(width,bottom)
+                    if width<=767:
+                        assert report["filterToggleVisible"],(width,report)
+                        assert report["filterBarDisplay"]=="none",(width,report)
+                        assert report["cardClass"],(width,report)
+                        assert report["first"]["right"]<=width+2,(width,report)
+                        assert report["minWidth"]=="0px",(width,report)
+                        assert report["tbodyDisplay"]=="grid",(width,report)
+                        assert report["whiteSpace"]=="normal",(width,report)
+                    else:
+                        assert not report["filterToggleVisible"],(width,report)
                 else:
                     assert not report["navVisible"],(width,report)
+                    assert not report["filterToggleVisible"],(width,report)
                     assert report["minWidth"]!="0px",(width,report)
+                if width==390:
+                    page.set_viewport_size({"width":390,"height":844})
+                    page.evaluate("window.scrollTo(0,0)")
+                    page.wait_for_timeout(60)
+                    visible=page.evaluate("""() => {
+                      const card=document.querySelector('.results-table tbody tr');
+                      const nav=document.querySelector('.mobile-tabs');
+                      const r=card.getBoundingClientRect(),n=nav.getBoundingClientRect();
+                      return {top:r.top,bottom:r.bottom,navTop:n.top,height:r.height};
+                    }""")
+                    assert visible["height"]>0 and visible["top"]>=0 and visible["bottom"]<=visible["navTop"],(width,visible)
                 assert not errors,(width,errors)
                 page.close()
             print("Mobile Results 320/360/390/430/768/900 + desktop 1024/1440 geometry: PASS")
