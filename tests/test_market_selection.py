@@ -92,26 +92,26 @@ def test_probability_first_odds_buckets_match_product_policy():
     assert [x['event_id'] for x in sections['value_picks']] == ['value']
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['top', 'top-not-value']
     meta = sections['market_selection']
-    assert meta['selection_policy'] == 'probability_first_odds_buckets_v12_top_probability_dynamic_fixed_150'
+    assert meta['selection_policy'] == 'probability_first_odds_buckets_v13_value65_top_probability_dynamic_fixed_150'
     assert meta['value_rule']['assignment_priority'] == 1
     assert meta['value_rule']['max_two_way_odds_difference'] == .15
     assert meta['top_daily_rule']['value_priority_exclusion'] is True
 
 
-def test_prime_top_core68_fallback65_and_value60_policy():
+def test_prime_top_core68_fallback65_and_value65_policy():
     rows = [
         row('p649-prime', .649, 1.40, 3.10, depth=1.0),
         row('p649-top', .649, 1.70, 2.20, depth=1.0),
         row('v599', .599, 1.90, 2.00, depth=1.0),
-        row('v600', .60, 1.90, 2.00, depth=1.0),
+        row('v600', .60, 1.90, 2.00, depth=1.0),\n        row('v650', .65, 1.90, 2.00, depth=1.0),
         row('p650', .65, 1.60, 2.30, depth=1.0),
     ]
     sections = select_market_sections(rows, prime_min_probability=.50, top_min_probability=.50, value_min_probability=.50)
-    assert [x['event_id'] for x in sections['value_picks']] == ['v600']
+    assert [x['event_id'] for x in sections['value_picks']] == ['v650']
     # TOP may relax probability only to 65%; its odds boundary never moves below 1.50.
     assert [x['event_id'] for x in sections['top_daily_picks']] == ['p650']
     assert sections['prime_picks'] == []
-    assert sections['value_picks'][0]['probability'] == .60
+    assert sections['value_picks'][0]['probability'] == .65
     assert sections['top_daily_picks'][0]['probability'] == .65
     assert sections['market_selection']['selection_counts']['top_fallback_added'] == 1
 
@@ -201,7 +201,7 @@ class _OddsProvider:
         ]}]}
 
 
-def test_odds_enrichment_covers_all_60_percent_value_candidates_before_prices_are_known():
+def test_odds_enrichment_covers_all_65_percent_value_candidates_before_prices_are_known():
     provider = _OddsProvider()
     rows = [
         row('eligible', .65, 1.60, 2.20, depth=.80, surface1=5, surface2=5),
@@ -212,8 +212,8 @@ def test_odds_enrichment_covers_all_60_percent_value_candidates_before_prices_ar
     for item in rows:
         item.pop('betting', None); item.pop('match_winner_market', None)
     enriched, report = enrich_current_betting_day_odds(provider, rows, now=datetime(2026,9,7,8,0,tzinfo=timezone.utc))
-    assert provider.called == [('weak', 1), ('eligible', 1)]
-    assert report['candidate_gate']['min_probability'] == .60
+    assert provider.called == [('eligible', 1)]
+    assert report['candidate_gate']['min_probability'] == .65
     assert report['candidate_gate']['min_data_depth'] == .75
     assert report['candidate_gate']['min_surface_matches_each'] == 3
     assert next(x for x in enriched if x['event_id'] == 'eligible').get('betting')
