@@ -3137,11 +3137,16 @@
     if((scheduled||players)&&selection)return `${scheduled}::${players}::${market}::${scope}::${metric}::${selection}`;
     return String(publication?.selection_key||publication?.publication_key||`${scheduled}::${players}::${publication?.section||''}::${selection||index}`);
   }
-  function settledPublishedEntries(rows,category='all'){
+  function settledPublishedEntries(rows,category='all',filters=null){
     const specific=['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
+    const now=Date.now();
     (rows||[]).forEach(row=>{
-      const pubs=publicResultPublications(row).filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category)).filter(p=>category!=='winners'||String(row?.prediction_family||'').toLowerCase()!=='doubles').filter(p=>publicationOutcome(p).kind!=='pending');
+      const pubs=publicResultPublications(row)
+        .filter(p=>!filters||resultPublicationMatchesWindow(row,p,filters,now))
+        .filter(p=>!specific&&category!=='sg'?true:publicationMatchesResultCategory(p,category))
+        .filter(p=>category!=='winners'||String(row?.prediction_family||'').toLowerCase()!=='doubles')
+        .filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
         const key=canonicalResultPublicationKey(row,publication,index);
         const current=unique.get(key);
@@ -3167,8 +3172,8 @@
       return outcome.kind==='win'?odds-1:-1;
     return NaN;
   }
-  function localResultMetrics(rows,category){
-    const entries=settledPublishedEntries(rows,category);
+  function localResultMetrics(rows,category,filters=null){
+    const entries=settledPublishedEntries(rows,category,filters);
     const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
     const voids=entries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
@@ -3224,7 +3229,7 @@
     };
   }
   function renderResults(){
-    const rows=filteredResults(),category=state.resultsFilters?.category||'all',entries=settledPublishedEntries(rows,category);
+    const filters=state.resultsFilters||{},rows=filteredResults(filters),category=filters.category||'all',entries=settledPublishedEntries(rows,category,filters);
     if(!entries.length){state.resultsPage=0;return '<div class="state-card">Zatiaľ nie sú dostupné vyhodnotené publikované predikcie/projekcie pre tento filter.</div>';}
     const allowedSizes=[50,100],pageSize=allowedSizes.includes(Number(state.resultsPageSize))?Number(state.resultsPageSize):50;
     state.resultsPageSize=pageSize;
@@ -4230,7 +4235,7 @@
     // Uses the exact same filter, dedupe and ROI function as the visible
     // Results page. This diagnostic never changes the public Results layout.
     const filters=state.resultsFilters||{};
-    const m=localResultMetrics(filteredResults(),filters.category||'all');
+    const m=localResultMetrics(filteredResults(filters),filters.category||'all',filters);
     const signed=value=>`${value>=0?'+':''}${value.toFixed(2)}u`;
     const window=filters.window==='custom'
       ?`${filters.dateFrom||'…'} – ${filters.dateTo||'…'}`
