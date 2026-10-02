@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'top200', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'today',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'top200', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -3022,27 +3022,59 @@
     }
     return guess;
   }
-  function filteredResults(){
-    const filters=state.resultsFilters||{},now=Date.now(),windowDays=Number(filters.window);
-    const from=String(filters.dateFrom||'').trim(),to=String(filters.dateTo||'').trim();
-    const bettingDay=filters.bettingDay!==false;
-    const fromTs=from?(bettingDay?bratislavaBoundaryTimestamp(from,6):new Date(`${from}T00:00:00`).getTime()):null;
-    const toTsExclusive=to?(bettingDay?bratislavaBoundaryTimestamp(dateOnlyAddDays(to,1),6):new Date(`${to}T23:59:59.999`).getTime()+1):null;
+  function bratislavaBettingDayKey(value=Date.now(),hour=6){
+    const date=value instanceof Date?value:new Date(value);
+    if(Number.isNaN(date.getTime()))return '';
+    const formatter=new Intl.DateTimeFormat('en-GB',{
+      timeZone:'Europe/Bratislava',year:'numeric',month:'2-digit',day:'2-digit',
+      hour:'2-digit',hourCycle:'h23'
+    });
+    const parts=Object.fromEntries(formatter.formatToParts(date).filter(p=>p.type!=='literal').map(p=>[p.type,p.value]));
+    let key=`${parts.year}-${parts.month}-${parts.day}`;
+    if(Number(parts.hour)<Number(hour||0))key=dateOnlyAddDays(key,-1);
+    return key;
+  }
+  function resultPublicationBettingDay(row,publication){
+    const explicit=String(
+      publication?.betting_day
+      ||publication?.issued_snapshot?.betting_day
+      ||row?.betting_day
+      ||row?.betting?.betting_day
+      ||''
+    ).trim();
+    if(/^\d{4}-\d{2}-\d{2}$/.test(explicit))return explicit;
+    return bratislavaBettingDayKey(row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0,6);
+  }
+  function resultPublicationMatchesWindow(row,publication,filters,now=Date.now()){
+    const window=String(filters?.window||'all');
+    if(window==='today')return resultPublicationBettingDay(row,publication)===bratislavaBettingDayKey(now,6);
+    const ts=new Date(row?.scheduled_at||row?.date||0).getTime();
+    if(window==='custom'){
+      const from=String(filters?.dateFrom||'').trim(),to=String(filters?.dateTo||'').trim();
+      const bettingDay=filters?.bettingDay!==false;
+      const fromTs=from?(bettingDay?bratislavaBoundaryTimestamp(from,6):new Date(`${from}T00:00:00`).getTime()):null;
+      const toTsExclusive=to?(bettingDay?bratislavaBoundaryTimestamp(dateOnlyAddDays(to,1),6):new Date(`${to}T23:59:59.999`).getTime()+1):null;
+      if(fromTs!==null&&(!Number.isFinite(ts)||ts<fromTs))return false;
+      if(toTsExclusive!==null&&(!Number.isFinite(ts)||ts>=toTsExclusive))return false;
+      return true;
+    }
+    const windowDays=Number(window);
+    return !(Number.isFinite(windowDays)&&windowDays>0)
+      ||(Number.isFinite(ts)&&ts>=now-windowDays*86400000);
+  }
+  function filteredResults(filtersOverride=null){
+    const filters=filtersOverride||state.resultsFilters||{},now=Date.now();
     return (state.feed.results||[]).filter(row=>{
       if(filters.tour&&String(row?.tour||'').toUpperCase()!==filters.tour)return false;
       // "All surfaces" really means all settled published rows. Unknown/missing
       // surface metadata must never hide a valid historical result.
       if(filters.surface){const raw=String(row?.surface||'').toLowerCase();const mapped=raw==='indoor_hard'?'hard':raw;if(mapped!==filters.surface)return false;}
-      const ts=new Date(row?.scheduled_at||0).getTime();
-      if(filters.window==='custom'){
-        if(fromTs!==null&&(!Number.isFinite(ts)||ts<fromTs))return false;
-        if(toTsExclusive!==null&&(!Number.isFinite(ts)||ts>=toTsExclusive))return false;
-      }else if(Number.isFinite(windowDays)&&windowDays>0){if(!Number.isFinite(ts)||ts<now-windowDays*86400000)return false;}
       const category=filters.category||'all';
-      const pubs=publicResultPublications(row);
+      const pubs=publicResultPublications(row)
+        .filter(p=>resultPublicationMatchesWindow(row,p,filters,now))
+        .filter(p=>publicationOutcome(p).kind!=='pending');
       if(!pubs.length)return false;
-      if(category!=='all'&&!pubs.some(p=>publicationMatchesResultCategory(p,category)&&publicationOutcome(p).kind!=='pending'))return false;
-      return pubs.some(p=>publicationOutcome(p).kind!=='pending');
+      return category==='all'||pubs.some(p=>publicationMatchesResultCategory(p,category));
     });
   }
   function resultsHistoryHours(){
