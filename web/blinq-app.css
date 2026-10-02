@@ -8577,3 +8577,37 @@ body#blinqPremium.blinq-admin .admin-project-empty strong{display:block;color:#d
   body#blinqPremium.blinq-admin .admin-project-result-row{grid-template-columns:82px minmax(0,1fr) 44px}
 }
 
+
+
+/* Project entry modes: open / request / locked. */
+body#blinqPremium .project-directory-card.is-locked{
+  border-style:solid;
+  background:rgba(5,22,24,.72);
+}
+body#blinqPremium .project-directory-card.is-locked header>div>small{color:#80928f}
+body#blinqPremium .project-locked-button{
+  border-color:#37534f!important;
+  background:rgba(19,35,35,.78)!important;
+  color:#91a6a1!important;
+  opacity:1!important;
+}
+body#blinqPremium.blinq-admin .admin-project-lock-state,
+body#blinqPremium.blinq-admin .admin-project-open-state{
+  display:inline-flex;align-items:center;min-height:22px;padding:3px 6px;border:1px solid rgba(80,119,115,.42);
+  border-radius:4px;font-size:8px;font-weight:850;letter-spacing:.03em;
+}
+body#blinqPremium.blinq-admin .admin-project-lock-state{color:#d3aaa4;border-color:rgba(176,87,78,.45);background:rgba(88,31,28,.18)}
+body#blinqPremium.blinq-admin .admin-project-open-state{color:#7ce0b3;border-color:rgba(58,178,126,.42);background:rgba(28,86,63,.18)}
+body#blinqPremium.blinq-admin .admin-project-entry-grid{margin-top:2px}
+body#blinqPremium.blinq-admin .admin-project-requests{margin-top:16px}
+body#blinqPremium.blinq-admin .admin-project-request-row{
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px 0;
+  border-bottom:1px solid rgba(56,102,98,.18)
+}
+body#blinqPremium.blinq-admin .admin-project-request-row strong{display:block;font-size:9px;color:#dbe9e5}
+body#blinqPremium.blinq-admin .admin-project-request-row small{display:block;margin-top:2px;color:#6e8c94;font-size:7px}
+body#blinqPremium.blinq-admin .admin-project-request-row>div{display:flex;gap:5px;align-items:center}
+@media(max-width:620px){
+  body#blinqPremium.blinq-admin .admin-project-request-row{grid-template-columns:1fr}
+  body#blinqPremium.blinq-admin .admin-project-request-row>div{justify-content:flex-start;flex-wrap:wrap}
+}

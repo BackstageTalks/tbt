@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from tbt.services import admin_storage
 
 
@@ -161,3 +163,133 @@ def test_project_group_capacity_and_payment_state(monkeypatch):
         assert "full" in str(exc).lower()
     else:
         raise AssertionError("A full project group must reject another self-join")
+
+
+def test_project_group_request_mode_requires_admin_approval(monkeypatch):
+    table = MultiTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+
+    group = admin_storage.save_project_group(
+        {
+            "name": "Request project",
+            "color": "purple",
+            "capacity": 3,
+            "total_cost_cents": 300,
+            "currency": "EUR",
+            "entry_mode": "request",
+            "join_deadline": "2999-01-01T12:00:00+00:00",
+            "active": True,
+        },
+        actor_id="admin",
+    )
+    assert group["entry_mode"] == "request"
+    assert group["can_request"] is True
+    assert group["can_join"] is False
+
+    pending = admin_storage.join_project_group(group["id"], "rookie-user")
+    assert pending["joined"] is False
+    assert pending["request_status"] == "requested"
+    assert group["id"] not in admin_storage.project_group_ids_for_user("rookie-user")
+
+    visible = admin_storage.list_project_groups(
+        user_id="rookie-user", include_members=True
+    )["items"][0]
+    assert visible["request_status"] == "requested"
+    assert visible["request_count"] == 1
+    assert visible["requests"][0]["user_id"] == "rookie-user"
+
+    approved = admin_storage.join_project_group(
+        group["id"], "rookie-user", admin=True
+    )
+    assert approved["joined"] is True
+    assert approved["request_status"] == ""
+    assert group["id"] in admin_storage.project_group_ids_for_user("rookie-user")
+
+    refreshed = admin_storage.list_project_groups(include_members=True)["items"][0]
+    assert refreshed["request_count"] == 0
+    assert refreshed["member_count"] == 1
+
+
+def test_project_group_locked_full_and_deadline_states(monkeypatch):
+    table = MultiTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+
+    locked = admin_storage.save_project_group(
+        {
+            "name": "Locked",
+            "color": "gray",
+            "capacity": 5,
+            "entry_mode": "locked",
+            "active": True,
+        },
+        actor_id="admin",
+    )
+    assert locked["locked"] is True
+    assert locked["lock_reason"] == "manual"
+    try:
+        admin_storage.join_project_group(locked["id"], "user-a")
+    except ValueError as exc:
+        assert "locked" in str(exc).lower()
+    else:
+        raise AssertionError("A manually locked group must reject self-entry")
+
+    # Admin can still place a user into a manually locked group.
+    joined = admin_storage.join_project_group(locked["id"], "user-a", admin=True)
+    assert joined["joined"] is True
+
+    full = admin_storage.save_project_group(
+        {
+            "name": "Full",
+            "color": "green",
+            "capacity": 1,
+            "entry_mode": "open",
+            "active": True,
+        },
+        actor_id="admin",
+    )
+    admin_storage.join_project_group(full["id"], "user-b")
+    full_row = next(
+        row for row in admin_storage.list_project_groups()["items"]
+        if row["id"] == full["id"]
+    )
+    assert full_row["locked"] is True
+    assert full_row["lock_reason"] == "full"
+    assert full_row["effective_entry_mode"] == "locked"
+
+    expired = admin_storage.save_project_group(
+        {
+            "name": "Expired join window",
+            "color": "orange",
+            "capacity": 10,
+            "entry_mode": "open",
+            "join_deadline": "2000-01-01T00:00:00+00:00",
+            "active": True,
+        },
+        actor_id="admin",
+    )
+    assert expired["locked"] is True
+    assert expired["lock_reason"] == "deadline"
+    try:
+        admin_storage.join_project_group(expired["id"], "user-c")
+    except ValueError as exc:
+        assert "deadline" in str(exc).lower()
+    else:
+        raise AssertionError("A project past its join deadline must reject self-entry")
+
+
+def test_legacy_self_join_groups_map_to_open_mode(monkeypatch):
+    table = MultiTable()
+    monkeypatch.setattr(admin_storage, "_table", lambda name: table)
+
+    group = admin_storage.save_project_group(
+        {
+            "name": "Legacy",
+            "color": "blue",
+            "capacity": 2,
+            "self_join_enabled": True,
+            "active": True,
+        },
+        actor_id="admin",
+    )
+    assert group["entry_mode"] == "open"
+    assert group["can_join"] is True
