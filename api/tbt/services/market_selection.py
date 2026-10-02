@@ -28,14 +28,14 @@ MATCH_WINNER_MARKET_NAMES = {
 #
 # Product rule: model probability and evidence quality decide whether a pick is
 # publishable. Odds decide the public section. Edge/EV are diagnostics only.
-# PRIME keeps its current short-price fallback. TOP uses a staged daily probability fallback: start at 68% and relax only until at least five TOP picks exist, never below 65%. The TOP odds boundary is fixed at >=1.50 and never moves. Value keeps a 60% floor.
+# PRIME keeps its current short-price fallback. TOP uses a staged daily probability fallback: start at 68% and relax only until at least five TOP picks exist, never below 65%. The TOP odds boundary is fixed at >=1.50 and never moves. Value keeps a 65% floor.
 #
 # VALUE has assignment priority because close-odds candidates are intentionally
 # scarce. TOP receives remaining >=1.50 selections. PRIME is the short-price
 # branch (<1.50).
 SECTION_PRIORITY = ("value", "prime", "top_daily")
 
-PUBLICATION_MIN_PROBABILITY = 0.60
+PUBLICATION_MIN_PROBABILITY = 0.65
 PRIME_TOP_CORE_PROBABILITY = 0.68
 PRIME_TOP_FALLBACK_PROBABILITY = 0.65
 TOP_DYNAMIC_FALLBACK_MIN_PROBABILITY = 0.65
@@ -879,7 +879,7 @@ def select_market_sections(
     TOP starts at 68% / 1.50. If fewer than five TOP picks remain after Value
     priority, the selector relaxes probability stepwise to a 65% hard floor,
     while the odds boundary remains fixed at >=1.50. PRIME keeps its current
-    short-price fallback. Value remains 60%+ with >=1.80 odds. EV/edge never
+    short-price fallback. Value remains 65%+ with >=1.80 odds. EV/edge never
     qualify or disqualify Prime/Top/Value; they are diagnostics only.
     """
     cards = [
@@ -995,7 +995,7 @@ def select_market_sections(
         "doubles_picks": deepcopy(doubles_picks or []),
         "market_selection": {
             "schema": 14,
-            "selection_policy": "probability_first_odds_buckets_v12_top_probability_dynamic_fixed_150",
+            "selection_policy": "probability_first_odds_buckets_v13_value65_top_probability_dynamic_fixed_150",
             "selection_counts": {
                 "priced_match_winner_rows": len(cards),
                 "prime_core_68_plus": len(prime_core),
