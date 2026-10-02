@@ -8611,3 +8611,130 @@ body#blinqPremium.blinq-admin .admin-project-request-row>div{display:flex;gap:5p
   body#blinqPremium.blinq-admin .admin-project-request-row{grid-template-columns:1fr}
   body#blinqPremium.blinq-admin .admin-project-request-row>div{justify-content:flex-start;flex-wrap:wrap}
 }
+
+
+/* Header control alignment — approved 2026-10-02.
+   One visual rhythm for project chips, LIVE, Upgrade, INFO and profile. */
+@media (min-width:901px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
+    align-items:center!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-actions{
+    display:flex!important;
+    align-items:center!important;
+    justify-content:flex-end!important;
+    gap:10px!important;
+    min-height:42px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .project-group-bar{
+    min-height:42px!important;
+    align-items:center!important;
+    padding-block:0!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .project-group-chip,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-info-button,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{
+    box-sizing:border-box!important;
+    height:42px!important;
+    min-height:42px!important;
+    max-height:42px!important;
+    margin:0!important;
+    align-self:center!important;
+    border-radius:8px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .project-group-chip{
+    min-width:86px!important;
+    max-width:176px!important;
+    padding:0 13px!important;
+    gap:7px!important;
+    font-size:9.5px!important;
+    line-height:1!important;
+    justify-content:center!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade{
+    min-width:86px!important;
+    max-width:none!important;
+    padding:0 15px!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    line-height:1!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button{
+    min-width:112px!important;
+    width:auto!important;
+    max-width:none!important;
+    padding:0 14px!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:7px!important;
+    line-height:1!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-info-button{
+    min-width:82px!important;
+    width:auto!important;
+    max-width:none!important;
+    padding:0 13px!important;
+    display:inline-flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:8px!important;
+    line-height:1!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{
+    min-width:194px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-button,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-toggle{
+    height:100%!important;
+    min-height:0!important;
+    max-height:100%!important;
+    align-items:center!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade>span,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut-live,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #insightShortcutLabel,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-info-label{
+    line-height:1!important;
+    display:inline-flex!important;
+    align-items:center!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #insightShortcutCount{
+    position:static!important;
+    transform:none!important;
+    flex:0 0 auto!important;
+    margin:0!important;
+  }
+}
+
+@media (min-width:901px) and (max-width:1180px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{
+    min-width:154px!important;
+    width:154px!important;
+    max-width:154px!important;
+  }
+}
+
+@media (max-width:900px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-actions{
+    align-items:center!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .project-group-chip,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-info-button,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{
+    box-sizing:border-box!important;
+    height:34px!important;
+    min-height:34px!important;
+    max-height:34px!important;
+    align-self:center!important;
+    border-radius:7px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .project-group-chip{
+    padding:0 8px!important;
+  }
+}
