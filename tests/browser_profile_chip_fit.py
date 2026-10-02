@@ -23,6 +23,15 @@ def main():
                     document.querySelector('#appShell').hidden=false;
                     document.body.classList.remove('blinq-admin');
                     document.getElementById('profileName').textContent='@BackstageTalks';
+                    const projects=document.getElementById('projectGroupBar');
+                    projects.hidden=false;
+                    projects.innerHTML='<button class="project-group-chip is-purple"><span>◆</span><strong>Platba PO</strong></button>';
+                    const live=document.getElementById('insightShortcut');
+                    live.hidden=false;
+                    const info=document.getElementById('insightBell');
+                    info.hidden=false;
+                    const upgrade=document.getElementById('topUpgradeButton');
+                    upgrade.hidden=false;
                 }""")
                 result=page.evaluate("""() => {
                     const shell=document.getElementById('profileShell');
@@ -38,8 +47,10 @@ def main():
                     const svg=round(toggle.querySelector('svg').getBoundingClientRect());
                     const m=round(menu.getBoundingClientRect());
                     const overflow=getComputedStyle(shell).overflow;
+                    const controls=['#projectGroupBar .project-group-chip','#insightShortcut','#topUpgradeButton','#insightBell','#profileShell']
+                      .map(sel=>({sel,rect:round(document.querySelector(sel).getBoundingClientRect())}));
                     menu.hidden=true;
-                    return {shell:s,button:b,toggle:t,svg,menu:m,overflow};
+                    return {shell:s,button:b,toggle:t,svg,menu:m,overflow,controls};
                 }""")
                 s=result["shell"]
                 for part in ("button","toggle"):
@@ -51,6 +62,12 @@ def main():
                 assert abs(result["toggle"]["centerY"]-result["svg"]["centerY"])<=1,(width,result)
                 assert result["menu"]["top"]>=s["bottom"],(width,result)
                 assert result["overflow"]=="visible",(width,result)
+                controls=result["controls"]
+                heights=[round(item["rect"]["bottom"]-item["rect"]["top"],1) for item in controls]
+                centers=[item["rect"]["centerY"] for item in controls]
+                assert max(heights)-min(heights)<=0.5,(width,heights,result)
+                assert max(centers)-min(centers)<=1.0,(width,centers,result)
+                assert all(abs(h-42)<=0.5 for h in heights),(width,heights,result)
                 assert not errors,(width,errors)
                 page.close()
                 print(f"PASS: {width}px profile outline and unclipped dropdown")
