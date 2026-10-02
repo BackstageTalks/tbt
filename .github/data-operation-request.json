@@ -1,13 +1,11 @@
 {
   "schema": 1,
-  "mode": "statistics",
+  "mode": "feature-audit",
   "promote": false,
-  "purpose": "Continue targeted historical statistics backfill on fully closed UTC dates only; newest matches first; shared budget and provider 500-request reserve remain authoritative.",
+  "purpose": "Run a zero-provider-call coverage audit after the successful statistics backfill to quantify remaining serve/return/pressure gaps and prioritize the next data-only enrichment.",
   "requested_on": "2026-10-03",
-  "requested_at_utc": "2026-10-02T23:15:00Z",
-  "start": "2022-01-01",
-  "end": "2026-10-01",
-  "max_requests": 11000,
+  "requested_at_utc": "2026-10-02T23:18:00Z",
+  "max_requests": 1,
   "training_scope": "data_only_no_model_promotion",
   "historical_match_winner_odds_as_model_feature": false
 }
