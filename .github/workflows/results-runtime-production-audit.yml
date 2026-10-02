@@ -96,6 +96,17 @@ jobs:
               )
               section[key]={'rows':len(rows),'rows_with_market_publications':with_pubs,'issued_publications':issued}
           print('RELEASE_SECTIONS', json.dumps(section, sort_keys=True))
+          top_level={}
+          for key in sources:
+              rows=feed.get(key) if isinstance(feed.get(key),list) else []
+              top_level[key]={
+                  'rows_with_issued_at':sum(bool(r.get('issued_at')) for r in rows if isinstance(r,dict)),
+                  'rows_with_publication_status':sum(bool(r.get('publication_status')) for r in rows if isinstance(r,dict)),
+                  'rows_with_betting_day':sum(bool(r.get('betting_day') or ((r.get('betting') or {}).get('betting_day') if isinstance(r.get('betting'),dict) else None)) for r in rows if isinstance(r,dict)),
+                  'sample_keys':sorted(list(rows[0].keys())) if rows and isinstance(rows[0],dict) else [],
+                  'sample_betting_keys':sorted(list((rows[0].get('betting') or {}).keys())) if rows and isinstance(rows[0],dict) and isinstance(rows[0].get('betting'),dict) else [],
+              }
+          print('TOP_LEVEL', json.dumps(top_level, sort_keys=True))
           print('RAW_RESULTS', json.dumps({
               'rows':len(feed.get('results') or []),
               'rows_with_market_publications':sum(bool(r.get('market_publications')) for r in (feed.get('results') or []) if isinstance(r,dict)),
