@@ -1381,6 +1381,7 @@ def main():
     refresh_report = {
         "requests": provider.request_count,
         "upcoming": len(feed["upcoming"]),
+        "top200": len(feed.get("top200_picks", [])),
         "daily": len(feed.get("top_daily_picks", [])),
         "prime": len(feed.get("prime_picks", [])),
         "value": len(feed.get("value_picks", [])),
