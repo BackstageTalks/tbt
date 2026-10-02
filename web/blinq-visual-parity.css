@@ -749,3 +749,11 @@ body#blinqPremium .reference-topbar .avatar{
     max-width:100%!important;
   }
 }
+
+
+/* Final mobile width guard: no legacy descendant may widen the app shell. */
+@media (max-width:760px){
+  body#blinqPremium .app-shell *{
+    max-width:100%!important;
+  }
+}
