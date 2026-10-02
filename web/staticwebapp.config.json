@@ -109,5 +109,43 @@
     "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
     "Cross-Origin-Opener-Policy": "same-origin",
     "Cross-Origin-Resource-Policy": "same-origin"
-  }
+  },
+  "routeRules": [
+    {
+      "route": "/mobile-preview.css",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "route": "/mobile-preview-overlays.css",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "route": "/mobile-preview-results.css",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "route": "/mobile-preview-daily.css",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "route": "/mobile-preview-base.css",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    },
+    {
+      "route": "/mobile-preview.html",
+      "headers": {
+        "Cache-Control": "no-store, max-age=0, must-revalidate"
+      }
+    }
+  ]
 }

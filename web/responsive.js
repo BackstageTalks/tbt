@@ -3,6 +3,8 @@
   'use strict';
   const $ = id => document.getElementById(id);
   let publishedAt = '';
+  let previewRoute = 'predictions';
+  const previewScroll = new Map();
   const pageLang=()=>document.documentElement.lang||'sk';
   const isSk=()=>pageLang().toLowerCase().startsWith('sk');
   const isCz=()=>pageLang().toLowerCase().startsWith('cs');
@@ -17,6 +19,20 @@
       if (active) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
+    const preview = document.body?.dataset.mobilePreview === 'true' && window.matchMedia('(max-width:900px)').matches;
+    if (preview) {
+      const changed = previewRoute !== route;
+      if (changed) {
+        previewScroll.set(previewRoute, window.scrollY);
+        const restore = Math.max(0, Number(previewScroll.get(route)) || 0);
+        previewRoute = route;
+        requestAnimationFrame(() => window.scrollTo({top: restore, behavior: 'instant'}));
+      } else if (focus && !previewScroll.has(route)) {
+        previewScroll.set(route, window.scrollY);
+      }
+      return;
+    }
+    previewRoute = route;
     if (focus) {
       window.scrollTo({top: 0, behavior: 'instant'});
       $('pageTitle')?.focus({preventScroll: true});
