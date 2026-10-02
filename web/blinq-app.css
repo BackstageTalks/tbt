@@ -8352,6 +8352,47 @@ body#blinqPremium .results-outcome-tabs button span{font-variant-numeric:tabular
 /* Phone application shell */
 @media (max-width:767px){
   html{background:#03110f;color-scheme:dark}
+  /* Critical compact-shell reset: these few important declarations retire
+     older global release geometry without building another override stack. */
+  body#blinqPremium:not(.blinq-admin) .app-shell{
+    width:100%!important;max-width:100%!important;margin:0!important;
+    padding:0 12px calc(84px + env(safe-area-inset-bottom,0px))!important;box-sizing:border-box!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .site-header.reference-topbar{
+    width:100%!important;max-width:100%!important;margin:0!important;box-sizing:border-box!important;
+    min-height:60px!important;height:auto!important;padding:env(safe-area-inset-top,0px) 0 0!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
+    display:grid!important;grid-template-columns:minmax(60px,1fr) auto!important;grid-template-areas:"brand actions"!important;
+    width:100%!important;min-height:60px!important;height:60px!important;padding:0!important;gap:4px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand{
+    grid-area:brand!important;width:82px!important;min-width:0!important;max-width:82px!important;
+    height:44px!important;min-height:44px!important;padding:4px 0!important;border:0!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand-source-logo{width:82px!important;max-width:82px!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-actions{
+    grid-area:actions!important;grid-column:auto!important;width:auto!important;height:44px!important;min-height:44px!important;
+    display:flex!important;gap:4px!important;padding:0!important;margin:0!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-upgrade,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-shortcut.insight-live-button,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-info-button,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .insight-bell,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-shell{
+    display:grid!important;width:44px!important;min-width:44px!important;max-width:44px!important;
+    height:44px!important;min-height:44px!important;max-height:44px!important;padding:0!important;
+    border-radius:10px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .profile-button{
+    width:44px!important;height:44px!important;min-height:44px!important;padding:0!important;
+  }
+  body#blinqPremium.blinq-route:not(.blinq-admin) .route-panel,
+  body#blinqPremium.blinq-route:not(.blinq-admin) .route-card.route-card-clean{
+    width:100%!important;max-width:100%!important;margin:0!important;padding:0!important;box-sizing:border-box!important;
+  }
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-bar.results-filter-bar-v683{display:none!important}
+  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-shell.is-open .results-filter-bar.results-filter-bar-v683{display:grid!important}
   body#blinqPremium:not(.blinq-admin){
     width:100%;min-width:0;overflow-x:hidden;background:#03110f;color:#edf7f3;
     font-size:14px;line-height:1.4;
