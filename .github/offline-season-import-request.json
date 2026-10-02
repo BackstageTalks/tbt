@@ -4,7 +4,7 @@
   "source": "tennisdata_app_season_2021_2026",
   "stage_branch": "staging/season-2021-2026-20261001",
   "expected_stage_rows": 11689,
-  "expected_quality_added": 11689,
-  "requested_at_utc": "2026-10-02T19:40:00Z",
+  "expected_quality_added": 0,
+  "requested_at_utc": "2026-10-02T20:52:00Z",
   "finalize_policy": "training_ready_or_delete"
 }
