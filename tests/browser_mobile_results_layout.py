@@ -4,6 +4,7 @@ Reproduces 320-900px Results filters, KPIs and populated result cards, plus
 long tournament names, mobile header and fixed navigation. Exercises desktop
 to make sure its horizontally scrollable results table remains unchanged.
 """
+from pathlib import Path
 import os
 from urllib.parse import urlparse
 
@@ -177,6 +178,17 @@ def main():
                     assert not report["filterToggleVisible"],(width,report)
                     assert report["minWidth"]!="0px",(width,report)
                 if width==390:
+                    preview_dir=Path("/tmp/blinq-mobile-previews")
+                    preview_dir.mkdir(parents=True,exist_ok=True)
+                    page.set_viewport_size({"width":390,"height":844})
+                    page.evaluate("window.scrollTo(0,0)")
+                    page.wait_for_timeout(80)
+                    page.screenshot(path=str(preview_dir/"results-390.png"),full_page=False)
+                    page.locator("[data-results-filter-toggle]").click()
+                    page.wait_for_timeout(80)
+                    page.screenshot(path=str(preview_dir/"results-filters-open-390.png"),full_page=False)
+                    page.locator("[data-results-filter-toggle]").click()
+                    page.wait_for_timeout(40)
                     page.set_viewport_size({"width":390,"height":844})
                     page.evaluate("window.scrollTo(0,0)")
                     page.wait_for_timeout(60)
