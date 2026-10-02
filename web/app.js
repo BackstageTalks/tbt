@@ -3672,6 +3672,97 @@
     const submit=form.querySelector('#adminInsightSubmit');
     if(submit)submit.textContent=form.dataset.editing==='1'?'Uložiť':blocks.length===1?'Publikovať':'Publikovať '+blocks.length+' správy';
   }
+  async function loadAdminProjectGroups(force=false){
+    const generation=feedGeneration;
+    if(state.adminProjectGroupsLoading||(!force&&Array.isArray(state.adminProjectGroups)))return;
+    state.adminProjectGroupsLoading=true;state.adminProjectGroupsError='';rerenderAdmin();
+    try{
+      const data=await BlinqAuth.adminProjectGroups();
+      if(generation!==feedGeneration)return;
+      state.adminProjectGroups=Array.isArray(data?.items)?data.items:[];
+      if(state.adminProjectGroupId&&!state.adminProjectGroups.some(group=>String(group.id)===String(state.adminProjectGroupId)))state.adminProjectGroupId='';
+      if(!state.adminProjectGroupId&&state.adminProjectGroups.length)state.adminProjectGroupId=String(state.adminProjectGroups[0].id);
+    }catch(error){
+      if(generation!==feedGeneration)return;
+      state.adminProjectGroups=[];
+      state.adminProjectGroupsError=error?.message||'Projektové skupiny sa nepodarilo načítať.';
+    }finally{
+      if(generation===feedGeneration){state.adminProjectGroupsLoading=false;rerenderAdmin();}
+    }
+  }
+  function adminProjectUserLabel(user){
+    return String(user?.telegram_nick||user?.email||user?.id||'Používateľ');
+  }
+  function renderAdminProjectGroups(){
+    const groups=Array.isArray(state.adminProjectGroups)?state.adminProjectGroups:[];
+    if(!state.adminProjectGroupId&&groups.length)state.adminProjectGroupId=String(groups[0].id);
+    const selected=groups.find(group=>String(group.id)===String(state.adminProjectGroupId))||null;
+    const users=Array.isArray(state.adminUsers)?state.adminUsers:[];
+    const insights=Array.isArray(state.adminInsights)?state.adminInsights:[];
+    const results=Array.isArray(state.adminInfoResults)?state.adminInfoResults:[];
+    const projectMessages=selected?insights.filter(row=>String(row.audience_mode||'levels')==='groups'&&Array.isArray(row.group_ids)&&row.group_ids.map(String).includes(String(selected.id))):[];
+    const projectResults=selected?results.filter(row=>String(row.audience_mode||'levels')==='groups'&&Array.isArray(row.group_ids)&&row.group_ids.map(String).includes(String(selected.id))):[];
+    const resultBySource=new Map(projectResults.map(row=>[String(row.source_id||''),row]));
+    const outcomeText=value=>({win:'WIN',loss:'LOSS',void:'VOID'})[String(value||'').toLowerCase()]||'';
+    const list=groups.map(group=>`<button type="button" class="admin-project-list-row${String(group.id)===String(state.adminProjectGroupId)?' is-active':''}" data-admin-action="project-select" data-project-id="${escapeHtml(group.id)}"><i class="is-${escapeHtml(projectGroupColor(group.color))}"></i><span><strong>${escapeHtml(group.name||'Projekt')}</strong><small>${Number(group.member_count)||0}/${Number(group.capacity)||0} členov · ${group.self_join_enabled?'self-join':'na pozvanie'}</small></span><b>›</b></button>`).join('');
+    const memberIds=new Set((selected?.members||[]).map(row=>String(row.user_id||'')));
+    const availableUsers=users.filter(user=>!memberIds.has(String(user.id)));
+    const userOptions=availableUsers.map(user=>`<option value="${escapeHtml(user.id)}">${escapeHtml(adminProjectUserLabel(user))} · ${escapeHtml(String(user.plan||'').toUpperCase())}</option>`).join('');
+    const memberRows=(selected?.members||[]).map(member=>{
+      const user=users.find(row=>String(row.id)===String(member.user_id));
+      const status=String(member.payment_status||'pending');
+      return `<div class="admin-project-member-row"><span><strong>${escapeHtml(adminProjectUserLabel(user)||member.user_id)}</strong><small>${escapeHtml(String(user?.plan||'').toUpperCase()||'—')} · od ${escapeHtml(member.joined_at?fmtDate(member.joined_at):'—')}</small></span><select data-project-payment-user="${escapeHtml(member.user_id)}"><option value="pending"${status==='pending'?' selected':''}>Platba čaká</option><option value="paid"${status==='paid'?' selected':''}>Zaplatené</option><option value="waived"${status==='waived'?' selected':''}>Bez platby</option></select><button type="button" class="btn btn-ghost danger" data-admin-action="project-member-remove" data-project-user="${escapeHtml(member.user_id)}">×</button></div>`;
+    }).join('');
+    const messageRows=projectMessages.map(row=>{
+      const result=resultBySource.get(String(row.id||'')),outcome=String(result?.outcome||'').toLowerCase();
+      return `<article class="admin-project-info-row"><div><small>INFO · ${escapeHtml(row.created_at?fmtDate(row.created_at)+' '+fmtTime(row.created_at):'')}${outcome?' · '+outcomeText(outcome):''}</small><strong>${escapeHtml(row.title||'')}</strong><p>${escapeHtml(row.body||'')}</p><span>${Number(row.read_count)||0} prečítaní</span></div><div class="admin-project-info-actions">${['win','loss','void'].map(value=>`<button type="button" class="admin-outcome-btn outcome-${value}${outcome===value?' is-selected':''}" data-admin-action="info-result-set" data-insight-id="${escapeHtml(row.id)}" data-info-outcome="${value}">${value.toUpperCase()}</button>`).join('')}<button type="button" class="btn btn-ghost danger" data-admin-action="insight-delete" data-insight-id="${escapeHtml(row.id)}">Zmazať</button></div></article>`;
+    }).join('');
+    const history=projectResults.map(row=>`<article class="admin-project-result-row outcome-${escapeHtml(row.outcome||'')}"><span>${escapeHtml(row.settled_at?fmtDate(row.settled_at)+' '+fmtTime(row.settled_at):'')}</span><strong>${escapeHtml(row.title||row.source_id||'INFO')}</strong><b>${escapeHtml(outcomeText(row.outcome))}</b></article>`).join('');
+    const colors=['blue','orange','purple','green','teal','pink','gray'].map(color=>`<option value="${color}"${projectGroupColor(selected?.color)===color?' selected':''}>${color.toUpperCase()}</option>`).join('');
+    const contribution=selected&&Number(selected.contribution_cents)>0?formatProjectMoney(selected.contribution_cents,selected.currency):'0 €';
+    const workspace=!selected?`<div class="admin-project-empty"><strong>Vytvor prvú projektovú skupinu</strong><span>Po kliknutí na + Nová skupina sa automaticky vytvorí kompletná štruktúra: členovia, INFO správy aj vyhodnotenia.</span></div>`:`
+      <div class="admin-project-workspace">
+        <section class="admin-project-info-composer">
+          <div class="admin-subsection-heading"><div><strong>${escapeHtml(selected.name)}</strong><span>Projektový INFO kanál</span></div></div>
+          <form id="adminProjectMessageForm">
+            <label>Nadpis<input id="adminProjectMessageTitle" maxlength="140" required placeholder="Napr. Dnešný projektový tip"></label>
+            <label>Správa<textarea id="adminProjectMessageBody" maxlength="4000" rows="5" required placeholder="Napíš správu pre členov tejto skupiny…"></textarea></label>
+            <label>Event ID / zápas <span>(voliteľné)</span><input id="adminProjectMessageMatch" maxlength="96"></label>
+            <div class="admin-insight-actions"><button class="btn btn-primary" type="submit">Poslať do skupiny</button><span id="adminProjectMessageStatus"></span></div>
+          </form>
+        </section>
+        <section class="admin-project-published">
+          <div class="admin-subsection-heading"><div><strong>Publikované</strong><span>${projectMessages.length} správ</span></div></div>
+          ${messageRows||'<div class="admin-note">Zatiaľ žiadne projektové INFO správy.</div>'}
+        </section>
+        <section class="admin-project-results">
+          <div class="admin-subsection-heading"><div><strong>Vyhodnotenia</strong><span>${projectResults.length} výsledkov</span></div></div>
+          <p class="admin-live-delete-help">WIN / LOSS / VOID sa ukladá samostatne. História zostáva zachovaná aj keď pôvodná INFO správa expiruje alebo ju neskôr zmažeš.</p>
+          ${history||'<div class="admin-note">Zatiaľ nič vyhodnotené.</div>'}
+        </section>
+        <details class="admin-project-settings">
+          <summary>Nastavenie skupiny · členovia · príspevok</summary>
+          <form id="adminProjectGroupForm">
+            <div class="admin-form-grid"><label>Názov<input id="adminProjectName" maxlength="80" required value="${escapeHtml(selected.name||'')}"></label><label>Farba<select id="adminProjectColor">${colors}</select></label><label>Kapacita<input id="adminProjectCapacity" type="number" min="1" max="500" value="${Number(selected.capacity)||10}"></label><label>Spolu €<input id="adminProjectTotalCost" type="number" min="0" step="0.01" value="${(Number(selected.total_cost_cents)||0)/100}"></label></div>
+            <label>Popis<textarea id="adminProjectDescription" maxlength="1200" rows="3">${escapeHtml(selected.description||'')}</textarea></label>
+            <label>Poznámka k platbe<textarea id="adminProjectPaymentNote" maxlength="1200" rows="2">${escapeHtml(selected.payment_note||'')}</textarea></label>
+            <div class="admin-project-cost-summary"><span>Obsadenosť <b>${Number(selected.member_count)||0}/${Number(selected.capacity)||0}</b></span><span>Príspevok pri plnej skupine <b>${escapeHtml(contribution)} / osoba</b></span></div>
+            <div class="admin-insight-flags"><label><input id="adminProjectSelfJoin" type="checkbox" ${selected.self_join_enabled?'checked':''}> Používatelia sa môžu pridať sami</label><label><input id="adminProjectActive" type="checkbox" ${selected.active!==false?'checked':''}> Aktívna skupina</label></div>
+            <div class="admin-insight-actions"><button class="btn btn-primary" type="submit">Uložiť skupinu</button><button type="button" class="btn btn-ghost danger" data-admin-action="project-delete">Zmazať skupinu</button><span id="adminProjectFormStatus"></span></div>
+          </form>
+          <div class="admin-project-members">
+            <div class="admin-subsection-heading"><div><strong>Členovia</strong><span>${(selected.members||[]).length} ľudí</span></div></div>
+            <div class="admin-project-add-member"><select id="adminProjectMemberSelect"><option value="">Vyber používateľa…</option>${userOptions}</select><button type="button" class="btn btn-ghost" data-admin-action="project-member-add" ${availableUsers.length?'':'disabled'}>+ Pridať</button></div>
+            <div>${memberRows||'<div class="admin-note">Skupina zatiaľ nemá členov.</div>'}</div>
+          </div>
+        </details>
+      </div>`;
+    return `<section class="admin-ux-section admin-projects"><div class="admin-ux-heading"><div><small>PROJEKTOVÉ SKUPINY</small><h2>Skupiny nezávislé od levelu</h2><p>Vytvor ľubovoľný počet skupín. Každá dostane vlastný INFO kanál a samostatnú históriu WIN / LOSS / VOID.</p></div><button class="btn btn-primary" type="button" data-admin-action="project-create">+ Nová skupina</button></div>
+      ${state.adminProjectGroupsError?`<div class="admin-runtime-note is-error">${escapeHtml(state.adminProjectGroupsError)}</div>`:''}
+      <div class="admin-project-layout"><aside class="admin-project-list">${state.adminProjectGroupsLoading?'<div class="admin-note">Načítavam…</div>':list||'<div class="admin-note">Žiadne skupiny.</div>'}</aside>${workspace}</div>
+    </section>`;
+  }
+
   function renderAdminInsights(){
     const item=adminInsightDraft(),levels=Array.isArray(item.levels)?item.levels:[];const list=Array.isArray(state.adminInsights)?state.adminInsights:[];
     const notificationCfg=notificationAudienceConfig(),
