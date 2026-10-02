@@ -167,6 +167,15 @@ jobs:
           python tests/browser_results_betting_day.py
           python tests/browser_profile_chip_fit.py
 
+      - name: Upload mobile visual previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-mobile-previews
+          path: /tmp/blinq-mobile-previews/*.png
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Check production web artifact
         run: |
           set -euo pipefail
