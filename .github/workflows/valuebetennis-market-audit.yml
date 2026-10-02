@@ -30,7 +30,7 @@ jobs:
           import os
           from pathlib import Path
           from scripts.release_store import ReleaseStore
-          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",Path(".cache/tbt/history")).download(require_bundle_manifest=True)
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",Path(".cache/tbt/history")).download()
           PY
       - name: Download Valuebetennis CC BY 4.0 CSVs
         run: |
