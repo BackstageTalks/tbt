@@ -1,0 +1,373 @@
+/* BlinQ dark premium polish — production-safe visual layer.
+   Presentation only: no data/API/prediction logic changes. */
+
+:root{
+  --bdp-bg:#04111a;
+  --bdp-bg-2:#071924;
+  --bdp-panel:#081b26;
+  --bdp-panel-2:#0b2230;
+  --bdp-card:#0b202c;
+  --bdp-card-2:#0e2836;
+  --bdp-line:rgba(113,234,188,.13);
+  --bdp-line-strong:rgba(113,234,188,.24);
+  --bdp-text:#eef8f5;
+  --bdp-muted:#89a9a1;
+  --bdp-green:#3ce79a;
+  --bdp-green-2:#25c982;
+  --bdp-purple:#9a78ff;
+  --bdp-shadow:0 16px 44px rgba(0,0,0,.22);
+}
+
+body#blinqPremium{
+  color:var(--bdp-text)!important;
+  background:
+    radial-gradient(900px 420px at 82% -8%,rgba(33,156,112,.11),transparent 58%),
+    radial-gradient(700px 360px at 8% 4%,rgba(107,80,213,.08),transparent 60%),
+    linear-gradient(180deg,var(--bdp-bg),#031019 72%,#020b11)!important;
+}
+
+body#blinqPremium .app-shell{
+  width:min(calc(100% - 28px),1480px)!important;
+  margin:0 auto!important;
+}
+
+/* Header */
+body#blinqPremium .site-header.reference-topbar{
+  background:rgba(4,17,26,.91)!important;
+  border:1px solid rgba(255,255,255,.045)!important;
+  border-top:0!important;
+  box-shadow:0 12px 36px rgba(0,0,0,.20)!important;
+  backdrop-filter:blur(18px)!important;
+}
+body#blinqPremium .reference-topbar .header-top{
+  min-height:62px!important;
+  height:62px!important;
+  padding:0 14px!important;
+}
+body#blinqPremium .reference-topbar .brand-source-logo{
+  width:82px!important;
+  max-height:32px!important;
+}
+body#blinqPremium .reference-navigation a{
+  color:#9fb7b4!important;
+  font-size:10px!important;
+  font-weight:850!important;
+  letter-spacing:.02em!important;
+}
+body#blinqPremium .reference-navigation a.active{
+  color:#f5fffb!important;
+}
+body#blinqPremium .reference-navigation a.active:after{
+  background:linear-gradient(90deg,var(--bdp-green),#7ff3bd)!important;
+  height:2px!important;
+}
+body#blinqPremium .reference-topbar .header-actions{gap:6px!important}
+body#blinqPremium .reference-topbar .insight-shortcut,
+body#blinqPremium .reference-topbar .header-upgrade,
+body#blinqPremium .reference-topbar .insight-bell,
+body#blinqPremium .reference-topbar .profile-button{
+  border:1px solid rgba(112,232,187,.14)!important;
+  background:rgba(255,255,255,.035)!important;
+  color:#dff8ef!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.02)!important;
+}
+body#blinqPremium .reference-topbar .header-upgrade{
+  width:34px!important;min-width:34px!important;height:34px!important;min-height:34px!important;
+  padding:0!important;font-size:0!important;border-radius:9px!important;
+}
+body#blinqPremium .reference-topbar .header-upgrade:before{
+  content:"◆";font-size:12px;color:var(--bdp-purple);
+}
+body#blinqPremium .reference-topbar .insight-info-label,
+body#blinqPremium .reference-topbar .profile-copy,
+body#blinqPremium .reference-topbar .profile-toggle{display:none!important}
+body#blinqPremium .reference-topbar .insight-bell,
+body#blinqPremium .reference-topbar .profile-button{
+  width:34px!important;min-width:34px!important;height:34px!important;min-height:34px!important;
+  border-radius:9px!important;padding:0!important;
+}
+body#blinqPremium .reference-topbar .avatar{
+  width:28px!important;height:28px!important;border-radius:50%!important;
+}
+
+/* LIVE becomes the breathing status dot from the approved mobile direction. */
+body#blinqPremium .reference-topbar .insight-shortcut.insight-live-button{
+  width:28px!important;min-width:28px!important;max-width:28px!important;height:34px!important;
+  padding:0!important;border-radius:9px!important;overflow:hidden!important;
+  display:grid!important;place-items:center!important;
+}
+body#blinqPremium .reference-topbar .insight-shortcut-live{
+  width:9px!important;height:9px!important;min-width:9px!important;
+  display:block!important;border-radius:50%!important;background:var(--bdp-green)!important;
+  color:transparent!important;font-size:0!important;
+  animation:bdp-live 1.8s ease-in-out infinite!important;
+}
+body#blinqPremium .reference-topbar #insightShortcutLabel{display:none!important}
+@keyframes bdp-live{
+  0%,100%{transform:scale(.82);opacity:.72;box-shadow:0 0 0 0 rgba(60,231,154,.30)}
+  50%{transform:scale(1);opacity:1;box-shadow:0 0 0 5px rgba(60,231,154,0)}
+}
+@media(prefers-reduced-motion:reduce){
+  body#blinqPremium .reference-topbar .insight-shortcut-live{animation:none!important}
+}
+
+/* Project / payment chip: compact icon in top panel, no label. */
+body#blinqPremium .project-group-bar{
+  min-width:0!important;gap:5px!important;padding:0!important;
+}
+body#blinqPremium .project-group-chip{
+  width:34px!important;min-width:34px!important;max-width:34px!important;
+  height:34px!important;min-height:34px!important;padding:0!important;
+  justify-content:center!important;border-radius:9px!important;
+  border:1px solid rgba(154,120,255,.28)!important;
+  background:rgba(112,76,196,.10)!important;
+  color:var(--bdp-purple)!important;
+}
+body#blinqPremium .project-group-chip>strong,
+body#blinqPremium .project-group-chip>b{display:none!important}
+body#blinqPremium .project-group-chip>span{font-size:11px!important;color:var(--bdp-purple)!important}
+
+/* Main surface remains dark — never white. */
+body#blinqPremium .site-main{
+  padding-top:12px!important;
+  color:var(--bdp-text)!important;
+  background:transparent!important;
+}
+body#blinqPremium .route-heading{
+  padding:14px 4px 12px!important;
+}
+body#blinqPremium .route-heading>span{color:#6fe6b4!important}
+body#blinqPremium .route-heading h1{
+  color:var(--bdp-text)!important;
+  font-size:30px!important;letter-spacing:-.035em!important;
+}
+body#blinqPremium .route-heading p{color:var(--bdp-muted)!important}
+
+/* Hero */
+body#blinqPremium .hero-shell{
+  height:188px!important;
+  border:1px solid var(--bdp-line)!important;
+  border-radius:18px!important;
+  background:#061824!important;
+  box-shadow:var(--bdp-shadow)!important;
+}
+body#blinqPremium .hero-shell:after{
+  content:"";position:absolute;inset:0;pointer-events:none;
+  background:linear-gradient(90deg,rgba(2,13,19,.54),rgba(2,13,19,.08) 55%,rgba(2,13,19,.10));
+}
+body#blinqPremium .hero-shell .dashboard-hero-copy,
+body#blinqPremium .hero-shell .hero-copy{z-index:3!important}
+body#blinqPremium .hero-shell .dashboard-hero-copy h2,
+body#blinqPremium .hero-shell .hero-copy h2{
+  color:#f4fffb!important;font-size:32px!important;letter-spacing:-.04em!important;
+}
+body#blinqPremium .hero-shell .dashboard-hero-copy p,
+body#blinqPremium .hero-shell .hero-copy p{color:#b8cbc6!important}
+
+/* KPI cards */
+body#blinqPremium .dashboard-kpis{
+  grid-template-columns:repeat(4,minmax(0,1fr))!important;
+  gap:8px!important;margin:11px 0 10px!important;
+}
+body#blinqPremium .dashboard-kpi{
+  min-height:76px!important;padding:11px 12px!important;
+  border:1px solid var(--bdp-line)!important;border-radius:13px!important;
+  background:linear-gradient(180deg,var(--bdp-card-2),var(--bdp-card))!important;
+  box-shadow:0 8px 24px rgba(0,0,0,.12)!important;
+}
+body#blinqPremium .dashboard-kpi>span{
+  width:34px!important;height:34px!important;flex:0 0 34px!important;
+  border-radius:10px!important;background:rgba(40,201,130,.11)!important;
+  color:var(--bdp-green)!important;
+}
+body#blinqPremium .dashboard-kpi small{color:#789b93!important}
+body#blinqPremium .dashboard-kpi strong{color:#f5fffb!important}
+body#blinqPremium .dashboard-kpi p{color:#627e78!important}
+
+/* Today / results board */
+body#blinqPremium .daily-panel{
+  border:1px solid var(--bdp-line)!important;border-radius:16px!important;
+  background:linear-gradient(180deg,rgba(8,28,39,.98),rgba(5,20,29,.98))!important;
+  box-shadow:0 12px 34px rgba(0,0,0,.16)!important;
+}
+body#blinqPremium .daily-tabs-row{
+  padding:9px 12px!important;border-bottom:1px solid rgba(120,226,188,.09)!important;
+  background:rgba(3,16,24,.50)!important;
+}
+body#blinqPremium .daily-hub-tab{
+  border:1px solid rgba(118,221,184,.12)!important;
+  border-radius:999px!important;
+  background:rgba(255,255,255,.035)!important;color:#afc9c3!important;
+  padding:7px 11px!important;font-size:9px!important;
+}
+body#blinqPremium .daily-hub-tab.active{
+  background:linear-gradient(135deg,var(--bdp-green),var(--bdp-green-2))!important;
+  border-color:transparent!important;color:#03150d!important;
+  box-shadow:0 8px 22px rgba(34,198,125,.18)!important;
+}
+body#blinqPremium .daily-hub-table th{
+  color:#72958d!important;background:rgba(255,255,255,.018)!important;
+}
+body#blinqPremium .daily-hub-table td{
+  color:#dcebe7!important;border-color:rgba(116,216,181,.07)!important;
+}
+body#blinqPremium .daily-hub-table tbody tr:hover{background:rgba(77,204,155,.035)!important}
+body#blinqPremium .hub-detail{
+  border-color:rgba(115,230,188,.16)!important;background:rgba(255,255,255,.035)!important;
+  color:#a9d7c7!important;border-radius:8px!important;
+}
+
+/* Results stays dark, dense, and card-like. */
+body#blinqPremium .route-panel{
+  color:var(--bdp-text)!important;
+  background:transparent!important;
+  border:0!important;box-shadow:none!important;
+}
+body#blinqPremium .results-filter-bar,
+body#blinqPremium .results-filter-bar.results-filter-bar-v683,
+body#blinqPremium .metric-card,
+body#blinqPremium .results-table-wrap{
+  border-color:var(--bdp-line)!important;
+  background:linear-gradient(180deg,var(--bdp-card-2),var(--bdp-card))!important;
+  color:var(--bdp-text)!important;
+}
+body#blinqPremium .results-filter-field>span:first-child,
+body#blinqPremium .metric-card small{color:#789b93!important}
+body#blinqPremium .results-filter-field select,
+body#blinqPremium .results-filter-field input[type="date"]{
+  background:#071923!important;color:#eaf7f2!important;border-color:rgba(112,225,186,.14)!important;
+}
+body#blinqPremium .metric-card strong{color:#f3fdf9!important}
+body#blinqPremium .results-table th{color:#769b92!important;background:rgba(255,255,255,.018)!important}
+body#blinqPremium .results-table td{color:#dcebe7!important;border-color:rgba(116,216,181,.07)!important}
+
+/* Telegram/community: still available lower on the page but visually subordinate. */
+body#blinqPremium .telegram-groups-panel{
+  border:1px solid rgba(84,192,151,.13)!important;
+  background:linear-gradient(145deg,rgba(5,27,27,.78),rgba(3,17,20,.88))!important;
+  box-shadow:none!important;
+}
+body#blinqPremium .tg-group-card{
+  border-color:rgba(82,181,147,.12)!important;background:rgba(4,23,24,.66)!important;
+}
+
+/* Footer stays quiet, not another visual block. */
+body#blinqPremium .site-footer.site-footer-minimal{
+  border:0!important;background:transparent!important;box-shadow:none!important;
+  color:#6e8e87!important;
+}
+
+/* Mobile app treatment. */
+@media(max-width:900px){
+  body#blinqPremium .app-shell{
+    width:100%!important;margin:0!important;padding:0 8px 78px!important;
+  }
+  body#blinqPremium .site-header.reference-topbar{
+    position:sticky!important;top:0!important;z-index:120!important;
+    margin:0 -8px!important;border-left:0!important;border-right:0!important;
+    border-radius:0!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-top{
+    grid-template-columns:64px minmax(34px,1fr) auto!important;
+    grid-template-areas:"brand projects actions"!important;
+    min-height:58px!important;height:58px!important;padding:0 8px!important;gap:5px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand{
+    grid-area:brand!important;width:62px!important;min-width:62px!important;height:58px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .brand-source-logo{
+    width:60px!important;max-width:60px!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-navigation{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .project-group-bar{
+    grid-area:projects!important;justify-self:end!important;
+    width:34px!important;min-width:34px!important;max-width:34px!important;overflow:hidden!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-actions{
+    grid-area:actions!important;width:auto!important;gap:4px!important;
+  }
+
+  body#blinqPremium .site-main{padding:10px 2px 18px!important}
+  body#blinqPremium .route-heading{padding:8px 4px 10px!important}
+  body#blinqPremium .route-heading h1{font-size:25px!important}
+
+  body#blinqPremium .hero-shell{
+    height:126px!important;margin:0 0 10px!important;border-radius:14px!important;
+  }
+  body#blinqPremium .hero-shell .dashboard-hero-copy,
+  body#blinqPremium .hero-shell .hero-copy{
+    left:16px!important;max-width:72%!important;
+  }
+  body#blinqPremium .hero-shell .dashboard-hero-copy h2,
+  body#blinqPremium .hero-shell .hero-copy h2{
+    font-size:20px!important;line-height:1.04!important;
+  }
+  body#blinqPremium .hero-shell .dashboard-hero-copy p,
+  body#blinqPremium .hero-shell .hero-copy p{display:none!important}
+
+  body#blinqPremium .dashboard-kpis{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:6px!important;margin:0 0 9px!important;
+  }
+  body#blinqPremium .dashboard-kpi{
+    min-height:82px!important;display:flex!important;flex-direction:column!important;
+    align-items:flex-start!important;justify-content:center!important;gap:5px!important;padding:9px!important;
+    border-radius:12px!important;
+  }
+  body#blinqPremium .dashboard-kpi>span{
+    width:26px!important;height:26px!important;flex:0 0 26px!important;border-radius:8px!important;font-size:12px!important;
+  }
+  body#blinqPremium .dashboard-kpi small{font-size:6.6px!important}
+  body#blinqPremium .dashboard-kpi strong{font-size:18px!important}
+  body#blinqPremium .dashboard-kpi p{display:none!important}
+
+  body#blinqPremium .daily-panel{
+    border-radius:14px!important;overflow:hidden!important;
+  }
+  body#blinqPremium .daily-tabs-row{
+    margin:0!important;padding:8px!important;overflow-x:auto!important;scrollbar-width:none!important;
+  }
+  body#blinqPremium .daily-tabs{
+    min-width:max-content!important;flex-wrap:nowrap!important;gap:5px!important;
+  }
+  body#blinqPremium .daily-hub-tab{padding:7px 10px!important;font-size:8.5px!important}
+  body#blinqPremium .daily-hub-tab b{display:none!important}
+
+  /* Results filters collapse into the existing mobile trigger. */
+  body#blinqPremium .results-mobile-filter-toggle{
+    min-height:44px!important;border:1px solid var(--bdp-line)!important;border-radius:12px!important;
+    background:linear-gradient(180deg,var(--bdp-card-2),var(--bdp-card))!important;
+    color:#eef8f5!important;
+  }
+  body#blinqPremium .results-filter-bar.results-filter-bar-v683{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:6px!important;
+    border-radius:12px!important;padding:9px!important;
+  }
+  body#blinqPremium .metric-cards{
+    grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:6px!important;
+  }
+  body#blinqPremium .metric-card{
+    min-height:70px!important;border-radius:12px!important;padding:9px!important;
+  }
+  body#blinqPremium .metric-card span{display:none!important}
+
+  /* Compact bottom bar; account remains reachable through avatar. */
+  body#blinqPremium .mobile-tabs{
+    left:8px!important;right:8px!important;bottom:8px!important;
+    grid-template-columns:repeat(2,1fr)!important;
+    padding:5px!important;border:1px solid rgba(112,232,187,.12)!important;
+    border-radius:15px!important;background:rgba(4,17,26,.94)!important;
+    box-shadow:0 14px 34px rgba(0,0,0,.30)!important;backdrop-filter:blur(18px)!important;
+  }
+  body#blinqPremium .mobile-tabs a{
+    min-height:44px!important;border-radius:10px!important;color:#819f98!important;
+  }
+  body#blinqPremium .mobile-tabs a.active{
+    background:rgba(52,220,145,.10)!important;color:var(--bdp-green)!important;
+  }
+  body#blinqPremium .mobile-tabs a:nth-child(3){display:none!important}
+
+  /* Lower-priority community/footer hidden on mobile home to keep the first screen product-focused. */
+  body#blinqPremium.blinq-home .telegram-groups-panel,
+  body#blinqPremium .site-footer.site-footer-minimal{display:none!important}
+}
