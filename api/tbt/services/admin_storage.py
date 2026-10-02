@@ -1447,6 +1447,7 @@ def info_alert_levels(config: dict | None = None) -> list[str]:
 
 _PROJECT_GROUP_COLORS = {"blue", "orange", "purple", "green", "teal", "pink", "gray"}
 _PROJECT_PAYMENT_STATES = {"pending", "paid", "waived"}
+_PROJECT_GROUP_ENTRY_MODES = {"open", "request", "locked"}
 
 
 def _project_user_partition(user_id: object) -> str:
