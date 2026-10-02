@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: blinq-live-radar-worker
@@ -16,6 +17,48 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
+      - name: Hand off hourly data autofill when due
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY' >/tmp/blinq-autofill-plan
+          from datetime import datetime, timezone
+          from zoneinfo import ZoneInfo
+          local=datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/Bratislava"))
+          minute=local.hour*60+local.minute
+          blocked=5*60 <= minute < 6*60+30
+          print("blocked=true" if blocked else "blocked=false")
+          print(f"local={local.isoformat()}")
+          PY
+          cat /tmp/blinq-autofill-plan
+          source /tmp/blinq-autofill-plan
+          if [[ "$blocked" == "true" ]]; then
+            echo "Reserved 05:00-06:30 Bratislava window; no data autofill dispatch."
+            exit 0
+          fi
+
+          last_created="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow data-autofill.yml --limit 1 --json createdAt --jq '.[0].createdAt // empty' 2>/dev/null || true)"
+          if [[ -n "$last_created" ]]; then
+            recent="$(python - "$last_created" <<'PY'
+          import sys
+          from datetime import datetime, timezone
+          stamp=sys.argv[1].replace("Z","+00:00")
+          age=(datetime.now(timezone.utc)-datetime.fromisoformat(stamp)).total_seconds()
+          print("true" if age < 3000 else "false")
+          PY
+          )"
+            if [[ "$recent" == "true" ]]; then
+              echo "Data autofill already dispatched within the last 50 minutes; skipping duplicate."
+              exit 0
+            fi
+          fi
+
+          gh workflow run data-autofill.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f mode=auto -f max_requests=1000 -f environment=false
+          echo "Queued hourly data autofill from existing external LIVE Radar trigger."
+
       - name: Scan LIVE tennis roughly every 50 seconds
         env:
           BLINQ_BASE_URL: ${{ vars.BLINQ_PUBLIC_BASE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net' }}
