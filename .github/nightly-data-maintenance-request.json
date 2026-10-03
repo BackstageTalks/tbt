@@ -1,8 +1,9 @@
 {
   "schema": 1,
   "mode": "nightly-data-maintenance",
-  "requested_for_local_date": "2026-10-02",
-  "requested_at_utc": "2026-10-01T16:35:00Z",
+  "requested_for_local_date": "2026-10-03",
+  "requested_at_utc": "2026-10-03T07:35:00Z",
   "timezone": "Europe/Bratislava",
-  "purpose": "External trigger marker for zero-TennisAPI nightly environment/offline data maintenance. The workflow itself enforces the Bratislava night window and 05:00 hard stop."
+  "force_once": true,
+  "purpose": "One-time forced ATP+WTA training DB rebuild and verification; zero TennisAPI."
 }
