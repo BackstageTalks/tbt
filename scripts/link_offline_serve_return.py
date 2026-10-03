@@ -693,7 +693,7 @@ def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]
         score += 1
         evidence.append("date_plusminus_1")
     elif source.source.startswith(("sackmann:", "all-matches:")) and 0 <= signed_delta <= 16:
-        # TML/Sackmann-style yearly files store tournament start date rather
+        # Converted Library match-level exports intentionally use the same\n        # tournament-start-date semantics as archived Sackmann-style rows.\n        # TML/Sackmann-style yearly files store tournament start date rather
         # than the actual match date. A bounded forward-only tournament window
         # is accepted only with the strong metadata gates below.
         score += 1
