@@ -291,8 +291,10 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
     selected = result.model
     serving_train, serving_calibration = _split_serving_refit_by_date(result.feature_frame)
 
-    serving = _new_production_ensemble(
-        list(getattr(selected, "feature_names", None) or PRODUCTION_FEATURE_NAMES)
+    serving = _new_production_ensemble()
+    serving.feature_names = list(
+        getattr(selected, "feature_names", None)
+        or PRODUCTION_FEATURE_NAMES
     )
     serving.fit_frozen(
         serving_train,
@@ -680,13 +682,12 @@ def train_from_matches(
     test, eligibility_reason = _eligible_evaluation(test, production_model, promotion_history)
     holdout_fingerprint = _holdout_fingerprint(test) if len(test) else ""
 
-    candidate_feature_names = (
-        ATP_CANDIDATE_FEATURE_NAMES
-        if atp_leaderboards is not None
-        else PRODUCTION_FEATURE_NAMES
-    )
     evaluation_model = (
-        _new_production_ensemble(candidate_feature_names)
+        (
+            _new_production_ensemble(ATP_CANDIDATE_FEATURE_NAMES)
+            if atp_leaderboards is not None
+            else _new_production_ensemble()
+        )
         .fit(
             train,
             calibration,
