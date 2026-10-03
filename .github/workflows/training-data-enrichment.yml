@@ -1,6 +1,7 @@
 name: Enrich training data from TML and WTA PBP
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
     paths:
