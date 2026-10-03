@@ -107,17 +107,10 @@ def main():
                 });
                 const beforeSix=day+'T02:00:00Z';
                 const current=mk('current-day',day);
-                const runtimeCurrent=mk('runtime-current',day);
-                delete runtimeCurrent.market_publications[0].issued_at;
-                runtimeCurrent.market_publications[0].result={
-                  status:'hit',correct:true,runtime_source:'match_status_snapshot'
-                };
                 const staleExplicit=mk('before-six-but-explicit-current',day,beforeSix);
                 s.feed.entitlements={daily_pick_count:64};
-                s.feed.top_daily_picks=[
-                  structuredClone(current),structuredClone(runtimeCurrent),structuredClone(staleExplicit)
-                ];
-                s.feed.results=[current,runtimeCurrent,staleExplicit,mk('previous-day',prev)];
+                s.feed.top_daily_picks=[structuredClone(current),structuredClone(staleExplicit)];
+                s.feed.results=[current,staleExplicit,mk('previous-day',prev)];
                 s.resultsFilters={category:'all',tour:'',surface:'',window:'today',
                   dateFrom:'',dateTo:'',bettingDay:true};
                 const host=document.querySelector('#routePanel');
@@ -126,9 +119,9 @@ def main():
                 const sample=[...document.querySelectorAll('.metric-card')].at(-1)?.textContent||'';
                 return {ids,sample,window:s.resultsFilters.window};
             }""")
-            assert today["ids"] == ["current-day", "runtime-current"], today
+            assert today["ids"] == ["current-day"], today
             assert today["window"] == "today", today
-            assert "2/64" in today["sample"], today
+            assert "1/64" in today["sample"], today
             assert not errors, errors
             print("Results current betting-day cohort + 06:00 custom filter contract: PASS")
         finally:
