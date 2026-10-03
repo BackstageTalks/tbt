@@ -766,7 +766,8 @@ def train_from_matches(
             **atp_leaderboard_coverage,
             "features": list(ATP_LEADERBOARD_FEATURE_NAMES),
             "historical_policy": "previous_completed_season_only",
-            "production_features_enabled": False,
+            "candidate_features_enabled": bool(atp_leaderboards is not None),
+            "promotion_required_for_serving": True,
         },
         "evaluation_governance": {
             "holdout_fingerprint": holdout_fingerprint,
