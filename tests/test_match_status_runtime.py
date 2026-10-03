@@ -772,6 +772,92 @@ def test_top200_is_tracked_and_runtime_settled_like_other_match_winner_sections(
     assert abs(publication["result"]["profit_units"] - .55) < 1e-12
 
 
+def test_runtime_status_overlay_settles_deployed_daily_row_without_embedded_publication():
+    row = _row("deployed-1", "11", "2026-10-02T12:00:00+00:00")
+    row.update({
+        "betting_day": "2026-10-02",
+        "publication_status": "pending",
+        "issued_at": None,
+        "market": "match_winner",
+        "selection": "Alpha",
+        "odds": 1.62,
+        "betting": {
+            "market": "match_winner",
+            "selection_id": "11",
+            "selection": "Alpha",
+            "odds": 1.62,
+            "model_probability": .68,
+            "betting_day": "2026-10-02",
+        },
+    })
+
+    rows = runtime_settled_results(
+        {"top_daily_picks": [row], "results": []},
+        {
+            "deployed-1": {
+                "status": "win",
+                "checked_at": "2026-10-02T15:00:00+00:00",
+            }
+        },
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["runtime_result_overlay"] is True
+    publication = rows[0]["market_publications"][0]
+    assert publication["section"] == "top_daily"
+    assert publication["market"] == "match_winner"
+    assert publication["selection_id"] == "11"
+    assert publication["odds"] == 1.62
+    assert publication["runtime_publication_evidence"] == "deployed_daily_offer_row"
+    assert not publication.get("issued_at")
+    assert publication["result"]["correct"] is True
+    assert publication["result"]["runtime_source"] == "match_status_snapshot"
+    assert abs(publication["result"]["profit_units"] - .62) < 1e-12
+
+
+def test_runtime_status_overlay_derives_each_deployed_match_winner_section():
+    source_sections = {
+        "top200_picks": "top200",
+        "top_daily_picks": "top_daily",
+        "prime_picks": "prime",
+        "value_picks": "value",
+        "doubles_picks": "doubles",
+    }
+    feed = {"results": []}
+    statuses = {}
+    for index, (source, section) in enumerate(source_sections.items(), start=1):
+        event_id = f"deployed-{index}"
+        player1 = f"p{index}"
+        player2 = f"q{index}"
+        row = _row(event_id, player1, "2026-10-02T12:00:00+00:00")
+        row["player1"]["id"] = player1
+        row["player2"]["id"] = player2
+        row["winner_id"] = player1
+        row["betting"] = {
+            "market": "match_winner",
+            "selection_id": player1,
+            "odds": 1.50 + index / 100,
+            "betting_day": "2026-10-02",
+        }
+        feed[source] = [row]
+        statuses[event_id] = {
+            "status": "win",
+            "checked_at": "2026-10-02T15:00:00+00:00",
+        }
+
+    rows = runtime_settled_results(feed, statuses)
+    assert len(rows) == len(source_sections)
+    assert {
+        row["market_publications"][0]["section"]
+        for row in rows
+    } == set(source_sections.values())
+    assert all(
+        row["market_publications"][0]["result"]["runtime_source"]
+        == "match_status_snapshot"
+        for row in rows
+    )
+
+
 def test_runtime_status_overlay_keeps_roi_fail_closed_without_real_odds():
     row = _row("202", "11", "2026-09-29T13:00:00+00:00")
     row["market_publications"] = [{
