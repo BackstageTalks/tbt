@@ -111,3 +111,33 @@ def test_non_atp_match_is_neutral():
     features = priors.features_for_match(_match(tour="wta"), current=True)
     assert set(features) == set(ATP_LEADERBOARD_FEATURE_NAMES)
     assert all(value == 0.0 for value in features.values())
+
+
+def test_detailed_serve_return_pressure_metrics_are_exposed():
+    rows = _rows()
+    for row in rows:
+        if row["period"] != "52week":
+            continue
+        if row["board"] == "serve":
+            row["Stats.FirstServePctSortField"] = (
+                "67.0" if row["PlayerName"] == "Jannik Sinner" else "63.0"
+            )
+            row["Stats.AvgAcesPerMatchSortField"] = (
+                "9.2" if row["PlayerName"] == "Jannik Sinner" else "7.1"
+            )
+        elif row["board"] == "return":
+            row["Stats.ReturnGamesWonPctSortField"] = (
+                "31.0" if row["PlayerName"] == "Jannik Sinner" else "28.5"
+            )
+        elif row["board"] == "pressure":
+            row["Stats.TieBreaksWonPctSortField"] = (
+                "70.0" if row["PlayerName"] == "Jannik Sinner" else "62.0"
+            )
+
+    priors = ATPLeaderboardPriors(rows)
+    features = priors.features_for_match(_match(year=2026), current=True)
+
+    assert features["atp_first_serve_pct_diff"] == 4.0
+    assert round(features["atp_avg_aces_per_match_diff"], 6) == 2.1
+    assert features["atp_return_games_won_pct_diff"] == 2.5
+    assert features["atp_tiebreaks_won_pct_diff"] == 8.0
