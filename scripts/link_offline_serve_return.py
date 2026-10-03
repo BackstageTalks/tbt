@@ -93,12 +93,15 @@ def _norm_name(value: object) -> str:
 ROUND_ALIASES = {
     "f": "f",
     "final": "f",
+    "finals": "f",
     "sf": "sf",
     "semifinal": "sf",
     "semi final": "sf",
+    "semi finals": "sf",
     "qf": "qf",
     "quarterfinal": "qf",
     "quarter final": "qf",
+    "quarter finals": "qf",
     "r16": "r16",
     "round of 16": "r16",
     "r32": "r32",
@@ -106,6 +109,9 @@ ROUND_ALIASES = {
     "r64": "r64",
     "round of 64": "r64",
     "r128": "r128",
+    "1st round qualifying": "q1",
+    "2nd round qualifying": "q2",
+    "3rd round qualifying": "q3",
     "q1": "q1",
     "q2": "q2",
     "q3": "q3",
@@ -235,6 +241,22 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                 day = _parse_yyyymmdd(row.get("tourney_date"))
                 winner = str(row.get("winner_name") or "").strip()
                 loser = str(row.get("loser_name") or "").strip()
+
+                # Some owned Library exports retain abbreviated display names
+                # (for example "N. Kulti") but expose a stable alphabetic slug
+                # in winner_id/loser_id (for example "nicklas-kulti"). Prefer
+                # that slug only when it is clearly name-like; ordinary
+                # numeric Sackmann player IDs keep the original display name.
+                def identity_name(display_name: str, raw_id: object) -> str:
+                    sid = str(raw_id or "").strip()
+                    if sid and any(ch.isalpha() for ch in sid) and not sid.isdigit():
+                        candidate = sid.replace("-", " ").replace("_", " ").strip()
+                        if len(candidate.split()) >= 2:
+                            return candidate
+                    return display_name
+
+                winner = identity_name(winner, row.get("winner_id"))
+                loser = identity_name(loser, row.get("loser_id"))
                 if not day or not winner or not loser:
                     continue
                 w_stats = _service_stats("w", row)
@@ -283,6 +305,70 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                     best_of=int(bo) if bo in (3.0, 5.0) else None,
                     stats_a=w_stats,
                     stats_b=l_stats,
+                )
+
+
+
+def _all_matches_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
+    """Read player-centric ATP all_matches exports.
+
+    The source stores one row per player/match and uses tournament start_date
+    rather than exact match date. Both orientations may be present; the linker
+    safely merges complementary fields only after canonical identity checks.
+    """
+    for raw_path in paths:
+        path = Path(raw_path)
+        with path.open("r", encoding="utf-8-sig", newline="") as handle:
+            for idx, row in enumerate(csv.DictReader(handle), start=2):
+                try:
+                    event_day = datetime.strptime(str(row.get("start_date") or "").strip(), "%Y-%m-%d").date()
+                except ValueError:
+                    continue
+                player = str(row.get("player_name") or row.get("player_id") or "").strip()
+                opponent = str(row.get("opponent_name") or row.get("opponent_id") or "").strip()
+                if not player or not opponent:
+                    continue
+                doubles = str(row.get("doubles") or "").strip().lower()
+                if doubles in {"t", "true", "1", "yes"}:
+                    continue
+
+                def count_rate(num_key: str, den_key: str) -> float | None:
+                    return _rate(row.get(num_key), row.get(den_key))
+
+                stats: dict[str, float] = {}
+                for field, key in (("aces", "aces"), ("double_faults", "double_faults")):
+                    value = _num(row.get(key))
+                    if value is not None and value >= 0 and float(value).is_integer():
+                        stats[field] = float(value)
+                for field, value in (
+                    ("first_serve_win", count_rate("first_serve_points_made", "first_serve_points_attempted")),
+                    ("second_serve_win", count_rate("second_serve_points_made", "second_serve_points_attempted")),
+                    ("service_points_won", count_rate("service_points_won", "service_points_attempted")),
+                    ("return_points_won", count_rate("return_points_won", "return_points_attempted")),
+                    ("break_point_serve_win", count_rate("break_points_saved", "break_points_against")),
+                    ("break_point_return_win", count_rate("break_points_made", "break_points_attempted")),
+                ):
+                    if value is not None:
+                        stats[field] = value
+                if not stats:
+                    continue
+
+                victory = str(row.get("player_victory") or "").strip().lower()
+                winner = player if victory in {"t", "true", "1", "yes"} else opponent if victory in {"f", "false", "0", "no"} else ""
+                yield OfflineMatch(
+                    source=f"all-matches:{path.name}",
+                    source_match_id=f"{event_day.isoformat()}:{_norm_name(player)}:{_norm_name(opponent)}:{idx}",
+                    tour="atp",
+                    event_date=event_day,
+                    player_a=player,
+                    player_b=opponent,
+                    winner=winner,
+                    tournament=str(row.get("tournament") or ""),
+                    surface=_norm_surface(row.get("court_surface")),
+                    round_name=_norm_round(row.get("round")),
+                    best_of=None,
+                    stats_a=stats,
+                    stats_b={},
                 )
 
 
@@ -622,8 +708,8 @@ def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]
     elif delta == 1:
         score += 1
         evidence.append("date_plusminus_1")
-    elif source.source.startswith("sackmann:") and 0 <= signed_delta <= 16:
-        # TML/Sackmann-style yearly files store tournament start date rather
+    elif source.source.startswith(("sackmann:", "all-matches:")) and 0 <= signed_delta <= 16:
+        # Converted Library match-level exports intentionally use the same\n        # tournament-start-date semantics as archived Sackmann-style rows.\n        # TML/Sackmann-style yearly files store tournament start date rather
         # than the actual match date. A bounded forward-only tournament window
         # is accepted only with the strong metadata gates below.
         score += 1
@@ -734,6 +820,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--history-dir", required=True)
     ap.add_argument("--source-csv", action="append", default=[])
+    ap.add_argument("--all-matches-csv", action="append", default=[])
     ap.add_argument("--charting-zip", default="")
     ap.add_argument("--livetennisapi-reconstructed-csv", action="append", default=[])
     ap.add_argument("--livetennisapi-derived-csv", action="append", default=[])
@@ -753,6 +840,7 @@ def main() -> None:
         canonical_by_day_pair[(str(match.tour or "").lower(), match.scheduled_at.date(), pair)].append(match)
 
     sources: list[OfflineMatch] = list(_sackmann_rows(args.source_csv))
+    sources.extend(_all_matches_rows(args.all_matches_csv))
     if args.charting_zip:
         sources.extend(_charting_rows(args.charting_zip))
     sources.extend(_livetennisapi_reconstructed_rows(args.livetennisapi_reconstructed_csv))
@@ -767,7 +855,7 @@ def main() -> None:
         counts["source_rows"] += 1
         per_source[source.source] += 1
         candidates = []
-        deltas = range(-1, 17) if source.source.startswith("sackmann:") else (-1, 0, 1)
+        deltas = range(-1, 17) if source.source.startswith(("sackmann:", "all-matches:")) else (-1, 0, 1)
         for delta in deltas:
             day = source.event_date + timedelta(days=delta)
             candidates.extend(canonical_by_day_pair.get((source.tour, day, source.pair_key), []))
