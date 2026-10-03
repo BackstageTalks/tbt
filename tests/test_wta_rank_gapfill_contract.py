@@ -18,10 +18,12 @@ def test_wta_rank_audit_is_read_only_and_pinned():
     assert "research/rank_points/wta-rank-points-2006-2026.jsonl.gz" in workflow
 
 
-def test_wta_rank_audit_only_stages_exact_day_both_missing_pairs():
+def test_wta_rank_audit_stages_only_safe_exact_day_missing_ranks():
     script=(ROOT/"scripts/audit_offline_wta_rank_points.py").read_text()
     assert 'counts["canonical_both_rank_missing"]' in script
     assert 'counts["strict_fill_candidate"]' in script
+    assert 'counts["strict_fill_candidate_one_missing"]' in script
+    assert "present_rank_matches" in script
     assert "if exact_day:" in script
     assert "rank-fill-candidates.jsonl" in script
     assert "canonical_rank1=None" in script
@@ -33,4 +35,6 @@ def test_wta_rank_importer_preserves_point_in_time_provenance_contract():
     assert '"point_in_time": True' in script
     assert '"_tbt_rank_provenance"' in script
     assert "source_date.date() != scheduled.date()" in script
-    assert "match.player1_rank is not None or match.player2_rank is not None" in script
+    assert 'counts["existing_rank_mismatch"]' in script
+    assert 'counts["player1_rank_filled"]' in script
+    assert 'counts["player2_rank_filled"]' in script
