@@ -84,17 +84,25 @@ def main():
                 }''')
                 page.wait_for_timeout(150)
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), width
-                aligned_selectors = ['#dashboardKpis','#dailyHub','#telegramGroupsPanel']
-                if width > 900:
-                    aligned_selectors.append('.site-footer')
-                else:
-                    # PR #271 intentionally replaces the legacy mobile footer/navigation
-                    # with the compact hamburger shell below 900px.
-                    assert page.locator('.site-footer').bounding_box() is None, width
-                boxes = [page.locator(s).bounding_box() for s in aligned_selectors]
-                assert all(boxes), (width, aligned_selectors, boxes)
+                core_selectors = ['#dashboardKpis','#dailyHub']
+                boxes = [page.locator(s).bounding_box() for s in core_selectors]
+                assert all(boxes), (width, core_selectors, boxes)
                 assert max(b['x'] for b in boxes)-min(b['x'] for b in boxes) <= 1, (width, boxes)
                 assert max(b['width'] for b in boxes)-min(b['width'] for b in boxes) <= 1, (width, boxes)
+                telegram_box = page.locator('#telegramGroupsPanel').bounding_box()
+                assert telegram_box, width
+                if width <= 900:
+                    # PR #271 uses a deliberate 12px inset for the community panel
+                    # and replaces the legacy footer/navigation with the mobile shell.
+                    assert abs(telegram_box['x'] - (boxes[0]['x'] + 12)) <= 1, (width, boxes[0], telegram_box)
+                    assert abs(telegram_box['width'] - (boxes[0]['width'] - 24)) <= 1, (width, boxes[0], telegram_box)
+                    assert page.locator('.site-footer').bounding_box() is None, width
+                else:
+                    footer_box = page.locator('.site-footer').bounding_box()
+                    assert footer_box, width
+                    aligned_boxes = boxes + [telegram_box, footer_box]
+                    assert max(b['x'] for b in aligned_boxes)-min(b['x'] for b in aligned_boxes) <= 1, (width, aligned_boxes)
+                    assert max(b['width'] for b in aligned_boxes)-min(b['width'] for b in aligned_boxes) <= 1, (width, aligned_boxes)
                 cards = page.locator('.dashboard-kpi')
                 sizes = [cards.nth(i).bounding_box() for i in range(3)]
                 assert max(b['width'] for b in sizes)-min(b['width'] for b in sizes) <= 1
