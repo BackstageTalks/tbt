@@ -1851,7 +1851,7 @@ class FeatureBuilder:
             ),
             **{
                 name: 0.0
-                for name in ATP_LEADERBOARD_FEATURE_NAMES
+                for name in ATP_LEADERBOARD_FEATURE_NAMES + WTA_SEASON_FEATURE_NAMES
             },
         }
 
