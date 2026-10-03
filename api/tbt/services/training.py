@@ -23,16 +23,28 @@ from .prediction_quality import subgroup_report, history_band
 PRODUCTION_FEATURE_NAMES = [
     name
     for name in FEATURE_NAMES
-    if name not in set(RICH_CHARTING_FEATURE_NAMES)
+    if (
+        name not in set(RICH_CHARTING_FEATURE_NAMES)
+        and name not in set(ATP_LEADERBOARD_FEATURE_NAMES)
+    )
 ]
 
+ATP_CANDIDATE_FEATURE_NAMES = (
+    list(PRODUCTION_FEATURE_NAMES)
+    + list(ATP_LEADERBOARD_FEATURE_NAMES)
+)
 
-def _new_production_ensemble() -> TennisEnsemble:
-    """Governed candidate model with experimentally unproven rich fields off."""
+
+def _new_production_ensemble(feature_names=None) -> TennisEnsemble:
+    """Governed candidate model with only explicitly enabled feature groups."""
     model = TennisEnsemble()
     # Assign after construction so test doubles and legacy constructors that
     # accept no feature_names argument remain compatible.
-    model.feature_names = list(PRODUCTION_FEATURE_NAMES)
+    model.feature_names = list(
+        PRODUCTION_FEATURE_NAMES
+        if feature_names is None
+        else feature_names
+    )
     return model
 
 
@@ -279,7 +291,9 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
     selected = result.model
     serving_train, serving_calibration = _split_serving_refit_by_date(result.feature_frame)
 
-    serving = _new_production_ensemble()
+    serving = _new_production_ensemble(
+        list(getattr(selected, "feature_names", None) or PRODUCTION_FEATURE_NAMES)
+    )
     serving.fit_frozen(
         serving_train,
         serving_calibration,
@@ -666,8 +680,13 @@ def train_from_matches(
     test, eligibility_reason = _eligible_evaluation(test, production_model, promotion_history)
     holdout_fingerprint = _holdout_fingerprint(test) if len(test) else ""
 
+    candidate_feature_names = (
+        ATP_CANDIDATE_FEATURE_NAMES
+        if atp_leaderboards is not None
+        else PRODUCTION_FEATURE_NAMES
+    )
     evaluation_model = (
-        _new_production_ensemble()
+        _new_production_ensemble(candidate_feature_names)
         .fit(
             train,
             calibration,
