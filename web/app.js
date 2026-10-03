@@ -2870,10 +2870,7 @@
 
   function metricCards(items){ return `<div class="metric-cards">${items.map(([label,value,note])=>`<div class="metric-card"><small>${escapeHtml(label)}</small><strong>${escapeHtml(value)}</strong><span>${escapeHtml(note||'')}</span></div>`).join('')}</div>`; }
   function issuedMarketPublications(row){
-    return (Array.isArray(row?.market_publications)?row.market_publications:[]).filter(p=>{
-      const runtimeSettled=p?.result?.runtime_source==='match_status_snapshot';
-      return p&&p.result&&!p.excluded_reason&&(Boolean(p.issued_at)||runtimeSettled);
-    });
+    return (Array.isArray(row?.market_publications)?row.market_publications:[]).filter(p=>p&&p.issued_at&&p.result&&!p.excluded_reason);
   }
   const publicResultSections=new Set(['top200','top_daily','prime','value','doubles','ace','double_faults','sets','games']);
   const publicResultMarkets=new Set(['aces','double_faults']);
