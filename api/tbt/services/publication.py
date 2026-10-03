@@ -410,7 +410,24 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
         for row in rows:
             commitment = _market_commitment_from_feed_row(row, section)
             publications = [p for p in index.get(commitment[0], {}).get("market_publications", []) or [] if isinstance(p, dict)]
-            if any(_market_commitment_from_publication(commitment[0], p) == commitment for p in publications):
+            exact_publications = [
+                p for p in publications
+                if _market_commitment_from_publication(commitment[0], p) == commitment
+            ]
+            if exact_publications:
+                # The public section row is also the source used by the hourly
+                # runtime settlement overlay. Preserve the exact issued ledger
+                # publication on that row so a finished match can appear in
+                # Results immediately, without waiting for the next full data
+                # refresh. Pending candidates remain publication-free until the
+                # deployment confirmation writes issued_at.
+                issued_exact = [
+                    p for p in exact_publications
+                    if p.get("issued_at")
+                    and str(p.get("publication_status") or "") == "published"
+                ]
+                if len(issued_exact) == 1:
+                    row["market_publications"] = [deepcopy(issued_exact[0])]
                 restored_rows.append(row)
                 continue
 
@@ -532,6 +549,10 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                     raise RuntimeError(f"Market feed/ledger mismatch for {section} event {commitment[0]}; no unique issued snapshot")
 
             snapshot = matches[0]
+            # Keep the immutable issued publication next to the public card.
+            # match_status.runtime_settled_results consumes this exact record
+            # to build same-day Results rows from the external status snapshot.
+            row["market_publications"] = [deepcopy(snapshot)]
             betting = row.get("betting")
             if isinstance(betting, dict):
                 for field in ("odds", "model_probability", "edge", "expected_value", "fair_implied_probability", "captured_at", "provider_id", "selection"):
