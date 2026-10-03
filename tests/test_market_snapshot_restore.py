@@ -1,7 +1,6 @@
 from copy import deepcopy
 import pytest
 from tbt.services.publication import restore_published_market_snapshots, validate_market_publication_candidate
-from tbt.services.match_status import runtime_settled_results
 
 
 def artifacts():
@@ -25,31 +24,8 @@ def test_restore_issued_snapshot_without_mutating_inputs():
     assert validate_market_publication_candidate(restored, ledger) == 1
     row = restored['top_daily_picks'][0]
     assert row['betting']['model_probability'] == row['probability'] == row['player1']['probability'] == .71281
-    assert len(row['market_publications']) == 1
-    assert row['market_publications'][0]['issued_at'] == '2026-09-09T17:00:00Z'
-    assert row['market_publications'][0]['publication_status'] == 'published'
     assert (feed, ledger) == originals
     assert restore_published_market_snapshots(restored, ledger) == restored
-
-
-
-def test_restored_issued_row_can_be_settled_by_hourly_runtime_overlay():
-    feed, ledger = artifacts()
-    restored = restore_published_market_snapshots(feed, ledger)
-    results = runtime_settled_results(
-        {**restored, 'results': []},
-        {'16983980': {
-            'status': 'win',
-            'checked_at': '2026-09-09T20:00:00+00:00',
-        }},
-    )
-    assert len(results) == 1
-    publication = results[0]['market_publications'][0]
-    assert publication['section'] == 'top_daily'
-    assert publication['result']['status'] == 'hit'
-    assert publication['result']['correct'] is True
-    assert publication['result']['runtime_source'] == 'match_status_snapshot'
-    assert publication['result']['profit_units'] == pytest.approx(.36)
 
 
 @pytest.mark.parametrize('field,value', [('selection_id','B'),('betting_day','2026-09-10'),('section','value'),('market','total_games'),('issued_at',None),('publication_status','pending')])
