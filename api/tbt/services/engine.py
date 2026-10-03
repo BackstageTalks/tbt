@@ -248,7 +248,16 @@ def predict(model, history, upcoming, now=None, atp_leaderboards=None):
                      and m.status in {"upcoming", "notstarted", "scheduled"}), key=lambda m: (m.scheduled_at, m.match_id))
     if not future:
         return []
-    feature_names = list(getattr(model, "feature_names", None) or FEATURE_NAMES)
+    persisted_feature_names = getattr(model, "feature_names", None)
+    feature_names = list(
+        persisted_feature_names
+        if persisted_feature_names
+        else [
+            name
+            for name in FEATURE_NAMES
+            if name not in set(ATP_LEADERBOARD_FEATURE_NAMES)
+        ]
+    )
     requires_atp = any(
         name in set(ATP_LEADERBOARD_FEATURE_NAMES)
         for name in feature_names
