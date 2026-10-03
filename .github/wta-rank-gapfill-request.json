@@ -9,5 +9,5 @@
   "purpose": "Audit and write only exact-day both-missing WTA point-in-time rank pairs from the already pinned 2006-2026 source; ranking points remain sidecar-only.",
   "zero_provider_api_requests": true,
   "production_mutated": false,
-  "requested_at_utc": "2026-09-30T14:58:00Z"
+  "requested_at_utc": "2026-10-03T06:14:00Z"
 }
