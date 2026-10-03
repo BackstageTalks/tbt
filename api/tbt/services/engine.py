@@ -232,7 +232,7 @@ def _presentation_player_profile(builder, match, *, player1):
     }
 
 
-def predict(model, history, upcoming, now=None):
+def predict(model, history, upcoming, now=None, atp_leaderboards=None):
     now = now or datetime.now(timezone.utc)
     # Match completion timestamps are unavailable. Use previous UTC days only,
     # matching the conservative whole-day training protocol. Validate the exact
@@ -247,7 +247,14 @@ def predict(model, history, upcoming, now=None):
                      and m.status in {"upcoming", "notstarted", "scheduled"}), key=lambda m: (m.scheduled_at, m.match_id))
     if not future:
         return []
-    features = [builder.snapshot(m) for m in future]
+    features = []
+    for match in future:
+        values = builder.snapshot(match)
+        if atp_leaderboards is not None:
+            values.update(
+                atp_leaderboards.features_for_match(match, current=True)
+            )
+        features.append(values)
     # Serving is artifact-schema driven. This keeps an already-deployed legacy
     # champion usable while the repository evolves to a richer feature schema;
     # a newly trained model opts into new features through its persisted list.
