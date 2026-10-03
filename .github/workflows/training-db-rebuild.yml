@@ -59,13 +59,12 @@ jobs:
               require_bundle_manifest=True,
           )
 
-          wta=Path(".cache/tbt/wta-season-stats")
-          ReleaseStore(repo, "tbt-wta-season-stats-v1", wta).download(
-              extra_names=("wta_stats_2010_2026_serving_returning.csv",),
-              required_names=("wta_stats_2010_2026_serving_returning.csv",),
-              require_bundle_manifest=True,
-          )
           PY
+          gh release download tbt-wta-season-stats-v1 \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --pattern wta_stats_2010_2026_serving_returning.csv \
+            --dir .cache/tbt/wta-season-stats --clobber
+          echo "023849319985801b1ab0065f77ff70f7d51a4fada6db0827c22d0b84659cba02  .cache/tbt/wta-season-stats/wta_stats_2010_2026_serving_returning.csv" | sha256sum -c -
 
       - name: Build leakage-safe ATP+WTA training DB
         shell: bash
