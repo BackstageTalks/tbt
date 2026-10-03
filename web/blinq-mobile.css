@@ -194,9 +194,9 @@ body#blinqPremium:not(.blinq-admin) #insightBell #insightUnread:not([hidden]){
     display:flex!important;
     align-items:center!important;
     justify-content:center!important;
-    width:40px!important;
-    min-width:40px!important;
-    height:40px!important;
+    width:42px!important;
+    min-width:42px!important;
+    height:42px!important;
     padding:0!important;
     margin:0!important;
     border:0!important;
@@ -214,9 +214,9 @@ body#blinqPremium:not(.blinq-admin) #insightBell #insightUnread:not([hidden]){
     object-fit:contain!important;
   }
   body#blinqPremium:not(.blinq-admin) .reference-topbar #insightBell.insight-info-button{
-    width:40px!important;
-    min-width:40px!important;
-    height:40px!important;
+    width:42px!important;
+    min-width:42px!important;
+    height:42px!important;
     padding:0!important;
     margin:0!important;
     display:flex!important;
