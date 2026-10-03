@@ -309,13 +309,12 @@ def walk_forward_backtest(
             historical
         )
 
-        feature_names = (
-            ATP_CANDIDATE_FEATURE_NAMES
-            if atp_leaderboards is not None
-            else PRODUCTION_FEATURE_NAMES
-        )
         model = (
-            _new_production_ensemble(feature_names)
+            (
+                _new_production_ensemble(ATP_CANDIDATE_FEATURE_NAMES)
+                if atp_leaderboards is not None
+                else _new_production_ensemble()
+            )
             .fit(
                 train,
                 calibration,
