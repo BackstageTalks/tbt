@@ -46,6 +46,8 @@ jobs:
           INPUT_MODE: ${{ inputs.mode }}
           INPUT_MAX_REQUESTS: ${{ inputs.max_requests }}
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -85,6 +87,26 @@ jobs:
           # The normal external trigger uses mode=auto and is blocked during the morning production window.
           # An explicitly selected manual mode is treated as an operator override.
           should_run = not (requested_mode == "auto" and blocked)
+
+          # Do not enqueue a canonical data writer while the dedicated training-enrichment
+          # writer is queued or running. GitHub concurrency keeps only one pending run in
+          # a group, so repeated autofill dispatches could otherwise replace the pending
+          # enrichment before it starts.
+          if should_run:
+              import json, subprocess
+              repo = os.environ["GITHUB_REPOSITORY"]
+              raw = subprocess.check_output(
+                  ["gh", "run", "list", "--repo", repo, "--workflow", "training-data-enrichment.yml",
+                   "--limit", "20", "--json", "status,conclusion,databaseId"],
+                  text=True,
+              )
+              active = [
+                  item for item in json.loads(raw)
+                  if item.get("status") in {"queued", "pending", "in_progress", "waiting", "requested"}
+              ]
+              if active:
+                  should_run = False
+                  print(f"training enrichment active; suppressing data autofill: {active[:3]}")
           values = {
               "should_run": str(should_run).lower(),
               "mode": mode,
