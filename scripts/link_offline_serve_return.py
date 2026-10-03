@@ -241,6 +241,22 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                 day = _parse_yyyymmdd(row.get("tourney_date"))
                 winner = str(row.get("winner_name") or "").strip()
                 loser = str(row.get("loser_name") or "").strip()
+
+                # Some owned Library exports retain abbreviated display names
+                # (for example "N. Kulti") but expose a stable alphabetic slug
+                # in winner_id/loser_id (for example "nicklas-kulti"). Prefer
+                # that slug only when it is clearly name-like; ordinary
+                # numeric Sackmann player IDs keep the original display name.
+                def identity_name(display_name: str, raw_id: object) -> str:
+                    sid = str(raw_id or "").strip()
+                    if sid and any(ch.isalpha() for ch in sid) and not sid.isdigit():
+                        candidate = sid.replace("-", " ").replace("_", " ").strip()
+                        if len(candidate.split()) >= 2:
+                            return candidate
+                    return display_name
+
+                winner = identity_name(winner, row.get("winner_id"))
+                loser = identity_name(loser, row.get("loser_id"))
                 if not day or not winner or not loser:
                     continue
                 w_stats = _service_stats("w", row)
