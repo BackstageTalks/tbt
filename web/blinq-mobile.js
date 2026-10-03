@@ -22,6 +22,10 @@
   const projects = button('', () => {
     const groups = joinedControls();
     if (groups.length === 1) { groups[0].click(); return; }
+    if (!mq.matches) {
+      const desktopProjects = byId('profileProjectsLink');
+      if (available(desktopProjects)) { desktopProjects.click(); return; }
+    }
     openMenu(); render('projects');
   });
   const projectSymbol = document.createElement('img');
@@ -39,7 +43,9 @@
     const groups = joinedControls();
     projects.hidden = !groups.length;
     const unread = groups.reduce((sum, node) => sum + (Number(node.querySelector('b')?.textContent) || 0), 0);
-    projects.setAttribute('aria-label', 'Moje projektové skupiny' + (unread ? ', ' + unread + ' neprečítaných' : ''));
+    const displayUnread = unread > 99 ? '99+' : String(unread);
+    projects.dataset.unread = unread ? displayUnread : '';
+    projects.setAttribute('aria-label', 'Moje projektové skupiny' + (unread ? ', ' + displayUnread + ' neprečítaných' : ''));
     projects.classList.toggle('has-unread', unread > 0);
     document.body.classList.toggle('bqm-project-admin', available(byId('profileAdminLink')));
   }
