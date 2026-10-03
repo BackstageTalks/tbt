@@ -49,6 +49,8 @@ def main():
             page.route("**/*", route_request)
             page.goto(ORIGIN + "/index.html?lang=sk", wait_until="networkidle")
             page.wait_for_function("window.bettingDayTest && bettingDayTest.state.ui")
+            initial = page.evaluate("() => bettingDayTest.state.resultsFilters.window")
+            assert initial == "all", initial
             rows = [
                 ("before", "2026-09-27T03:59:59Z"),
                 ("start", "2026-09-27T04:00:00Z"),
