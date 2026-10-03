@@ -84,7 +84,15 @@ def main():
                 }''')
                 page.wait_for_timeout(150)
                 assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1'), width
-                boxes = [page.locator(s).bounding_box() for s in ('#dashboardKpis','#dailyHub','#telegramGroupsPanel','.site-footer')]
+                aligned_selectors = ['#dashboardKpis','#dailyHub','#telegramGroupsPanel']
+                if width > 900:
+                    aligned_selectors.append('.site-footer')
+                else:
+                    # PR #271 intentionally replaces the legacy mobile footer/navigation
+                    # with the compact hamburger shell below 900px.
+                    assert page.locator('.site-footer').bounding_box() is None, width
+                boxes = [page.locator(s).bounding_box() for s in aligned_selectors]
+                assert all(boxes), (width, aligned_selectors, boxes)
                 assert max(b['x'] for b in boxes)-min(b['x'] for b in boxes) <= 1, (width, boxes)
                 assert max(b['width'] for b in boxes)-min(b['width'] for b in boxes) <= 1, (width, boxes)
                 cards = page.locator('.dashboard-kpi')
