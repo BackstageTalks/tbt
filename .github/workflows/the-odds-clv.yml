@@ -47,6 +47,8 @@ jobs:
         run: python scripts/the_odds_clv_collect.py
 
       - name: Build CLV movement report
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.reason == 'manual' }}
+        timeout-minutes: 12
         run: python scripts/the_odds_clv_report.py
 
       - name: Save reports
