@@ -1,0 +1,255 @@
+name: Import library all_matches enrichment
+
+on:
+  push:
+    branches:
+      - library-all-matches-enrichment
+    paths:
+      - '.github/workflows/library-all-matches-import.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: BackstageTalks/tbt-data
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+
+      - name: Download canonical history and library asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/download_production_preflight_inputs.py
+          rm -rf .cache/tbt/history-library-enriched .cache/tbt/library-import
+          cp -a .cache/tbt/history .cache/tbt/history-library-enriched
+          mkdir -p .cache/tbt/library-import/source .cache/tbt/library-import/link .cache/tbt/library-import/import
+          gh release download tbt-training-table-v1 \
+            --repo "$TBT_DATA_REPOSITORY" \
+            --pattern all_matches_matchlevel_1991_2018.csv.gz \
+            --dir .cache/tbt/library-import/source \
+            --clobber
+          echo "00c6fd017c8e49c774d7a472fb12362a36702317779dee2df4e2a145441686ad  .cache/tbt/library-import/source/all_matches_matchlevel_1991_2018.csv.gz" | sha256sum -c -
+          gzip -dc .cache/tbt/library-import/source/all_matches_matchlevel_1991_2018.csv.gz \
+            > .cache/tbt/library-import/source/all_matches_matchlevel_1991_2018.csv
+
+      - name: Link fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/link_offline_serve_return.py \
+            --history-dir .cache/tbt/history-library-enriched \
+            --source-csv .cache/tbt/library-import/source/all_matches_matchlevel_1991_2018.csv \
+            --out-dir .cache/tbt/library-import/link
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/library-import/link/report.json").read_text())
+          c=r.get("counts") or {}
+          assert r.get("canonical_rows") == 740121, r
+          assert r.get("source_rows") == 145745, r
+          assert c.get("identity_linked",0) >= 110000, c
+          assert c.get("staged_matches",0) >= 10000, c
+          assert r.get("quality_ready_projected_added",0) >= 5000, r
+          print(json.dumps(r, indent=2))
+          PY
+
+      - name: Import staged stats locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py \
+            --stage .cache/tbt/library-import/link/auto_linked.jsonl \
+            --history-dir .cache/tbt/history-library-enriched \
+            --out-dir .cache/tbt/library-import/import \
+            --write-partitions \
+            --write-history-dir .cache/tbt/history-library-enriched
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/library-import/import/report.json").read_text())
+          c=r.get("counts") or {}
+          assert c.get("identity_missing",0) == 0, c
+          assert c.get("identity_changed",0) == 0, c
+          assert c.get("invalid_stats",0) == 0, c
+          assert c.get("stat_conflicts",0) == 0, c
+          assert c.get("updated",0) >= 10000, c
+          assert r.get("quality_ready_added",0) >= 5000, r
+          print(json.dumps(r, indent=2))
+          PY
+
+      - name: Validate enriched canonical history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, math
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          root=Path(".cache/tbt/history-library-enriched")
+          matches=load_partitions(root)
+          safe,safety=sanitize_history_identities(matches)
+          if safety.get("quarantined_rows") or len(safe)!=len(matches):
+              raise SystemExit(f"Identity safety failed: {safety}")
+          if len(safe) != 740121:
+              raise SystemExit(f"Unexpected canonical row count: {len(safe)}")
+          for m in safe:
+              for key,value in (m.stats or {}).items():
+                  if isinstance(value,(int,float)) and not isinstance(value,bool) and not math.isfinite(float(value)):
+                      raise SystemExit(f"Non-finite stat {key} on {m.match_id}")
+          Path(".cache/tbt/library-import/identity-safety.json").write_text(json.dumps(safety,indent=2),encoding="utf-8")
+          print(json.dumps({"rows":len(safe),"identity_safety":safety},indent=2))
+          PY
+
+      - name: Publish changed canonical history partitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          report=json.loads(Path(".cache/tbt/library-import/import/report.json").read_text())
+          years=[int(y) for y in (report.get("changed_years") or [])]
+          if not years:
+              raise SystemExit("No changed years to publish")
+          root=Path(".cache/tbt/history-library-enriched")
+          paths=[root/f"history-{y:04d}.parquet" for y in years]+[root/"history_manifest.json"]
+          if any(not p.is_file() or p.stat().st_size<=0 for p in paths):
+              raise SystemExit("Missing enriched history asset")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle(paths)
+          print("Published changed years:",years)
+          PY
+
+      - name: Read back canonical history
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/library-import/readback
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          from tbt.models.feature_builder import FeatureBuilder
+          root=Path(".cache/tbt/library-import/readback")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).download()
+          matches=load_partitions(root)
+          safe,safety=sanitize_history_identities(matches)
+          quality=sum(1 for m in safe if all(
+              FeatureBuilder._extract_quality(m.stats or {},side)[0] is not None and
+              FeatureBuilder._extract_quality(m.stats or {},side)[1] is not None
+              for side in ("p1","p2")
+          ))
+          if len(safe) != 740121 or safety.get("quarantined_rows"):
+              raise SystemExit(f"Canonical readback failed: rows={len(safe)} safety={safety}")
+          if quality < 281254:
+              raise SystemExit(f"Quality readback below audited projection: {quality}")
+          result={"rows":len(safe),"quality_ready":quality,"identity_safety":safety}
+          Path(".cache/tbt/library-import/readback.json").write_text(json.dumps(result,indent=2),encoding="utf-8")
+          print(json.dumps(result,indent=2))
+          PY
+
+      - name: Download verified priors
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/library-import/atp .cache/tbt/library-import/wta .cache/tbt/library-import/training
+          gh release download tbt-atp-leaderboards-v1 --repo "$TBT_DATA_REPOSITORY" --pattern atp_leaderboards_1991_2026_52week_career.csv --dir .cache/tbt/library-import/atp --clobber
+          gh release download tbt-wta-season-stats-v1 --repo "$TBT_DATA_REPOSITORY" --pattern wta_stats_2010_2026_serving_returning.csv --dir .cache/tbt/library-import/wta --clobber
+
+      - name: Build and leakage-audit training DB
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_production_training_table.py \
+            --history-dir .cache/tbt/library-import/readback \
+            --atp-leaderboards-csv .cache/tbt/library-import/atp/atp_leaderboards_1991_2026_52week_career.csv \
+            --wta-season-stats-csv .cache/tbt/library-import/wta/wta_stats_2010_2026_serving_returning.csv \
+            --out .cache/tbt/library-import/training/training_table.parquet \
+            --report .cache/tbt/library-import/training/training_table_report.json
+          python scripts/audit_training_leakage.py \
+            --history-dir .cache/tbt/library-import/readback \
+            --report .cache/tbt/library-import/training/leakage_audit_report.json
+          cp .cache/tbt/library-import/import/report.json .cache/tbt/library-import/training/library_import_report.json
+          cp .cache/tbt/library-import/readback.json .cache/tbt/library-import/training/library_readback.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          leak=json.loads(Path(".cache/tbt/library-import/training/leakage_audit_report.json").read_text())
+          status=str(leak.get("status") or "").lower()
+          if status not in {"pass","passed","ok"}:
+              raise SystemExit(f"Leakage audit did not pass: {leak}")
+          print(json.dumps(leak,indent=2))
+          PY
+
+      - name: Publish and verify training DB bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/library-import/training")
+          required=[
+              root/"training_table.parquet",
+              root/"training_table_report.json",
+              root/"leakage_audit_report.json",
+              root/"library_import_report.json",
+              root/"library_readback.json",
+          ]
+          if any(not p.is_file() or p.stat().st_size<=0 for p in required):
+              raise SystemExit("Incomplete training bundle")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-training-table-v1",root).upload_bundle(required)
+          verify=Path(".cache/tbt/library-import/training-readback")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-training-table-v1",verify).download(
+              extra_names=tuple(p.name for p in required),
+              required_names=tuple(p.name for p in required),
+              require_bundle_manifest=True,
+          )
+          frame=pd.read_parquet(verify/"training_table.parquet")
+          report=json.loads((verify/"training_table_report.json").read_text())
+          leakage=json.loads((verify/"leakage_audit_report.json").read_text())
+          library=json.loads((verify/"library_readback.json").read_text())
+          if len(frame) < 740000:
+              raise SystemExit(f"Training table unexpectedly small: {len(frame)}")
+          if str(leakage.get("status") or "").lower() not in {"pass","passed","ok"}:
+              raise SystemExit("Persisted leakage report failed")
+          if int(library.get("quality_ready") or 0) < 281254:
+              raise SystemExit("Persisted library quality readback too low")
+          print(json.dumps({
+              "status":"verified",
+              "training_rows":int(len(frame)),
+              "training_columns":int(len(frame.columns)),
+              "date_range":report.get("date_range"),
+              "quality_ready":library.get("quality_ready"),
+              "leakage_status":leakage.get("status"),
+          },indent=2))
+          PY
