@@ -12,6 +12,10 @@ from ..data.atp_leaderboards import (
     ATP_LEADERBOARD_FEATURE_NAMES,
     coverage_summary as atp_coverage_summary,
 )
+from ..data.wta_season_stats import (
+    WTA_SEASON_FEATURE_NAMES,
+    coverage_summary as wta_coverage_summary,
+)
 from ..models.ensemble import TennisEnsemble
 from ..models.feature_builder import FEATURE_NAMES, RICH_CHARTING_FEATURE_NAMES, FeatureBuilder
 from ..models.metrics import evaluate_probabilities
@@ -26,6 +30,7 @@ PRODUCTION_FEATURE_NAMES = [
     if (
         name not in set(RICH_CHARTING_FEATURE_NAMES)
         and name not in set(ATP_LEADERBOARD_FEATURE_NAMES)
+        and name not in set(WTA_SEASON_FEATURE_NAMES)
     )
 ]
 
@@ -33,6 +38,20 @@ ATP_CANDIDATE_FEATURE_NAMES = (
     list(PRODUCTION_FEATURE_NAMES)
     + list(ATP_LEADERBOARD_FEATURE_NAMES)
 )
+
+WTA_CANDIDATE_FEATURE_NAMES = (
+    list(PRODUCTION_FEATURE_NAMES)
+    + list(WTA_SEASON_FEATURE_NAMES)
+)
+
+
+def _candidate_feature_names(*, atp_leaderboards=None, wta_season_stats=None):
+    names = list(PRODUCTION_FEATURE_NAMES)
+    if atp_leaderboards is not None:
+        names += list(ATP_LEADERBOARD_FEATURE_NAMES)
+    if wta_season_stats is not None:
+        names += list(WTA_SEASON_FEATURE_NAMES)
+    return names
 
 
 def _new_production_ensemble(feature_names=None) -> TennisEnsemble:
@@ -612,6 +631,31 @@ def _augment_atp_leaderboard_features(
     return augmented, atp_coverage_summary(rows)
 
 
+def _augment_wta_season_features(
+    frame: pd.DataFrame,
+    matches: Iterable[MatchRecord],
+    wta_season_stats,
+) -> tuple[pd.DataFrame, dict]:
+    augmented = frame.copy()
+    if wta_season_stats is None:
+        rows = [
+            {name: 0.0 for name in WTA_SEASON_FEATURE_NAMES}
+            for _ in range(len(augmented))
+        ]
+    else:
+        source = {match.match_id: match for match in matches}
+        rows = []
+        for match_id in augmented["match_id"]:
+            original = source[match_id]
+            oriented, _ = FeatureBuilder.orient_for_training(original)
+            rows.append(
+                wta_season_stats.features_for_match(oriented, current=False)
+            )
+    for name in WTA_SEASON_FEATURE_NAMES:
+        augmented[name] = [float(row.get(name, 0.0)) for row in rows]
+    return augmented, wta_coverage_summary(rows)
+
+
 def train_from_matches(
     matches: Iterable[
         MatchRecord
@@ -621,6 +665,7 @@ def train_from_matches(
     production_model=None,
     promotion_history=(),
     atp_leaderboards=None,
+    wta_season_stats=None,
 ) -> TrainingResult:
     matches, quality = audit_history(matches)
     matches, rank_provenance = _enforce_rank_provenance(matches)
@@ -634,6 +679,9 @@ def train_from_matches(
     )
     frame, atp_leaderboard_coverage = _augment_atp_leaderboard_features(
         frame, matches, atp_leaderboards
+    )
+    frame, wta_season_coverage = _augment_wta_season_features(
+        frame, matches, wta_season_stats
     )
 
     if (
@@ -684,8 +732,13 @@ def train_from_matches(
 
     evaluation_model = (
         (
-            _new_production_ensemble(ATP_CANDIDATE_FEATURE_NAMES)
-            if atp_leaderboards is not None
+            _new_production_ensemble(
+                _candidate_feature_names(
+                    atp_leaderboards=atp_leaderboards,
+                    wta_season_stats=wta_season_stats,
+                )
+            )
+            if atp_leaderboards is not None or wta_season_stats is not None
             else _new_production_ensemble()
         )
         .fit(
@@ -787,6 +840,14 @@ def train_from_matches(
             "features": list(ATP_LEADERBOARD_FEATURE_NAMES),
             "historical_policy": "previous_completed_season_only",
             "candidate_features_enabled": bool(atp_leaderboards is not None),
+            "promotion_required_for_serving": True,
+        },
+        "wta_season_stats": {
+            **wta_season_coverage,
+            "features": list(WTA_SEASON_FEATURE_NAMES),
+            "historical_policy": "previous_completed_season_only",
+            "current_policy": "previous_completed_season_only",
+            "candidate_features_enabled": bool(wta_season_stats is not None),
             "promotion_required_for_serving": True,
         },
         "evaluation_governance": {
