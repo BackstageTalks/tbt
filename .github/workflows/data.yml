@@ -73,8 +73,8 @@ permissions:
   actions: write
 concurrency:
   group: tbt-history-data-writer
-  # Controlled recovery runs may replace a stale current-refresh; ordinary writers never cancel each other.
-  cancel-in-progress: ${{ github.event_name == 'push' && contains(github.event.head_commit.message, '[replace-current-refresh]') }}
+  # Explicit replacement markers may cancel a stale writer; ordinary writers never cancel each other.
+  cancel-in-progress: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[replace-current-refresh]') || contains(github.event.head_commit.message, '[replace-stale-data-run]')) }}
 jobs:
   pipeline:
     if: (github.event_name == 'push' && (contains(github.event.head_commit.message, '[refresh-now]') || contains(github.event.head_commit.message, '[data-request]'))) || github.event_name == 'workflow_dispatch'
