@@ -12,12 +12,12 @@ permissions:
 
 concurrency:
   group: tbt-history-data-writer
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   enrich:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
     env:
       PYTHONPATH: api:scripts
       TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
@@ -106,6 +106,34 @@ jobs:
             --write-partitions \
             --write-history-dir .cache/tbt/history-enriched
 
+      - name: Download, link and import archived Sackmann ATP/WTA match statistics
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/sackmann-archive .cache/tbt/enrichment/sackmann-link .cache/tbt/enrichment/sackmann-import
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/AngieXuAU/tennis-point-by-point-archive.git .cache/tbt/sackmann-archive
+          git -C .cache/tbt/sackmann-archive sparse-checkout set atp wta
+          mkdir -p .cache/tbt/enrichment/sackmann-link .cache/tbt/enrichment/sackmann-import
+          mapfile -t csvs < <(find .cache/tbt/sackmann-archive/atp .cache/tbt/sackmann-archive/wta -maxdepth 1 -type f \
+            \( -name 'atp_matches_*.csv' -o -name 'wta_matches_*.csv' \) \
+            ! -iname '*doubles*' | sort)
+          if (( ${#csvs[@]} == 0 )); then
+            echo "No archived Sackmann match CSVs found" >&2
+            exit 1
+          fi
+          args=()
+          for f in "${csvs[@]}"; do args+=(--source-csv "$f"); done
+          python scripts/link_offline_serve_return.py \
+            --history-dir .cache/tbt/history-enriched \
+            "${args[@]}" \
+            --out-dir .cache/tbt/enrichment/sackmann-link
+          python scripts/import_offline_linked_serve_return.py \
+            --stage .cache/tbt/enrichment/sackmann-link/auto_linked.jsonl \
+            --history-dir .cache/tbt/history-enriched \
+            --out-dir .cache/tbt/enrichment/sackmann-import \
+            --write-partitions \
+            --write-history-dir .cache/tbt/history-enriched
+
       - name: Validate enriched canonical history
         shell: bash
         run: |
@@ -130,12 +158,15 @@ jobs:
               "tml_import":read(".cache/tbt/enrichment/tml-import/report.json"),
               "wta_link":read(".cache/tbt/enrichment/wta-link/report.json"),
               "wta_import":read(".cache/tbt/enrichment/wta-import/report.json"),
+              "sackmann_link":read(".cache/tbt/enrichment/sackmann-link/report.json"),
+              "sackmann_import":read(".cache/tbt/enrichment/sackmann-import/report.json"),
           }
-          updated=sum(int((reports[k].get("counts") or {}).get("updated") or 0) for k in ("tml_import","wta_import"))
-          changed_years=sorted({int(y) for k in ("tml_import","wta_import") for y in (reports[k].get("changed_years") or [])})
+          import_keys=("tml_import","wta_import","sackmann_import")
+          updated=sum(int((reports[k].get("counts") or {}).get("updated") or 0) for k in import_keys)
+          changed_years=sorted({int(y) for k in import_keys for y in (reports[k].get("changed_years") or [])})
           summary={"schema":1,"status":"validated","canonical_rows":len(safe),"updated_matches_total":updated,"canonical_changed":bool(changed_years),"changed_years":changed_years,**reports}
           Path(".cache/tbt/enrichment/enrichment-summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding="utf-8")
-          print(json.dumps({"canonical_rows":len(safe),"updated_matches_total":updated,"tml_updated":(reports["tml_import"].get("counts") or {}).get("updated",0),"wta_updated":(reports["wta_import"].get("counts") or {}).get("updated",0)},indent=2))
+          print(json.dumps({"canonical_rows":len(safe),"updated_matches_total":updated,"tml_updated":(reports["tml_import"].get("counts") or {}).get("updated",0),"wta_updated":(reports["wta_import"].get("counts") or {}).get("updated",0),"sackmann_updated":(reports["sackmann_import"].get("counts") or {}).get("updated",0)},indent=2))
           PY
 
       - name: Publish enriched canonical history
@@ -147,7 +178,7 @@ jobs:
           from pathlib import Path
           from release_store import ReleaseStore
           root=Path(".cache/tbt/history-enriched")
-          reports=[json.loads(Path(".cache/tbt/enrichment/tml-import/report.json").read_text()),json.loads(Path(".cache/tbt/enrichment/wta-import/report.json").read_text())]
+          reports=[json.loads(Path(p).read_text()) for p in (".cache/tbt/enrichment/tml-import/report.json",".cache/tbt/enrichment/wta-import/report.json",".cache/tbt/enrichment/sackmann-import/report.json")]
           years=sorted({int(y) for r in reports for y in (r.get("changed_years") or [])})
           if not years:
               print("Verified no-op: no changed history partitions to publish")
@@ -239,7 +270,7 @@ jobs:
           enrichment=json.loads((root/"enrichment_summary.json").read_text())
           leakage=json.loads((root/"leakage_audit_report.json").read_text())
           if len(frame)<1000 or enrichment.get("status")!="validated": raise SystemExit("Persisted training DB verification failed")
-          verification={"schema":2,"status":"verified","rows":int(len(frame)),"columns":int(len(frame.columns)),"date_range":report.get("date_range"),"updated_matches_total":int(enrichment.get("updated_matches_total") or 0),"history_readback_rows":int(enrichment.get("history_readback_rows") or 0),"history_readback_quality_ready":int(enrichment.get("history_readback_quality_ready") or 0),"tml_import":enrichment.get("tml_import"),"wta_pbp_import":enrichment.get("wta_import"),"atp_known_both_rate":float((report.get("atp_leaderboards") or {}).get("known_both_rate") or 0),"wta_known_both_rate":float((report.get("wta_season_stats") or {}).get("known_both_rate") or 0),"leakage_report":leakage}
+          verification={"schema":2,"status":"verified","rows":int(len(frame)),"columns":int(len(frame.columns)),"date_range":report.get("date_range"),"updated_matches_total":int(enrichment.get("updated_matches_total") or 0),"history_readback_rows":int(enrichment.get("history_readback_rows") or 0),"history_readback_quality_ready":int(enrichment.get("history_readback_quality_ready") or 0),"tml_import":enrichment.get("tml_import"),"wta_pbp_import":enrichment.get("wta_import"),"sackmann_import":enrichment.get("sackmann_import"),"atp_known_both_rate":float((report.get("atp_leaderboards") or {}).get("known_both_rate") or 0),"wta_known_both_rate":float((report.get("wta_season_stats") or {}).get("known_both_rate") or 0),"leakage_report":leakage}
           out=Path(".cache/tbt/training-db-verification.json")
           out.write_text(json.dumps(verification,ensure_ascii=False,indent=2),encoding="utf-8")
           print(json.dumps(verification,ensure_ascii=False,indent=2))
