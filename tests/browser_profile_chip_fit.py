@@ -25,7 +25,7 @@ def main():
                     document.getElementById('profileName').textContent='@BackstageTalks';
                     const projects=document.getElementById('projectGroupBar');
                     projects.hidden=false;
-                    projects.innerHTML='<button class="project-group-chip is-purple"><span>◆</span><strong>Platba PO</strong></button>';
+                    projects.innerHTML='<button class="project-group-chip is-purple" data-project-group-open="one"><span>◆</span><strong>Platba PO</strong><b>1</b></button>';
                     const live=document.getElementById('insightShortcut');
                     live.hidden=false;
                     const info=document.getElementById('insightBell');
@@ -47,7 +47,7 @@ def main():
                     const svg=round(toggle.querySelector('svg').getBoundingClientRect());
                     const m=round(menu.getBoundingClientRect());
                     const overflow=getComputedStyle(shell).overflow;
-                    const controls=['#projectGroupBar .project-group-chip','#insightShortcut','#topUpgradeButton','#insightBell','#profileShell']
+                    const controls=['#bqm-projects','#insightShortcut','#topUpgradeButton','#insightBell','#profileShell']
                       .map(sel=>({sel,rect:round(document.querySelector(sel).getBoundingClientRect())}));
                     menu.hidden=true;
                     return {shell:s,button:b,toggle:t,svg,menu:m,overflow,controls};
