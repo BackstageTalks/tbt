@@ -1,0 +1,150 @@
+/* BlinQ mobile presentation adapter, r61. No API, auth or entitlement changes. */
+(() => {
+  'use strict';
+  if (window.__blinqMobileInstalled) return;
+  const header = document.querySelector('#appShell .header-top');
+  const shell = document.getElementById('appShell');
+  if (!header || !shell || !window.HTMLDialogElement) return;
+  window.__blinqMobileInstalled = true;
+  const mq = matchMedia('(max-width: 900px)');
+  const byId = id => document.getElementById(id);
+  const button = (text, action) => {
+    const node = document.createElement('button');
+    node.type = 'button'; node.textContent = text;
+    node.addEventListener('click', action); return node;
+  };
+  const toggle = button('☰', () => openMenu());
+  toggle.id = 'bqm-toggle'; toggle.className = 'bqm-toggle';
+  toggle.setAttribute('aria-label', 'Otvoriť menu');
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-controls', 'bqm-dialog');
+  header.prepend(toggle);
+  const projects = button('', () => {
+    const groups = joinedControls();
+    if (groups.length === 1) { groups[0].click(); return; }
+    openMenu(); render('projects');
+  });
+  const projectSymbol = document.createElement('img');
+  projectSymbol.src = '/assets/project-pp.svg';
+  projectSymbol.alt = '';
+  projectSymbol.width = 24; projectSymbol.height = 24;
+  projects.append(projectSymbol);
+  projects.id = 'bqm-projects';
+  projects.setAttribute('aria-label', 'Moje projektové skupiny');
+  header.querySelector('.header-actions').prepend(projects);
+  function joinedControls() {
+    return Array.from(document.querySelectorAll('#projectGroupBar [data-project-group-open]')).filter(available);
+  }
+  function syncProjects() {
+    const groups = joinedControls();
+    projects.hidden = !groups.length;
+    const unread = groups.reduce((sum, node) => sum + (Number(node.querySelector('b')?.textContent) || 0), 0);
+    projects.setAttribute('aria-label', 'Moje projektové skupiny' + (unread ? ', ' + unread + ' neprečítaných' : ''));
+    projects.classList.toggle('has-unread', unread > 0);
+    document.body.classList.toggle('bqm-project-admin', available(byId('profileAdminLink')));
+  }
+  const dialog = document.createElement('dialog');
+  dialog.id = 'bqm-dialog'; dialog.setAttribute('aria-label', 'Hlavné menu BlinQ');
+  const top = document.createElement('div'); top.className = 'bqm-top';
+  const close = button('×', () => dialog.close()); close.setAttribute('aria-label', 'Zavrieť menu');
+  const logo = document.createElement('img');
+  logo.src = header.querySelector('.brand img')?.getAttribute('src') || '/assets/blinq_logo.svg';
+  logo.alt = 'BlinQ';
+  top.append(close, logo);
+  const nav = document.createElement('nav'); nav.setAttribute('aria-label', 'Mobilná navigácia');
+  const note = document.createElement('p'); note.className = 'bqm-note'; note.setAttribute('role', 'status');
+  dialog.append(top, nav, note); document.body.append(dialog);
+  let currentLevel = 'root';
+  function enabled() { return mq.matches && !shell.hidden && !document.body.classList.contains('blinq-admin'); }
+  function sync() {
+    document.body.classList.toggle('bqm-enabled', enabled());
+    syncProjects();
+    if (!enabled() && dialog.open) dialog.close();
+  }
+  function available(node) { return node && !node.hidden && !node.disabled && node.getAttribute('aria-disabled') !== 'true'; }
+  function finish(node) {
+    // Resolve and use the original control: its access checks and listeners remain authoritative.
+    if (!available(node)) { note.textContent = 'Táto položka momentálne nie je dostupná.'; return; }
+    dialog.close(); node.click();
+  }
+  function proxy(label, resolve) {
+    if (!available(resolve())) return;
+    nav.append(button(label, () => finish(resolve())));
+  }
+  function section(label, level) { nav.append(button(label + ' ›', () => render(level))); }
+  function render(level) {
+    currentLevel = level; nav.replaceChildren(); note.textContent = '';
+    if (level !== 'root') nav.append(button('← Hlavné menu', () => render('root')));
+    if (level === 'root') {
+      section('Predikcie', 'predictions');
+      proxy('Výsledky', () => document.querySelector('.reference-navigation [data-route="results"]'));
+      proxy('Live radar', () => byId('insightShortcut'));
+      section('Členstvo', 'membership');
+      if (joinedControls().length) section('Moje skupiny', 'projects');
+      if (available(byId('telegramGroupsPanel'))) section('Komunita', 'community');
+      proxy('Info', () => byId('insightBell'));
+      section(byId('profileName')?.textContent.trim() || 'Môj účet', 'account');
+      section('Jazyk', 'language');
+    } else if (level === 'predictions') {
+      proxy('Všetky predikcie', () => document.querySelector('.reference-navigation [data-route="predictions"]'));
+      document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]').forEach(source => {
+        const key = source.dataset.dailyHubTab;
+        const label = source.querySelector('.daily-hub-tab-copy > span')?.textContent || source.textContent;
+        nav.append(button(label.trim(), () => {
+          const original = Array.from(document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]')).find(n => n.dataset.dailyHubTab === key);
+          if (!available(original)) { render('predictions'); return; }
+          dialog.close();
+          document.querySelector('.reference-navigation [data-route="predictions"]')?.click();
+          // Routing can replace the tab nodes synchronously.
+          Array.from(document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]')).find(n => n.dataset.dailyHubTab === key)?.click();
+        }));
+      });
+    } else if (level === 'membership') {
+      proxy('Upgrade', () => byId('topUpgradeButton'));
+    } else if (level === 'projects') {
+      joinedControls().forEach(source => nav.append(button(source.querySelector('strong')?.textContent || source.textContent.trim(), () => {
+        const id = source.dataset.projectGroupOpen;
+        const fresh = joinedControls().find(node => node.dataset.projectGroupOpen === id);
+        if (fresh) finish(fresh); else render('projects');
+      })));
+      if (!joinedControls().length) note.textContent = 'Zatiaľ nie si členom projektovej skupiny.';
+    } else if (level === 'account') {
+      proxy('Môj účet', () => byId('profileAccountLink'));
+      proxy('Admin', () => byId('profileAdminLink'));
+      proxy('Odhlásiť sa', () => byId('headerLogoutButton'));
+    } else if (level === 'language') {
+      document.querySelectorAll('#footerLanguages a').forEach(source => proxy(source.textContent.trim(), () => source));
+    } else if (level === 'community') {
+      document.querySelectorAll('#telegramGroupsPanel .tg-group-card').forEach(card => {
+        const label = card.querySelector('.tg-group-copy strong')?.textContent || 'Telegram';
+        const action = card.querySelector('a.tg-group-cta,button.tg-group-cta');
+        if (action) proxy(label, () => action);
+        else { const unavailable = button(label + ' · nedostupné', () => {}); unavailable.disabled = true; nav.append(unavailable); }
+      });
+    }
+    nav.querySelector('button')?.focus();
+  }
+  function openMenu() {
+    if (!enabled()) return;
+    dialog.showModal(); document.body.classList.add('bqm-menu-open');
+    toggle.setAttribute('aria-expanded', 'true'); render('root');
+  }
+  dialog.addEventListener('close', () => {
+    document.body.classList.remove('bqm-menu-open'); toggle.setAttribute('aria-expanded', 'false');
+    if (enabled()) toggle.focus();
+  });
+  dialog.addEventListener('cancel', event => {
+    if (currentLevel !== 'root') { event.preventDefault(); render('root'); }
+  });
+  window.addEventListener('hashchange', () => { if (dialog.open) dialog.close(); });
+  mq.addEventListener('change', sync);
+  const groupBar = byId('projectGroupBar');
+  if (groupBar) new MutationObserver(syncProjects).observe(groupBar, {childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['hidden']});
+  const adminLink = byId('profileAdminLink');
+  if (adminLink) new MutationObserver(syncProjects).observe(adminLink, {attributes:true,attributeFilter:['hidden']});
+  new MutationObserver(sync).observe(shell, { attributes: true, attributeFilter: ['hidden'] });
+  new MutationObserver(() => {
+    if (document.body.classList.contains('bqm-enabled') !== enabled()) sync();
+  }).observe(document.body, { attributes: true, attributeFilter: ['class'] });
+  sync();
+})();

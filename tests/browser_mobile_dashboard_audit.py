@@ -42,7 +42,7 @@ FIXTURE = """() => {
   upgrade.hidden=false; live.hidden=false; bell.hidden=false; profile.hidden=false;
   projects.hidden=false;
   projects.innerHTML=['ALPHA','TESTERI','PARTNER X','RESEARCH'].map((name,i)=>
-    '<button class="project-group-chip is-'+(['blue','orange','purple','green'][i])+'"><span>◆</span><strong>'+name+'</strong>'+(i===0?'<b>2</b>':'')+'</button>').join('');
+    '<button data-project-group-open="fixture" class="project-group-chip is-'+(['blue','orange','purple','green'][i])+'"><span>◆</span><strong>'+name+'</strong>'+(i===0?'<b>2</b>':'')+'</button>').join('');
   live.classList.add('is-access-locked');
   live.querySelector('#insightShortcutCount').hidden=false;
   live.querySelector('#insightShortcutCount').textContent='2';
@@ -149,7 +149,10 @@ def main():
                 assert report["docOverflow"] <= 2, (label, report)
                 assert report["brand"]["right"] <= width + 1, (label, report)
                 assert report["projects"]["left"] >= -1 and report["projects"]["right"] <= width + 1, (label, report)
-                assert report["projectChips"] and all(chip["width"] > 20 for chip in report["projectChips"]), (label, report)
+                if width > 900:
+                    assert report["projectChips"] and all(chip["width"] > 20 for chip in report["projectChips"]), (label, report)
+                else:
+                    assert page.locator('#bqm-projects').is_visible(), (label, report)
                 actions = [x["r"] for x in report["actions"]]
                 for i, a in enumerate(actions):
                     assert a["left"] >= -1 and a["right"] <= width + 1, (label, report)
@@ -159,13 +162,14 @@ def main():
                 # Regression for the screenshot where row 5/6 painted through
                 # the normal-flow system/language footer.
                 assert report["tableMaxHeight"] == "none", (label, report)
-                assert report["last"]["bottom"] <= report["footer"]["top"] + 2, (label, report)
+                if width > 900:
+                    assert report["last"]["bottom"] <= report["footer"]["top"] + 2, (label, report)
                 if report["status"] and report["langs"] and width > 480:
                     assert not overlap(report["status"], report["langs"]), (label, report)
                 if width <= 900:
-                    assert report["navVisible"], (label, report)
+                    assert not report["navVisible"], (label, report)
                     assert report["nav"]["left"] >= 0 and report["nav"]["right"] <= width, (label, report)
-                    assert report["hint"]["bottom"] <= report["nav"]["top"] - 2, (label, report)
+                    assert report["hint"]["bottom"] <= report["viewport"]["height"], (label, report)
                     assert report["lockTop"] != "50%", (label, report)
                     page.evaluate("window.scrollTo(0,document.documentElement.scrollHeight)")
                     page.wait_for_timeout(60)
@@ -173,7 +177,7 @@ def main():
                       footer:document.querySelector('.site-footer-minimal').getBoundingClientRect().bottom,
                       nav:document.querySelector('#mobileTabs').getBoundingClientRect().top
                     })""")
-                    assert bottom["footer"] <= bottom["nav"] - 2, (label, bottom)
+                    assert page.locator('.site-footer-minimal').is_hidden(), (label, bottom)
                 page.evaluate("""() => {
                   const dialog=document.querySelector('#projectGroupsDialog');
                   const list=document.querySelector('#projectGroupsDialogList');

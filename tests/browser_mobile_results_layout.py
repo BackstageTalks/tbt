@@ -81,6 +81,7 @@ def main():
                     document.body.classList.remove('blinq-home','blinq-admin');
                     document.body.classList.add('blinq-route');
                     document.querySelector('#routePanel').hidden=false;
+                    document.querySelector('#predictionsView').hidden=true;
                     document.querySelector('#routePanel').innerHTML=
                       t.renderResultsFilters()+t.resultsSummary()+t.renderResults();
                     window.BlinqUI.prepareRoute(document.querySelector('#routePanel'));
@@ -88,12 +89,13 @@ def main():
                     document.querySelector('#profileRegisteredEmail').textContent='long-account-email@example.org';
                     const projects=document.querySelector('#projectGroupBar');
                     projects.hidden=false;
-                    projects.innerHTML='<button class="project-group-chip is-purple is-active" type="button"><span>◆</span><strong>Platba PO</strong></button>';
+                    projects.innerHTML='<button class="project-group-chip is-purple is-active" data-project-group-open="fixture" type="button"><span>◆</span><strong>Platba PO</strong></button>';
                     document.querySelector('#insightShortcut').hidden=false;
                     document.querySelector('#topUpgradeButton').hidden=false;
                     t.renderInsightBell();
                 }""")
                 page.wait_for_selector("#routePanel .results-table tbody tr")
+                page.wait_for_timeout(250)
                 report = page.evaluate("""() => {
                     const css=s=>document.querySelector(s);
                     const rect=e=>{const r=e.getBoundingClientRect();
@@ -111,7 +113,7 @@ def main():
                     const info=css('#insightBell');
                     const nav=css('.mobile-tabs');
                     const projects=css('#projectGroupBar');
-                    const projectChip=css('#projectGroupBar .project-group-chip');
+                    const projectChip=css('#bqm-projects');
                     const live=css('#insightShortcut');
                     const filterToggle=css('.results-mobile-filter-toggle');
                     const filterBar=css('.results-filter-bar-v683');
@@ -146,13 +148,14 @@ def main():
                 assert report["profile"]["right"]<=width+2,(width,report)
                 assert report["brand"]["right"]<=report["profile"]["left"]+2,(width,report)
                 if width<=900:
-                    assert report["navVisible"],(width,report)
+                    assert not report["navVisible"],(width,report)
                     assert report["filterToggleVisible"],(width,report)
                     assert report["filterBarDisplay"]=="none",(width,report)
                     assert report["cardClass"],(width,report)
                     assert report["projectChip"]["top"]>=report["header"]["top"]-2,(width,report)
                     assert report["projectChip"]["bottom"]<=report["header"]["bottom"]+2,(width,report)
-                    assert report["projectChip"]["right"]<=report["live"]["left"]+2,(width,report)
+                    assert report["projectChip"]["right"]<=report["info"]["left"]+2,(width,report)
+                    assert report["info"]["right"]<=report["profile"]["left"]+2,(width,report)
                     assert report["table"]["right"]<=width+2,(width,report)
                     assert report["wrap"]["right"]<=width+2,(width,report)
                     assert report["first"]["right"]<=width+2,(width,report)
@@ -161,18 +164,31 @@ def main():
                     assert report["whiteSpace"]=="normal",(width,report)
                     assert report["clamp"]=="2",(width,report)
                     assert report["appOverflow"]<=2,(width,report)
-                    # Even when the user scrolls right to the end of a long
-                    # Results page, the last pager is above the fixed nav.
+                    # The pager remains reachable after removing the bottom nav.
                     page.evaluate("window.scrollTo(0,document.documentElement.scrollHeight)")
                     page.wait_for_timeout(60)
                     bottom=page.evaluate("""() => ({
                       pager:document.querySelector('.results-pagination').getBoundingClientRect().bottom,
                       nav:document.querySelector('.mobile-tabs').getBoundingClientRect().top
                     })""")
-                    assert bottom["pager"]<=bottom["nav"]-4,(width,bottom)
+                    assert bottom["pager"]<=820+2,(width,bottom)
                 else:
                     assert not report["navVisible"],(width,report)
                     assert report["minWidth"]!="0px",(width,report)
+                if width==390:
+                    if os.getenv('BLINQ_SCREENSHOTS'):
+                        from pathlib import Path
+                        out=Path(os.environ['BLINQ_SCREENSHOTS']);out.mkdir(parents=True,exist_ok=True)
+                        page.screenshot(path=str(out / "mobile-results-review.png"),full_page=True)
+                    page.locator('#bqm-toggle').click()
+                    page.get_by_role('button',name='Predikcie ›',exact=True).click()
+                    page.keyboard.press('Escape')
+                    assert page.locator('#bqm-dialog').is_visible()
+                    page.keyboard.press('Escape')
+                    assert not page.locator('#bqm-dialog').is_visible()
+                    page.locator('#profileButton').click()
+                    assert page.locator('#profileMenu').is_visible()
+                    page.locator('#profileButton').click()
                 assert not errors,(width,errors)
                 page.close()
             print("Mobile Results 320/360/390/430/768/900 + desktop 1024/1440 geometry: PASS")
