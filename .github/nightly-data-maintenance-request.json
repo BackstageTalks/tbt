@@ -2,7 +2,7 @@
   "schema": 1,
   "mode": "nightly-data-maintenance",
   "requested_for_local_date": "2026-10-03",
-  "requested_at_utc": "2026-10-03T07:35:00Z",
+  "requested_at_utc": "2026-10-03T07:39:00Z",
   "timezone": "Europe/Bratislava",
   "force_once": true,
   "purpose": "One-time forced ATP+WTA training DB rebuild and verification; zero TennisAPI."
