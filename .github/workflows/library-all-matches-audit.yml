@@ -58,7 +58,7 @@ jobs:
           mkdir -p .cache/tbt/library-all-matches/link
           python scripts/link_offline_serve_return.py \
             --history-dir .cache/tbt/history \
-            --all-matches-csv .cache/tbt/library-all-matches/all_matches_matchlevel_1991_2018.csv \
+            --source-csv .cache/tbt/library-all-matches/all_matches_matchlevel_1991_2018.csv \
             --out-dir .cache/tbt/library-all-matches/link
           cat .cache/tbt/library-all-matches/link/report.json
 
