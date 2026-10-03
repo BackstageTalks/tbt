@@ -30,6 +30,10 @@ def main():
                     document.querySelectorAll('dialog[open]').forEach(d=>d.close());
                     document.getElementById('appShell').hidden=false;
                     const h=mobileTest;h.state.feed.account={plan:'rookie',status:'active',project_groups:[{id:'one',name:'Platba PO',joined:true,active:true}]};
+                    h.state.insights=[
+                      {id:'project-one',read:false,type:'info',audience_mode:'groups',group_ids:['one']},
+                      {id:'info-one',read:false,type:'info',audience_mode:'levels'}
+                    ];
                     h.state.ui.notifications={enabled:true};h.renderInsightBell();h.renderProjectGroupBar();
                     const row={event_id:'test',scheduled_at:new Date(Date.now()+3600000).toISOString(),tour:'ATP',tournament:'Beijing, China',surface:'hard',player1:{id:'one',name:'Andrey Rublev',rank:26},player2:{id:'two',name:'Roman Safiullin',rank:102},pick:'Andrey Rublev',model_probability:.703,odds:1.67};
                     document.getElementById('dailyHubBody').innerHTML=h.dailyHubRow(row,'daily',false,0);
@@ -40,6 +44,9 @@ def main():
                 page.wait_for_timeout(200)
                 if width<=900:
                     assert page.locator('#bqm-projects').is_visible()
+                    assert page.locator('#bqm-projects').get_attribute('data-unread')=='1'
+                    assert page.locator('#insightUnread').is_visible()
+                    assert page.locator('#insightUnread').inner_text()=='1'
                     geometry=page.evaluate('''() => {
                         const els=['#bqm-toggle','.header-top>.brand','#bqm-projects','#insightBell','#profileButton'].map(s=>document.querySelector(s).getBoundingClientRect());
                         return {overlap:els.some((r,i)=>i&&r.left<els[i-1].right-1),overflow:document.documentElement.scrollWidth-innerWidth};
@@ -67,11 +74,18 @@ def main():
                     page.wait_for_timeout(50)
                     assert not page.locator('#bqm-projects').is_visible()
                 else:
-                    assert not page.locator('#bqm-projects').is_visible()
+                    assert page.locator('#bqm-projects').is_visible()
+                    assert not page.locator('#projectGroupBar').is_visible()
                     assert not page.locator('#bqm-toggle').is_visible()
+                    assert page.locator('#profileButton').is_visible()
+                    assert page.locator('#bqm-projects').get_attribute('data-unread')=='1'
+                    assert page.locator('#insightUnread').is_visible()
+                    assert page.locator('#insightUnread').inner_text()=='1'
+                    page.locator('#bqm-projects').click()
+                    assert page.evaluate('groupCalls')==['one']
                 assert not errors,(width,errors)
                 page.close()
-            print('Mobile header, PP 0/1/multiple groups, avatar, prediction typography, desktop: PASS')
+            print('Header PP/Info numeric badges, avatar profile, mobile layout and desktop: PASS')
         finally:
             browser.close()
 
