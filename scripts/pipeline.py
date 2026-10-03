@@ -672,7 +672,7 @@ def main():
     atp_leaderboards = None
     if args.mode in {"train", "backtest", "refresh", "current-refresh"}:
         atp_dir = cache / "atp-leaderboards"
-        atp_asset = "atp_leaderboards_2010_2026_52week.csv"
+        atp_asset = "atp_leaderboards_1991_2026_52week_career.csv"
         try:
             atp_store = ReleaseStore(
                 args.data_repository,
