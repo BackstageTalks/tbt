@@ -4,6 +4,7 @@ from __future__ import annotations
 import pandas as pd
 
 from ..data.atp_leaderboards import ATP_LEADERBOARD_FEATURE_NAMES
+from ..data.wta_season_stats import WTA_SEASON_FEATURE_NAMES
 from .feature_builder import FEATURE_NAMES
 
 INVARIANT_FEATURES = {
@@ -15,6 +16,7 @@ INVARIANT_FEATURES = {
     "round_form_known_both", "tournament_history_known_both",
     "tournament_level", "best_of_five", "indoor", "tour_atp", "data_depth",
     "atp_leaderboard_known_both", "atp_surface_leaderboard_known_both",
+    "wta_season_stats_known_both",
 }
 
 

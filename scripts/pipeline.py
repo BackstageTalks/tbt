@@ -22,6 +22,7 @@ from tbt.data.history_snapshot import (
 )
 from tbt.data.history_safety import sanitize_history_identities, merge_trusted_history_batch
 from tbt.data.atp_leaderboards import ATPLeaderboardPriors
+from tbt.data.wta_season_stats import WTASeasonPriors
 from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.budget import RequestBudgetExceeded
@@ -706,10 +707,48 @@ def main():
                 "warning": "atp_leaderboards_unavailable",
                 "reason": str(exc)[:300],
             }), flush=True)
+    wta_season_stats = None
+    if args.mode in {"train", "backtest", "refresh", "current-refresh"}:
+        wta_dir = cache / "wta-season-stats"
+        wta_asset = "wta_stats_2010_2026_serving_returning.csv"
+        try:
+            wta_store = ReleaseStore(
+                args.data_repository,
+                "tbt-wta-season-stats-v1",
+                wta_dir,
+            )
+            wta_assets = wta_store._asset_names()
+            if wta_asset in wta_assets:
+                wta_store.download(
+                    extra_names=(wta_asset,),
+                    required_names=(wta_asset,),
+                    require_bundle_manifest=True,
+                )
+                wta_season_stats = WTASeasonPriors.from_csv(wta_dir / wta_asset)
+                print(json.dumps({
+                    "wta_season_stats": {
+                        "status": "loaded",
+                        "asset": wta_asset,
+                        "historical_policy": "previous_completed_season_only",
+                        "current_policy": "previous_completed_season_only",
+                    }
+                }, ensure_ascii=False), flush=True)
+            else:
+                print(json.dumps({
+                    "warning": "wta_season_stats_release_missing_asset",
+                    "asset": wta_asset,
+                }), flush=True)
+        except Exception as exc:
+            print(json.dumps({
+                "warning": "wta_season_stats_unavailable",
+                "reason": str(exc)[:300],
+            }), flush=True)
+
     model_dir = cache / "model"
     if args.mode == "backtest":
         report = clean(walk_forward_backtest(
-            matches, atp_leaderboards=atp_leaderboards
+            matches, atp_leaderboards=atp_leaderboards,
+            wta_season_stats=wta_season_stats
         ))
         path = cache / "backtest.json"
         write_json(path, report)
@@ -747,6 +786,7 @@ def main():
             production_model=champion,
             promotion_history=promotion_history,
             atp_leaderboards=atp_leaderboards,
+            wta_season_stats=wta_season_stats,
         )
         report = clean(result.report)
         governance = report.get("evaluation_governance") or {}
@@ -1131,6 +1171,7 @@ def main():
         predictions = predict(
             model, matches, upcoming, now=prediction_now,
             atp_leaderboards=atp_leaderboards,
+            wta_season_stats=wta_season_stats,
         )
 
         # Score the exact same pre-match fixtures with the private challenger.
@@ -1141,6 +1182,7 @@ def main():
                 predict(
                     challenger_model, matches, upcoming, now=prediction_now,
                     atp_leaderboards=atp_leaderboards,
+                    wta_season_stats=wta_season_stats,
                 )
                 if shadow_enabled else []
             )

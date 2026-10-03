@@ -9,6 +9,7 @@ import numpy as np
 import pandas as pd
 
 from ..data.atp_leaderboards import ATP_LEADERBOARD_FEATURE_NAMES
+from ..data.wta_season_stats import WTA_SEASON_FEATURE_NAMES
 from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES, stats_surface_key
 from ..models.metrics import evaluate_probabilities
 from .prediction_quality import coverage, subgroup_report
@@ -233,7 +234,7 @@ def _presentation_player_profile(builder, match, *, player1):
     }
 
 
-def predict(model, history, upcoming, now=None, atp_leaderboards=None):
+def predict(model, history, upcoming, now=None, atp_leaderboards=None, wta_season_stats=None):
     now = now or datetime.now(timezone.utc)
     # Match completion timestamps are unavailable. Use previous UTC days only,
     # matching the conservative whole-day training protocol. Validate the exact
@@ -256,6 +257,7 @@ def predict(model, history, upcoming, now=None, atp_leaderboards=None):
             name
             for name in FEATURE_NAMES
             if name not in set(ATP_LEADERBOARD_FEATURE_NAMES)
+            and name not in set(WTA_SEASON_FEATURE_NAMES)
         ]
     )
     requires_atp = any(
@@ -266,12 +268,24 @@ def predict(model, history, upcoming, now=None, atp_leaderboards=None):
         raise ValueError(
             "ATP-enabled model requires the verified rolling 52-week leaderboard snapshot"
         )
+    requires_wta = any(
+        name in set(WTA_SEASON_FEATURE_NAMES)
+        for name in feature_names
+    )
+    if requires_wta and wta_season_stats is None:
+        raise ValueError(
+            "WTA-enabled model requires the verified previous-season serving/returning snapshot"
+        )
     features = []
     for match in future:
         values = builder.snapshot(match)
         if atp_leaderboards is not None:
             values.update(
                 atp_leaderboards.features_for_match(match, current=True)
+            )
+        if wta_season_stats is not None:
+            values.update(
+                wta_season_stats.features_for_match(match, current=True)
             )
         features.append(values)
     # Serving is artifact-schema driven. This keeps an already-deployed legacy

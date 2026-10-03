@@ -10,9 +10,10 @@ from ..models.metrics import evaluate_probabilities
 from ..schemas import MatchRecord
 from .data_quality import audit_history
 from .training import (
-    ATP_CANDIDATE_FEATURE_NAMES,
     PRODUCTION_FEATURE_NAMES,
     _augment_atp_leaderboard_features,
+    _augment_wta_season_features,
+    _candidate_feature_names,
     _enforce_rank_provenance,
     _new_production_ensemble,
 )
@@ -189,6 +190,7 @@ def walk_forward_backtest(
     first_test_year: int | None = None,
     *,
     atp_leaderboards=None,
+    wta_season_stats=None,
 ) -> dict:
     matches, quality = audit_history(matches)
     matches, rank_provenance = _enforce_rank_provenance(matches)
@@ -200,6 +202,9 @@ def walk_forward_backtest(
     )
     frame, atp_leaderboard_coverage = _augment_atp_leaderboard_features(
         frame, matches, atp_leaderboards
+    )
+    frame, wta_season_coverage = _augment_wta_season_features(
+        frame, matches, wta_season_stats
     )
 
     if frame.empty:
@@ -311,8 +316,13 @@ def walk_forward_backtest(
 
         model = (
             (
-                _new_production_ensemble(ATP_CANDIDATE_FEATURE_NAMES)
-                if atp_leaderboards is not None
+                _new_production_ensemble(
+                    _candidate_feature_names(
+                        atp_leaderboards=atp_leaderboards,
+                        wta_season_stats=wta_season_stats,
+                    )
+                )
+                if atp_leaderboards is not None or wta_season_stats is not None
                 else _new_production_ensemble()
             )
             .fit(
@@ -518,6 +528,12 @@ def walk_forward_backtest(
             **atp_leaderboard_coverage,
             "historical_policy": "previous_completed_season_only",
             "candidate_features_enabled": bool(atp_leaderboards is not None),
+            "promotion_required_for_serving": True,
+        },
+        "wta_season_stats": {
+            **wta_season_coverage,
+            "historical_policy": "previous_completed_season_only",
+            "candidate_features_enabled": bool(wta_season_stats is not None),
             "promotion_required_for_serving": True,
         },
         "method": (
