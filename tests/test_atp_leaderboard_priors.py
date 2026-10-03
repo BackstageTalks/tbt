@@ -3,10 +3,14 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pandas as pd
+
 from tbt.data.atp_leaderboards import (
     ATPLeaderboardPriors,
     ATP_LEADERBOARD_FEATURE_NAMES,
 )
+from tbt.models.feature_builder import FEATURE_NAMES
+from tbt.models.symmetry import swap_frame
 
 
 def _row(period, surface, board, player_id, name, rating):
@@ -141,3 +145,20 @@ def test_detailed_serve_return_pressure_metrics_are_exposed():
     assert round(features["atp_avg_aces_per_match_diff"], 6) == 2.1
     assert features["atp_return_games_won_pct_diff"] == 2.5
     assert features["atp_tiebreaks_won_pct_diff"] == 8.0
+
+
+def test_atp_features_have_explicit_model_and_swap_contract():
+    assert set(ATP_LEADERBOARD_FEATURE_NAMES).issubset(set(FEATURE_NAMES))
+    row = {name: 0.0 for name in FEATURE_NAMES}
+    row["atp_serve_rating_diff"] = 12.5
+    row["atp_surface_avg_aces_per_match_diff"] = 2.25
+    row["atp_leaderboard_known_both"] = 1.0
+    row["atp_surface_leaderboard_known_both"] = 1.0
+    row["target"] = 1
+    swapped = swap_frame(pd.DataFrame([row])).iloc[0]
+
+    assert swapped["atp_serve_rating_diff"] == -12.5
+    assert swapped["atp_surface_avg_aces_per_match_diff"] == -2.25
+    assert swapped["atp_leaderboard_known_both"] == 1.0
+    assert swapped["atp_surface_leaderboard_known_both"] == 1.0
+    assert swapped["target"] == 0
