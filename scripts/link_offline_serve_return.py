@@ -227,9 +227,11 @@ class OfflineMatch:
 def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
     for raw_path in paths:
         path = Path(raw_path)
-        tour = _tour_from_path(path.name)
+        fallback_tour = _tour_from_path(path.name)
         with path.open("r", encoding="utf-8-sig", newline="") as handle:
             for idx, row in enumerate(csv.DictReader(handle), start=2):
+                row_tour = _norm_text(row.get("league"))
+                tour = row_tour if row_tour in {"atp", "wta"} else fallback_tour
                 day = _parse_yyyymmdd(row.get("tourney_date"))
                 winner = str(row.get("winner_name") or "").strip()
                 loser = str(row.get("loser_name") or "").strip()
@@ -243,6 +245,27 @@ def _sackmann_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                     w_stats["return_points_won"] = w_ret
                 if l_ret is not None:
                     l_stats["return_points_won"] = l_ret
+
+                w_bp_saved, w_bp_faced = _num(row.get("w_bpSaved")), _num(row.get("w_bpFaced"))
+                l_bp_saved, l_bp_faced = _num(row.get("l_bpSaved")), _num(row.get("l_bpFaced"))
+                w_bp_serve = _rate(w_bp_saved, w_bp_faced)
+                l_bp_serve = _rate(l_bp_saved, l_bp_faced)
+                w_bp_return = _rate(
+                    None if l_bp_saved is None or l_bp_faced is None else l_bp_faced - l_bp_saved,
+                    l_bp_faced,
+                )
+                l_bp_return = _rate(
+                    None if w_bp_saved is None or w_bp_faced is None else w_bp_faced - w_bp_saved,
+                    w_bp_faced,
+                )
+                for stats, serve_bp, return_bp in (
+                    (w_stats, w_bp_serve, w_bp_return),
+                    (l_stats, l_bp_serve, l_bp_return),
+                ):
+                    if serve_bp is not None:
+                        stats["break_point_serve_win"] = serve_bp
+                    if return_bp is not None:
+                        stats["break_point_return_win"] = return_bp
                 if not w_stats and not l_stats:
                     continue
                 bo = _num(row.get("best_of"))
