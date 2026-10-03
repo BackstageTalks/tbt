@@ -11,6 +11,11 @@ import pandas as pd
 from _bootstrap import ROOT  # noqa: F401
 from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
+from tbt.data.atp_leaderboards import (
+    ATPLeaderboardPriors,
+    ATP_LEADERBOARD_FEATURE_NAMES,
+    coverage_summary as atp_coverage_summary,
+)
 from tbt.models.feature_builder import FEATURE_NAMES, FeatureBuilder
 from tbt.services.data_quality import audit_history
 from tbt.services.training import _enforce_rank_provenance
@@ -155,6 +160,15 @@ def main() -> None:
     parser.add_argument("--history-dir", default=".cache/tbt/history")
     parser.add_argument("--out", default=".cache/tbt/training_table.parquet")
     parser.add_argument("--report", default=".cache/tbt/training_table_report.json")
+    parser.add_argument(
+        "--atp-leaderboards-csv",
+        default="",
+        help=(
+            "Official ATP leaderboard master CSV. Historical rows use only the "
+            "previous completed season; current 52-week data is never backfilled "
+            "into historical matches."
+        ),
+    )
     args = parser.parse_args()
 
     matches, identity_safety = sanitize_history_identities(load_partitions(Path(args.history_dir)))
@@ -172,10 +186,51 @@ def main() -> None:
     frame["indoor_known"] = frame.match_id.map(lambda key: source[key].indoor is not None).astype(float)
     frame["year"] = pd.to_datetime(frame["scheduled_at"], utc=True).dt.year.astype(str)
 
+    atp_feature_rows = []
+    if args.atp_leaderboards_csv:
+        priors = ATPLeaderboardPriors.from_csv(args.atp_leaderboards_csv)
+        for match_id in frame["match_id"]:
+            original = source[match_id]
+            oriented, _ = FeatureBuilder.orient_for_training(original)
+            atp_feature_rows.append(
+                priors.features_for_match(oriented, current=False)
+            )
+    else:
+        atp_feature_rows = [
+            {name: 0.0 for name in ATP_LEADERBOARD_FEATURE_NAMES}
+            for _ in range(len(frame))
+        ]
+
+    for name in ATP_LEADERBOARD_FEATURE_NAMES:
+        frame[name] = [float(row.get(name, 0.0)) for row in atp_feature_rows]
+
+    atp_coverage = atp_coverage_summary(atp_feature_rows)
+
     out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(out, index=False, engine="pyarrow")
 
     report = build_report(frame, quality, rank_provenance)
+    report["atp_leaderboards"] = {
+        **atp_coverage,
+        "training_eligible": True,
+        "production_enabled": False,
+        "features": list(ATP_LEADERBOARD_FEATURE_NAMES),
+        "historical_policy": "previous_completed_season_only",
+        "current_policy": "rolling_52week",
+        "surface_policy": "exact_surface_plus_all_surface_baseline",
+        "identity_policy": "unique_normalized_name_or_unique_first_initial_surname",
+        "source_csv": str(args.atp_leaderboards_csv or ""),
+    }
+    report.setdefault("candidate_feature_groups", {})["atp_leaderboard_priors"] = {
+        "schema_eligible": True,
+        "has_observations": bool(atp_coverage.get("known_both_rate", 0.0)),
+        "eligible_for_candidate": bool(atp_coverage.get("known_both_rate", 0.0)),
+        "production_enabled": False,
+        "coverage": atp_coverage.get("known_both_rate", 0.0),
+        "surface_coverage": atp_coverage.get("surface_known_both_rate", 0.0),
+        "features": list(ATP_LEADERBOARD_FEATURE_NAMES),
+        "reason": "requires chronological ablation before production feature activation",
+    }
     report["identity_safety"] = identity_safety
     report["output"] = str(out)
     report_path = Path(args.report); report_path.parent.mkdir(parents=True, exist_ok=True)

@@ -21,6 +21,7 @@ from tbt.data.history_snapshot import (
     _provider_event_id,
 )
 from tbt.data.history_safety import sanitize_history_identities, merge_trusted_history_batch
+from tbt.data.atp_leaderboards import ATPLeaderboardPriors
 from tbt.models.artifact import load_model, save_model
 from tbt.providers.rapidapi import RapidTennisClient
 from tbt.providers.budget import RequestBudgetExceeded
@@ -666,9 +667,50 @@ def main():
     matches, history_safety = sanitize_history_identities(matches)
     if history_safety.get("changed"):
         print(json.dumps({"history_safety": history_safety}, ensure_ascii=False), flush=True)
+
+    atp_leaderboards = None
+    if args.mode in {"train", "backtest", "refresh", "current-refresh"}:
+        atp_dir = cache / "atp-leaderboards"
+        atp_asset = "atp_leaderboards_2010_2026_52week.csv"
+        try:
+            atp_store = ReleaseStore(
+                args.data_repository,
+                "tbt-atp-leaderboards-v1",
+                atp_dir,
+            )
+            assets = atp_store._asset_names()
+            if atp_asset in assets:
+                atp_store.download(
+                    extra_names=(atp_asset,),
+                    required_names=(atp_asset,),
+                    require_bundle_manifest=True,
+                )
+                atp_leaderboards = ATPLeaderboardPriors.from_csv(
+                    atp_dir / atp_asset
+                )
+                print(json.dumps({
+                    "atp_leaderboards": {
+                        "status": "loaded",
+                        "asset": atp_asset,
+                        "historical_policy": "previous_completed_season_only",
+                        "current_policy": "rolling_52week",
+                    }
+                }, ensure_ascii=False), flush=True)
+            else:
+                print(json.dumps({
+                    "warning": "atp_leaderboards_release_missing_asset",
+                    "asset": atp_asset,
+                }), flush=True)
+        except Exception as exc:
+            print(json.dumps({
+                "warning": "atp_leaderboards_unavailable",
+                "reason": str(exc)[:300],
+            }), flush=True)
     model_dir = cache / "model"
     if args.mode == "backtest":
-        report = clean(walk_forward_backtest(matches))
+        report = clean(walk_forward_backtest(
+            matches, atp_leaderboards=atp_leaderboards
+        ))
         path = cache / "backtest.json"
         write_json(path, report)
         store = ReleaseStore(args.data_repository, "tbt-reports-v1", cache / "reports")
@@ -700,8 +742,12 @@ def main():
                              if "promotion_history.json" in production_assets else []):
                 if decision not in promotion_history:
                     promotion_history.append(decision)
-        result = train_from_matches(matches, production_model=champion,
-                                    promotion_history=promotion_history)
+        result = train_from_matches(
+            matches,
+            production_model=champion,
+            promotion_history=promotion_history,
+            atp_leaderboards=atp_leaderboards,
+        )
         report = clean(result.report)
         governance = report.get("evaluation_governance") or {}
         fingerprint = str(governance.get("holdout_fingerprint") or "")
@@ -1082,14 +1128,20 @@ def main():
         # BEFORE evaluating their projection models. Match Winner continues to
         # use its independent qualification rules and shares cached payloads.
         prediction_now = datetime.now(timezone.utc)
-        predictions = predict(model, matches, upcoming, now=prediction_now)
+        predictions = predict(
+            model, matches, upcoming, now=prediction_now,
+            atp_leaderboards=atp_leaderboards,
+        )
 
         # Score the exact same pre-match fixtures with the private challenger.
         # Only the first snapshot for a model-pair/fixture is retained. Results
         # are settled later from canonical completed history.
         if shadow_store is not None:
             challenger_predictions = (
-                predict(challenger_model, matches, upcoming, now=prediction_now)
+                predict(
+                    challenger_model, matches, upcoming, now=prediction_now,
+                    atp_leaderboards=atp_leaderboards,
+                )
                 if shadow_enabled else []
             )
             shadow_ledger = update_shadow_ledger(

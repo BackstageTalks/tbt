@@ -8,6 +8,10 @@ from typing import Iterable
 
 import pandas as pd
 
+from ..data.atp_leaderboards import (
+    ATP_LEADERBOARD_FEATURE_NAMES,
+    coverage_summary as atp_coverage_summary,
+)
 from ..models.ensemble import TennisEnsemble
 from ..models.feature_builder import FEATURE_NAMES, RICH_CHARTING_FEATURE_NAMES, FeatureBuilder
 from ..models.metrics import evaluate_probabilities
@@ -19,16 +23,28 @@ from .prediction_quality import subgroup_report, history_band
 PRODUCTION_FEATURE_NAMES = [
     name
     for name in FEATURE_NAMES
-    if name not in set(RICH_CHARTING_FEATURE_NAMES)
+    if (
+        name not in set(RICH_CHARTING_FEATURE_NAMES)
+        and name not in set(ATP_LEADERBOARD_FEATURE_NAMES)
+    )
 ]
 
+ATP_CANDIDATE_FEATURE_NAMES = (
+    list(PRODUCTION_FEATURE_NAMES)
+    + list(ATP_LEADERBOARD_FEATURE_NAMES)
+)
 
-def _new_production_ensemble() -> TennisEnsemble:
-    """Governed candidate model with experimentally unproven rich fields off."""
+
+def _new_production_ensemble(feature_names=None) -> TennisEnsemble:
+    """Governed candidate model with only explicitly enabled feature groups."""
     model = TennisEnsemble()
     # Assign after construction so test doubles and legacy constructors that
     # accept no feature_names argument remain compatible.
-    model.feature_names = list(PRODUCTION_FEATURE_NAMES)
+    model.feature_names = list(
+        PRODUCTION_FEATURE_NAMES
+        if feature_names is None
+        else feature_names
+    )
     return model
 
 
@@ -276,6 +292,10 @@ def refit_serving_model(result: TrainingResult) -> TennisEnsemble:
     serving_train, serving_calibration = _split_serving_refit_by_date(result.feature_frame)
 
     serving = _new_production_ensemble()
+    serving.feature_names = list(
+        getattr(selected, "feature_names", None)
+        or PRODUCTION_FEATURE_NAMES
+    )
     serving.fit_frozen(
         serving_train,
         serving_calibration,
@@ -567,6 +587,31 @@ def _eligible_evaluation(test, production_model=None, promotion_history=()):
     return test, None if len(test) else "no_eligible_unseen_evaluation_rows"
 
 
+def _augment_atp_leaderboard_features(
+    frame: pd.DataFrame,
+    matches: Iterable[MatchRecord],
+    atp_leaderboards,
+) -> tuple[pd.DataFrame, dict]:
+    augmented = frame.copy()
+    if atp_leaderboards is None:
+        rows = [
+            {name: 0.0 for name in ATP_LEADERBOARD_FEATURE_NAMES}
+            for _ in range(len(augmented))
+        ]
+    else:
+        source = {match.match_id: match for match in matches}
+        rows = []
+        for match_id in augmented["match_id"]:
+            original = source[match_id]
+            oriented, _ = FeatureBuilder.orient_for_training(original)
+            rows.append(
+                atp_leaderboards.features_for_match(oriented, current=False)
+            )
+    for name in ATP_LEADERBOARD_FEATURE_NAMES:
+        augmented[name] = [float(row.get(name, 0.0)) for row in rows]
+    return augmented, atp_coverage_summary(rows)
+
+
 def train_from_matches(
     matches: Iterable[
         MatchRecord
@@ -575,6 +620,7 @@ def train_from_matches(
     *,
     production_model=None,
     promotion_history=(),
+    atp_leaderboards=None,
 ) -> TrainingResult:
     matches, quality = audit_history(matches)
     matches, rank_provenance = _enforce_rank_provenance(matches)
@@ -585,6 +631,9 @@ def train_from_matches(
         .build_training_frame(
             matches
         )
+    )
+    frame, atp_leaderboard_coverage = _augment_atp_leaderboard_features(
+        frame, matches, atp_leaderboards
     )
 
     if (
@@ -634,7 +683,11 @@ def train_from_matches(
     holdout_fingerprint = _holdout_fingerprint(test) if len(test) else ""
 
     evaluation_model = (
-        _new_production_ensemble()
+        (
+            _new_production_ensemble(ATP_CANDIDATE_FEATURE_NAMES)
+            if atp_leaderboards is not None
+            else _new_production_ensemble()
+        )
         .fit(
             train,
             calibration,
@@ -729,6 +782,13 @@ def train_from_matches(
         "delta_vs_production": delta_vs_production,
         "data_quality": quality,
         "rank_provenance": rank_provenance,
+        "atp_leaderboards": {
+            **atp_leaderboard_coverage,
+            "features": list(ATP_LEADERBOARD_FEATURE_NAMES),
+            "historical_policy": "previous_completed_season_only",
+            "candidate_features_enabled": bool(atp_leaderboards is not None),
+            "promotion_required_for_serving": True,
+        },
         "evaluation_governance": {
             "holdout_fingerprint": holdout_fingerprint,
             "holdout_reuse_policy": (

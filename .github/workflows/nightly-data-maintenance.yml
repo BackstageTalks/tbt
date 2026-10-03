@@ -163,7 +163,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p .cache/tbt/nightly/history .cache/tbt/nightly/derived
+          mkdir -p .cache/tbt/nightly/history .cache/tbt/nightly/derived .cache/tbt/atp-leaderboards
+          python - <<'PYATP'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+
+          root=Path(".cache/tbt/atp-leaderboards")
+          store=ReleaseStore(
+              os.environ["TBT_DATA_REPOSITORY"],
+              "tbt-atp-leaderboards-v1",
+              root,
+          )
+          store.download(
+              extra_names=("atp_leaderboards_2010_2026_52week.csv",),
+              required_names=("atp_leaderboards_2010_2026_52week.csv",),
+              require_bundle_manifest=True,
+          )
+          print("ATP leaderboard priors ready:", root/"atp_leaderboards_2010_2026_52week.csv")
+          PYATP
           remaining="$(python - <<'PY'
           import os
           from datetime import datetime, timezone
@@ -200,6 +218,7 @@ jobs:
               --report .cache/tbt/nightly/derived/tournament_venue_report.json
             python scripts/build_production_training_table.py \
               --history-dir .cache/tbt/nightly/history \
+              --atp-leaderboards-csv .cache/tbt/atp-leaderboards/atp_leaderboards_2010_2026_52week.csv \
               --out .cache/tbt/nightly/derived/training_table.parquet \
               --report .cache/tbt/nightly/derived/training_table_report.json
             python scripts/audit_training_leakage.py \

@@ -8,6 +8,7 @@ from typing import Iterable
 
 import pandas as pd
 
+from ..data.atp_leaderboards import ATP_LEADERBOARD_FEATURE_NAMES
 from ..schemas import MatchRecord
 from ..utils import clamp, stable_hash
 from .elo import dynamic_k, elo_expected, update_elo
@@ -80,7 +81,7 @@ FEATURE_NAMES = [
     "indoor",
     "tour_atp",
     "data_depth",
-]
+] + ATP_LEADERBOARD_FEATURE_NAMES
 
 # Match Charting specialist rates are retained in canonical history and in
 # FeatureBuilder state for research / future coverage growth. Current paired
@@ -1847,6 +1848,10 @@ class FeatureBuilder:
                 )
                 / 50.0
             ),
+            **{
+                name: 0.0
+                for name in ATP_LEADERBOARD_FEATURE_NAMES
+            },
         }
 
     @staticmethod

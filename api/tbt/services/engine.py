@@ -8,6 +8,7 @@ import math
 import numpy as np
 import pandas as pd
 
+from ..data.atp_leaderboards import ATP_LEADERBOARD_FEATURE_NAMES
 from ..models.feature_builder import FeatureBuilder, FEATURE_NAMES, stats_surface_key
 from ..models.metrics import evaluate_probabilities
 from .prediction_quality import coverage, subgroup_report
@@ -232,7 +233,7 @@ def _presentation_player_profile(builder, match, *, player1):
     }
 
 
-def predict(model, history, upcoming, now=None):
+def predict(model, history, upcoming, now=None, atp_leaderboards=None):
     now = now or datetime.now(timezone.utc)
     # Match completion timestamps are unavailable. Use previous UTC days only,
     # matching the conservative whole-day training protocol. Validate the exact
@@ -247,11 +248,35 @@ def predict(model, history, upcoming, now=None):
                      and m.status in {"upcoming", "notstarted", "scheduled"}), key=lambda m: (m.scheduled_at, m.match_id))
     if not future:
         return []
-    features = [builder.snapshot(m) for m in future]
+    persisted_feature_names = getattr(model, "feature_names", None)
+    feature_names = list(
+        persisted_feature_names
+        if persisted_feature_names
+        else [
+            name
+            for name in FEATURE_NAMES
+            if name not in set(ATP_LEADERBOARD_FEATURE_NAMES)
+        ]
+    )
+    requires_atp = any(
+        name in set(ATP_LEADERBOARD_FEATURE_NAMES)
+        for name in feature_names
+    )
+    if requires_atp and atp_leaderboards is None:
+        raise ValueError(
+            "ATP-enabled model requires the verified rolling 52-week leaderboard snapshot"
+        )
+    features = []
+    for match in future:
+        values = builder.snapshot(match)
+        if atp_leaderboards is not None:
+            values.update(
+                atp_leaderboards.features_for_match(match, current=True)
+            )
+        features.append(values)
     # Serving is artifact-schema driven. This keeps an already-deployed legacy
     # champion usable while the repository evolves to a richer feature schema;
     # a newly trained model opts into new features through its persisted list.
-    feature_names = list(getattr(model, "feature_names", None) or FEATURE_NAMES)
     missing = [name for name in feature_names if name not in features[0]]
     if missing:
         raise ValueError(f"Model artifact requests unavailable features: {missing}")
