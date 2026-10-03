@@ -150,6 +150,105 @@ _RUNTIME_RESULT_SOURCE_KEYS = (
     "doubles_picks",
 )
 
+_RUNTIME_RESULT_SOURCE_SECTIONS = {
+    "top200_picks": "top200",
+    "daily_picks": "top_daily",
+    "prime_picks": "prime",
+    "top_daily_picks": "top_daily",
+    "value_picks": "value",
+    "doubles_picks": "doubles",
+}
+
+
+def _runtime_result_identity(
+    row: dict[str, Any], publication: dict[str, Any], index: int = 0
+) -> str:
+    """Semantic result identity, independent of lifecycle timestamps."""
+    event_id = _event_id(row)
+    section = str(publication.get("section") or "").strip().lower()
+    market = str(publication.get("market") or "match_winner").strip().lower()
+    scope = str(publication.get("projection_scope") or "").strip().lower()
+    metric = str(publication.get("projection_metric") or "").strip().lower()
+    selection = str(
+        publication.get("selection_id")
+        or publication.get("winner_id")
+        or publication.get("pick_id")
+        or ""
+    ).strip()
+    if event_id and section and market and selection:
+        return f"{event_id}|{section}|{market}|{scope}|{metric}|{selection}"
+    return f"{event_id}|{section}|{market}|{scope}|{metric}|{selection}|{index}"
+
+
+def _deployed_match_winner_publication(
+    row: dict[str, Any], source_key: str
+) -> dict[str, Any] | None:
+    """Derive the exact already-deployed Match Winner card for runtime settlement.
+
+    The private serving release intentionally keeps immutable publication history
+    in the separate ledger, so current daily section rows do not embed publication
+    objects. Once such a row is being served by the production feed, the row
+    itself is the exact public commitment. Runtime settlement may therefore copy
+    its immutable market fields without inventing an issuance timestamp or
+    changing any price/probability.
+    """
+    if row.get("excluded_reason"):
+        return None
+    section = _RUNTIME_RESULT_SOURCE_SECTIONS.get(source_key)
+    selection = _selection_id(row)
+    if not section or not selection:
+        return None
+    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+
+    publication: dict[str, Any] = {
+        "section": section,
+        "market": "match_winner",
+        "selection_id": selection,
+        "publication_status": "published",
+        "runtime_publication_evidence": "deployed_daily_offer_row",
+    }
+    selection_text = (
+        betting.get("selection")
+        or row.get("selection")
+        or row.get("pick")
+        or row.get("prediction")
+    )
+    if selection_text not in (None, ""):
+        publication["selection"] = deepcopy(selection_text)
+
+    field_sources = {
+        "odds": (betting.get("odds"), row.get("odds")),
+        "model_probability": (
+            betting.get("model_probability"),
+            row.get("blinq_probability"),
+            row.get("probability"),
+        ),
+        "edge": (betting.get("edge"), row.get("edge")),
+        "expected_value": (
+            betting.get("expected_value"),
+            row.get("expected_value"),
+        ),
+        "fair_implied_probability": (
+            betting.get("fair_implied_probability"),
+            row.get("fair_implied_probability"),
+        ),
+        "captured_at": (betting.get("captured_at"), row.get("captured_at")),
+        "provider_id": (betting.get("provider_id"), row.get("provider_id")),
+        "betting_day": (betting.get("betting_day"), row.get("betting_day")),
+    }
+    for field, candidates in field_sources.items():
+        for value in candidates:
+            if value not in (None, ""):
+                publication[field] = deepcopy(value)
+                break
+
+    # Preserve a real issuance marker if an older/newer serving schema happens
+    # to carry it, but never manufacture one merely to make Results render.
+    issued_at = row.get("issued_at")
+    if issued_at:
+        publication["issued_at"] = deepcopy(issued_at)
+    return publication
+
 
 def _runtime_publication_key(
     row: dict[str, Any], publication: dict[str, Any], index: int = 0
@@ -187,13 +286,16 @@ def runtime_settled_results(
         return existing_results
 
     seen: set[str] = set()
+    seen_identities: set[str] = set()
     for row in existing_results:
         for index, publication in enumerate(row.get("market_publications") or []):
             if isinstance(publication, dict):
                 seen.add(_runtime_publication_key(row, publication, index))
+                seen_identities.add(_runtime_result_identity(row, publication, index))
 
     runtime_rows: list[dict[str, Any]] = []
     runtime_seen: set[str] = set()
+    runtime_seen_identities: set[str] = set()
     for source_key in _RUNTIME_RESULT_SOURCE_KEYS:
         rows = feed.get(source_key)
         if not isinstance(rows, list):
@@ -211,10 +313,25 @@ def runtime_settled_results(
 
             expected_selection = _selection_id(row)
             overlay_publications: list[dict[str, Any]] = []
-            for index, publication in enumerate(row.get("market_publications") or []):
-                if not isinstance(publication, dict):
-                    continue
-                if not publication.get("issued_at") or publication.get("excluded_reason"):
+            source_publications = [
+                publication
+                for publication in (row.get("market_publications") or [])
+                if isinstance(publication, dict)
+            ]
+            if not source_publications:
+                deployed = _deployed_match_winner_publication(row, source_key)
+                if deployed is not None:
+                    source_publications = [deployed]
+
+            for index, publication in enumerate(source_publications):
+                runtime_evidence = (
+                    publication.get("runtime_publication_evidence")
+                    == "deployed_daily_offer_row"
+                )
+                if (
+                    (not publication.get("issued_at") and not runtime_evidence)
+                    or publication.get("excluded_reason")
+                ):
                     continue
                 section = str(publication.get("section") or "").strip().lower()
                 market = str(publication.get("market") or "").strip().lower()
@@ -237,7 +354,13 @@ def runtime_settled_results(
                     continue
 
                 key = _runtime_publication_key(row, publication, index)
-                if key in seen or key in runtime_seen:
+                identity = _runtime_result_identity(row, publication, index)
+                if (
+                    key in seen
+                    or key in runtime_seen
+                    or identity in seen_identities
+                    or identity in runtime_seen_identities
+                ):
                     continue
 
                 result = publication.get("result")
@@ -287,6 +410,7 @@ def runtime_settled_results(
                 copy["result"] = result
                 overlay_publications.append(copy)
                 runtime_seen.add(key)
+                runtime_seen_identities.add(identity)
 
             if overlay_publications:
                 copy = deepcopy(row)
