@@ -16,6 +16,11 @@ from tbt.data.atp_leaderboards import (
     ATP_LEADERBOARD_FEATURE_NAMES,
     coverage_summary as atp_coverage_summary,
 )
+from tbt.data.wta_season_stats import (
+    WTASeasonPriors,
+    WTA_SEASON_FEATURE_NAMES,
+    coverage_summary as wta_coverage_summary,
+)
 from tbt.models.feature_builder import FEATURE_NAMES, FeatureBuilder
 from tbt.services.data_quality import audit_history
 from tbt.services.training import _enforce_rank_provenance
@@ -169,6 +174,14 @@ def main() -> None:
             "into historical matches."
         ),
     )
+    parser.add_argument(
+        "--wta-season-stats-csv",
+        default="",
+        help=(
+            "Verified WTA seasonal serve/return CSV. Historical rows use only "
+            "the previous completed season to prevent same-season leakage."
+        ),
+    )
     args = parser.parse_args()
 
     matches, identity_safety = sanitize_history_identities(load_partitions(Path(args.history_dir)))
@@ -206,6 +219,26 @@ def main() -> None:
 
     atp_coverage = atp_coverage_summary(atp_feature_rows)
 
+    wta_feature_rows = []
+    if args.wta_season_stats_csv:
+        wta_priors = WTASeasonPriors.from_csv(args.wta_season_stats_csv)
+        for match_id in frame["match_id"]:
+            original = source[match_id]
+            oriented, _ = FeatureBuilder.orient_for_training(original)
+            wta_feature_rows.append(
+                wta_priors.features_for_match(oriented, current=False)
+            )
+    else:
+        wta_feature_rows = [
+            {name: 0.0 for name in WTA_SEASON_FEATURE_NAMES}
+            for _ in range(len(frame))
+        ]
+
+    for name in WTA_SEASON_FEATURE_NAMES:
+        frame[name] = [float(row.get(name, 0.0)) for row in wta_feature_rows]
+
+    wta_coverage = wta_coverage_summary(wta_feature_rows)
+
     out = Path(args.out); out.parent.mkdir(parents=True, exist_ok=True)
     frame.to_parquet(out, index=False, engine="pyarrow")
 
@@ -229,6 +262,24 @@ def main() -> None:
         "coverage": atp_coverage.get("known_both_rate", 0.0),
         "surface_coverage": atp_coverage.get("surface_known_both_rate", 0.0),
         "features": list(ATP_LEADERBOARD_FEATURE_NAMES),
+        "reason": "requires chronological ablation before production feature activation",
+    }
+    report["wta_season_stats"] = {
+        **wta_coverage,
+        "training_eligible": True,
+        "production_enabled": False,
+        "features": list(WTA_SEASON_FEATURE_NAMES),
+        "historical_policy": "previous_completed_season_only",
+        "identity_policy": "unique_normalized_name_or_unique_first_initial_surname",
+        "source_csv": str(args.wta_season_stats_csv or ""),
+    }
+    report.setdefault("candidate_feature_groups", {})["wta_season_priors"] = {
+        "schema_eligible": True,
+        "has_observations": bool(wta_coverage.get("known_both_rate", 0.0)),
+        "eligible_for_candidate": bool(wta_coverage.get("known_both_rate", 0.0)),
+        "production_enabled": False,
+        "coverage": wta_coverage.get("known_both_rate", 0.0),
+        "features": list(WTA_SEASON_FEATURE_NAMES),
         "reason": "requires chronological ablation before production feature activation",
     }
     report["identity_safety"] = identity_safety
