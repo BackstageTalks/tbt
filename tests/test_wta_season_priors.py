@@ -15,7 +15,7 @@ def match(year=2026, p1="Iga Swiatek", p2="Aryna Sabalenka", tour="wta"):
         player2_id="2",
         player2_name=p2,
         winner_id="1",
-        completed=True,
+        status="completed",
     )
 
 
