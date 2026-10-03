@@ -1,0 +1,256 @@
+name: Enrich training data from TML and WTA PBP
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/training-data-enrichment-request.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: true
+
+jobs:
+  enrich:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and verify private destination
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download canonical history and enrichment sources
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/download_production_preflight_inputs.py
+          rm -rf .cache/tbt/history-enriched .cache/tbt/tml .cache/tbt/enrichment
+          cp -a .cache/tbt/history .cache/tbt/history-enriched
+          mkdir -p .cache/tbt/tml .cache/tbt/enrichment/wta-derived
+
+          python - <<'PY'
+          import json, re, urllib.request
+          from pathlib import Path
+          root=Path(".cache/tbt/tml")
+          payload=json.load(urllib.request.urlopen("https://stats.tennismylife.org/api/data-files", timeout=60))
+          pattern=re.compile(r"^\d{4}(?:_challenger|_wta)?\.csv$")
+          wanted=[(str(i.get("name") or ""),str(i.get("url") or "")) for i in (payload.get("files") or []) if pattern.fullmatch(str(i.get("name") or "")) and i.get("url")]
+          if not wanted:
+              raise SystemExit("No TML yearly CSV files discovered")
+          for name,url in wanted:
+              target=root/name
+              with urllib.request.urlopen(url, timeout=120) as src, target.open("wb") as dst:
+                  while True:
+                      chunk=src.read(1024*1024)
+                      if not chunk: break
+                      dst.write(chunk)
+              if target.stat().st_size <= 50:
+                  raise SystemExit(f"TML download too small: {name}")
+          print(f"Downloaded {len(wanted)} TML yearly CSV files")
+          PY
+
+          gh api "repos/$TBT_DATA_REPOSITORY/contents/research/livetennisapi/wta-2025-pbp-match-aggregates.csv?ref=main" \
+            --jq .content | tr -d '\n' | base64 -d \
+            > .cache/tbt/enrichment/wta-derived/wta-2025-pbp-match-aggregates.csv
+          test -s .cache/tbt/enrichment/wta-derived/wta-2025-pbp-match-aggregates.csv
+
+      - name: Link and import TML match statistics
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/enrichment/tml-link .cache/tbt/enrichment/tml-import
+          mapfile -t csvs < <(find .cache/tbt/tml -maxdepth 1 -type f -name '*.csv' | sort)
+          args=()
+          for f in "${csvs[@]}"; do args+=(--source-csv "$f"); done
+          python scripts/link_offline_serve_return.py \
+            --history-dir .cache/tbt/history-enriched \
+            "${args[@]}" \
+            --out-dir .cache/tbt/enrichment/tml-link
+          python scripts/import_offline_linked_serve_return.py \
+            --stage .cache/tbt/enrichment/tml-link/auto_linked.jsonl \
+            --history-dir .cache/tbt/history-enriched \
+            --out-dir .cache/tbt/enrichment/tml-import \
+            --write-partitions \
+            --write-history-dir .cache/tbt/history-enriched
+
+      - name: Link and import WTA 2025 point-by-point aggregates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/enrichment/wta-link .cache/tbt/enrichment/wta-import
+          python scripts/link_offline_serve_return.py \
+            --history-dir .cache/tbt/history-enriched \
+            --livetennisapi-derived-csv .cache/tbt/enrichment/wta-derived/wta-2025-pbp-match-aggregates.csv \
+            --out-dir .cache/tbt/enrichment/wta-link
+          python scripts/import_offline_linked_serve_return.py \
+            --stage .cache/tbt/enrichment/wta-link/auto_linked.jsonl \
+            --history-dir .cache/tbt/history-enriched \
+            --out-dir .cache/tbt/enrichment/wta-import \
+            --write-partitions \
+            --write-history-dir .cache/tbt/history-enriched
+
+      - name: Validate enriched canonical history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, math
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          root=Path(".cache/tbt/history-enriched")
+          matches=load_partitions(root)
+          safe,safety=sanitize_history_identities(matches)
+          if safety.get("quarantined_rows") or len(safe)!=len(matches):
+              raise SystemExit("Identity safety failed after enrichment")
+          for m in safe:
+              for key,value in (m.stats or {}).items():
+                  if isinstance(value,(int,float)) and not isinstance(value,bool) and not math.isfinite(float(value)):
+                      raise SystemExit(f"Non-finite stat {key} on {m.match_id}")
+          def read(p): return json.loads(Path(p).read_text(encoding="utf-8"))
+          reports={
+              "tml_link":read(".cache/tbt/enrichment/tml-link/report.json"),
+              "tml_import":read(".cache/tbt/enrichment/tml-import/report.json"),
+              "wta_link":read(".cache/tbt/enrichment/wta-link/report.json"),
+              "wta_import":read(".cache/tbt/enrichment/wta-import/report.json"),
+          }
+          updated=sum(int((reports[k].get("counts") or {}).get("updated") or 0) for k in ("tml_import","wta_import"))
+          if updated<=0:
+              raise SystemExit("No new training-history statistics were imported")
+          summary={"schema":1,"status":"validated","canonical_rows":len(safe),"updated_matches_total":updated,**reports}
+          Path(".cache/tbt/enrichment/enrichment-summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps({"canonical_rows":len(safe),"updated_matches_total":updated,"tml_updated":(reports["tml_import"].get("counts") or {}).get("updated",0),"wta_updated":(reports["wta_import"].get("counts") or {}).get("updated",0)},indent=2))
+          PY
+
+      - name: Publish enriched canonical history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/history-enriched")
+          reports=[json.loads(Path(".cache/tbt/enrichment/tml-import/report.json").read_text()),json.loads(Path(".cache/tbt/enrichment/wta-import/report.json").read_text())]
+          years=sorted({int(y) for r in reports for y in (r.get("changed_years") or [])})
+          if not years: raise SystemExit("No changed history partitions to publish")
+          paths=[root/f"history-{y:04d}.parquet" for y in years]+[root/"history_manifest.json"]
+          if any(not p.is_file() or p.stat().st_size<=0 for p in paths): raise SystemExit("Missing enriched history asset")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle(paths)
+          print("Published changed years:",years)
+          PY
+
+      - name: Read back enriched history
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/history-readback
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.models.feature_builder import FeatureBuilder
+          root=Path(".cache/tbt/history-readback")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).download()
+          matches=load_partitions(root)
+          quality=sum(1 for m in matches if all(FeatureBuilder._extract_quality(m.stats or {},side)[0] is not None and FeatureBuilder._extract_quality(m.stats or {},side)[1] is not None for side in ("p1","p2")))
+          p=Path(".cache/tbt/enrichment/enrichment-summary.json")
+          summary=json.loads(p.read_text())
+          summary["history_readback_rows"]=len(matches)
+          summary["history_readback_quality_ready"]=quality
+          p.write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps({"history_readback_rows":len(matches),"quality_ready":quality},indent=2))
+          PY
+
+      - name: Download verified ATP and WTA priors
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/atp-leaderboards .cache/tbt/wta-season-stats .cache/tbt/training-db
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-atp-leaderboards-v1",Path(".cache/tbt/atp-leaderboards")).download(
+              extra_names=("atp_leaderboards_1991_2026_52week_career.csv",),
+              required_names=("atp_leaderboards_1991_2026_52week_career.csv",),
+              require_bundle_manifest=True)
+          PY
+          gh release download tbt-wta-season-stats-v1 --repo "$TBT_DATA_REPOSITORY" --pattern wta_stats_2010_2026_serving_returning.csv --dir .cache/tbt/wta-season-stats --clobber
+          echo "023849319985801b1ab0065f77ff70f7d51a4fada6db0827c22d0b84659cba02  .cache/tbt/wta-season-stats/wta_stats_2010_2026_serving_returning.csv" | sha256sum -c -
+
+      - name: Build and audit enriched training DB
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/build_production_training_table.py --history-dir .cache/tbt/history-readback --atp-leaderboards-csv .cache/tbt/atp-leaderboards/atp_leaderboards_1991_2026_52week_career.csv --wta-season-stats-csv .cache/tbt/wta-season-stats/wta_stats_2010_2026_serving_returning.csv --out .cache/tbt/training-db/training_table.parquet --report .cache/tbt/training-db/training_table_report.json
+          python scripts/audit_training_leakage.py --history-dir .cache/tbt/history-readback --report .cache/tbt/training-db/leakage_audit_report.json
+          cp .cache/tbt/enrichment/enrichment-summary.json .cache/tbt/training-db/enrichment_summary.json
+
+      - name: Publish enriched training DB bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/training-db")
+          required=[root/"training_table.parquet",root/"training_table_report.json",root/"leakage_audit_report.json",root/"enrichment_summary.json"]
+          if any(not p.is_file() or p.stat().st_size<=0 for p in required): raise SystemExit("Refusing incomplete enriched training DB publication")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-training-table-v1",root).upload_bundle(required)
+          PY
+
+      - name: Final persisted training DB readback verification
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/training-db-readback
+          mkdir -p .cache/tbt/training-db-readback
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          import pandas as pd
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/training-db-readback")
+          required=("training_table.parquet","training_table_report.json","leakage_audit_report.json","enrichment_summary.json")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-training-table-v1",root).download(extra_names=required,required_names=required,require_bundle_manifest=True)
+          frame=pd.read_parquet(root/"training_table.parquet")
+          report=json.loads((root/"training_table_report.json").read_text())
+          enrichment=json.loads((root/"enrichment_summary.json").read_text())
+          leakage=json.loads((root/"leakage_audit_report.json").read_text())
+          if len(frame)<1000 or int(enrichment.get("updated_matches_total") or 0)<=0: raise SystemExit("Persisted training DB verification failed")
+          verification={"schema":2,"status":"verified","rows":int(len(frame)),"columns":int(len(frame.columns)),"date_range":report.get("date_range"),"updated_matches_total":int(enrichment.get("updated_matches_total") or 0),"history_readback_rows":int(enrichment.get("history_readback_rows") or 0),"history_readback_quality_ready":int(enrichment.get("history_readback_quality_ready") or 0),"tml_import":enrichment.get("tml_import"),"wta_pbp_import":enrichment.get("wta_import"),"atp_known_both_rate":float((report.get("atp_leaderboards") or {}).get("known_both_rate") or 0),"wta_known_both_rate":float((report.get("wta_season_stats") or {}).get("known_both_rate") or 0),"leakage_report":leakage}
+          out=Path(".cache/tbt/training-db-verification.json")
+          out.write_text(json.dumps(verification,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(verification,ensure_ascii=False,indent=2))
+          PY
+          encoded="$(base64 -w0 .cache/tbt/training-db-verification.json)"
+          path="audit/training-db-latest.json"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Verify enriched training DB" -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Verify enriched training DB" -f content="$encoded" >/dev/null
+          fi
