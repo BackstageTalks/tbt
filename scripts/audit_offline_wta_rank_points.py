@@ -153,6 +153,35 @@ def main() -> None:
                     })
             elif existing[0] is None or existing[1] is None:
                 counts["canonical_one_rank_missing"] += 1
+                # Safe one-sided fill: exact match date and the already-present
+                # canonical rank must exactly agree with the pinned source.
+                present_rank_matches = (
+                    (existing[0] is None and int(existing[1]) == int(rank2))
+                    or (existing[1] is None and int(existing[0]) == int(rank1))
+                )
+                if exact_day and present_rank_matches:
+                    counts["strict_fill_candidate_one_missing"] += 1
+                    rank_fill_candidates.append({
+                        "schema": 1,
+                        "match_id": str(match.match_id),
+                        "scheduled_at": match.scheduled_at.astimezone(timezone.utc).isoformat(),
+                        "player1_id": str(match.player1_id),
+                        "player1_name": str(match.player1_name),
+                        "player2_id": str(match.player2_id),
+                        "player2_name": str(match.player2_name),
+                        "incoming_player1_rank": int(rank1),
+                        "incoming_player2_rank": int(rank2),
+                        "existing_player1_rank": existing[0],
+                        "existing_player2_rank": existing[1],
+                        "source_match_date": parsed.event_date.isoformat(),
+                        "source_match_id": parsed.source_match_id,
+                        "source_file_sha256": source_sha,
+                        "link_score": linked["score"],
+                        "link_evidence": linked["evidence"],
+                        "orientation": linked["orientation"],
+                    })
+                elif exact_day:
+                    counts["one_missing_existing_rank_mismatch"] += 1
             else:
                 counts["canonical_both_rank_present"] += 1
                 d1 = abs(int(existing[0]) - int(rank1))
@@ -188,7 +217,7 @@ def main() -> None:
         "counts": dict(counts),
         "api_requests": 0,
         "production_mutated": False,
-        "rank_fill_policy": "audit_only_exact_date_both_missing",
+        "rank_fill_policy": "exact_date_both_missing_or_one_missing_with_exact_existing_rank_match",
         "rank_points_policy": "sidecar_only_no_model_feature",
     }
     (out / "report.json").write_text(json.dumps(report, indent=2), encoding="utf-8")
