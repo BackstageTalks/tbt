@@ -8,21 +8,38 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Iterable
 
-ATP_LEADERBOARD_FEATURE_NAMES = [
-    "atp_serve_rating_diff",
-    "atp_return_rating_diff",
-    "atp_pressure_rating_diff",
-    "atp_surface_serve_rating_diff",
-    "atp_surface_return_rating_diff",
-    "atp_surface_pressure_rating_diff",
-    "atp_leaderboard_known_both",
-    "atp_surface_leaderboard_known_both",
-]
+ATP_METRICS = {
+    "serve_rating": ("serve", "Stats.ServeRatingSortField"),
+    "first_serve_pct": ("serve", "Stats.FirstServePctSortField"),
+    "first_serve_points_won_pct": ("serve", "Stats.FirstServePointsWonPctSortField"),
+    "second_serve_points_won_pct": ("serve", "Stats.SecondServePointsWonPctSortField"),
+    "service_games_won_pct": ("serve", "Stats.ServiceGamesWonPctSortField"),
+    "avg_aces_per_match": ("serve", "Stats.AvgAcesPerMatchSortField"),
+    "avg_double_faults_per_match": ("serve", "Stats.AvgDblFaultsPerMatchSortField"),
+    "return_rating": ("return", "Stats.ReturnRatingSortField"),
+    "first_serve_return_points_won_pct": ("return", "Stats.FirstServeReturnPointsWonPctSortField"),
+    "second_serve_return_points_won_pct": ("return", "Stats.SecondServeReturnPointsWonPctSortField"),
+    "return_games_won_pct": ("return", "Stats.ReturnGamesWonPctSortField"),
+    "break_points_converted_pct": ("return", "Stats.BrkPointsConvertedPctSortField"),
+    "pressure_rating": ("pressure", "Stats.PressureRatingSortField"),
+    "break_points_saved_pct": ("pressure", "Stats.BrkPointsSavedPctSortField"),
+    "tiebreaks_won_pct": ("pressure", "Stats.TieBreaksWonPctSortField"),
+    "deciding_sets_won_pct": ("pressure", "Stats.DecidingSetsWonPctSortField"),
+}
+
+ATP_LEADERBOARD_FEATURE_NAMES = (
+    [f"atp_{name}_diff" for name in ATP_METRICS]
+    + [f"atp_surface_{name}_diff" for name in ATP_METRICS]
+    + [
+        "atp_leaderboard_known_both",
+        "atp_surface_leaderboard_known_both",
+    ]
+)
 
 _BOARD_RATING_FIELD = {
-    "serve": "Stats.ServeRatingSortField",
-    "return": "Stats.ReturnRatingSortField",
-    "pressure": "Stats.PressureRatingSortField",
+    "serve": ATP_METRICS["serve_rating"][1],
+    "return": ATP_METRICS["return_rating"][1],
+    "pressure": ATP_METRICS["pressure_rating"][1],
 }
 
 
@@ -142,6 +159,23 @@ class ATPLeaderboardPriors:
             return None
         return _number(row.get(_BOARD_RATING_FIELD[board]))
 
+    def _metric(
+        self,
+        *,
+        period: str,
+        surface: str,
+        metric: str,
+        player_name: object,
+    ) -> float | None:
+        board, field = ATP_METRICS[metric]
+        player_key = self._player_key(player_name)
+        if player_key is None:
+            return None
+        row = self._by_key.get((period, surface, board, player_key))
+        if row is None:
+            return None
+        return _number(row.get(field))
+
     def player_snapshot(
         self,
         player_name: object,
@@ -151,16 +185,22 @@ class ATPLeaderboardPriors:
     ) -> dict[str, float | None]:
         surface = _surface_key(surface)
         out: dict[str, float | None] = {}
-        for board in ("serve", "return", "pressure"):
-            out[f"{board}_all"] = self._rating(
-                period=period, surface="all", board=board, player_name=player_name
+        for metric in ATP_METRICS:
+            out[f"{metric}_all"] = self._metric(
+                period=period,
+                surface="all",
+                metric=metric,
+                player_name=player_name,
             )
-            out[f"{board}_surface"] = (
-                self._rating(
-                    period=period, surface=surface, board=board, player_name=player_name
+            out[f"{metric}_surface"] = (
+                self._metric(
+                    period=period,
+                    surface=surface,
+                    metric=metric,
+                    player_name=player_name,
                 )
                 if surface != "all"
-                else out[f"{board}_all"]
+                else out[f"{metric}_all"]
             )
         return out
 
@@ -178,26 +218,28 @@ class ATPLeaderboardPriors:
             getattr(match, "player2_name", ""), period=period, surface=surface
         )
 
+        core_metrics = ("serve_rating", "return_rating", "pressure_rating")
         all_known = all(
-            p1.get(f"{board}_all") is not None and p2.get(f"{board}_all") is not None
-            for board in ("serve", "return", "pressure")
+            p1.get(f"{metric}_all") is not None
+            and p2.get(f"{metric}_all") is not None
+            for metric in core_metrics
         )
         surface_known = all(
-            p1.get(f"{board}_surface") is not None
-            and p2.get(f"{board}_surface") is not None
-            for board in ("serve", "return", "pressure")
+            p1.get(f"{metric}_surface") is not None
+            and p2.get(f"{metric}_surface") is not None
+            for metric in core_metrics
         )
 
-        for board in ("serve", "return", "pressure"):
-            left = p1.get(f"{board}_all")
-            right = p2.get(f"{board}_all")
+        for metric in ATP_METRICS:
+            left = p1.get(f"{metric}_all")
+            right = p2.get(f"{metric}_all")
             if left is not None and right is not None:
-                neutral[f"atp_{board}_rating_diff"] = float(left) - float(right)
+                neutral[f"atp_{metric}_diff"] = float(left) - float(right)
 
-            left_surface = p1.get(f"{board}_surface")
-            right_surface = p2.get(f"{board}_surface")
+            left_surface = p1.get(f"{metric}_surface")
+            right_surface = p2.get(f"{metric}_surface")
             if left_surface is not None and right_surface is not None:
-                neutral[f"atp_surface_{board}_rating_diff"] = (
+                neutral[f"atp_surface_{metric}_diff"] = (
                     float(left_surface) - float(right_surface)
                 )
 
