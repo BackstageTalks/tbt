@@ -591,13 +591,20 @@ def _candidate_score(source: OfflineMatch, match) -> tuple[int, list[str], bool]
     if source_names != canonical_names or source.tour != str(match.tour or "").lower():
         return -100, ["pair_or_tour_mismatch"], False
 
-    delta = abs((match.scheduled_at.astimezone(timezone.utc).date() - source.event_date).days)
+    signed_delta = (match.scheduled_at.astimezone(timezone.utc).date() - source.event_date).days
+    delta = abs(signed_delta)
     if delta == 0:
         score += 4
         evidence.append("date_exact")
     elif delta == 1:
         score += 1
         evidence.append("date_plusminus_1")
+    elif source.source.startswith("sackmann:") and 0 <= signed_delta <= 16:
+        # TML/Sackmann-style yearly files store tournament start date rather
+        # than the actual match date. A bounded forward-only tournament window
+        # is accepted only with the strong metadata gates below.
+        score += 1
+        evidence.append("date_tournament_window")
     else:
         return -100, ["date_mismatch"], False
 
@@ -737,7 +744,8 @@ def main() -> None:
         counts["source_rows"] += 1
         per_source[source.source] += 1
         candidates = []
-        for delta in (-1, 0, 1):
+        deltas = range(-1, 17) if source.source.startswith("sackmann:") else (-1, 0, 1)
+        for delta in deltas:
             day = source.event_date + timedelta(days=delta)
             candidates.extend(canonical_by_day_pair.get((source.tour, day, source.pair_key), []))
         # Same canonical row can only appear once, but de-duplicate defensively.
