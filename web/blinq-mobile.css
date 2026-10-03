@@ -146,3 +146,111 @@ body#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin) .results-card-row .r
 body#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin) .result-tag{font-size:10px!important}
 body#blinqPremium.bqm-enabled.blinq-route:not(.blinq-admin) .results-card-row .result-status b{font-size:11px!important}
 }
+
+
+/* Header icon badges 2026-10-04 — PP and Info are compact counters; avatar/profile stays separate. */
+body#blinqPremium:not(.blinq-admin) #bqm-projects.has-unread::after{
+  content:attr(data-unread)!important;
+  position:absolute!important;
+  top:2px!important;
+  right:1px!important;
+  min-width:15px!important;
+  height:15px!important;
+  padding:0 3px!important;
+  display:grid!important;
+  place-items:center!important;
+  box-sizing:border-box!important;
+  border-radius:999px!important;
+  background:#b999ff!important;
+  color:#07130f!important;
+  border:2px solid #061b15!important;
+  font:900 8px/1 Arial,sans-serif!important;
+  letter-spacing:0!important;
+}
+body#blinqPremium:not(.blinq-admin) #insightBell .insight-info-label{display:none!important}
+body#blinqPremium:not(.blinq-admin) #insightBell{position:relative!important}
+body#blinqPremium:not(.blinq-admin) #insightBell #insightUnread:not([hidden]){
+  position:absolute!important;
+  top:2px!important;
+  right:1px!important;
+  min-width:15px!important;
+  height:15px!important;
+  padding:0 3px!important;
+  display:grid!important;
+  place-items:center!important;
+  box-sizing:border-box!important;
+  border-radius:999px!important;
+  background:#57eca2!important;
+  color:#06150e!important;
+  border:2px solid #061b15!important;
+  font:900 8px/1 Arial,sans-serif!important;
+  box-shadow:none!important;
+}
+
+@media(min-width:901px){
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #projectGroupBar{display:none!important}
+  body#blinqPremium:not(.blinq-admin) .reference-topbar .header-actions>#bqm-projects:not([hidden]){
+    position:relative!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    width:40px!important;
+    min-width:40px!important;
+    height:40px!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+    border-radius:9px!important;
+    background:transparent!important;
+    cursor:pointer!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #bqm-projects:hover{
+    background:rgba(185,153,255,.07)!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #bqm-projects img{
+    display:block!important;
+    width:25px!important;
+    height:25px!important;
+    object-fit:contain!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #insightBell.insight-info-button{
+    width:40px!important;
+    min-width:40px!important;
+    height:40px!important;
+    padding:0!important;
+    margin:0!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    border:0!important;
+    border-radius:9px!important;
+    background:transparent!important;
+    gap:0!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #insightBell.insight-info-button:hover,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #insightBell.insight-info-button.has-unread{
+    background:rgba(87,236,162,.06)!important;
+    color:#57eca2!important;
+  }
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #insightBell .insight-bell-icon,
+  body#blinqPremium:not(.blinq-admin) .reference-topbar #insightBell .insight-bell-icon svg{
+    width:21px!important;
+    height:21px!important;
+  }
+}
+
+@media(max-width:900px){
+  body#blinqPremium.bqm-enabled:not(.blinq-admin) #bqm-projects.has-unread::after{
+    content:attr(data-unread)!important;
+    top:3px!important;
+    right:3px!important;
+    width:auto!important;
+    min-width:15px!important;
+    height:15px!important;
+    background:#b999ff!important;
+  }
+  body#blinqPremium.bqm-enabled:not(.blinq-admin) #insightBell #insightUnread:not([hidden]){
+    top:3px!important;
+    right:3px!important;
+  }
+}
