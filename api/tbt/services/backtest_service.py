@@ -9,7 +9,11 @@ from ..models.feature_builder import FeatureBuilder
 from ..models.metrics import evaluate_probabilities
 from ..schemas import MatchRecord
 from .data_quality import audit_history
-from .training import _enforce_rank_provenance, _new_production_ensemble
+from .training import (
+    _augment_atp_leaderboard_features,
+    _enforce_rank_provenance,
+    _new_production_ensemble,
+)
 
 
 def _calendar_safe_split(
@@ -181,6 +185,8 @@ def walk_forward_backtest(
     ],
     min_training_rows: int = 1200,
     first_test_year: int | None = None,
+    *,
+    atp_leaderboards=None,
 ) -> dict:
     matches, quality = audit_history(matches)
     matches, rank_provenance = _enforce_rank_provenance(matches)
@@ -189,6 +195,9 @@ def walk_forward_backtest(
         .build_training_frame(
             matches
         )
+    )
+    frame, atp_leaderboard_coverage = _augment_atp_leaderboard_features(
+        frame, matches, atp_leaderboards
     )
 
     if frame.empty:
@@ -499,6 +508,11 @@ def walk_forward_backtest(
     return {
         "data_quality": quality,
         "rank_provenance": rank_provenance,
+        "atp_leaderboards": {
+            **atp_leaderboard_coverage,
+            "historical_policy": "previous_completed_season_only",
+            "production_features_enabled": False,
+        },
         "method": (
             "calendar-year walk-forward; "
             "every test year is strictly later "
