@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "mode": "feature-audit",
+  "mode": "train",
   "promote": false,
-  "purpose": "Run a zero-provider-call coverage audit after the successful statistics backfill to quantify remaining serve/return/pressure gaps and prioritize the next data-only enrichment.",
+  "purpose": "Train and audit a fresh candidate on the latest canonical history with merged ATP leaderboard priors and published PBP/statistics enrichments; compare against the current production model and Elo without production promotion.",
   "requested_on": "2026-10-03",
-  "requested_at_utc": "2026-10-02T23:18:00Z",
+  "requested_at_utc": "2026-10-03T06:33:00Z",
   "max_requests": 1,
-  "training_scope": "data_only_no_model_promotion",
+  "training_scope": "latest_canonical_candidate_only_no_model_promotion",
   "historical_match_winner_odds_as_model_feature": false
 }
