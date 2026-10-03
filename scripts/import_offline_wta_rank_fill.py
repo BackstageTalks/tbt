@@ -69,10 +69,6 @@ def main() -> None:
         if _signature(match) != expected:
             counts["identity_changed"] += 1
             continue
-        if match.player1_rank is not None or match.player2_rank is not None:
-            counts["rank_no_longer_both_missing"] += 1
-            continue
-
         try:
             rank1 = int(row["incoming_player1_rank"])
             rank2 = int(row["incoming_player2_rank"])
@@ -85,13 +81,30 @@ def main() -> None:
         if rank1 <= 0 or rank2 <= 0:
             counts["invalid_incoming"] += 1
             continue
+
+        # Never overwrite a canonical rank. If one side is already present it
+        # must exactly match the pinned source before the missing side is filled.
+        existing1, existing2 = match.player1_rank, match.player2_rank
+        if existing1 is not None and int(existing1) != rank1:
+            counts["existing_rank_mismatch"] += 1
+            continue
+        if existing2 is not None and int(existing2) != rank2:
+            counts["existing_rank_mismatch"] += 1
+            continue
+        if existing1 is not None and existing2 is not None:
+            counts["rank_already_complete"] += 1
+            continue
         scheduled = match.scheduled_at.astimezone(timezone.utc)
         if source_date.date() != scheduled.date() or source_date > scheduled:
             counts["point_in_time_rejected"] += 1
             continue
 
-        match.player1_rank = rank1
-        match.player2_rank = rank2
+        if existing1 is None:
+            match.player1_rank = rank1
+            counts["player1_rank_filled"] += 1
+        if existing2 is None:
+            match.player2_rank = rank2
+            counts["player2_rank_filled"] += 1
         payload = dict(match.provider_payload or {})
         payload["_tbt_rank_provenance"] = {
             "point_in_time": True,
