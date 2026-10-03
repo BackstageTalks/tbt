@@ -8,6 +8,10 @@ from typing import Iterable
 
 import pandas as pd
 
+from ..data.atp_leaderboards import (
+    ATP_LEADERBOARD_FEATURE_NAMES,
+    coverage_summary as atp_coverage_summary,
+)
 from ..models.ensemble import TennisEnsemble
 from ..models.feature_builder import FEATURE_NAMES, RICH_CHARTING_FEATURE_NAMES, FeatureBuilder
 from ..models.metrics import evaluate_probabilities
@@ -567,6 +571,28 @@ def _eligible_evaluation(test, production_model=None, promotion_history=()):
     return test, None if len(test) else "no_eligible_unseen_evaluation_rows"
 
 
+def _augment_atp_leaderboard_features(
+    frame: pd.DataFrame,
+    matches: Iterable[MatchRecord],
+    atp_leaderboards,
+) -> tuple[pd.DataFrame, dict]:
+    augmented = frame.copy()
+    source = {match.match_id: match for match in matches}
+    rows = []
+    for match_id in augmented["match_id"]:
+        original = source[match_id]
+        oriented, _ = FeatureBuilder.orient_for_training(original)
+        if atp_leaderboards is None:
+            rows.append({name: 0.0 for name in ATP_LEADERBOARD_FEATURE_NAMES})
+        else:
+            rows.append(
+                atp_leaderboards.features_for_match(oriented, current=False)
+            )
+    for name in ATP_LEADERBOARD_FEATURE_NAMES:
+        augmented[name] = [float(row.get(name, 0.0)) for row in rows]
+    return augmented, atp_coverage_summary(rows)
+
+
 def train_from_matches(
     matches: Iterable[
         MatchRecord
@@ -575,6 +601,7 @@ def train_from_matches(
     *,
     production_model=None,
     promotion_history=(),
+    atp_leaderboards=None,
 ) -> TrainingResult:
     matches, quality = audit_history(matches)
     matches, rank_provenance = _enforce_rank_provenance(matches)
@@ -585,6 +612,9 @@ def train_from_matches(
         .build_training_frame(
             matches
         )
+    )
+    frame, atp_leaderboard_coverage = _augment_atp_leaderboard_features(
+        frame, matches, atp_leaderboards
     )
 
     if (
@@ -729,6 +759,12 @@ def train_from_matches(
         "delta_vs_production": delta_vs_production,
         "data_quality": quality,
         "rank_provenance": rank_provenance,
+        "atp_leaderboards": {
+            **atp_leaderboard_coverage,
+            "features": list(ATP_LEADERBOARD_FEATURE_NAMES),
+            "historical_policy": "previous_completed_season_only",
+            "production_features_enabled": False,
+        },
         "evaluation_governance": {
             "holdout_fingerprint": holdout_fingerprint,
             "holdout_reuse_policy": (
