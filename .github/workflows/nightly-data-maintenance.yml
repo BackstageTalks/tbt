@@ -40,6 +40,7 @@ jobs:
         shell: bash
         env:
           BLINQ_EVENT_NAME: ${{ github.event_name }}
+          BLINQ_HEAD_COMMIT_MESSAGE: ${{ github.event.head_commit.message || '' }}
         run: |
           set -euo pipefail
           python - <<'PY'
@@ -53,11 +54,17 @@ jobs:
           event = os.environ.get("BLINQ_EVENT_NAME", "")
 
           if event == "push":
-              env_stop_local = datetime.combine(local.date(), time(4, 0), tzinfo=zone)
-              hard_stop_local = datetime.combine(local.date(), time(5, 0), tzinfo=zone)
-              # External scheduler is expected around 00:30 Bratislava. A stale
-              # daytime request must not start a multi-hour writer accidentally.
-              should_run = local < hard_stop_local and local.hour < 5
+              forced = "[force-nightly]" in os.environ.get("BLINQ_HEAD_COMMIT_MESSAGE", "")
+              if forced:
+                  env_stop_local = local + timedelta(hours=3, minutes=30)
+                  hard_stop_local = local + timedelta(hours=4, minutes=30)
+                  should_run = True
+              else:
+                  env_stop_local = datetime.combine(local.date(), time(4, 0), tzinfo=zone)
+                  hard_stop_local = datetime.combine(local.date(), time(5, 0), tzinfo=zone)
+                  # External scheduler is expected around 00:30 Bratislava. A stale
+                  # daytime request must not start a multi-hour writer accidentally.
+                  should_run = local < hard_stop_local and local.hour < 5
           else:
               should_run = True
               env_stop_local = local + timedelta(hours=3, minutes=30)
@@ -163,7 +170,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p .cache/tbt/nightly/history .cache/tbt/nightly/derived .cache/tbt/atp-leaderboards
+          mkdir -p .cache/tbt/nightly/history .cache/tbt/nightly/derived .cache/tbt/atp-leaderboards .cache/tbt/wta-season-stats
           python - <<'PYATP'
           import os
           from pathlib import Path
@@ -181,6 +188,19 @@ jobs:
               require_bundle_manifest=True,
           )
           print("ATP leaderboard priors ready:", root/"atp_leaderboards_1991_2026_52week_career.csv")
+
+          wta_root=Path(".cache/tbt/wta-season-stats")
+          wta_store=ReleaseStore(
+              os.environ["TBT_DATA_REPOSITORY"],
+              "tbt-wta-season-stats-v1",
+              wta_root,
+          )
+          wta_store.download(
+              extra_names=("wta_stats_2010_2026_serving_returning.csv",),
+              required_names=("wta_stats_2010_2026_serving_returning.csv",),
+              require_bundle_manifest=True,
+          )
+          print("WTA season priors ready:", wta_root/"wta_stats_2010_2026_serving_returning.csv")
           PYATP
           remaining="$(python - <<'PY'
           import os
@@ -219,6 +239,7 @@ jobs:
             python scripts/build_production_training_table.py \
               --history-dir .cache/tbt/nightly/history \
               --atp-leaderboards-csv .cache/tbt/atp-leaderboards/atp_leaderboards_1991_2026_52week_career.csv \
+              --wta-season-stats-csv .cache/tbt/wta-season-stats/wta_stats_2010_2026_serving_returning.csv \
               --out .cache/tbt/nightly/derived/training_table.parquet \
               --report .cache/tbt/nightly/derived/training_table_report.json
             python scripts/audit_training_leakage.py \
@@ -240,6 +261,34 @@ jobs:
           elif [[ "$rc" != "0" ]]; then
             exit "$rc"
           fi
+
+      - name: Persist verified training table to private training DB release
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! -s .cache/tbt/nightly/derived/training_table.parquet || ! -s .cache/tbt/nightly/derived/training_table_report.json ]]; then
+            echo "Training table or report missing; refusing to publish."
+            exit 1
+          fi
+          python - <<'PYTRAIN'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+
+          root = Path(".cache/tbt/nightly/derived")
+          store = ReleaseStore(
+              os.environ["TBT_DATA_REPOSITORY"],
+              "tbt-training-table-v1",
+              root,
+          )
+          store.upload_bundle([
+              root / "training_table.parquet",
+              root / "training_table_report.json",
+              root / "leakage_audit_report.json",
+          ])
+          print("Published verified training DB bundle:", root / "training_table.parquet")
+          PYTRAIN
 
       - name: Build nightly summary
         if: always()
