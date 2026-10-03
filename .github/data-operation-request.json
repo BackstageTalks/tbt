@@ -2,10 +2,10 @@
   "schema": 1,
   "mode": "train",
   "promote": false,
-  "purpose": "Train and audit the final enriched candidate on latest canonical history after ATP and leakage-safe WTA priors integration, with published PBP/statistics enrichments; compare against current production and Elo without production promotion.",
+  "purpose": "Train and audit the final enriched candidate using full-history ATP Serve/Return/Pressure priors (1991-2026 plus rolling 52-week and Career asset), leakage-safe WTA priors, and published statistics enrichments; compare against current production and Elo without production promotion.",
   "requested_on": "2026-10-03",
-  "requested_at_utc": "2026-10-03T06:44:30Z",
+  "requested_at_utc": "2026-10-03T06:52:00Z",
   "max_requests": 1,
-  "training_scope": "latest_canonical_atp_wta_pbp_stats_candidate_no_model_promotion",
+  "training_scope": "latest_canonical_full_history_atp_wta_pbp_stats_candidate_no_model_promotion",
   "historical_match_winner_odds_as_model_feature": false
 }
