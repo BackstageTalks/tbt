@@ -20,9 +20,11 @@ permissions:
   actions: read
 
 concurrency:
-  # Pull-request audits are read-only and may run independently. Main/write runs
-  # publish canonical history and must serialize with every other history writer.
-  group: ${{ github.event_name == 'pull_request' && format('wta-rank-audit-pr-{0}', github.ref) || 'tbt-history-data-writer' }}
+  # Serialize both audits and writes with canonical history publishers. Even a
+  # read-only audit downloads the multi-asset release bundle and must not race
+  # an in-progress --clobber publication, otherwise checksum validation can see
+  # a mixed release generation.
+  group: tbt-history-data-writer
   cancel-in-progress: false
 
 jobs:
