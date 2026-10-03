@@ -10,6 +10,8 @@ from ..models.metrics import evaluate_probabilities
 from ..schemas import MatchRecord
 from .data_quality import audit_history
 from .training import (
+    ATP_CANDIDATE_FEATURE_NAMES,
+    PRODUCTION_FEATURE_NAMES,
     _augment_atp_leaderboard_features,
     _enforce_rank_provenance,
     _new_production_ensemble,
@@ -307,8 +309,13 @@ def walk_forward_backtest(
             historical
         )
 
+        feature_names = (
+            ATP_CANDIDATE_FEATURE_NAMES
+            if atp_leaderboards is not None
+            else PRODUCTION_FEATURE_NAMES
+        )
         model = (
-            _new_production_ensemble()
+            _new_production_ensemble(feature_names)
             .fit(
                 train,
                 calibration,
