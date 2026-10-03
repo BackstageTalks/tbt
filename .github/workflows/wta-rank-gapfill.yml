@@ -20,10 +20,6 @@ permissions:
   actions: read
 
 concurrency:
-  # Serialize both audits and writes with canonical history publishers. Even a
-  # read-only audit downloads the multi-asset release bundle and must not race
-  # an in-progress --clobber publication, otherwise checksum validation can see
-  # a mixed release generation.
   group: tbt-history-data-writer
   cancel-in-progress: false
 
@@ -73,7 +69,7 @@ jobs:
           source=.cache/tbt/wta-rank/source/wta.txt
           : > "$source"
           for part in 000 001 002 003 004 005; do
-            gh api -H "Accept: application/vnd.github.raw+json"               "repos/$TBT_DATA_REPOSITORY/contents/$SOURCE_PREFIX/wta.txt.part$part?ref=$SOURCE_REF" >> "$source"
+            gh api -H "Accept: application/vnd.github.raw+json" "repos/$TBT_DATA_REPOSITORY/contents/$SOURCE_PREFIX/wta.txt.part$part?ref=$SOURCE_REF" >> "$source"
           done
           test "$(sha256sum "$source" | awk '{print $1}')" = "$EXPECTED_SHA"
           test "$(wc -l < "$source" | tr -d ' ')" = "$EXPECTED_LINES"
@@ -90,7 +86,7 @@ jobs:
 
       - name: Audit point-in-time ranks and points
         run: |
-          python scripts/audit_offline_wta_rank_points.py             --history-dir .cache/tbt/wta-rank/history             --source-csv .cache/tbt/wta-rank/source/wta.txt             --source-label "$SOURCE_LABEL"             --out-dir .cache/tbt/wta-rank/audit
+          python scripts/audit_offline_wta_rank_points.py --history-dir .cache/tbt/wta-rank/history --source-csv .cache/tbt/wta-rank/source/wta.txt --source-label "$SOURCE_LABEL" --out-dir .cache/tbt/wta-rank/audit
           test -s .cache/tbt/wta-rank/audit/report.json
 
       - name: Dry-run strict rank importer
@@ -100,7 +96,7 @@ jobs:
             --history-dir .cache/tbt/wta-rank/history \
             --out-dir .cache/tbt/wta-rank/dry
           python - <<'PY'
-          import json
+          import json, os
           from pathlib import Path
           r=json.loads(Path(".cache/tbt/wta-rank/dry/report.json").read_text())
           c=r.get("counts") or {}
@@ -108,12 +104,16 @@ jobs:
           for key in ("identity_missing","identity_changed","invalid_incoming","point_in_time_rejected","duplicate_or_missing_match_id"):
               if int(c.get(key) or 0):
                   raise SystemExit(f"Strict WTA rank importer rejected rows: {key}={c.get(key)}")
-          if int(c.get("updated") or 0) <= 0:
-              raise SystemExit("No safe WTA rank fills")
+          updated=int(c.get("updated") or 0)
+          exhausted=updated <= 0
+          with open(os.environ["GITHUB_ENV"],"a",encoding="utf-8") as fh:
+              fh.write(f"RANK_GAP_EXHAUSTED={'true' if exhausted else 'false'}\n")
+          if exhausted:
+              print("No safe WTA rank fills remain; treating verified exhaustion as a successful no-op.")
           PY
 
       - name: Write verified WTA ranks into local history
-        if: env.RANK_MODE == 'write'
+        if: env.RANK_MODE == 'write' && env.RANK_GAP_EXHAUSTED != 'true'
         run: |
           python scripts/import_offline_wta_rank_fill.py \
             --stage .cache/tbt/wta-rank/audit/rank-fill-candidates.jsonl \
@@ -123,7 +123,7 @@ jobs:
             --write-history-dir .cache/tbt/wta-rank/history
 
       - name: Validate and publish changed canonical partitions
-        if: env.RANK_MODE == 'write'
+        if: env.RANK_MODE == 'write' && env.RANK_GAP_EXHAUSTED != 'true'
         run: |
           python - <<'PY'
           import json,os
@@ -187,8 +187,8 @@ jobs:
           PY
             gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" --input /tmp/wta-rank-upload.json >/dev/null
           }
-          upload /tmp/wta-rank-points-2006-2026.jsonl.gz             research/rank_points/wta-rank-points-2006-2026.jsonl.gz             "Update WTA rank-points sidecar from run $GITHUB_RUN_ID"
-          upload .cache/tbt/wta-rank/audit/report.json             audit/wta-rank-points-latest.json             "Audit WTA rank-points source run $GITHUB_RUN_ID"
+          upload /tmp/wta-rank-points-2006-2026.jsonl.gz research/rank_points/wta-rank-points-2006-2026.jsonl.gz "Update WTA rank-points sidecar from run $GITHUB_RUN_ID"
+          upload .cache/tbt/wta-rank/audit/report.json audit/wta-rank-points-latest.json "Audit WTA rank-points source run $GITHUB_RUN_ID"
 
       - name: Upload workflow evidence
         uses: actions/upload-artifact@v4
@@ -199,5 +199,5 @@ jobs:
             .cache/tbt/wta-rank/audit/rank-fill-candidates.jsonl
             .cache/tbt/wta-rank/dry/report.json
             .cache/tbt/wta-rank/write/report.json
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 14
