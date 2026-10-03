@@ -1,10 +1,10 @@
 {
-  "requested_at": "2026-10-03T18:04:00+02:00",
+  "requested_at": "2026-10-03T21:01:00+02:00",
   "action": "enrich_training_data",
   "sources": [
     "TennisMyLife yearly ATP/WTA/Challenger CSVs",
     "Live Tennis API WTA 2025 derived point-by-point aggregates",
     "Jeff Sackmann archived ATP/WTA match statistics"
   ],
-  "note": "Retry full safe serialised enrichment after autofill coordination fix. Publish only safe identity-linked non-conflicting statistics, rebuild training DB, audit leakage and verify persisted read-back. No model promotion."
+  "note": "Run full safe serialized enrichment with mixed ATP/WTA Sackmann parsing and break-point serve/return rates. Publish only safe identity-linked non-conflicting statistics, rebuild training DB, audit leakage and verify persisted read-back. No model promotion."
 }
