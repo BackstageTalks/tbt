@@ -577,14 +577,17 @@ def _augment_atp_leaderboard_features(
     atp_leaderboards,
 ) -> tuple[pd.DataFrame, dict]:
     augmented = frame.copy()
-    source = {match.match_id: match for match in matches}
-    rows = []
-    for match_id in augmented["match_id"]:
-        original = source[match_id]
-        oriented, _ = FeatureBuilder.orient_for_training(original)
-        if atp_leaderboards is None:
-            rows.append({name: 0.0 for name in ATP_LEADERBOARD_FEATURE_NAMES})
-        else:
+    if atp_leaderboards is None:
+        rows = [
+            {name: 0.0 for name in ATP_LEADERBOARD_FEATURE_NAMES}
+            for _ in range(len(augmented))
+        ]
+    else:
+        source = {match.match_id: match for match in matches}
+        rows = []
+        for match_id in augmented["match_id"]:
+            original = source[match_id]
+            oriented, _ = FeatureBuilder.orient_for_training(original)
             rows.append(
                 atp_leaderboards.features_for_match(oriented, current=False)
             )
