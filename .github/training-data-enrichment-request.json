@@ -1,9 +1,9 @@
 {
-  "requested_at": "2026-10-03T08:35:00+02:00",
+  "requested_at": "2026-10-03T08:48:00+02:00",
   "action": "enrich_training_data",
   "sources": [
     "TennisMyLife yearly ATP/WTA/Challenger CSVs",
     "Live Tennis API WTA 2025 derived point-by-point aggregates"
   ],
-  "note": "Import, publish canonical history, rebuild and verify persisted training DB"
+  "note": "Retry with single ZIP source download; import, publish history, rebuild and verify persisted training DB"
 }
