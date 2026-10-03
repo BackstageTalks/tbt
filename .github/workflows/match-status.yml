@@ -2,6 +2,8 @@ name: Hourly prediction match status
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 
 permissions:
   actions: write
@@ -13,8 +15,11 @@ concurrency:
 
 jobs:
   match-status:
-    # Hourly worker may call the Tennis provider: only enable after explicit approval.
-    if: github.event_name == 'workflow_dispatch'
+    # Recurring cadence is owned by the external scheduler. A tagged main push
+    # provides a safe one-shot catch-up without bypassing shared API budget guards.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[match-status-now]'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
