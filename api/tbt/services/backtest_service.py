@@ -511,7 +511,8 @@ def walk_forward_backtest(
         "atp_leaderboards": {
             **atp_leaderboard_coverage,
             "historical_policy": "previous_completed_season_only",
-            "production_features_enabled": False,
+            "candidate_features_enabled": bool(atp_leaderboards is not None),
+            "promotion_required_for_serving": True,
         },
         "method": (
             "calendar-year walk-forward; "
