@@ -1,5 +1,6 @@
 {
   "schema": 1,
   "requested_on": "2026-10-03",
+  "attempt": 2,
   "purpose": "Persist and verify full-history ATP+WTA training database from canonical history and verified priors."
 }
