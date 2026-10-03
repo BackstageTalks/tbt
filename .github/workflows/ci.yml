@@ -163,6 +163,7 @@ jobs:
           python tests/browser_admin_live_delete.py
           python tests/browser_results_financial_audit.py
           python tests/browser_mobile_results_layout.py
+          python tests/browser_mobile_header.py
           python tests/browser_mobile_dashboard_audit.py
           python tests/browser_results_betting_day.py
           python tests/browser_profile_chip_fit.py
