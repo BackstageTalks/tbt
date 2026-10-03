@@ -20,7 +20,11 @@ permissions:
   actions: read
 
 concurrency:
-  group: ${{ github.event_name == 'pull_request' && format('wta-rank-audit-pr-{0}', github.ref) || 'wta-rank-audit' }}
+  # Serialize both audits and writes with canonical history publishers. Even a
+  # read-only audit downloads the multi-asset release bundle and must not race
+  # an in-progress --clobber publication, otherwise checksum validation can see
+  # a mixed release generation.
+  group: tbt-history-data-writer
   cancel-in-progress: false
 
 jobs:
