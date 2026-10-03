@@ -9,6 +9,7 @@ import os
 import re
 import statistics
 import urllib.error
+import urllib.parse
 import urllib.request
 import unicodedata
 from collections import defaultdict
@@ -32,12 +33,25 @@ def _gh(path, missing_ok=False):
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=35) as response:
+        with urllib.request.urlopen(req, timeout=20) as response:
             return json.load(response)
     except urllib.error.HTTPError as exc:
         if missing_ok and exc.code == 404:
             return None
         raise RuntimeError(f"GitHub archive HTTP {exc.code}") from None
+
+
+def _download_url(url):
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": "Bearer " + TOKEN,
+            "Accept": "application/vnd.github.raw+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=20) as response:
+        return response.read()
 
 
 def _norm(value):
@@ -62,6 +76,13 @@ def read_archives(days):
         entries = _gh(ROOT + "/" + day, missing_ok=True) or []
         for entry in entries if isinstance(entries, list) else []:
             if not str(entry.get("name") or "").endswith(".json.gz"):
+                continue
+            # Directory listings already provide a direct download URL.  Using it
+            # avoids a second GitHub Contents API metadata request plus base64
+            # expansion for every archived snapshot.
+            download_url = str(entry.get("download_url") or "").strip()
+            if download_url:
+                yield json.loads(gzip.decompress(_download_url(download_url)))
                 continue
             obj = _gh(entry["path"])
             if obj and obj.get("content"):
