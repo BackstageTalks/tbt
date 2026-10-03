@@ -48,25 +48,21 @@ jobs:
           cp -a .cache/tbt/history .cache/tbt/history-enriched
           mkdir -p .cache/tbt/tml .cache/tbt/enrichment/wta-derived
 
+          curl -fsSL --retry 3 --retry-delay 2 https://stats.tennismylife.org/api/download-all -o .cache/tbt/tml-data.zip
+          unzip -q .cache/tbt/tml-data.zip -d .cache/tbt/tml
           python - <<'PY'
-          import json, re, urllib.request
+          import re
           from pathlib import Path
           root=Path(".cache/tbt/tml")
-          payload=json.load(urllib.request.urlopen("https://stats.tennismylife.org/api/data-files", timeout=60))
           pattern=re.compile(r"^\d{4}(?:_challenger|_wta)?\.csv$")
-          wanted=[(str(i.get("name") or ""),str(i.get("url") or "")) for i in (payload.get("files") or []) if pattern.fullmatch(str(i.get("name") or "")) and i.get("url")]
-          if not wanted:
-              raise SystemExit("No TML yearly CSV files discovered")
-          for name,url in wanted:
-              target=root/name
-              with urllib.request.urlopen(url, timeout=120) as src, target.open("wb") as dst:
-                  while True:
-                      chunk=src.read(1024*1024)
-                      if not chunk: break
-                      dst.write(chunk)
-              if target.stat().st_size <= 50:
-                  raise SystemExit(f"TML download too small: {name}")
-          print(f"Downloaded {len(wanted)} TML yearly CSV files")
+          files=[p for p in root.rglob("*.csv") if pattern.fullmatch(p.name) and p.stat().st_size>50]
+          if not files:
+              raise SystemExit("No TML yearly CSV files extracted")
+          for p in files:
+              target=root/p.name
+              if p != target:
+                  target.write_bytes(p.read_bytes())
+          print(f"Extracted {len(files)} TML yearly CSV files")
           PY
 
           gh api "repos/$TBT_DATA_REPOSITORY/contents/research/livetennisapi/wta-2025-pbp-match-aggregates.csv?ref=main" \
