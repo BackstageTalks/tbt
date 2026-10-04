@@ -16,6 +16,7 @@ from tbt.data.history_safety import sanitize_history_identities
 from tbt.data.offline_market_history import (
     build_market_history_marker, candidate_link, parse_valuebet_row,
 )
+from tbt.data.offline_odds import norm_text
 
 
 def _signature(match):
@@ -42,6 +43,36 @@ def _sha256(path):
     return h.hexdigest()
 
 
+def _source_lookup(value):
+    tokens = norm_text(value).split()
+    if not tokens:
+        return None
+    cut = len(tokens)
+    while cut > 0 and len(tokens[cut - 1]) == 1 and tokens[cut - 1].isalpha():
+        cut -= 1
+    if 0 < cut < len(tokens):
+        return ("legacy", " ".join(tokens[:cut]))
+    return ("exact", " ".join(tokens))
+
+
+def _canonical_lookup_keys(value):
+    normalized = norm_text(value)
+    tokens = normalized.split()
+    exact = {normalized} if normalized else set()
+    legacy = set()
+    for n in range(1, len(tokens)):
+        legacy.add(" ".join(tokens[:n]))
+        legacy.add(" ".join(tokens[-n:]))
+    return exact, legacy
+
+
+def _index_add(index, key, match):
+    bucket = index[key]
+    mid = str(match.match_id)
+    if mid not in bucket:
+        bucket[mid] = match
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--history-dir", required=True)
@@ -55,9 +86,16 @@ def main():
     if safety.get("quarantined_rows"):
         raise SystemExit("Canonical history has identity quarantine; refusing market linking")
 
-    by_day = defaultdict(list)
+    by_exact_name = defaultdict(dict)
+    by_legacy_surname = defaultdict(dict)
     for m in matches:
-        by_day[(str(m.tour or "").lower(), m.scheduled_at.date())].append(m)
+        base = (str(m.tour or "").lower(), m.scheduled_at.date())
+        for player_name in (m.player1_name, m.player2_name):
+            exact_keys, legacy_keys = _canonical_lookup_keys(player_name)
+            for key in exact_keys:
+                _index_add(by_exact_name, (*base, key), m)
+            for key in legacy_keys:
+                _index_add(by_legacy_surname, (*base, key), m)
 
     counts, staged, review, quarantine = Counter(), [], [], []
     seen_source_ids = set()
@@ -74,10 +112,23 @@ def main():
                 if key in seen_source_ids:
                     counts["duplicate_source_rows"] += 1; continue
                 seen_source_ids.add(key)
+                lookup_a = _source_lookup(source.player_a)
+                lookup_b = _source_lookup(source.player_b)
+                if lookup_a is None or lookup_b is None:
+                    counts["unmatched"] += 1
+                    continue
+
                 candidates = {}
                 for delta in (-1, 0, 1):
-                    for m in by_day.get((source.tour, source.event_date + timedelta(days=delta)), []):
-                        candidates[str(m.match_id)] = m
+                    day = source.event_date + timedelta(days=delta)
+                    index_a = by_legacy_surname if lookup_a[0] == "legacy" else by_exact_name
+                    index_b = by_legacy_surname if lookup_b[0] == "legacy" else by_exact_name
+                    a = index_a.get((source.tour, day, lookup_a[1]), {})
+                    b = index_b.get((source.tour, day, lookup_b[1]), {})
+                    if not a or not b:
+                        continue
+                    for mid in a.keys() & b.keys():
+                        candidates[mid] = a[mid]
                 scored = []
                 for m in candidates.values():
                     linked = candidate_link(
