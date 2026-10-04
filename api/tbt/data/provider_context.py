@@ -121,6 +121,31 @@ def minimize_provider_payload(
             )
             if k in odds_marker
         }
+    market_history = raw.get("_tbt_market_history")
+    if isinstance(market_history, dict):
+        compact_market_history = {
+            k: market_history[k]
+            for k in (
+                "schema", "status", "source", "source_match_id",
+                "source_file_sha256", "price_kind", "closing_semantics",
+                "model_feature_policy",
+            )
+            if k in market_history
+        }
+        for kind in ("opening", "closing"):
+            market = market_history.get(kind)
+            if isinstance(market, dict):
+                compact_market_history[kind] = {
+                    k: market[k]
+                    for k in (
+                        "player1_odds", "player2_odds",
+                        "player1_implied_probability",
+                        "player2_implied_probability", "raw_overround",
+                    )
+                    if k in market
+                }
+        if compact_market_history:
+            out["_tbt_market_history"] = compact_market_history
     termination = _compact_termination(raw)
     if termination is not None:
         out["_tbt_termination"] = termination
