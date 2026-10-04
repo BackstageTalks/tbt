@@ -1,0 +1,8 @@
+{
+  "schema": 1,
+  "requested_at": "2026-10-04T14:30:00+02:00",
+  "action": "integrate_valuebetennis_market_history",
+  "source": "Valuebetennis 2021-2026 public CSV, CC BY 4.0",
+  "policy": "opening odds stored as pre-match candidate; closing odds validation/CLV only; fail closed on identity or market conflicts",
+  "note": "Autonomous BlinQ integration. Publish only exact/unique linked market history, validate leakage and persisted read-back. No model promotion."
+}
