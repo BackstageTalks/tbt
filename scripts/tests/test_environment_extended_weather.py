@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import unittest
+from types import SimpleNamespace
 
-from tbt.services.environment import ARCHIVE_URL, OpenMeteoClient, Venue
+from enrich_environment_snapshot import VenueKnowledge, _needs_work
+from tbt.services.environment import ARCHIVE_URL, ENVIRONMENT_SCHEMA_VERSION, OpenMeteoClient, Venue
 
 
 class _Response:
@@ -103,6 +105,83 @@ class ExtendedEnvironmentWeatherTests(unittest.TestCase):
         )
         self.assertIsNone(weather.air_density_kg_m3)
         self.assertIsNone(weather.density_altitude_m)
+
+
+class WeatherSchemaResumeTests(unittest.TestCase):
+    def test_old_resolved_weather_is_selected_for_additive_upgrade(self):
+        match = SimpleNamespace(
+            tournament="Madrid",
+            tournament_id=1,
+            tour="ATP",
+            indoor=False,
+        )
+        payload = {
+            "_tbt_environment": {
+                "schema_version": ENVIRONMENT_SCHEMA_VERSION - 1,
+                "venue_resolved": True,
+                "venue": {
+                    "name": "Madrid",
+                    "query": "Madrid, ES",
+                    "latitude": 40.4168,
+                    "longitude": -3.7038,
+                    "country": "ES",
+                },
+                "weather": {
+                    "temperature_c": 25.0,
+                    "relative_humidity_pct": 40.0,
+                    "wind_speed_kmh": 10.0,
+                },
+            }
+        }
+        selected, reason = _needs_work(
+            match=match,
+            payload=payload,
+            knowledge=VenueKnowledge(),
+            force=False,
+            complete_static=False,
+            retry_unresolved=True,
+        )
+        self.assertTrue(selected)
+        self.assertEqual(reason, "weather_schema_upgrade")
+
+    def test_current_extended_weather_does_not_repeat(self):
+        match = SimpleNamespace(
+            tournament="Madrid",
+            tournament_id=1,
+            tour="ATP",
+            indoor=False,
+        )
+        payload = {
+            "_tbt_environment": {
+                "schema_version": ENVIRONMENT_SCHEMA_VERSION,
+                "venue_resolved": True,
+                "venue": {
+                    "name": "Madrid",
+                    "query": "Madrid, ES",
+                    "latitude": 40.4168,
+                    "longitude": -3.7038,
+                    "country": "ES",
+                },
+                "weather": {
+                    "dew_point_c": 10.0,
+                    "apparent_temperature_c": 25.0,
+                    "cloud_cover_pct": 10.0,
+                    "wind_direction_deg": 180.0,
+                    "air_density_kg_m3": 1.1,
+                    "density_altitude_m": 900.0,
+                },
+            }
+        }
+        selected, reason = _needs_work(
+            match=match,
+            payload=payload,
+            knowledge=VenueKnowledge(),
+            force=False,
+            complete_static=False,
+            retry_unresolved=True,
+        )
+        self.assertFalse(selected)
+        self.assertEqual(reason, "not_unresolved")
 
 
 if __name__ == "__main__":
