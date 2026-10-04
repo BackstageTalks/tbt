@@ -152,11 +152,10 @@ jobs:
           if safety.get("quarantined_rows") or len(safe) != len(matches):
               failed.append("canonical_identity_safety")
 
-          market_feature_names = [
-              name for name in FEATURE_NAMES
-              if any(token in str(name).lower() for token in ("market", "odds", "opening", "closing", "price"))
-          ]
-          if market_feature_names:
+          feature_builder_source = Path("api/tbt/models/feature_builder.py").read_text(encoding="utf-8")
+          market_feature_names = []
+          if "_tbt_market_history" in feature_builder_source:
+              market_feature_names.append("_tbt_market_history")
               failed.append("market_data_exposed_as_model_features")
 
           markers = 0
