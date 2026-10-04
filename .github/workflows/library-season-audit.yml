@@ -1,0 +1,68 @@
+name: Audit Library season source overlap
+
+on:
+  push:
+    branches: [library-final-sweep]
+    paths:
+      - '.github/workflows/library-season-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install --quiet pandas pyarrow
+      - name: Download canonical history
+        run: |
+          mkdir -p audit/history
+          gh release download tbt-data-v1 --repo "$TBT_DATA_REPOSITORY" --pattern 'history-*.parquet' --dir audit/history
+      - name: Inspect 2021-2026 provider identity and sample IDs
+        run: |
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          import pandas as pd
+
+          samples={"50962420","69894353","18505151","75839774","69081935","10533391","95131199","49933924","35133526","90951843"}
+          found=[]
+          by_year={}
+          provider_sources=Counter()
+          for p in sorted(Path("audit/history").glob("history-*.parquet")):
+              y=int(p.stem.split("-")[1])
+              if y<2021 or y>2026: continue
+              f=pd.read_parquet(p,columns=["match_id","tour","scheduled_at","player1_name","player2_name","stats_json","provider_context_json"])
+              total=len(f); with_pid=0; with_stats=0
+              for row in f.itertuples(index=False):
+                  try: ctx=json.loads(row.provider_context_json or "{}")
+                  except Exception: ctx={}
+                  pid=str(ctx.get("_tbt_provider_event_id") or "")
+                  if pid:
+                      with_pid+=1
+                      provider_sources[str(ctx.get("_tbt_source_category_name") or "")]+=1
+                  try: stats=json.loads(row.stats_json or "{}")
+                  except Exception: stats={}
+                  if stats: with_stats+=1
+                  if pid in samples:
+                      found.append({
+                          "provider_event_id":pid,"match_id":str(row.match_id),"tour":str(row.tour),
+                          "scheduled_at":str(row.scheduled_at),"player1":str(row.player1_name),"player2":str(row.player2_name),
+                          "stats_keys":sorted(stats.keys()),
+                      })
+              by_year[str(y)]={"rows":total,"with_provider_event_id":with_pid,"with_any_stats":with_stats}
+          print("BY_YEAR",json.dumps(by_year,sort_keys=True))
+          print("SAMPLES",json.dumps(found,ensure_ascii=False,sort_keys=True))
+          print("SOURCE_CATEGORIES",json.dumps(provider_sources.most_common(20)))
+          PY
