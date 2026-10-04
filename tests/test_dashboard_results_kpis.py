@@ -12,6 +12,16 @@ import json
 from pathlib import Path
 
 NOW = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
+
+def test_dashboard_counts_runtime_settlements_and_top200_like_results():
+    runtime = {"event_id":"runtime", "market_publications":[{"section":"top_daily", "market":"match_winner", "selection_id":"a", "result":{"correct":True,"runtime_source":"match_status_snapshot"}}]}
+    top = {"event_id":"top", "market_publications":[{"section":"top200", "market":"match_winner", "selection_id":"b", "issued_at":"2026-09-20T12:00:00Z", "result":{"correct":False}}]}
+    unissued = {"event_id":"draft", "market_publications":[{"section":"top_daily", "selection_id":"c", "result":{"correct":True}}]}
+    feed={"results":[runtime,top,unissued]}
+    stats=published_results_metrics(feed,"all",now=NOW)
+    assert (stats["sample"],stats["wins"],stats["losses"])==(2,1,1)
+    cards=selected_dashboard_cards(feed,{"dashboard":{"kpi_cards":[{"metric":"today_picks","period":"today"},{"metric":"results_success","period":"auto"},{"metric":"avg_odds","period":"today"}]}},now=NOW)
+    assert cards[1]["value"]==.5 and cards[1]["sample"]==2
 ROOT = Path(__file__).resolve().parents[1]
 
 

@@ -72,7 +72,7 @@ def _finite(value: Any) -> float | None:
 # Mirror the public Results table rather than the winner-model ledger or the
 # financial-only betting window. Results counts graded projection-only Aces,
 # DF, Sets and Games in its W/L record even when they have no genuine odds.
-_RESULTS_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
+_RESULTS_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 _PROJECTION_MARKETS = {"aces", "double_faults", "sets", "games"}
 _VOID_STATUSES = {
     "void", "push", "cancelled", "canceled", "postponed", "walkover",
@@ -153,7 +153,9 @@ def published_results_metrics(feed: dict, period: str, category: str = "all",
         if cutoff is not None and (scheduled is None or scheduled < cutoff):
             continue
         for index, p in enumerate(row.get("market_publications") or []):
-            if not isinstance(p, dict) or not p.get("issued_at") or not isinstance(p.get("result"), dict) or p.get("excluded_reason"):
+            if not isinstance(p, dict) or not isinstance(p.get("result"), dict) or p.get("excluded_reason"):
+                continue
+            if not p.get("issued_at") and p["result"].get("runtime_source") != "match_status_snapshot":
                 continue
             section = str(p.get("section") or "").strip().lower()
             market = str(p.get("market") or "").strip().lower()

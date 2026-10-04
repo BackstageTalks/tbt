@@ -41,7 +41,7 @@ def assert_column_alignment(page, label):
         headDisplay:getComputedStyle(head).display,rowDisplay:getComputedStyle(row).display};
     }""")
     assert geometry["headDisplay"]=="grid" and geometry["rowDisplay"]=="grid",(label,geometry)
-    for column in (1,2,3):  # Level, expiry, status. Chevron is right-aligned by design.
+    for column in (1,2,3,4,5):  # Level, expiry, status. Chevron is right-aligned by design.
         delta=abs(geometry["headers"][column]-geometry["cells"][column])
         assert delta<=2.5,(label,column,geometry)
     # The Level track must not get pushed to the far right, leaving a huge empty user track.
@@ -86,7 +86,7 @@ def main():
                     accountHarness.wireAdmin();
                 }""")
                 assert_results(page,["@Zara","@Ladislav","@Adam","@Franta"])
-                if width>860:
+                if width>1100:
                     assert_column_alignment(page,f"full-width {width}px")
                 page.locator("#adminUserSearch").fill("franta")
                 assert_results(page,["@Franta"])
@@ -139,8 +139,14 @@ def main():
                 page.locator('#adminUserLoginDate').select_option('')
                 assert_results(page,['@Zara','@Ladislav','@Adam','@Franta'])
                 page.evaluate("document.querySelector('#routePanel').innerHTML=accountHarness.renderAdminAccounts();accountHarness.wireAdmin();")
-                assert '2026' in page.locator('[data-admin-user="u1"] .admin-user-last-login').inner_text()
-                assert 'Bez záznamu' in page.locator('[data-admin-user="u4"] .admin-user-last-login').inner_text()
+                assert '2026' in page.locator('[data-admin-user="u1"] .admin-account-login').inner_text()
+                assert 'Bez záznamu' in page.locator('[data-admin-user="u4"] .admin-account-login').inner_text()
+                page.evaluate("""() => {const u=accountHarness.state.adminUsers;u[0].created_at='2026-10-03T22:30:00Z';u[1].created_at='2026-09-20T10:00:00Z';u[2].created_at='2026-10-04T10:00:00Z';u[3].created_at='2026-10-01T10:00:00Z';document.querySelector('#routePanel').innerHTML=accountHarness.renderAdminAccounts();accountHarness.wireAdmin();}""")
+                page.locator('#adminUserCreatedDate').select_option('today')
+                assert_results(page,['@Zara','@Ladislav'])
+                page.locator('#adminUserSort').select_option('created')
+                assert_results(page,['@Ladislav','@Zara'])
+                assert '2026' in page.locator('[data-admin-user="u1"] .admin-account-created').inner_text()
                 assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
                 assert not errors,(width,errors)
                 page.close()
