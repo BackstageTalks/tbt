@@ -1,5 +1,5 @@
 {
-  "requested_at": "2026-10-04T13:00:00+02:00",
+  "requested_at": "2026-10-04T21:53:00+02:00",
   "action": "enrich_training_data",
   "sources": [
     "TennisMyLife yearly ATP/WTA/Challenger CSVs",
@@ -8,5 +8,5 @@
     "Audited ATP main-draw point-by-point archive 2026-10-04",
     "Audited ATP qualifying archive + current exact blob matches from archive (6)"
   ],
-  "note": "Serialized closeout pass. Include the exact-matching ATP qualifying PBP files already merged into the workflow. Publish only exact identity-linked, non-conflicting statistics that improve complete serve/return quality, rebuild training DB, audit leakage and verify persisted read-back. No model promotion."
+  "note": "Final residual closeout rerun on the current expanded canonical (~885k rows) after WTA rank exhaustion and environment v3 integration. Recompute exact/fail-closed TML, WTA PBP, Sackmann and audited ATP PBP linking against current canonical, publish only verified non-conflicting improvements, rebuild the training DB, audit leakage, and verify persisted read-back. No model promotion."
 }
