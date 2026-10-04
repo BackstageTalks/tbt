@@ -206,6 +206,11 @@ def _learned_environment(
         "location_query": f"history-cache:{cache_key}",
         "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
         "source": "history-venue-cache",
+        "weather_dataset": "era5_seamless" if include_weather else None,
+        "weather_source_attribution": (
+            "Open-Meteo Historical Weather API / ECMWF ERA5 + ERA5-Land"
+            if include_weather else None
+        ),
         "weather_provenance": "historical_archive_posthoc",
         "training_eligible_weather": False,
         "venue": asdict(venue),
