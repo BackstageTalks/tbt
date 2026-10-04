@@ -13,7 +13,7 @@ def test_r27_short_odds_is_public_and_admin_managed():
     assert prime["enabled"] is True
     assert prime["label"] == "Short Odds"
     assert prime["plans"]["rookie"]["visible_rows"] == 1
-    assert "const tabs=['top200','daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];" in APP
+    assert "const tabs=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];" in APP
     assert "if(tab==='prime')return marketRows('prime').filter(offerSurfaceEligible);" in APP
     assert "const rows=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].map" in APP
 

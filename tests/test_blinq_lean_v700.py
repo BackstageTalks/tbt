@@ -75,7 +75,7 @@ def test_short_odds_stays_separate_from_public_top():
 def test_public_prediction_board_matches_final_product_tabs():
     app = (ROOT / "web" / "app.js").read_text(encoding="utf-8")
     render = app.split("function renderDailyHub(){", 1)[1].split("function marketPreviewCard", 1)[0]
-    assert "['top200','daily','prime','value','ace','double_faults','doubles','games','sets','see_all']" in render
+    assert "['daily','prime','value','ace','double_faults','doubles','games','sets','see_all']" in render
     assert "{top200:'TOP200',daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ACES',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}" in app
     assert "if(tab==='top200')return marketRows('top200').filter(offerSurfaceEligible);" in app
     assert "if(tab==='daily'){" in app and "state.feed?.daily_picks" in app
