@@ -144,7 +144,7 @@ def main():
             page.locator('#resultsRangeDialog [data-range-apply]').click()
             dates=page.evaluate('() => bettingDayTest.state.resultsFilters')
             assert dates['dateFrom']=='2026-09-26' and dates['dateTo']=='2026-09-28',dates
-            assert page.locator('#resultsRangeDialog').count()==0
+            page.locator('#resultsRangeDialog').wait_for(state='detached')
             assert page.locator('#resultsDateFrom').get_attribute('type')=='hidden'
             page.locator('#resultsDateRange').click()
             page.locator('#resultsRangeDialog [data-range-clear]').click()
