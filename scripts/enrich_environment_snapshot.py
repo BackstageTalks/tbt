@@ -277,6 +277,32 @@ def _needs_work(
             return True, "incompatible_resolved"
 
     now_utc = now or datetime.now(timezone.utc)
+
+    # Weather schema upgrades are additive. Revisit already-resolved outdoor
+    # venues when their stored research weather predates the current schema or
+    # lacks the extended thermodynamic fields. Indoor rows intentionally remain
+    # weather-free.
+    if (
+        not complete_static
+        and existing.get("venue_resolved") is True
+        and getattr(match, "indoor", None) is not True
+    ):
+        weather = _as_dict(existing.get("weather"))
+        try:
+            schema_version = int(existing.get("schema_version") or 0)
+        except (TypeError, ValueError):
+            schema_version = 0
+        required_weather = {
+            "dew_point_c",
+            "apparent_temperature_c",
+            "cloud_cover_pct",
+            "wind_direction_deg",
+            "air_density_kg_m3",
+            "density_altitude_m",
+        }
+        if schema_version < ENVIRONMENT_SCHEMA_VERSION or not required_weather.issubset(weather):
+            return True, "weather_schema_upgrade"
+
     if complete_static:
         if existing.get("venue_resolved") is True:
             return False, "resolved"
