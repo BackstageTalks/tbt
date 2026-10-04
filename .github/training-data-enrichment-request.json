@@ -1,11 +1,12 @@
 {
-  "requested_at": "2026-10-04T12:44:00+02:00",
+  "requested_at": "2026-10-04T13:00:00+02:00",
   "action": "enrich_training_data",
   "sources": [
     "TennisMyLife yearly ATP/WTA/Challenger CSVs",
     "Live Tennis API WTA 2025 derived point-by-point aggregates",
     "Jeff Sackmann archived ATP/WTA match statistics",
-    "Audited ATP main-draw point-by-point archive 2026-10-04"
+    "Audited ATP main-draw point-by-point archive 2026-10-04",
+    "Audited ATP qualifying archive + current exact blob matches from archive (6)"
   ],
-  "note": "Run full safe serialized enrichment including the deduplicated ATP PBP archive. Publish only exact identity-linked, non-conflicting statistics that improve complete serve/return quality, rebuild training DB, audit leakage and verify persisted read-back. No model promotion."
+  "note": "Serialized closeout pass. Include the exact-matching ATP qualifying PBP files already merged into the workflow. Publish only exact identity-linked, non-conflicting statistics that improve complete serve/return quality, rebuild training DB, audit leakage and verify persisted read-back. No model promotion."
 }
