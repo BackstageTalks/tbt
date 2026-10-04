@@ -1,0 +1,384 @@
+name: Resolve remaining Library data
+
+on:
+  push:
+    branches: [library-final-sweep]
+    paths:
+      - '.github/workflows/library-final-sweep.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install dependencies
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+          test -n "$GH_TOKEN"
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download canonical history
+        run: |
+          set -euo pipefail
+          python scripts/download_production_preflight_inputs.py
+          rm -rf .cache/tbt/history-work .cache/tbt/library-final-sweep
+          cp -a .cache/tbt/history .cache/tbt/history-work
+          mkdir -p .cache/tbt/library-final-sweep
+
+      - name: Download complete public PBP archive
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/library-final-sweep/pbp/source
+          base='https://raw.githubusercontent.com/ppaulojr/tennis_pointbypoint/master'
+          for tour in atp ch fu wta itf; do
+            for draw in main qual; do
+              for age in archive current; do
+                f="pbp_matches_${tour}_${draw}_${age}.csv"
+                curl -fL --retry 3 --retry-delay 2 "$base/$f" -o ".cache/tbt/library-final-sweep/pbp/source/$f"
+              done
+            done
+          done
+          (cd .cache/tbt/library-final-sweep/pbp/source && sha256sum *.csv | sort) > .cache/tbt/library-final-sweep/pbp/source_sha256.txt
+          wc -l .cache/tbt/library-final-sweep/pbp/source/*.csv
+          cat .cache/tbt/library-final-sweep/pbp/source_sha256.txt
+
+      - name: Link and import safe PBP serve-return observations
+        run: |
+          set -euo pipefail
+          args=()
+          while IFS= read -r f; do args+=(--pbp-csv "$f"); done < <(find .cache/tbt/library-final-sweep/pbp/source -name '*.csv' -type f | sort)
+          python scripts/link_sackmann_pbp_serve_return.py \
+            --history-dir .cache/tbt/history-work \
+            "${args[@]}" \
+            --out-dir .cache/tbt/library-final-sweep/pbp/link
+          python scripts/import_offline_linked_serve_return.py \
+            --stage .cache/tbt/library-final-sweep/pbp/link/auto_linked.jsonl \
+            --history-dir .cache/tbt/history-work \
+            --out-dir .cache/tbt/library-final-sweep/pbp/import \
+            --write-partitions \
+            --write-history-dir .cache/tbt/history-work
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          link=json.loads(Path(".cache/tbt/library-final-sweep/pbp/link/report.json").read_text())
+          imp=json.loads(Path(".cache/tbt/library-final-sweep/pbp/import/report.json").read_text())
+          bad=sum(int(imp.get("counts",{}).get(k,0)) for k in ("identity_changed","invalid_stats","stat_conflicts"))
+          if bad:
+              raise SystemExit(f"PBP importer safety rejection after staging: {bad}")
+          print(json.dumps({"link":link,"import":imp},indent=2))
+          PY
+
+      - name: Download ATP Futures source archive
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/library-final-sweep/futures/source
+          base='https://huggingface.co/datasets/Aneeshers/tennis-sackmann-archive/resolve/main/atp'
+          for y in $(seq 1991 2026); do
+            f="atp_matches_futures_${y}.csv"
+            curl -fL --retry 3 --retry-delay 2 "$base/$f?download=true" -o ".cache/tbt/library-final-sweep/futures/source/$f"
+          done
+          (cd .cache/tbt/library-final-sweep/futures/source && sha256sum *.csv | sort) > .cache/tbt/library-final-sweep/futures/source_sha256.txt
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+          n=0
+          for p in sorted(Path(".cache/tbt/library-final-sweep/futures/source").glob("*.csv")):
+              with p.open(encoding="utf-8-sig",newline="") as h:
+                  n += sum(1 for _ in csv.DictReader(h))
+          print({"futures_source_rows":n})
+          if n < 300000:
+              raise SystemExit("Unexpectedly small Futures source archive")
+          PY
+
+      - name: Import only fail-closed ATP Futures gaps
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from collections import Counter, defaultdict
+          from pathlib import Path
+          from tbt.data.history_snapshot import load_partitions, write_year_partition
+          from tbt.data.history_safety import sanitize_history_identities
+          from tbt.data.offline_odds import norm_text, tournament_score
+          from tbt.schemas import MatchRecord
+          from import_historical_match_foundation import (
+              _read_sources, _crosswalk, _historical_player_id, _match_id,
+              _provider_payload, _canonical_winner_name, _round,
+          )
+
+          root=Path(".cache/tbt/history-work")
+          out=Path(".cache/tbt/library-final-sweep/futures")
+          canonical,safety=sanitize_history_identities(load_partitions(root))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Canonical identity quarantine before Futures audit")
+
+          specs=[("atp",str(p)) for p in sorted((out/"source").glob("atp_matches_futures_*.csv"))]
+          counts=Counter()
+          sources=_read_sources(specs,counts)
+          historical=[s for s in sources if s.year <= 2020]
+          mapping,evidence=_crosswalk(sources,canonical,counts)
+
+          by_mid={str(m.match_id):m for m in canonical}
+          by_name=defaultdict(list)
+          by_ids=defaultdict(list)
+          for m in canonical:
+              if str(m.tour or "").lower()!="atp":
+                  continue
+              day=m.scheduled_at.date()
+              npair=tuple(sorted((norm_text(m.player1_name),norm_text(m.player2_name))))
+              by_name[(day,npair)].append(m)
+              ipair=tuple(sorted((str(m.player1_id),str(m.player2_id))))
+              by_ids[(day,ipair)].append(m)
+
+          def winner_name(m):
+              return norm_text(_canonical_winner_name(m))
+
+          def strong_match(source,m):
+              if winner_name(m)!=norm_text(source.winner_name):
+                  return False
+              tscore,_=tournament_score(source.tournament,m.tournament)
+              if tscore<=0:
+                  return False
+              sr,cr=_round(source.round_name),_round(m.round_name)
+              if sr and cr and sr!=cr:
+                  return False
+              return True
+
+          staged=[]
+          review=[]
+          changed=set()
+          existing_ids=set(by_mid)
+          for s in sorted(historical,key=lambda x:(x.scheduled_at,x.source_match_key)):
+              mid=_match_id(s)
+              if mid in existing_ids:
+                  counts["already_present_source_id"]+=1
+                  continue
+
+              name_candidates=[m for m in by_name.get((s.scheduled_at.date(),s.pair),[]) if strong_match(s,m)]
+              if len(name_candidates)==1:
+                  counts["already_present_name_identity"]+=1
+                  continue
+              if len(name_candidates)>1:
+                  counts["ambiguous_name_identity"]+=1
+                  review.append({"source_match_key":s.source_match_key,"reason":"ambiguous_name_identity"})
+                  continue
+
+              wmap=mapping.get(("atp",s.winner_source_id))
+              lmap=mapping.get(("atp",s.loser_source_id))
+              if not wmap or not lmap or wmap==lmap:
+                  counts["unsafe_unmapped_player_pair"]+=1
+                  continue
+
+              idpair=tuple(sorted((str(wmap),str(lmap))))
+              id_candidates=[m for m in by_ids.get((s.scheduled_at.date(),idpair),[]) if strong_match(s,m)]
+              if len(id_candidates)==1:
+                  counts["already_present_mapped_identity"]+=1
+                  continue
+              if len(id_candidates)>1:
+                  counts["ambiguous_mapped_identity"]+=1
+                  review.append({"source_match_key":s.source_match_key,"reason":"ambiguous_mapped_identity"})
+                  continue
+
+              item=MatchRecord(
+                  match_id=mid,
+                  tour="atp",
+                  scheduled_at=s.scheduled_at,
+                  player1_id=str(wmap),
+                  player1_name=s.winner_name,
+                  player2_id=str(lmap),
+                  player2_name=s.loser_name,
+                  surface=s.surface,
+                  tournament=s.tournament,
+                  tournament_id=s.tourney_id,
+                  tournament_level=s.level,
+                  round_name=s.round_name,
+                  player1_rank=s.winner_rank,
+                  player2_rank=s.loser_rank,
+                  winner_id=str(wmap),
+                  status="completed",
+                  best_of=s.best_of,
+                  indoor=None,
+                  stats=s.stats,
+                  provider_payload=_provider_payload(s,mid,s.winner_rank is not None or s.loser_rank is not None,bool(s.stats)),
+              )
+              staged.append(item)
+              canonical.append(item)
+              existing_ids.add(mid)
+              by_name[(s.scheduled_at.date(),s.pair)].append(item)
+              by_ids[(s.scheduled_at.date(),idpair)].append(item)
+              changed.add(s.year)
+              counts["staged_safe_futures"]+=1
+              counts["staged_rank_rows"]+=int(s.winner_rank is not None or s.loser_rank is not None)
+              counts["staged_stats_rows"]+=int(bool(s.stats))
+
+          verified,after=sanitize_history_identities(canonical)
+          if after.get("quarantined_rows") or len(verified)!=len(canonical):
+              raise SystemExit(f"Futures import would violate identity safety: {after}")
+
+          for year in sorted(changed):
+              write_year_partition(
+                  canonical,root,year,
+                  extra_manifest={"coverage_status":"verified_futures_gapfill_closeout"}
+              )
+
+          report={
+              "schema":1,
+              "canonical_before":len(canonical)-len(staged),
+              "source_rows":len(sources),
+              "historical_rows_through_2020":len(historical),
+              "crosswalk_players":len(mapping),
+              "staged_safe_futures":len(staged),
+              "changed_years":sorted(changed),
+              "counts":dict(counts),
+              "identity_safety":after,
+              "policy":"only rows absent by exact source id, exact date+name pair, and mapped canonical player-id pair; both source players require independently proven canonical mapping; ambiguous/unmapped rows rejected",
+              "production_mutated":False,
+          }
+          (out/"report.json").write_text(json.dumps(report,indent=2,ensure_ascii=False))
+          with (out/"review.jsonl").open("w",encoding="utf-8") as h:
+              for row in review:
+                  h.write(json.dumps(row,ensure_ascii=False)+"\n")
+          print(json.dumps(report,indent=2,ensure_ascii=False))
+          PY
+
+      - name: Validate and publish changed canonical partitions
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          root=Path(".cache/tbt/history-work")
+          matches,safety=sanitize_history_identities(load_partitions(root))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Final identity quarantine is non-empty")
+
+          pbp=json.loads(Path(".cache/tbt/library-final-sweep/pbp/import/report.json").read_text())
+          fut=json.loads(Path(".cache/tbt/library-final-sweep/futures/report.json").read_text())
+          years=sorted(set(map(int,pbp.get("changed_years") or [])) | set(map(int,fut.get("changed_years") or [])))
+          if years:
+              paths=[root/f"history-{y:04d}.parquet" for y in years]+[root/"history_manifest.json"]
+              ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle(paths)
+
+          summary={
+              "status":"published" if years else "no_changes",
+              "canonical_rows":len(matches),
+              "changed_years":years,
+              "pbp":pbp,
+              "futures":fut,
+          }
+          Path(".cache/tbt/library-final-sweep/summary.json").write_text(json.dumps(summary,indent=2,ensure_ascii=False))
+          print(json.dumps(summary,indent=2,ensure_ascii=False))
+          PY
+
+      - name: Read back canonical and rebuild training DB
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/history-readback .cache/tbt/atp-leaderboards .cache/tbt/wta-season-stats .cache/tbt/training-db
+          mkdir -p .cache/tbt/atp-leaderboards .cache/tbt/wta-season-stats .cache/tbt/training-db
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",Path(".cache/tbt/history-readback")).download()
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-atp-leaderboards-v1",Path(".cache/tbt/atp-leaderboards")).download(
+              extra_names=("atp_leaderboards_1991_2026_52week_career.csv",),
+              required_names=("atp_leaderboards_1991_2026_52week_career.csv",),
+              require_bundle_manifest=True)
+          PY
+          gh release download tbt-wta-season-stats-v1 --repo "$TBT_DATA_REPOSITORY" --pattern wta_stats_2010_2026_serving_returning.csv --dir .cache/tbt/wta-season-stats --clobber
+          echo "023849319985801b1ab0065f77ff70f7d51a4fada6db0827c22d0b84659cba02  .cache/tbt/wta-season-stats/wta_stats_2010_2026_serving_returning.csv" | sha256sum -c -
+          python scripts/build_production_training_table.py \
+            --history-dir .cache/tbt/history-readback \
+            --atp-leaderboards-csv .cache/tbt/atp-leaderboards/atp_leaderboards_1991_2026_52week_career.csv \
+            --wta-season-stats-csv .cache/tbt/wta-season-stats/wta_stats_2010_2026_serving_returning.csv \
+            --out .cache/tbt/training-db/training_table.parquet \
+            --report .cache/tbt/training-db/training_table_report.json
+          python scripts/audit_training_leakage.py \
+            --history-dir .cache/tbt/history-readback \
+            --report .cache/tbt/training-db/leakage_audit_report.json
+          cp .cache/tbt/library-final-sweep/summary.json .cache/tbt/training-db/library_final_sweep_summary.json
+
+      - name: Publish and persisted-readback verify training DB
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os,shutil
+          from pathlib import Path
+          import pandas as pd
+          from release_store import ReleaseStore
+
+          root=Path(".cache/tbt/training-db")
+          required=[
+              root/"training_table.parquet",
+              root/"training_table_report.json",
+              root/"leakage_audit_report.json",
+              root/"library_final_sweep_summary.json",
+          ]
+          leak=json.loads((root/"leakage_audit_report.json").read_text())
+          if str(leak.get("status") or "").lower() not in {"pass","passed","ok"}:
+              raise SystemExit("Leakage audit failed")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-training-table-v1",root).upload_bundle(required)
+
+          rb=Path(".cache/tbt/training-db-readback")
+          shutil.rmtree(rb,ignore_errors=True)
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-training-table-v1",rb).download(
+              extra_names=tuple(p.name for p in required),
+              required_names=tuple(p.name for p in required),
+              require_bundle_manifest=True,
+          )
+          frame=pd.read_parquet(rb/"training_table.parquet")
+          summary=json.loads((rb/"library_final_sweep_summary.json").read_text())
+          leak2=json.loads((rb/"leakage_audit_report.json").read_text())
+          if len(frame)!=int(summary["canonical_rows"]):
+              raise SystemExit("Persisted row count mismatch")
+          if str(leak2.get("status") or "").lower() not in {"pass","passed","ok"}:
+              raise SystemExit("Persisted leakage audit failed")
+          print(json.dumps({
+              "status":"verified",
+              "training_rows":len(frame),
+              "columns":len(frame.columns),
+              "leakage_status":leak2.get("status"),
+              "summary":summary,
+          },indent=2,ensure_ascii=False))
+          PY
+
+      - name: Upload final sweep audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: library-final-sweep-audit
+          path: |
+            .cache/tbt/library-final-sweep/summary.json
+            .cache/tbt/library-final-sweep/pbp/link/report.json
+            .cache/tbt/library-final-sweep/pbp/import/report.json
+            .cache/tbt/library-final-sweep/pbp/source_sha256.txt
+            .cache/tbt/library-final-sweep/futures/report.json
+            .cache/tbt/library-final-sweep/futures/source_sha256.txt
+            .cache/tbt/training-db/leakage_audit_report.json
+            .cache/tbt/training-db/training_table_report.json
+          retention-days: 7
