@@ -1272,6 +1272,12 @@ body#blinqPremium .creative-effect-zoom.is-active img{animation:creativeZoom 5s 
 @keyframes creativeRevealLeft{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
 @keyframes creativeRevealRight{from{clip-path:inset(0 0 0 100%)}to{clip-path:inset(0 0 0 0)}}
 @keyframes creativeSoftGlitch{0%{opacity:0;transform:translate3d(-8px,0,0);filter:hue-rotate(8deg)}22%{opacity:.8;transform:translate3d(5px,-1px,0)}42%{transform:translate3d(-3px,1px,0);filter:hue-rotate(-5deg)}65%{transform:translate3d(2px,0,0)}100%{opacity:1;transform:none;filter:none}}
+@keyframes creativeVerticalWipe{from{clip-path:inset(100% 0 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes creativeCurtainOpen{from{clip-path:inset(0 50% 0 50%);opacity:.45}to{clip-path:inset(0 0 0 0);opacity:1}}
+@keyframes creativeKenBurns{from{transform:scale(1.13) translate3d(-1.6%,-1%,0)}to{transform:scale(1.02) translate3d(0,0,0)}}
+@keyframes creativeFlipIn{from{opacity:0;transform:perspective(1200px) rotateX(-16deg) scale(.98);transform-origin:50% 0}to{opacity:1;transform:perspective(1200px) rotateX(0) scale(1)}}
+@keyframes creativeTiltIn{from{opacity:0;transform:translate3d(-22px,10px,0) rotate(-1.4deg) scale(1.025)}to{opacity:1;transform:none}}
+@keyframes creativeFocusPulse{0%{opacity:.15;filter:blur(16px) saturate(.8);transform:scale(1.05)}55%{opacity:1;filter:blur(0) saturate(1.08);transform:scale(.995)}100%{opacity:1;filter:none;transform:scale(1)}}
 @keyframes creativeZoom{from{transform:scale(1.02)}to{transform:scale(1.07)}}
 
 body#blinqPremium .creative-effect-fade-down.is-active .dashboard-hero-copy,
@@ -1305,6 +1311,18 @@ body#blinqPremium .creative-effect-reveal-right.is-active,
 body#blinqPremium .lean-admin-preview.creative-effect-reveal-right.is-active{animation:creativeRevealRight .72s cubic-bezier(.3,.7,.2,1) both}
 body#blinqPremium .creative-effect-soft-glitch.is-active,
 body#blinqPremium .lean-admin-preview.creative-effect-soft-glitch.is-active{animation:creativeSoftGlitch .56s steps(2,end) both}
+body#blinqPremium .creative-effect-vertical-wipe.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-vertical-wipe.is-active{animation:creativeVerticalWipe .7s cubic-bezier(.2,.78,.2,1) both}
+body#blinqPremium .creative-effect-curtain-open.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-curtain-open.is-active{animation:creativeCurtainOpen .82s cubic-bezier(.2,.82,.2,1) both}
+body#blinqPremium .creative-effect-ken-burns.is-active>img,
+body#blinqPremium .lean-admin-preview.creative-effect-ken-burns.is-active>img{animation:creativeKenBurns 1.55s cubic-bezier(.18,.74,.2,1) both}
+body#blinqPremium .creative-effect-flip-in.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-flip-in.is-active{animation:creativeFlipIn .68s cubic-bezier(.18,.82,.24,1) both}
+body#blinqPremium .creative-effect-tilt-in.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-tilt-in.is-active{animation:creativeTiltIn .68s cubic-bezier(.16,.82,.25,1) both}
+body#blinqPremium .creative-effect-focus-pulse.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-focus-pulse.is-active{animation:creativeFocusPulse .82s ease-out both}
 
 body#blinqPremium .lean-admin-preview.creative-effect-fade-up.is-active .admin-hero-preview-copy{animation:creativeFadeUp .55s ease both;animation-delay:var(--creative-delay,80ms)!important}
 body#blinqPremium .lean-admin-preview.creative-effect-fade.is-active .admin-hero-preview-copy{animation:creativeFade .55s ease both;animation-delay:var(--creative-delay,80ms)!important}
