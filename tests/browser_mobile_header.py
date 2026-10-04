@@ -86,6 +86,11 @@ def main():
                 page.evaluate("document.body.classList.add('blinq-admin');document.getElementById('telegramGroupsPanel').hidden=false")
                 page.wait_for_timeout(50)
                 assert page.locator('#bqm-toggle').is_visible()
+                page.evaluate("document.getElementById('bqm-projects').dataset.unread='12';document.getElementById('bqm-projects').classList.add('has-unread');document.getElementById('insightUnread').textContent='6';document.getElementById('insightUnread').hidden=false")
+                assert page.locator('#bqm-projects').evaluate("n=>getComputedStyle(n,'::after').content")=='"12"'
+                bell_box=page.locator('#insightBell').bounding_box()
+                badge_box=page.locator('#insightUnread').bounding_box()
+                assert badge_box and bell_box and badge_box['x']>=bell_box['x'] and badge_box['x']+badge_box['width']<=bell_box['x']+bell_box['width']+1,(width,bell_box,badge_box)
                 assert not page.locator('#topUpgradeButton').is_visible()
                 page.locator('#bqm-toggle').click()
                 root_text=page.locator('#bqm-dialog nav').inner_text()
