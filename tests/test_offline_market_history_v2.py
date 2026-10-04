@@ -1,5 +1,7 @@
-from datetime import date
+from datetime import date, datetime, timezone
 
+from tbt.data.history_snapshot import load_snapshot, write_snapshot
+from tbt.schemas import MatchRecord
 from tbt.data.offline_market_history import (
     build_market_history_marker,
     candidate_link,
@@ -99,3 +101,40 @@ def test_valuebet_row_without_any_two_sided_market_is_rejected():
         row_number=2,
     )
     assert parsed is None
+
+
+def test_market_history_survives_canonical_snapshot_roundtrip(tmp_path):
+    source = parse_valuebet_row(_row(), row_number=2)
+    linked = candidate_link(
+        source,
+        canonical_tour="atp",
+        canonical_date=date(2025, 1, 1),
+        canonical_player1="Harold Mayot",
+        canonical_player2="Daniel Elahi Galan",
+        canonical_winner="Harold Mayot",
+        canonical_tournament="Canberra Challenger",
+        canonical_surface="Hard",
+        canonical_round="Final",
+    )
+    marker = build_market_history_marker(
+        source=source,
+        linked=linked,
+        source_label="valuebetennis_cc_by_4",
+        source_file_sha256="a" * 64,
+    )
+    match = MatchRecord(
+        match_id="m1",
+        tour="atp",
+        scheduled_at=datetime(2025, 1, 1, 12, tzinfo=timezone.utc),
+        player1_id="p1",
+        player1_name="Harold Mayot",
+        player2_id="p2",
+        player2_name="Daniel Elahi Galan",
+        winner_id="p1",
+        provider_payload={"_tbt_market_history": marker},
+    )
+    path = tmp_path / "history-2025.parquet"
+    write_snapshot([match], path)
+    loaded = load_snapshot(path)
+    restored = loaded[0].provider_payload.get("_tbt_market_history")
+    assert clean_market_history_marker(restored) == clean_market_history_marker(marker)
