@@ -452,3 +452,9 @@ body#blinqPremium.blinq-route .results-filter-field .results-category-options in
 body#blinqPremium .results-category-picker summary:focus-visible{outline:2px solid #65cbaa;outline-offset:2px}
 
 body#blinqPremium #resultsRangeDialog .range-grid button.range-today{border:2px solid #80edc3!important;font-weight:800;position:relative}
+
+/* One continuous backdrop across the viewport; content retains its existing width. */
+html:has(body#blinqPremium){background:#031314!important}
+body#blinqPremium#blinqPremium{width:100%;min-height:100vh;background-color:#031314!important;background-image:linear-gradient(90deg,rgba(1,11,12,.80),rgba(2,23,20,.58),rgba(1,10,12,.82)),var(--blinq-page-bg,url("/assets/blinq_page_background.webp"))!important;background-size:cover!important;background-position:center!important;background-repeat:no-repeat!important;background-attachment:fixed!important}
+body#blinqPremium#blinqPremium::before{content:none!important}
+@media(max-width:900px){body#blinqPremium#blinqPremium{min-height:100dvh;background-attachment:scroll!important}}
