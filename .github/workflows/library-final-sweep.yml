@@ -383,4 +383,4 @@ jobs:
             .cache/tbt/training-db/training_table_report.json
           retention-days: 7
 
-# rerun trigger: 2026-10-04 final closeout
+# rerun trigger: 2026-10-04 18:16 final verified closeout
