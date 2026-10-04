@@ -76,6 +76,20 @@ jobs:
             > .cache/tbt/enrichment/atp-pbp-source/pbp_matches_atp_main_archive_20261004.csv
           test -s .cache/tbt/enrichment/atp-pbp-source/pbp_matches_atp_main_archive_20261004.csv
 
+          # Exact blob matches for the user's audited archive (6).zip:
+          # qual archive SHA 3f5f477ffe09fd4a095b823218e578009aea3966
+          # qual current SHA befd1da9370c9cf56702467a94f37179231e9455
+          curl -fsSL --retry 3 --retry-delay 2 \
+            https://raw.githubusercontent.com/rteeter1618/TennisSim/c20ef5d6a0ec5ecaa0d57dc69873aba0f51b8f45/src/main/Data/tennis_pointbypoint-master/pbp_matches_atp_qual_archive.csv \
+            -o .cache/tbt/enrichment/atp-pbp-source/pbp_matches_atp_qual_archive.csv
+          curl -fsSL --retry 3 --retry-delay 2 \
+            https://raw.githubusercontent.com/rteeter1618/TennisSim/c20ef5d6a0ec5ecaa0d57dc69873aba0f51b8f45/src/main/Data/tennis_pointbypoint-master/pbp_matches_atp_qual_current.csv \
+            -o .cache/tbt/enrichment/atp-pbp-source/pbp_matches_atp_qual_current.csv
+          printf '%s  %s\n' \
+            3f5f477ffe09fd4a095b823218e578009aea3966 pbp_matches_atp_qual_archive.csv \
+            befd1da9370c9cf56702467a94f37179231e9455 pbp_matches_atp_qual_current.csv \
+            | (cd .cache/tbt/enrichment/atp-pbp-source && sha1sum -c -)
+
       - name: Link and import TML match statistics
         shell: bash
         run: |
