@@ -325,6 +325,24 @@ def test_derived_service_never_overwrites_explicit_or_uses_invalid_return():
     assert "p2_service_points_won" not in stats
 
 
+def test_direct_service_only_payload_recovers_opponent_return_without_api():
+    raw = {"statistics": [{"period":"ALL","groups":[{"statisticsItems":[
+        {"key":"servicePointsWon","homeValue":39,"homeTotal":64,"awayValue":36,"awayTotal":67}
+    ]}]}]}
+    stats = parse_statistics(raw,home_is_player1=True)
+    assert stats['p1_service_points_won']==39/64
+    assert stats['p2_return_points_won']==1-39/64
+    assert stats['p1_return_points_won']==1-36/67
+    assert FeatureBuilder._extract_quality(stats,'p1')==(39/64,1-36/67)
+
+
+def test_complement_derivation_preserves_observed_zero_and_rejects_boolean():
+    stats={'p1_service_points_won':0.,'p2_return_points_won':None,'p2_service_points_won':True}
+    assert complete_opponent_service_rates(stats)
+    assert stats['p2_return_points_won']==1.
+    assert 'p1_return_points_won' not in stats
+
+
 def test_existing_return_only_schema_three_repairs_without_api_calls(match_factory, tmp_path):
     class NoRequests:
         def _get(self, path, **kwargs):

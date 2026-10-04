@@ -1,4 +1,5 @@
 name: BlinQ all-category issued evidence audit
+# Include priced-sample uncertainty separately from win-rate sample size.
 on:
   push:
     branches: [main]

@@ -88,24 +88,27 @@ COUNT_ALIASES = {
 }
 
 def complete_opponent_service_rates(values: dict[str, float]) -> bool:
-    """Recover whole-match service points won from the opponent's return rate.
+    """Recover missing complementary whole-match service and return rates.
 
     These are complementary outcomes on the *same* service points. Do not use
     first-serve placement percentages or unweighted first/second percentages.
-    Existing explicit service statistics always take precedence.
+    Existing explicit statistics always take precedence. A player's whole-match
+    service win rate equally determines their opponent's return win rate.
     """
     changed = False
     for prefix, opponent in (("p1", "p2"), ("p2", "p1")):
         service_field = f"{prefix}_service_points_won"
-        return_rate = values.get(f"{opponent}_return_points_won")
-        if service_field in values or return_rate is None:
-            continue
-        if not isinstance(return_rate, (int, float)) or not math.isfinite(return_rate):
-            continue
-        if not 0 <= return_rate <= 1:
-            continue
-        values[service_field] = 1.0 - return_rate
-        changed = True
+        return_field = f"{opponent}_return_points_won"
+        for target, source in ((service_field,return_field),(return_field,service_field)):
+            rate = values.get(source)
+            if values.get(target) is not None or rate is None:
+                continue
+            if isinstance(rate,bool) or not isinstance(rate,(int,float)) or not math.isfinite(rate):
+                continue
+            if not 0 <= rate <= 1:
+                continue
+            values[target] = 1.0 - rate
+            changed = True
     return changed
 
 

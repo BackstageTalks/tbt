@@ -3,14 +3,29 @@ from collections import Counter, defaultdict
 from datetime import datetime, timezone
 import argparse
 import json
+import math
+from statistics import stdev
 from pathlib import Path
 
 from _bootstrap import ROOT
-from audit_top_reliability import timestamp, number, summarize, download, issued_snapshot
+from audit_top_reliability import timestamp, number, summarize as base_summary, download, issued_snapshot
 from audit_market_reliability import _semantic_key, _betting_day
 
 SECTIONS = {'top_daily', 'prime', 'value', 'ace', 'double_faults', 'sets', 'games', 'doubles'}
 VOID = {'void','push','cancelled','canceled','postponed','walkover','walk over','w/o','retired','ret','abandoned','interrupted','suspended','no_action'}
+
+
+def summarize(entries):
+    result = base_summary(entries)
+    priced = [r for r in entries if r['correct'] is not None and r['odds'] is not None and r['odds'] > 1]
+    profits = [r['odds']-1 if r['correct'] else -1 for r in priced]
+    result['yield_small_sample'] = len(priced) < 100
+    result['calibration_small_sample'] = result['calibration_n'] < 100
+    mean = result['yield_flat_stake']
+    error = 1.96*stdev(profits)/math.sqrt(len(profits)) if len(profits)>1 else None
+    result['yield_ci95_normal_approximation'] = [mean-error,mean+error] if error is not None else None
+    result['uncertainty_note'] = 'Approximate independent-bet interval; correlated same-event bets can make uncertainty larger. Descriptive, not proof of future profitability.'
+    return result
 
 
 def analyze(ledger, now=None):

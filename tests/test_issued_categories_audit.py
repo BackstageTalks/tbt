@@ -25,6 +25,8 @@ def test_all_categories_deduplicate_and_never_count_retirement_as_win():
     assert report['diagnostics']['duplicate_issued_identity']==1
     df=report['sections']['double_faults']['overall']
     assert df['settled']==1 and df['priced']==0 and df['yield_flat_stake'] is None
+    assert df['yield_small_sample'] is True
+    assert df['yield_ci95_normal_approximation'] is None
 
 
 def test_missing_offer_position_is_not_assigned_into_membership_scenario():
