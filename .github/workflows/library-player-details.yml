@@ -1,0 +1,223 @@
+name: Resolve WTA player-details source
+
+on:
+  push:
+    branches: [library-final-sweep]
+    paths:
+      - '.github/workflows/library-player-details.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install
+        run: |
+          python -m pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+      - name: Download canonical
+        run: |
+          python scripts/download_production_preflight_inputs.py
+          rm -rf .cache/tbt/history-player-details
+          cp -a .cache/tbt/history .cache/tbt/history-player-details
+      - name: Fail-closed link and apply useful fields
+        run: |
+          python - <<'PY'
+          import json, os
+          from collections import Counter, defaultdict
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions, write_year_partition
+          from tbt.data.history_safety import sanitize_history_identities
+          from tbt.data.offline_odds import norm_text, tournament_score
+          from import_historical_match_foundation import _round
+
+          srcs=sorted(Path(".cache/library-sources").glob("wta_player_details_part_*.jsonl"))
+          if len(srcs)!=6:
+              raise SystemExit(f"Expected 6 staged source parts, got {len(srcs)}")
+          rows=[]
+          for p in srcs:
+              rows += [json.loads(x) for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
+          if len(rows)!=5817:
+              raise SystemExit(f"Staged source row count changed: {len(rows)}")
+
+          root=Path(".cache/tbt/history-player-details")
+          matches,safety=sanitize_history_identities(load_partitions(root))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Canonical identity quarantine")
+          by_pair=defaultdict(list)
+          for m in matches:
+              if str(m.tour or "").lower()!="wta": continue
+              pair=tuple(sorted((norm_text(m.player1_name),norm_text(m.player2_name))))
+              by_pair[pair].append(m)
+
+          def iso_day(v):
+              s=str(v or "").strip()
+              if not s: return None
+              try: return datetime.fromisoformat(s.replace("Z","+00:00")).date()
+              except Exception: return None
+          def posint(v):
+              try:
+                  n=int(float(str(v).strip()))
+                  return n if n>0 else None
+              except Exception: return None
+          def source_sides(r):
+              pid=str(r.get("player.id") or r.get("player_id") or "").strip()
+              oid=str(r.get("match.opponent.id") or "").strip()
+              p1=str(r.get("match.player_1") or "").strip()
+              p2=str(r.get("match.player_2") or "").strip()
+              pn=str(r.get("player.fullName") or r.get("player_name") or "").strip()
+              on=str(r.get("match.opponent.fullName") or "").strip()
+              if p1 and p2 and pid and oid:
+                  if pid==p1 and oid==p2: return (pn,on)
+                  if pid==p2 and oid==p1: return (on,pn)
+              return None
+          def canonical_winner(m):
+              if str(m.winner_id or "")==str(m.player1_id): return norm_text(m.player1_name)
+              if str(m.winner_id or "")==str(m.player2_id): return norm_text(m.player2_name)
+              return ""
+          def source_winner(r,names):
+              raw=str(r.get("match.winner") or "").strip()
+              if raw=="1": return norm_text(names[0])
+              if raw=="2": return norm_text(names[1])
+              return ""
+
+          counts=Counter(); changed=set(); evidence=[]; linked_mids=set()
+          for r in rows:
+              counts["source_rows"]+=1
+              names=source_sides(r)
+              start=iso_day(r.get("match.tournament.startDate") or r.get("match.StartDate"))
+              end=iso_day(r.get("match.tournament.endDate")) or start
+              if not names or not start or not end or start>end or norm_text(names[0])==norm_text(names[1]):
+                  counts["invalid_source_identity"]+=1; continue
+              pair=tuple(sorted((norm_text(names[0]),norm_text(names[1]))))
+              candidates=[]
+              for m in by_pair.get(pair,[]):
+                  day=m.scheduled_at.astimezone(timezone.utc).date()
+                  if day < start or day > end:
+                      continue
+                  tsource=str(r.get("match.tournament.title") or r.get("match.TournamentName") or "")
+                  ts,tev=tournament_score(tsource,m.tournament)
+                  if ts<=0: continue
+                  sr,cr=_round(r.get("match.round_name") or r.get("match.tourn_round")),_round(m.round_name)
+                  if sr and cr and sr!=cr: continue
+                  sw=source_winner(r,names); cw=canonical_winner(m)
+                  if sw and cw and sw!=cw: continue
+                  score=4+ts+(2 if sr and cr and sr==cr else 0)+(3 if sw and cw and sw==cw else 0)
+                  candidates.append((score,m,tev))
+              if not candidates:
+                  counts["unmatched"]+=1; continue
+              best=max(x[0] for x in candidates)
+              top=[x for x in candidates if x[0]==best]
+              if len(top)!=1:
+                  counts["ambiguous"]+=1; continue
+              _,m,tev=top[0]
+              mid=str(m.match_id)
+              if mid in linked_mids:
+                  counts["duplicate_source_link"]+=1; continue
+              linked_mids.add(mid); counts["identity_linked"]+=1
+
+              # Orient source ranks using match.player_1/match.player_2 names.
+              r1=posint(r.get("match.rank_1")); r2=posint(r.get("match.rank_2"))
+              n1,n2=names
+              p1n,p2n=norm_text(m.player1_name),norm_text(m.player2_name)
+              incoming1=incoming2=None
+              if norm_text(n1)==p1n and norm_text(n2)==p2n:
+                  incoming1,incoming2=r1,r2
+              elif norm_text(n1)==p2n and norm_text(n2)==p1n:
+                  incoming1,incoming2=r2,r1
+              else:
+                  counts["orientation_failed"]+=1; continue
+
+              touched=False; rank_touched=False
+              e1,e2=m.player1_rank,m.player2_rank
+              if incoming1 and incoming2:
+                  safe_pair = (
+                      (e1 is None and e2 is None)
+                      or (e1 is None and e2 is not None and int(e2)==incoming2)
+                      or (e2 is None and e1 is not None and int(e1)==incoming1)
+                  )
+                  if safe_pair:
+                      if e1 is None: m.player1_rank=incoming1; counts["rank_sides_filled"]+=1; rank_touched=True
+                      if e2 is None: m.player2_rank=incoming2; counts["rank_sides_filled"]+=1; rank_touched=True
+                      if rank_touched:
+                          payload=dict(m.provider_payload or {})
+                          payload["_tbt_rank_provenance"]={
+                              "point_in_time":True,
+                              "source":"library_wta_player_details_verified_tournament_snapshot",
+                              "as_of":start.isoformat()+"T00:00:00+00:00",
+                          }
+                          m.provider_payload=payload
+                          counts["rank_matches_updated"]+=1; touched=True
+                  elif (e1 is None or e2 is None):
+                      counts["rank_existing_mismatch"]+=1
+
+              indoor_raw=str(r.get("match.tournament.inOutdoor") or "").strip().upper()
+              incoming_indoor = True if indoor_raw=="I" else False if indoor_raw=="O" else None
+              if incoming_indoor is not None:
+                  if m.indoor is None:
+                      m.indoor=incoming_indoor; counts["indoor_filled"]+=1; touched=True
+                  elif bool(m.indoor)!=incoming_indoor:
+                      counts["indoor_conflict"]+=1
+
+              if touched:
+                  changed.add(m.scheduled_at.year)
+                  counts["matches_updated"]+=1
+                  evidence.append({"match_id":mid,"source_row":r.get("source_row"),"tournament_evidence":tev})
+
+          verified,after=sanitize_history_identities(matches)
+          if after.get("quarantined_rows") or len(verified)!=len(matches):
+              raise SystemExit(f"Identity safety failed: {after}")
+          for y in sorted(changed):
+              write_year_partition(matches,root,y,extra_manifest={"coverage_status":"library_wta_player_details_closeout"})
+
+          report={
+              "schema":1,"source_rows":len(rows),"canonical_rows":len(matches),
+              "counts":dict(counts),"changed_years":sorted(changed),
+              "identity_safety":after,
+              "policy":"unique WTA pair within explicit tournament start/end window + positive tournament evidence + round agreement + winner agreement when available; ranks fill missing only with pair consistency; indoor fills missing only",
+          }
+          out=Path(".cache/tbt/player-details-report.json")
+          out.write_text(json.dumps(report,indent=2,ensure_ascii=False),encoding="utf-8")
+          print(json.dumps(report,indent=2,ensure_ascii=False))
+
+          if changed:
+              paths=[root/f"history-{y:04d}.parquet" for y in sorted(changed)]+[root/"history_manifest.json"]
+              ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle(paths)
+          PY
+      - name: Readback safety check
+        run: |
+          rm -rf .cache/tbt/player-details-readback
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",Path(".cache/tbt/player-details-readback")).download()
+          matches,safety=sanitize_history_identities(load_partitions(".cache/tbt/player-details-readback"))
+          if safety.get("quarantined_rows"): raise SystemExit("Persisted identity quarantine")
+          report=json.loads(Path(".cache/tbt/player-details-report.json").read_text())
+          if len(matches)!=int(report["canonical_rows"]): raise SystemExit("Persisted row count mismatch")
+          print(json.dumps({"status":"verified","rows":len(matches),"report":report},indent=2,ensure_ascii=False))
+          PY
