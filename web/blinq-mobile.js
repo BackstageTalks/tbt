@@ -122,7 +122,8 @@
       document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]').forEach(source => {
         const key = source.dataset.dailyHubTab;
         const label = source.querySelector('.daily-hub-tab-copy > span')?.textContent || source.textContent;
-        nav.append(button(label.trim(), () => {
+        const menuLabel = label.trim() + (source.classList.contains('is-locked') ? ' 🔒' : '');
+        nav.append(button(menuLabel, () => {
           const original = Array.from(document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]')).find(n => n.dataset.dailyHubTab === key);
           if (!available(original)) { render('predictions'); return; }
           dialog.close();

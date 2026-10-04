@@ -256,6 +256,7 @@ body#blinqPremium:not(.blinq-admin) #insightBell #insightUnread:not([hidden]){
 }
 
 .bqm-avatar-action{display:none!important}
+#bqm-dialog[open]{background-color:#061b15!important;background-image:var(--blinq-login-loader-backdrop,linear-gradient(rgba(1,11,12,.85),rgba(1,11,12,.85)),url('/assets/blinq_page_background.webp'))!important;background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important}
 /* The mobile account dropdown is moved to body by the original account handler. */
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) > #profileMenu{position:fixed!important;top:calc(72px + env(safe-area-inset-top,0px))!important;right:8px!important;left:auto!important;max-height:calc(100dvh - 88px)!important;overflow-y:auto!important;z-index:1002!important}
 @media(max-width:900px){body.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) #profileMenu .bqm-avatar-action:not([hidden]){display:flex!important;align-items:center;padding:12px 16px;font-weight:700;text-align:left}}
