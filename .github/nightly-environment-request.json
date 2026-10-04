@@ -1,12 +1,12 @@
 {
   "schema": 1,
   "mode": "nightly-environment",
-  "start": "2021-01-01",
-  "end": "",
+  "start": "1949-01-01",
+  "end": "2021-01-01",
   "limit": 0,
   "static_max_requests": 4000,
   "weather_max_requests": 2000,
   "retry_unresolved": true,
-  "requested_at_local": "2026-10-04T21:17:00+02:00",
-  "note": "Environment schema v3 backfill: preserve legacy enviro, complete venue/elevation, then upgrade resolved outdoor historical weather to ERA5-Seamless extended fields."
+  "requested_at_local": "2026-10-05T00:13:00+02:00",
+  "note": "Historical environment backfill phase 2: cover canonical 1949-2020 after verified 2021-2026 completion; preserve legacy enviro and keep historical weather research-only."
 }
