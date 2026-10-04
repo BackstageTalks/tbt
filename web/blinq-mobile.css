@@ -343,3 +343,12 @@ body#blinqPremium #accountDialog{background-color:#061b15!important;background-i
 
 body#blinqPremium #accountDialog .account-modal-security{flex-direction:row!important;flex-wrap:nowrap!important;gap:16px!important}
 body#blinqPremium #accountDialog .account-modal-security > button{flex:0 0 auto!important;width:auto!important;align-self:center!important}
+
+/* Mouse, keyboard and touch feedback for interactive controls. */
+body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop){cursor:pointer;transition:filter 140ms ease,box-shadow 140ms ease,transform 100ms ease!important;-webkit-tap-highlight-color:rgba(64,230,163,.22)}
+@media(hover:hover) and (pointer:fine){
+body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):hover{filter:brightness(1.16)!important;box-shadow:inset 0 0 0 1px rgba(105,247,193,.55),0 3px 12px rgba(0,0,0,.18)!important}
+}
+body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):focus-visible{outline:2px solid #6bf1bd!important;outline-offset:3px!important}
+body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):active{filter:brightness(1.24)!important;transform:scale(.97)!important;box-shadow:inset 0 0 0 2px rgba(148,255,213,.8)!important}
+@media(prefers-reduced-motion:reduce){body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop){transition:none!important}body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):active{transform:none!important}}
