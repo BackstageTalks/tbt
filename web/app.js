@@ -3154,6 +3154,7 @@
     const required=String(upgradePlanLabel(minPlan)||minPlan).replace(/^BlinQ\s+/i,'').toUpperCase();
     return `<div class="results-access-lock" data-upgrade-plan="${escapeHtml(minPlan)}" data-upgrade-section="${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}"><span aria-hidden="true">🔒</span><div><small>${escapeHtml(lcopy('LOCKED SECTION','UZAMKNUTÁ SEKCIA','UZAMČENÁ SEKCE'))}</small><strong>${escapeHtml(lcopy('Results','Výsledky','Výsledky'))}</strong><p>${escapeHtml(lcopy(`Available from ${required}`,`Dostupné od: ${required}`,`Dostupné od: ${required}`))}</p></div></div>`;
   }
+  function shortRangeDate(value){const parts=String(value||'').split('-');return parts.length===3?`${Number(parts[2])}. ${Number(parts[1])}. ${parts[0].slice(-2)}`:'—';}
   function renderResultsFilters(){
     const rows=state.feed.results||[],filters=state.resultsFilters||{},hours=resultsHistoryHours();
     const tours=[...new Set(rows.map(r=>String(r?.tour||'').toUpperCase()).filter(Boolean))].sort();
@@ -3164,7 +3165,7 @@
     const todayOption=['today',lcopy('Today','Dnes','Dnes')];
     const periodOptions=hours
       ?[todayOption,[String(fixedDays),fixedLabel]]
-      :[todayOption,['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
+      :[todayOption,['all',publicText('All time')],['1',publicText('24 hours')],['2',lcopy('48 hours','48 hodín','48 hodin')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
     if(!periodOptions.some(([value])=>value===String(state.resultsFilters.window||''))){
       state.resultsFilters.window='all';
       state.resultsFilters.dateFrom='';
@@ -3181,7 +3182,7 @@
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
-      ${hours?'':`<div class="results-filter-field results-range-field"><span>Od – do</span><button id="resultsDateRange" type="button" aria-haspopup="dialog">${filters.dateFrom?escapeHtml(filters.dateFrom+' – '+(filters.dateTo||filters.dateFrom)):'Vybrať obdobie'} <span aria-hidden="true">▦</span></button><input id="resultsDateFrom" type="hidden" value="${escapeHtml(filters.dateFrom||'')}"><input id="resultsDateTo" type="hidden" value="${escapeHtml(filters.dateTo||'')}"></div><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava.','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava.','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava.'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
+      ${hours?'':`<div class="results-filter-field results-range-field"><span>Od – do</span><button id="resultsDateRange" type="button" aria-haspopup="dialog">${filters.dateFrom?escapeHtml(shortRangeDate(filters.dateFrom)+' – '+shortRangeDate(filters.dateTo||filters.dateFrom)):'Vybrať obdobie'} <span aria-hidden="true">▦</span></button><input id="resultsDateFrom" type="hidden" value="${escapeHtml(filters.dateFrom||'')}"><input id="resultsDateTo" type="hidden" value="${escapeHtml(filters.dateTo||'')}"></div><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava.','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava.','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava.'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
       ${isAdminAccount()?`<fieldset class="results-member-levels"><legend>Výkon podľa členstva</legend>${[['','Všetky'],['rookie','FREE'],['pro','PRO'],['elite','ELITE'],['legend','LEGEND'],['goat','GOAT']].map(([value,label])=>`<label><input type="radio" name="resultsMembership" value="${value}" ${String(filters.membership||'')===value?'checked':''}>${label}</label>`).join('')}</fieldset>`:''}
       </div>
       ${isAdminAccount()?`${filters.membership?'<p class="results-member-note">Historický model podľa aktuálnych denných limitov. Staršie poradie je rekonštruované podľa prvého publikovania; náhodný výber je vzorka úrovne, nie história konkrétneho účtu. ROI používa iba skutočné kurzy a vyhodnotené vklady.</p>':''}`:''}
@@ -3422,7 +3423,7 @@
     dialog.id='resultsRangeDialog';dialog.setAttribute('aria-label','Vybrať obdobie výsledkov');
     let from=state.resultsFilters.dateFrom||'',to=state.resultsFilters.dateTo||'';
     let month=(from||bratislavaBettingDayKey(Date.now(),0)).slice(0,7);
-    const pretty=value=>value?value.split('-').reverse().join('. '):'—';
+    const pretty=shortRangeDate;
     function draw(){
       const [y,m]=month.split('-').map(Number),first=new Date(Date.UTC(y,m-1,1)),count=new Date(Date.UTC(y,m,0)).getUTCDate(),offset=(first.getUTCDay()+6)%7;
       const title=new Intl.DateTimeFormat('sk-SK',{month:'long',year:'numeric',timeZone:'UTC'}).format(first);
