@@ -317,3 +317,8 @@ body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-action
 position:absolute!important;top:2px!important;right:1px!important;bottom:auto!important;left:auto!important;transform:none!important;min-width:16px!important;width:auto!important;height:16px!important;padding:0 3px!important;display:grid!important;place-items:center!important;box-sizing:border-box!important;border-radius:999px!important;color:#06150e!important;border:2px solid #061b15!important;font:900 9px/1 Arial,sans-serif!important;letter-spacing:0!important;box-shadow:none!important;margin:0!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-actions > #bqm-projects.has-unread::after{content:attr(data-unread)!important;background:#b999ff!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-actions > #insightBell #insightUnread:not([hidden]){background:#57eca2!important}
+
+/* Numeric unread badges replace the old decorative notification dot. */
+body#blinqPremium .header-actions #insightBell.insight-info-button.has-unread::before{display:none!important;content:none!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-actions > #profileShell{margin-left:8px!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-top > .brand{left:min(50%,calc(100% - 192px))!important}
