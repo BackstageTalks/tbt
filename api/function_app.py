@@ -103,6 +103,7 @@ from tbt.providers.shared_budget import (
 )
 from tbt.services.entitlements import (
     filter_feed_for_access,
+    entitlement_manifest,
     match_detail_entitlements,
     match_intelligence_row_authorized,
     redact_match_intelligence,
@@ -1051,6 +1052,11 @@ def feed(req):
             # Global admin-selected KPI scalars only. Never return unrestricted
             # raw performance windows to accounts with limited Results access.
             data["dashboard_kpi_cards"] = selected_dashboard_cards(source_feed, runtime_ui)
+            if is_admin(user, settings):
+                data["member_result_rules"] = {
+                    plan: entitlement_manifest({"plan": plan, "status": "active"}, {}, runtime_ui)["sections"]
+                    for plan in ("rookie", "pro", "elite", "legend", "goat")
+                }
         except PermissionError:
             return response({"error": "account_suspended"}, 403)
         try:

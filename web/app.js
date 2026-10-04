@@ -3180,6 +3180,7 @@
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
       ${hours?'':`<div class="results-filter-field results-range-field"><span>Od – do</span><button id="resultsDateRange" type="button" aria-haspopup="dialog">${filters.dateFrom?escapeHtml(filters.dateFrom+' – '+(filters.dateTo||filters.dateFrom)):'Vybrať obdobie'} <span aria-hidden="true">▦</span></button><input id="resultsDateFrom" type="hidden" value="${escapeHtml(filters.dateFrom||'')}"><input id="resultsDateTo" type="hidden" value="${escapeHtml(filters.dateTo||'')}"></div><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava.','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava.','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava.'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
       </div>
+      ${isAdminAccount()?`<fieldset class="results-member-levels"><legend>Výkon podľa členstva</legend>${[['','Všetky'],['rookie','FREE'],['pro','PRO'],['elite','ELITE'],['legend','LEGEND'],['goat','GOAT']].map(([value,label])=>`<label><input type="radio" name="resultsMembership" value="${value}" ${String(filters.membership||'')===value?'checked':''}>${label}</label>`).join('')}</fieldset>${filters.membership?'<p class="results-member-note">Historický model podľa aktuálnych denných limitov. Staršie poradie je rekonštruované podľa prvého publikovania; náhodný výber je vzorka úrovne, nie história konkrétneho účtu. ROI používa iba skutočné kurzy a vyhodnotené vklady.</p>':''}`:''}
     </section>`;
   }
   function canonicalResultPublicationKey(row,publication,index=0){
@@ -3199,9 +3200,46 @@
     if((scheduled||players)&&selection)return `${scheduled}::${players}::${market}::${scope}::${metric}::${selection}`;
     return String(publication?.selection_key||publication?.publication_key||`${scheduled}::${players}::${publication?.section||''}::${selection||index}`);
   }
+  function memberResultCohort(plan){
+    // Select from the full daily pool before settlement, time and category filters.
+    // Current membership rules model historical access; they are not user allocations.
+    if(!isAdminAccount()||!plan)return null;
+    const rules=state.feed?.member_result_rules?.[plan];
+    if(!rules)return new Set();
+    const groups=new Map(),seen=new Set();
+    const add=(row,p)=>{
+      const section=p.market==='aces'?'ace':p.market==='double_faults'?'double_faults':p.section;
+      const tab=section==='top_daily'?'daily':section;
+      const day=resultPublicationBettingDay(row,p),key=canonicalResultPublicationKey(row,p);
+      if(!day||!key||!rules[tab])return;
+      const identity=day+'|'+tab+'|'+key;if(seen.has(identity))return;seen.add(identity);
+      const group=day+'|'+tab;if(!groups.has(group))groups.set(group,[]);
+      groups.get(group).push({key,p,tab,day});
+    };
+    (state.feed.results||[]).forEach(row=>publicResultPublications(row).forEach(p=>add(row,p)));
+    [['daily_picks','top_daily'],['prime_picks','prime'],['value_picks','value'],['doubles_picks','doubles'],['ace_picks','ace'],['sg_picks','sg'],['top200_picks','top200']].forEach(([feedKey,section])=>{
+      (state.feed[feedKey]||[]).forEach(row=>add(row,{...row,section:row.market==='double_faults'?'double_faults':row.market==='sets'?'sets':row.market==='games'?'games':section,selection_id:row.betting?.selection_id||row.selection_id||row.pick_id,market:row.market||'match_winner',issued_at:row.issued_at||row.published_at||row.created_at}));
+    });
+    const allowed=new Set();
+    const hash=text=>{let h=2166136261;for(const ch of text){h^=ch.charCodeAt(0);h=Math.imul(h,16777619);}return h>>>0;};
+    for(const pool of groups.values()){
+      const rule=rules[pool[0].tab];
+      if(!rule.enabled||rule.display_state!=='active')continue;
+      pool.sort((a,b)=>(Date.parse(a.p.issued_at)||Infinity)-(Date.parse(b.p.issued_at)||Infinity)||(Number(a.p.offer_position)||Infinity)-(Number(b.p.offer_position)||Infinity)||a.key.localeCompare(b.key));
+      const all=String(rule.visible_picks).toUpperCase()==='ALL';
+      const limit=all?pool.length:Math.max(0,Number(rule.visible_picks)||0);
+      const sample=rule.selection_mode==='stable_random'&&!all?new Set(pool.slice(0,10).map(x=>[hash(plan+'|'+x.day+'|'+x.tab+'|'+x.key),x.key]).sort((a,b)=>a[0]-b[0]||a[1].localeCompare(b[1])).slice(0,limit).map(x=>x[1])):null;
+      pool.forEach((item,i)=>{
+        const override=rule.row_overrides?.[String(i+1)];
+        if(override==='active'||(!['hidden','blurred'].includes(override)&&(all||(sample?sample.has(item.key):i<limit))))allowed.add(item.key);
+      });
+    }
+    return allowed;
+  }
   function settledPublishedEntries(rows,category='all',filters=null){
     const specific=['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
+    const cohort=memberResultCohort(filters?.membership);
     const now=Date.now();
     const todayKeys=String(filters?.window||'all')==='today'?currentBettingDayPublishedKeys(now):null;
     (rows||[]).forEach(row=>{
@@ -3212,6 +3250,7 @@
         .filter(p=>publicationOutcome(p).kind!=='pending');
       pubs.forEach((publication,index)=>{
         const key=canonicalResultPublicationKey(row,publication,index);
+        if(cohort&&!cohort.has(key))return;
         const current=unique.get(key);
         if(!current||new Date(publication.issued_at)<new Date(current.publication.issued_at))unique.set(key,{row,publication});
       });
@@ -3240,7 +3279,7 @@
     const graded=entries.filter(({publication})=>['win','loss'].includes(publicationOutcome(publication).kind));
     const wins=graded.filter(({publication})=>publicationOutcome(publication).kind==='win').length;
     const voids=entries.filter(({publication})=>publicationOutcome(publication).kind==='void').length;
-    const aceDfCategory=category==='ace'||category==='double_faults';
+    const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults');
     let stake=0,profit=0,oddsTotal=0,oddsSample=0,unitSample=0,roiOddsSum=0,roiOddCount=0,ledgerDiscrepancies=0;
     for(const {publication} of graded){
       // ACES/DF Results use the same normalized-or-real quote shown in the table.
@@ -3269,7 +3308,7 @@
       if(!priced||!Number.isFinite(actualOdds)||actualOdds<=1)continue;
       oddsTotal+=actualOdds;
       oddsSample++;
-      if(String(publication?.section||'').toLowerCase()==='prime')continue;
+      if(!filters?.membership&&String(publication?.section||'').toLowerCase()==='prime')continue;
       const realStake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
       const realProfit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
       if(!Number.isFinite(realStake)||realStake<=0||!Number.isFinite(realProfit))continue;
@@ -3407,6 +3446,7 @@
       mobileFilterToggle.setAttribute('aria-expanded',open?'true':'false');
     };
     [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface']].forEach(([id,key])=>{const el=$(id);if(el)el.onchange=()=>{state.resultsFilters[key]=el.value;rerender();};});
+    document.querySelectorAll('input[name=resultsMembership]').forEach(el=>el.onchange=()=>{state.resultsFilters.membership=el.value;rerender();});
     const period=$('resultsWindow');if(period)period.onchange=()=>{state.resultsFilters.window=period.value||'all';if(state.resultsFilters.window!=='custom'){state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}rerender();if(state.resultsFilters.window==='custom')openResultsRange(rerender);};
     const range=$('resultsDateRange');if(range)range.onclick=()=>openResultsRange(rerender);
     const from=$('resultsDateFrom'),to=$('resultsDateTo'),bettingDay=$('resultsBettingDay');

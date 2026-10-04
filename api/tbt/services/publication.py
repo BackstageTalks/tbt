@@ -987,10 +987,12 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
 
     deployed = set()
     deployed_rows = {}
+    deployed_positions = {}
     for section, key in _MARKET_SECTION_KEYS.items():
-        for row in _section_feed_rows(deployed_feed, section, key):
+        for position, row in enumerate(_section_feed_rows(deployed_feed, section, key), start=1):
             commitment = _market_commitment_from_feed_row(row, section)
             deployed.add(commitment)
+            deployed_positions[commitment] = position
             # Presentation-only ranking may be added after private candidate creation.
             # Record the exact card displayed at the first confirmed issuance.
             deployed_rows.setdefault(commitment, []).append(row)
@@ -1019,6 +1021,7 @@ def confirm_market_publications(ledger, deployed_feed, now=None):
                     else "inside_publication_cutoff"
                 )
                 continue
+            publication["offer_position"] = deployed_positions[commitment]
             publication["issued_at"] = now.isoformat()
             publication["publication_status"] = "published"
             if section in {"top_daily", "prime", "value"} and publication.get("market") == "match_winner":

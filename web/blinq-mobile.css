@@ -404,3 +404,9 @@ body#blinqPremium.bqm-enabled .site-main #dailyHub .daily-tabs-row{background:rg
 }
 
 @media(max-width:900px){body#blinqPremium.blinq-home.bqm-enabled{background-image:var(--blinq-login-loader-backdrop)!important;background-size:cover!important;background-position:center!important;background-attachment:fixed!important}body#blinqPremium.blinq-home.bqm-enabled .site-main{background:transparent!important}}
+
+body#blinqPremium .results-member-levels{display:flex;flex-wrap:wrap;align-items:center;gap:16px;border:0;margin:14px 0 0;padding:0 12px}
+body#blinqPremium .results-member-levels legend{font-size:11px;color:#9cb3aa;margin-bottom:8px}
+body#blinqPremium .results-member-levels label{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer}
+body#blinqPremium .results-member-levels input{accent-color:#28e3aa}
+body#blinqPremium .results-member-note{font-size:11px;line-height:1.5;color:#9cb3aa;margin:12px}
