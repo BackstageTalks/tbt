@@ -113,7 +113,7 @@ def test_no_extra_public_results_copy_or_layout_changes():
     # KPIs, while every other category keeps verified real-settlement accounting.
     assert "const aceDfKpiOdds=aceDfResultKpiOdds(publication)" in app
     assert ":resultVisibleUnits(publication,outcome,resultVisibleOdds(publication));" in app
-    assert "const aceDfCategory=category==='ace'||category==='double_faults'" in app
+    assert "const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults')" in app
     assert "Other Results categories retain verified real-stake financial KPIs only." in app
     assert "const units=outcome.kind==='void'?0:rawUnits;" in app
     assert "projectionMarket?status==='priced_projection'" in app

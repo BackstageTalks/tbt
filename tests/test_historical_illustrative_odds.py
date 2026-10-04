@@ -86,7 +86,7 @@ def test_ace_df_results_kpis_use_displayed_normalized_or_real_api_odds_without_r
     assert "const aceDfKpiOdds=aceDfResultKpiOdds(publication)" in APP
     assert "outcome.kind==='win'?aceDfKpiOdds-1" in APP
     assert "outcome.kind==='loss'?-1" in APP
-    assert "const aceDfCategory=category==='ace'||category==='double_faults'" in APP
+    assert "const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults')" in APP
     assert "const displayOdds=aceDfResultKpiOdds(publication)" in APP
     assert "stake+=1" in APP
     assert "profit+=units" in APP

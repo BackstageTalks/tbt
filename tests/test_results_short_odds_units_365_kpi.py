@@ -65,7 +65,7 @@ def test_results_ui_purple_void_units_and_longer_filter_are_explicit():
     assert "shortOddsUnitsExcluded" not in app
     assert "const units=outcome.kind==='void'?0:rawUnits;" in app
     assert "averageOddsHelp" not in app
-    assert "if(String(publication?.section||'').toLowerCase()==='prime')continue;" in app
+    assert "if(!filters?.membership&&String(publication?.section||'').toLowerCase()==='prime')continue;" in app
     assert "unitSample" in app
     assert ".results-table b.retired" in css
     assert ".results-table b.void" in css
