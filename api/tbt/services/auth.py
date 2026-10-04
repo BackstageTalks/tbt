@@ -31,6 +31,7 @@ _FIREBASE_APP = None
 _FIREBASE_APP_LOCK = Lock()
 _ACTIVITY_TOUCH_LOCK = Lock()
 _ACTIVITY_TOUCHES: dict[str, float] = {}
+_LOGIN_OBSERVATIONS: set[tuple[str, int]] = set()
 
 
 def request_authorization(headers):
@@ -179,7 +180,10 @@ def _verify_firebase_user(token, cfg):
         user_id = str(decoded.get("uid") or decoded.get("sub") or "").strip()
         if not user_id:
             return None
-        return firebase_get_user(cfg, user_id)
+        user = firebase_get_user(cfg, user_id)
+        if user:
+            user["_auth_time"] = decoded.get("auth_time")
+        return user
     except Exception as exc:
         invalid_names = (
             "InvalidIdTokenError",
@@ -239,6 +243,19 @@ def verify_user(authorization, cfg, client=None):
     user = _verify_firebase_user(token, cfg)
     if user:
         _touch_verified_activity(user.get("id"))
+        try:
+            marker = (str(user.get("id") or ""), int(user.get("_auth_time") or 0))
+            with _ACTIVITY_TOUCH_LOCK:
+                seen = marker in _LOGIN_OBSERVATIONS
+            if not seen:
+                from .login_metrics import record_login
+                record_login(marker[0], marker[1])
+                with _ACTIVITY_TOUCH_LOCK:
+                    if len(_LOGIN_OBSERVATIONS) > 10000:
+                        _LOGIN_OBSERVATIONS.clear()
+                    _LOGIN_OBSERVATIONS.add(marker)
+        except Exception:
+            pass  # Analytics storage must never block authentication; retry next request.
     return user
 
 

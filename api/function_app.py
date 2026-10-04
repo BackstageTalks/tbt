@@ -109,6 +109,7 @@ from tbt.services.entitlements import (
     redact_match_intelligence,
     build_daily_access_state,
 )
+from tbt.services.login_metrics import load_login_statistics, TRACKING_STARTED_AT
 from tbt.services.account_inactivity import run_inactivity_review, smtp_diagnostics, inactivity_policy
 from tbt.services.live_comeback import (
     scan_comeback_radar, publish_radar_signals, prime_radar_eligible,
@@ -2181,8 +2182,12 @@ def admin_users(req):
         except AdminStorageUnavailable:
             profiles = {str(user.get("id") or ""): profile_claims(user) for user in users}
             storage_warning = "operational_metadata_fallback"
+        try:
+            login_metrics = load_login_statistics([user.get("id") for user in users])
+        except AdminStorageUnavailable:
+            login_metrics = {}
         payload = {
-            "users": [_admin_account_row(user, profiles.get(str(user.get("id") or ""), {})) for user in users],
+            "users": [{**_admin_account_row(user, profiles.get(str(user.get("id") or ""), {})), **login_metrics.get(str(user.get("id") or ""), {"login_count": None, "login_tracking_started_at": TRACKING_STARTED_AT})} for user in users],
             "page": page,
             "per_page": per_page,
             "actor_id": actor.get("id"),
