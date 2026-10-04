@@ -60,8 +60,34 @@
   const nav = document.createElement('nav'); nav.setAttribute('aria-label', 'Mobilná navigácia');
   const note = document.createElement('p'); note.className = 'bqm-note'; note.setAttribute('role', 'status');
   dialog.append(top, nav, note); document.body.append(dialog);
+
+  // Keep account actions in the original avatar menu and reuse existing handlers.
+  const profileMenu = byId('profileMenu');
+  function avatarAction(label, action) {
+    const item = button(label, () => {
+      byId('profileButton')?.click();
+      action();
+    });
+    item.className = 'bqm-avatar-action';
+    profileMenu?.insertBefore(item, byId('headerLogoutButton'));
+    return item;
+  }
+  const avatarUpgrade = avatarAction('Upgrade', () => byId('topUpgradeButton')?.click());
+  const avatarCommunity = avatarAction('Komunita', () => openMenu('community'));
+  avatarAction('Jazyk', () => openMenu('language'));
+  function syncAvatarActions() {
+    avatarUpgrade.hidden = !available(byId('topUpgradeButton'));
+    avatarCommunity.hidden = !available(byId('telegramGroupsPanel'));
+  }
+  if (profileMenu) new MutationObserver(syncAvatarActions).observe(profileMenu, {attributes:true,attributeFilter:['hidden']});
+
   let currentLevel = 'root';
-  function enabled() { return mq.matches && !shell.hidden && !document.body.classList.contains('blinq-admin'); }
+  function enabled() { return (mq.matches || document.body.classList.contains('blinq-admin')) && !shell.hidden; }
+  byId('profileButton')?.addEventListener('click', event => {
+    if (!enabled() || mq.matches) return;
+    event.stopImmediatePropagation();
+    byId('profileMenuToggle')?.click();
+  }, true);
   function sync() {
     document.body.classList.toggle('bqm-enabled', enabled());
     syncProjects();
@@ -80,17 +106,17 @@
   function section(label, level) { nav.append(button(label + ' ›', () => render(level))); }
   function render(level) {
     currentLevel = level; nav.replaceChildren(); note.textContent = '';
-    if (level !== 'root') nav.append(button('← Hlavné menu', () => render('root')));
+    if (level !== 'root') nav.append(button(level === 'community' || level === 'language' ? '← Menu účtu' : '← Hlavné menu', event => {
+      event.stopPropagation();
+      if (level === 'community' || level === 'language') { dialog.close(); byId('profileButton')?.click(); }
+      else render('root');
+    }));
     if (level === 'root') {
       section('Predikcie', 'predictions');
       proxy('Výsledky', () => document.querySelector('.reference-navigation [data-route="results"]'));
       proxy('Live radar', () => byId('insightShortcut'));
-      section('Členstvo', 'membership');
       if (joinedControls().length) section('Moje skupiny', 'projects');
-      if (available(byId('telegramGroupsPanel'))) section('Komunita', 'community');
       proxy('Info', () => byId('insightBell'));
-      section(byId('profileName')?.textContent.trim() || 'Môj účet', 'account');
-      section('Jazyk', 'language');
     } else if (level === 'predictions') {
       proxy('Všetky predikcie', () => document.querySelector('.reference-navigation [data-route="predictions"]'));
       document.querySelectorAll('#dailyHubTabs [data-daily-hub-tab]').forEach(source => {
@@ -130,10 +156,10 @@
     }
     nav.querySelector('button')?.focus();
   }
-  function openMenu() {
+  function openMenu(level = 'root') {
     if (!enabled()) return;
     dialog.showModal(); document.body.classList.add('bqm-menu-open');
-    toggle.setAttribute('aria-expanded', 'true'); render('root');
+    toggle.setAttribute('aria-expanded', 'true'); render(level);
   }
   dialog.addEventListener('close', () => {
     document.body.classList.remove('bqm-menu-open'); toggle.setAttribute('aria-expanded', 'false');

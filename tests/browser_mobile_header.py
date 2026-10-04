@@ -83,6 +83,26 @@ def main():
                     assert page.locator('#insightUnread').inner_text()=='1'
                     page.locator('#bqm-projects').click()
                     assert page.evaluate('groupCalls')==['one']
+                page.evaluate("document.body.classList.add('blinq-admin');document.getElementById('telegramGroupsPanel').hidden=false")
+                page.wait_for_timeout(50)
+                assert page.locator('#bqm-toggle').is_visible()
+                assert not page.locator('#topUpgradeButton').is_visible()
+                page.locator('#bqm-toggle').click()
+                root_text=page.locator('#bqm-dialog nav').inner_text()
+                for unwanted in ('Členstvo', 'Komunita', 'Jazyk', 'Môj účet', 'Odhlásiť sa'):
+                    assert unwanted not in root_text,(width,root_text)
+                page.get_by_role('button',name='Zavrieť menu',exact=True).click()
+                page.locator('#profileButton').click()
+                assert page.locator('#profileMenu').is_visible()
+                for label in ('Môj účet', 'Odhlásiť sa', 'Upgrade', 'Komunita', 'Jazyk'):
+                    assert page.locator('#profileMenu').get_by_role('button',name=label,exact=(label in ('Upgrade','Komunita','Jazyk'))).is_visible(),(width,label)
+                page.locator('#profileMenu').get_by_role('button',name='Jazyk',exact=True).click()
+                assert page.locator('#bqm-dialog').is_visible()
+                assert page.locator('#bqm-dialog').get_by_role('button',name='SK',exact=True).is_visible()
+                page.get_by_role('button',name='← Menu účtu',exact=True).click()
+                assert page.locator('#profileMenu').is_visible()
+                if width==1440 and os.getenv('BLINQ_SCREENSHOTS'):
+                    page.locator('.site-header').screenshot(path=str(Path(os.environ['BLINQ_SCREENSHOTS'])/'admin-header-review.png'))
                 assert not errors,(width,errors)
                 page.close()
             print('Header PP/Info numeric badges, avatar profile, mobile layout and desktop: PASS')
