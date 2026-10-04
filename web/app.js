@@ -3107,6 +3107,12 @@
       return true;
     }
     const windowDays=Number(window);
+    if(Number.isFinite(windowDays)&&windowDays>0&&filters?.bettingDay!==false){
+      const day=bratislavaBettingDayKey(now,6);
+      const from=bratislavaBoundaryTimestamp(dateOnlyAddDays(day,1-Math.ceil(windowDays)),6);
+      const until=bratislavaBoundaryTimestamp(dateOnlyAddDays(day,1),6);
+      return Number.isFinite(ts)&&ts>=from&&ts<until;
+    }
     return !(Number.isFinite(windowDays)&&windowDays>0)
       ||(Number.isFinite(ts)&&ts>=now-windowDays*86400000);
   }

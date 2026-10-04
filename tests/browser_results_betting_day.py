@@ -14,7 +14,7 @@ def route_request(route):
         assert source.count(marker) == 1
         source = source.replace(
             marker,
-            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,wireResultsFilters,bratislavaBettingDayKey};\n"
+            "  window.bettingDayTest={state,filteredResults,renderResultsFilters,resultsSummary,wireResultsFilters,bratislavaBettingDayKey,resultPublicationMatchesWindow};\n"
             + marker,
         )
         route.fulfill(content_type="application/javascript", body=source)
@@ -149,6 +149,23 @@ def main():
             page.locator('#resultsDateRange').click()
             page.locator('#resultsRangeDialog [data-range-clear]').click()
             assert page.evaluate('bettingDayTest.state.resultsFilters.window')=='all'
+            ranges=page.evaluate("""() => {
+              const match=bettingDayTest.resultPublicationMatchesWindow;
+              const now=Date.parse('2026-10-04T14:00:00Z');
+              const run=(at,days,enabled,clock=now)=>match({scheduled_at:at},{},{window:String(days),bettingDay:enabled},clock);
+              return {
+                before:run('2026-10-04T03:59:59Z',1,true),
+                start:run('2026-10-04T04:00:00Z',1,true),
+                end:run('2026-10-05T04:00:00Z',1,true),
+                rolling:run('2026-10-03T15:00:00Z',1,false),
+                aligned:run('2026-10-03T15:00:00Z',1,true),
+                threeStart:run('2026-10-02T04:00:00Z',3,true),
+                threeBefore:run('2026-10-02T03:59:59Z',3,true),
+                winterBefore:run('2026-10-25T04:59:59Z',1,true,Date.parse('2026-10-25T12:00:00Z')),
+                winterStart:run('2026-10-25T05:00:00Z',1,true,Date.parse('2026-10-25T12:00:00Z'))
+              };
+            }""")
+            assert ranges=={'before':False,'start':True,'end':False,'rolling':True,'aligned':False,'threeStart':True,'threeBefore':False,'winterBefore':False,'winterStart':True},ranges
             assert not errors, errors
             print("Results current betting-day cohort + 06:00 custom filter contract: PASS")
         finally:
