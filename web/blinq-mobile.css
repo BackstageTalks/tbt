@@ -471,3 +471,8 @@ body#blinqPremium#blinqPremium .admin-simple-toolbar{grid-template-columns:minma
 body#blinqPremium [data-route="top200"],body#blinqPremium [data-hub-tab="top200"],body#blinqPremium #top200Panel{display:none!important}
 
 body#blinqPremium #resultsDateRange{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:8px!important;white-space:nowrap!important;font-size:11px!important;font-variant-numeric:tabular-nums;min-width:0!important;padding:0 10px!important;height:42px!important}body#blinqPremium #resultsDateRange>span{flex:0 0 auto}
+
+/* Avoid the opaque desktop shell introduced by the old reference layout. */
+body#blinqPremium#blinqPremium .app-shell{background:rgba(1,13,13,.12)!important;box-shadow:none!important}
+body#blinqPremium#blinqPremium .site-main{background:transparent!important}
+body#blinqPremium [data-daily-tab="top200"],body#blinqPremium [data-admin-hub-tab-card="top200"]{display:none!important}

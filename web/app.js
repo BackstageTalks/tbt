@@ -540,14 +540,19 @@
     // 6.6.8: add the consolidated Daily Hub tabs even when an older runtime
     // config is still published. Existing plan rules remain untouched.
     const sourceTabs=state.uiSource?.dashboard?.daily_hub?.tabs||{},liveHub=state.ui.dashboard?.daily_hub;
-    if(liveHub){liveHub.tabs=liveHub.tabs||{};['top200','prime','top','doubles','double_faults','sets'].forEach(tab=>{if(!liveHub.tabs[tab]&&sourceTabs[tab])liveHub.tabs[tab]=clone(sourceTabs[tab]);});}
+    if(liveHub){liveHub.tabs=liveHub.tabs||{};['prime','top','doubles','double_faults','sets'].forEach(tab=>{if(!liveHub.tabs[tab]&&sourceTabs[tab])liveHub.tabs[tab]=clone(sourceTabs[tab]);});}
     const sourceSections=state.uiSource?.dashboard?.sections||{},liveSections=state.ui.dashboard?.sections;
     if(liveSections&&!liveSections.top200&&sourceSections.top200)liveSections.top200=clone(sourceSections.top200);
     const sourceElements=state.uiSource?.elements||{};
     state.ui.elements=state.ui.elements||{};
     for(const id of ['SIDEBAR_TOP200','TOP200_PANEL'])if(!state.ui.elements[id]&&sourceElements[id])state.ui.elements[id]=clone(sourceElements[id]);
     state.ui.market_rules=state.ui.market_rules||{};
-    if(!state.ui.market_rules.top200&&state.uiSource?.market_rules?.top200)state.ui.market_rules.top200=clone(state.uiSource.market_rules.top200);
+    delete state.ui.market_rules.top200;
+    if(liveHub?.tabs)delete liveHub.tabs.top200;
+    if(liveSections)delete liveSections.top200;
+    delete state.ui.elements.SIDEBAR_TOP200;delete state.ui.elements.TOP200_PANEL;
+    if(state.ui.market_rules.match_winner_assignment?.priority)state.ui.market_rules.match_winner_assignment.priority=state.ui.market_rules.match_winner_assignment.priority.filter(key=>key!=='top200');
+
     // r24 membership invariant: ROOKIE is the always-on free tier. Run this
     // cleanup here as well so an older local Admin draft cannot reintroduce the
     // former 30-day/trial behaviour after loadAdminDraft().
@@ -2515,7 +2520,7 @@
   function renderDailyHub(){
     const host=$('dailyHub'); if(!host)return; wireDailyHub();
     const cfg=dailyHubConfig(); host.hidden=cfg.enabled===false; if(host.hidden)return;
-    const tabs=['top200','daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];
+    const tabs=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];
     if(!tabs.includes(state.dailyHubTab))state.dailyHubTab='daily';
     const plan=accountPlan();
     const visibleTabs=tabs.filter(tab=>dailyHubEntitlement(tab).enabled!==false);
