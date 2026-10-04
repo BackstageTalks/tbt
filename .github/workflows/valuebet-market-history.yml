@@ -181,6 +181,9 @@ jobs:
 
           imp = json.loads(Path(".cache/tbt/valuebet/import/report.json").read_text())
           counts = imp.get("counts") or {}
+          expected_markers = int(counts.get("updated") or 0) + int(counts.get("already_present") or 0)
+          if markers < expected_markers:
+              failed.append("market_history_not_persisted")
           forbidden = {
               "identity_missing": int(counts.get("identity_missing") or 0),
               "identity_changed": int(counts.get("identity_changed") or 0),
@@ -200,6 +203,7 @@ jobs:
               "invalid_market_history_markers": invalid_markers,
               "closing_policy_violations": closing_policy_violations,
               "market_feature_names": market_feature_names,
+              "expected_market_history_rows_min": expected_markers,
               "strict_import_safety": forbidden,
               "failed_checks": failed,
               "policy": {
