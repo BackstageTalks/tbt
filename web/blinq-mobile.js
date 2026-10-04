@@ -113,7 +113,14 @@
     }));
     if (level === 'root') {
       section('Predikcie', 'predictions');
-      proxy('Výsledky', () => document.querySelector('.reference-navigation [data-route="results"]'));
+      const resultsSource = document.querySelector('.reference-navigation [data-route="results"]');
+      const resultsLocked = resultsSource?.classList.contains('access-nav-locked');
+      nav.append(button('Výsledky' + (resultsLocked ? ' 🔒' : ''), () => {
+        dialog.close();
+        // The desktop link may be hidden by presentation settings; its original
+        // route handler still enforces the account's results access.
+        resultsSource?.click();
+      }));
       proxy('Live radar', () => byId('insightShortcut'));
       if (joinedControls().length) section('Moje skupiny', 'projects');
       proxy('Info', () => byId('insightBell'));

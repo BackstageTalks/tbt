@@ -89,6 +89,7 @@ def main():
                 assert not page.locator('#topUpgradeButton').is_visible()
                 page.locator('#bqm-toggle').click()
                 root_text=page.locator('#bqm-dialog nav').inner_text()
+                assert 'Výsledky' in root_text,(width,root_text)
                 for unwanted in ('Členstvo', 'Komunita', 'Jazyk', 'Môj účet', 'Odhlásiť sa'):
                     assert unwanted not in root_text,(width,root_text)
                 page.get_by_role('button',name='Zavrieť menu',exact=True).click()
