@@ -131,6 +131,24 @@ def main():
             assert today["ids"] == ["current-day", "runtime-current"], today
             assert today["window"] == "today", today
             assert "2/64" in today["sample"], today
+            page.evaluate("""() => {
+              document.querySelectorAll('dialog[open]').forEach(d=>d.close());
+              const t=bettingDayTest;
+              t.state.resultsFilters={category:'all',tour:'',surface:'',window:'custom',dateFrom:'2026-09-27',dateTo:'2026-09-27',bettingDay:true};
+              document.querySelector('#routePanel').innerHTML=t.renderResultsFilters()+t.resultsSummary();
+              t.wireResultsFilters();
+            }""")
+            page.locator('#resultsDateRange').click()
+            page.locator('#resultsRangeDialog [data-range-day="2026-09-26"]').click()
+            page.locator('#resultsRangeDialog [data-range-day="2026-09-28"]').click()
+            page.locator('#resultsRangeDialog [data-range-apply]').click()
+            dates=page.evaluate('() => bettingDayTest.state.resultsFilters')
+            assert dates['dateFrom']=='2026-09-26' and dates['dateTo']=='2026-09-28',dates
+            assert page.locator('#resultsRangeDialog').count()==0
+            assert page.locator('#resultsDateFrom').get_attribute('type')=='hidden'
+            page.locator('#resultsDateRange').click()
+            page.locator('#resultsRangeDialog [data-range-clear]').click()
+            assert page.evaluate('bettingDayTest.state.resultsFilters.window')=='all'
             assert not errors, errors
             print("Results current betting-day cohort + 06:00 custom filter contract: PASS")
         finally:

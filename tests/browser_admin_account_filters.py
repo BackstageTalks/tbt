@@ -111,6 +111,29 @@ def main():
                       node.querySelector('.admin-simple-user-editor-wrap').innerHTML='<div>Editor fixture</div>';
                     }""")
                     assert_column_alignment(page,"with-editor 1440px")
+                page.evaluate("""() => {
+                  const users=accountHarness.state.adminUsers;
+                  users[0].last_sign_in_at='2026-10-03T22:30:00Z';
+                  users[1].last_sign_in_at='2026-10-04T22:30:00Z';
+                  users[2].last_sign_in_at='2026-10-04T16:00:00Z';
+                  users[3].last_sign_in_at=null;
+                }""")
+                page.locator('#adminUserLoginDate').fill('2026-10-04')
+                assert_results(page,['@Ladislav','@Zara'])
+                page.locator('#adminUserLevelFilter').select_option('elite')
+                assert_results(page,['@Ladislav'])
+                page.locator('#adminUserStatusFilter').select_option('active')
+                assert_results(page,[])
+                page.locator('#adminUserStatusFilter').select_option('all')
+                page.locator('#adminUserLevelFilter').select_option('all')
+                page.locator('#adminUserSort').select_option('email')
+                assert page.locator('#adminUserLoginDate').input_value()=='2026-10-04'
+                assert_results(page,['@Zara','@Ladislav'])
+                page.get_by_role('button',name='Zrušiť filter dátumu',exact=True).click()
+                assert_results(page,['@Zara','@Ladislav','@Adam','@Franta'])
+                page.get_by_role('button',name='Dnes',exact=True).click()
+                assert page.locator('#adminUserLoginDate').input_value()
+                assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
                 assert not errors,(width,errors)
                 page.close()
                 print("PASS admin account filters/search/sort at",width)

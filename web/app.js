@@ -3,7 +3,7 @@
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email'}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'top200', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
+  const state = { feed: {upcoming:[],results:[],performance:{},history:{},model:null}, ui:null, uiSource:null, route:'predictions', page:0, showAll:false, authMode:'login', authEnabled:true, draftLoaded:false, selectedElement:'HERO_BANNER_1', adminPlan:'rookie', adminTab:'accounts', adminUsers:null, adminUsersLoading:false, adminUsersError:'', adminDiagnostics:null, adminDiagnosticsLoading:false, adminSelectedUser:null, adminUsersWarning:'', adminUserFilters:{q:'',plan:'all',status:'all',sort:'email',loginDate:''}, previewPlan:null, newsPool:[], bannerObserver:null, bannerTimers:new WeakMap(), runtimeConfigLoaded:false, uiStorageAvailable:null, uiRuntimeNotice:'', adminUiSnapshots:null, adminUiSnapshotsLoading:false, adminUiSnapshotsError:'', adminPreRestorePreview:null, resultsFilters:{category:'all',tour:'',surface:'',window:'all',dateFrom:'',dateTo:'',bettingDay:true}, resultsPage:0, resultsPageSize:50, marketPage:{top200:0,top_daily:0,value:0,doubles:0,ace:0,sg:0}, dashboardVisibility:null, demoFeedBackup:null, demoMode:false, heroIndex:0, heroTimer:null, heroPaused:false, adminPreviewIndex:0, adminPreviewPaused:false, adminPreviewPinnedId:null, adminPreviewTimer:null, dailyHubTab:'top200', dailyHubExpanded:false, dashboardSearch:'', dailyHubTournament:'', dailyHubSelected:{top200:'',daily:'',prime:'',top:'',value:'',ace:'',double_faults:'',games:'',sets:'',doubles:'',board:''}, insights:[], insightsUnread:0, insightsLoading:false, insightsStorageUnavailable:false, insightDrawerOpen:false, insightFilter:'all', insightChannel:'info', liveRadarTab:'comeback', adminInsights:null, adminInsightsLoading:false, adminInsightsError:'', adminInfoResults:null, adminInfoResultsLoading:false, adminInfoResultsError:'', adminLiveResults:null, adminLiveResultsLoading:false, adminLiveResultsError:'', adminInsightEditingId:'', adminLiveRadarStatus:null, adminLiveRadarLoading:false, userLiveRadarStatus:null, userLiveRadarLoading:false, liveRadarHeartbeat:null, privateUpdatesLastPoll:0, privateUpdatesBusy:false, presentationConfig:null, siteContent:null, pushConfig:null, pushBusy:false, projectGroups:[], projectGroupsLoading:false, projectGroupsError:'', activeProjectGroupId:'', adminProjectGroups:null, adminProjectGroupsLoading:false, adminProjectGroupsError:'', adminProjectGroupId:'' };
   const pageSize = () => innerWidth >= 1700 ? 6 : innerWidth >= 1450 ? 5 : innerWidth >= 1200 ? 4 : innerWidth >= 900 ? 3 : 1;
   const dashboardCardsPerPanel = () => 1; // v6.5.16: dashboard is a lightweight one-pick preview; See more opens 3–5 picks.
   const escapeHtml = value => String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
@@ -3085,6 +3085,10 @@
   }
   function resultPublicationMatchesWindow(row,publication,filters,now=Date.now(),todayKeys=null){
     const window=String(filters?.window||'all');
+    if(window==='today'&&filters?.bettingDay===false){
+      const scheduled=row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0;
+      return bratislavaBettingDayKey(scheduled,0)===bratislavaBettingDayKey(now,0);
+    }
     if(window==='today'){
       const scheduled=row?.scheduled_at||row?.date||row?.start_time||row?.start_at||0;
       if(bratislavaBettingDayKey(scheduled,6)!==bratislavaBettingDayKey(now,6))return false;
@@ -3096,8 +3100,8 @@
     if(window==='custom'){
       const from=String(filters?.dateFrom||'').trim(),to=String(filters?.dateTo||'').trim();
       const bettingDay=filters?.bettingDay!==false;
-      const fromTs=from?(bettingDay?bratislavaBoundaryTimestamp(from,6):new Date(`${from}T00:00:00`).getTime()):null;
-      const toTsExclusive=to?(bettingDay?bratislavaBoundaryTimestamp(dateOnlyAddDays(to,1),6):new Date(`${to}T23:59:59.999`).getTime()+1):null;
+      const fromTs=from?(bettingDay?bratislavaBoundaryTimestamp(from,6):bratislavaBoundaryTimestamp(from,0)):null;
+      const toTsExclusive=to?(bettingDay?bratislavaBoundaryTimestamp(dateOnlyAddDays(to,1),6):bratislavaBoundaryTimestamp(dateOnlyAddDays(to,1),0)):null;
       if(fromTs!==null&&(!Number.isFinite(ts)||ts<fromTs))return false;
       if(toTsExclusive!==null&&(!Number.isFinite(ts)||ts>=toTsExclusive))return false;
       return true;
@@ -3148,7 +3152,7 @@
     const option=(value,label,selected)=>`<option value="${escapeHtml(value)}"${value===selected?' selected':''}>${escapeHtml(label)}</option>`;
     const fixedDays=hours?hours/24:null;
     const fixedLabel=hours?(hours===24?lcopy('Last 24 hours','Posledných 24 hodín','Posledních 24 hodin'):hours===48?lcopy('Last 48 hours','Posledných 48 hodín','Posledních 48 hodin'):lcopy(`Last ${fixedDays} days`,`Posledných ${fixedDays} dní`,`Posledních ${fixedDays} dní`)):'';
-    const todayOption=['today',lcopy('Today · betting day 06:00–06:00','Dnes · betting day 06:00–06:00','Dnes · betting day 06:00–06:00')];
+    const todayOption=['today',lcopy('Today','Dnes','Dnes')];
     const periodOptions=hours
       ?[todayOption,[String(fixedDays),fixedLabel]]
       :[todayOption,['all',publicText('All time')],['1',publicText('24 hours')],['3',lcopy('3 days','3 dni','3 dny')],['7',publicText('7 days')],['10',lcopy('10 days','10 dní','10 dní')],['14',lcopy('14 days','14 dní','14 dní')],['30',publicText('30 days')],['90',publicText('90 days')],['365',lcopy('365 days','365 dní','365 dní')],['custom',lcopy('Custom range','Vlastné obdobie','Vlastní období')]];
@@ -3168,7 +3172,7 @@
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
-      ${hours?'':`<label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('From','Od','Od'))}</span><span class="date-shell"><input id="resultsDateFrom" type="date" value="${escapeHtml(filters.dateFrom||'')}"><i aria-hidden="true"></i></span></label><label class="results-filter-field results-date-field"><span>${escapeHtml(lcopy('To','Do','Do'))}</span><span class="date-shell"><input id="resultsDateTo" type="date" value="${escapeHtml(filters.dateTo||'')}"><i aria-hidden="true"></i></span></label><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava.','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava.','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava.'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
+      ${hours?'':`<div class="results-filter-field results-range-field"><span>Od – do</span><button id="resultsDateRange" type="button" aria-haspopup="dialog">${filters.dateFrom?escapeHtml(filters.dateFrom+' – '+(filters.dateTo||filters.dateFrom)):'Vybrať obdobie'} <span aria-hidden="true">▦</span></button><input id="resultsDateFrom" type="hidden" value="${escapeHtml(filters.dateFrom||'')}"><input id="resultsDateTo" type="hidden" value="${escapeHtml(filters.dateTo||'')}"></div><label class="results-betting-day-toggle" title="${escapeHtml(lcopy('Selected dates run from 06:00 to 06:00 Europe/Bratislava.','Vybrané dátumy sa počítajú od 06:00 do 06:00 Europe/Bratislava.','Vybraná data se počítají od 06:00 do 06:00 Europe/Bratislava.'))}"><input id="resultsBettingDay" type="checkbox" ${filters.bettingDay!==false?'checked':''}><span><strong>Betting day</strong><small>06:00–06:00</small></span></label>`}
       </div>
     </section>`;
   }
@@ -3362,6 +3366,32 @@
     return `<div class="admin-table-wrap results-table-wrap"><table class="admin-analytics-table results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>${pager}`;
   }
 
+
+  function openResultsRange(onApply){
+    $('resultsRangeDialog')?.remove();
+    const dialog=document.createElement('dialog');
+    dialog.id='resultsRangeDialog';dialog.setAttribute('aria-label','Vybrať obdobie výsledkov');
+    let from=state.resultsFilters.dateFrom||'',to=state.resultsFilters.dateTo||'';
+    let month=(from||bratislavaBettingDayKey(Date.now(),0)).slice(0,7);
+    const pretty=value=>value?value.split('-').reverse().join('. '):'—';
+    function draw(){
+      const [y,m]=month.split('-').map(Number),first=new Date(Date.UTC(y,m-1,1)),count=new Date(Date.UTC(y,m,0)).getUTCDate(),offset=(first.getUTCDay()+6)%7;
+      const title=new Intl.DateTimeFormat('sk-SK',{month:'long',year:'numeric',timeZone:'UTC'}).format(first);
+      const days=Array.from({length:offset},()=>'<span></span>').join('')+Array.from({length:count},(_,i)=>{
+        const value=month+'-'+String(i+1).padStart(2,'0');
+        return `<button type="button" data-range-day="${value}" aria-label="${pretty(value)}" aria-pressed="${value===from||value===to}" class="${value===from||value===to?'range-edge':from&&to&&value>from&&value<to?'range-inside':''}">${i+1}</button>`;
+      }).join('');
+      dialog.innerHTML=`<header><strong>Vybrať obdobie</strong><button type="button" data-range-close aria-label="Zavrieť kalendár">×</button></header><div class="range-month"><button type="button" data-month="-1" aria-label="Predchádzajúci mesiac">‹</button><strong>${title}</strong><button type="button" data-month="1" aria-label="Nasledujúci mesiac">›</button></div><p role="status">Od: <b>${pretty(from)}</b> · Do: <b>${pretty(to)}</b></p><small>${!from?'Vyber začiatok obdobia.':!to?'Vyber koniec obdobia.':'Obdobie je pripravené.'}</small><div class="range-grid">${['Po','Ut','St','Št','Pi','So','Ne'].map(d=>'<span>'+d+'</span>').join('')}${days}</div><footer><button type="button" data-range-clear>Celé obdobie</button><button type="button" class="btn btn-primary" data-range-apply ${from?'':'disabled'}>Použiť obdobie</button></footer>`;
+      dialog.querySelector('[data-range-close]').onclick=()=>dialog.close();
+      dialog.querySelectorAll('[data-month]').forEach(button=>button.onclick=()=>{const next=new Date(Date.UTC(y,m-1+Number(button.dataset.month),1));month=next.toISOString().slice(0,7);draw();dialog.querySelector('[data-month="'+button.dataset.month+'"]')?.focus();});
+      dialog.querySelectorAll('[data-range-day]').forEach(button=>button.onclick=()=>{const value=button.dataset.rangeDay;if(!from||to||value<from){from=value;to='';}else to=value;draw();dialog.querySelector('[data-range-day="'+value+'"]')?.focus();});
+      dialog.querySelector('[data-range-apply]').onclick=()=>{state.resultsFilters.dateFrom=from;state.resultsFilters.dateTo=to||from;state.resultsFilters.window='custom';dialog.close();onApply();$('resultsDateRange')?.focus();};
+      dialog.querySelector('[data-range-clear]').onclick=()=>{state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';state.resultsFilters.window='all';dialog.close();onApply();$('resultsDateRange')?.focus();};
+    }
+    dialog.addEventListener('close',()=>dialog.remove());
+    document.body.append(dialog);draw();dialog.showModal();
+  }
+
   function wireResultsFilters(){
     const rerender=()=>{state.resultsPage=0;renderRoute('results');};
     const mobileFilterToggle=document.querySelector('[data-results-filter-toggle]');
@@ -3371,7 +3401,8 @@
       mobileFilterToggle.setAttribute('aria-expanded',open?'true':'false');
     };
     [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface']].forEach(([id,key])=>{const el=$(id);if(el)el.onchange=()=>{state.resultsFilters[key]=el.value;rerender();};});
-    const period=$('resultsWindow');if(period)period.onchange=()=>{state.resultsFilters.window=period.value||'all';if(state.resultsFilters.window!=='custom'){state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}rerender();};
+    const period=$('resultsWindow');if(period)period.onchange=()=>{state.resultsFilters.window=period.value||'all';if(state.resultsFilters.window!=='custom'){state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}rerender();if(state.resultsFilters.window==='custom')openResultsRange(rerender);};
+    const range=$('resultsDateRange');if(range)range.onclick=()=>openResultsRange(rerender);
     const from=$('resultsDateFrom'),to=$('resultsDateTo'),bettingDay=$('resultsBettingDay');
     if(from)from.onchange=()=>{state.resultsFilters.dateFrom=from.value||'';if(state.resultsFilters.dateTo&&state.resultsFilters.dateFrom>state.resultsFilters.dateTo)state.resultsFilters.dateTo=state.resultsFilters.dateFrom;state.resultsFilters.window='custom';rerender();};
     if(to)to.onchange=()=>{state.resultsFilters.dateTo=to.value||'';if(state.resultsFilters.dateFrom&&state.resultsFilters.dateTo<state.resultsFilters.dateFrom)state.resultsFilters.dateFrom=state.resultsFilters.dateTo;state.resultsFilters.window='custom';rerender();};
@@ -3607,16 +3638,24 @@
     return `<span class="admin-tg-action is-${action}">${labels[action]}</span>`;
   }
   function adminUserFilterState(){
-    const defaults={q:'',plan:'all',status:'all',sort:'email'};
+    const defaults={q:'',plan:'all',status:'all',sort:'email',loginDate:''};
     state.adminUserFilters={...defaults,...(state.adminUserFilters||{})};
     return state.adminUserFilters;
   }
   function adminUserDateMs(value){const ms=value?new Date(value).getTime():NaN;return Number.isFinite(ms)?ms:null;}
+  function adminLoginDay(value){
+    const ms=adminUserDateMs(value);
+    if(ms===null)return '';
+    const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Bratislava',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date(ms));
+    const part=key=>parts.find(p=>p.type===key)?.value||'';
+    return `${part('year')}-${part('month')}-${part('day')}`;
+  }
   function adminUserMatchesFilters(user){
     const f=adminUserFilterState(),status=String(user?.status||'').toLowerCase(),plan=String(user?.plan||'').toLowerCase(),nick=String(user?.telegram_nick||''),search=`${user?.email||''} ${nick} ${user?.id||''}`.toLowerCase(),q=String(f.q||'').trim().toLowerCase();
     if(q&&!search.includes(q))return false;
     if(f.plan!=='all'&&plan!==f.plan)return false;
     if(f.status!=='all'&&status!==f.status)return false;
+    if(f.loginDate&&adminLoginDay(user?.last_sign_in_at)!==f.loginDate)return false;
     return true;
   }
   function adminSortedUsers(users){
@@ -3674,7 +3713,7 @@
     return `<section class="admin-ux-section admin-accounts-simple"><div class="admin-ux-heading"><div><small>POUŽÍVATELIA</small><h2>Správa účtov</h2><p>Nájdi účet, uprav prístup a ulož.</p></div><button class="btn btn-ghost icon-text-btn" type="button" data-admin-action="refresh-users"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15.5 6.2A6 6 0 1 0 16 12"></path><path d="M15.5 2.8v3.8h-3.8"></path></svg><span>Obnoviť</span></button></div>
       ${state.adminUsersWarning?`<div class="admin-note admin-note-warning"><strong>Profilové úložisko je v náhradnom režime</strong><span>Levely fungujú cez Firebase. Niektoré profilové zmeny môžu čakať na dostupné úložisko.</span></div>`:''}
       <div class="admin-simple-stats"><span><b>${users.length}</b> účtov</span><span><b>${countActive}</b> aktívnych</span>${countSuspended?`<span><b>${countSuspended}</b> pozastavených</span>`:''}</div>
-      <div class="admin-simple-toolbar"><label class="search-box"><span class="admin-search-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5"></circle><path d="m12.2 12.2 4 4"></path></svg></span><input id="adminUserSearch" type="search" value="${escapeHtml(f.q)}" placeholder="Hľadať e-mail, Telegram alebo UID"></label><label>Level<select id="adminUserLevelFilter">${levelOptions}</select></label><label>Stav<select id="adminUserStatusFilter">${statusOptions}</select></label><label>Zoradiť<select id="adminUserSort"><option value="email"${f.sort==='email'?' selected':''}>E-mail</option><option value="telegram"${f.sort==='telegram'?' selected':''}>Telegram</option><option value="level"${f.sort==='level'?' selected':''}>Level</option><option value="expiry"${f.sort==='expiry'?' selected':''}>Najbližšia expirácia</option><option value="last-login"${f.sort==='last-login'?' selected':''}>Posledné prihlásenie</option></select></label><span>Zobrazených <b id="adminFilteredCount">${filtered.length}</b></span></div>
+      <div class="admin-simple-toolbar"><label class="search-box"><span class="admin-search-icon" aria-hidden="true"><svg viewBox="0 0 20 20"><circle cx="8.5" cy="8.5" r="5"></circle><path d="m12.2 12.2 4 4"></path></svg></span><input id="adminUserSearch" type="search" value="${escapeHtml(f.q)}" placeholder="Hľadať e-mail, Telegram alebo UID"></label><label>Level<select id="adminUserLevelFilter">${levelOptions}</select></label><label>Stav<select id="adminUserStatusFilter">${statusOptions}</select></label><label class="admin-login-date">Posledné prihlásenie<div class="admin-login-date-controls"><input id="adminUserLoginDate" type="date" value="${escapeHtml(f.loginDate)}" aria-label="Dátum posledného prihlásenia"><button type="button" data-admin-action="login-today">Dnes</button><button type="button" data-admin-action="clear-login-date" aria-label="Zrušiť filter dátumu">×</button></div></label><label>Zoradiť<select id="adminUserSort"><option value="email"${f.sort==='email'?' selected':''}>E-mail</option><option value="telegram"${f.sort==='telegram'?' selected':''}>Telegram</option><option value="level"${f.sort==='level'?' selected':''}>Level</option><option value="expiry"${f.sort==='expiry'?' selected':''}>Najbližšia expirácia</option><option value="last-login"${f.sort==='last-login'?' selected':''}>Posledné prihlásenie</option></select></label><span>Zobrazených <b id="adminFilteredCount">${filtered.length}</b></span></div>
       <div class="admin-accounts-split admin-accounts-split-v22${state.adminSelectedUser?' has-selection':' no-selection'}"><div class="admin-simple-user-table"><div class="admin-simple-user-head"><span>Používateľ</span><span>Level</span><span>Platnosť</span><span>Stav</span><span></span></div><div class="admin-simple-user-list">${rows}${!state.adminUsersLoading&&users.length?`<div id="adminUserFilterEmpty" class="admin-filter-empty"${filtered.length?" hidden":""} role="status">Žiadne účty nezodpovedajú zvoleným filtrom.</div>`:""}</div></div><div class="admin-simple-user-editor-wrap">${renderAdminUserEditor(state.adminSelectedUser)}</div></div>
     </section>`;
   }
@@ -4787,7 +4826,8 @@
       else if(action==='extend-default-term'){const plan=String($('adminUserPlan')?.value||'');if(!plan){showStatus('Najprv vyber level.');return;}const cfg=state.ui?.plans?.[plan]||{};if(planIsUnlimited(plan,cfg)){setAdminPlanDefaults(plan,true);showStatus('ROOKIE je bez časového obmedzenia.');return;}adminAddDaysToExpiry(adminDefaultPlanDays());}
       else if(action==='delete-user'){const user=state.adminSelectedUser;if(!user)return;const confirmation=window.prompt(`Naozaj zmazať účet ${user.email||user.id}?\n\nPre potvrdenie napíš DELETE`);if(confirmation!=='DELETE')return;try{await BlinqAuth.adminDeleteUser(user.id);state.adminUsers=(state.adminUsers||[]).filter(row=>row.id!==user.id);state.adminSelectedUser=null;rerenderAdmin();adminApplyUserFilters();showStatus('Účet bol zmazaný.');}catch(error){showStatus(error.message||'Účet sa nepodarilo zmazať.');}}
       else if(action==='refresh-users')await loadAdminUsers(true);
-      else if(action==='reset-user-filters'){state.adminUserFilters={q:'',plan:'all',status:'all',sort:'email'};rerenderAdmin();adminApplyUserFilters();}
+      else if(action==='login-today'||action==='clear-login-date'){const f=adminUserFilterState();f.loginDate=action==='login-today'?adminLoginDay(new Date()):'';const input=$('adminUserLoginDate');if(input)input.value=f.loginDate;adminApplyUserFilters();}
+      else if(action==='reset-user-filters'){state.adminUserFilters={q:'',plan:'all',status:'all',sort:'email',loginDate:''};rerenderAdmin();adminApplyUserFilters();}
       else if(action==='copy-tg-nicks'){const nicks=adminFilteredUsers().map(u=>String(u.telegram_nick||'').trim()).filter(Boolean);const text=nicks.join('\n');if(!text){showStatus('V aktuálnom filtri nie sú žiadne Telegram nicky.');return;}try{if(navigator.clipboard?.writeText)await navigator.clipboard.writeText(text);else{const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();document.execCommand('copy');ta.remove();}showStatus(`Skopírovaných ${nicks.length} Telegram nickov.`);}catch{showStatus('Telegram nicky sa nepodarilo skopírovať.');}}
     };
     host.onchange=event=>{
@@ -4797,6 +4837,7 @@
       const uf=adminUserFilterState();
       if(t.id==='adminUserLevelFilter'){uf.plan=t.value;adminApplyUserFilters();return;}
       if(t.id==='adminUserStatusFilter'){uf.status=t.value;adminApplyUserFilters();return;}
+      if(t.id==='adminUserLoginDate'){uf.loginDate=t.value;adminApplyUserFilters();return;}
       if(t.id==='adminUserSort'){uf.sort=t.value;rerenderAdmin();adminApplyUserFilters();return;}
       if(t.id==='adminPlanSelect'){state.adminPlan=t.value;rerenderAdmin();return;}
       if(t.dataset.adminHeroCount!==undefined){const count=Math.max(1,Math.min(5,Number(t.value)||1));state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.enabled=true;state.ui.hero_banner.slot_count=count;state.ui.hero_banner.auto_rotate=count>1;state.ui.hero_banner.show_dots=count>1;state.ui.hero_banner.pause_on_hover=true;[1,2,3,4,5].forEach(i=>{const slot=elements()?.[`HERO_BANNER_${i}`];if(slot){slot.content=slot.content||{};slot.content.enabled=i<=count;}});state.heroIndex=0;state.adminPreviewIndex=0;renderAllUiContent();rerenderAdmin();return;}

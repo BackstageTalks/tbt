@@ -352,3 +352,35 @@ body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"
 body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):focus-visible{outline:2px solid #6bf1bd!important;outline-offset:3px!important}
 body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):active{filter:brightness(1.24)!important;transform:scale(.97)!important;box-shadow:inset 0 0 0 2px rgba(148,255,213,.8)!important}
 @media(prefers-reduced-motion:reduce){body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop){transition:none!important}body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):active{transform:none!important}}
+
+body#blinqPremium .admin-simple-toolbar{grid-template-columns:minmax(200px,2fr) 115px 115px minmax(230px,1.3fr) 150px auto!important}
+body#blinqPremium .admin-login-date-controls{display:flex;gap:5px;align-items:center;min-width:0}
+body#blinqPremium .admin-login-date-controls input{min-width:0;width:100%;color-scheme:dark}
+body#blinqPremium .admin-login-date-controls button{flex:0 0 auto;min-height:34px;padding:0 8px;border:1px solid #285447;border-radius:8px;background:#08241b;color:#ddf5e9}
+@media(max-width:1300px){body#blinqPremium .admin-simple-toolbar{grid-template-columns:repeat(3,minmax(0,1fr))!important}body#blinqPremium .admin-simple-toolbar .search-box{grid-column:1/-1!important}}
+@media(max-width:700px){body#blinqPremium .admin-simple-toolbar{grid-template-columns:repeat(2,minmax(0,1fr))!important}body#blinqPremium .admin-simple-toolbar .admin-login-date{grid-column:1/-1!important}}
+@media(max-width:380px){body#blinqPremium .admin-simple-toolbar{grid-template-columns:minmax(0,1fr)!important}}
+
+body#blinqPremium .results-range-field #resultsDateRange{display:flex;align-items:center;justify-content:space-between;width:100%;min-height:42px;padding:10px 12px;border:1px solid #285447;border-radius:9px;background:#061b15;color:#e4f0e9;text-align:left;font:inherit}
+body#blinqPremium .results-filter-bar-v683{grid-template-columns:repeat(4,minmax(0,1fr)) minmax(210px,1.3fr) minmax(160px,1fr)!important}
+#resultsRangeDialog{width:min(360px,calc(100vw - 24px));max-height:calc(100dvh - 24px);box-sizing:border-box;overflow:auto;padding:20px;border:1px solid #285447;border-radius:16px;background:#061b15;color:#e4f0e9}
+#resultsRangeDialog::backdrop{background:rgba(0,10,8,.72)}
+#resultsRangeDialog header,#resultsRangeDialog footer,.range-month{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#resultsRangeDialog button{min-height:40px;min-width:40px;border:1px solid #285447;border-radius:9px;background:#09261d;color:inherit;cursor:pointer}
+#resultsRangeDialog .range-month{margin:15px 0}
+#resultsRangeDialog p{margin:10px 0}
+#resultsRangeDialog small{display:block;color:#abc8ba}
+#resultsRangeDialog .range-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;margin:16px 0}
+#resultsRangeDialog .range-grid span{text-align:center;font-size:12px;padding:4px 0}
+#resultsRangeDialog .range-grid button{min-width:0;padding:0}
+#resultsRangeDialog .range-grid .range-edge{background:#2ce6a0;color:#03150e;border-color:#2ce6a0}
+#resultsRangeDialog .range-grid .range-inside{background:#164d39;border-color:#297254}
+#resultsRangeDialog footer button{padding:8px 12px}
+@media(max-width:1100px){body#blinqPremium .results-filter-bar-v683{grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(max-width:700px){body#blinqPremium .results-filter-bar-v683{grid-template-columns:repeat(2,minmax(0,1fr))!important}body#blinqPremium .results-range-field{grid-column:1/-1}}
+
+body#blinqPremium .reference-topbar .header-actions > #bqm-projects:not([hidden]){border:1px solid rgba(185,153,255,.25)!important;border-radius:9px!important;background:rgba(185,153,255,.065)!important}
+
+@media(max-width:700px){
+body#blinqPremium.blinq-home #dashboardHero .hero-slide .dashboard-hero-copy h2{width:26ch!important;max-width:100%!important;text-wrap:balance!important;line-height:1.15!important}
+}
