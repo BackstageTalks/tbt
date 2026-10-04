@@ -340,3 +340,6 @@ body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .site-header .
 body#blinqPremium #accountDialog .account-modal-security{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:24px!important;flex-wrap:wrap!important}
 body#blinqPremium #accountDialog #accountModalPassword{margin-right:auto!important}
 body#blinqPremium #accountDialog{background-color:#061b15!important;background-image:var(--blinq-login-loader-backdrop,linear-gradient(rgba(1,11,12,.85),rgba(1,11,12,.85)),url('/assets/blinq_page_background.webp'))!important;background-position:center!important;background-size:cover!important;background-repeat:no-repeat!important}
+
+body#blinqPremium #accountDialog .account-modal-security{flex-direction:row!important;flex-wrap:nowrap!important;gap:16px!important}
+body#blinqPremium #accountDialog .account-modal-security > button{flex:0 0 auto!important;width:auto!important;align-self:center!important}
