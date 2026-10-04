@@ -439,7 +439,7 @@ body#blinqPremium .admin-login-metrics-cards strong{font-size:28px;line-height:1
 body#blinqPremium .admin-login-metrics-note{margin:16px 0 0;color:#91aaa7;font-size:11px;line-height:1.6}
 @media(max-width:600px){body#blinqPremium .admin-login-metrics{padding:16px}body#blinqPremium .admin-login-metrics-cards{gap:12px;grid-template-columns:1fr}body#blinqPremium .admin-login-metrics-cards article{display:flex;align-items:center;justify-content:space-between}body#blinqPremium .admin-login-metrics-cards span{margin:0}}
 
-body#blinqPremium .results-category-compat{display:none!important}
+body#blinqPremium.blinq-route .results-filter-field select.results-category-compat{display:none!important}
 body#blinqPremium .results-category-picker{position:relative;width:100%;min-width:0}
 body#blinqPremium .results-category-picker summary{list-style:none;cursor:pointer;padding:12px 30px 12px 12px;border:1px solid #285447;border-radius:9px;min-height:42px;background:#051d17;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 body#blinqPremium .results-category-picker summary::after{content:'⌄';position:absolute;right:12px;top:11px}
@@ -448,5 +448,5 @@ body#blinqPremium .results-category-picker[open]{z-index:30}
 body#blinqPremium .results-category-options{position:absolute;top:calc(100% + 7px);left:0;min-width:220px;max-width:calc(100vw - 40px);padding:10px;background:#061c18;border:1px solid #285447;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);max-height:360px;overflow:auto}
 body#blinqPremium .results-category-options label{display:flex;align-items:center;gap:12px;padding:10px;border-radius:7px;cursor:pointer;font-size:13px}
 body#blinqPremium .results-category-options label:hover{background:rgba(56,173,132,.09)}
-body#blinqPremium .results-category-options input{width:16px;height:16px;accent-color:#21d99a;flex-shrink:0}
+body#blinqPremium.blinq-route .results-filter-field .results-category-options input{width:16px!important;max-width:16px!important;min-width:16px!important;height:16px;accent-color:#21d99a;flex-shrink:0}
 body#blinqPremium .results-category-picker summary:focus-visible{outline:2px solid #65cbaa;outline-offset:2px}
