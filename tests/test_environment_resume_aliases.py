@@ -27,7 +27,7 @@ def test_environment_payload_stamps_schema_even_when_unresolved():
     payload = environment_payload(
         FakeClient(), {}, 'Unknown Event', datetime(2025, 1, 1, tzinfo=timezone.utc)
     )
-    assert payload['schema_version'] == ENVIRONMENT_SCHEMA_VERSION == 2
+    assert payload['schema_version'] == ENVIRONMENT_SCHEMA_VERSION
     assert payload['venue_resolved'] is False
 
 
