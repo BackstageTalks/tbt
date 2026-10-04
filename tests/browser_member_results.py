@@ -38,6 +38,16 @@ def main():
             }""")
             assert result=={"selected":["loss","next-day","prime"],"limited":["loss"],"roi":1/3,"profit":1,"all":4,"hidden":True,"regular":4,"controls":True},result
             assert not errors,errors
+            combined=page.evaluate("""() => {
+              const t=memberTest;
+              const rows=t.state.feed.results;
+              const top=t.settledPublishedEntries(rows,'top_daily',{window:'all'});
+              const prime=t.settledPublishedEntries(rows,'prime',{window:'all'});
+              const multi=t.settledPublishedEntries(rows,'top_daily,prime',{window:'all'});
+              const html=t.renderResultsFilters();
+              return {count:multi.length,expected:top.length+prime.length,checkboxes:html.includes('data-result-category')};
+            }""")
+            assert combined['count']==combined['expected'] and combined['checkboxes'],combined
             print("Admin membership cohort, pending slots, per-day limits and ROI: PASS")
         finally: browser.close()
 if __name__=="__main__":main()

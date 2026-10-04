@@ -2899,6 +2899,7 @@
   }
   function isProjectionPublication(publication){return ['aces','double_faults','sets','games'].includes(String(publication?.market||publication?.projection_metric||'').toLowerCase())||['projection_only','priced_projection'].includes(String(publication?.price_status||'').toLowerCase());}
   function publicationMatchesResultCategory(publication,category='all'){
+    if(String(category).includes(','))return String(category).split(',').some(c=>publicationMatchesResultCategory(publication,c));
     if(category==='all')return true;
     if(category==='sg')return ['sets','games'].includes(String(publication?.section||''));
     if(category==='winners')return String(publication?.market||'match_winner').toLowerCase()==='match_winner'&&String(publication?.section||'').toLowerCase()!=='doubles';
@@ -2978,7 +2979,7 @@
     }
     return primary;
   }
-  function resultCategoryLabel(value){const en=({all:'All published',top200:'TOP200',prime:'Short Odds',top_daily:'TOP',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP':'TOP','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP':'TOP','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
+  function resultCategoryLabel(value){if(String(value).includes(','))return String(value).split(',').map(resultCategoryLabel).join(', ');const en=({all:'All published',top200:'TOP200',prime:'Short Odds',top_daily:'TOP',value:'Value',doubles:'Doubles',ace:'Aces',aces:'Aces',double_faults:'Double Faults',sg:'Sets & Games',sets:'Sets',games:'Games',model:'Model'})[value]||String(value||'').replaceAll('_',' ');if(locale==='sk')return ({'All published':'Všetky publikované','TOP':'TOP','Doubles':'Štvorhra','Aces':'Esá','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;if(locale==='cz')return ({'All published':'Všechny publikované','TOP':'TOP','Doubles':'Čtyřhra','Aces':'Esa','Double Faults':'Dvojchyby','Sets & Games':'Sety a gamy','Sets':'Sety','Games':'Gamy','Model':'Model'})[en]||en;return en;}
   function resultPublication(row,category='all'){
     const pubs=publicResultPublications(row);
     const filtered=['top200','prime','top_daily','value','doubles','ace','double_faults','sg','sets','games'].includes(category)?pubs.filter(p=>publicationMatchesResultCategory(p,category)):pubs;
@@ -3174,7 +3175,7 @@
         <span class="results-mobile-filter-current">${escapeHtml(mobileFilterLabel)}<i aria-hidden="true"></i></span>
       </button>
       <div class="results-filter-bar results-filter-bar-v683">
-      <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory">${['all','top200','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><i aria-hidden="true"></i></span></label>
+      <label class="results-filter-field"><span>${escapeHtml(publicText('Category'))}</span><span class="select-shell"><select id="resultsCategory" class="results-category-compat">${['all','top200','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>option(v,resultCategoryLabel(v),filters.category||'all')).join('')}</select><details class="results-category-picker"><summary>${escapeHtml(resultCategoryLabel(filters.category||'all'))}</summary><div class="results-category-options">${['all','top200','top_daily','prime','value','ace','double_faults','sets','games','doubles'].map(v=>`<label><input type="checkbox" data-result-category="${v}" ${String(filters.category||'all').split(',').includes(v)?'checked':''}><span>${escapeHtml(resultCategoryLabel(v))}</span></label>`).join('')}</div></details></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Tour'))}</span><span class="select-shell"><select id="resultsTour">${option('',publicText('All Tours'),filters.tour||'')}${tours.map(v=>option(v,v,filters.tour||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Surface'))}</span><span class="select-shell"><select id="resultsSurface">${option('',publicText('All Surfaces'),filters.surface||'')}${surfaces.map(v=>option(v,v.replaceAll('_',' '),filters.surface||'')).join('')}</select><i aria-hidden="true"></i></span></label>
       <label class="results-filter-field"><span>${escapeHtml(publicText('Period'))}</span><span class="select-shell"><select id="resultsWindow">${periodOptions.map(([v,l])=>option(v,l,filters.window||periodOptions[0][0])).join('')}</select><i aria-hidden="true"></i></span></label>
@@ -3238,7 +3239,7 @@
     return allowed;
   }
   function settledPublishedEntries(rows,category='all',filters=null){
-    const specific=['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
+    const specific=String(category).includes(',')||['top200','prime','top_daily','value','doubles','ace','double_faults','sets','games','winners'].includes(category);
     const unique=new Map();
     const cohort=memberResultCohort(filters?.membership);
     const now=Date.now();
@@ -3446,6 +3447,7 @@
       const open=Boolean(shell?.classList.toggle('is-open'));
       mobileFilterToggle.setAttribute('aria-expanded',open?'true':'false');
     };
+    document.querySelectorAll('[data-result-category]').forEach(el=>el.onchange=()=>{const chosen=new Set(String(state.resultsFilters.category||'all').split(','));const value=el.dataset.resultCategory;if(value==='all'){chosen.clear();}else{chosen.delete('all');if(el.checked)chosen.add(value);else chosen.delete(value);}state.resultsFilters.category=chosen.size?[...chosen].join(','):'all';rerender();const menu=document.querySelector('.results-category-picker');if(menu)menu.open=true;});
     [['resultsCategory','category'],['resultsTour','tour'],['resultsSurface','surface']].forEach(([id,key])=>{const el=$(id);if(el)el.onchange=()=>{state.resultsFilters[key]=el.value;rerender();};});
     document.querySelectorAll('input[name=resultsMembership]').forEach(el=>el.onchange=()=>{state.resultsFilters.membership=el.value;rerender();});
     const period=$('resultsWindow');if(period)period.onchange=()=>{state.resultsFilters.window=period.value||'all';if(state.resultsFilters.window!=='custom'){state.resultsFilters.dateFrom='';state.resultsFilters.dateTo='';}rerender();if(state.resultsFilters.window==='custom')openResultsRange(rerender);};
