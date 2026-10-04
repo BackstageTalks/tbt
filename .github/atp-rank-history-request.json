@@ -1,0 +1,11 @@
+{
+  "schema": 1,
+  "mode": "dry-run",
+  "source": "https://atp-rankings.ishanjha.com",
+  "source_api_docs": "https://atp-rankings.ishanjha.com/api-docs",
+  "purpose": "Audit weekly ATP ranking history against canonical BlinQ history, quantify safe gap-fill value, and validate strict point-in-time import without modifying production.",
+  "rapidapi_requests": 0,
+  "production_mutated": false,
+  "rank_points_policy": "sidecar_only_until_candidate_ablation",
+  "requested_at_utc": "2026-10-04T21:53:00Z"
+}
