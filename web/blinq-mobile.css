@@ -410,3 +410,10 @@ body#blinqPremium .results-member-levels legend{font-size:11px;color:#9cb3aa;mar
 body#blinqPremium .results-member-levels label{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer}
 body#blinqPremium .results-member-levels input{accent-color:#28e3aa}
 body#blinqPremium .results-member-note{font-size:11px;line-height:1.5;color:#9cb3aa;margin:12px}
+
+body#blinqPremium .results-filter-bar:has(.results-member-levels){grid-template-columns:repeat(4,minmax(100px,1fr)) minmax(140px,1fr) minmax(115px,.8fr) minmax(210px,1.4fr)!important}
+body#blinqPremium .results-filter-bar .results-member-levels{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px 10px;margin:0;padding:0;min-width:0;align-self:center}
+body#blinqPremium .results-filter-bar .results-member-levels legend{font-size:10px;margin-bottom:7px}
+body#blinqPremium .results-filter-bar .results-member-levels label{font-size:11px;gap:5px;white-space:nowrap}
+@media(max-width:1100px){body#blinqPremium .results-filter-bar:has(.results-member-levels){grid-template-columns:repeat(3,minmax(0,1fr))!important}}
+@media(max-width:700px){body#blinqPremium .results-filter-bar:has(.results-member-levels){grid-template-columns:repeat(2,minmax(0,1fr))!important}body#blinqPremium .results-filter-bar .results-member-levels{grid-column:1/-1;padding:6px 0;grid-template-columns:repeat(3,minmax(0,1fr))}}
