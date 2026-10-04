@@ -42,10 +42,11 @@ def _norm(value: str) -> str:
 def _positive_int(value):
     if value in (None, "", "-"):
         return None
-    try:
-        number = int(str(value).replace(",", "").strip())
-    except (TypeError, ValueError):
+    text = str(value).replace(",", "").strip()
+    match = re.match(r"^(\\d+)", text)
+    if not match:
         return None
+    number = int(match.group(1))
     return number if number > 0 else None
 
 
