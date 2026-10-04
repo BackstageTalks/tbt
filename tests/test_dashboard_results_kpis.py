@@ -24,9 +24,9 @@ def test_auto_kpi_uses_latest_runtime_results_not_pre_overlay_sample():
     value=selected_dashboard_cards(feed,config,now=NOW)[1]
     assert value['value']==.5 and value['sample']==2
 
-def test_dashboard_counts_runtime_settlements_and_top200_like_results():
+def test_dashboard_counts_runtime_settlements_like_results():
     runtime = {"event_id":"runtime", "market_publications":[{"section":"top_daily", "market":"match_winner", "selection_id":"a", "result":{"correct":True,"runtime_source":"match_status_snapshot"}}]}
-    top = {"event_id":"top", "market_publications":[{"section":"top200", "market":"match_winner", "selection_id":"b", "issued_at":"2026-09-20T12:00:00Z", "result":{"correct":False}}]}
+    top = {"event_id":"top", "market_publications":[{"section":"prime", "market":"match_winner", "selection_id":"b", "issued_at":"2026-09-20T12:00:00Z", "result":{"correct":False}}]}
     unissued = {"event_id":"draft", "market_publications":[{"section":"top_daily", "selection_id":"c", "result":{"correct":True}}]}
     feed={"results":[runtime,top,unissued]}
     stats=published_results_metrics(feed,"all",now=NOW)

@@ -72,7 +72,7 @@ def _finite(value: Any) -> float | None:
 # Mirror the public Results table rather than the winner-model ledger or the
 # financial-only betting window. Results counts graded projection-only Aces,
 # DF, Sets and Games in its W/L record even when they have no genuine odds.
-_RESULTS_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
+_RESULTS_SECTIONS = { "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 _PROJECTION_MARKETS = {"aces", "double_faults", "sets", "games"}
 _VOID_STATUSES = {
     "void", "push", "cancelled", "canceled", "postponed", "walkover",

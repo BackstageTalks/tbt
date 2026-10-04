@@ -2877,7 +2877,7 @@
       return p&&p.result&&!p.excluded_reason&&(Boolean(p.issued_at)||runtimeSettled);
     });
   }
-  const publicResultSections=new Set(['top200','top_daily','prime','value','doubles','ace','double_faults','sets','games']);
+  const publicResultSections=new Set(['top_daily','prime','value','doubles','ace','double_faults','sets','games']);
   const publicResultMarkets=new Set(['aces','double_faults']);
   function isPublicResultPublication(publication){
     if(!publication||typeof publication!=='object')return false;
