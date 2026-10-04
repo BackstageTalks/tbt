@@ -19,7 +19,7 @@ from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
 from tbt.models.feature_builder import FEATURE_NAMES, FeatureBuilder
 from tbt.services.data_quality import audit_history
-from tbt.services.training import _enforce_rank_provenance
+from tbt.services.training import _enforce_rank_provenance, _verified_rank_provenance
 
 FORBIDDEN_MODEL_FEATURES = {
     "target", "winner_id", "result_winner_id", "is_correct", "status",
@@ -47,6 +47,11 @@ def audit(history_dir: Path) -> dict[str, Any]:
     raw, identity_safety = sanitize_history_identities(load_partitions(history_dir))
     accepted, quality = audit_history(raw)
     cleaned, rank = _enforce_rank_provenance(accepted)
+    retained_unverified_ranks = [
+        m.match_id for m in cleaned
+        if (m.player1_rank is not None or m.player2_rank is not None)
+        and not _verified_rank_provenance(m)
+    ]
     frame = FeatureBuilder().build_training_frame(cleaned).sort_values(["scheduled_at", "match_id"]).reset_index(drop=True)
 
     forbidden = sorted(set(FEATURE_NAMES) & FORBIDDEN_MODEL_FEATURES)
@@ -80,8 +85,7 @@ def audit(history_dir: Path) -> dict[str, Any]:
         "model_feature_contract_has_no_target_or_result_fields": not forbidden,
         "historical_posthoc_weather_never_marked_training_eligible": not posthoc_violations,
         "model_feature_values_finite": not nonfinite,
-        "unverified_historical_ranks_stripped_before_features": rank.get("stripped_values", 0) >= 0,
-        "same_day_results_isolated_by_feature_builder": True,
+        "unverified_historical_ranks_stripped_before_features": not retained_unverified_ranks,
     }
     # The final policy is guaranteed by FeatureBuilder.build_training_frame: it
     # snapshots every match on a UTC calendar day before applying any result from
@@ -95,6 +99,8 @@ def audit(history_dir: Path) -> dict[str, Any]:
         "history_quality": quality,
         "identity_safety": identity_safety,
         "rank_provenance": rank,
+        "retained_unverified_rank_match_ids": retained_unverified_ranks,
+        "same_day_policy_validation": "separate_feature_builder_regression_tests; not asserted as a measured dataset check",
         "checks": checks,
         "failed_checks": failed,
         "forbidden_model_features": forbidden,

@@ -247,6 +247,38 @@ class _OddsProvider:
         ]}]}
 
 
+def test_exhausted_budget_stops_outbound_attempts_but_still_uses_later_cached_quotes():
+    from tbt.providers.budget import RequestBudgetExceeded
+
+    class Exhausted:
+        def __init__(self): self.called = []
+        def event_odds(self, event_id, provider_id=1):
+            self.called.append(event_id)
+            raise RequestBudgetExceeded('exhausted')
+
+    provider = Exhausted()
+    rows = [row('first', .80, 1.8, 2.0), row('skip', .75, 1.8, 2.0), row('cached', .70, 1.8, 2.0)]
+    cached = {'cached': _OddsProvider().event_odds('cached')}
+    enriched, report = enrich_current_betting_day_odds(provider, rows, now=datetime(2026,9,7,8,tzinfo=timezone.utc), prefetched_payloads=cached)
+    assert provider.called == ['first']
+    assert report['stopped_on_budget'] is True
+    assert report['skipped_budget'] == 2
+    assert report['errors'] == 0
+    assert report['odds_available'] == 1
+    assert report['cache_hits'] == 1
+    assert report['provider_call_attempts'] == 1
+
+
+def test_odds_errors_are_classified_without_publishing_exception_body():
+    class Broken:
+        def event_odds(self, event_id, provider_id=1):
+            raise RuntimeError('RapidAPI HTTP 404 for endpoint: private response text')
+
+    _, report = enrich_current_betting_day_odds(Broken(), [row('first', .80, 1.8, 2.0)], now=datetime(2026,9,7,8,tzinfo=timezone.utc))
+    assert report['error_types'] == {'http_404': 1}
+    assert 'private response' not in str(report)
+
+
 def test_odds_enrichment_covers_all_65_percent_value_candidates_before_prices_are_known():
     provider = _OddsProvider()
     rows = [

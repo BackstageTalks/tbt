@@ -14,6 +14,8 @@ import re
 from typing import Any, Iterable
 from zoneinfo import ZoneInfo
 
+from ..providers.budget import RequestBudgetExceeded
+
 
 MATCH_WINNER_MARKET_NAMES = {
     "full time",
@@ -726,6 +728,11 @@ def enrich_current_betting_day_odds(
         "odds_available": 0,
         "odds_unavailable": 0,
         "errors": 0,
+        "error_types": {},
+        "provider_call_attempts": 0,
+        "cache_hits": 0,
+        "stopped_on_budget": False,
+        "skipped_budget": 0,
         "provider_id": int(provider_id),
         "candidate_gate": {
             "min_probability": float(candidate_min_probability),
@@ -739,13 +746,19 @@ def enrich_current_betting_day_odds(
             continue
         p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
         p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+        cached = prefetched_payloads is not None and event_id in prefetched_payloads
+        if report["stopped_on_budget"] and not cached:
+            report["skipped_budget"] += 1
+            continue
         try:
             report["odds_requested"] += 1
             # Share the initial odds-first provider response with Match Winner
             # to avoid querying the same event twice in a refresh.
-            if prefetched_payloads is not None and event_id in prefetched_payloads:
+            if cached:
+                report["cache_hits"] += 1
                 payload = prefetched_payloads[event_id]
             else:
+                report["provider_call_attempts"] += 1
                 payload = provider.event_odds(event_id, provider_id=provider_id)
                 if prefetched_payloads is not None:
                     prefetched_payloads[event_id] = payload
@@ -754,8 +767,19 @@ def enrich_current_betting_day_odds(
                 str(p1.get("name") or ""),
                 str(p2.get("name") or ""),
             )
-        except Exception:
+        except RequestBudgetExceeded:
+            # Quota exhaustion is not a bookmaker/provider error. Reuse cached
+            # responses for later candidates, but stop further outbound attempts.
+            report["stopped_on_budget"] = True
+            report["skipped_budget"] += 1
+            continue
+        except Exception as exc:
             report["errors"] += 1
+            # Aggregate categories only: never put provider response bodies or
+            # potentially sensitive exception text into published diagnostics.
+            status = re.search(r"HTTP\s+(\d{3})\b", str(exc))
+            category = "http_" + status.group(1) if status else type(exc).__name__
+            report["error_types"][category] = report["error_types"].get(category, 0) + 1
             continue
         if market is None:
             report["odds_unavailable"] += 1
