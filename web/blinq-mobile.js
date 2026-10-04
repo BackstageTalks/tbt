@@ -56,7 +56,14 @@
   const logo = document.createElement('img');
   logo.src = header.querySelector('.brand img')?.getAttribute('src') || '/assets/blinq_logo.svg';
   logo.alt = 'BlinQ';
-  top.append(close, logo);
+  const home = document.createElement('a');
+  home.href = '#predictions';
+  home.dataset.route = 'predictions';
+  home.setAttribute('aria-label', 'BlinQ · hlavná stránka');
+  home.style.justifySelf = 'center';
+  home.append(logo);
+  home.addEventListener('click', () => dialog.close());
+  top.append(close, home);
   const nav = document.createElement('nav'); nav.setAttribute('aria-label', 'Mobilná navigácia');
   const note = document.createElement('p'); note.className = 'bqm-note'; note.setAttribute('role', 'status');
   dialog.append(top, nav, note); document.body.append(dialog);
@@ -112,6 +119,10 @@
       else render('root');
     }));
     if (level === 'root') {
+      nav.append(button('Späť na hlavnú stránku', () => {
+        dialog.close();
+        header.querySelector('.brand')?.click();
+      }));
       section('Predikcie', 'predictions');
       const resultsSource = document.querySelector('.reference-navigation [data-route="results"]');
       const resultsLocked = resultsSource?.classList.contains('access-nav-locked');
