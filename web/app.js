@@ -3424,9 +3424,10 @@
     function draw(){
       const [y,m]=month.split('-').map(Number),first=new Date(Date.UTC(y,m-1,1)),count=new Date(Date.UTC(y,m,0)).getUTCDate(),offset=(first.getUTCDay()+6)%7;
       const title=new Intl.DateTimeFormat('sk-SK',{month:'long',year:'numeric',timeZone:'UTC'}).format(first);
+      const today=bratislavaBettingDayKey(Date.now(),0);
       const days=Array.from({length:offset},()=>'<span></span>').join('')+Array.from({length:count},(_,i)=>{
         const value=month+'-'+String(i+1).padStart(2,'0');
-        return `<button type="button" data-range-day="${value}" aria-label="${pretty(value)}" aria-pressed="${value===from||value===to}" class="${value===from||value===to?'range-edge':from&&to&&value>from&&value<to?'range-inside':''}">${i+1}</button>`;
+        return `<button type="button" data-range-day="${value}" aria-label="${pretty(value)}${value===today?' · Dnes':''}" ${value===today?'aria-current="date"':''} aria-pressed="${value===from||value===to}" class="${value===today?'range-today ':''}${value===from||value===to?'range-edge':from&&to&&value>from&&value<to?'range-inside':''}">${i+1}</button>`;
       }).join('');
       dialog.innerHTML=`<header><strong>Vybrať obdobie</strong><button type="button" data-range-close aria-label="Zavrieť kalendár">×</button></header><div class="range-month"><button type="button" data-month="-1" aria-label="Predchádzajúci mesiac">‹</button><strong>${title}</strong><button type="button" data-month="1" aria-label="Nasledujúci mesiac">›</button></div><p role="status">Od: <b>${pretty(from)}</b> · Do: <b>${pretty(to)}</b></p><small>${!from?'Vyber začiatok obdobia.':!to?'Vyber koniec obdobia.':'Obdobie je pripravené.'}</small><div class="range-grid">${['Po','Ut','St','Št','Pi','So','Ne'].map(d=>'<span>'+d+'</span>').join('')}${days}</div><footer><button type="button" data-range-clear>Celé obdobie</button><button type="button" class="btn btn-primary" data-range-apply ${from?'':'disabled'}>Použiť obdobie</button></footer>`;
       dialog.querySelector('[data-range-close]').onclick=()=>dialog.close();

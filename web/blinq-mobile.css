@@ -450,3 +450,5 @@ body#blinqPremium .results-category-options label{display:flex;align-items:cente
 body#blinqPremium .results-category-options label:hover{background:rgba(56,173,132,.09)}
 body#blinqPremium.blinq-route .results-filter-field .results-category-options input{width:16px!important;max-width:16px!important;min-width:16px!important;height:16px;accent-color:#21d99a;flex-shrink:0}
 body#blinqPremium .results-category-picker summary:focus-visible{outline:2px solid #65cbaa;outline-offset:2px}
+
+body#blinqPremium #resultsRangeDialog .range-grid button.range-today{border:2px solid #80edc3!important;font-weight:800;position:relative}
