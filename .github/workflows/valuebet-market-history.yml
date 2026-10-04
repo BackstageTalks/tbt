@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: tbt-history-data-writer
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   import-market-history:
