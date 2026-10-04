@@ -94,6 +94,8 @@ def main():
                 page.get_by_role('button',name='Zavrieť menu',exact=True).click()
                 page.locator('#profileButton').click()
                 assert page.locator('#profileMenu').is_visible()
+                menu_box=page.locator('#profileMenu').bounding_box()
+                assert menu_box and menu_box['y'] >= 0 and menu_box['y']+menu_box['height'] <= 850,(width,menu_box)
                 for label in ('Môj účet', 'Odhlásiť sa', 'Upgrade', 'Komunita', 'Jazyk'):
                     assert page.locator('#profileMenu').get_by_role('button',name=label,exact=(label in ('Upgrade','Komunita','Jazyk'))).is_visible(),(width,label)
                 page.locator('#profileMenu').get_by_role('button',name='Jazyk',exact=True).click()
