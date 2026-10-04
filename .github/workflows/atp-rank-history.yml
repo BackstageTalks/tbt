@@ -1,0 +1,97 @@
+name: BlinQ ATP weekly rank history audit
+
+on:
+  pull_request:
+    paths:
+      - ".github/atp-rank-history-request.json"
+      - ".github/workflows/atp-rank-history.yml"
+      - "scripts/audit_atp_weekly_rank_history.py"
+      - "scripts/import_atp_weekly_rank_fill.py"
+      - "tests/test_atp_rank_history_contract.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install dependencies and focused tests
+        run: |
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest tests/test_atp_rank_history_contract.py -q
+
+      - name: Resolve controlled request
+        run: |
+          set -euo pipefail
+          request=.github/atp-rank-history-request.json
+          test "$(jq -r '.mode' "$request")" = "dry-run"
+          test "$(jq -r '.rapidapi_requests' "$request")" = "0"
+
+      - name: Download canonical history
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          directory=Path(".cache/tbt/atp-rank/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory).download(require_bundle_manifest=True)
+          PY
+
+      - name: Audit public ATP weekly ranking source
+        run: |
+          python scripts/audit_atp_weekly_rank_history.py             --history-dir .cache/tbt/atp-rank/history             --out-dir .cache/tbt/atp-rank/audit
+
+      - name: Dry-run strict importer
+        run: |
+          python scripts/import_atp_weekly_rank_fill.py             --stage .cache/tbt/atp-rank/audit/rank-fill-candidates.jsonl             --history-dir .cache/tbt/atp-rank/history             --out-dir .cache/tbt/atp-rank/dry
+
+      - name: Validate evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          audit=json.loads(Path(".cache/tbt/atp-rank/audit/report.json").read_text())
+          dry=json.loads(Path(".cache/tbt/atp-rank/dry/report.json").read_text())
+          print(json.dumps({"audit":audit,"dry_run":dry}, indent=2))
+          if audit.get("production_mutated") is not False:
+              raise SystemExit("Audit unexpectedly mutated production")
+          if int(audit.get("rapidapi_requests",-1)) != 0:
+              raise SystemExit("RapidAPI budget was touched")
+          if int((audit.get("counts") or {}).get("identity_linked") or 0) <= 0:
+              raise SystemExit("No ATP weekly rankings linked to canonical history")
+          bad=("identity_missing","identity_changed","wrong_tour","invalid_incoming","point_in_time_rejected","stale_snapshot_rejected")
+          counts=dry.get("counts") or {}
+          if any(int(counts.get(key) or 0) for key in bad):
+              raise SystemExit(f"Strict importer rejected staged rows: {counts}")
+          PY
+
+      - name: Upload audit evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-atp-rank-history-${{ github.run_id }}
+          path: |
+            .cache/tbt/atp-rank/audit/report.json
+            .cache/tbt/atp-rank/audit/rank-fill-candidates.jsonl
+            .cache/tbt/atp-rank/audit/review.jsonl
+            .cache/tbt/atp-rank/dry/report.json
+          retention-days: 14
