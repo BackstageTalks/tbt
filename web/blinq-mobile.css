@@ -425,3 +425,7 @@ body#blinqPremium.blinq-route .results-betting-day-toggle strong{font-size:10px!
 body#blinqPremium.blinq-route .results-betting-day-toggle small{font-size:8px!important}
 @media(min-width:1101px){body#blinqPremium.blinq-route .results-filter-bar:has(.results-member-levels){grid-template-columns:repeat(4,minmax(100px,1fr)) minmax(140px,1fr) 95px minmax(210px,1.4fr)!important}body#blinqPremium.blinq-route .results-filter-bar-v683:not(:has(.results-member-levels)){grid-template-columns:repeat(4,minmax(0,1fr)) minmax(140px,1.2fr) 95px!important}}
 @media(max-width:900px){body#blinqPremium.blinq-route:not(.blinq-admin) .results-betting-day-toggle{grid-column:auto!important;height:38px!important;justify-self:start!important}}
+
+body#blinqPremium.blinq-admin .admin-simple-user-main .admin-user-last-login{display:block!important;margin-top:3px;font-size:10px!important;line-height:1.35!important;color:#9dbbb0!important;font-weight:500!important}
+body#blinqPremium.blinq-admin .admin-simple-user-row{min-height:60px!important}
+@media(min-width:1301px){body#blinqPremium .admin-simple-toolbar{grid-template-columns:minmax(200px,2fr) 115px 115px minmax(170px,1fr) 150px auto!important}}

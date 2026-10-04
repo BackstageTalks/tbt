@@ -113,12 +113,13 @@ def main():
                     assert_column_alignment(page,"with-editor 1440px")
                 page.evaluate("""() => {
                   const users=accountHarness.state.adminUsers;
+                  Date.now=()=>Date.parse('2026-10-04T18:00:00Z');
                   users[0].last_sign_in_at='2026-10-03T22:30:00Z';
                   users[1].last_sign_in_at='2026-10-04T22:30:00Z';
                   users[2].last_sign_in_at='2026-10-04T16:00:00Z';
                   users[3].last_sign_in_at=null;
                 }""")
-                page.locator('#adminUserLoginDate').fill('2026-10-04')
+                page.locator('#adminUserLoginDate').select_option('today')
                 assert_results(page,['@Ladislav','@Zara'])
                 page.locator('#adminUserLevelFilter').select_option('elite')
                 assert_results(page,['@Ladislav'])
@@ -127,12 +128,19 @@ def main():
                 page.locator('#adminUserStatusFilter').select_option('all')
                 page.locator('#adminUserLevelFilter').select_option('all')
                 page.locator('#adminUserSort').select_option('email')
-                assert page.locator('#adminUserLoginDate').input_value()=='2026-10-04'
+                assert page.locator('#adminUserLoginDate').input_value()=='today'
                 assert_results(page,['@Zara','@Ladislav'])
-                page.get_by_role('button',name='Zrušiť filter dátumu',exact=True).click()
+                page.locator('#adminUserLoginDate').select_option('never')
+                assert_results(page,['@Adam'])
+                page.locator('#adminUserLoginDate').select_option('yesterday')
+                assert_results(page,[])
+                page.locator('#adminUserLoginDate').select_option('3')
+                assert_results(page,['@Zara','@Ladislav'])
+                page.locator('#adminUserLoginDate').select_option('')
                 assert_results(page,['@Zara','@Ladislav','@Adam','@Franta'])
-                page.get_by_role('button',name='Dnes',exact=True).click()
-                assert page.locator('#adminUserLoginDate').input_value()
+                page.evaluate("document.querySelector('#routePanel').innerHTML=accountHarness.renderAdminAccounts();accountHarness.wireAdmin();")
+                assert '2026' in page.locator('[data-admin-user="u1"] .admin-user-last-login').inner_text()
+                assert 'Bez záznamu' in page.locator('[data-admin-user="u4"] .admin-user-last-login').inner_text()
                 assert page.evaluate('document.documentElement.scrollWidth<=innerWidth+1'),width
                 assert not errors,(width,errors)
                 page.close()
