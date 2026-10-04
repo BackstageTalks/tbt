@@ -3615,7 +3615,7 @@
     const previewEntry=adminPreviewEntry(entries);
     const hero1=elements()?.HERO_BANNER_1?.content||{};
     const bg=safePhotoUrl(hero1.site_background_url||'')||String(state.presentationConfig?.theme?.background?.image||'/assets/blinq_page_background.webp');
-    const effects=['fade-up','fade-down','fade','slide-up','slide-down','zoom-in','zoom-out','blur-in','diagonal-wipe','mosaic-grid','parallax','reveal-left','reveal-right','soft-glitch'];
+    const effects=['fade-up','fade-down','fade','slide-up','slide-down','zoom-in','zoom-out','blur-in','diagonal-wipe','vertical-wipe','curtain-open','mosaic-grid','parallax','ken-burns','reveal-left','reveal-right','flip-in','tilt-in','focus-pulse','soft-glitch'];
     const tabs=heroIds.map((id,index)=>{
       const slot=elements()?.[id]||{},content=slot.content||{},active=index<activeCount,selected=id===selectedId,ready=Boolean(String(content.image_url||'').trim());
       return `<button type="button" class="admin-hero-tab${selected?' is-selected':''}${active?' is-live':''}${ready?' is-ready':''}" data-admin-element="${id}" aria-pressed="${selected}"><span>0${index+1}</span><strong>Banner ${index+1}</strong><small>${active?'AKTÍVNY':ready?'PRIPRAVENÝ':'NEAKTÍVNY'}</small></button>`;
