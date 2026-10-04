@@ -35,3 +35,30 @@ a výskumné počasie sú zámerne ručné; úspešný model sa nevymieňa bez v
 
 Automatizácia neznamená záruku nulovej údržby: expirované tokeny, zmeny API schémy,
 výpadky a limity vyžadujú zásah. Pri chybe sa výpočty nesnažia nahradiť chýbajúce dáta výmyslami.
+
+
+## Environment schema v3
+
+Historický weather enrichment používa explicitne `ERA5-Seamless` cez Open-Meteo Historical Weather API.
+Tento režim kombinuje ERA5-Land surface thermodynamics s ERA5 poľami potrebnými pre vietor/radiáciu,
+aby bol multi-decade výskumný časový rad konzistentný a zároveň nestratil veterné premenné.
+
+Od schema v3 sa k pôvodným poliam ukladajú aj:
+
+- `dew_point_c`
+- `apparent_temperature_c`
+- `cloud_cover_pct`
+- `sunshine_duration_s`
+- `wind_direction_deg`
+- `air_density_kg_m3` (odvodené z teploty, relatívnej vlhkosti a surface pressure)
+- `density_altitude_m` (ISA-equivalent odvodený z hustoty vzduchu)
+
+Existujúce enviro dáta sa nemažú. Enrichment je doplnkový a zachováva source/provenance.
+Historické reanalysis počasie naďalej ostáva `training_eligible_weather=false`, pretože ide o
+post-hoc pozorovanie; do produkčného modelu sa smie dostať až po samostatnej leakage-safe
+chronologickej ablácii. Venue/elevation/static environment zostáva oddelená training-eligible vrstva.
+
+Meteostat a NOAA sú určené ako nezávislé validačné/quality-control zdroje, nie ako slepé
+prepísanie canonical hodnôt. CourtSpeed/DeepCourt-like court/ball metadata sa importujú iba
+cez licencovaný alebo používateľom dodaný sidecar s explicitnou provenance; scraper nie je
+súčasťou produkčného pipeline.

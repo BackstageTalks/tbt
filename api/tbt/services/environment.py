@@ -7,6 +7,7 @@ from typing import Any
 import time
 import unicodedata
 import re
+import math
 
 import httpx
 
@@ -15,7 +16,7 @@ from tbt.services.countries import normalize_country_code
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
-ENVIRONMENT_SCHEMA_VERSION = 2
+ENVIRONMENT_SCHEMA_VERSION = 3
 ENVIRONMENT_RESOLVER_VERSION = 6
 
 
@@ -44,6 +45,13 @@ class WeatherAtMatch:
     surface_pressure_hpa: float | None
     weather_code: int | None
     source_time_utc: str | None
+    dew_point_c: float | None = None
+    apparent_temperature_c: float | None = None
+    cloud_cover_pct: float | None = None
+    sunshine_duration_s: float | None = None
+    wind_direction_deg: float | None = None
+    air_density_kg_m3: float | None = None
+    density_altitude_m: float | None = None
 
 
 # Only documented equivalent city spellings. Never guess arbitrary cities.
@@ -276,8 +284,13 @@ class OpenMeteoClient:
             [
                 "temperature_2m",
                 "relative_humidity_2m",
+                "dew_point_2m",
+                "apparent_temperature",
                 "precipitation",
+                "cloud_cover",
+                "sunshine_duration",
                 "wind_speed_10m",
+                "wind_direction_10m",
                 "wind_gusts_10m",
                 "surface_pressure",
                 "weather_code",
@@ -292,6 +305,10 @@ class OpenMeteoClient:
                 "end_date": day_iso,
                 "hourly": hourly,
                 "timezone": "UTC",
+                # ERA5-Seamless keeps the multi-decade series consistent while
+                # combining ERA5-Land surface thermodynamics with ERA5 wind/
+                # radiation fields that ERA5-Land alone does not fully expose.
+                "models": "era5_seamless",
             },
         )
         data = payload.get("hourly") or {}
@@ -332,15 +349,45 @@ class OpenMeteoClient:
                 return None
 
         code = num("weather_code")
+        temperature_c = num("temperature_2m")
+        humidity_pct = num("relative_humidity_2m")
+        pressure_hpa = num("surface_pressure")
+        air_density = None
+        density_altitude = None
+        if temperature_c is not None and humidity_pct is not None and pressure_hpa is not None:
+            # Moist-air density using Tetens saturation vapour pressure.
+            temp_k = temperature_c + 273.15
+            if temp_k > 0:
+                saturation_hpa = 6.112 * math.exp(
+                    (17.67 * temperature_c) / (temperature_c + 243.5)
+                )
+                vapour_pa = max(0.0, min(100.0, humidity_pct)) / 100.0 * saturation_hpa * 100.0
+                pressure_pa = pressure_hpa * 100.0
+                dry_pa = max(0.0, pressure_pa - vapour_pa)
+                air_density = dry_pa / (287.05 * temp_k) + vapour_pa / (461.495 * temp_k)
+                if 0.3 <= air_density <= 1.6:
+                    density_altitude = 44330.0 * (
+                        1.0 - (air_density / 1.225) ** (1.0 / 4.255)
+                    )
+                else:
+                    air_density = None
+
         return WeatherAtMatch(
-            temperature_c=num("temperature_2m"),
-            relative_humidity_pct=num("relative_humidity_2m"),
+            temperature_c=temperature_c,
+            relative_humidity_pct=humidity_pct,
             precipitation_mm=num("precipitation"),
             wind_speed_kmh=num("wind_speed_10m"),
             wind_gusts_kmh=num("wind_gusts_10m"),
-            surface_pressure_hpa=num("surface_pressure"),
+            surface_pressure_hpa=pressure_hpa,
             weather_code=int(code) if code is not None else None,
             source_time_utc=source_time.isoformat(),
+            dew_point_c=num("dew_point_2m"),
+            apparent_temperature_c=num("apparent_temperature"),
+            cloud_cover_pct=num("cloud_cover"),
+            sunshine_duration_s=num("sunshine_duration"),
+            wind_direction_deg=num("wind_direction_10m"),
+            air_density_kg_m3=round(air_density, 6) if air_density is not None else None,
+            density_altitude_m=round(density_altitude, 1) if density_altitude is not None else None,
         )
 
 
@@ -992,6 +1039,8 @@ def environment_payload(
         "location_query": query,
         "enriched_at_utc": datetime.now(timezone.utc).isoformat(),
         "source": "open-meteo",
+        "weather_dataset": "era5_seamless",
+        "weather_source_attribution": "Open-Meteo Historical Weather API / ECMWF ERA5 + ERA5-Land",
         "weather_provenance": "historical_archive_posthoc",
         "training_eligible_weather": False,
     }
