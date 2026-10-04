@@ -1046,6 +1046,7 @@ def feed(req):
         profile = _profile_for(user)
         account_data = public_account(user, cfg=settings, profile=profile)
         source_feed = visible_feed(read_feed(FEED))
+        runtime_ui = None
         try:
             runtime_ui, _, _ = load_effective_ui_config()
             access_context = _access_context_with_daily_allocation(user, account_data, profile, source_feed, runtime_ui)
@@ -1077,6 +1078,12 @@ def feed(req):
             allowed_event_ids = event_ids_from_feed(data)
             raw_statuses = status_snapshot.get("statuses")
             raw_statuses = raw_statuses if isinstance(raw_statuses, dict) else {}
+            # KPI and Results share the same response-time settlement overlay.
+            # Only configured scalar cards cross entitlement boundaries.
+            if runtime_ui is not None:
+                kpi_source = dict(source_feed)
+                kpi_source["results"] = runtime_settled_results(source_feed, raw_statuses)
+                data["dashboard_kpi_cards"] = selected_dashboard_cards(kpi_source, runtime_ui)
             data["match_statuses"] = {
                 str(event_id): value
                 for event_id, value in raw_statuses.items()

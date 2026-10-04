@@ -13,6 +13,17 @@ from pathlib import Path
 
 NOW = datetime(2026, 9, 27, 12, tzinfo=timezone.utc)
 
+def test_auto_kpi_uses_latest_runtime_results_not_pre_overlay_sample():
+    from tbt.services.match_status import runtime_settled_results
+    loss=row('old','top_daily','match_winner',False,2,'priced',days=1)
+    current={"event_id":"new","scheduled_at":NOW.isoformat(),"winner_id":"a","player1":{"id":"a","name":"A"},"player2":{"id":"b","name":"B"},"odds":2,"betting":{"selection_id":"a","market":"match_winner","odds":2}}
+    feed={"results":[loss],"top_daily_picks":[current]}
+    config={"dashboard":{"kpi_cards":[{"metric":"today_picks","period":"today"},{"metric":"results_success","period":"auto"},{"metric":"avg_odds","period":"today"}]}}
+    assert selected_dashboard_cards(feed,config,now=NOW)[1]['value']==0
+    feed['results']=runtime_settled_results(feed,{'new':{'status':'win','checked_at':NOW.isoformat()}})
+    value=selected_dashboard_cards(feed,config,now=NOW)[1]
+    assert value['value']==.5 and value['sample']==2
+
 def test_dashboard_counts_runtime_settlements_and_top200_like_results():
     runtime = {"event_id":"runtime", "market_publications":[{"section":"top_daily", "market":"match_winner", "selection_id":"a", "result":{"correct":True,"runtime_source":"match_status_snapshot"}}]}
     top = {"event_id":"top", "market_publications":[{"section":"top200", "market":"match_winner", "selection_id":"b", "issued_at":"2026-09-20T12:00:00Z", "result":{"correct":False}}]}
@@ -118,3 +129,4 @@ def test_all_time_selector_no_data_and_reject_incompatible_periods():
         validate_ui_config(ui)
     with pytest.raises(ValueError):
         published_results_metrics(sample_feed(), "30", now=NOW.replace(tzinfo=None))
+
