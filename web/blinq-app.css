@@ -9134,3 +9134,12 @@ body#blinqPremium .results-mobile-filter-toggle{display:none}
   body#blinqPremium.blinq-route:not(.blinq-admin) .metric-card{padding:11px!important;min-height:96px!important}
   body#blinqPremium.blinq-route:not(.blinq-admin) .metric-card strong{font-size:21px!important}
 }
+
+
+/* Banner copy inset: keep all hero slides consistently away from the left edge. */
+body#blinqPremium .hero-shell .dashboard-hero-copy{left:46px!important}
+body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy{padding-left:calc(clamp(13px,2.5vw,28px) + 8px)!important}
+@media(max-width:760px){
+  body#blinqPremium .hero-shell .dashboard-hero-copy{left:26px!important}
+  body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile .admin-hero-preview-copy{padding-left:21px!important}
+}
