@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "requested_at": "2026-10-04T18:23:30+02:00",
+  "requested_at": "2026-10-04T21:19:30+02:00",
   "action": "integrate_valuebetennis_market_history",
   "source": "Valuebetennis 2021-2026 public CSV, CC BY 4.0",
   "policy": "opening odds stored as pre-match candidate; closing odds validation/CLV only; fail closed on identity or market conflicts",
-  "note": "Final Valuebet closeout after fixing canonical snapshot persistence for _tbt_market_history; targeted audit must verify persisted marker count.",
-  "attempt": 6
+  "note": "Final verified Valuebet persistence closeout after successful Library sweep and canonical snapshot persistence fix; require publish + persisted readback + audit.",
+  "attempt": 7
 }
