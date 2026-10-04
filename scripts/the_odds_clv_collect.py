@@ -67,25 +67,32 @@ def _get(path, params, *, opener=urllib.request.urlopen):
 def _gh(path, method="GET", data=None, missing_ok=False):
     url = "https://api.github.com/repos/" + DATA_REPO + "/contents/" + path
     body = json.dumps(data).encode() if data is not None else None
-    req = urllib.request.Request(
-        url,
-        data=body,
-        method=method,
-        headers={
-            "Authorization": "Bearer " + GH_TOKEN,
-            "Accept": "application/vnd.github+json",
-            "Content-Type": "application/json",
-            "X-GitHub-Api-Version": "2022-11-28",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=35) as response:
-            raw = response.read()
-            return json.loads(raw) if raw else {}
-    except urllib.error.HTTPError as exc:
-        if missing_ok and exc.code == 404:
-            return None
-        raise RuntimeError(f"GitHub archive HTTP {exc.code}") from None
+    for attempt in range(5):
+        req = urllib.request.Request(
+            url,
+            data=body,
+            method=method,
+            headers={
+                "Authorization": "Bearer " + GH_TOKEN,
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=35) as response:
+                raw = response.read()
+                return json.loads(raw) if raw else {}
+        except urllib.error.HTTPError as exc:
+            if missing_ok and exc.code == 404:
+                return None
+            # Contents API writes can race with other tbt-data writers and
+            # transiently return 409 while the target branch moves. Each CLV
+            # snapshot path is unique, so retrying the same create is safe.
+            if method == "PUT" and exc.code == 409 and attempt < 4:
+                time.sleep(1.0 + attempt)
+                continue
+            raise RuntimeError(f"GitHub archive HTTP {exc.code}") from None
 
 
 def _norm(value):

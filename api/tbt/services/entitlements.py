@@ -125,7 +125,7 @@ def _result_timestamp(row: dict) -> datetime | None:
     return None
 
 
-PUBLIC_RESULT_SECTIONS = {"top200", "top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
+PUBLIC_RESULT_SECTIONS = {"top_daily", "prime", "value", "doubles", "ace", "double_faults", "sets", "games"}
 PUBLIC_RESULT_MARKETS = {"aces", "double_faults"}
 
 
