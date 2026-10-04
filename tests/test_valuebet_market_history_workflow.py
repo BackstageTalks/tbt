@@ -7,7 +7,10 @@ def test_valuebet_market_history_workflow_is_fail_closed():
     text = WORKFLOW.read_text(encoding="utf-8")
     assert "link_valuebetennis_market_history.py" in text
     assert "import_offline_market_history.py" in text
-    assert "audit_training_leakage.py" in text
+    assert "Validate identity and market-feature isolation" in text
+    assert "clean_market_history_marker" in text
+    assert "market_data_exposed_as_model_features" in text
+    assert "closing_semantics_policy" in text
     assert "sanitize_history_identities" in text
     assert "market_conflicts" in text
     assert "identity_changed" in text
