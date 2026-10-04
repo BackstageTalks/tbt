@@ -10,6 +10,7 @@ on:
       - "scripts/tests/test_environment_location_candidates.py"
       - "scripts/tests/test_environment_bulk_modes.py"
       - "scripts/tests/test_environment_ablation.py"
+      - "scripts/tests/test_environment_extended_weather.py"
       - ".github/workflows/environment-*.yml"
   push:
     branches:
@@ -41,3 +42,4 @@ jobs:
           python -m unittest discover -s scripts/tests -p "test_environment_location_candidates.py" -v
           python -m unittest discover -s scripts/tests -p "test_environment_bulk_modes.py" -v
           python -m unittest discover -s scripts/tests -p "test_environment_ablation.py" -v
+          python -m unittest discover -s scripts/tests -p "test_environment_extended_weather.py" -v
