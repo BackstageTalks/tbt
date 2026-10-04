@@ -12,7 +12,7 @@ permissions:
 
 concurrency:
   group: tbt-history-data-writer
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   import-market-history:
@@ -132,34 +132,93 @@ jobs:
           set -euo pipefail
           python scripts/import_offline_market_history.py             --stage .cache/tbt/valuebet/link/auto_linked.jsonl             --history-dir .cache/tbt/valuebet/history-enriched             --out-dir .cache/tbt/valuebet/import             --write-partitions             --write-history-dir .cache/tbt/valuebet/history-enriched
 
-      - name: Validate identity and leakage
+      - name: Validate identity and market-feature isolation
         shell: bash
         run: |
           set -euo pipefail
-          python scripts/audit_training_leakage.py             --history-dir .cache/tbt/valuebet/history-enriched             --report .cache/tbt/valuebet/leakage-audit.json
           python - <<'PY'
           import json
           from pathlib import Path
+
           from tbt.data.history_snapshot import load_partitions
           from tbt.data.history_safety import sanitize_history_identities
+          from tbt.data.offline_market_history import clean_market_history_marker
+          from tbt.models.feature_builder import FEATURE_NAMES
 
           matches = load_partitions(".cache/tbt/valuebet/history-enriched")
           safe, safety = sanitize_history_identities(matches)
+          failed = []
+
           if safety.get("quarantined_rows") or len(safe) != len(matches):
-              raise SystemExit("Identity safety failed after Valuebet market import")
-          leakage = json.loads(Path(".cache/tbt/valuebet/leakage-audit.json").read_text())
-          if leakage.get("failed_checks"):
-              raise SystemExit(f"Leakage audit failed: {leakage['failed_checks']}")
-          markers = sum(
-              1 for m in safe
-              if isinstance(m.provider_payload, dict)
-              and isinstance(m.provider_payload.get("_tbt_market_history"), dict)
+              failed.append("canonical_identity_safety")
+
+          market_feature_names = [
+              name for name in FEATURE_NAMES
+              if any(token in str(name).lower() for token in ("market", "odds", "opening", "closing", "price"))
+          ]
+          if market_feature_names:
+              failed.append("market_data_exposed_as_model_features")
+
+          markers = 0
+          invalid_markers = 0
+          closing_policy_violations = 0
+          for match in safe:
+              payload = match.provider_payload if isinstance(match.provider_payload, dict) else {}
+              raw = payload.get("_tbt_market_history")
+              if raw is None:
+                  continue
+              markers += 1
+              cleaned = clean_market_history_marker(raw)
+              if cleaned is None:
+                  invalid_markers += 1
+                  continue
+              if str(cleaned.get("closing_semantics") or "") != "last_recorded_before_match":
+                  closing_policy_violations += 1
+
+          if invalid_markers:
+              failed.append("invalid_market_history_markers")
+          if closing_policy_violations:
+              failed.append("closing_semantics_policy")
+
+          imp = json.loads(Path(".cache/tbt/valuebet/import/report.json").read_text())
+          counts = imp.get("counts") or {}
+          forbidden = {
+              "identity_missing": int(counts.get("identity_missing") or 0),
+              "identity_changed": int(counts.get("identity_changed") or 0),
+              "invalid_market_history": int(counts.get("invalid_market_history") or 0),
+              "market_conflicts": int(counts.get("market_conflicts") or 0),
+          }
+          if any(forbidden.values()):
+              failed.append("strict_import_safety_gates")
+
+          report = {
+              "schema": 1,
+              "status": "pass" if not failed else "fail",
+              "audit_scope": "valuebet_market_metadata_only",
+              "canonical_rows": len(safe),
+              "market_history_rows": markers,
+              "identity_safety": safety,
+              "invalid_market_history_markers": invalid_markers,
+              "closing_policy_violations": closing_policy_violations,
+              "market_feature_names": market_feature_names,
+              "strict_import_safety": forbidden,
+              "failed_checks": failed,
+              "policy": {
+                  "opening": "stored_metadata_only_candidate_not_promoted",
+                  "closing": "validation_and_clv_only",
+                  "model_promotion": False,
+              },
+          }
+          Path(".cache/tbt/valuebet/leakage-audit.json").write_text(
+              json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
           )
           Path(".cache/tbt/valuebet/validated-counts.json").write_text(
               json.dumps({"canonical_rows": len(safe), "market_history_rows_local": markers}, indent=2),
               encoding="utf-8",
           )
-          print("Validated canonical rows:", len(safe), "market history rows:", markers)
+          print(json.dumps(report, ensure_ascii=False, indent=2))
+          if failed:
+              raise SystemExit("Valuebet targeted safety audit failed: " + ", ".join(failed))
           PY
 
       - name: Publish changed canonical history partitions
