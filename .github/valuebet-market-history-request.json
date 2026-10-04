@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "requested_at": "2026-10-04T14:31:00+02:00",
+  "requested_at": "2026-10-04T16:17:00+02:00",
   "action": "integrate_valuebetennis_market_history",
   "source": "Valuebetennis 2021-2026 public CSV, CC BY 4.0",
   "policy": "opening odds stored as pre-match candidate; closing odds validation/CLV only; fail closed on identity or market conflicts",
-  "note": "Explicit post-merge trigger for the verified fail-closed Valuebetennis market-history integration. No model promotion.",
-  "attempt": 2
+  "note": "Final autonomous closeout trigger after ATP PBP enrichment and WTA player-details completed successfully; fail-closed Valuebetennis import only, no model promotion.",
+  "attempt": 3
 }
