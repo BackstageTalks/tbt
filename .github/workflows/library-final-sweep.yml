@@ -382,3 +382,5 @@ jobs:
             .cache/tbt/training-db/leakage_audit_report.json
             .cache/tbt/training-db/training_table_report.json
           retention-days: 7
+
+# rerun trigger: 2026-10-04 final closeout
