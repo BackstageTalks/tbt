@@ -331,3 +331,7 @@ body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-top :i
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-top #insightBell .insight-bell-icon svg{display:block!important;margin:0!important;transform:none!important}
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-actions > #bqm-projects[hidden],
 body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .header-actions > #insightBell[hidden]{display:none!important}
+
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .site-header .header-top{display:flex!important;align-items:center!important;justify-content:space-between!important;height:64px!important;min-height:64px!important;max-height:64px!important;padding:10px 8px!important;box-sizing:border-box!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .site-header .header-top > #bqm-toggle{display:flex!important;align-items:center!important;justify-content:center!important;flex:0 0 44px!important;height:44px!important;margin:0!important;padding:0!important}
+body#blinqPremium.bqm-enabled:is(.blinq-admin,:not(.blinq-admin)) .site-header .header-top .header-actions{margin:0 0 0 auto!important;padding:0!important;transform:none!important;position:static!important}
