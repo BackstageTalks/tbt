@@ -1258,7 +1258,65 @@ body#blinqPremium .creative-pos-right-center .dashboard-hero-copy{justify-conten
 body#blinqPremium .creative-effect-fade-up.is-active .dashboard-hero-copy{animation:creativeFadeUp .55s ease both;animation-delay:var(--creative-delay,80ms)!important;}
 body#blinqPremium .creative-effect-fade.is-active .dashboard-hero-copy{animation:creativeFade .55s ease both;animation-delay:var(--creative-delay,80ms)!important;}
 body#blinqPremium .creative-effect-zoom.is-active img{animation:creativeZoom 5s ease both;}
-@keyframes creativeFadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}@keyframes creativeFade{from{opacity:0}to{opacity:1}}@keyframes creativeZoom{from{transform:scale(1.02)}to{transform:scale(1.07)}}
+@keyframes creativeFadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes creativeFadeDown{from{opacity:0;transform:translateY(-14px)}to{opacity:1;transform:none}}
+@keyframes creativeFade{from{opacity:0}to{opacity:1}}
+@keyframes creativeSlideUp{from{opacity:0;transform:translateY(34px)}to{opacity:1;transform:none}}
+@keyframes creativeSlideDown{from{opacity:0;transform:translateY(-34px)}to{opacity:1;transform:none}}
+@keyframes creativeZoomIn{from{opacity:.25;transform:scale(1.12)}to{opacity:1;transform:scale(1)}}
+@keyframes creativeZoomOut{from{opacity:.25;transform:scale(.9)}to{opacity:1;transform:scale(1)}}
+@keyframes creativeBlurIn{from{opacity:.15;filter:blur(18px);transform:scale(1.035)}to{opacity:1;filter:blur(0);transform:scale(1)}}
+@keyframes creativeDiagonalWipe{from{clip-path:polygon(0 0,0 0,0 0,0 0)}to{clip-path:polygon(0 0,100% 0,100% 100%,0 100%)}}
+@keyframes creativeMosaicGrid{0%{opacity:.2;filter:blur(14px) contrast(1.18);transform:scale(1.08)}18%{opacity:.45;filter:blur(10px) contrast(1.12)}42%{opacity:.7;filter:blur(6px) contrast(1.08)}68%{opacity:.88;filter:blur(2px) contrast(1.03)}100%{opacity:1;filter:none;transform:scale(1)}}
+@keyframes creativeParallax{from{opacity:.4;transform:scale(1.08) translate3d(-1.8%,1.2%,0)}to{opacity:1;transform:scale(1.02) translate3d(0,0,0)}}
+@keyframes creativeRevealLeft{from{clip-path:inset(0 100% 0 0)}to{clip-path:inset(0 0 0 0)}}
+@keyframes creativeRevealRight{from{clip-path:inset(0 0 0 100%)}to{clip-path:inset(0 0 0 0)}}
+@keyframes creativeSoftGlitch{0%{opacity:0;transform:translate3d(-8px,0,0);filter:hue-rotate(8deg)}22%{opacity:.8;transform:translate3d(5px,-1px,0)}42%{transform:translate3d(-3px,1px,0);filter:hue-rotate(-5deg)}65%{transform:translate3d(2px,0,0)}100%{opacity:1;transform:none;filter:none}}
+@keyframes creativeZoom{from{transform:scale(1.02)}to{transform:scale(1.07)}}
+
+body#blinqPremium .creative-effect-fade-down.is-active .dashboard-hero-copy,
+body#blinqPremium .lean-admin-preview.creative-effect-fade-down.is-active .admin-hero-preview-copy{animation:creativeFadeDown .58s cubic-bezier(.2,.72,.25,1) both;animation-delay:var(--creative-delay,80ms)!important}
+body#blinqPremium .creative-effect-slide-up.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-slide-up.is-active{animation:creativeSlideUp .62s cubic-bezier(.16,.84,.28,1) both}
+body#blinqPremium .creative-effect-slide-down.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-slide-down.is-active{animation:creativeSlideDown .62s cubic-bezier(.16,.84,.28,1) both}
+body#blinqPremium .creative-effect-zoom-in.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-zoom-in.is-active{animation:creativeZoomIn .72s cubic-bezier(.16,.84,.28,1) both}
+body#blinqPremium .creative-effect-zoom-out.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-zoom-out.is-active{animation:creativeZoomOut .72s cubic-bezier(.16,.84,.28,1) both}
+body#blinqPremium .creative-effect-blur-in.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-blur-in.is-active{animation:creativeBlurIn .78s ease-out both}
+body#blinqPremium .creative-effect-diagonal-wipe.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-diagonal-wipe.is-active{animation:creativeDiagonalWipe .74s cubic-bezier(.33,.02,.18,1) both}
+body#blinqPremium .creative-effect-mosaic-grid.is-active>img,
+body#blinqPremium .lean-admin-preview.creative-effect-mosaic-grid.is-active>img{animation:creativeMosaicGrid .9s steps(7,end) both}
+body#blinqPremium .creative-effect-mosaic-grid.is-active::before,
+body#blinqPremium .lean-admin-preview.creative-effect-mosaic-grid.is-active::after{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+  background-image:linear-gradient(rgba(107,232,180,.18) 1px,transparent 1px),linear-gradient(90deg,rgba(107,232,180,.18) 1px,transparent 1px);
+  background-size:12.5% 25%;animation:creativeGridOverlay .9s steps(6,end) both
+}
+@keyframes creativeGridOverlay{0%{opacity:.72}55%{opacity:.24}100%{opacity:0}}
+body#blinqPremium .creative-effect-parallax.is-active>img,
+body#blinqPremium .lean-admin-preview.creative-effect-parallax.is-active>img{animation:creativeParallax 1.15s cubic-bezier(.18,.82,.2,1) both}
+body#blinqPremium .creative-effect-reveal-left.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-reveal-left.is-active{animation:creativeRevealLeft .72s cubic-bezier(.3,.7,.2,1) both}
+body#blinqPremium .creative-effect-reveal-right.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-reveal-right.is-active{animation:creativeRevealRight .72s cubic-bezier(.3,.7,.2,1) both}
+body#blinqPremium .creative-effect-soft-glitch.is-active,
+body#blinqPremium .lean-admin-preview.creative-effect-soft-glitch.is-active{animation:creativeSoftGlitch .56s steps(2,end) both}
+
+body#blinqPremium .lean-admin-preview.creative-effect-fade-up.is-active .admin-hero-preview-copy{animation:creativeFadeUp .55s ease both;animation-delay:var(--creative-delay,80ms)!important}
+body#blinqPremium .lean-admin-preview.creative-effect-fade.is-active .admin-hero-preview-copy{animation:creativeFade .55s ease both;animation-delay:var(--creative-delay,80ms)!important}
+body#blinqPremium .lean-admin-preview.creative-effect-zoom-in.is-active>img{will-change:transform,opacity,filter}
+body#blinqPremium .dashboard-hero[class*="creative-effect-"].is-active,
+body#blinqPremium .lean-admin-preview[class*="creative-effect-"].is-active{will-change:transform,opacity,clip-path}
+@media(prefers-reduced-motion:reduce){
+  body#blinqPremium .dashboard-hero[class*="creative-effect-"].is-active,
+  body#blinqPremium .dashboard-hero[class*="creative-effect-"].is-active *,
+  body#blinqPremium .lean-admin-preview[class*="creative-effect-"].is-active,
+  body#blinqPremium .lean-admin-preview[class*="creative-effect-"].is-active *{animation:none!important;transition:none!important}
+}
 
 /* Readability pass on result tables. */
 body#blinqPremium#blinqPremium.blinq-route .results-table th{font-size:10px!important;}
