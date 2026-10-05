@@ -48,16 +48,16 @@ jobs:
           from pathlib import Path
           from release_store import ReleaseStore
           directory=Path(".cache/tbt/wta-rank/history")
-          for attempt in range(1,5):
+          for attempt in range(1,13):
               shutil.rmtree(directory,ignore_errors=True)
               directory.mkdir(parents=True,exist_ok=True)
               try:
                   ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",directory).download(require_bundle_manifest=True)
                   print("verified canonical snapshot",attempt)
                   break
-              except RuntimeError:
-                  if attempt==4: raise
-                  time.sleep(10)
+              except (RuntimeError, FileNotFoundError):
+                  if attempt==12: raise
+                  time.sleep(20)
           PY
 
       - name: Download pinned Sackmann WTA rankings
