@@ -46,6 +46,7 @@ jobs:
           request=.github/atp-rank-history-request.json
           test "$(jq -r '.mode' "$request")" = "dry-run"
           test "$(jq -r '.rapidapi_requests' "$request")" = "0"
+          test "$(jq -r '.source_mode' "$request")" = "pinned_sqlite"
 
       - name: Download canonical history
         run: |
@@ -57,13 +58,27 @@ jobs:
           ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory).download(require_bundle_manifest=True)
           PY
 
+      - name: Download pinned upstream ATP rankings database
+        run: |
+          mkdir -p .cache/tbt/atp-rank/source
+          curl --fail --location --retry 3 \
+            "https://raw.githubusercontent.com/Jupiterian/ATP-Rankings-API/247f2f5e86b9e142a7ead7b0e8b3dfb5ee6abb28/rankings.db" \
+            --output .cache/tbt/atp-rank/source/rankings.db
+          test -s .cache/tbt/atp-rank/source/rankings.db
+
       - name: Audit public ATP weekly ranking source
         run: |
-          python scripts/audit_atp_weekly_rank_history.py             --history-dir .cache/tbt/atp-rank/history             --out-dir .cache/tbt/atp-rank/audit
+          python scripts/audit_atp_weekly_rank_history.py \
+            --history-dir .cache/tbt/atp-rank/history \
+            --sqlite-db .cache/tbt/atp-rank/source/rankings.db \
+            --out-dir .cache/tbt/atp-rank/audit
 
       - name: Dry-run strict importer
         run: |
-          python scripts/import_atp_weekly_rank_fill.py             --stage .cache/tbt/atp-rank/audit/rank-fill-candidates.jsonl             --history-dir .cache/tbt/atp-rank/history             --out-dir .cache/tbt/atp-rank/dry
+          python scripts/import_atp_weekly_rank_fill.py \
+            --stage .cache/tbt/atp-rank/audit/rank-fill-candidates.jsonl \
+            --history-dir .cache/tbt/atp-rank/history \
+            --out-dir .cache/tbt/atp-rank/dry
 
       - name: Validate evidence
         run: |
@@ -77,6 +92,10 @@ jobs:
               raise SystemExit("Audit unexpectedly mutated production")
           if int(audit.get("rapidapi_requests",-1)) != 0:
               raise SystemExit("RapidAPI budget was touched")
+          if int(audit.get("api_requests",-1)) != 0:
+              raise SystemExit("Live ATP ranking API was unexpectedly called")
+          if audit.get("source_mode") != "sqlite":
+              raise SystemExit("Pinned SQLite source was not used")
           if int((audit.get("counts") or {}).get("identity_linked") or 0) <= 0:
               raise SystemExit("No ATP weekly rankings linked to canonical history")
           bad=("identity_missing","identity_changed","wrong_tour","invalid_incoming","point_in_time_rejected","stale_snapshot_rejected")
