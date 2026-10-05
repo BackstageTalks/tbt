@@ -16,6 +16,11 @@ from tbt.data.atp_leaderboards import (
     ATP_LEADERBOARD_FEATURE_NAMES,
     coverage_summary as atp_coverage_summary,
 )
+from tbt.data.atp_rank_history import (
+    ATPRankHistory,
+    ATP_RANK_HISTORY_FEATURE_NAMES,
+    coverage_summary as atp_rank_history_coverage_summary,
+)
 from tbt.data.wta_season_stats import (
     WTASeasonPriors,
     WTA_SEASON_FEATURE_NAMES,
@@ -175,6 +180,14 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--atp-rank-history-sqlite",
+        default="",
+        help=(
+            "Pinned weekly ATP ranking SQLite archive. Historical features use "
+            "only snapshots strictly before each match date."
+        ),
+    )
+    parser.add_argument(
         "--wta-season-stats-csv",
         default="",
         help=(
@@ -218,6 +231,26 @@ def main() -> None:
         frame[name] = [float(row.get(name, 0.0)) for row in atp_feature_rows]
 
     atp_coverage = atp_coverage_summary(atp_feature_rows)
+
+    atp_rank_history_rows = []
+    if args.atp_rank_history_sqlite:
+        rank_history = ATPRankHistory.from_sqlite(args.atp_rank_history_sqlite)
+        for match_id in frame["match_id"]:
+            original = source[match_id]
+            oriented, _ = FeatureBuilder.orient_for_training(original)
+            atp_rank_history_rows.append(rank_history.features_for_match(oriented))
+    else:
+        atp_rank_history_rows = [
+            {name: 0.0 for name in ATP_RANK_HISTORY_FEATURE_NAMES}
+            for _ in range(len(frame))
+        ]
+
+    for name in ATP_RANK_HISTORY_FEATURE_NAMES:
+        frame[name] = [float(row.get(name, 0.0)) for row in atp_rank_history_rows]
+
+    atp_rank_history_coverage = atp_rank_history_coverage_summary(
+        atp_rank_history_rows
+    )
 
     wta_feature_rows = []
     if args.wta_season_stats_csv:
@@ -263,6 +296,33 @@ def main() -> None:
         "surface_coverage": atp_coverage.get("surface_known_both_rate", 0.0),
         "features": list(ATP_LEADERBOARD_FEATURE_NAMES),
         "reason": "requires chronological ablation before production feature activation",
+    }
+    report["atp_rank_history"] = {
+        **atp_rank_history_coverage,
+        "training_eligible": True,
+        "production_enabled": False,
+        "features": list(ATP_RANK_HISTORY_FEATURE_NAMES),
+        "historical_policy": "latest_weekly_snapshot_strictly_before_match_date",
+        "source_sqlite": str(args.atp_rank_history_sqlite or ""),
+    }
+    report.setdefault("candidate_feature_groups", {})["atp_rank_history"] = {
+        "schema_eligible": True,
+        "has_observations": bool(
+            atp_rank_history_coverage.get("known_both_rate", 0.0)
+        ),
+        "eligible_for_candidate": bool(
+            atp_rank_history_coverage.get("known_both_rate", 0.0)
+        ),
+        "production_enabled": False,
+        "coverage": atp_rank_history_coverage.get("known_both_rate", 0.0),
+        "momentum_4w_coverage": atp_rank_history_coverage.get(
+            "momentum_4w_known_both_rate", 0.0
+        ),
+        "momentum_12w_coverage": atp_rank_history_coverage.get(
+            "momentum_12w_known_both_rate", 0.0
+        ),
+        "features": list(ATP_RANK_HISTORY_FEATURE_NAMES),
+        "reason": "requires chronological ablation before production activation",
     }
     report["wta_season_stats"] = {
         **wta_coverage,
