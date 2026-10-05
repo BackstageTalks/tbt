@@ -59,6 +59,17 @@ def main():
     ReleaseStore(args.data_repository,'tbt-model-production-v1',out.parent).download(
         extra_names=('model.joblib','training_report.json'),required_names=('model.joblib','training_report.json'))
     report=inspect(load_model(str(out.parent/'model.joblib')))
+    publication_dir=out.parent/'publication'
+    ReleaseStore(args.data_repository,'tbt-predictions-v1',publication_dir).download(
+        extra_names=('feed.json','ledger.json'),required_names=('feed.json','ledger.json'))
+    feed=json.loads((publication_dir/'feed.json').read_text())
+    selection=feed.get('market_selection') or {}
+    report['current_publication']={
+        'generated_at':feed.get('generated_at'), 'value_audit':selection.get('value_audit'),
+        'publication_schema':selection.get('publication_schema'),
+        'odds_report':selection.get('odds_report'),
+        'sections_available':sorted(selection.keys()),
+        'policy':'Read private persisted publication bundle only; no new prediction, paid refresh, or selector changes.'}
     out.write_text(json.dumps(report,indent=2,allow_nan=False,default=str))
     print(json.dumps({'model':report['model_version'],'constant_features':[x['feature'] for x in report['inputs'] if x['constant_during_training']],
                       'unused_learned_features':[x['feature'] for x in report['inputs'] if not x['learned_linear_or_boost_effect']]}))
