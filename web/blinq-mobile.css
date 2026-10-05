@@ -349,7 +349,7 @@ body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"
 @media(hover:hover) and (pointer:fine){
 body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):hover{filter:brightness(1.04)!important;box-shadow:none!important;transform:none!important}
 }
-body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):focus-visible{outline:2px solid currentColor!important;outline-offset:3px!important}
+body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):focus-visible{outline:2px solid rgba(79,239,174,.62)!important;outline-offset:3px!important}
 body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):active{filter:brightness(.98)!important;transform:none!important;box-shadow:none!important}
 @media(prefers-reduced-motion:reduce){body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop){transition:none!important}body#blinqPremium :is(button,a.btn,a.tg-group-cta,a.analysis-link,[role="button"]):not(:disabled):not([aria-disabled="true"]):not(.insight-backdrop):active{transform:none!important}}
 
@@ -441,7 +441,7 @@ body#blinqPremium .admin-login-metrics-note{margin:16px 0 0;color:#91aaa7;font-s
 
 body#blinqPremium.blinq-route .results-filter-field select.results-category-compat{display:none!important}
 body#blinqPremium .results-category-picker{position:relative;width:100%;min-width:0}
-body#blinqPremium .results-category-picker summary{list-style:none;cursor:pointer;padding:12px 30px 12px 12px;border:1px solid #285447;border-radius:9px;min-height:42px;background:#051d17;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+body#blinqPremium .results-category-picker summary{list-style:none;cursor:pointer;padding:12px 30px 12px 12px;border:1px solid #285447;border-radius:9px;min-height:42px;background:#051d17;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;outline:none!important;-webkit-tap-highlight-color:transparent}
 body#blinqPremium .results-category-picker summary::after{content:'⌄';position:absolute;right:12px;top:11px}
 body#blinqPremium .results-category-picker summary::-webkit-details-marker{display:none}
 body#blinqPremium .results-category-picker[open]{z-index:30}
@@ -449,7 +449,8 @@ body#blinqPremium .results-category-options{position:absolute;top:calc(100% + 7p
 body#blinqPremium .results-category-options label{display:flex;align-items:center;gap:12px;padding:10px;border-radius:7px;cursor:pointer;font-size:13px}
 body#blinqPremium .results-category-options label:hover{background:rgba(56,173,132,.09)}
 body#blinqPremium.blinq-route .results-filter-field .results-category-options input{width:16px!important;max-width:16px!important;min-width:16px!important;height:16px;accent-color:#21d99a;flex-shrink:0}
-body#blinqPremium .results-category-picker summary:focus-visible{outline:2px solid #65cbaa;outline-offset:2px}
+body#blinqPremium .results-category-picker summary:focus{outline:none!important}
+body#blinqPremium .results-category-picker summary:focus-visible{outline:none!important;border-color:#65cbaa!important;box-shadow:0 0 0 2px rgba(101,203,170,.18)!important}
 
 body#blinqPremium #resultsRangeDialog .range-grid button.range-today{border:2px solid #80edc3!important;font-weight:800;position:relative}
 
