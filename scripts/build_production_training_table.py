@@ -21,6 +21,11 @@ from tbt.data.atp_rank_history import (
     ATP_RANK_HISTORY_FEATURE_NAMES,
     coverage_summary as atp_rank_history_coverage_summary,
 )
+from tbt.data.court_speed import (
+    CourtSpeedHistory,
+    COURT_SPEED_FEATURE_NAMES,
+    coverage_summary as court_speed_coverage_summary,
+)
 from tbt.data.wta_rank_history import (
     WTARankHistory,
     WTA_RANK_HISTORY_FEATURE_NAMES,
@@ -273,6 +278,19 @@ def main() -> None:
         atp_rank_history_rows
     )
 
+    # Court speed is a research/candidate layer derived exclusively from
+    # completed matches strictly before each target match. No third-party
+    # court-speed values are copied into the training table.
+    court_speed_history = CourtSpeedHistory(matches)
+    court_speed_rows = []
+    for match_id in frame["match_id"]:
+        original = source[match_id]
+        oriented, _ = FeatureBuilder.orient_for_training(original)
+        court_speed_rows.append(court_speed_history.features_for_match(oriented))
+    for name in COURT_SPEED_FEATURE_NAMES:
+        frame[name] = [float(row.get(name, 0.0)) for row in court_speed_rows]
+    court_speed_coverage = court_speed_coverage_summary(court_speed_rows)
+
     wta_rank_history_rows = []
     if args.wta_rank_history_players_csv and args.wta_rank_history_csv:
         rank_history = WTARankHistory.from_sackmann(
@@ -369,6 +387,28 @@ def main() -> None:
         "features": list(ATP_RANK_HISTORY_FEATURE_NAMES),
         "reason": "requires chronological ablation before production activation",
     }
+    report["court_speed"] = {
+        **court_speed_coverage,
+        "training_eligible": True,
+        "production_enabled": False,
+        "features": list(COURT_SPEED_FEATURE_NAMES),
+        "historical_policy": (
+            "same-surface baseline and venue/current-event aggregates use only "
+            "completed matches strictly before the target match"
+        ),
+        "source": "blinq_internal_completed_match_stats",
+        "external_benchmark": "DeepCourt court-speed methodology/thresholds only; no scraped values",
+    }
+    report.setdefault("candidate_feature_groups", {})["court_speed"] = {
+        "schema_eligible": True,
+        "has_observations": bool(court_speed_coverage.get("known_rate", 0.0)),
+        "eligible_for_candidate": bool(court_speed_coverage.get("known_rate", 0.0)),
+        "production_enabled": False,
+        "coverage": court_speed_coverage.get("known_rate", 0.0),
+        "features": list(COURT_SPEED_FEATURE_NAMES),
+        "reason": "requires chronological ablation before production activation",
+    }
+
     report["wta_rank_history"] = {
         **wta_rank_history_coverage,
         "training_eligible": True,
