@@ -15,8 +15,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: tbt-history-data-writer
-  cancel-in-progress: false
+  group: atp-rank-history-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   audit:
