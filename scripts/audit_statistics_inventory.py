@@ -23,6 +23,19 @@ def _quality_ready(stats: dict[str, Any], prefix: str) -> bool:
     return serve is not None and ret is not None
 
 
+def statistics_value_change(before, after):
+    """Count actual new usable fields and full quality, not parsed responses."""
+    before = before if isinstance(before, dict) else {}
+    after = after if isinstance(after, dict) else {}
+    added = {key for key, value in after.items() if value is not None and before.get(key) is None}
+    ready = lambda stats: _quality_ready(stats, "p1") and _quality_ready(stats, "p2")
+    return {
+        "new_statistic_values": len(added),
+        "new_ace_df_values": sum(key in {"p1_aces", "p2_aces", "p1_double_faults", "p2_double_faults"} for key in added),
+        "new_quality_ready_rows": int(not ready(before) and ready(after)),
+    }
+
+
 def build(matches) -> dict[str, Any]:
     key_counts = Counter()
     rows = 0

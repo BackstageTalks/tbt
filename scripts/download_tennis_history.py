@@ -26,6 +26,7 @@ from tbt.services.statistics_enrichment import StatisticsEnricher
 
 from release_store import ReleaseStore
 from date_window import history_window
+from audit_statistics_inventory import statistics_value_change
 
 
 def read_json(path, default):
@@ -346,6 +347,7 @@ def main():
     provider = RapidTennisClient(request_budget=None)
     provider.request_limit = allocation
     report = Counter()
+    statistics_value = Counter()
     provider_quarantine = []
     enricher = None
     primary_error = None
@@ -360,7 +362,13 @@ def main():
             for match in sorted(matches, key=lambda m: m.scheduled_at, reverse=True):
                 if not start <= match.scheduled_at.date() <= end:
                     continue
+                stats_before = dict(match.stats or {})
+                requests_before = provider.request_count
                 status = enricher.enrich(match)
+                value_change = statistics_value_change(stats_before, match.stats)
+                statistics_value.update(value_change)
+                source = "api" if provider.request_count > requests_before else "local_or_cache"
+                statistics_value[source + "_new_quality_ready_rows"] += value_change["new_quality_ready_rows"]
                 report[status] += 1
                 if status in {"enriched", "unavailable"}:
                     changed.add(match.scheduled_at.year)
@@ -394,8 +402,18 @@ def main():
         if provider_quarantine:
             report["provider_identity_quarantined"] = len(provider_quarantine)
         try:
-            write_json(directory / "download_report.json", dict(report))
-            print(json.dumps(dict(report), indent=2), flush=True)
+            output_report = dict(report)
+            if args.mode != "history":
+                requests = provider.request_count
+                output_report["statistics_data_value"] = {
+                    **dict(statistics_value),
+                    "api_quality_ready_rows_per_1000_requests": (
+                        1000 * statistics_value["api_new_quality_ready_rows"] / requests if requests else None
+                    ),
+                    "policy": "Actual full serve+return readiness transitions; cache/local gains separated. Denominator includes provider retries/failures. Not an estimate of model accuracy gain.",
+                }
+            write_json(directory / "download_report.json", output_report)
+            print(json.dumps(output_report, indent=2), flush=True)
         except Exception as exc:
             secondary_errors.append(("download report", exc))
 
