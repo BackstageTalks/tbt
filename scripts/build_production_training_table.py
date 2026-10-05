@@ -21,6 +21,11 @@ from tbt.data.atp_rank_history import (
     ATP_RANK_HISTORY_FEATURE_NAMES,
     coverage_summary as atp_rank_history_coverage_summary,
 )
+from tbt.data.wta_rank_history import (
+    WTARankHistory,
+    WTA_RANK_HISTORY_FEATURE_NAMES,
+    coverage_summary as wta_rank_history_coverage_summary,
+)
 from tbt.data.wta_season_stats import (
     WTASeasonPriors,
     WTA_SEASON_FEATURE_NAMES,
@@ -188,6 +193,17 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--wta-rank-history-players-csv",
+        default="",
+        help="Sackmann WTA player master CSV for ranking-history identity mapping.",
+    )
+    parser.add_argument(
+        "--wta-rank-history-csv",
+        action="append",
+        default=[],
+        help="Sackmann WTA ranking CSV; may be supplied multiple times.",
+    )
+    parser.add_argument(
         "--wta-season-stats-csv",
         default="",
         help=(
@@ -250,6 +266,29 @@ def main() -> None:
 
     atp_rank_history_coverage = atp_rank_history_coverage_summary(
         atp_rank_history_rows
+    )
+
+    wta_rank_history_rows = []
+    if args.wta_rank_history_players_csv and args.wta_rank_history_csv:
+        rank_history = WTARankHistory.from_sackmann(
+            args.wta_rank_history_players_csv,
+            args.wta_rank_history_csv,
+        )
+        for match_id in frame["match_id"]:
+            original = source[match_id]
+            oriented, _ = FeatureBuilder.orient_for_training(original)
+            wta_rank_history_rows.append(rank_history.features_for_match(oriented))
+    else:
+        wta_rank_history_rows = [
+            {name: 0.0 for name in WTA_RANK_HISTORY_FEATURE_NAMES}
+            for _ in range(len(frame))
+        ]
+
+    for name in WTA_RANK_HISTORY_FEATURE_NAMES:
+        frame[name] = [float(row.get(name, 0.0)) for row in wta_rank_history_rows]
+
+    wta_rank_history_coverage = wta_rank_history_coverage_summary(
+        wta_rank_history_rows
     )
 
     wta_feature_rows = []
@@ -322,6 +361,34 @@ def main() -> None:
             "momentum_12w_known_both_rate", 0.0
         ),
         "features": list(ATP_RANK_HISTORY_FEATURE_NAMES),
+        "reason": "requires chronological ablation before production activation",
+    }
+    report["wta_rank_history"] = {
+        **wta_rank_history_coverage,
+        "training_eligible": True,
+        "production_enabled": False,
+        "features": list(WTA_RANK_HISTORY_FEATURE_NAMES),
+        "historical_policy": "latest_weekly_snapshot_strictly_before_match_date",
+        "players_csv": str(args.wta_rank_history_players_csv or ""),
+        "ranking_csvs": list(args.wta_rank_history_csv or []),
+    }
+    report.setdefault("candidate_feature_groups", {})["wta_rank_history"] = {
+        "schema_eligible": True,
+        "has_observations": bool(
+            wta_rank_history_coverage.get("known_both_rate", 0.0)
+        ),
+        "eligible_for_candidate": bool(
+            wta_rank_history_coverage.get("known_both_rate", 0.0)
+        ),
+        "production_enabled": False,
+        "coverage": wta_rank_history_coverage.get("known_both_rate", 0.0),
+        "momentum_4w_coverage": wta_rank_history_coverage.get(
+            "momentum_4w_known_both_rate", 0.0
+        ),
+        "momentum_12w_coverage": wta_rank_history_coverage.get(
+            "momentum_12w_known_both_rate", 0.0
+        ),
+        "features": list(WTA_RANK_HISTORY_FEATURE_NAMES),
         "reason": "requires chronological ablation before production activation",
     }
     report["wta_season_stats"] = {
