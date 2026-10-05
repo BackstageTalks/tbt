@@ -903,9 +903,17 @@ def train_from_matches(
         ),
     }
 
+    production_probabilities = (
+        production_model.predict_proba(test)
+        if production_model is not None and len(test) else None
+    )
     production_metrics = (
-        evaluate_probabilities(test["target"], production_model.predict_proba(test))
-        if production_model is not None and len(test) else {}
+        evaluate_probabilities(test["target"], production_probabilities)
+        if production_probabilities is not None else {}
+    )
+    production_subgroups = (
+        subgroup_report(test, production_probabilities)
+        if production_probabilities is not None else {}
     )
     delta_vs_production = {
         key: _metric_delta(holdout_metrics, production_metrics, key)
@@ -913,6 +921,7 @@ def train_from_matches(
     }
     report = {
         "production_holdout": production_metrics,
+        "production_subgroups": production_subgroups,
         "delta_vs_production": delta_vs_production,
         "data_quality": quality,
         "rank_provenance": rank_provenance,
