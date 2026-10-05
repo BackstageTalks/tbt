@@ -1,0 +1,90 @@
+name: Repair WTA season stats bundle manifest
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/wta-season-manifest-repair-request.json'
+      - 'scripts/repair_release_bundle_manifest.py'
+      - '.github/workflows/wta-season-manifest-repair.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-wta-season-manifest-repair
+  cancel-in-progress: false
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      PYTHONPATH: api:scripts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Load request
+        shell: bash
+        run: |
+          set -euo pipefail
+          request=.github/wta-season-manifest-repair-request.json
+          repo="$(jq -r '.repository' "$request")"
+          tag="$(jq -r '.tag' "$request")"
+          asset="$(jq -r '.required_asset' "$request")"
+          test -n "$repo" -a -n "$tag" -a -n "$asset"
+          echo "REPAIR_REPOSITORY=$repo" >> "$GITHUB_ENV"
+          echo "REPAIR_TAG=$tag" >> "$GITHUB_ENV"
+          echo "REPAIR_ASSET=$asset" >> "$GITHUB_ENV"
+      - name: Rebuild and upload checksum manifest
+        run: |
+          set -euo pipefail
+          python scripts/repair_release_bundle_manifest.py \
+            --repository "$REPAIR_REPOSITORY" \
+            --tag "$REPAIR_TAG" \
+            --require-asset "$REPAIR_ASSET" \
+            --out ".cache/tbt/wta-season/_tbt_bundle_manifest.json" \
+            --upload
+      - name: Verify through production ReleaseStore and WTA loader
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.wta_season_stats import WTASeasonPriors
+
+          out = Path(".cache/tbt/wta-season-verify")
+          store = ReleaseStore(os.environ["REPAIR_REPOSITORY"], os.environ["REPAIR_TAG"], out)
+          store.download(
+              extra_names=(os.environ["REPAIR_ASSET"],),
+              required_names=(os.environ["REPAIR_ASSET"],),
+              require_bundle_manifest=True,
+          )
+          priors = WTASeasonPriors.from_csv(out / os.environ["REPAIR_ASSET"])
+          report = {
+              "schema": 1,
+              "status": "verified",
+              "repository": os.environ["REPAIR_REPOSITORY"],
+              "tag": os.environ["REPAIR_TAG"],
+              "asset": os.environ["REPAIR_ASSET"],
+              "loader": type(priors).__name__,
+              "rapidapi_requests": 0,
+          }
+          target = Path(".cache/tbt/wta-season/verification.json")
+          target.write_text(json.dumps(report, indent=2), encoding="utf-8")
+          print(json.dumps(report))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blinq-wta-season-manifest-repair-${{ github.run_id }}
+          path: |
+            .cache/tbt/wta-season/_tbt_bundle_manifest.json
+            .cache/tbt/wta-season/verification.json
+          if-no-files-found: warn
