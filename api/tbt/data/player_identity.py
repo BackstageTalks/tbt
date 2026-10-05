@@ -226,6 +226,7 @@ def build_crosswalk(
     canonical_players: Iterable[dict[str, Any]],
     sackmann_players: Iterable[dict[str, Any]],
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    canonical = list(canonical_players)
     sackmann = list(sackmann_players)
     by_name: dict[str, list[dict]] = defaultdict(list)
     by_short: dict[str, list[dict]] = defaultdict(list)
@@ -238,7 +239,7 @@ def build_crosswalk(
     unresolved = []
     evidence_counts = Counter()
 
-    for player in canonical_players:
+    for player in canonical:
         aliases = sorted(
             {
                 normalize_player_name(alias)
@@ -321,7 +322,7 @@ def build_crosswalk(
             }
         )
 
-    canonical_count = len(list(canonical_players)) if not isinstance(canonical_players, list) else len(canonical_players)
+    canonical_count = len(canonical)
     report = {
         "schema": 1,
         "canonical_players": canonical_count,
