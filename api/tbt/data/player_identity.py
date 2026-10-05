@@ -25,6 +25,13 @@ def initial_surname_key(value: object) -> str:
     return f"{parts[0][0]} {parts[-1]}"
 
 
+def first_last_key(value: object) -> str:
+    parts = normalize_player_name(value).split()
+    if len(parts) < 2 or len(parts[0]) <= 1:
+        return ""
+    return f"{parts[0]} {parts[-1]}"
+
+
 def normalize_birth_date(value: object) -> str:
     text = re.sub(r"[^0-9]", "", str(value or ""))
     if len(text) == 8:
@@ -209,6 +216,7 @@ def load_sackmann_players(path: str | Path) -> list[dict[str, Any]]:
                     "name": name,
                     "normalized_name": normalize_player_name(name),
                     "short_key": initial_surname_key(name),
+                    "first_last_key": first_last_key(name),
                     "birth_date": normalize_birth_date(
                         raw.get("birth_date") or raw.get("dob")
                     ),
@@ -230,10 +238,13 @@ def build_crosswalk(
     sackmann = list(sackmann_players)
     by_name: dict[str, list[dict]] = defaultdict(list)
     by_short: dict[str, list[dict]] = defaultdict(list)
+    by_first_last: dict[str, list[dict]] = defaultdict(list)
     for row in sackmann:
         by_name[row["normalized_name"]].append(row)
         if row["short_key"]:
             by_short[row["short_key"]].append(row)
+        if row.get("first_last_key"):
+            by_first_last[row["first_last_key"]].append(row)
 
     resolved = []
     unresolved = []
@@ -276,6 +287,26 @@ def build_crosswalk(
                 if len(same_country) == 1:
                     chosen = same_country[0]
                     evidence = "exact_alias_plus_country"
+
+        if chosen is None:
+            first_last_candidates: dict[str, dict] = {}
+            for alias in aliases:
+                key = first_last_key(alias)
+                if not key:
+                    continue
+                for item in by_first_last.get(key, []):
+                    first_last_candidates[item["sackmann_player_id"]] = item
+            if len(first_last_candidates) == 1:
+                chosen = next(iter(first_last_candidates.values()))
+                evidence = "unique_first_last"
+            elif birth_date and first_last_candidates:
+                dob = [
+                    item for item in first_last_candidates.values()
+                    if item["birth_date"] == birth_date
+                ]
+                if len(dob) == 1:
+                    chosen = dob[0]
+                    evidence = "first_last_plus_dob"
 
         if chosen is None and birth_date:
             short_candidates: dict[str, dict] = {}
@@ -334,7 +365,7 @@ def build_crosswalk(
         "unresolved_players": unresolved[:1000],
         "policy": (
             "fail_closed: unique exact alias; duplicate exact alias disambiguated "
-            "by exact DOB/country; initial+surname requires exact DOB"
+            "by exact DOB/country; unique full first+last; initial+surname requires exact DOB"
         ),
     }
     return resolved, report
