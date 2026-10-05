@@ -62,6 +62,25 @@ def metrics(p, y):
             "calibration": calibration_buckets(p, y)}
 
 
+def fitted_model_boundary(metadata):
+    """Exclude calibration/selection as well as the base training interval.
+
+    history_end alone is insufficient: a fixed ensemble can fit its calibrator
+    and choose blends on months after its base classifier training cutoff.
+    """
+    required = ('history_end', 'trained_at')
+    dates = {}
+    for name in (*required, 'evaluation_end', 'calibration_end'):
+        value = metadata.get(name)
+        if value is None and name not in required:
+            continue
+        date = pd.to_datetime(value, utc=True, errors='coerce')
+        if pd.isna(date):
+            raise ValueError(f'Production {name} missing/invalid: cannot declare a post-fitting audit')
+        dates[name] = date
+    return max(dates.values())
+
+
 def main():
     from tbt.models.artifact import load_model
     from tbt.services.training import _enforce_rank_provenance
@@ -97,9 +116,7 @@ def main():
     production.download(extra_names=("model.joblib", "training_report.json"),
                         required_names=("model.joblib", "training_report.json"))
     model = load_model(str(model_dir / "model.joblib"))
-    cutoff = pd.to_datetime(model.metadata.get("history_end"), utc=True, errors="coerce")
-    if pd.isna(cutoff):
-        raise ValueError("Production history_end missing: cannot declare an out-of-sample audit")
+    cutoff = fitted_model_boundary(model.metadata)
     # Whole-day isolation matches the production training/evaluation contract.
     eligible = frame.loc[pd.to_datetime(frame.scheduled_at, utc=True).dt.normalize() > cutoff.normalize()].copy()
     report = {"schema": 1, "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -120,7 +137,8 @@ def main():
                                         "zero_rate": float((frame[name] == 0).mean()),
                                         "standard_deviation": float(frame[name].std())}
                                  for name in model.feature_names},
-              "evaluation_policy": "Post-champion-training days only; descriptive audit. Previously consumed promotion holdouts may be present; never use this report to promote or tune a model."}
+              "evaluation_boundary": str(cutoff),
+              "evaluation_policy": "Whole UTC days after all recorded fitting/calibration/evaluation boundaries and model availability; descriptive audit, never an automatic promotion or tuning gate."}
     if len(eligible):
         predictions = model.predict_proba(eligible)
         eligible["audit_probability"] = predictions

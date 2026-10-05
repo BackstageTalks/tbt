@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from _bootstrap import ROOT
 from audit_environment_release import download_committed_history
-from audit_high_impact import metrics
+from audit_high_impact import metrics, fitted_model_boundary
 from release_store import ReleaseStore
 from tbt.data.history_snapshot import load_partitions
 from tbt.data.history_safety import sanitize_history_identities
@@ -139,9 +139,7 @@ def main():
     ReleaseStore(args.data_repository,'tbt-model-production-v1',model_dir).download(
         extra_names=('model.joblib','training_report.json'),required_names=('model.joblib','training_report.json'))
     model = load_model(str(model_dir/'model.joblib'))
-    cutoff = pd.to_datetime(model.metadata.get('history_end'), utc=True, errors='coerce')
-    if pd.isna(cutoff):
-        raise ValueError('Cannot declare post-training data without model cutoff')
+    cutoff = fitted_model_boundary(model.metadata)
     start = cutoff.normalize().to_pydatetime() + timedelta(days=1)
     recent = [m for m in cleaned if m.scheduled_at >= start]
     metadata = {}
@@ -164,9 +162,12 @@ def main():
     del builder, recent
     gc.collect()
     matched = frame.loc[frame.match_id.isin(metadata)].copy()
-    report['model'] = {'version':model.version,'history_end':str(cutoff),'rank_provenance':ranks}
+    report['model'] = {'version':model.version,'history_end':model.metadata.get('history_end'),
+                       'post_fitting_boundary':str(cutoff),'rank_provenance':ranks}
+    report['post_fitting_all_events'] = metrics(model.predict_proba(frame), frame.target) if len(frame) else {'n':0}
+    report['post_fitting_by_tour'] = {str(k):metrics(model.predict_proba(g),g.target) for k,g in frame.groupby('tour')}
     report['matched_post_training_rows'] = raw_market_count
-    report['comparison_policy'] = 'Identical post-training UTC-day events. Descriptive, may include previously consumed promotion holdouts; no tuning or model promotion. Source opening/closing labels lack independently verified tick timestamps: not a measured publication CLV.'
+    report['comparison_policy'] = 'Identical whole-UTC-day events after all recorded fitting/calibration/evaluation boundaries and model availability. Descriptive, not an untouched promotion gate. Source opening/closing labels lack independently verified tick timestamps: not a measured publication CLV.'
     rows = {'opening': [], 'closing': []}
     if len(matched):
         matched['audit_p'] = model.predict_proba(matched)

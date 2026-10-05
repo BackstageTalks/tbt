@@ -1,4 +1,5 @@
 name: BlinQ existing-data recovery and market audit
+# Strict post-fitting evaluation excludes later calibration and model selection.
 on:
   push:
     branches: [main]
