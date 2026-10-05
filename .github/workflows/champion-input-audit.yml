@@ -1,0 +1,43 @@
+name: BlinQ fitted champion input inspection
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/champion-input-audit.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: python -m pip install -r api/requirements-train.txt pytest
+      - run: python -m pytest tests/test_champion_input_inspection.py -q
+      - run: python scripts/inspect_champion_inputs.py --data-repository "$TBT_DATA_REPOSITORY"
+      - name: Preserve private fitted-input evidence
+        run: |
+          python - <<'PY'
+          import base64,json,os,subprocess
+          from pathlib import Path
+          repo=os.environ['TBT_DATA_REPOSITORY']; target='audit/champion-inputs-latest.json'
+          lookup=subprocess.run(['gh','api',f'repos/{repo}/contents/{target}'],capture_output=True,text=True)
+          body={'message':'Inspect actual fitted BlinQ champion inputs','content':base64.b64encode(Path('.cache/tbt/champion-inputs/report.json').read_bytes()).decode()}
+          if lookup.returncode==0: body['sha']=json.loads(lookup.stdout)['sha']
+          elif '404' not in lookup.stderr: raise RuntimeError('Cannot safely inspect evidence target')
+          payload=Path('/tmp/champion-input-audit.json');payload.write_text(json.dumps(body))
+          subprocess.run(['gh','api','--method','PUT',f'repos/{repo}/contents/{target}','--input',str(payload)],check=True,stdout=subprocess.DEVNULL)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blinq-champion-inputs-${{ github.run_id }}
+          path: .cache/tbt/champion-inputs/report.json
+          if-no-files-found: warn
