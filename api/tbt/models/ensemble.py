@@ -14,7 +14,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from .feature_builder import FEATURE_NAMES
-from .symmetry import swap_frame
+from .symmetry import MODEL_FEATURE_CONTRACT, swap_frame
 
 
 def _logits(p):
@@ -55,7 +55,7 @@ class TennisEnsemble:
         # Re-enable only after storing point-in-time forecast provenance.
         self.excluded_features = {"weather_serve_interaction", "weather_known"}
         self.feature_names = list(FEATURE_NAMES if feature_names is None else feature_names)
-        unknown = set(self.feature_names) - set(FEATURE_NAMES)
+        unknown = set(self.feature_names) - set(MODEL_FEATURE_CONTRACT)
         if unknown:
             raise ValueError(f"Features need an explicit swap contract: {sorted(unknown)}")
         self.linear = Pipeline([
