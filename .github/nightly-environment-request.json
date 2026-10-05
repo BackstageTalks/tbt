@@ -7,6 +7,6 @@
   "static_max_requests": 4000,
   "weather_max_requests": 2000,
   "retry_unresolved": true,
-  "requested_at_local": "2026-10-05T00:13:00+02:00",
-  "note": "Historical environment backfill phase 2: cover canonical 1949-2020 after verified 2021-2026 completion; preserve legacy enviro and keep historical weather research-only."
+  "requested_at_local": "2026-10-05T08:55:00+02:00",
+  "note": "Retry historical environment backfill 1949-2020 after cancelled run 89; preserve legacy enviro and keep historical weather research-only."
 }
