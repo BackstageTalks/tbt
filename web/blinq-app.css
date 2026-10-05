@@ -9137,9 +9137,9 @@ body#blinqPremium .results-mobile-filter-toggle{display:none}
 
 
 /* Banner copy inset: keep all hero slides consistently away from the left edge. */
-body#blinqPremium .hero-shell .dashboard-hero-copy{left:46px!important}
-body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy{padding-left:calc(clamp(13px,2.5vw,28px) + 8px)!important}
+body#blinqPremium .hero-shell .dashboard-hero-copy{left:50px!important}
+body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy{padding-left:calc(clamp(13px,2.5vw,28px) + 12px)!important}
 @media(max-width:760px){
-  body#blinqPremium .hero-shell .dashboard-hero-copy{left:26px!important}
-  body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile .admin-hero-preview-copy{padding-left:21px!important}
+  body#blinqPremium .hero-shell .dashboard-hero-copy{left:30px!important}
+  body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile .admin-hero-preview-copy{padding-left:25px!important}
 }
