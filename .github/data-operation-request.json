@@ -1,11 +1,13 @@
 {
   "schema": 1,
-  "mode": "train",
+  "mode": "statistics",
   "promote": false,
-  "purpose": "Codex audit closeout: fit a fresh governed candidate on the current canonical history, evaluate only genuinely unseen whole-day holdout rows against the production champion and Elo, require ATP/WTA subgroup evidence, and never promote automatically.",
+  "purpose": "Final closeout serve/return statistics gapfill after environment writer completes. Reuse persisted availability markers/cache, spend only on remaining eligible historical gaps, and fail closed through the shared 14500 provider-day ceiling with 500 provider reserve.",
   "requested_on": "2026-10-05",
-  "requested_at_utc": "2026-10-05T19:06:00Z",
-  "max_requests": 1,
-  "training_scope": "fresh_candidate_unseen_holdout_no_promotion",
+  "requested_at_utc": "2026-10-05T20:56:00Z",
+  "max_requests": 12000,
+  "start": "1949-12-22",
+  "end": "2026-10-05",
+  "training_scope": "final_statistics_gapfill_no_model_promotion",
   "historical_match_winner_odds_as_model_feature": false
 }
