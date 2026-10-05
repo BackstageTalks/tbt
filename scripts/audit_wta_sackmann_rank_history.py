@@ -25,11 +25,17 @@ def main():
         raise SystemExit("Canonical identity quarantine is non-empty")
     history=WTARankHistory.from_sackmann(args.players_csv,args.ranking_csv)
     counts=Counter()
+    cutoffs=(1980,1990,2000,2010,2020)
+    segments={year:Counter() for year in cutoffs}
     samples=[]
     for m in matches:
         if str(m.tour or "").lower()!="wta":
             continue
         counts["canonical_wta_matches"]+=1
+        year=m.scheduled_at.year
+        for cutoff in cutoffs:
+            if year>=cutoff:
+                segments[cutoff]["matches"]+=1
         day=m.scheduled_at.date()
         p1=history._snapshot(m.player1_name,day)
         p2=history._snapshot(m.player2_name,day)
@@ -39,6 +45,9 @@ def main():
             counts["player2_linked"]+=1
         if p1 is None or p2 is None:
             counts["missing_one_or_both"]+=1
+            for cutoff in cutoffs:
+                if year>=cutoff:
+                    segments[cutoff]["missing_one_or_both"]+=1
             if len(samples)<100:
                 samples.append({
                     "match_id":str(m.match_id),
@@ -50,11 +59,20 @@ def main():
                 })
             continue
         counts["linked_both"]+=1
+        for cutoff in cutoffs:
+            if year>=cutoff:
+                segments[cutoff]["linked_both"]+=1
         features=history.features_for_match(m)
         if features["wta_hist_momentum_4w_known_both"]>0:
             counts["momentum_4w_both"]+=1
+            for cutoff in cutoffs:
+                if year>=cutoff:
+                    segments[cutoff]["momentum_4w_both"]+=1
         if features["wta_hist_momentum_12w_known_both"]>0:
             counts["momentum_12w_both"]+=1
+            for cutoff in cutoffs:
+                if year>=cutoff:
+                    segments[cutoff]["momentum_12w_both"]+=1
 
         for existing,incoming in ((m.player1_rank,p1["rank"]),(m.player2_rank,p2["rank"])):
             if existing is None:
@@ -71,6 +89,17 @@ def main():
     total=counts["canonical_wta_matches"]
     linked=counts["linked_both"]
     existing=counts["existing_rank_values"]
+    segment_report={}
+    for cutoff,segment in segments.items():
+        n=segment["matches"]
+        segment_report[str(cutoff)]={
+            "matches":n,
+            "linked_both":segment["linked_both"],
+            "match_coverage_both":segment["linked_both"]/n if n else 0.0,
+            "momentum_4w_coverage":segment["momentum_4w_both"]/n if n else 0.0,
+            "momentum_12w_coverage":segment["momentum_12w_both"]/n if n else 0.0,
+        }
+
     report={
         "schema":1,
         "source":"Aneeshers/tennis-sackmann-archive WTA (Jeff Sackmann mirror)",
@@ -83,6 +112,7 @@ def main():
         "existing_rank_exact_rate":counts["existing_exact"]/existing if existing else 0.0,
         "existing_rank_within2_rate":counts["existing_within2"]/existing if existing else 0.0,
         "existing_rank_within5_rate":counts["existing_within5"]/existing if existing else 0.0,
+        "coverage_by_start_year":segment_report,
         "rapidapi_requests":0,
         "production_mutated":False,
         "missing_samples":samples,
