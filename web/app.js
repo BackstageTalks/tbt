@@ -3448,7 +3448,28 @@
     document.body.append(dialog);draw();dialog.showModal();
   }
 
+  let resultsCategoryDismissBound=false;
+  function ensureResultsCategoryDismissHandlers(){
+    if(resultsCategoryDismissBound)return;
+    resultsCategoryDismissBound=true;
+    document.addEventListener('pointerdown',event=>{
+      const picker=document.querySelector('.results-category-picker[open]');
+      if(picker&&!picker.contains(event.target))picker.open=false;
+    },true);
+    document.addEventListener('keydown',event=>{
+      if(event.key!=='Escape')return;
+      const picker=document.querySelector('.results-category-picker[open]');
+      if(!picker)return;
+      picker.open=false;
+      const summary=picker.querySelector('summary');
+      if(summary instanceof HTMLElement)summary.focus({preventScroll:true});
+      event.preventDefault();
+      event.stopPropagation();
+    });
+  }
+
   function wireResultsFilters(){
+    ensureResultsCategoryDismissHandlers();
     const rerender=()=>{state.resultsPage=0;renderRoute('results');};
     const mobileFilterToggle=document.querySelector('[data-results-filter-toggle]');
     if(mobileFilterToggle)mobileFilterToggle.onclick=()=>{
