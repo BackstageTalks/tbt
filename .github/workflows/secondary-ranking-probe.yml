@@ -1,0 +1,30 @@
+name: BlinQ secondary ranking API probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONPATH: api:scripts
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: history
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python -m pip install -r api/requirements.txt
+      - run: python scripts/probe_secondary_ranking_api.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: secondary-ranking-probe-${{ github.run_id }}
+          path: .cache/tbt/ranking-history/secondary-probe.json
+          retention-days: 7

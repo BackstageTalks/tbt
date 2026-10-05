@@ -1,0 +1,54 @@
+name: BlinQ ranking history API probe
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ranking-history-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONPATH: api:scripts
+      RAPIDAPI_KEY: ${{ secrets.RAPIDAPI_KEY }}
+      BLINQ_SHARED_API_BUDGET_URL: ${{ vars.BLINQ_API_BUDGET_RESERVE_URL || 'https://agreeable-sky-011a7fe10.7.azurestaticapps.net/api/v1/internal/api-budget/reserve' }}
+      BLINQ_SHARED_API_BUDGET_TOKEN: ${{ secrets.BLINQ_LIVE_WORKER_TOKEN }}
+      BLINQ_SHARED_API_BUDGET_PURPOSE: history
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install runtime dependencies
+        run: python -m pip install -r api/requirements.txt
+
+      - name: Probe ranking history endpoints
+        run: |
+          python scripts/probe_ranking_history_api.py \
+            --player-id 275923 \
+            --max-requests 8 \
+            --out .cache/tbt/ranking-history/probe.json
+
+      - name: Assert bounded non-production probe
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path(".cache/tbt/ranking-history/probe.json").read_text())
+          assert report["production_mutated"] is False
+          assert 0 < int(report["request_count"]) <= 8
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blinq-ranking-history-probe-${{ github.run_id }}
+          path: .cache/tbt/ranking-history/probe.json
+          retention-days: 7
