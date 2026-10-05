@@ -947,6 +947,47 @@ def build_daily_offer_snapshot(
 
 
 
+def _frozen_access_contract(ui_config):
+    """Keep only non-sensitive entitlement rules effective at issuance."""
+    if not isinstance(ui_config, dict):
+        return None
+    hub = ((ui_config.get("dashboard") or {}).get("daily_hub") or {})
+    tabs = hub.get("tabs") if isinstance(hub, dict) else {}
+    frozen_tabs = {}
+    allowed_plans = ("rookie", "pro", "elite", "legend", "goat")
+    allowed_rule_keys = (
+        "visible_rows", "blur_remaining", "see_all", "selection_mode",
+        "display_state", "tab_enabled", "row_overrides",
+    )
+    if isinstance(tabs, dict):
+        for tab_id, raw_tab in tabs.items():
+            if not isinstance(raw_tab, dict):
+                continue
+            plans = raw_tab.get("plans") if isinstance(raw_tab.get("plans"), dict) else {}
+            frozen_plans = {}
+            for plan in allowed_plans:
+                raw_rule = plans.get(plan)
+                if not isinstance(raw_rule, dict):
+                    continue
+                frozen_plans[plan] = {
+                    key: deepcopy(raw_rule.get(key))
+                    for key in allowed_rule_keys
+                    if key in raw_rule
+                }
+            frozen_tabs[str(tab_id)] = {
+                "enabled": raw_tab.get("enabled") is not False,
+                "plans": frozen_plans,
+            }
+    return {
+        "schema": 1,
+        "source": "effective_ui_config_at_issuance",
+        "ui_patch": str(ui_config.get("ui_patch") or ""),
+        "access_contract_revision": ui_config.get("access_contract_revision"),
+        "daily_hub_enabled": hub.get("enabled") is not False if isinstance(hub, dict) else True,
+        "tabs": frozen_tabs,
+    }
+
+
 def build_confirmed_daily_offer_snapshot(
     feed,
     ledger,
@@ -954,6 +995,7 @@ def build_confirmed_daily_offer_snapshot(
     now=None,
     timezone_name="Europe/Bratislava",
     start_hour=6,
+    ui_config=None,
 ):
     """Persist only rows that the ledger proves were actually published."""
     if not isinstance(feed, dict) or not isinstance(ledger, list):
@@ -978,6 +1020,9 @@ def build_confirmed_daily_offer_snapshot(
         totals[key] = len(kept)
     snapshot["totals"] = totals
     snapshot["confirmed_only"] = True
+    access_contract = _frozen_access_contract(ui_config)
+    if access_contract is not None:
+        snapshot["access_contract"] = access_contract
     return snapshot
 
 def confirm_market_publications(ledger, deployed_feed, now=None):
