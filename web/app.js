@@ -3309,7 +3309,9 @@
         continue;
       }
 
-      // Other Results categories retain verified real-stake financial KPIs only.
+      // Filtered Results compare every settled quoted pick on the same 1u basis.
+      // profit_units is already the displayed unit result; legacy staked_units can
+      // carry a different scale (for example 100) and must not dilute filter ROI.
       const actualOdds=publication?.odds==null?NaN:Number(publication.odds);
       const status=String(publication?.price_status||'').trim().toLowerCase();
       const market=String(publication?.market||'').trim().toLowerCase();
@@ -3322,7 +3324,7 @@
       const realStake=publication?.result?.staked_units==null?NaN:Number(publication.result.staked_units);
       const realProfit=publication?.result?.profit_units==null?NaN:Number(publication.result.profit_units);
       if(!Number.isFinite(realStake)||realStake<=0||!Number.isFinite(realProfit))continue;
-      stake+=realStake;
+      stake+=1;
       profit+=realProfit;
       unitSample++;
       roiOddsSum+=actualOdds;
@@ -4455,9 +4457,9 @@
       <div class="admin-roi-audit-grid">
         ${row('Výhry – prehry (všetky tipy)',`${m.wins} – ${m.losses}`)}
         ${row('Úspešnosť všetkých tipov',m.hit==null?'—':pct(m.hit))}
-        ${row('Počet reálnych vkladov v ROI',String(m.unitSample))}
+        ${row('Počet 1u vkladov v ROI',String(m.unitSample))}
         ${row('Priemerný kurz ROI vzorky',odds)}
-        ${row('Súčet vkladov',`${m.stake.toFixed(2)}u`)}
+        ${row('Súčet 1u vkladov',`${m.stake.toFixed(2)}u`)}
         ${row('Čistý zisk',signed(m.profit))}
         ${row('ROI = čistý zisk / vklady',roi)}
       </div>
@@ -5282,7 +5284,7 @@
       [publicText('Record'),`${m.wins}-${m.losses}`,lcopy('WIN - LOSS','VÝHRA - PREHRA','VÝHRA - PREHRA')],
       [publicText('Hit rate'),m.hit==null?'—':pct(m.hit),lcopy('filtered settled sample','filtrovaná vyhodnotená vzorka','filtrovaný vyhodnocený vzorek')],
       [publicText('Avg Odds'),m.avgOdds==null?'—':m.avgOdds.toFixed(2),m.oddsSample?lcopy(`${m.oddsSample} picks with displayed odds`,`${m.oddsSample} predikcií s kurzom`,`${m.oddsSample} predikcí s kurzem`):publicText('no odds')],
-      ['ROI',m.roi==null?'—':pct(m.roi),m.aceDfNormalizedKpis?lcopy('1u result ROI from normalized legacy / real API odds','1u výsledkové ROI z normalizovaných historických / reálnych API kurzov','1u výsledkové ROI z normalizovaných historických / reálných API kurzů'):lcopy('real settled stakes','reálne vyhodnotené vklady','reálné vyhodnocené vklady')],
+      ['ROI',m.roi==null?'—':pct(m.roi),m.aceDfNormalizedKpis?lcopy('1u result ROI from normalized legacy / real API odds','1u výsledkové ROI z normalizovaných historických / reálnych API kurzov','1u výsledkové ROI z normalizovaných historických / reálných API kurzů'):lcopy('1u per settled pick with a real quote','1u na každý vyhodnotený tip s reálnym kurzom','1u na každý vyhodnocený tip s reálným kurzem')],
       [publicText('Units'),m.unitSample?`${m.profit>=0?'+':''}${m.profit.toFixed(2)}u`:'—',m.aceDfNormalizedKpis?lcopy('1u per settled Aces/DF pick','1u na každý vyhodnotený pick ESÁ/DF','1u na každý vyhodnocený tip ESA/DF'):lcopy('settled profit','vyhodnotený zisk','vyhodnocený zisk')],
       [publicText('Sample'),sampleValue,sampleNote],
     ]);
