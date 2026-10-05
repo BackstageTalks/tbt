@@ -391,13 +391,30 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
           TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+          TBT_PRODUCTION_URL: ${{ vars.TBT_PRODUCTION_URL }}
         run: |
           set -euo pipefail
           test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          ui_args=()
+          if [[ -n "${TBT_PRODUCTION_URL:-}" ]] && curl -fsSL --connect-timeout 4 --max-time 20 -H 'Cache-Control: no-cache' "${TBT_PRODUCTION_URL%/}/api/v1/ui-config?publication_audit=${GITHUB_SHA}" -o /tmp/blinq-publication-ui.json; then
+            python - <<'PYUI'
+          import json
+          from pathlib import Path
+          payload=json.loads(Path('/tmp/blinq-publication-ui.json').read_text(encoding='utf-8'))
+          config=payload.get('config')
+          if not isinstance(config,dict):
+              raise SystemExit('Effective UI config missing from public response')
+          Path('/tmp/blinq-effective-ui.json').write_text(json.dumps(config,ensure_ascii=False),encoding='utf-8')
+          PYUI
+            ui_args=(--ui-config-file /tmp/blinq-effective-ui.json)
+          else
+            echo "::warning::Effective UI config could not be frozen with this issuance."
+          fi
           for attempt in 1 2 3; do
             if python scripts/confirm_prediction_publication.py \
               --data-repository "$TBT_DATA_REPOSITORY" \
-              --deployed-feed api/data/feed.json; then
+              --deployed-feed api/data/feed.json \
+              "${ui_args[@]}"; then
               break
             fi
             if [[ "$attempt" == "3" ]]; then

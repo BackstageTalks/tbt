@@ -117,7 +117,18 @@ def main(argv=None):
         default=None,
         help="Local feed file that was just deployed; must match the private candidate exactly.",
     )
+    parser.add_argument(
+        "--ui-config-file",
+        default=None,
+        help="Effective public UI config captured at issuance; only entitlement rules are persisted.",
+    )
     args = parser.parse_args(argv)
+
+    effective_ui_config = None
+    if args.ui_config_file:
+        effective_ui_config = read_json(Path(args.ui_config_file), None)
+        if not isinstance(effective_ui_config, dict):
+            raise ValueError("Invalid effective UI config")
 
     deployed_feed = None
     if args.deployed_feed:
@@ -181,6 +192,7 @@ def main(argv=None):
         feed,
         confirmed,
         now=now,
+        ui_config=effective_ui_config,
     )
     write_json(directory / "daily_offer_snapshot.json", daily_snapshot)
     store.upload_bundle([
