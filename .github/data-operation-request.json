@@ -2,12 +2,12 @@
   "schema": 1,
   "mode": "statistics",
   "promote": false,
-  "purpose": "Spend up to 12000 Tennis RapidAPI requests on a full-history targeted statistics backfill to close serve/return quality gaps before rebuilding the enriched training DB. Reuse canonical/cache markers and skip already-complete schema-3 statistics.",
-  "requested_on": "2026-10-04",
-  "requested_at_utc": "2026-10-04T19:44:00Z",
+  "purpose": "Second full-history targeted serve/return statistics gapfill using today's available RapidAPI headroom. Reuse persisted schema-3 available/unavailable markers; skip already-covered matches; stop at max_requests and shared daily budget before 15000 total daily requests.",
+  "requested_on": "2026-10-05",
+  "requested_at_utc": "2026-10-05T06:58:00Z",
   "max_requests": 12000,
   "start": "1949-12-22",
   "end": "2026-10-04",
-  "training_scope": "full_canonical_statistics_gapfill_then_rebuild_training",
+  "training_scope": "full_canonical_statistics_gapfill_round2_no_model_promotion",
   "historical_match_winner_odds_as_model_feature": false
 }
