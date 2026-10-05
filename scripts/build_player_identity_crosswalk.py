@@ -20,7 +20,7 @@ def main() -> None:
     ap=argparse.ArgumentParser()
     ap.add_argument("--history-dir",required=True)
     ap.add_argument("--tour",default="wta")
-    ap.add_argument("--profiles",default="")
+    ap.add_argument("--profiles",action="append",default=[])
     ap.add_argument("--sackmann-players",required=True)
     ap.add_argument("--out",required=True)
     ap.add_argument("--report",required=True)
@@ -29,7 +29,12 @@ def main() -> None:
     matches,safety=sanitize_history_identities(load_partitions(Path(args.history_dir)))
     if safety.get("quarantined_rows"):
         raise SystemExit("Canonical identity quarantine is non-empty")
-    by_tour_id,by_id=load_profiles(args.profiles)
+    by_tour_id={}
+    by_id={}
+    for profile_path in args.profiles:
+        tour_map,id_map=load_profiles(profile_path)
+        by_tour_id.update(tour_map)
+        by_id.update(id_map)
     canonical=build_canonical_players(
         matches,
         tour=args.tour,
@@ -39,7 +44,7 @@ def main() -> None:
     sackmann=load_sackmann_players(args.sackmann_players)
     rows,report=build_crosswalk(canonical,sackmann)
     report["tour"]=args.tour.lower()
-    report["profile_source"]=str(args.profiles or "")
+    report["profile_sources"]=list(args.profiles or [])
     report["canonical_identity_safety"]=safety
 
     out=Path(args.out); out.parent.mkdir(parents=True,exist_ok=True)
