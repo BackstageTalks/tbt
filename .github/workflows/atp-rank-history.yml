@@ -51,11 +51,28 @@ jobs:
       - name: Download canonical history
         run: |
           python - <<'PY'
-          import os
+          import os, shutil, time
           from pathlib import Path
           from release_store import ReleaseStore
           directory=Path(".cache/tbt/atp-rank/history")
-          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"], "tbt-data-v1", directory).download(require_bundle_manifest=True)
+          last_error=None
+          for attempt in range(1, 7):
+              shutil.rmtree(directory, ignore_errors=True)
+              directory.mkdir(parents=True, exist_ok=True)
+              try:
+                  ReleaseStore(
+                      os.environ["TBT_DATA_REPOSITORY"],
+                      "tbt-data-v1",
+                      directory,
+                  ).download(require_bundle_manifest=True)
+                  print(f"Canonical history snapshot verified on attempt {attempt}")
+                  break
+              except RuntimeError as exc:
+                  last_error=exc
+                  print(f"Canonical history snapshot changed during download (attempt {attempt}/6): {exc}")
+                  if attempt == 6:
+                      raise
+                  time.sleep(15)
           PY
 
       - name: Download pinned upstream ATP rankings database
