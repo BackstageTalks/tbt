@@ -47,7 +47,7 @@ jobs:
           from pathlib import Path
           from release_store import ReleaseStore
           directory=Path(".cache/tbt/identity/history")
-          for attempt in range(1,7):
+          for attempt in range(1,13):
               shutil.rmtree(directory,ignore_errors=True)
               directory.mkdir(parents=True,exist_ok=True)
               try:
@@ -58,10 +58,10 @@ jobs:
                   ).download(require_bundle_manifest=True)
                   print("verified canonical snapshot",attempt)
                   break
-              except RuntimeError:
-                  if attempt==6:
+              except (RuntimeError, FileNotFoundError):
+                  if attempt==12:
                       raise
-                  time.sleep(15)
+                  time.sleep(20)
           PY
 
       - name: Download existing player profiles
