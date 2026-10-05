@@ -1,10 +1,7 @@
 name: BlinQ secondary ranking API probe
 
 on:
-  pull_request:
-    paths:
-      - "scripts/probe_secondary_ranking_api.py"
-      - ".github/workflows/secondary-ranking-probe.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
