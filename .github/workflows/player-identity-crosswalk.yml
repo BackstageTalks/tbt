@@ -69,6 +69,11 @@ jobs:
           mkdir -p .cache/tbt/identity/profiles
           gh release download tbt-player-assets-v1             -R "$TBT_DATA_REPOSITORY"             -p player_profiles.json             -D .cache/tbt/identity/profiles
 
+      - name: Download existing tbt-pro player registry
+        run: |
+          mkdir -p .cache/tbt/identity/profiles
+          gh api -H "Accept: application/vnd.github.raw+json"             "repos/BackstageTalks/tbt-pro/contents/blinq/data/players/player_registry.json"             > .cache/tbt/identity/profiles/tbt-pro-player-registry.json
+
       - name: Download pinned Sackmann WTA source
         run: |
           set -euo pipefail
@@ -81,7 +86,7 @@ jobs:
 
       - name: Build fail-closed WTA identity crosswalk
         run: |
-          python scripts/build_player_identity_crosswalk.py             --history-dir .cache/tbt/identity/history             --tour wta             --profiles .cache/tbt/identity/profiles/player_profiles.json             --sackmann-players .cache/tbt/identity/sackmann/wta_players.csv             --out .cache/tbt/identity/wta-sackmann-crosswalk.json             --report .cache/tbt/identity/crosswalk-report.json
+          python scripts/build_player_identity_crosswalk.py             --history-dir .cache/tbt/identity/history             --tour wta             --profiles .cache/tbt/identity/profiles/player_profiles.json             --profiles .cache/tbt/identity/profiles/tbt-pro-player-registry.json             --sackmann-players .cache/tbt/identity/sackmann/wta_players.csv             --out .cache/tbt/identity/wta-sackmann-crosswalk.json             --report .cache/tbt/identity/crosswalk-report.json
 
       - name: Measure coverage improvement
         run: |
