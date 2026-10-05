@@ -364,10 +364,20 @@ def test_retry_after_full_delay_precedes_retry(monkeypatch, delay):
 
 
 def gate_report():
+    candidate_tours = {
+        'atp': {'n': 125, 'accuracy': .70, 'log_loss': .55, 'brier_score': .19, 'ece_10': .04},
+        'wta': {'n': 125, 'accuracy': .69, 'log_loss': .56, 'brier_score': .20, 'ece_10': .05},
+    }
+    production_tours = {
+        'atp': {'n': 125, 'accuracy': .70, 'log_loss': .56, 'brier_score': .19, 'ece_10': .04},
+        'wta': {'n': 125, 'accuracy': .69, 'log_loss': .57, 'brier_score': .20, 'ece_10': .05},
+    }
     return {'holdout': {'n': 250},
             'delta_vs_elo': {'accuracy': .01, 'log_loss': -.02, 'brier_score': -.01, 'ece_10': -.01},
             'production_holdout': {'n': 250},
             'delta_vs_production': {'accuracy': 0, 'log_loss': -.01, 'brier_score': 0, 'ece_10': 0},
+            'subgroups': {'tour': candidate_tours},
+            'production_subgroups': {'tour': production_tours},
             'evaluation_governance': {'production_present': True}}
 
 
