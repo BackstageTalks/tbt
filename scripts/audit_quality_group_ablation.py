@@ -98,6 +98,9 @@ def main():
             'No odds in the table: this test measures probability quality, not yield or CLV.',
             'Diagnostic comparison of identical fitted arms isolates this group; candidate vs champion also differs in training dates.']}
     probabilities={'champion':champion.predict_proba(test)}
+    report['arms']['champion']={'all_events':metrics(probabilities['champion'],test.target),
+        'by_tour':{str(tour):metrics(probabilities['champion'][test.tour.to_numpy()==tour],group.target)
+            for tour,group in test.groupby('tour')}}
     write=lambda:out.write_text(json.dumps(report,indent=2,allow_nan=False,default=str))
     write()
     for name,disabled in [('without_quality',QUALITY),('with_quality',set())]:
@@ -116,9 +119,6 @@ def main():
         report['phase']=name;write()
         print(json.dumps({'phase':name,'test_n':len(test)}),flush=True)
         del model;gc.collect()
-    report['arms']['champion']={'all_events':metrics(probabilities['champion'],test.target),
-        'by_tour':{str(tour):metrics(probabilities['champion'][test.tour.to_numpy()==tour],group.target)
-            for tour,group in test.groupby('tour')}}
     known=test.stats_known_both.to_numpy()>0
     report['quality_minus_no_quality']={}
     for label,mask in [('all_events',np.ones(len(test),dtype=bool)),('quality_known',known),('quality_missing',~known)]:
