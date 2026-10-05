@@ -1,11 +1,13 @@
 {
   "schema": 1,
-  "mode": "train",
+  "mode": "statistics",
   "promote": false,
-  "purpose": "Final closeout metric-gate on the latest canonical and current eligible unseen holdout after successful PBP recheck and full-history statistics gapfill. Compare candidate against current production and Elo; do not promote automatically.",
+  "purpose": "Post-reset targeted serve/return statistics gapfill. Spend up to 12000 Tennis RapidAPI requests only on remaining eligible historical matches, reusing persisted schema-3 available/unavailable markers and cache, then rebuild and audit training coverage. Keep daily total below 15000.",
   "requested_on": "2026-10-05",
-  "requested_at_utc": "2026-10-05T16:30:00Z",
-  "max_requests": 1,
-  "training_scope": "latest_canonical_final_metric_gate_no_model_promotion",
+  "requested_at_utc": "2026-10-05T17:16:00Z",
+  "max_requests": 12000,
+  "start": "1949-12-22",
+  "end": "2026-10-05",
+  "training_scope": "post_reset_full_canonical_statistics_gapfill_no_model_promotion",
   "historical_match_winner_odds_as_model_feature": false
 }
