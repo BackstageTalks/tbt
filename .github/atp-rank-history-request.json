@@ -7,5 +7,8 @@
   "rapidapi_requests": 0,
   "production_mutated": false,
   "rank_points_policy": "sidecar_only_until_candidate_ablation",
-  "requested_at_utc": "2026-10-04T21:53:00Z"
+  "requested_at_utc": "2026-10-04T21:53:00Z",
+  "upstream_repository": "Jupiterian/ATP-Rankings-API",
+  "upstream_commit": "247f2f5e86b9e142a7ead7b0e8b3dfb5ee6abb28",
+  "source_mode": "pinned_sqlite"
 }
