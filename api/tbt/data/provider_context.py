@@ -101,6 +101,18 @@ def minimize_provider_payload(
     if isinstance(marker, dict):
         out["_tbt_statistics"] = {k: marker[k] for k in
             ("schema", "event_id", "source", "fetched_at", "status") if k in marker}
+        # Preserve bounded adapter diagnostics across canonical readback. Without
+        # these, unsupported statistics and missing ALL periods become identical
+        # cache misses and cannot be triaged without another provider request.
+        reason = marker.get("reason")
+        if isinstance(reason, str) and reason:
+            out["_tbt_statistics"]["reason"] = reason[:128]
+        for name, limit in (("unsupported_keys", 40), ("period_labels", 20)):
+            values = marker.get(name)
+            if isinstance(values, list):
+                compact = list(dict.fromkeys(value[:96] for value in values if isinstance(value, str) and value))[:limit]
+                if compact:
+                    out["_tbt_statistics"][name] = compact
     score_marker = raw.get("_tbt_score")
     if isinstance(score_marker, dict):
         out["_tbt_score"] = {k: score_marker[k] for k in
