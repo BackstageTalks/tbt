@@ -107,13 +107,18 @@ def test_no_extra_public_results_copy_or_layout_changes():
     assert "<small>${escapeHtml(depthText)}</small>" not in app
     assert "const depthText=Number.isFinite(depth)" not in app
     assert "bez Short Odds" not in app[app.index("function resultsSummary()"):app.index("function primeDetailCard(")]
-    assert "real settled stakes" in app
+    summary = app[app.index("function resultsSummary()"):app.index("function primeDetailCard(")]
+    assert "1u per settled pick with a real quote" in summary
+    assert "real settled stakes" not in summary
     assert "settled profit" in app
-    # ACES/DF intentionally use their Results display quote for 1u presentation
-    # KPIs, while every other category keeps verified real-settlement accounting.
+    # All filtered financial KPIs use a comparable 1u denominator. ACES/DF
+    # still use their normalized Results display quote; other markets require
+    # a verified real quote and settled unit profit.
     assert "const aceDfKpiOdds=aceDfResultKpiOdds(publication)" in app
     assert ":resultVisibleUnits(publication,outcome,resultVisibleOdds(publication));" in app
     assert "const aceDfCategory=!filters?.membership&&(category==='ace'||category==='double_faults')" in app
-    assert "Other Results categories retain verified real-stake financial KPIs only." in app
+    assert "Filtered Results compare every settled quoted pick on the same 1u basis." in app
+    assert "stake+=1;" in app
+    assert "profit+=realProfit;" in app
     assert "const units=outcome.kind==='void'?0:rawUnits;" in app
     assert "projectionMarket?status==='priced_projection'" in app

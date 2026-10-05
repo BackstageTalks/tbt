@@ -66,14 +66,17 @@ def main():
                         historical_display_placeholder_odds:real?null:o,
                         historical_display_placeholder_source:real?null:'synthetic_illustrative_not_bookmaker',
                         result:{status:'hit',correct:true,actual_count:23,
-                           ...(real?{staked_units:1,profit_units:.83}:{})}
+                           ...(real?{staked_units:100,profit_units:.83}:{})}
                       }]
                     }
                   });
                 }""")
+                # Legacy rows may carry a 100-sized stake scale while
+                # profit_units is already normalized to the displayed 1u result.
+                # Filter ROI must stay 83%, not be diluted to 0.83%.
                 check_summary(page, ["5-0", "100.0%", "1.83", "83.0%", "+0.83u", "5"])
                 # Existing illustrative units are deliberately retained in
-                # individual rows; unlike the real ROI total they are NOT stakes.
+                # individual rows; unlike the real quoted ROI sample they are NOT stakes.
                 assert page.locator("#routePanel .results-units-depth b").count() == 5
                 page.evaluate("""() => {
                   const s=resultsFinancialAudit.state;
@@ -88,10 +91,12 @@ def main():
                       section:'doubles',market:'match_winner',
                       selection_id:'teamA'+i,selection:'A / B',
                       issued_at:'2026-09-25T10:00:00Z',odds,
-                      result:{status:'hit',correct:true,staked_units:1,profit_units:odds-1}
+                      result:{status:'hit',correct:true,staked_units:100,profit_units:odds-1}
                     }]
                   }));
                 }""")
+                # Same contract for a filtered match-winner sample: 1u per
+                # settled quoted pick regardless of legacy staked_units scale.
                 check_summary(page, ["3-0", "100.0%", "1.52", "52.0%", "+1.56u", "3"])
                 assert not errors, errors
                 page.close()
