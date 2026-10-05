@@ -43,7 +43,7 @@ def _positive_int(value):
     if value in (None, "", "-"):
         return None
     text = str(value).replace(",", "").strip()
-    match = re.match(r"^(\\d+)", text)
+    match = re.match(r"^(\d+)", text)
     if not match:
         return None
     number = int(match.group(1))
