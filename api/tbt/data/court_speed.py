@@ -79,6 +79,7 @@ class CourtSpeedHistory:
 
     def __init__(self, matches: Iterable[MatchRecord]) -> None:
         self._features: dict[str, dict[str, float]] = {}
+        self._player1_ids: dict[str, str] = {}
         surface_sum = defaultdict(float)
         surface_n = defaultdict(int)
         venue_sum = defaultdict(float)
@@ -145,6 +146,7 @@ class CourtSpeedHistory:
                 # the historical player profile conflicts with current speed.
                 return abs(direction - max(-1.0, min(1.0, preference * 2.0))) / 2.0
 
+            self._player1_ids[str(match.match_id)] = str(match.player1_id)
             self._features[str(match.match_id)] = {
                 "court_speed_prior": float(prior_idx or 0.0),
                 "court_speed_current": float(current_idx or prior_idx or 0.0),
@@ -181,12 +183,24 @@ class CourtSpeedHistory:
                             row[f"{bucket}_wins"] += 1.0
 
     def features_for_match(self, match: MatchRecord) -> dict[str, float]:
-        return dict(
+        key = str(match.match_id)
+        row = dict(
             self._features.get(
-                str(match.match_id),
+                key,
                 {name: 0.0 for name in COURT_SPEED_FEATURE_NAMES},
             )
         )
+        # FeatureBuilder may orient a training row by swapping players. Preserve
+        # anti-symmetry for player-difference features and swap player-specific
+        # mismatch fields to the requested orientation.
+        original_p1 = self._player1_ids.get(key)
+        if original_p1 is not None and str(match.player1_id) != original_p1:
+            row["player_perf_fast_courts"] *= -1.0
+            row["player_perf_slow_courts"] *= -1.0
+            p1 = row["court_speed_mismatch_player1"]
+            row["court_speed_mismatch_player1"] = row["court_speed_mismatch_player2"]
+            row["court_speed_mismatch_player2"] = p1
+        return row
 
 
 def coverage_summary(rows: Iterable[dict[str, float]]) -> dict[str, float | int]:
