@@ -1,0 +1,81 @@
+name: BlinQ court-speed ablation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/court-speed-ablation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-court-speed-ablation-readonly
+  cancel-in-progress: false
+
+jobs:
+  ablation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+      - name: Install and verify
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest tests/test_court_speed.py tests/test_court_speed_ablation.py tests/test_quality_group_ablation.py -q
+      - name: Run matched chronological court-speed ablation
+        run: python -u scripts/audit_court_speed_ablation.py --data-repository "$TBT_DATA_REPOSITORY"
+      - name: Persist private evidence
+        if: always()
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import base64, json, os, subprocess
+          from pathlib import Path
+
+          source = Path('.cache/tbt/court-speed-ablation/report.json')
+          if not source.exists():
+              raise SystemExit(0)
+          report = json.loads(source.read_text(encoding='utf-8'))
+          target = (
+              'audit/court-speed-ablation-latest.json'
+              if report.get('phase') == 'complete'
+              else 'audit/court-speed-ablation-partial.json'
+          )
+          repo = os.environ['TBT_DATA_REPOSITORY']
+          lookup = subprocess.run(
+              ['gh', 'api', f'repos/{repo}/contents/{target}'],
+              capture_output=True, text=True
+          )
+          body = {
+              'message': 'Read-only BlinQ court-speed ablation evidence',
+              'content': base64.b64encode(source.read_bytes()).decode(),
+          }
+          if lookup.returncode == 0:
+              body['sha'] = json.loads(lookup.stdout)['sha']
+          elif '404' not in lookup.stderr:
+              raise RuntimeError('Cannot safely inspect evidence target')
+          payload = Path('/tmp/blinq-court-speed-ablation.json')
+          payload.write_text(json.dumps(body))
+          subprocess.run(
+              ['gh', 'api', '--method', 'PUT', f'repos/{repo}/contents/{target}',
+               '--input', str(payload)],
+              check=True, stdout=subprocess.DEVNULL
+          )
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blinq-court-speed-ablation-${{ github.run_id }}
+          path: .cache/tbt/court-speed-ablation/report.json
+          if-no-files-found: warn
