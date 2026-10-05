@@ -1,0 +1,119 @@
+name: BlinQ player identity crosswalk audit
+
+on:
+  pull_request:
+    paths:
+      - "api/tbt/data/player_identity.py"
+      - "api/tbt/data/wta_rank_history.py"
+      - "scripts/build_player_identity_crosswalk.py"
+      - "scripts/audit_wta_identity_coverage.py"
+      - "tests/test_player_identity_crosswalk.py"
+      - ".github/workflows/player-identity-crosswalk.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: player-identity-crosswalk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      SACKMANN_COMMIT: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and test
+        run: |
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest tests/test_player_identity_crosswalk.py tests/test_wta_rank_history.py -q
+
+      - name: Download checksum-stable canonical history
+        run: |
+          python - <<'PY'
+          import os, shutil, time
+          from pathlib import Path
+          from release_store import ReleaseStore
+          directory=Path(".cache/tbt/identity/history")
+          for attempt in range(1,13):
+              shutil.rmtree(directory,ignore_errors=True)
+              directory.mkdir(parents=True,exist_ok=True)
+              try:
+                  ReleaseStore(
+                      os.environ["TBT_DATA_REPOSITORY"],
+                      "tbt-data-v1",
+                      directory,
+                  ).download(require_bundle_manifest=True)
+                  print("verified canonical snapshot",attempt)
+                  break
+              except (RuntimeError, FileNotFoundError):
+                  if attempt==12:
+                      raise
+                  time.sleep(20)
+          PY
+
+      - name: Download existing player profiles
+        run: |
+          mkdir -p .cache/tbt/identity/profiles
+          gh release download tbt-player-assets-v1             -R "$TBT_DATA_REPOSITORY"             -p player_profiles.json             -D .cache/tbt/identity/profiles
+
+      - name: Download pinned Sackmann WTA source
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/identity/sackmann
+          base="https://raw.githubusercontent.com/Aneeshers/tennis-sackmann-archive/$SACKMANN_COMMIT/wta"
+          curl --fail --location --retry 3 "$base/wta_players.csv"             -o .cache/tbt/identity/sackmann/wta_players.csv
+          for file in wta_rankings_80s.csv wta_rankings_90s.csv wta_rankings_00s.csv wta_rankings_10s.csv wta_rankings_20s.csv wta_rankings_current.csv; do
+            curl --fail --location --retry 3 "$base/$file"               -o ".cache/tbt/identity/sackmann/$file"
+          done
+
+      - name: Build fail-closed WTA identity crosswalk
+        run: |
+          python scripts/build_player_identity_crosswalk.py             --history-dir .cache/tbt/identity/history             --tour wta             --profiles .cache/tbt/identity/profiles/player_profiles.json             --sackmann-players .cache/tbt/identity/sackmann/wta_players.csv             --out .cache/tbt/identity/wta-sackmann-crosswalk.json             --report .cache/tbt/identity/crosswalk-report.json
+
+      - name: Measure coverage improvement
+        run: |
+          args=()
+          for file in .cache/tbt/identity/sackmann/wta_rankings_*.csv; do
+            args+=(--ranking-csv "$file")
+          done
+          python scripts/audit_wta_identity_coverage.py             --history-dir .cache/tbt/identity/history             --players-csv .cache/tbt/identity/sackmann/wta_players.csv             "${args[@]}"             --crosswalk .cache/tbt/identity/wta-sackmann-crosswalk.json             --out .cache/tbt/identity/coverage-report.json
+
+      - name: Validate no-regression evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          cross=json.loads(Path(".cache/tbt/identity/crosswalk-report.json").read_text())
+          cov=json.loads(Path(".cache/tbt/identity/coverage-report.json").read_text())
+          print(json.dumps({"crosswalk":cross,"coverage":cov},indent=2))
+          if int(cross.get("resolved") or 0) < 1000:
+              raise SystemExit("Identity crosswalk resolved too few players")
+          if float(cov["after"]["both_coverage"]) < float(cov["before"]["both_coverage"]):
+              raise SystemExit("Identity crosswalk regressed WTA ranking coverage")
+          if int(cov.get("rapidapi_requests",-1)) != 0:
+              raise SystemExit("RapidAPI was unexpectedly used")
+          if cov.get("production_mutated") is not False:
+              raise SystemExit("Audit unexpectedly mutated production")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blinq-player-identity-${{ github.run_id }}
+          path: |
+            .cache/tbt/identity/wta-sackmann-crosswalk.json
+            .cache/tbt/identity/crosswalk-report.json
+            .cache/tbt/identity/coverage-report.json
+          retention-days: 14

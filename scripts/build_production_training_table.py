@@ -204,6 +204,11 @@ def main() -> None:
         help="Sackmann WTA ranking CSV; may be supplied multiple times.",
     )
     parser.add_argument(
+        "--wta-rank-history-crosswalk",
+        default="",
+        help="Fail-closed BlinQ player_id -> Sackmann player_id crosswalk JSON.",
+    )
+    parser.add_argument(
         "--wta-season-stats-csv",
         default="",
         help=(
@@ -273,6 +278,7 @@ def main() -> None:
         rank_history = WTARankHistory.from_sackmann(
             args.wta_rank_history_players_csv,
             args.wta_rank_history_csv,
+            crosswalk_path=args.wta_rank_history_crosswalk or None,
         )
         for match_id in frame["match_id"]:
             original = source[match_id]
@@ -371,6 +377,7 @@ def main() -> None:
         "historical_policy": "latest_weekly_snapshot_strictly_before_match_date",
         "players_csv": str(args.wta_rank_history_players_csv or ""),
         "ranking_csvs": list(args.wta_rank_history_csv or []),
+        "identity_crosswalk": str(args.wta_rank_history_crosswalk or ""),
     }
     report.setdefault("candidate_feature_groups", {})["wta_rank_history"] = {
         "schema_eligible": True,
