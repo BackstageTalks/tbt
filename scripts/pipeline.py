@@ -136,6 +136,41 @@ def _promotion_metric_gate(report):
         if not any(champion_delta.get(key) is not None and float(champion_delta[key]) < 0
                    for key in ("log_loss", "brier_score", "ece_10")):
             reasons.append("no_probabilistic_improvement_vs_production")
+
+        # ATP and WTA are separate promotion gates. A strong aggregate result
+        # must not hide a regression on one tour, which the controlled 2026
+        # retraining audit demonstrated can happen.
+        candidate_tours = ((report.get("subgroups") or {}).get("tour") or {})
+        production_tours = ((report.get("production_subgroups") or {}).get("tour") or {})
+        for tour in ("atp", "wta"):
+            candidate = candidate_tours.get(tour) or {}
+            baseline = production_tours.get(tour) or {}
+            candidate_n = int(candidate.get("n") or 0)
+            baseline_n = int(baseline.get("n") or 0)
+            if candidate_n < 50 or baseline_n != candidate_n:
+                reasons.append(f"{tour}_promotion_sample_missing_or_below_50")
+                continue
+            tour_deltas = {}
+            for key in required:
+                candidate_value = candidate.get(key)
+                baseline_value = baseline.get(key)
+                if (
+                    candidate_value is None or baseline_value is None
+                    or not math.isfinite(float(candidate_value))
+                    or not math.isfinite(float(baseline_value))
+                ):
+                    reasons.append(f"{tour}_missing_or_nonfinite_{key}")
+                    continue
+                tour_deltas[key] = float(candidate_value) - float(baseline_value)
+            if len(tour_deltas) != len(required):
+                continue
+            if tour_deltas["accuracy"] < 0.0:
+                reasons.append(f"{tour}_accuracy_worse_than_production")
+            for key in ("log_loss", "brier_score", "ece_10"):
+                if tour_deltas[key] > 0.0:
+                    reasons.append(f"{tour}_{key}_worse_than_production")
+            if not any(tour_deltas[key] < 0.0 for key in ("log_loss", "brier_score", "ece_10")):
+                reasons.append(f"{tour}_no_probabilistic_improvement_vs_production")
     return not reasons, reasons
 
 

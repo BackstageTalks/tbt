@@ -1,4 +1,7 @@
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
 
 import numpy as np
 import pandas as pd
@@ -45,3 +48,18 @@ def test_end_to_end_training_reports_real_match_counts_and_symmetric_outputs():
 def test_empty_evaluation_period_is_explicitly_none():
     frame = pd.DataFrame({"scheduled_at": pd.Series([], dtype="datetime64[ns, UTC]")})
     assert _period(frame) == {"start": None, "end": None}
+
+
+def test_training_report_contains_production_subgroups_contract():
+    source = (ROOT / "api" / "tbt" / "services" / "training.py").read_text(encoding="utf-8")
+    assert '"production_subgroups": production_subgroups' in source
+    assert "subgroup_report(test, production_probabilities)" in source
+
+
+def test_promotion_gate_requires_atp_and_wta_non_regression():
+    source = (ROOT / "scripts" / "pipeline.py").read_text(encoding="utf-8")
+    assert 'for tour in ("atp", "wta")' in source
+    assert 'f"{tour}_promotion_sample_missing_or_below_50"' in source
+    assert 'f"{tour}_accuracy_worse_than_production"' in source
+    assert 'f"{tour}_{key}_worse_than_production"' in source
+    assert 'f"{tour}_no_probabilistic_improvement_vs_production"' in source
