@@ -268,3 +268,45 @@ def test_top_six_published_core_prevent_new_65_percent_fallback():
     assert len(merged["top_daily_picks"]) == 6
     assert report["top_core_available"]["top_daily_picks"] == 6
     assert report["skipped_top_fallback"]["top_daily_picks"] == 4
+
+
+def test_confirmed_snapshot_freezes_only_effective_membership_access_rules():
+    now = datetime(2026, 9, 21, 18, 0, tzinfo=timezone.utc)
+    issued = winner_row("issued-access", "2026-09-21T21:00:00+00:00", selection="Alpha", odds=1.70)
+    feed = {
+        "top_daily_picks": [issued], "prime_picks": [], "value_picks": [],
+        "doubles_picks": [], "ace_picks": [], "sg_picks": [],
+    }
+    ledger = [{
+        "event_id": "issued-access",
+        "market_publications": [publication_for(issued, "top_daily", issued=True)],
+    }]
+    ui_config = {
+        "ui_patch": "736-r61",
+        "access_contract_revision": 1,
+        "secret_admin_note": "must-not-leak",
+        "dashboard": {"daily_hub": {"enabled": True, "tabs": {
+            "daily": {"enabled": True, "headline": "presentation-only", "plans": {
+                "rookie": {"visible_rows": 1, "blur_remaining": True, "selection_mode": "stable_random", "see_all": False, "row_overrides": {"3": "hidden"}},
+                "elite": {"visible_rows": "ALL", "blur_remaining": False, "selection_mode": "first", "see_all": True},
+            }}
+        }}},
+    }
+    snapshot = build_confirmed_daily_offer_snapshot(feed, ledger, now=now, ui_config=ui_config)
+    contract = snapshot["access_contract"]
+    assert contract["schema"] == 1
+    assert contract["source"] == "effective_ui_config_at_issuance"
+    assert contract["ui_patch"] == "736-r61"
+    assert contract["tabs"]["daily"]["plans"]["rookie"]["visible_rows"] == 1
+    assert contract["tabs"]["daily"]["plans"]["elite"]["visible_rows"] == "ALL"
+    assert "secret_admin_note" not in str(contract)
+    assert "headline" not in str(contract)
+
+
+def test_confirmed_snapshot_remains_backward_compatible_without_ui_config():
+    now = datetime(2026, 9, 21, 18, 0, tzinfo=timezone.utc)
+    issued = winner_row("issued-no-access", "2026-09-21T21:00:00+00:00", selection="Alpha", odds=1.70)
+    feed = {"top_daily_picks": [issued], "prime_picks": [], "value_picks": [], "doubles_picks": [], "ace_picks": [], "sg_picks": []}
+    ledger = [{"event_id": "issued-no-access", "market_publications": [publication_for(issued, "top_daily", issued=True)]}]
+    snapshot = build_confirmed_daily_offer_snapshot(feed, ledger, now=now)
+    assert "access_contract" not in snapshot
