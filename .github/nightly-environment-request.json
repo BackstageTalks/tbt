@@ -7,6 +7,6 @@
   "static_max_requests": 4000,
   "weather_max_requests": 2000,
   "retry_unresolved": true,
-  "requested_at_local": "2026-10-05T08:55:00+02:00",
-  "note": "Retry historical environment backfill 1949-2020 after cancelled run 89; preserve legacy enviro and keep historical weather research-only."
+  "requested_at_local": "2026-10-05T22:10:00+02:00",
+  "note": "Final Codex closeout: resume 1949-2020 static environment completion now; preserve legacy enviro, retry unresolved safely, and run the built-in final environment + serve/return gap audit. No Tennis RapidAPI."
 }
