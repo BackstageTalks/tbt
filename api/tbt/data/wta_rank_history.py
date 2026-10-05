@@ -10,6 +10,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable
 
+from .player_identity import load_crosswalk
+
 WTA_RANK_HISTORY_FEATURE_NAMES = [
     "wta_hist_rank_advantage",
     "wta_hist_points_advantage",
@@ -48,17 +50,36 @@ class WTARankHistory:
     eligible so same-day publication timing can never leak.
     """
 
-    def __init__(self, rows: Iterable[dict[str, object]]) -> None:
+    def __init__(
+        self,
+        rows: Iterable[dict[str, object]],
+        *,
+        canonical_to_sackmann: dict[str, str] | None = None,
+    ) -> None:
+        self._canonical_to_sackmann = {
+            str(key): str(value)
+            for key, value in (canonical_to_sackmann or {}).items()
+            if str(key).strip() and str(value).strip()
+        }
         by_player: dict[str, list[tuple]] = defaultdict(list)
         for raw in rows:
             name = _norm_name(raw.get("name"))
+            sackmann_id = str(raw.get("sackmann_player_id") or "").strip()
             rank = _positive_int(raw.get("rank"))
             source_date = raw.get("date")
-            if not name or rank is None or source_date is None:
+            if rank is None or source_date is None:
                 continue
-            by_player[name].append(
-                (source_date, rank, _positive_int(raw.get("points")))
-            )
+            keys = []
+            if sackmann_id:
+                keys.append(f"id:{sackmann_id}")
+            if name:
+                keys.append(f"name:{name}")
+            if not keys:
+                continue
+            for key in keys:
+                by_player[key].append(
+                    (source_date, rank, _positive_int(raw.get("points")))
+                )
 
         self._dates = {}
         self._ranks = {}
@@ -80,7 +101,14 @@ class WTARankHistory:
             self._career_best[name] = bests
 
     @classmethod
-    def from_sackmann(cls, players_csv: str | Path, ranking_csvs: Iterable[str | Path]):
+    def from_sackmann(
+        cls,
+        players_csv: str | Path,
+        ranking_csvs: Iterable[str | Path],
+        *,
+        crosswalk_path: str | Path | None = None,
+        canonical_to_sackmann: dict[str, str] | None = None,
+    ):
         player_names: dict[int, str] = {}
         with Path(players_csv).open("r", encoding="utf-8-sig", newline="") as handle:
             reader = csv.DictReader(handle)
@@ -114,11 +142,29 @@ class WTARankHistory:
                         "rank": row.get("ranking") or row.get("rank"),
                         "points": row.get("ranking_points") or row.get("points"),
                         "name": player_names[pid],
+                        "sackmann_player_id": str(pid),
                     })
-        return cls(rows)
+        mapping = dict(canonical_to_sackmann or {})
+        if crosswalk_path:
+            mapping.update(load_crosswalk(crosswalk_path))
+        return cls(rows, canonical_to_sackmann=mapping)
 
-    def _snapshot(self, player_name: object, cutoff_date, *, max_age_days: int = 14):
-        key = _norm_name(player_name)
+    def _lookup_key(self, player_id: object, player_name: object) -> str:
+        canonical_id = str(player_id or "").strip()
+        sackmann_id = self._canonical_to_sackmann.get(canonical_id)
+        if sackmann_id:
+            return f"id:{sackmann_id}"
+        return f"name:{_norm_name(player_name)}"
+
+    def _snapshot(
+        self,
+        player_name: object,
+        cutoff_date,
+        *,
+        player_id: object = None,
+        max_age_days: int = 14,
+    ):
+        key = self._lookup_key(player_id, player_name)
         dates = self._dates.get(key)
         if not dates:
             return None
@@ -135,8 +181,15 @@ class WTARankHistory:
             "career_best_rank": self._career_best[key][idx],
         }
 
-    def _snapshot_at_or_before(self, player_name: object, cutoff_date, *, max_age_days: int = 21):
-        key = _norm_name(player_name)
+    def _snapshot_at_or_before(
+        self,
+        player_name: object,
+        cutoff_date,
+        *,
+        player_id: object = None,
+        max_age_days: int = 21,
+    ):
+        key = self._lookup_key(player_id, player_name)
         dates = self._dates.get(key)
         if not dates:
             return None
@@ -174,8 +227,16 @@ class WTARankHistory:
             return out
 
         match_date = match.scheduled_at.date()
-        p1 = self._snapshot(getattr(match, "player1_name", ""), match_date)
-        p2 = self._snapshot(getattr(match, "player2_name", ""), match_date)
+        p1 = self._snapshot(
+            getattr(match, "player1_name", ""),
+            match_date,
+            player_id=getattr(match, "player1_id", None),
+        )
+        p2 = self._snapshot(
+            getattr(match, "player2_name", ""),
+            match_date,
+            player_id=getattr(match, "player2_id", None),
+        )
         if p1 is None or p2 is None:
             return out
 
@@ -193,8 +254,16 @@ class WTARankHistory:
 
         for weeks in (4, 12):
             target = p1["date"] - timedelta(weeks=weeks)
-            q1 = self._snapshot_at_or_before(getattr(match, "player1_name", ""), target)
-            q2 = self._snapshot_at_or_before(getattr(match, "player2_name", ""), target)
+            q1 = self._snapshot_at_or_before(
+                getattr(match, "player1_name", ""),
+                target,
+                player_id=getattr(match, "player1_id", None),
+            )
+            q2 = self._snapshot_at_or_before(
+                getattr(match, "player2_name", ""),
+                target,
+                player_id=getattr(match, "player2_id", None),
+            )
             r1, r2 = self._rank_improvement(p1, q1), self._rank_improvement(p2, q2)
             if r1 is not None and r2 is not None:
                 out[f"wta_hist_rank_momentum_{weeks}w_diff"] = r1 - r2
