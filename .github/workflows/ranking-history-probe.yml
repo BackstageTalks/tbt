@@ -1,10 +1,7 @@
 name: BlinQ ranking history API probe
 
 on:
-  pull_request:
-    paths:
-      - "scripts/probe_ranking_history_api.py"
-      - ".github/workflows/ranking-history-probe.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
