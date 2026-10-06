@@ -54,7 +54,9 @@ from tbt.services.comeback_projection import annotate_live_second_set_projection
 from tbt.services.market_selection import (
     annotate_market_publication_candidates,
     attach_market_sections_to_feed,
+    attach_match_winner_market,
     enrich_current_betting_day_odds,
+    extract_match_winner_odds,
 )
 from tbt.services.training import refit_serving_model, train_from_matches
 from tbt.services.backtest_service import walk_forward_backtest
@@ -1307,30 +1309,112 @@ def main():
             projection_discovery_report["ace_df_real_odds_policy"] = "propline_only_v1"
             projection_discovery_report["rapidapi_ace_df_markets_ignored"] = ignored_rapid_ace_df
 
+            # Primary Match Winner enrichment runs first. PropLine is a true
+            # fallback: it may fill only contracts that provider 1 did not price.
+            # The same PropLine event/odds calls also cover Aces/DF/Sets/Games,
+            # so adding h2h fallback does not create a second board sweep.
+            predictions, odds_report = enrich_current_betting_day_odds(
+                provider, predictions, now=selection_now,
+                max_events=projection_odds_cap, provider_id=1,
+                timezone_name="Europe/Bratislava",
+                start_hour=args.betting_day_start_hour,
+                prefetched_payloads=projection_market_cache,
+            )
+
             # Paid/API requests only run as part of an explicitly authorized
             # refresh (the existing workflow auto-refresh gate is unchanged).
-            # This secret already powers the separate research-only CLV job.
-            # PropLine has its own independent call cap. Tennis RapidAPI remains
-            # protected by the shared 15k provider-day ledger, 500-request reserve
-            # and the workflow's per-run request limit.
+            # PropLine has its own independent 1000/day quota and keeps a hard
+            # reserve. Its h2h output is used only when the primary provider left
+            # the Match Winner contract unpriced; primary quotes are never replaced.
             prop_key = os.getenv("PROPL", "").strip()
             if prop_key and args.propline_max_events:
+                propline_existing = {
+                    event_id: set(markets)
+                    for event_id, markets in available_projection_markets.items()
+                }
+                primary_match_winner = 0
+                for row in predictions:
+                    event_id = str(row.get("event_id") or "").strip()
+                    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+                    if event_id and betting.get("market") == "match_winner" and betting.get("odds"):
+                        propline_existing.setdefault(event_id, set()).add("match_winner")
+                        primary_match_winner += 1
+
                 prop_client = PropLineClient(
                     prop_key, max_calls=1 + 2 * args.propline_max_events,
                     min_remaining=150,
                 )
                 prop_market_payloads, prop_report = discover_propline_fallback(
-                    prop_client, predictions, available_projection_markets,
+                    prop_client, predictions, propline_existing,
                     now=now, max_events=args.propline_max_events,
                 )
+
+                match_winner_fallback_attached = 0
+                for index, row in enumerate(predictions):
+                    event_id = str(row.get("event_id") or "").strip()
+                    if not event_id:
+                        continue
+                    betting = row.get("betting") if isinstance(row.get("betting"), dict) else {}
+                    if betting.get("market") == "match_winner" and betting.get("odds"):
+                        continue
+                    quote = (prop_market_payloads.get(event_id) or {}).get("match_winner")
+                    if not isinstance(quote, dict):
+                        continue
+                    p1 = row.get("player1") if isinstance(row.get("player1"), dict) else {}
+                    p2 = row.get("player2") if isinstance(row.get("player2"), dict) else {}
+                    market = extract_match_winner_odds(
+                        quote.get("payload"),
+                        str(p1.get("name") or ""),
+                        str(p2.get("name") or ""),
+                    )
+                    if market is None:
+                        continue
+                    try:
+                        captured_at = datetime.fromisoformat(
+                            str(quote.get("captured_at") or "").replace("Z", "+00:00")
+                        )
+                        if captured_at.tzinfo is None:
+                            captured_at = captured_at.replace(tzinfo=timezone.utc)
+                    except (TypeError, ValueError):
+                        captured_at = selection_now
+                    enriched = attach_match_winner_market(
+                        row, market, captured_at=captured_at,
+                        provider_id=2, betting_day=odds_report.get("betting_day"),
+                    )
+                    provenance = {
+                        "source": "propline",
+                        "bookmaker": quote.get("bookmaker"),
+                        "provider_event_id": quote.get("provider_event_id"),
+                    }
+                    if isinstance(enriched.get("match_winner_market"), dict):
+                        enriched["match_winner_market"].update(provenance)
+                    if isinstance(enriched.get("betting"), dict):
+                        enriched["betting"].update({
+                            "odds_source": "propline",
+                            "odds_bookmaker": quote.get("bookmaker"),
+                            "odds_provider_event_id": quote.get("provider_event_id"),
+                        })
+                    predictions[index] = enriched
+                    match_winner_fallback_attached += 1
+
                 for rapid_id, by_metric in prop_market_payloads.items():
-                    available_projection_markets.setdefault(rapid_id, set()).update(by_metric)
                     for metric, quote in by_metric.items():
+                        if metric == "match_winner":
+                            continue
+                        available_projection_markets.setdefault(rapid_id, set()).add(metric)
                         if metric in ("games", "sets"):
                             bookmaker_lines_by_event.setdefault(rapid_id, {})[metric] = [
                                 float(line["line"]) for line in
                                 extract_match_total_odds(quote["payload"], metric)
                             ]
+
+                prop_report["match_winner_primary_preserved"] = primary_match_winner
+                prop_report["match_winner_fallback_attached"] = match_winner_fallback_attached
+                prop_report["fallback_order"] = [
+                    "primary_match_winner", "propline_match_winner",
+                    "propline_aces_df_sets_games",
+                ]
+                prop_report["clv_followup"] = "published_offer_priority"
                 projection_discovery_report["propline"] = prop_report
                 print(json.dumps({"propline_market_audit": prop_report}, ensure_ascii=False), flush=True)
             else:
@@ -1339,14 +1423,6 @@ def main():
                         "PROPL_secret_missing" if not prop_key else "disabled_by_event_cap"
                     ), "calls": 0,
                 }
-            # No re-query for events already visited by odds-first discovery.
-            predictions, odds_report = enrich_current_betting_day_odds(
-                provider, predictions, now=selection_now,
-                max_events=projection_odds_cap, provider_id=1,
-                timezone_name="Europe/Bratislava",
-                start_hour=args.betting_day_start_hour,
-                prefetched_payloads=projection_market_cache,
-            )
         # In odds-first mode the projection models operate only on events
         # that have a complete matching market from the provider. Keep an
         # expanded *eligible* pool so publication can independently rank each
