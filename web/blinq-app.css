@@ -9272,7 +9272,7 @@ body#blinqPremium .admin-banner-copy-editor textarea[data-simple-banner-field="h
 
 /* Results: reduce the large dead zones between tournament, match and prediction.
    Desktop only: mobile uses the existing card/table transform and must remain fluid. */
-@media(min-width:761px){
+@media(min-width:901px){
   body#blinqPremium.blinq-route .results-table{
     table-layout:fixed!important;
     min-width:1180px!important;
