@@ -9143,3 +9143,192 @@ body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy{padding-lef
   body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy{left:40px!important}
   body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile .admin-hero-preview-copy{padding-left:37px!important}
 }
+
+
+/* 7.3.7 — Admin-controlled hero crop/copy layout + Results density */
+body#blinqPremium #dashboardHero .hero-slide-image,
+body#blinqPremium #dashboardHero .hero-media img{
+  object-position:var(--hero-img-x,50%) var(--hero-img-y,50%)!important;
+}
+body#blinqPremium #dashboardHero .dashboard-hero-copy,
+body#blinqPremium #dashboardHero .hero-copy{
+  left:var(--hero-copy-x,3%)!important;
+  right:auto!important;
+  top:var(--hero-copy-y,50%)!important;
+  width:var(--hero-copy-width,42%)!important;
+  max-width:var(--hero-copy-width,42%)!important;
+  transform:translateY(-50%)!important;
+  white-space:normal!important;
+}
+body#blinqPremium #dashboardHero .dashboard-hero-copy h2,
+body#blinqPremium #dashboardHero .dashboard-hero-copy h2 strong,
+body#blinqPremium #dashboardHero .dashboard-hero-copy p,
+body#blinqPremium #dashboardHero .hero-copy h2,
+body#blinqPremium #dashboardHero .hero-copy h2 strong,
+body#blinqPremium #dashboardHero .hero-copy p{
+  white-space:normal!important;
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+}
+body#blinqPremium #dashboardHero .dashboard-hero-copy br,
+body#blinqPremium .admin-hero-preview-copy br{display:block!important}
+
+/* Admin preview uses exactly the same crop/position variables as production. */
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview>img{
+  object-position:var(--hero-img-x,50%) var(--hero-img-y,50%)!important;
+}
+body#blinqPremium .admin-hero-preview-stage .admin-hero-preview-copy{
+  inset:auto!important;
+  left:var(--hero-copy-x,3%)!important;
+  top:var(--hero-copy-y,50%)!important;
+  width:var(--hero-copy-width,42%)!important;
+  max-width:var(--hero-copy-width,42%)!important;
+  padding:0!important;
+  transform:translateY(-50%)!important;
+  white-space:normal!important;
+}
+body#blinqPremium .admin-banner-layout-grid{
+  display:grid!important;
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  gap:12px!important;
+  margin-top:4px!important;
+}
+body#blinqPremium .admin-banner-layout-grid fieldset{
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:8px!important;
+  min-width:0!important;
+  margin:0!important;
+  padding:12px!important;
+  border:1px solid rgba(105,173,150,.24)!important;
+  border-radius:11px!important;
+  background:#061b18!important;
+}
+body#blinqPremium .admin-banner-layout-grid fieldset:nth-child(-n+2){
+  grid-template-columns:repeat(2,minmax(0,1fr))!important;
+}
+body#blinqPremium .admin-banner-layout-grid legend{
+  padding:0 6px!important;
+  color:#9ec8b8!important;
+  font-size:10px!important;
+  font-weight:850!important;
+  letter-spacing:.04em!important;
+}
+body#blinqPremium .admin-banner-layout-grid label{
+  display:grid!important;
+  gap:5px!important;
+  color:#89a99e!important;
+  font-size:9px!important;
+}
+body#blinqPremium .admin-banner-layout-grid input[type="number"]{
+  width:100%!important;
+  min-width:0!important;
+  height:38px!important;
+  padding:0 9px!important;
+  border:1px solid rgba(105,173,150,.30)!important;
+  border-radius:8px!important;
+  background:#051714!important;
+  color:#edf8f3!important;
+}
+body#blinqPremium .admin-banner-layout-help{
+  margin:2px 0 0!important;
+  color:#83a096!important;
+  font-size:10px!important;
+  line-height:1.45!important;
+}
+body#blinqPremium .admin-banner-copy-editor textarea[data-simple-banner-field="headline"]{
+  min-height:58px!important;
+  resize:vertical!important;
+}
+
+@media(max-width:900px){
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-slide-image,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-media img{
+    object-position:var(--hero-img-mobile-x,50%) var(--hero-img-mobile-y,50%)!important;
+  }
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .dashboard-hero-copy,
+  body#blinqPremium:not(.blinq-admin) #dashboardHero .hero-copy{
+    left:var(--hero-copy-mobile-x,4%)!important;
+    top:var(--hero-copy-mobile-y,50%)!important;
+    width:var(--hero-copy-mobile-width,70%)!important;
+    max-width:var(--hero-copy-mobile-width,70%)!important;
+    transform:translateY(-50%)!important;
+  }
+  body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile>img{
+    object-position:var(--hero-img-mobile-x,50%) var(--hero-img-mobile-y,50%)!important;
+  }
+  body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile .admin-hero-preview-copy{
+    left:var(--hero-copy-mobile-x,4%)!important;
+    top:var(--hero-copy-mobile-y,50%)!important;
+    width:var(--hero-copy-mobile-width,70%)!important;
+    max-width:var(--hero-copy-mobile-width,70%)!important;
+    padding:0!important;
+    transform:translateY(-50%)!important;
+  }
+}
+@media(max-width:640px){
+  body#blinqPremium .admin-banner-layout-grid{grid-template-columns:1fr!important}
+}
+
+/* Results: reduce the large dead zones between tournament, match and prediction.
+   Desktop only: mobile uses the existing card/table transform and must remain fluid. */
+@media(min-width:901px){
+  body#blinqPremium.blinq-route .results-table{
+    table-layout:fixed!important;
+    min-width:1180px!important;
+  }
+  body#blinqPremium.blinq-route .results-table th:nth-child(1),
+  body#blinqPremium.blinq-route .results-table td:nth-child(1){width:8%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(2),
+  body#blinqPremium.blinq-route .results-table td:nth-child(2){width:9%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(3),
+  body#blinqPremium.blinq-route .results-table td:nth-child(3){width:16%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(4),
+  body#blinqPremium.blinq-route .results-table td:nth-child(4){width:24%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(5),
+  body#blinqPremium.blinq-route .results-table td:nth-child(5){width:13%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(6),
+  body#blinqPremium.blinq-route .results-table td:nth-child(6){width:10%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(7),
+  body#blinqPremium.blinq-route .results-table td:nth-child(7){width:6%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(8),
+  body#blinqPremium.blinq-route .results-table td:nth-child(8){width:8%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(9),
+  body#blinqPremium.blinq-route .results-table td:nth-child(9){width:6%!important}
+  body#blinqPremium.blinq-route .result-tournament .tournament-identity{
+    display:grid!important;
+    grid-template-columns:34px minmax(0,1fr)!important;
+    align-items:center!important;
+    gap:8px!important;
+    min-width:0!important;
+  }
+  body#blinqPremium.blinq-route .result-tournament .hub-tournament-logo,
+  body#blinqPremium.blinq-route .result-tournament .hub-logo-code{
+    width:34px!important;
+    height:34px!important;
+    min-width:34px!important;
+  }
+  body#blinqPremium.blinq-route .result-tournament .tournament-identity-copy{
+    min-width:0!important;
+  }
+  body#blinqPremium.blinq-route .result-tournament .tournament-identity-copy strong,
+  body#blinqPremium.blinq-route .result-tournament .tournament-location{
+    display:block!important;
+    max-width:100%!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  body#blinqPremium.blinq-route .result-match .results-match-player,
+  body#blinqPremium.blinq-route .result-match .results-opponent{
+    min-width:0!important;
+  }
+  body#blinqPremium.blinq-route .result-match strong,
+  body#blinqPremium.blinq-route .result-prediction strong{
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+
+}
+

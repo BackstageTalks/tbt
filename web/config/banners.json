@@ -26,7 +26,17 @@
         "text_color": "#c5d5db",
         "effect": "fade-up",
         "animation_delay_ms": 80,
-        "site_background_url": "/assets/blinq_page_background.webp"
+        "site_background_url": "/assets/blinq_page_background.webp",
+        "desktop_image_x": 50,
+        "desktop_image_y": 50,
+        "mobile_image_x": 50,
+        "mobile_image_y": 50,
+        "desktop_text_x": 3,
+        "desktop_text_y": 50,
+        "desktop_text_width": 42,
+        "mobile_text_x": 4,
+        "mobile_text_y": 50,
+        "mobile_text_width": 70
       },
       {
         "enabled": false,
@@ -48,7 +58,17 @@
         "headline_color": "#ffffff",
         "text_color": "#c5d5db",
         "effect": "fade-up",
-        "animation_delay_ms": 80
+        "animation_delay_ms": 80,
+        "desktop_image_x": 50,
+        "desktop_image_y": 50,
+        "mobile_image_x": 50,
+        "mobile_image_y": 50,
+        "desktop_text_x": 3,
+        "desktop_text_y": 50,
+        "desktop_text_width": 42,
+        "mobile_text_x": 4,
+        "mobile_text_y": 50,
+        "mobile_text_width": 70
       },
       {
         "enabled": false,
@@ -70,7 +90,17 @@
         "headline_color": "#ffffff",
         "text_color": "#c5d5db",
         "effect": "fade-up",
-        "animation_delay_ms": 80
+        "animation_delay_ms": 80,
+        "desktop_image_x": 50,
+        "desktop_image_y": 50,
+        "mobile_image_x": 50,
+        "mobile_image_y": 50,
+        "desktop_text_x": 3,
+        "desktop_text_y": 50,
+        "desktop_text_width": 42,
+        "mobile_text_x": 4,
+        "mobile_text_y": 50,
+        "mobile_text_width": 70
       },
       {
         "enabled": false,
@@ -92,7 +122,17 @@
         "headline_color": "#ffffff",
         "text_color": "#c5d5db",
         "effect": "fade-up",
-        "animation_delay_ms": 80
+        "animation_delay_ms": 80,
+        "desktop_image_x": 50,
+        "desktop_image_y": 50,
+        "mobile_image_x": 50,
+        "mobile_image_y": 50,
+        "desktop_text_x": 3,
+        "desktop_text_y": 50,
+        "desktop_text_width": 42,
+        "mobile_text_x": 4,
+        "mobile_text_y": 50,
+        "mobile_text_width": 70
       },
       {
         "enabled": false,
@@ -114,7 +154,17 @@
         "headline_color": "#ffffff",
         "text_color": "#c5d5db",
         "effect": "fade-up",
-        "animation_delay_ms": 80
+        "animation_delay_ms": 80,
+        "desktop_image_x": 50,
+        "desktop_image_y": 50,
+        "mobile_image_x": 50,
+        "mobile_image_y": 50,
+        "desktop_text_x": 3,
+        "desktop_text_y": 50,
+        "desktop_text_width": 42,
+        "mobile_text_x": 4,
+        "mobile_text_y": 50,
+        "mobile_text_width": 70
       }
     ],
     "pause_on_hover": true

@@ -14,7 +14,7 @@ def test_r27_short_odds_is_public_and_admin_managed():
     assert prime["label"] == "Short Odds"
     assert prime["plans"]["rookie"]["visible_rows"] == 1
     assert "const tabs=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'];" in APP
-    assert "if(tab==='prime')return marketRows('prime').filter(offerSurfaceEligible);" in APP
+    assert "if(tab==='prime')return shortOddsDisplayRows(marketRows('prime'));" in APP
     assert "const rows=['daily','prime','value','ace','double_faults','doubles','games','sets','see_all'].map" in APP
 
 def test_r27_see_all_uses_same_controls_as_other_categories():
