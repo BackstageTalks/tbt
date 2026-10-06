@@ -1,0 +1,25 @@
+name: Inspect OddsTrader state marker
+on:
+  push:
+    branches: [research/oddstrader-probe-20260901]
+    paths: [".github/workflows/oddstrader-state-marker.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.request
+          u="https://www.oddstrader.com/atp/?date=20260901&g=match&m=winner"
+          r=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0"})
+          with urllib.request.urlopen(r,timeout=30) as h:
+              s=h.read().decode("utf-8","replace")
+          for needle in ['"settings":{"subscription"', '"sportsbooks":{"categoriesBySportsbook"', '"activeSeasons"']:
+              i=s.find(needle)
+              print("\nMARKER",needle,"INDEX",i)
+              if i>=0: print(s[max(0,i-2500):i+3000])
+          PY
