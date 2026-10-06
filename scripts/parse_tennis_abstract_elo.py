@@ -8,8 +8,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
-from io import StringIO
 from pathlib import Path
+from html.parser import HTMLParser
+from html import unescape
 
 import pandas as pd
 
@@ -35,16 +36,58 @@ def _snapshot_date(html: str) -> str:
     return match.group(1)
 
 
+class _TableParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.tables: list[list[list[str]]] = []
+        self._table: list[list[str]] | None = None
+        self._row: list[str] | None = None
+        self._cell: list[str] | None = None
+
+    def handle_starttag(self, tag: str, attrs) -> None:
+        tag = tag.lower()
+        if tag == "table":
+            self._table = []
+        elif tag == "tr" and self._table is not None:
+            self._row = []
+        elif tag in {"th", "td"} and self._row is not None:
+            self._cell = []
+
+    def handle_data(self, data: str) -> None:
+        if self._cell is not None:
+            self._cell.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if tag in {"th", "td"} and self._cell is not None and self._row is not None:
+            value = unescape("".join(self._cell)).replace("\xa0", " ").strip()
+            self._row.append(re.sub(r"\s+", " ", value))
+            self._cell = None
+        elif tag == "tr" and self._row is not None and self._table is not None:
+            if any(cell for cell in self._row):
+                self._table.append(self._row)
+            self._row = None
+        elif tag == "table" and self._table is not None:
+            if self._table:
+                self.tables.append(self._table)
+            self._table = None
+
+
 def _find_table(html: str, *, kind: str) -> pd.DataFrame:
-    tables = pd.read_html(StringIO(html))
-    if not tables:
-        raise ValueError("No HTML tables found")
+    parser = _TableParser()
+    parser.feed(html)
     required = {"player", "elo"} if kind == "elo" else {"player", "yelo"}
-    for frame in tables:
-        copy = frame.copy()
-        copy.columns = [_column_name(c) for c in copy.columns]
-        if required.issubset(set(copy.columns)):
-            return copy
+    for rows in parser.tables:
+        if len(rows) < 2:
+            continue
+        width = max(len(row) for row in rows)
+        header = rows[0] + [""] * (width - len(rows[0]))
+        names = [_column_name(c) for c in header]
+        if not required.issubset(set(names)):
+            continue
+        normalized = [row + [""] * (width - len(row)) for row in rows[1:]]
+        frame = pd.DataFrame(normalized, columns=names)
+        return frame
     raise ValueError(f"No Tennis Abstract {kind} table found")
 
 
