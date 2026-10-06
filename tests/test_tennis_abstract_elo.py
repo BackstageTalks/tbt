@@ -30,3 +30,31 @@ def test_parse_yelo_snapshot():
     assert frame.loc[0, "player"] == "Beta Player"
     assert frame.loc[0, "wins"] == 44
     assert frame.loc[0, "yelo"] == 2323.0
+
+
+
+def test_parse_elo_reader_tab_snapshot():
+    text = """Title: Tennis Abstract: ATP Elo Ratings
+
+Updated weekly(ish). Last update: 2026-09-28
+Elo\u00a0Rank\tPlayer\tAge\tElo\t\u00a0\u00a0\tATP\u00a0Rank\tLog\u00a0diff
+1\tJannik\u00a0Sinner\t24.8\t2296.9\t\t1\t0
+"""
+    frame, snapshot = parse_elo(text, tour="atp")
+    assert snapshot == "2026-09-28"
+    assert frame.loc[0, "player"] == "Jannik Sinner"
+    assert frame.loc[0, "elo"] == 2296.9
+
+
+def test_parse_yelo_reader_markdown_snapshot():
+    text = """Title: Tennis Abstract: WTA Season yElo Ratings
+
+Updated weekly(ish). Last update: 2026-09-28
+| Rank | Player | Wins | Losses | yElo |
+| ---: | :--- | ---: | ---: | ---: |
+| 1 | [Aryna Sabalenka](https://example.test/player) | 44 | 3 | 2323.0 |
+"""
+    frame, snapshot = parse_yelo(text, tour="wta")
+    assert snapshot == "2026-09-28"
+    assert frame.loc[0, "player"] == "Aryna Sabalenka"
+    assert frame.loc[0, "yelo"] == 2323.0
