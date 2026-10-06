@@ -132,3 +132,56 @@ def test_match_score_validates_id_without_provider_call():
     with pytest.raises(ValueError):
         client.match_score("../bad")
     assert called is False
+
+
+def test_paid_history_endpoints_request_complete_point_basis():
+    seen = []
+
+    def handler(request):
+        seen.append((request.url.path, dict(request.url.params)))
+        if request.url.path.endswith("/usage"):
+            return httpx.Response(
+                200,
+                json={
+                    "tier": "basic",
+                    "limits": {"per_day": 1000, "per_minute": 120},
+                    "today": {"calls": 0, "errors": 0, "remaining_day": 1000},
+                },
+            )
+        if request.url.path.endswith("/history/coverage"):
+            return httpx.Response(200, json={"data": [], "meta": {"as_of": "2026-10-06"}})
+        if request.url.path.endswith("/history/matches"):
+            return httpx.Response(200, json={"data": [], "meta": {"count": 0}})
+        if request.url.path.endswith("/history/matches/77"):
+            return httpx.Response(
+                200,
+                json={
+                    "match": {"id": 77},
+                    "tape": [],
+                    "meta": {"points": {"available_complete": True}},
+                },
+            )
+        return httpx.Response(404)
+
+    client = _client(handler, max_calls=10, daily_reserve=200)
+    assert client.history_coverage()["meta"]["as_of"] == "2026-10-06"
+    assert client.history_matches(
+        from_date="2026-01-01",
+        to_date="2026-10-05",
+        tour="wta",
+        points_complete=True,
+        limit=100,
+        offset=200,
+    )["meta"]["count"] == 0
+    assert client.history_tape(77, complete=True)["match"]["id"] == 77
+
+    list_call = next(row for row in seen if row[0].endswith("/history/matches"))
+    assert list_call[1]["from"] == "2026-01-01"
+    assert list_call[1]["to"] == "2026-10-05"
+    assert list_call[1]["tour"] == "wta"
+    assert list_call[1]["draw"] == "singles"
+    assert list_call[1]["points_complete"] == "true"
+    assert list_call[1]["limit"] == "100"
+    assert list_call[1]["offset"] == "200"
+    tape_call = next(row for row in seen if row[0].endswith("/history/matches/77"))
+    assert tape_call[1] == {"points": "complete"}
