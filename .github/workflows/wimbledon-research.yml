@@ -1,0 +1,142 @@
+name: Build Wimbledon research sidecar
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/wimbledon-research-request.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-wimbledon-research
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      SOURCE_COMMIT: 2e7db5b3d505c92a60edd4528f88f443adfcf196
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Verify destination and source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          rm -rf .cache/tbt/wimbledon-source .cache/tbt/wimbledon-research
+          git clone --depth 1 https://github.com/ibm-datapalooza/wimbledon-datasets.git .cache/tbt/wimbledon-source
+          git -C .cache/tbt/wimbledon-source fetch --depth 1 origin "$SOURCE_COMMIT"
+          git -C .cache/tbt/wimbledon-source checkout --detach "$SOURCE_COMMIT"
+          test "$(git -C .cache/tbt/wimbledon-source rev-parse HEAD)" = "$SOURCE_COMMIT"
+          grep -q "Apache License" .cache/tbt/wimbledon-source/LICENSE
+
+      - name: Build research-only player/year profile
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/wimbledon-research
+          python scripts/build_wimbledon_research_profiles.py \
+            --source ".cache/tbt/wimbledon-source/w14 PbP MS LS R1-R3.csv" \
+            --source ".cache/tbt/wimbledon-source/w15 PbP MS LS R1-R3.csv" \
+            --out .cache/tbt/wimbledon-research/wimbledon_player_year_serve_speed.csv \
+            --manifest .cache/tbt/wimbledon-research/manifest.json \
+            --source-commit "$SOURCE_COMMIT"
+          python - <<'PY'
+          import csv, json
+          from pathlib import Path
+          root=Path(".cache/tbt/wimbledon-research")
+          manifest=json.loads((root/"manifest.json").read_text())
+          rows=sum(1 for _ in csv.DictReader((root/"wimbledon_player_year_serve_speed.csv").open()))
+          if manifest.get("model_policy") != "research_only_not_promoted; sparse grass-specific historical prior":
+              raise SystemExit("Wimbledon model policy drift")
+          if rows != manifest.get("rows") or rows < 400:
+              raise SystemExit("Wimbledon row-count verification failed")
+          if manifest.get("api_requests") != 0:
+              raise SystemExit("Unexpected provider request marker")
+          print(json.dumps({"rows":rows,"players":manifest.get("players"),"years":manifest.get("years")},indent=2))
+          PY
+
+      - name: Publish private research sidecar
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/wimbledon-research")
+          files=[root/"wimbledon_player_year_serve_speed.csv",root/"manifest.json"]
+          if any(not p.is_file() or p.stat().st_size <= 0 for p in files):
+              raise SystemExit("Missing Wimbledon research artifact")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-wimbledon-research-v1",root).upload_bundle(files)
+          PY
+
+      - name: Read back and verify research sidecar
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/wimbledon-readback
+          mkdir -p .cache/tbt/wimbledon-readback
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          root=Path(".cache/tbt/wimbledon-readback")
+          required=("wimbledon_player_year_serve_speed.csv","manifest.json")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-wimbledon-research-v1",root).download(
+              extra_names=required,required_names=required,require_bundle_manifest=True)
+          manifest=json.loads((root/"manifest.json").read_text())
+          digest=hashlib.sha256((root/"wimbledon_player_year_serve_speed.csv").read_bytes()).hexdigest()
+          if digest != manifest.get("derived_sha256"):
+              raise SystemExit("Persisted Wimbledon checksum mismatch")
+          if manifest.get("source_commit") != os.environ["SOURCE_COMMIT"]:
+              raise SystemExit("Persisted Wimbledon source pin mismatch")
+          if manifest.get("model_policy") != "research_only_not_promoted; sparse grass-specific historical prior":
+              raise SystemExit("Persisted Wimbledon policy mismatch")
+          verification={
+              "schema":1,
+              "status":"verified",
+              "release":"tbt-wimbledon-research-v1",
+              "rows":manifest.get("rows"),
+              "players":manifest.get("players"),
+              "years":manifest.get("years"),
+              "source_commit":manifest.get("source_commit"),
+              "derived_sha256":digest,
+              "model_policy":manifest.get("model_policy"),
+              "api_requests":0,
+          }
+          out=Path(".cache/tbt/wimbledon-research-verification.json")
+          out.write_text(json.dumps(verification,indent=2),encoding="utf-8")
+          print(json.dumps(verification,indent=2))
+          PY
+          encoded="$(base64 -w0 .cache/tbt/wimbledon-research-verification.json)"
+          path="audit/wimbledon-research-latest.json"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Verify Wimbledon research sidecar" -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Verify Wimbledon research sidecar" -f content="$encoded" >/dev/null
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: wimbledon-research-${{ github.run_id }}
+          path: |
+            .cache/tbt/wimbledon-research/manifest.json
+            .cache/tbt/wimbledon-research-verification.json
+          if-no-files-found: warn

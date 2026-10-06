@@ -1,0 +1,7 @@
+{
+  "requested_at": "2026-10-06T15:51:00+02:00",
+  "action": "build_wimbledon_research_sidecar",
+  "source": "ibm-datapalooza/wimbledon-datasets@2e7db5b3d505c92a60edd4528f88f443adfcf196",
+  "policy": "research_only_not_promoted",
+  "note": "Build and persist sparse Wimbledon 2014-2015 serve-speed, serve-direction, ace/DF and serve-and-volley profiles for future grass-specific ablation. No production model wiring and no tennis/provider API requests."
+}
