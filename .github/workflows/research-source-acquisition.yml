@@ -1,0 +1,241 @@
+name: Acquire BlinQ research source data
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/research-source-acquisition-request.json"
+      - ".github/workflows/research-source-acquisition.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-research-source-acquisition
+  cancel-in-progress: false
+
+jobs:
+  acquire:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      SACKMANN_REPOSITORY: Aneeshers/tennis-sackmann-archive
+      SACKMANN_COMMIT: 83733587353df8a41f2fd4f516147d5aa83f5a8d
+      RELEASE_TAG: tbt-research-sources-v1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify private destination
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN" >&2; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download pinned Sackmann rankings and Grand Slam PBP
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/research-sources
+          mkdir -p .cache/tbt/research-sources/{src,bundles,valuebet}
+          git clone --filter=blob:none --no-checkout "https://github.com/$SACKMANN_REPOSITORY.git" .cache/tbt/research-sources/src/sackmann
+          git -C .cache/tbt/research-sources/src/sackmann fetch --depth 1 origin "$SACKMANN_COMMIT"
+          git -C .cache/tbt/research-sources/src/sackmann sparse-checkout init --no-cone
+          cat > .cache/tbt/research-sources/src/sackmann/.git/info/sparse-checkout <<'EOF'
+          /LICENSE
+          /README.md
+          /atp/atp_players.csv
+          /atp/atp_rankings_*.csv
+          /wta/wta_players.csv
+          /wta/wta_rankings_*.csv
+          /slam_pointbypoint/*
+          EOF
+          git -C .cache/tbt/research-sources/src/sackmann checkout "$SACKMANN_COMMIT"
+
+          root=.cache/tbt/research-sources/src/sackmann
+          test -s "$root/LICENSE"
+          test -s "$root/atp/atp_players.csv"
+          test -s "$root/wta/wta_players.csv"
+          test "$(find "$root/atp" -maxdepth 1 -name 'atp_rankings_*.csv' -type f | wc -l)" -ge 5
+          test "$(find "$root/wta" -maxdepth 1 -name 'wta_rankings_*.csv' -type f | wc -l)" -ge 5
+          test "$(find "$root/slam_pointbypoint" -maxdepth 1 -name '*-points*.csv' -type f | wc -l)" -ge 20
+
+          mkdir -p .cache/tbt/research-sources/stage/atp .cache/tbt/research-sources/stage/wta .cache/tbt/research-sources/stage/slam
+          cp "$root/LICENSE" .cache/tbt/research-sources/stage/atp/LICENSE
+          cp "$root/README.md" .cache/tbt/research-sources/stage/atp/ARCHIVE_README.md
+          cp "$root/atp/atp_players.csv" .cache/tbt/research-sources/stage/atp/
+          cp "$root"/atp/atp_rankings_*.csv .cache/tbt/research-sources/stage/atp/
+
+          cp "$root/LICENSE" .cache/tbt/research-sources/stage/wta/LICENSE
+          cp "$root/README.md" .cache/tbt/research-sources/stage/wta/ARCHIVE_README.md
+          cp "$root/wta/wta_players.csv" .cache/tbt/research-sources/stage/wta/
+          cp "$root"/wta/wta_rankings_*.csv .cache/tbt/research-sources/stage/wta/
+
+          cp "$root/LICENSE" .cache/tbt/research-sources/stage/slam/LICENSE
+          cp "$root/README.md" .cache/tbt/research-sources/stage/slam/ARCHIVE_README.md
+          cp -a "$root/slam_pointbypoint"/. .cache/tbt/research-sources/stage/slam/
+
+          tar -C .cache/tbt/research-sources/stage/atp -czf .cache/tbt/research-sources/bundles/sackmann-atp-rankings.tar.gz .
+          tar -C .cache/tbt/research-sources/stage/wta -czf .cache/tbt/research-sources/bundles/sackmann-wta-rankings.tar.gz .
+          tar -C .cache/tbt/research-sources/stage/slam -czf .cache/tbt/research-sources/bundles/sackmann-slam-pointbypoint-2011-2024.tar.gz .
+
+      - name: Download Valuebetennis raw market history when available
+        shell: bash
+        run: |
+          set -u
+          ok=0
+          for year in 2021 2022 2023 2024 2025 2026; do
+            url="https://www.valuebetennis.com/datasets/valuebetennis-matchs-$year.csv"
+            target=".cache/tbt/research-sources/valuebet/valuebetennis-matchs-$year.csv"
+            if curl -fsSL --retry 4 --retry-delay 3 "$url" -o "$target" && [[ -s "$target" ]]; then
+              ok=$((ok+1))
+            else
+              rm -f "$target"
+              echo "::warning::Valuebetennis $year source unavailable during this run"
+            fi
+          done
+          echo "$ok" > .cache/tbt/research-sources/valuebet/downloaded-count.txt
+          if (( ok > 0 )); then
+            cat > .cache/tbt/research-sources/valuebet/LICENSE-NOTE.txt <<'EOF'
+          Source: Valuebetennis public datasets.
+          License used by the existing BlinQ import workflow: CC BY 4.0.
+          Preserve source attribution when reusing the raw files.
+          EOF
+            tar -C .cache/tbt/research-sources/valuebet -czf .cache/tbt/research-sources/bundles/valuebetennis-market-history-2021-2026.tar.gz .
+          fi
+
+      - name: Build acquisition manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          root=Path(".cache/tbt/research-sources")
+          bundles=root/"bundles"
+          def meta(name):
+              p=bundles/name
+              if not p.is_file():
+                  return None
+              h=hashlib.sha256()
+              with p.open("rb") as fh:
+                  for chunk in iter(lambda: fh.read(1024*1024), b""):
+                      h.update(chunk)
+              return {"asset":name,"bytes":p.stat().st_size,"sha256":h.hexdigest()}
+
+          valuebet_count=0
+          count_file=root/"valuebet/downloaded-count.txt"
+          if count_file.is_file():
+              try: valuebet_count=int(count_file.read_text().strip())
+              except Exception: pass
+
+          manifest={
+            "schema":1,
+            "generated_at":datetime.now(timezone.utc).isoformat(),
+            "production_mutated":False,
+            "model_promoted":False,
+            "destination":"private GitHub release tbt-research-sources-v1",
+            "downloaded":[
+              {
+                "id":"sackmann_atp_rankings",
+                "status":"downloaded",
+                "source":"Aneeshers/tennis-sackmann-archive",
+                "source_commit":"83733587353df8a41f2fd4f516147d5aa83f5a8d",
+                "license":"CC BY-NC-SA 4.0",
+                **(meta("sackmann-atp-rankings.tar.gz") or {})
+              },
+              {
+                "id":"sackmann_wta_rankings",
+                "status":"downloaded",
+                "source":"Aneeshers/tennis-sackmann-archive",
+                "source_commit":"83733587353df8a41f2fd4f516147d5aa83f5a8d",
+                "license":"CC BY-NC-SA 4.0",
+                **(meta("sackmann-wta-rankings.tar.gz") or {})
+              },
+              {
+                "id":"sackmann_slam_pointbypoint",
+                "status":"downloaded",
+                "coverage":"Grand Slam point-by-point archive through 2024",
+                "source":"Aneeshers/tennis-sackmann-archive",
+                "source_commit":"83733587353df8a41f2fd4f516147d5aa83f5a8d",
+                "license":"CC BY-NC-SA 4.0",
+                **(meta("sackmann-slam-pointbypoint-2011-2024.tar.gz") or {})
+              },
+              {
+                "id":"valuebetennis_market_history",
+                "status":"downloaded" if valuebet_count==6 else ("partial" if valuebet_count else "source_temporarily_unavailable"),
+                "downloaded_year_files":valuebet_count,
+                "expected_year_files":6,
+                "coverage":"2021-2026 opening and closing odds",
+                "license":"CC BY 4.0",
+                **(meta("valuebetennis-market-history-2021-2026.tar.gz") or {})
+              }
+            ],
+            "not_downloaded":[
+              {
+                "id":"open_meteo_historical_pre_match_forecasts",
+                "status":"available_needs_targeted_extraction",
+                "reason":"The archive is query-based rather than one bounded bulk file. It must be extracted against BlinQ venue coordinates and match timestamps to preserve point-in-time lead-time semantics.",
+                "license":"CC BY 4.0",
+                "recommended_next":"Build canonical venue/date extractor using Previous Runs / Single Runs instead of post-hoc weather."
+              },
+              {
+                "id":"tennis_abstract_historical_elo",
+                "status":"permission_or_license_clarification_needed",
+                "reason":"Public report pages exist, but no explicit bulk-data redistribution/training license was verified. Do not scrape and persist automatically."
+              },
+              {
+                "id":"tennis_data_historical_odds",
+                "status":"blocked_by_source_terms",
+                "reason":"The source explicitly restricts automated bot/scraper/AI/data-training use. Do not download for BlinQ."
+              },
+              {
+                "id":"live_tennis_api_full_pbp",
+                "status":"application_required",
+                "reason":"The public sample is already usable, but the full dataset requires a research application/approval and may not be redistributed."
+              },
+              {
+                "id":"ecmwf_full_operational_archive",
+                "status":"licensed_access_required",
+                "reason":"Full historical forecast archive access is licensed; use Open-Meteo archived forecasts first for this non-production research path."
+              }
+            ]
+          }
+          out=root/"source-acquisition-manifest.json"
+          out.write_text(json.dumps(manifest,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps(manifest,ensure_ascii=False,indent=2))
+          PY
+
+      - name: Publish research bundles to private data release
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY"               --title "BlinQ research source bundles"               --notes "Private research-only source snapshots. No production model mutation."
+          fi
+          mapfile -t assets < <(find .cache/tbt/research-sources/bundles -maxdepth 1 -type f -name '*.tar.gz' | sort)
+          test "${#assets[@]}" -ge 3
+          gh release upload "$RELEASE_TAG" --repo "$TBT_DATA_REPOSITORY" --clobber "${assets[@]}"
+
+          manifest=.cache/tbt/research-sources/source-acquisition-manifest.json
+          path=research/source-acquisition/latest.json
+          encoded="$(base64 -w0 "$manifest")"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Update BlinQ research source acquisition manifest"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Add BlinQ research source acquisition manifest"               -f content="$encoded" >/dev/null
+          fi
+
+      - name: Upload workflow evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-research-source-acquisition-${{ github.run_id }}
+          path: .cache/tbt/research-sources/source-acquisition-manifest.json
+          retention-days: 14
