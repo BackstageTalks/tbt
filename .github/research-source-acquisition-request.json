@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "requested_at_utc": "2026-10-06T09:05:00Z",
+  "purpose": "Download and preserve high-value research datasets for rank-history, market-history and point-by-point experiments without changing the production model.",
+  "production_model_mutation": false,
+  "canonical_history_mutation": false,
+  "sources": [
+    "Pinned Sackmann ATP weekly rankings and players",
+    "Pinned Sackmann WTA weekly rankings and players",
+    "Pinned Sackmann Grand Slam point-by-point archive",
+    "Valuebetennis 2021-2026 raw market history when reachable"
+  ],
+  "blocked_or_deferred_sources_are_recorded_in_manifest": true
+}
