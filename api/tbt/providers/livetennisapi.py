@@ -193,6 +193,59 @@ class LiveTennisApiClient:
         offset = max(0, int(offset))
         return self._rows(self._get("/fixtures", {"limit": limit, "offset": offset}))
 
+
+    def history_coverage(self) -> dict[str, Any]:
+        """Paid history completeness rollup. One provider call."""
+        payload = self._get("/history/coverage")
+        if not isinstance(payload, dict):
+            raise ProviderError("Invalid Live Tennis API history coverage payload")
+        return payload
+
+    def history_matches(
+        self,
+        *,
+        from_date: str,
+        to_date: str,
+        tour: str,
+        draw: str = "singles",
+        points_complete: bool = True,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """List completed paid-history matches for a controlled research sweep."""
+        tour = str(tour or "").strip().lower()
+        if tour not in {"atp", "wta", "challenger", "itf", "juniors"}:
+            raise ValueError("Unsupported history tour")
+        draw = str(draw or "").strip().lower()
+        if draw not in {"singles", "doubles"}:
+            raise ValueError("Unsupported history draw")
+        payload = self._get(
+            "/history/matches",
+            {
+                "from": str(from_date),
+                "to": str(to_date),
+                "tour": tour,
+                "draw": draw,
+                "points_complete": "true" if points_complete else "false",
+                "limit": max(1, min(100, int(limit))),
+                "offset": max(0, int(offset)),
+            },
+        )
+        if not isinstance(payload, dict):
+            raise ProviderError("Invalid Live Tennis API history list payload")
+        return payload
+
+    def history_tape(self, match_id: int | str, *, complete: bool = True) -> dict[str, Any]:
+        """Fetch one paid history tape; complete=True requests the complete basis."""
+        token = str(match_id).strip()
+        if not token.isdigit() or int(token) <= 0:
+            raise ValueError("match_id must be a positive integer")
+        params = {"points": "complete"} if complete else {}
+        payload = self._get(f"/history/matches/{token}", params)
+        if not isinstance(payload, dict):
+            raise ProviderError("Invalid Live Tennis API history tape payload")
+        return payload
+
     def match_score(self, match_id: int | str) -> dict[str, Any]:
         """Point-in-time score snapshot. One provider call."""
         token = str(match_id).strip()
