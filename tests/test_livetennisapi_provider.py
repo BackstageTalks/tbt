@@ -102,6 +102,24 @@ def test_per_process_cap_blocks_second_billable_call():
         client.upcoming_matches()
 
 
+def test_paid_plan_allows_controlled_700_call_cap():
+    def handler(request):
+        assert request.url.path.endswith("/usage")
+        return httpx.Response(
+            200,
+            json={
+                "tier": "basic",
+                "limits": {"per_day": 1000, "per_minute": 120},
+                "today": {"calls": 50, "errors": 0, "remaining_day": 950},
+            },
+        )
+
+    client = _client(handler, max_calls=700, daily_reserve=200)
+    assert client.max_calls == 700
+    assert client.daily_reserve == 200
+    assert client.remaining_day() == 950
+
+
 def test_match_score_validates_id_without_provider_call():
     called = False
 
