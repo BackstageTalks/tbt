@@ -239,3 +239,14 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "Export OddsTrader ATP odds for 2026-09-01"
           git push origin HEAD:research/oddstrader-probe-20260901
+
+
+      - name: Upload CSV artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oddstrader-atp-20260901
+          path: |
+            research/oddstrader/oddstrader_atp_20260901.csv
+            research/oddstrader/oddstrader_atp_20260901_manifest.json
+          retention-days: 14
