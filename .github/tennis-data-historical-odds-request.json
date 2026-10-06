@@ -1,0 +1,58 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "purpose": "Integrate operator-supplied historical Tennis-Data Match Winner prices into private BlinQ history and a canonical player1/player2 research sidecar.",
+  "source_policy": "operator-supplied bytes; public mirrors are used only as deterministic transport and must match operator-provided checksums/semantic hashes",
+  "sources": {
+    "archive_atp": {
+      "mirror_repository": "0xsimulacra/MLT",
+      "mirror_commit": "cb2e4002058d75288e0ee09925b6aacb81f4900f",
+      "path": "df_atp.csv",
+      "expected_rows": 54908,
+      "expected_sha256": "94a2ca9e705a491eaf506799968c391beeeb18fcd56be793f54dd42b3cdee9cc"
+    },
+    "archive_wta": {
+      "mirror_repository": "0xsimulacra/MLT",
+      "mirror_commit": "cb2e4002058d75288e0ee09925b6aacb81f4900f",
+      "path": "df_wta.csv",
+      "expected_rows": 32053,
+      "expected_sha256": "7823f0cf650bbe95fa794aa172c5085c0d4860e64f3af23b2fbde92e84b3b920"
+    },
+    "atp_2020_2022": {
+      "mirror_repository": "nick-benelli/Tennis-Data-Pipeline",
+      "mirror_commit": "52c96435d038658c5361a35f09d8147d02d7ce59",
+      "paths": [
+        "data/raw/uk/atp/uk_atp_singles_raw_2020.csv",
+        "data/raw/uk/atp/uk_atp_singles_raw_2021.csv",
+        "data/raw/uk/atp/uk_atp_singles_raw_2022.csv"
+      ],
+      "operator_ranges": {
+        "2020": {
+          "rows": 1267,
+          "min_date": "2020-01-06",
+          "max_date": "2020-11-22",
+          "semantic_sha256": "2ecd09ba62d879eb0b9ca26402ffac1235e594603a7be183fdcf37bfa557bb1a"
+        },
+        "2021": {
+          "rows": 2489,
+          "min_date": "2021-01-07",
+          "max_date": "2021-11-21",
+          "semantic_sha256": "9a7c97feb0fd92dab8498135d34eb93afe72ae1dfe7120dc74fdffcc8075319b"
+        },
+        "2022": {
+          "rows": 598,
+          "min_date": "2022-01-03",
+          "max_date": "2022-02-27",
+          "semantic_sha256": "d4c270f5fcd96403ab4f6f6f6091b39891416a4ce50605f35dbf5dd3ee823968"
+        }
+      }
+    }
+  },
+  "duplicate_policy": "df_atp.csv.zip is an exact duplicate of archive df_atp.csv and is intentionally not imported twice",
+  "price_semantics": "historical_two_way_unspecified_timestamp",
+  "orientation_policy": "Winner/Loser source orientation is used only for identity linking; persisted odds are canonical player1/player2",
+  "model_feature_policy": "benchmark_only_no_same_match_training_feature",
+  "api_requests": 0,
+  "model_promotion": false,
+  "requested_at_utc": "2026-10-06T23:55:00Z"
+}
