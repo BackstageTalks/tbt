@@ -17,7 +17,7 @@ def test_mega_data_prioritizes_statistics_then_sg_then_ace():
 def test_mega_data_keeps_history_small_and_one_global_cap():
     assert 'min(700' in MEGA
     assert 'int(total * 0.05)' in MEGA
-    assert 'mega-data max-requests must be 500..12000' in MEGA
+    assert 'mega-data max-requests must be 500..1000' in MEGA
     assert 'requests_unused' in MEGA
 
 
