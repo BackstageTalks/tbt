@@ -372,6 +372,77 @@ def _all_matches_rows(paths: Iterable[str]) -> Iterable[OfflineMatch]:
                 )
 
 
+
+_CHARTING_MATCH_HEADERS = [
+    "match_id", "Player 1", "Player 2", "Pl 1 hand", "Pl 2 hand",
+    "Date", "Tournament", "Round", "Time", "Court", "Surface", "Umpire",
+    "Best of", "Final TB?", "Charted by",
+]
+
+
+def _charting_match_metadata(raw) -> list[dict[str, str]]:
+    """Repair known short/duplicate MCP match rows before linking.
+
+    A few current Match Charting Project rows omit player-name or Surface
+    columns instead of leaving an empty CSV field, which shifts later values
+    left. Some of those rows are paired with a complementary duplicate row.
+    Repair only structural omissions that are provable from the row shape and
+    merge duplicates field-wise; never invent a surface or player identity.
+    """
+    text = (line.decode("utf-8-sig", errors="replace") for line in raw)
+    reader = csv.reader(text)
+    header = next(reader, [])
+    if header != _CHARTING_MATCH_HEADERS:
+        # Keep the parser fail-closed if upstream changes its schema.
+        return []
+
+    grouped: dict[str, list[dict[str, str]]] = defaultdict(list)
+    valid_surfaces = {"hard", "clay", "grass", "carpet"}
+    hand_codes = {"R", "L", "U"}
+
+    for values in reader:
+        if not values:
+            continue
+        values = list(values)
+
+        # Some rows omit Player 1 / Player 2 entirely and begin with hands.
+        if len(values) >= 3 and values[1] in hand_codes and values[2] in hand_codes:
+            values = values[:1] + ["", ""] + values[1:]
+
+        # Some rows omit Surface entirely, leaving Umpire in the Surface slot
+        # and Best-of (3/5) in the Umpire slot.
+        if len(values) > 11:
+            surface = _norm_surface(values[10])
+            shifted_best_of = str(values[11] or "").strip()
+            if surface not in valid_surfaces and shifted_best_of in {"3", "5"}:
+                values = values[:10] + [""] + values[10:]
+
+        values = values[: len(header)] + [""] * max(0, len(header) - len(values))
+        row = dict(zip(header, values))
+        mid = str(row.get("match_id") or "").strip()
+        if mid:
+            grouped[mid].append(row)
+
+    merged_rows: list[dict[str, str]] = []
+    for rows in grouped.values():
+        merged = {key: "" for key in header}
+        for row in rows:
+            for key in header:
+                value = str(row.get(key) or "").strip()
+                if not value:
+                    continue
+                if key in {"Player 1", "Player 2"} and value in hand_codes:
+                    continue
+                if key == "Surface" and _norm_surface(value) not in valid_surfaces:
+                    continue
+                if key == "Best of" and value not in {"3", "5"}:
+                    continue
+                if not merged[key]:
+                    merged[key] = value
+        merged_rows.append(merged)
+    return merged_rows
+
+
 def _charting_rows(path: str) -> Iterable[OfflineMatch]:
     """Yield charting matches with Overview plus high-confidence specialist rates.
 
@@ -478,8 +549,7 @@ def _charting_rows(path: str) -> Iterable[OfflineMatch]:
                 return result
 
             with archive.open(match_name) as raw:
-                text = (line.decode("utf-8-sig", errors="replace") for line in raw)
-                for row in csv.DictReader(text):
+                for row in _charting_match_metadata(raw):
                     mid = str(row.get("match_id") or "")
                     day = _parse_yyyymmdd(row.get("Date"))
                     p1, p2 = str(row.get("Player 1") or "").strip(), str(row.get("Player 2") or "").strip()
