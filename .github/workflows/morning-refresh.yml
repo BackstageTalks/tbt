@@ -188,11 +188,13 @@ jobs:
           days="$(jq -r '.eligible_unseen_days // 0' "$readiness")"
           echo "Model gate readiness: metric=$ready_metric retrain=$ready_retrain unseen_rows=$rows unseen_days=$days"
 
-          if [[ "$ready_metric" != "true" || "$ready_retrain" != "true" || "$rows" -lt 200 || "$days" -lt 3 ]]; then
+          if [[ "$ready_metric" != "true" || "$rows" -lt 200 || "$days" -lt 3 ]]; then
             echo "::notice::Model promotion gate deferred; current champion remains unchanged."
             exit 0
           fi
 
+          # 1000 rows remain the recommended retrain target, but the governed
+          # unseen validation gate opens at 200 rows spanning at least 3 UTC days.
           # Training itself performs the fail-closed leakage audit and the strict
           # candidate-vs-production + candidate-vs-Elo holdout gate, including
           # separate ATP/WTA non-regression checks. No provider calls are needed.
