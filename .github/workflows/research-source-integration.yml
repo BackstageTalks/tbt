@@ -41,7 +41,7 @@ jobs:
           set -euo pipefail
           python -m pip install -r api/requirements-train.txt pytest
           python -m compileall -q api scripts
-          python -m pytest tests/test_open_meteo_pre_match_forecasts.py -q
+          python -m pytest tests/test_open_meteo_pre_match_forecasts.py tests/test_slam_pointbypoint_linker.py -q
           test -n "$GH_TOKEN"
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
           request=.github/research-source-integration-request.json
@@ -74,7 +74,8 @@ jobs:
           test -s .cache/tbt/research-integration/source/wta-rank/wta_players.csv
           test "$(find .cache/tbt/research-integration/source/wta-rank -maxdepth 1 -name 'wta_rankings_*.csv' | wc -l)" -ge 5
           test "$(find .cache/tbt/research-integration/source/atp-rank -maxdepth 1 -name 'atp_rankings_*.csv' | wc -l)" -ge 5
-          test "$(find .cache/tbt/research-integration/source/slam-pbp -type f -name 'pbp_matches_*.csv' | wc -l)" -ge 10
+          test "$(find .cache/tbt/research-integration/source/slam-pbp -type f -name '*-matches.csv' ! -name '*-doubles.csv' ! -name '*-mixed.csv' | wc -l)" -ge 20
+          test "$(find .cache/tbt/research-integration/source/slam-pbp -type f -name '*-points.csv' ! -name '*-doubles.csv' ! -name '*-mixed.csv' | wc -l)" -ge 20
           test "$(find .cache/tbt/research-integration/source/valuebet -maxdepth 1 -type f -name 'valuebetennis-matchs-*.csv' | wc -l)" -eq 6
 
       - name: Strict Grand Slam PBP link and dry-run
@@ -83,7 +84,7 @@ jobs:
           set -euo pipefail
           cp -a .cache/tbt/history .cache/tbt/research-integration/history-enriched
           mkdir -p .cache/tbt/research-integration/work/{slam-link,slam-dry,slam-import}
-          python scripts/link_pointbypoint_serve_return.py             --history-dir .cache/tbt/research-integration/history-enriched             --source-dir .cache/tbt/research-integration/source/slam-pbp             --out-dir .cache/tbt/research-integration/work/slam-link
+          python scripts/link_slam_pointbypoint_serve_return.py             --history-dir .cache/tbt/research-integration/history-enriched             --source-dir .cache/tbt/research-integration/source/slam-pbp             --out-dir .cache/tbt/research-integration/work/slam-link
           python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/research-integration/work/slam-link/auto_linked.jsonl             --history-dir .cache/tbt/research-integration/history-enriched             --out-dir .cache/tbt/research-integration/work/slam-dry
           python - <<'PY'
           import json
