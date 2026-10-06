@@ -46,6 +46,14 @@ STATIC_ENV_FEATURES = [
     "altitude_serve_interaction", "environment_known", "indoor",
 ]
 WEATHER_RESEARCH_FEATURES = ["weather_serve_interaction", "weather_known"]
+PRE_MATCH_FORECAST_FEATURES = [
+    "pre_match_temperature_c",
+    "pre_match_relative_humidity_pct",
+    "pre_match_surface_pressure_hpa",
+    "pre_match_wind_speed_kmh",
+    "pre_match_wind_gusts_kmh",
+    "pre_match_weather_known",
+]
 ES_FEATURES = ["serve_quality_diff", "return_quality_diff", "stats_known_both"]
 
 # Coverage gates are data-readiness gates, not model-quality/promotion gates.
@@ -222,6 +230,17 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--atp-rank-history-players-csv",
+        default="",
+        help="Jeff Sackmann ATP player master CSV for weekly ranking identity mapping.",
+    )
+    parser.add_argument(
+        "--atp-rank-history-csv",
+        action="append",
+        default=[],
+        help="Jeff Sackmann ATP ranking CSV; may be supplied multiple times.",
+    )
+    parser.add_argument(
         "--wta-rank-history-players-csv",
         default="",
         help="Sackmann WTA player master CSV for ranking-history identity mapping.",
@@ -245,6 +264,14 @@ def main() -> None:
             "the previous completed season to prevent same-season leakage."
         ),
     )
+    parser.add_argument(
+        "--pre-match-weather-csv",
+        default="",
+        help=(
+            "Leakage-safe Open-Meteo Previous Runs features keyed by match_id. "
+            "Only fixed 24h pre-match forecasts are accepted."
+        ),
+    )
     args = parser.parse_args()
 
     matches, identity_safety = sanitize_history_identities(load_partitions(Path(args.history_dir)))
@@ -261,6 +288,56 @@ def main() -> None:
     frame["surface"] = frame.match_id.map(lambda key: source[key].surface or "unknown")
     frame["indoor_known"] = frame.match_id.map(lambda key: source[key].indoor is not None).astype(float)
     frame["year"] = pd.to_datetime(frame["scheduled_at"], utc=True).dt.year.astype(str)
+
+    pre_match_weather_coverage = {
+        "rows": 0,
+        "known_rows": 0,
+        "known_rate": 0.0,
+        "lead_hours": 24,
+    }
+    for name in PRE_MATCH_FORECAST_FEATURES:
+        frame[name] = 0.0
+    if args.pre_match_weather_csv:
+        weather = pd.read_csv(args.pre_match_weather_csv)
+        required_weather = {
+            "match_id", "forecast_lead_hours", "forecast_reference", "source",
+            "temperature_c", "relative_humidity_pct", "surface_pressure_hpa",
+            "wind_speed_kmh", "wind_gusts_kmh",
+        }
+        missing_weather = sorted(required_weather - set(weather.columns))
+        if missing_weather:
+            raise ValueError("Pre-match weather columns missing: " + ", ".join(missing_weather))
+        if weather["match_id"].astype(str).duplicated().any():
+            raise ValueError("Duplicate match_id in pre-match weather source")
+        lead = pd.to_numeric(weather["forecast_lead_hours"], errors="coerce")
+        if not lead.eq(24).all():
+            raise ValueError("Only fixed 24h pre-match forecasts are accepted")
+        if not weather["forecast_reference"].astype(str).eq("previous_day1").all():
+            raise ValueError("Unexpected pre-match weather forecast_reference")
+        weather = weather.copy()
+        weather["match_id"] = weather["match_id"].astype(str)
+        weather = weather.set_index("match_id")
+        mapping = {
+            "pre_match_temperature_c": "temperature_c",
+            "pre_match_relative_humidity_pct": "relative_humidity_pct",
+            "pre_match_surface_pressure_hpa": "surface_pressure_hpa",
+            "pre_match_wind_speed_kmh": "wind_speed_kmh",
+            "pre_match_wind_gusts_kmh": "wind_gusts_kmh",
+        }
+        ids = frame["match_id"].astype(str)
+        known = pd.Series(True, index=frame.index)
+        for feature, source_name in mapping.items():
+            values = pd.to_numeric(ids.map(weather[source_name]), errors="coerce")
+            known &= values.notna()
+            frame[feature] = values.fillna(0.0).astype(float)
+        frame["pre_match_weather_known"] = known.astype(float)
+        known_rows = int(known.sum())
+        pre_match_weather_coverage = {
+            "rows": int(len(weather)),
+            "known_rows": known_rows,
+            "known_rate": (known_rows / len(frame)) if len(frame) else 0.0,
+            "lead_hours": 24,
+        }
 
     atp_feature_rows = []
     if args.atp_leaderboards_csv:
@@ -283,8 +360,22 @@ def main() -> None:
     atp_coverage = atp_coverage_summary(atp_feature_rows)
 
     atp_rank_history_rows = []
-    if args.atp_rank_history_sqlite:
+    atp_rank_history_source = ""
+    if args.atp_rank_history_players_csv and args.atp_rank_history_csv:
+        if args.atp_rank_history_sqlite:
+            raise ValueError("Choose either Sackmann ATP rank CSVs or ATP rank SQLite, not both")
+        rank_history = ATPRankHistory.from_sackmann(
+            args.atp_rank_history_players_csv,
+            args.atp_rank_history_csv,
+        )
+        atp_rank_history_source = "sackmann_weekly_rankings"
+        for match_id in frame["match_id"]:
+            original = source[match_id]
+            oriented, _ = FeatureBuilder.orient_for_training(original)
+            atp_rank_history_rows.append(rank_history.features_for_match(oriented))
+    elif args.atp_rank_history_sqlite:
         rank_history = ATPRankHistory.from_sqlite(args.atp_rank_history_sqlite)
+        atp_rank_history_source = "validated_weekly_sqlite"
         for match_id in frame["match_id"]:
             original = source[match_id]
             oriented, _ = FeatureBuilder.orient_for_training(original)
@@ -390,7 +481,10 @@ def main() -> None:
         "production_enabled": False,
         "features": list(ATP_RANK_HISTORY_FEATURE_NAMES),
         "historical_policy": "latest_weekly_snapshot_strictly_before_match_date",
+        "source": atp_rank_history_source,
         "source_sqlite": str(args.atp_rank_history_sqlite or ""),
+        "players_csv": str(args.atp_rank_history_players_csv or ""),
+        "ranking_csvs": list(args.atp_rank_history_csv or []),
     }
     report.setdefault("candidate_feature_groups", {})["atp_rank_history"] = {
         "schema_eligible": True,
@@ -479,6 +573,24 @@ def main() -> None:
         "coverage": wta_coverage.get("known_both_rate", 0.0),
         "features": list(WTA_SEASON_FEATURE_NAMES),
         "reason": "requires chronological ablation before production feature activation",
+    }
+    report["pre_match_forecast_weather"] = {
+        **pre_match_weather_coverage,
+        "training_eligible": True,
+        "production_enabled": False,
+        "features": list(PRE_MATCH_FORECAST_FEATURES),
+        "historical_policy": "Open-Meteo Previous Runs fixed 24h lead; information available before match",
+        "source_csv": str(args.pre_match_weather_csv or ""),
+        "post_hoc_weather_used": False,
+    }
+    report.setdefault("candidate_feature_groups", {})["pre_match_forecast_weather"] = {
+        "schema_eligible": True,
+        "has_observations": bool(pre_match_weather_coverage.get("known_rows", 0)),
+        "eligible_for_candidate": bool(pre_match_weather_coverage.get("known_rows", 0)),
+        "production_enabled": False,
+        "coverage": pre_match_weather_coverage.get("known_rate", 0.0),
+        "features": list(PRE_MATCH_FORECAST_FEATURES),
+        "reason": "requires chronological ablation and fresh unseen gate before production activation",
     }
     report["identity_safety"] = identity_safety
     report["output"] = str(out)

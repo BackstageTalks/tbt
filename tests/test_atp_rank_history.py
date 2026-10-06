@@ -63,3 +63,27 @@ def test_sqlite_loader_and_candidate_governance(tmp_path):
     enabled_names = _candidate_feature_names(atp_rank_history=history)
     assert not (set(ATP_RANK_HISTORY_FEATURE_NAMES) & set(default_names))
     assert set(ATP_RANK_HISTORY_FEATURE_NAMES).issubset(enabled_names)
+
+
+def test_sackmann_csv_loader(tmp_path):
+    players = tmp_path / "atp_players.csv"
+    players.write_text(
+        "player_id,name_first,name_last,hand,dob,ioc,height,wikidata_id\n"
+        "1,Alpha,One,R,19900101,USA,180,\n"
+        "2,Beta,Two,L,19910101,CAN,175,\n",
+        encoding="utf-8",
+    )
+    rankings = tmp_path / "atp_rankings_20s.csv"
+    rankings.write_text(
+        "ranking_date,rank,player,points\n"
+        "20241202,20,1,1200\n"
+        "20241202,40,2,800\n"
+        "20241230,10,1,1800\n"
+        "20241230,30,2,1000\n",
+        encoding="utf-8",
+    )
+
+    history = ATPRankHistory.from_sackmann(players, [rankings])
+    features = history.features_for_match(_match("2025-01-02"))
+    assert features["atp_hist_known_both"] == 1.0
+    assert features["atp_hist_points_advantage"] > 0
