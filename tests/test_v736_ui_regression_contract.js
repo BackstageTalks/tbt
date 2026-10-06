@@ -61,6 +61,19 @@ const daily = app.split('function dailyHubRow')[1].split('function dailyHubLocke
 assert.equal(daily.includes('aria-hidden="true">→</span>'),false);
 assert.match(css,/hub-action-cell \.hub-detail/);
 
+// Match detail Market Intelligence must understand secondary-provider fallback
+// provenance and show a verified current quote even before two CLV snapshots exist.
+const marketTrend = app.split('function renderMatchMarketTrend')[1].split('function renderMotivationPanel')[0];
+for (const token of [
+  'match_winner_market',
+  'odds_bookmaker',
+  'odds_source',
+  'Verified current quote',
+  'A second verified snapshot is needed to draw the CLV trend.'
+]) assert.ok(marketTrend.includes(token), token);
+assert.match(marketTrend,/provider_id/);
+assert.match(marketTrend,/captured_at/);
+
 // Admin health cards expose the concrete runtime checks requested for launch.
 for (const label of ['PLAYER IMAGES','TOURNAMENT LOGOS','INFO STORAGE','LIVE DATA']) assert.ok(app.includes(label), label);
 
