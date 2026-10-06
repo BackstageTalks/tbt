@@ -26,7 +26,7 @@ from tbt.services.statistics_enrichment import StatisticsEnricher
 
 from release_store import ReleaseStore
 from date_window import history_window
-from audit_statistics_inventory import statistics_value_change
+from audit_statistics_inventory import _quality_ready, statistics_value_change
 
 
 def read_json(path, default):
@@ -209,6 +209,59 @@ def reopen_history_gap_days(matches, progress, start, end, existing_years):
         "reopened_days": reopened_days,
     }
 
+
+def _statistics_candidates(matches, start, end):
+    """Prioritize real serve/return gaps and skip rows already quality-ready."""
+    in_window = [
+        match for match in matches
+        if match.is_completed and start <= match.scheduled_at.date() <= end
+    ]
+    bucket_total = Counter()
+    bucket_ready = Counter()
+    for match in in_window:
+        key = (str(match.tour or "unknown").lower(), int(match.scheduled_at.year))
+        bucket_total[key] += 1
+        stats = match.stats if isinstance(match.stats, dict) else {}
+        if _quality_ready(stats, "p1") and _quality_ready(stats, "p2"):
+            bucket_ready[key] += 1
+
+    candidates = []
+    for match in in_window:
+        stats = match.stats if isinstance(match.stats, dict) else {}
+        p1_ready = _quality_ready(stats, "p1")
+        p2_ready = _quality_ready(stats, "p2")
+        if p1_ready and p2_ready:
+            continue
+        key = (str(match.tour or "unknown").lower(), int(match.scheduled_at.year))
+        coverage = bucket_ready[key] / max(1, bucket_total[key])
+        populated = sum(value is not None for value in stats.values())
+        partial_priority = 0 if (p1_ready or p2_ready) else 1 if populated else 2
+        candidates.append((
+            coverage,
+            partial_priority,
+            -populated,
+            -match.scheduled_at.timestamp(),
+            str(match.match_id),
+            match,
+        ))
+    candidates.sort(key=lambda row: row[:-1])
+    return [row[-1] for row in candidates], {
+        "window_completed": len(in_window),
+        "already_quality_ready": sum(bucket_ready.values()),
+        "candidate_rows": len(candidates),
+        "bucket_coverage": {
+            f"{tour}:{year}": {
+                "completed": bucket_total[(tour, year)],
+                "quality_ready": bucket_ready[(tour, year)],
+                "quality_ready_rate": round(
+                    bucket_ready[(tour, year)] / max(1, bucket_total[(tour, year)]), 6
+                ),
+            }
+            for tour, year in sorted(bucket_total)
+        },
+    }
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start", default=None, help="Optional oldest date; overrides lookback")
@@ -359,9 +412,11 @@ def main():
         else:
             enricher = StatisticsEnricher(provider, directory / "statistics_cache.sqlite")
             changed = set()
-            for match in sorted(matches, key=lambda m: m.scheduled_at, reverse=True):
-                if not start <= match.scheduled_at.date() <= end:
-                    continue
+            statistics_candidates, statistics_plan = _statistics_candidates(matches, start, end)
+            report["statistics_candidate_rows"] = int(statistics_plan["candidate_rows"])
+            report["statistics_already_quality_ready"] = int(statistics_plan["already_quality_ready"])
+            print(json.dumps({"statistics_gap_plan": statistics_plan}, ensure_ascii=False), flush=True)
+            for match in statistics_candidates:
                 stats_before = dict(match.stats or {})
                 requests_before = provider.request_count
                 status = enricher.enrich(match)
