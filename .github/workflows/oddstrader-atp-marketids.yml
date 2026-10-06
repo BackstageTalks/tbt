@@ -1,0 +1,31 @@
+name: Inspect OddsTrader ATP market ids
+on:
+  push:
+    branches: [research/oddstrader-probe-20260901]
+    paths: [".github/workflows/oddstrader-atp-marketids.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          u="https://www.oddstrader.com/atp/?date=20260901&g=match&m=winner"
+          r=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0"})
+          with urllib.request.urlopen(r,timeout=30) as h: s=h.read().decode("utf-8","replace")
+          marker="window.__INITIAL_STATE__="
+          i=s.index(marker)+len(marker)
+          st,_=json.JSONDecoder().raw_decode(s[i:])
+          atp=(st.get("routing") or {}).get("atp") or {}
+          print(json.dumps({
+              "lid":atp.get("lid"),
+              "spid":atp.get("spid"),
+              "nam":atp.get("nam"),
+              "marketGroups":atp.get("marketGroups"),
+          },indent=2))
+          print("EVENT_IDS",list(((st.get("events") or {}).get("events") or {}).keys()))
+          PY
