@@ -1,0 +1,41 @@
+name: Inspect OddsTrader ATP 20260901 HTML
+
+on:
+  push:
+    branches:
+      - research/oddstrader-probe-20260901
+    paths:
+      - ".github/workflows/oddstrader-inspect.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch one public page and print bounded evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import re, urllib.request
+          url="https://www.oddstrader.com/atp/?date=20260901&g=match&m=winner"
+          req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"})
+          with urllib.request.urlopen(req,timeout=30) as r:
+              text=r.read().decode("utf-8","replace")
+          plain=re.sub(r"<[^>]+>"," ",text)
+          plain=re.sub(r"\s+"," ",plain)
+          print("status=200 bytes=",len(text))
+          for needle in ("Stefanos Tsitsipas","Francisco Comesana","Taylor Fritz","BetOnline","Bovada"):
+              i=plain.find(needle)
+              if i>=0:
+                  print("\nNEEDLE",needle)
+                  print(plain[max(0,i-700):i+2500])
+          print("\nCandidate service strings:")
+          for x in sorted(set(re.findall(r"https://[^\"'<> ]+",text))):
+              if "oddstrader.com" in x and ("odds" in x.lower() or "service" in x.lower()):
+                  print(x[:500])
+          PY
