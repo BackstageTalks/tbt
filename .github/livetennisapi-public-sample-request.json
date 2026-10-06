@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "requested_at": "2026-10-06T04:58:00+02:00",
+  "action": "integrate_livetennisapi_public_pbp_sample",
+  "source": "Live Tennis API Zenodo public sample DOI 10.5281/zenodo.22048731",
+  "license": "CC BY-NC 4.0",
+  "policy": "complete point tapes only; exact date + player pair; unique canonical candidate; no fuzzy identity; no raw redistribution; zero provider API",
+  "note": "Created before protected morning window; trigger only after morning production writer is clear."
+}
