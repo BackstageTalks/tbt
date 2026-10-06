@@ -1,10 +1,6 @@
 name: Archive Tennis Abstract Elo snapshots
 
 on:
-  schedule:
-    # Tennis Abstract updates weekly(ish); Tuesday morning gives Monday's
-    # leaderboard refresh time to settle before point-in-time archival.
-    - cron: "30 4 * * 2"
   push:
     branches: [main]
     paths:
