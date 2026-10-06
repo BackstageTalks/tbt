@@ -1,0 +1,104 @@
+{
+  "date": "2026-09-01",
+  "source_page": "https://www.oddstrader.com/atp/?date=20260901&g=match&m=winner",
+  "events": 16,
+  "sportsbooks": [
+    {
+      "bookmaker": "BetOnline",
+      "paid": 8,
+      "sbid": 1096
+    },
+    {
+      "bookmaker": "BetAnything",
+      "paid": 123,
+      "sbid": 1061
+    },
+    {
+      "bookmaker": "Bovada",
+      "paid": 9,
+      "sbid": 1618
+    },
+    {
+      "bookmaker": "Heritage",
+      "paid": 44,
+      "sbid": 169
+    },
+    {
+      "bookmaker": "Bookmaker",
+      "paid": 10,
+      "sbid": 93
+    },
+    {
+      "bookmaker": "JustBet",
+      "paid": 16,
+      "sbid": 1275
+    },
+    {
+      "bookmaker": "Everygame",
+      "paid": 29,
+      "sbid": 180
+    },
+    {
+      "bookmaker": "MyBookie",
+      "paid": 82,
+      "sbid": 1680
+    },
+    {
+      "bookmaker": "SportsBetting",
+      "paid": 131,
+      "sbid": 99
+    },
+    {
+      "bookmaker": "Bet105",
+      "paid": 130,
+      "sbid": 3174
+    }
+  ],
+  "market_ids": {
+    "match:winner": 126,
+    "match:spread": 395,
+    "match:total": 396,
+    "1st-set:winner": 279,
+    "1st-set:spread": 434,
+    "1st-set:total": 439
+  },
+  "rows": 1832,
+  "snapshots": {
+    "opening": 978,
+    "closing": 854
+  },
+  "dropped_post_start_current": 124,
+  "market_counts": {
+    "match:winner": {
+      "opening": 304,
+      "current": 304,
+      "options": 0
+    },
+    "match:spread": {
+      "opening": 302,
+      "current": 302,
+      "options": 0
+    },
+    "match:total": {
+      "opening": 308,
+      "current": 308,
+      "options": 0
+    },
+    "1st-set:winner": {
+      "opening": 64,
+      "current": 64,
+      "options": 0
+    },
+    "1st-set:spread": {
+      "opening": 0,
+      "current": 0,
+      "options": 0
+    },
+    "1st-set:total": {
+      "opening": 0,
+      "current": 0,
+      "options": 0
+    }
+  },
+  "policy": "openingLines + final currentLines; closing rows after event start are excluded"
+}
