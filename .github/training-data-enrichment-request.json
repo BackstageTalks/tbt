@@ -1,12 +1,14 @@
 {
-  "requested_at": "2026-10-04T21:53:00+02:00",
+  "requested_at": "2026-10-06T15:51:00+02:00",
   "action": "enrich_training_data",
   "sources": [
     "TennisMyLife yearly ATP/WTA/Challenger CSVs",
     "Live Tennis API WTA 2025 derived point-by-point aggregates",
     "Jeff Sackmann archived ATP/WTA match statistics",
     "Audited ATP main-draw point-by-point archive 2026-10-04",
-    "Audited ATP qualifying archive + current exact blob matches from archive (6)"
+    "Audited ATP qualifying archive + current exact blob matches from archive (6)",
+    "Pinned Jeff Sackmann Match Charting Project rich serve/return/shot/rally features",
+    "Pinned TennisVisuals validated singles PBP corpus (ATP/WTA/Challenger/ITF/team/125K)"
   ],
-  "note": "Final residual closeout rerun on the current expanded canonical (~885k rows) after WTA rank exhaustion and environment v3 integration. Recompute exact/fail-closed TML, WTA PBP, Sackmann and audited ATP PBP linking against current canonical, publish only verified non-conflicting improvements, rebuild the training DB, audit leakage, and verify persisted read-back. No model promotion."
+  "note": "Integrate the audited offline tennis bundle against the current canonical history. Recompute exact/fail-closed TML, archived Sackmann main/qualifying/Challenger/Futures stats, WTA PBP, audited ATP PBP, pinned TennisVisuals validated singles PBP, and pinned Match Charting rich features; publish only verified non-conflicting improvements; rebuild the training DB; audit identity/leakage; verify persisted read-back. No paid tennis/provider API calls. No model promotion. Tennis-Data Excel odds remain excluded from model/training integration because the current source terms prohibit AI/model-training use."
 }

@@ -70,13 +70,39 @@ def _parse_date(value: object):
     return None
 
 
-def _winner_side(value: object) -> int | None:
+def _winner_side(value: object, *, zero_based: bool = False) -> int | None:
     text = str(value or "").strip()
     try:
         side = int(float(text))
     except (TypeError, ValueError):
         return None
+    if zero_based:
+        return side + 1 if side in (0, 1) else None
     return side if side in (1, 2) else None
+
+
+def _source_tour(row: dict, path: Path) -> str:
+    label = norm_text(row.get("tour"))
+    if label in {"atp", "challenger", "itf men", "davis cup", "boys"}:
+        return "atp"
+    if label in {"wta", "wta 125k", "itf women", "federation cup", "girls"}:
+        return "wta"
+    name = path.name.lower()
+    if "atp" in name:
+        return "atp"
+    if "wta" in name:
+        return "wta"
+    return ""
+
+
+def _source_files(source: Path) -> list[Path]:
+    files = set(source.glob("pbp_matches_*.csv"))
+    # TennisVisuals validated corpus: prefer all singles files. The richer pbpx
+    # files overlap a subset of pbp rows; duplicate-identical staging is handled
+    # below and never double-writes canonical matches.
+    files.update(source.glob("*_Singles_pbp.csv"))
+    files.update(source.glob("*_Singles_pbpx.csv"))
+    return sorted(files)
 
 
 def _winner_name(match) -> str:
@@ -200,7 +226,7 @@ def main():
     index = defaultdict(list)
     for match in matches:
         pair = tuple(sorted((norm_text(match.player1_name), norm_text(match.player2_name))))
-        index[(match.scheduled_at.date().isoformat(), pair)].append(match)
+        index[(str(match.tour or "").lower(), match.scheduled_at.date().isoformat(), pair)].append(match)
 
     before = sum(1 for match in matches if _quality(dict(match.stats or {})))
     counts = Counter()
@@ -209,7 +235,7 @@ def main():
     review = []
 
     source = Path(args.source_dir)
-    files = sorted(source.glob("pbp_matches_*.csv"))
+    files = _source_files(source)
     counts["source_files"] = len(files)
     if not files:
         raise SystemExit(f"No tennis_pointbypoint CSV files found under {source}")
@@ -225,6 +251,7 @@ def main():
                 ("server2",),
                 ("pbp",),
             )
+            tennisvisuals_format = {"type", "tour", "draw"}.issubset(fields)
             if any(not any(name in fields for name in group) for group in required_groups):
                 raise SystemExit(f"{path}: unexpected fields={sorted(fields)}")
 
@@ -236,7 +263,10 @@ def main():
                 server1 = str(_field(row, ("server1", "player1")) or "").strip()
                 server2 = str(_field(row, ("server2", "player2")) or "").strip()
                 tournament = str(_field(row, ("tny_name", "tournament", "tournament_name")) or "").strip()
-                winner_side = _winner_side(_field(row, ("winner",)))
+                winner_side = _winner_side(
+                    _field(row, ("winner",)),
+                    zero_based=tennisvisuals_format,
+                )
                 winner_name = ""
                 if winner_side == 1:
                     winner_name = norm_text(server1)
@@ -258,7 +288,12 @@ def main():
                 counts["point_rows_derived"] += int(parsed["point_count"])
 
                 pair = tuple(sorted((norm_text(server1), norm_text(server2))))
-                key = (source_date.isoformat(), pair)
+                source_tour = _source_tour(row, path)
+                if not source_tour:
+                    counts["source_tour_unusable"] += 1
+                    local["source_tour_unusable"] += 1
+                    continue
+                key = (source_tour, source_date.isoformat(), pair)
                 candidates = _resolve_candidate(list(index.get(key, [])), tournament, winner_name)
                 if len(candidates) != 1:
                     reason = "unmatched" if not candidates else "ambiguous"
@@ -345,7 +380,11 @@ def main():
                     "canonical": _signature(match),
                     "incoming_stats": clean,
                     "provenance": [{
-                        "source": "jeff_sackmann_tennis_pointbypoint",
+                        "source": (
+                            "tennisvisuals_validated_pointbypoint"
+                            if tennisvisuals_format
+                            else "jeff_sackmann_tennis_pointbypoint"
+                        ),
                         "source_file": path.name,
                         "source_row": row_number,
                         "evidence": [
@@ -394,8 +433,9 @@ def main():
         "production_mutated": False,
         "api_requests": 0,
         "source_policy": (
-            "Legacy Jeff Sackmann tennis_pointbypoint corpus. Original dataset is documented "
-            "as CC BY-NC-SA 4.0; audit reads a pinned archival mirror and performs no redistribution."
+            "Legacy Jeff Sackmann tennis_pointbypoint plus the operator-supplied TennisVisuals "
+            "validated single-row PBP corpus. Only derived service/return rates are staged; "
+            "raw point tapes are not redistributed by this workflow."
         ),
         "link_policy": (
             "exact calendar date + exact normalized player pair; canonical candidate must be unique; "
