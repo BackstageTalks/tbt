@@ -96,7 +96,7 @@ def test_match_detail_has_clean_context_and_nonoverlapping_header_actions():
     assert "<small>CONTEXT</small>" not in context
     assert "Point-in-time · pred zápasom" not in context
     assert "note:'Elo'" not in motivation
-    assert "Povrchový fit" in motivation
+    assert "Rozdiel Elo na povrchu" in motivation
     final = css.split("R57: match detail header action space", 1)[1]
     assert ".match-dialog>.dialog-close" in final
     assert "position:absolute!important" in final

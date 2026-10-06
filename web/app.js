@@ -2868,7 +2868,7 @@
     // same-origin script instead of an inline <script>. The popup runtime also
     // reinstalls image fallback handling because DOM event listeners are not
     // copied with innerHTML.
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=61"><link rel="stylesheet" href="/blinq-detail.css?v=20261007-1"><script defer src="/match-popout.js?v=7360&p=61"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=61"><link rel="stylesheet" href="/blinq-detail.css?v=7360&detail=20261007-1"><script defer src="/match-popout.js?v=7360&p=61"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
