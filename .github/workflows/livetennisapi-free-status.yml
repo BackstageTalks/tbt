@@ -1,0 +1,33 @@
+name: Live Tennis API FREE status
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      LIVE_TENNIS_API_KEY: ${{ secrets.LIVE_TENNIS_API_KEY }}
+    steps:
+      - name: Check quota without spending a request
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$LIVE_TENNIS_API_KEY" || { echo "LIVE_TENNIS_API_KEY is not configured"; exit 1; }
+          response="$(curl -fsS --retry 2 --max-time 20             -H "X-API-Key: $LIVE_TENNIS_API_KEY"             "https://api.livetennisapi.com/api/public/v1/usage")"
+          RESPONSE="$response" python - <<'PY'
+          import json, os
+          payload=json.loads(os.environ["RESPONSE"])
+          if payload.get("error"):
+              raise SystemExit("Live Tennis API usage check returned an error")
+          print(json.dumps({
+              "tier":payload.get("tier"),
+              "limits":payload.get("limits"),
+              "today":payload.get("today"),
+              "as_of":payload.get("as_of"),
+          }, indent=2))
+          PY
