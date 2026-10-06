@@ -2875,6 +2875,7 @@
     const row=rowOverride||m?.raw||m;
     const shouldHydrate=!skipLiveHydration&&!row?.__liveIntelligenceLoaded&&!row?.__liveIntelligenceLoading;
     if(shouldHydrate)row.__liveIntelligenceLoading=true;
+    const preservedTab=skipLiveHydration?$('matchDialog')?.querySelector('[data-match-tab].active')?.dataset.matchTab:null;
     $('dialogContent').innerHTML=matchDetailHtml(m,tab,rowOverride);
     const dialog=$('matchDialog');
     dialog.classList.remove('ace-projection-dialog','sg-projection-dialog');
@@ -2883,6 +2884,7 @@
       dialog.querySelectorAll('[data-match-tab]').forEach(node=>{node.classList.toggle('active',node===button);node.setAttribute('aria-pressed',node===button?'true':'false');});
       dialog.querySelectorAll('[data-match-panel]').forEach(panel=>{const active=panel.dataset.matchPanel===id;panel.hidden=!active;panel.classList.toggle('active',active);});
     }));
+    if(preservedTab)Array.from(dialog.querySelectorAll('[data-match-tab]')).find(button=>button.dataset.matchTab===preservedTab)?.click();
     dialog.querySelector('[data-match-popout]')?.addEventListener('click',openMatchPopout);
     if(!dialog.open)dialog.showModal();
     if(shouldHydrate)requestLiveMatchIntelligence(row,tab);
