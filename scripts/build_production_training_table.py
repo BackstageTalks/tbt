@@ -54,6 +54,7 @@ ES_FEATURES = ["serve_quality_diff", "return_quality_diff", "stats_known_both"]
 # chronological holdout/backtest governance.
 ES_READY_MIN_COVERAGE = 0.70
 STATIC_ENV_READY_MIN_COVERAGE = 0.80
+READINESS_WINDOW_START_UTC = "2021-01-01T00:00:00Z"
 
 
 def _mean(frame: pd.DataFrame, name: str) -> float:
@@ -97,16 +98,25 @@ def _group_coverage(frame: pd.DataFrame, column: str) -> dict[str, Any]:
 def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> dict[str, Any]:
     es_rate = _mean(frame, "stats_known_both")
     env_rate = _mean(frame, "environment_known")
+    scheduled = (
+        pd.to_datetime(frame["scheduled_at"], utc=True, errors="coerce")
+        if "scheduled_at" in frame
+        else pd.Series(pd.NaT, index=frame.index, dtype="datetime64[ns, UTC]")
+    )
+    readiness_frame = frame.loc[
+        scheduled >= pd.Timestamp(READINESS_WINDOW_START_UTC)
+    ].copy()
+    readiness_es_rate = _mean(readiness_frame, "stats_known_both")
+    readiness_env_rate = _mean(readiness_frame, "environment_known")
     raw_stats_matches = int((quality or {}).get("with_statistics") or 0)
     raw_stats_rate = (raw_stats_matches / len(frame)) if len(frame) else 0.0
-    # Schema eligibility means the feature group is safe by provenance. Data
-    # readiness separately answers whether this concrete history has enough
-    # coverage for a meaningful candidate evaluation. A few observed rows are
-    # explicitly not enough to declare a group ready.
-    es_observed = es_rate > 0.0
-    env_observed = env_rate > 0.0
-    es_ready = es_rate >= ES_READY_MIN_COVERAGE
-    env_ready = env_rate >= STATIC_ENV_READY_MIN_COVERAGE
+    # Keep all-history diagnostics for transparency, but readiness must reflect
+    # the modern production/training regime. Otherwise decades that can never
+    # carry venue/environment metadata create a permanent false blocker.
+    es_observed = readiness_es_rate > 0.0
+    env_observed = readiness_env_rate > 0.0
+    es_ready = readiness_es_rate >= ES_READY_MIN_COVERAGE
+    env_ready = readiness_env_rate >= STATIC_ENV_READY_MIN_COVERAGE
     return {
         "schema": 2,
         "rows": int(len(frame)),
@@ -123,19 +133,23 @@ def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> d
             "has_observations": env_observed,
             "ready_for_candidate_eval": env_ready,
             "readiness_min_coverage": STATIC_ENV_READY_MIN_COVERAGE,
+            "readiness_window_start_utc": READINESS_WINDOW_START_UTC,
             "features": STATIC_ENV_FEATURES,
             "travel_known_rate": _mean(frame, "travel_known"),
             "altitude_change_known_rate": _mean(frame, "altitude_change_known"),
             "indoor_known_rate": _mean(frame, "indoor_known"),
             "venue_environment_known_rate": env_rate,
+            "readiness_venue_environment_known_rate": readiness_env_rate,
         },
         "event_statistics": {
             "training_eligible": True,
             "has_observations": es_observed,
             "ready_for_candidate_eval": es_ready,
             "readiness_min_coverage": ES_READY_MIN_COVERAGE,
+            "readiness_window_start_utc": READINESS_WINDOW_START_UTC,
             "features": ES_FEATURES,
             "stats_known_both_rate": es_rate,
+            "readiness_stats_known_both_rate": readiness_es_rate,
             "raw_statistics_matches": raw_stats_matches,
             "raw_statistics_match_rate": raw_stats_rate,
         },
@@ -150,6 +164,12 @@ def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> d
             "by_tour": _group_coverage(frame, "tour"),
             "by_year": _group_coverage(frame, "year"),
             "by_surface": _group_coverage(frame, "surface"),
+            "readiness_window": {
+                "start_utc": READINESS_WINDOW_START_UTC,
+                **_segment(readiness_frame),
+                "by_tour": _group_coverage(readiness_frame, "tour"),
+                "by_surface": _group_coverage(readiness_frame, "surface"),
+            },
         },
         "candidate_feature_groups": {
             "event_statistics": {
@@ -158,6 +178,8 @@ def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> d
                 "eligible_for_candidate": es_ready,
                 "ready_for_candidate_eval": es_ready,
                 "coverage": es_rate,
+                "readiness_coverage": readiness_es_rate,
+                "coverage_scope": f"scheduled_at >= {READINESS_WINDOW_START_UTC}",
                 "min_coverage": ES_READY_MIN_COVERAGE,
                 "features": ES_FEATURES,
             },
@@ -167,6 +189,8 @@ def build_report(frame: pd.DataFrame, quality: dict, rank_provenance: dict) -> d
                 "eligible_for_candidate": env_ready,
                 "ready_for_candidate_eval": env_ready,
                 "coverage": env_rate,
+                "readiness_coverage": readiness_env_rate,
+                "coverage_scope": f"scheduled_at >= {READINESS_WINDOW_START_UTC}",
                 "min_coverage": STATIC_ENV_READY_MIN_COVERAGE,
                 "features": STATIC_ENV_FEATURES,
             },
