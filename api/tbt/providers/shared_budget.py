@@ -4,6 +4,7 @@ The provider allowance resets at 19:10 Europe/Bratislava. One ETag-protected
 Azure Table row coordinates every BlinQ TennisAPI caller. Reserve BEFORE every
 billable attempt, including retries; never refund an ambiguous network failure.
 A 10% (1,500-request) provider reserve is kept untouched, so BlinQ hard-stops at 90%.
+This guard is production-critical and must be deployed before provider work resumes.
 """
 from __future__ import annotations
 
