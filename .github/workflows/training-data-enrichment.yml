@@ -184,7 +184,21 @@ jobs:
             --write-partitions \
             --write-history-dir .cache/tbt/history-enriched
 
-      - name: Link and import audited ATP point-by-point archive
+      - name: Download pinned validated TennisVisuals singles PBP corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/tennisvisuals-pbp
+          git clone --depth 1 https://github.com/TennisVisuals/tennis-match-data.git .cache/tbt/tennisvisuals-pbp
+          git -C .cache/tbt/tennisvisuals-pbp fetch --depth 1 origin 2a24523b3cf9d159d9643457aed5b1c291073bf8
+          git -C .cache/tbt/tennisvisuals-pbp checkout --detach 2a24523b3cf9d159d9643457aed5b1c291073bf8
+          test "$(git -C .cache/tbt/tennisvisuals-pbp rev-parse HEAD)" = "2a24523b3cf9d159d9643457aed5b1c291073bf8"
+          mapfile -t files < <(find .cache/tbt/tennisvisuals-pbp/point-by-point -maxdepth 1 -type f \
+            \( -name '*_Singles_pbp.csv' -o -name '*_Singles_pbpx.csv' \) | sort)
+          (( ${#files[@]} >= 10 )) || { echo "Incomplete TennisVisuals singles PBP corpus"; exit 1; }
+          cp "${files[@]}" .cache/tbt/enrichment/atp-pbp-source/
+
+      - name: Link and import audited validated point-by-point corpora
         shell: bash
         run: |
           set -euo pipefail
