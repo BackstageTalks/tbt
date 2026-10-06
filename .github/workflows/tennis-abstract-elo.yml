@@ -39,7 +39,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install -r api/requirements-train.txt pytest lxml
+          python -m pip install -r api/requirements-train.txt pytest
           python -m pytest tests/test_tennis_abstract_elo.py -q
           test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN" >&2; exit 1; }
           test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
