@@ -1,5 +1,5 @@
 {
-  "requested_at": "2026-10-06T15:51:00+02:00",
+  "requested_at": "2026-10-06T21:22:09+02:00",
   "action": "enrich_training_data",
   "sources": [
     "TennisMyLife yearly ATP/WTA/Challenger CSVs",
@@ -10,5 +10,5 @@
     "Pinned Jeff Sackmann Match Charting Project rich serve/return/shot/rally features",
     "Pinned TennisVisuals validated singles PBP corpus (ATP/WTA/Challenger/ITF/team/125K)"
   ],
-  "note": "Integrate the audited offline tennis bundle against the current canonical history. Recompute exact/fail-closed TML, archived Sackmann main/qualifying/Challenger/Futures stats, WTA PBP, audited ATP PBP, pinned TennisVisuals validated singles PBP, and pinned Match Charting rich features; publish only verified non-conflicting improvements; rebuild the training DB; audit identity/leakage; verify persisted read-back. No paid tennis/provider API calls. No model promotion. Tennis-Data Excel odds remain excluded from model/training integration because the current source terms prohibit AI/model-training use."
+  "note": "Re-run full offline tennis enrichment against the latest canonical history. Recompute exact/fail-closed TML, archived Sackmann main/qualifying/Challenger/Futures stats, WTA PBP, audited ATP PBP, pinned TennisVisuals validated singles PBP, and pinned Match Charting rich features; publish only verified non-conflicting improvements; rebuild the training DB; audit identity/leakage; verify persisted read-back. No paid Tennis API / API Pro calls. No model promotion. Tennis-Data Excel odds remain excluded from model/training integration because the current source terms prohibit AI/model-training use."
 }
