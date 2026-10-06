@@ -150,12 +150,19 @@ def _derive_rates(tape: list[dict[str, Any]]) -> tuple[dict[int, dict[str, float
             audit["invalid_rows"] += 1
             continue
         winner = row.get("winner")
-        if winner not in (1, 2):
+        if winner in (None, ""):
             winner = row.get("point_winner")
+        try:
+            winner = int(winner)
+        except (TypeError, ValueError):
+            winner = None
         if winner not in (1, 2):
             audit["non_point_rows"] += 1
             continue
-        server = row.get("server")
+        try:
+            server = int(row.get("server"))
+        except (TypeError, ValueError):
+            server = None
         if server not in (1, 2):
             audit["point_rows_missing_server"] += 1
             continue
@@ -218,6 +225,10 @@ def _stage_row(source_payload: dict[str, Any], canonical) -> tuple[dict[str, Any
         return None, "orientation_failed", {}
 
     source_winner = source_match.get("winner")
+    try:
+        source_winner = int(source_winner)
+    except (TypeError, ValueError):
+        source_winner = None
     if source_winner in (1, 2):
         source_winner_name = n1 if source_winner == 1 else n2
         canonical_winner = _winner_name(canonical)
