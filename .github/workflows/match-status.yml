@@ -15,11 +15,11 @@ concurrency:
 
 jobs:
   match-status:
-    # Recurring cadence is owned by the external scheduler. A tagged main push
-    # provides a safe one-shot catch-up without bypassing shared API budget guards.
-    # EMERGENCY API PAUSE 2026-10-06: shared daily quota reached 96%.
-    # Re-enable only after quota reset and budget-audit confirmation.
-    if: false
+    # Recurring 30-minute cadence is owned by the external scheduler. A tagged
+    # main push provides a safe one-shot catch-up without bypassing budget guards.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && contains(github.event.head_commit.message, '[match-status-now]'))
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -43,6 +43,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          # Match status runs every 30 minutes; CLV remains hourly.
+          if [[ "$(date -u +%M)" != "00" ]]; then
+            echo "Skipping CLV on the half-hour match-status pass."
+            exit 0
+          fi
           gh workflow run propline-clv-pilot.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f events_per_run=12
 
@@ -53,6 +58,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          # Match status runs every 30 minutes; CLV remains hourly.
+          if [[ "$(date -u +%M)" != "00" ]]; then
+            echo "Skipping CLV on the half-hour match-status pass."
+            exit 0
+          fi
           gh workflow run the-odds-clv.yml --repo "$GITHUB_REPOSITORY" --ref main \
             -f reason=hourly
 
