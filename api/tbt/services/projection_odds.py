@@ -287,8 +287,7 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
             "odds_market_name": superiority.get("market_name"),
             "price_contract": "player_superiority",
         })
-        if int(provider_id) == 2:
-            out["odds_contract_version"] = ACE_DF_REAL_ODDS_CONTRACT
+        out["odds_contract_version"] = ACE_DF_REAL_ODDS_CONTRACT
         return out, True, "priced"
 
     # Otherwise convert the COUNT prediction, not the superiority confidence,
@@ -327,8 +326,7 @@ def _attach_ace(card: dict[str, Any], payload: Any, captured_at: str, provider_i
         "provider_id": int(provider_id), "captured_at": captured_at,
         "odds_market_name": choice["market_name"],
     })
-    if int(provider_id) == 2:
-        out["odds_contract_version"] = ACE_DF_REAL_ODDS_CONTRACT
+    out["odds_contract_version"] = ACE_DF_REAL_ODDS_CONTRACT
     return out, True, "priced_player_total_ou"
 
 def prefetch_projection_market_board(
@@ -484,17 +482,34 @@ def enrich_projection_odds(provider: Any, ace_picks: list[dict[str, Any]], sg_pi
                     reasons[metric][reason] = reasons[metric].get(reason, 0) + 1
                 continue
             alternate = (alternate_market_payloads or {}).get(event_id, {}).get(metric)
-            actual_payload = alternate["payload"] if alternate else payload
-            actual_provider = int(alternate["provider_id"]) if alternate else provider_id
-            actual_captured = str(alternate.get("captured_at") or captured_at) if alternate else captured_at
+
+            # Primary provider is authoritative when it exposes an exact
+            # contract. PropLine is a true fallback, never an override.
             updated, ok, reason = (
-                _attach_ace(row, actual_payload, actual_captured, actual_provider)
+                _attach_ace(row, payload, captured_at, provider_id)
                 if kind == "ace" else
-                _attach_sg(row, actual_payload, actual_captured, actual_provider)
-            )
+                _attach_sg(row, payload, captured_at, provider_id)
+            ) if payload is not None else (deepcopy(row), False, "primary_payload_unavailable")
+
+            used_alternate = False
+            if not ok and alternate:
+                alt_payload = alternate.get("payload")
+                alt_provider = int(alternate.get("provider_id") or 2)
+                alt_captured = str(alternate.get("captured_at") or captured_at)
+                alt_updated, alt_ok, alt_reason = (
+                    _attach_ace(row, alt_payload, alt_captured, alt_provider)
+                    if kind == "ace" else
+                    _attach_sg(row, alt_payload, alt_captured, alt_provider)
+                )
+                if alt_ok:
+                    updated, ok, reason = alt_updated, True, alt_reason
+                    used_alternate = True
+                else:
+                    reason = f"{reason};fallback:{alt_reason}"
+
             if ok:
-                updated["odds_source"] = "propline" if alternate else "rapidapi"
-                if alternate:
+                updated["odds_source"] = "propline" if used_alternate else "rapidapi"
+                if used_alternate:
                     updated["odds_bookmaker"] = alternate.get("bookmaker")
                     updated["odds_provider_event_id"] = alternate.get("provider_event_id")
                 attached_by_provider[updated["odds_source"]] += 1

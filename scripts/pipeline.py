@@ -1479,13 +1479,19 @@ def main():
                 except (TypeError, ValueError, OverflowError):
                     return False
                 market = str(row.get("market") or "").strip().lower()
+                source = str(row.get("odds_source") or "").strip().lower()
                 ace_df_real_api = (
                     market not in ("aces", "double_faults")
                     or (
                         row.get("odds_contract_version") == "ace_df_real_api_v1"
-                        and row.get("odds_source") == "propline"
-                        and provider == 2
-                        and bool(row.get("odds_bookmaker"))
+                        and (
+                            (source == "rapidapi" and provider == 1)
+                            or (
+                                source == "propline"
+                                and provider == 2
+                                and bool(row.get("odds_bookmaker"))
+                            )
+                        )
                     )
                 )
                 return (
