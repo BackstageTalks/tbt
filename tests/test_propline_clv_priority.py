@@ -58,3 +58,21 @@ def test_clv_routing_uses_hourly_propline_and_hourly_bounded_the_odds_consensus(
     assert "  push:" in propline
     assert '"scripts/propline_clv_collect.py"' in propline
     assert "if: needs.collect.result == 'success'" in propline
+
+
+def test_propline_picker_orders_top_then_value_then_other_blinq_offer():
+    now = datetime(2026, 9, 30, 10, tzinfo=timezone.utc)
+    events = [
+        _event(11, "2026-09-30T11:00:00Z", "Prime A", "Prime B"),
+        _event(12, "2026-09-30T14:00:00Z", "Top A", "Top B"),
+        _event(13, "2026-09-30T12:00:00Z", "Value A", "Value B"),
+    ]
+    priorities = {
+        collector.player_pair("Top A", "Top B"): 0,
+        collector.player_pair("Value A", "Value B"): 1,
+        collector.player_pair("Prime A", "Prime B"): 2,
+    }
+    selected, eligible = collector.pick_events(events, now, priorities)
+    assert eligible == 3
+    assert [item[3] for item in selected] == ["12", "13", "11"]
+    assert [item[0] for item in selected] == [0, 1, 2]
