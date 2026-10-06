@@ -58,7 +58,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install -r api/requirements-train.txt pytest
-          python -m pytest             tests/test_tennis_data_historical_odds.py             tests/test_tennis_data_player_profiles.py             tests/test_offline_odds.py -q
+          python -m pytest             tests/test_tennis_data_historical_odds.py             tests/test_tennis_data_player_profiles.py             tests/test_offline_match_winner_odds.py -q
 
       - name: Download exact operator-matching source mirrors
         run: |
