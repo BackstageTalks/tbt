@@ -168,6 +168,41 @@ jobs:
 
           echo "Morning refresh completed successfully in child run $final_child."
 
+      - name: Dispatch guarded model promotion gate when enough unseen data exists
+        if: steps.daily_guard.outputs.dispatch == 'true'
+        shell: bash
+        env:
+          DATA_GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+          TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+        run: |
+          set -euo pipefail
+          test -n "$DATA_GH_TOKEN" || { echo "::error::Missing TBT_DATA_GH_TOKEN"; exit 1; }
+          mkdir -p .cache/tbt/morning
+          readiness=".cache/tbt/morning/model-readiness.json"
+          GH_TOKEN="$DATA_GH_TOKEN" gh api "repos/$TBT_DATA_REPOSITORY/contents/audit/model-promotion-readiness-latest.json" \
+            --jq .content | base64 -d > "$readiness"
+
+          ready_metric="$(jq -r '.ready_for_metric_gate // false' "$readiness")"
+          ready_retrain="$(jq -r '.ready_for_retrain // false' "$readiness")"
+          rows="$(jq -r '.eligible_unseen_rows // 0' "$readiness")"
+          days="$(jq -r '.eligible_unseen_days // 0' "$readiness")"
+          echo "Model gate readiness: metric=$ready_metric retrain=$ready_retrain unseen_rows=$rows unseen_days=$days"
+
+          if [[ "$ready_metric" != "true" || "$ready_retrain" != "true" || "$rows" -lt 200 || "$days" -lt 3 ]]; then
+            echo "::notice::Model promotion gate deferred; current champion remains unchanged."
+            exit 0
+          fi
+
+          # Training itself performs the fail-closed leakage audit and the strict
+          # candidate-vs-production + candidate-vs-Elo holdout gate, including
+          # separate ATP/WTA non-regression checks. No provider calls are needed.
+          gh workflow run data.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f mode=train \
+            -f max_requests=1 \
+            -f promote=true
+
+          echo "::notice::Guarded model train/promotion evaluation dispatched."
+
       - name: Upload morning supervision evidence
         if: always() && steps.daily_guard.outputs.dispatch == 'true'
         continue-on-error: true
