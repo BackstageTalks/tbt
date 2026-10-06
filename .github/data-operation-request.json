@@ -2,12 +2,12 @@
   "schema": 1,
   "mode": "statistics",
   "promote": false,
-  "purpose": "Target the largest modern serve/return gaps identified by the 2026-10-06 deep data audit. PR #304 skips already quality-ready rows and prioritizes the lowest-coverage tour-year buckets before spending quota. Requeued after the successful current refresh.",
+  "purpose": "Final closeout sweep for the remaining modern serve/return statistics gap. Existing lowest-coverage bucket priority stays in force. Spend only what the shared provider-day budget guard permits; do not promote a model or mutate current predictions.",
   "requested_on": "2026-10-06",
-  "requested_at_utc": "2026-10-06T06:57:00Z",
-  "max_requests": 1000,
+  "requested_at_utc": "2026-10-06T07:49:00Z",
+  "max_requests": 12000,
   "start": "2022-01-01",
   "end": "2025-12-31",
-  "training_scope": "targeted_modern_statistics_gapfill_no_model_promotion",
+  "training_scope": "final_targeted_modern_statistics_closeout_no_model_promotion",
   "historical_match_winner_odds_as_model_feature": false
 }
