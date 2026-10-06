@@ -1,0 +1,133 @@
+name: Archive Tennis Abstract Elo snapshots
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/tennis-abstract-elo-request.json"
+      - ".github/workflows/tennis-abstract-elo.yml"
+      - "scripts/parse_tennis_abstract_elo.py"
+  schedule:
+    - cron: "15 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-tennis-abstract-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      RESEARCH_RELEASE: tbt-research-sources-v1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and verify approved snapshot contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest lxml
+          python -m pytest tests/test_tennis_abstract_elo.py -q
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN" >&2; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          request=.github/tennis-abstract-elo-request.json
+          test "$(jq -r .action "$request")" = "archive_tennis_abstract_elo_snapshot"
+          test "$(jq -r .operator_permission_confirmed "$request")" = "true"
+          test "$(jq -r .promote_model "$request")" = "false"
+          test "$(jq -r .training_eligible_current_snapshot "$request")" = "false"
+
+      - name: Download four approved Tennis Abstract leaderboards
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/tennis-abstract
+          mkdir -p .cache/tbt/tennis-abstract/{raw,parsed}
+          declare -A urls=(
+            [atp_elo]="https://www.tennisabstract.com/reports/atp_elo_ratings.html"
+            [wta_elo]="https://www.tennisabstract.com/reports/wta_elo_ratings.html"
+            [atp_yelo]="https://www.tennisabstract.com/reports/atp_season_yelo_ratings.html"
+            [wta_yelo]="https://www.tennisabstract.com/reports/wta_season_yelo_ratings.html"
+          )
+          for name in atp_elo wta_elo atp_yelo wta_yelo; do
+            curl -fsSL --retry 3 --retry-delay 3               -A "BlinQ research snapshot/1.0 (approved operator use)"               "${urls[$name]}" -o ".cache/tbt/tennis-abstract/raw/$name.html"
+            test -s ".cache/tbt/tennis-abstract/raw/$name.html"
+          done
+
+      - name: Parse and validate point-in-time snapshot
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/parse_tennis_abstract_elo.py             --atp-elo-html .cache/tbt/tennis-abstract/raw/atp_elo.html             --wta-elo-html .cache/tbt/tennis-abstract/raw/wta_elo.html             --atp-yelo-html .cache/tbt/tennis-abstract/raw/atp_yelo.html             --wta-yelo-html .cache/tbt/tennis-abstract/raw/wta_yelo.html             --out-dir .cache/tbt/tennis-abstract/parsed
+          test "$(jq -r .training_eligible .cache/tbt/tennis-abstract/parsed/report.json)" = "false"
+          snapshot="$(jq -r .snapshot_date .cache/tbt/tennis-abstract/parsed/report.json)"
+          [[ "$snapshot" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]
+          echo "TA_SNAPSHOT_DATE=$snapshot" >> "$GITHUB_ENV"
+
+      - name: Preserve raw and parsed snapshot in private release
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage=.cache/tbt/tennis-abstract/bundle
+          mkdir -p "$stage/raw" "$stage/parsed"
+          cp .cache/tbt/tennis-abstract/raw/*.html "$stage/raw/"
+          cp .cache/tbt/tennis-abstract/parsed/*.csv "$stage/parsed/"
+          cp .cache/tbt/tennis-abstract/parsed/report.json "$stage/"
+          cat > "$stage/ATTRIBUTION.txt" <<'EOF'
+          Source: Tennis Abstract (Jeff Sackmann), ATP/WTA Elo and yElo report snapshots.
+          This private snapshot is stored under the operator-approved BlinQ research arrangement.
+          It is point-in-time evidence and must not be retroactively backfilled into older matches.
+          EOF
+          asset="/tmp/tennis-abstract-elo-${TA_SNAPSHOT_DATE}.tar.gz"
+          tar -C "$stage" -czf "$asset" .
+          if ! gh release view "$RESEARCH_RELEASE" -R "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+            gh release create "$RESEARCH_RELEASE" -R "$TBT_DATA_REPOSITORY"               --title "BlinQ research source bundles"               --notes "Private research-only source snapshots."
+          fi
+          gh release upload "$RESEARCH_RELEASE" -R "$TBT_DATA_REPOSITORY" --clobber "$asset"
+
+      - name: Publish current and dated parsed sidecars
+        shell: bash
+        run: |
+          set -euo pipefail
+          upload() {
+            local path="$1" file="$2" message="$3"
+            test -s "$file"
+            local encoded sha
+            encoded="$(base64 -w0 "$file")"
+            sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            if [[ -n "$sha" ]]; then
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"                 -f message="$message" -f content="$encoded" -f sha="$sha" >/dev/null
+            else
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"                 -f message="$message" -f content="$encoded" >/dev/null
+            fi
+          }
+
+          for name in atp_elo wta_elo atp_yelo wta_yelo; do
+            file=".cache/tbt/tennis-abstract/parsed/$name.csv"
+            upload "research/tennis-abstract/current/$name.csv" "$file" "Update Tennis Abstract current $name snapshot"
+            upload "research/tennis-abstract/${TA_SNAPSHOT_DATE}/$name.csv" "$file" "Archive Tennis Abstract $name snapshot ${TA_SNAPSHOT_DATE}"
+          done
+          upload "audit/tennis-abstract-elo-latest.json"             .cache/tbt/tennis-abstract/parsed/report.json             "Update Tennis Abstract Elo snapshot audit"
+
+      - name: Upload workflow evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: tennis-abstract-elo-${{ github.run_id }}
+          path: |
+            .cache/tbt/tennis-abstract/parsed/report.json
+            .cache/tbt/tennis-abstract/parsed/*.csv
+          retention-days: 14
