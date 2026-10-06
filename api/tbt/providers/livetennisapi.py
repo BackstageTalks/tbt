@@ -1,8 +1,8 @@
-"""Quota-safe read-only client for Live Tennis API FREE endpoints.
+"""Quota-safe read-only client for Live Tennis API endpoints.
 
-The FREE key is intentionally used only for live/upcoming match state. Historical
-point-by-point tapes are a separate licensed/research data path and are not
-requested by this client.
+The same server-side key can be used across FREE and paid plans. Historical
+point-by-point acquisition remains a separate research workflow; this runtime
+client keeps conservative defaults for live/upcoming use.
 
 Safety rules:
 - server-side key only (LIVE_TENNIS_API_KEY);
@@ -26,11 +26,12 @@ from .budget import RequestBudgetExceeded
 BASE_URL = "https://api.livetennisapi.com/api/public/v1"
 DEFAULT_DAILY_RESERVE = 20
 DEFAULT_MAX_CALLS = 20
+MAX_CONFIGURED_DAILY_CALLS = 1000
 DEFAULT_USAGE_TTL_SECONDS = 60.0
 
 
 class LiveTennisApiClient:
-    """Conservative adapter for the 100-calls/day FREE Live Tennis API key."""
+    """Conservative plan-aware adapter for Live Tennis API."""
 
     def __init__(
         self,
@@ -46,8 +47,8 @@ class LiveTennisApiClient:
         if not self.key:
             raise ConfigurationError("LIVE_TENNIS_API_KEY is required")
 
-        self.max_calls = max(0, min(100, int(max_calls)))
-        self.daily_reserve = max(0, min(99, int(daily_reserve)))
+        self.max_calls = max(0, min(MAX_CONFIGURED_DAILY_CALLS, int(max_calls)))
+        self.daily_reserve = max(0, min(MAX_CONFIGURED_DAILY_CALLS - 1, int(daily_reserve)))
         self.usage_ttl_seconds = max(0.0, float(usage_ttl_seconds))
         self.request_count = 0
 
@@ -72,7 +73,7 @@ class LiveTennisApiClient:
         return {
             "X-API-Key": self.key,
             "Accept": "application/json",
-            "User-Agent": "BlinQ-live-tennis-free/1.0",
+            "User-Agent": "BlinQ-live-tennis/1.0",
         }
 
     @staticmethod
@@ -109,8 +110,6 @@ class LiveTennisApiClient:
                 params=params or {},
             )
         except httpx.HTTPError as exc:
-            # No retry here: a failed/ambiguous attempt must not fan out into
-            # accidental quota spend.
             if not quota_exempt:
                 self.request_count += 1
             raise ProviderError(f"Live Tennis API request failed for {path}") from exc
@@ -175,10 +174,10 @@ class LiveTennisApiClient:
         return [row for row in data if isinstance(row, dict)]
 
     def list_matches(self, status: str, *, limit: int = 20) -> list[dict[str, Any]]:
-        """FREE live/upcoming board. One provider call."""
+        """Live/upcoming board. One provider call."""
         status = str(status or "").strip().lower()
         if status not in {"live", "upcoming"}:
-            raise ValueError("FREE client status must be live or upcoming")
+            raise ValueError("status must be live or upcoming")
         limit = max(1, min(100, int(limit)))
         return self._rows(self._get("/matches", {"status": status, "limit": limit}))
 
@@ -189,13 +188,13 @@ class LiveTennisApiClient:
         return self.list_matches("upcoming", limit=limit)
 
     def fixtures(self, *, limit: int = 50, offset: int = 0) -> list[dict[str, Any]]:
-        """FREE fixture directory. One provider call."""
+        """Fixture directory. One provider call."""
         limit = max(1, min(100, int(limit)))
         offset = max(0, int(offset))
         return self._rows(self._get("/fixtures", {"limit": limit, "offset": offset}))
 
     def match_score(self, match_id: int | str) -> dict[str, Any]:
-        """FREE point-in-time score snapshot. One provider call."""
+        """Point-in-time score snapshot. One provider call."""
         token = str(match_id).strip()
         if not token.isdigit() or int(token) <= 0:
             raise ValueError("match_id must be a positive integer")
