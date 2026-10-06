@@ -1,8 +1,10 @@
-"""Conservative, bounded PropLine fallback for real pre-match tennis props.
+"""Conservative, bounded PropLine fallback for real pre-match tennis markets.
 
 Read-only. No hidden external calls: callers must supply the existing PROPL
 secret and an explicit per-refresh event budget. Outcomes from DIFFERENT
-bookmakers are never combined into a synthetic two-sided market.
+bookmakers are never combined into a synthetic two-sided market. The fallback
+may fill missing Match Winner odds as well as Aces/DF/Sets/Games, but it never
+overwrites a quote already supplied by the primary provider.
 """
 from __future__ import annotations
 
@@ -16,14 +18,16 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
+from tbt.services.market_selection import extract_match_winner_odds
 from tbt.services.projection_odds import (
     extract_match_total_odds, extract_player_total_ou,
 )
 
 BASE = "https://api.prop-line.com/v1"
-KEYS = ("totals", "total_games", "total_sets", "player_aces", "player_double_faults")
-METRIC = {"totals": "games", "total_games": "games", "total_sets": "sets",
-          "player_aces": "aces", "player_double_faults": "double_faults"}
+KEYS = ("h2h", "totals", "total_games", "total_sets", "player_aces", "player_double_faults")
+METRIC = {"h2h": "match_winner", "totals": "games", "total_games": "games",
+          "total_sets": "sets", "player_aces": "aces",
+          "player_double_faults": "double_faults"}
 # Shared 1000/day PROPL: four refreshes x (1 board + 2x75) <= 604 calls.
 # CLV pilot is capped at 250/day; reserve >=146 for variable/manual demand.
 MAX_EVENTS_PER_REFRESH = 75
@@ -247,6 +251,7 @@ def _normalize_book(book: dict, row: dict, missing: set[str]) -> dict[str, dict]
     """Only full two-way quotes from ONE bookmaker at ONE matching line."""
     result: dict[str, dict] = {}
     p1, p2 = _players(row)
+    p1_key, p2_key = _name(p1), _name(p2)
     for market in book.get("markets") or []:
         if not isinstance(market, dict):
             continue
@@ -254,6 +259,32 @@ def _normalize_book(book: dict, row: dict, missing: set[str]) -> dict[str, dict]
         metric = METRIC.get(key)
         if metric not in missing:
             continue
+
+        if metric == "match_winner":
+            prices: dict[int, float] = {}
+            for outcome in market.get("outcomes") or []:
+                if not isinstance(outcome, dict):
+                    continue
+                label = _name(outcome.get("name") or outcome.get("description"))
+                price = _price(outcome.get("price"))
+                if price is None:
+                    continue
+                if label == p1_key:
+                    prices.setdefault(1, price)
+                elif label == p2_key:
+                    prices.setdefault(2, price)
+            if set(prices) == {1, 2}:
+                result["match_winner"] = {
+                    "markets": [{
+                        "name": "Match Winner",
+                        "choices": [
+                            {"choiceName": p1, "decimalOdds": prices[1]},
+                            {"choiceName": p2, "decimalOdds": prices[2]},
+                        ],
+                    }]
+                }
+            continue
+
         groups: dict[tuple[str, float], dict] = {}
         for outcome in market.get("outcomes") or []:
             if not isinstance(outcome, dict):
@@ -298,7 +329,9 @@ def _normalize_book(book: dict, row: dict, missing: set[str]) -> dict[str, dict]
             payload["markets"].append({"name": market_name, "choices": list(sides.values())})
     # Require the SAME bookmaker to offer a complete two-sided exact line.
     for metric, payload in list(result.items()):
-        if metric in ("games", "sets") and not extract_match_total_odds(payload, metric):
+        if metric == "match_winner" and not extract_match_winner_odds(payload, p1, p2):
+            result.pop(metric)
+        elif metric in ("games", "sets") and not extract_match_total_odds(payload, metric):
             result.pop(metric)
         elif metric in ("aces", "double_faults") and not (
             extract_player_total_ou(payload, metric, p1, player_slot=1)
@@ -314,23 +347,28 @@ def discover_propline_fallback(
 ) -> tuple[dict[str, dict[str, dict]], dict]:
     """Map PropLine event IDs safely to RapidAPI fixtures; return parsed payloads.
 
-    Caller only merges valid missing categories, never PropLine's generic h2h
-    into the existing Match Winner cache. API failures fail closed.
+    Caller only merges valid categories that are missing from the primary
+    provider. PropLine h2h is accepted only as a complete two-player quote from
+    one bookmaker. API failures fail closed.
     """
     report: dict[str, Any] = {"enabled": True, "calls": 0, "matched_events": 0,
                               "events_queried": 0, "priced_by_market": {
-                                  "aces": 0, "double_faults": 0, "sets": 0, "games": 0},
+                                  "match_winner": 0, "aces": 0, "double_faults": 0,
+                                  "sets": 0, "games": 0},
                               "missing_secret": False, "errors": 0,
                               "events_on_board": 0, "events_skipped_no_target_market": 0,
                               "events_with_any_target_market": 0,
                               "advertised_market_keys": {}, "markets_advertised_by_type": {
-                                  "aces": 0, "double_faults": 0, "sets": 0, "games": 0},
+                                  "match_winner": 0, "aces": 0, "double_faults": 0,
+                                  "sets": 0, "games": 0},
                               "odds_payload_events": 0, "bookmakers_with_target_market": 0,
                               "events_limited_out": 0,
                               "bookmakers_priced_by_market": {
-                                  "aces": {}, "double_faults": {}, "sets": {}, "games": {}},
+                                  "match_winner": {}, "aces": {}, "double_faults": {},
+                                  "sets": {}, "games": {}},
                               "sample_offers": {
-                                  "aces": [], "double_faults": [], "sets": [], "games": []}}
+                                  "match_winner": [], "aces": [], "double_faults": [],
+                                  "sets": [], "games": []}}
     fetched: dict[str, dict[str, dict]] = {}
     try:
         board = _events(client.get("/sports/tennis/events"))
@@ -345,7 +383,7 @@ def discover_propline_fallback(
     report["events_limited_out"] = max(0, len(matched) - max(0, min(MAX_EVENTS_PER_REFRESH, int(max_events))))
     for row, event in matched[:max(0, min(MAX_EVENTS_PER_REFRESH, int(max_events)))]:
         rapid_id, prop_id = str(row["event_id"]), str(event["id"])
-        missing = set(("aces", "double_faults", "games", "sets")) - existing.get(rapid_id, set())
+        missing = set(("match_winner", "aces", "double_faults", "games", "sets")) - existing.get(rapid_id, set())
         if not missing or client.calls + 2 > client.max_calls:
             continue
         report["events_queried"] += 1
@@ -391,18 +429,30 @@ def discover_propline_fallback(
                     samples = report["sample_offers"][metric]
                     if len(samples) < 8:
                         p1, p2 = _players(row)
-                        offers = (extract_match_total_odds(normalized, metric)
-                                  if metric in ("games", "sets") else
-                                  extract_player_total_ou(normalized, metric, p1, player_slot=1)
-                                  + extract_player_total_ou(normalized, metric, p2, player_slot=2))
-                        if offers:
-                            offer = offers[0]
-                            samples.append({
-                                "provider_event_id": prop_id, "bookmaker": book_name,
-                                "player": offer.get("player_name"),
-                                "line": offer["line"], "over": offer["over"],
-                                "under": offer["under"],
-                            })
+                        if metric == "match_winner":
+                            offer = extract_match_winner_odds(normalized, p1, p2)
+                            if offer:
+                                samples.append({
+                                    "provider_event_id": prop_id,
+                                    "bookmaker": book_name,
+                                    "player1": p1,
+                                    "player2": p2,
+                                    "player1_odds": offer["player1_odds"],
+                                    "player2_odds": offer["player2_odds"],
+                                })
+                        else:
+                            offers = (extract_match_total_odds(normalized, metric)
+                                      if metric in ("games", "sets") else
+                                      extract_player_total_ou(normalized, metric, p1, player_slot=1)
+                                      + extract_player_total_ou(normalized, metric, p2, player_slot=2))
+                            if offers:
+                                offer = offers[0]
+                                samples.append({
+                                    "provider_event_id": prop_id, "bookmaker": book_name,
+                                    "player": offer.get("player_name"),
+                                    "line": offer["line"], "over": offer["over"],
+                                    "under": offer["under"],
+                                })
         except (RuntimeError, ValueError):
             report["errors"] += 1
         if client.remaining is not None and client.remaining < client.min_remaining:
