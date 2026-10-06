@@ -1,0 +1,235 @@
+name: Import Live Tennis API public PBP sample
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/livetennisapi-public-sample-request.json'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  import-public-pbp:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      PYTHONPATH: api:scripts
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and verify private destination
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt
+          python -m compileall -q api scripts
+          test -n "$GH_TOKEN" || { echo 'Missing TBT_DATA_GH_TOKEN'; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+
+      - name: Download canonical history and public Zenodo sample
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/download_production_preflight_inputs.py
+          rm -rf .cache/tbt/livetennisapi
+          mkdir -p .cache/tbt/livetennisapi/source .cache/tbt/livetennisapi/link .cache/tbt/livetennisapi/dryrun .cache/tbt/livetennisapi/import
+          cp -a .cache/tbt/history .cache/tbt/livetennisapi/history-enriched
+
+          base="https://zenodo.org/records/22048731/files"
+          curl -fsSL --retry 4 --retry-delay 3 "$base/matches.csv.gz?download=1" -o .cache/tbt/livetennisapi/source/matches.csv.gz
+          curl -fsSL --retry 4 --retry-delay 3 "$base/players.csv.gz?download=1" -o .cache/tbt/livetennisapi/source/players.csv.gz
+          curl -fsSL --retry 4 --retry-delay 3 "$base/points_sample_2026-06.csv.gz?download=1" -o .cache/tbt/livetennisapi/source/points_sample_2026-06.csv.gz
+          test -s .cache/tbt/livetennisapi/source/matches.csv.gz
+          test -s .cache/tbt/livetennisapi/source/players.csv.gz
+          test -s .cache/tbt/livetennisapi/source/points_sample_2026-06.csv.gz
+          gzip -t .cache/tbt/livetennisapi/source/*.gz
+
+          python - <<'PY'
+          import csv, gzip, hashlib, json
+          from pathlib import Path
+          root=Path(".cache/tbt/livetennisapi/source")
+          required={
+            "matches.csv.gz":{"match_id","player1_id","player2_id","scheduled_time_utc"},
+            "players.csv.gz":{"player_id","name"},
+            "points_sample_2026-06.csv.gz":{"match_id","sets_p1","sets_p2","games_p1","games_p2","points_p1","points_p2","server"},
+          }
+          files=[]
+          for name,cols in required.items():
+              path=root/name
+              with gzip.open(path,"rt",encoding="utf-8-sig",newline="") as h:
+                  reader=csv.reader(h)
+                  header=set(next(reader))
+                  rows=sum(1 for _ in reader)
+              missing=sorted(cols-header)
+              if missing:
+                  raise SystemExit(f"{name}: missing columns {missing}")
+              if rows <= 0:
+                  raise SystemExit(f"{name}: no rows")
+              files.append({"name":name,"rows":rows,"sha256":hashlib.sha256(path.read_bytes()).hexdigest()})
+          manifest={
+            "schema":1,
+            "source":"Live Tennis API public academic sample",
+            "doi":"10.5281/zenodo.22048731",
+            "license":"CC BY-NC 4.0",
+            "raw_redistributed":False,
+            "files":files,
+          }
+          Path(".cache/tbt/livetennisapi/source-manifest.json").write_text(json.dumps(manifest,indent=2),encoding="utf-8")
+          print(json.dumps(manifest,indent=2))
+          PY
+
+      - name: Link complete PBP tapes fail-closed
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/link_livetennisapi_pbp_serve_return.py             --history-dir .cache/tbt/livetennisapi/history-enriched             --matches .cache/tbt/livetennisapi/source/matches.csv.gz             --players .cache/tbt/livetennisapi/source/players.csv.gz             --points .cache/tbt/livetennisapi/source/points_sample_2026-06.csv.gz             --source-version "zenodo-22048731"             --out-dir .cache/tbt/livetennisapi/link
+
+      - name: Dry-run strict import and safety gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/livetennisapi/link/auto_linked.jsonl             --history-dir .cache/tbt/livetennisapi/history-enriched             --out-dir .cache/tbt/livetennisapi/dryrun
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          link=json.loads(Path(".cache/tbt/livetennisapi/link/report.json").read_text())
+          imp=json.loads(Path(".cache/tbt/livetennisapi/dryrun/report.json").read_text())
+          counts=imp.get("counts") or {}
+          forbidden={k:int(counts.get(k) or 0) for k in ("identity_missing","identity_changed","invalid_stats","stat_conflicts")}
+          if any(forbidden.values()):
+              raise SystemExit(f"Dry-run safety failure: {forbidden}")
+          projected=int(link.get("quality_ready_projected_added") or 0)
+          actual=int(imp.get("quality_ready_added") or 0)
+          if projected != actual:
+              raise SystemExit(f"Quality projection mismatch: {projected} != {actual}")
+          print(json.dumps({"quality_ready_added":actual,"safety":forbidden},indent=2))
+          PY
+
+      - name: Write enriched local history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/livetennisapi/link/auto_linked.jsonl             --history-dir .cache/tbt/livetennisapi/history-enriched             --out-dir .cache/tbt/livetennisapi/import             --write-partitions             --write-history-dir .cache/tbt/livetennisapi/history-enriched
+
+      - name: Validate and publish changed canonical partitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          root=Path(".cache/tbt/livetennisapi/history-enriched")
+          matches=load_partitions(root)
+          safe,safety=sanitize_history_identities(matches)
+          if safety.get("quarantined_rows") or len(safe)!=len(matches):
+              raise SystemExit("Identity safety failed")
+          imp=json.loads(Path(".cache/tbt/livetennisapi/import/report.json").read_text())
+          if int((imp.get("counts") or {}).get("identity_missing") or 0):
+              raise SystemExit("Identity missing after write")
+          if int((imp.get("counts") or {}).get("identity_changed") or 0):
+              raise SystemExit("Identity changed after write")
+          years=sorted({int(y) for y in imp.get("changed_years") or []})
+          if years:
+              paths=[root/f"history-{y:04d}.parquet" for y in years]+[root/"history_manifest.json"]
+              if any(not p.is_file() or p.stat().st_size<=0 for p in paths):
+                  raise SystemExit("Missing canonical publish asset")
+              ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle(paths)
+          print(json.dumps({"changed_years":years,"quality_ready_added":imp.get("quality_ready_added",0)},indent=2))
+          PY
+
+      - name: Persisted readback and audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/livetennisapi/readback
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+          from tbt.models.feature_builder import FeatureBuilder
+
+          root=Path(".cache/tbt/livetennisapi/readback")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).download()
+          matches=load_partitions(root)
+          safe,safety=sanitize_history_identities(matches)
+          if safety.get("quarantined_rows") or len(safe)!=len(matches):
+              raise SystemExit("Persisted identity safety failed")
+          quality=sum(
+              1 for m in safe
+              if all(
+                  FeatureBuilder._extract_quality(m.stats or {},side)[0] is not None
+                  and FeatureBuilder._extract_quality(m.stats or {},side)[1] is not None
+                  for side in ("p1","p2")
+              )
+          )
+          link=json.loads(Path(".cache/tbt/livetennisapi/link/report.json").read_text())
+          imp=json.loads(Path(".cache/tbt/livetennisapi/import/report.json").read_text())
+          expected=int(imp.get("quality_ready_after") or 0)
+          if expected and quality != expected:
+              raise SystemExit(f"Persisted quality mismatch: {quality} != {expected}")
+          report={
+              "schema":1,
+              "status":"verified",
+              "source":"Live Tennis API public academic sample",
+              "doi":"10.5281/zenodo.22048731",
+              "license":"CC BY-NC 4.0",
+              "raw_redistributed":False,
+              "canonical_rows":len(safe),
+              "quality_ready_after":quality,
+              "quality_ready_added":int(imp.get("quality_ready_added") or 0),
+              "source_manifest":json.loads(Path(".cache/tbt/livetennisapi/source-manifest.json").read_text()),
+              "link_report":link,
+              "import_report":imp,
+              "identity_safety":safety,
+              "api_requests":0,
+          }
+          out=Path(".cache/tbt/livetennisapi/verification.json")
+          out.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8")
+          print(json.dumps({"status":"verified","canonical_rows":len(safe),"quality_ready_after":quality,"quality_ready_added":report["quality_ready_added"]},indent=2))
+          PY
+
+          file=.cache/tbt/livetennisapi/verification.json
+          encoded="$(base64 -w0 "$file")"
+          path="audit/livetennisapi-public-sample-latest.json"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Verify Live Tennis API public PBP sample" -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path" -f message="Verify Live Tennis API public PBP sample" -f content="$encoded" >/dev/null
+          fi
+
+      - name: Upload audit artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: livetennisapi-public-sample-${{ github.run_id }}
+          path: |
+            .cache/tbt/livetennisapi/source-manifest.json
+            .cache/tbt/livetennisapi/link/report.json
+            .cache/tbt/livetennisapi/link/review.jsonl
+            .cache/tbt/livetennisapi/dryrun/report.json
+            .cache/tbt/livetennisapi/import/report.json
+            .cache/tbt/livetennisapi/verification.json
+          if-no-files-found: warn
+          retention-days: 14
