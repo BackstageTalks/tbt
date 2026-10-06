@@ -9270,61 +9270,65 @@ body#blinqPremium .admin-banner-copy-editor textarea[data-simple-banner-field="h
   body#blinqPremium .admin-banner-layout-grid{grid-template-columns:1fr!important}
 }
 
-/* Results: reduce the large dead zones between tournament, match and prediction. */
-body#blinqPremium.blinq-route .results-table{
-  table-layout:fixed!important;
-  min-width:1180px!important;
-}
-body#blinqPremium.blinq-route .results-table th:nth-child(1),
-body#blinqPremium.blinq-route .results-table td:nth-child(1){width:8%!important}
-body#blinqPremium.blinq-route .results-table th:nth-child(2),
-body#blinqPremium.blinq-route .results-table td:nth-child(2){width:9%!important}
-body#blinqPremium.blinq-route .results-table th:nth-child(3),
-body#blinqPremium.blinq-route .results-table td:nth-child(3){width:16%!important}
-body#blinqPremium.blinq-route .results-table th:nth-child(4),
-body#blinqPremium.blinq-route .results-table td:nth-child(4){width:24%!important}
-body#blinqPremium.blinq-route .results-table th:nth-child(5),
-body#blinqPremium.blinq-route .results-table td:nth-child(5){width:13%!important}
-body#blinqPremium.blinq-route .results-table th:nth-child(6),
-body#blinqPremium.blinq-route .results-table td:nth-child(6){width:10%!important}
-body#blinqPremium.blinq-route .results-table th:nth-child(7),
-body#blinqPremium.blinq-route .results-table td:nth-child(7){width:6%!important}
-body#blinqPremium.blinq-route .results-table th:nth-child(8),
-body#blinqPremium.blinq-route .results-table td:nth-child(8){width:8%!important}
-body#blinqPremium.blinq-route .results-table th:nth-child(9),
-body#blinqPremium.blinq-route .results-table td:nth-child(9){width:6%!important}
-body#blinqPremium.blinq-route .result-tournament .tournament-identity{
-  display:grid!important;
-  grid-template-columns:34px minmax(0,1fr)!important;
-  align-items:center!important;
-  gap:8px!important;
-  min-width:0!important;
-}
-body#blinqPremium.blinq-route .result-tournament .hub-tournament-logo,
-body#blinqPremium.blinq-route .result-tournament .hub-logo-code{
-  width:34px!important;
-  height:34px!important;
-  min-width:34px!important;
-}
-body#blinqPremium.blinq-route .result-tournament .tournament-identity-copy{
-  min-width:0!important;
-}
-body#blinqPremium.blinq-route .result-tournament .tournament-identity-copy strong,
-body#blinqPremium.blinq-route .result-tournament .tournament-location{
-  display:block!important;
-  max-width:100%!important;
-  white-space:nowrap!important;
-  overflow:hidden!important;
-  text-overflow:ellipsis!important;
-}
-body#blinqPremium.blinq-route .result-match .results-match-player,
-body#blinqPremium.blinq-route .result-match .results-opponent{
-  min-width:0!important;
-}
-body#blinqPremium.blinq-route .result-match strong,
-body#blinqPremium.blinq-route .result-prediction strong{
-  white-space:nowrap!important;
-  overflow:hidden!important;
-  text-overflow:ellipsis!important;
+/* Results: reduce the large dead zones between tournament, match and prediction.
+   Desktop only: mobile uses the existing card/table transform and must remain fluid. */
+@media(min-width:761px){
+  body#blinqPremium.blinq-route .results-table{
+    table-layout:fixed!important;
+    min-width:1180px!important;
+  }
+  body#blinqPremium.blinq-route .results-table th:nth-child(1),
+  body#blinqPremium.blinq-route .results-table td:nth-child(1){width:8%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(2),
+  body#blinqPremium.blinq-route .results-table td:nth-child(2){width:9%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(3),
+  body#blinqPremium.blinq-route .results-table td:nth-child(3){width:16%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(4),
+  body#blinqPremium.blinq-route .results-table td:nth-child(4){width:24%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(5),
+  body#blinqPremium.blinq-route .results-table td:nth-child(5){width:13%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(6),
+  body#blinqPremium.blinq-route .results-table td:nth-child(6){width:10%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(7),
+  body#blinqPremium.blinq-route .results-table td:nth-child(7){width:6%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(8),
+  body#blinqPremium.blinq-route .results-table td:nth-child(8){width:8%!important}
+  body#blinqPremium.blinq-route .results-table th:nth-child(9),
+  body#blinqPremium.blinq-route .results-table td:nth-child(9){width:6%!important}
+  body#blinqPremium.blinq-route .result-tournament .tournament-identity{
+    display:grid!important;
+    grid-template-columns:34px minmax(0,1fr)!important;
+    align-items:center!important;
+    gap:8px!important;
+    min-width:0!important;
+  }
+  body#blinqPremium.blinq-route .result-tournament .hub-tournament-logo,
+  body#blinqPremium.blinq-route .result-tournament .hub-logo-code{
+    width:34px!important;
+    height:34px!important;
+    min-width:34px!important;
+  }
+  body#blinqPremium.blinq-route .result-tournament .tournament-identity-copy{
+    min-width:0!important;
+  }
+  body#blinqPremium.blinq-route .result-tournament .tournament-identity-copy strong,
+  body#blinqPremium.blinq-route .result-tournament .tournament-location{
+    display:block!important;
+    max-width:100%!important;
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+  body#blinqPremium.blinq-route .result-match .results-match-player,
+  body#blinqPremium.blinq-route .result-match .results-opponent{
+    min-width:0!important;
+  }
+  body#blinqPremium.blinq-route .result-match strong,
+  body#blinqPremium.blinq-route .result-prediction strong{
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis!important;
+  }
+
 }
 
