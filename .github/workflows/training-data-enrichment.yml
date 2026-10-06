@@ -151,6 +151,39 @@ jobs:
             --write-partitions \
             --write-history-dir .cache/tbt/history-enriched
 
+      - name: Download pinned Match Charting Project bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf .cache/tbt/charting-source .cache/tbt/enrichment/charting-root.zip
+          git clone --depth 1 https://github.com/JeffSackmann/tennis_MatchChartingProject.git .cache/tbt/charting-source
+          git -C .cache/tbt/charting-source fetch --depth 1 origin 1813a1309b7ed7ebf1c7e884b32bf675d00e4edf
+          git -C .cache/tbt/charting-source checkout --detach 1813a1309b7ed7ebf1c7e884b32bf675d00e4edf
+          test "$(git -C .cache/tbt/charting-source rev-parse HEAD)" = "1813a1309b7ed7ebf1c7e884b32bf675d00e4edf"
+          (
+            cd .cache/tbt/charting-source
+            mapfile -t files < <(find . -maxdepth 1 -type f -name 'charting-*.csv' -printf '%f\n' | sort)
+            (( ${#files[@]} >= 40 )) || { echo "Incomplete Match Charting bundle"; exit 1; }
+            zip -q ../enrichment/charting-root.zip "${files[@]}"
+          )
+          test -s .cache/tbt/enrichment/charting-root.zip
+
+      - name: Link and import rich Match Charting features
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/enrichment/charting-link .cache/tbt/enrichment/charting-import
+          python scripts/link_offline_serve_return.py \
+            --history-dir .cache/tbt/history-enriched \
+            --charting-zip .cache/tbt/enrichment/charting-root.zip \
+            --out-dir .cache/tbt/enrichment/charting-link
+          python scripts/import_offline_linked_serve_return.py \
+            --stage .cache/tbt/enrichment/charting-link/auto_linked.jsonl \
+            --history-dir .cache/tbt/history-enriched \
+            --out-dir .cache/tbt/enrichment/charting-import \
+            --write-partitions \
+            --write-history-dir .cache/tbt/history-enriched
+
       - name: Link and import audited ATP point-by-point archive
         shell: bash
         run: |
@@ -193,15 +226,17 @@ jobs:
               "wta_import":read(".cache/tbt/enrichment/wta-import/report.json"),
               "sackmann_link":read(".cache/tbt/enrichment/sackmann-link/report.json"),
               "sackmann_import":read(".cache/tbt/enrichment/sackmann-import/report.json"),
+              "charting_link":read(".cache/tbt/enrichment/charting-link/report.json"),
+              "charting_import":read(".cache/tbt/enrichment/charting-import/report.json"),
               "atp_pbp_link":read(".cache/tbt/enrichment/atp-pbp-link/report.json"),
               "atp_pbp_import":read(".cache/tbt/enrichment/atp-pbp-import/report.json"),
           }
-          import_keys=("tml_import","wta_import","sackmann_import","atp_pbp_import")
+          import_keys=("tml_import","wta_import","sackmann_import","charting_import","atp_pbp_import")
           updated=sum(int((reports[k].get("counts") or {}).get("updated") or 0) for k in import_keys)
           changed_years=sorted({int(y) for k in import_keys for y in (reports[k].get("changed_years") or [])})
           summary={"schema":1,"status":"validated","canonical_rows":len(safe),"updated_matches_total":updated,"canonical_changed":bool(changed_years),"changed_years":changed_years,**reports}
           Path(".cache/tbt/enrichment/enrichment-summary.json").write_text(json.dumps(summary,ensure_ascii=False,indent=2),encoding="utf-8")
-          print(json.dumps({"canonical_rows":len(safe),"updated_matches_total":updated,"tml_updated":(reports["tml_import"].get("counts") or {}).get("updated",0),"wta_updated":(reports["wta_import"].get("counts") or {}).get("updated",0),"sackmann_updated":(reports["sackmann_import"].get("counts") or {}).get("updated",0),"atp_pbp_updated":(reports["atp_pbp_import"].get("counts") or {}).get("updated",0)},indent=2))
+          print(json.dumps({"canonical_rows":len(safe),"updated_matches_total":updated,"tml_updated":(reports["tml_import"].get("counts") or {}).get("updated",0),"wta_updated":(reports["wta_import"].get("counts") or {}).get("updated",0),"sackmann_updated":(reports["sackmann_import"].get("counts") or {}).get("updated",0),"charting_updated":(reports["charting_import"].get("counts") or {}).get("updated",0),"atp_pbp_updated":(reports["atp_pbp_import"].get("counts") or {}).get("updated",0)},indent=2))
           PY
 
       - name: Publish enriched canonical history
@@ -213,7 +248,7 @@ jobs:
           from pathlib import Path
           from release_store import ReleaseStore
           root=Path(".cache/tbt/history-enriched")
-          reports=[json.loads(Path(p).read_text()) for p in (".cache/tbt/enrichment/tml-import/report.json",".cache/tbt/enrichment/wta-import/report.json",".cache/tbt/enrichment/sackmann-import/report.json",".cache/tbt/enrichment/atp-pbp-import/report.json")]
+          reports=[json.loads(Path(p).read_text()) for p in (".cache/tbt/enrichment/tml-import/report.json",".cache/tbt/enrichment/wta-import/report.json",".cache/tbt/enrichment/sackmann-import/report.json",".cache/tbt/enrichment/charting-import/report.json",".cache/tbt/enrichment/atp-pbp-import/report.json")]
           years=sorted({int(y) for r in reports for y in (r.get("changed_years") or [])})
           if not years:
               print("Verified no-op: no changed history partitions to publish")
