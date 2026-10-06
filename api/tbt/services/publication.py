@@ -537,7 +537,7 @@ def restore_published_market_snapshots(feed, ledger, *, quarantine_report=None):
                     # quarantine sink remain strict/fail-closed.
                     if (
                         quarantine_report is not None
-                        and section in {"top_daily", "prime", "doubles"}
+                        and section in {"top_daily", "prime", "value", "doubles"}
                     ):
                         quarantine_report.append({
                             "event_id": commitment[0],

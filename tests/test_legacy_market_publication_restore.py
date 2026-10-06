@@ -194,3 +194,60 @@ def test_tied_conflicting_prime_can_be_quarantined_for_daily_offer_recovery():
         "section": "prime",
         "reason": "ambiguous_issued_legacy_match_winner_snapshots",
     }]
+
+
+def test_tied_conflicting_value_can_be_quarantined_for_daily_offer_recovery():
+    feed = {
+        "top_daily_picks": [],
+        "prime_picks": [],
+        "value_picks": [_feed_row()],
+        "doubles_picks": [],
+        "ace_picks": [],
+        "sg_picks": [],
+    }
+    first = _legacy_publication(odds=1.84)
+    conflict = _legacy_publication(odds=1.91)
+    for publication in (first, conflict):
+        publication["section"] = "value"
+        publication["publication_key"] = "value:legacy:17201971:A"
+    ledger = [{
+        "event_id": "17201971",
+        "market_publications": [first, conflict],
+    }]
+    quarantine = []
+
+    restored = restore_published_market_snapshots(
+        feed,
+        ledger,
+        quarantine_report=quarantine,
+    )
+
+    assert restored["value_picks"] == []
+    assert quarantine == [{
+        "event_id": "17201971",
+        "market": "match_winner",
+        "section": "value",
+        "reason": "ambiguous_issued_legacy_match_winner_snapshots",
+    }]
+
+
+def test_tied_conflicting_value_remains_strict_without_quarantine_sink():
+    feed = {
+        "top_daily_picks": [],
+        "prime_picks": [],
+        "value_picks": [_feed_row()],
+        "doubles_picks": [],
+        "ace_picks": [],
+        "sg_picks": [],
+    }
+    first = _legacy_publication(odds=1.84)
+    conflict = _legacy_publication(odds=1.91)
+    for publication in (first, conflict):
+        publication["section"] = "value"
+    ledger = [{
+        "event_id": "17201971",
+        "market_publications": [first, conflict],
+    }]
+
+    with pytest.raises(RuntimeError, match="value event 17201971"):
+        restore_published_market_snapshots(feed, ledger)
