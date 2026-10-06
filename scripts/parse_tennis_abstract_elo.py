@@ -73,14 +73,35 @@ class _TableParser(HTMLParser):
             self._table = None
 
 
+def _strip_markdown_link(value: str) -> str:
+    match = re.fullmatch(r"\[([^\]]+)\]\([^\)]+\)", value.strip())
+    return match.group(1).strip() if match else value.strip()
+
+
+def _split_text_row(line: str) -> list[str] | None:
+    if "\t" in line:
+        return [cell.replace("\xa0", " ").strip() for cell in line.split("\t")]
+    stripped = line.strip()
+    if stripped.startswith("|") and stripped.endswith("|"):
+        return [cell.strip() for cell in stripped[1:-1].split("|")]
+    return None
+
+
+def _markdown_separator(row: list[str]) -> bool:
+    return bool(row) and all(
+        not cell or re.fullmatch(r":?-{3,}:?", cell) is not None
+        for cell in row
+    )
+
+
 def _find_text_table(text: str, *, kind: str) -> pd.DataFrame:
-    """Parse the tab-delimited text emitted by browser/Reader fallbacks."""
+    """Parse tab-delimited or Markdown-table browser/Reader fallbacks."""
     required = {"player", "elo"} if kind == "elo" else {"player", "yelo"}
     lines = text.replace("\r\n", "\n").replace("\xa0", " ").splitlines()
     for pos, line in enumerate(lines):
-        if "\t" not in line:
+        header = _split_text_row(line)
+        if not header:
             continue
-        header = [cell.strip() for cell in line.split("\t")]
         names = [_column_name(cell) for cell in header]
         if not required.issubset(set(names)):
             continue
@@ -91,15 +112,18 @@ def _find_text_table(text: str, *, kind: str) -> pd.DataFrame:
                 if rows:
                     break
                 continue
-            if "\t" not in raw:
+            row = _split_text_row(raw)
+            if row is None:
                 if rows:
                     break
                 continue
-            row = [cell.replace("\xa0", " ").strip() for cell in raw.split("\t")]
+            if _markdown_separator(row):
+                continue
             if not row or not re.fullmatch(r"\d+", row[0] or ""):
                 if rows:
                     break
                 continue
+            row = [_strip_markdown_link(cell) for cell in row]
             if len(row) < width:
                 row += [""] * (width - len(row))
             elif len(row) > width:
