@@ -362,7 +362,22 @@
   }
   function bannerCreativeStyle(c={}){
     const n=(v,min,max,fallback)=>{const x=Number(v);return Number.isFinite(x)&&v!==''?Math.max(min,Math.min(max,x)):fallback;};
-    const vars=[`--creative-headline-size:${n(c.headline_size,12,72,36)}px`,`--creative-text-size:${n(c.text_size,9,28,14)}px`,`--creative-eyebrow-size:${n(c.eyebrow_size,7,18,10)}px`,`--creative-delay:${n(c.animation_delay_ms,0,5000,80)}ms`];
+    const vars=[
+      `--creative-headline-size:${n(c.headline_size,12,72,36)}px`,
+      `--creative-text-size:${n(c.text_size,9,28,14)}px`,
+      `--creative-eyebrow-size:${n(c.eyebrow_size,7,18,10)}px`,
+      `--creative-delay:${n(c.animation_delay_ms,0,5000,80)}ms`,
+      `--hero-img-x:${n(c.desktop_image_x,0,100,50)}%`,
+      `--hero-img-y:${n(c.desktop_image_y,0,100,50)}%`,
+      `--hero-img-mobile-x:${n(c.mobile_image_x,0,100,50)}%`,
+      `--hero-img-mobile-y:${n(c.mobile_image_y,0,100,50)}%`,
+      `--hero-copy-x:${n(c.desktop_text_x,0,100,3)}%`,
+      `--hero-copy-y:${n(c.desktop_text_y,0,100,50)}%`,
+      `--hero-copy-width:${n(c.desktop_text_width,18,96,42)}%`,
+      `--hero-copy-mobile-x:${n(c.mobile_text_x,0,100,4)}%`,
+      `--hero-copy-mobile-y:${n(c.mobile_text_y,0,100,50)}%`,
+      `--hero-copy-mobile-width:${n(c.mobile_text_width,22,96,70)}%`
+    ];
     for(const field of ['headline','text','eyebrow']){
       const color=String(c[`${field}_color`]||'').trim();
       if(/^#[0-9a-f]{6}$/i.test(color))vars.push(`--creative-${field}-color:${color}`);
@@ -375,6 +390,9 @@
     const pos=String(c.text_position||'left-center').replace(/[^a-z0-9_-]/gi,'');
     const effect=String(c.effect||'fade-up').replace(/[^a-z0-9_-]/gi,'');
     return ` creative-${mode} creative-pos-${pos} creative-effect-${effect}`;
+  }
+  function bannerLineHtml(value){
+    return escapeHtml(String(value||'')).replace(/\r?\n/g,'<br>');
   }
   async function loadEditablePresentationConfig(){
     try{
@@ -878,10 +896,10 @@
     const art=image?'':`<div class="dashboard-hero-ball" aria-hidden="true"><i></i><b></b></div>`;
     // Do not render the obsolete, uneditable accent_text from saved banner revisions.
     const title=String(c.headline||'').trim();
-    const titleHtml=title?`<h2><strong>${escapeHtml(title)}</strong></h2>`:'';
+    const titleHtml=title?`<h2><strong>${bannerLineHtml(title)}</strong></h2>`:'';
     const heroEyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
     const subtitle=String(c.text||'').trim();
-    const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${escapeHtml(heroEyebrow)}</small>`:''}${titleHtml}${subtitle?`<p>${escapeHtml(subtitle)}</p>`:''}${c.button_text?`<b class="hero-slide-cta">${escapeHtml(c.button_text)} →</b>`:''}</div>`:'';
+    const copy=showCopy?`<div class="dashboard-hero-copy">${heroEyebrow?`<small>${bannerLineHtml(heroEyebrow)}</small>`:''}${titleHtml}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b class="hero-slide-cta">${bannerLineHtml(c.button_text)} →</b>`:''}</div>`:'';
     return `<a class="dashboard-hero hero-slide theme-${escapeHtml(theme)}${bannerCreativeClasses(c)}${index===state.heroIndex?' is-active':''}${showCopy?'':' hero-image-only'}" ${bannerCreativeStyle(c)} href="${escapeHtml(href)}" ${external?'target="_blank" rel="noopener"':''} ${route&&!external?`data-route="${escapeHtml(route)}"`:''} data-hero-index="${index}" data-ui-element="${escapeHtml(item.id)}" ${bannerAttrs(item,c)} aria-hidden="${index===state.heroIndex?'false':'true'}">${sponsored}${image}${copy}${art}</a>`;
   }
   function clearHeroRotation(){
@@ -3643,7 +3661,7 @@
     const eyebrow=Object.prototype.hasOwnProperty.call(c,'eyebrow')?String(c.eyebrow||'').trim():'BLINQ';
     const headline=String(c.headline||'').trim();
     const subtitle=String(c.text||'').trim();
-    const copy=c.show_copy===false?'':`<div class="admin-hero-preview-copy">${eyebrow?`<small>${escapeHtml(eyebrow)}</small>`:''}${headline?`<strong>${escapeHtml(headline)}</strong>`:''}${subtitle?`<p>${escapeHtml(subtitle)}</p>`:''}${c.button_text?`<b>${escapeHtml(c.button_text)} →</b>`:''}</div>`;
+    const copy=c.show_copy===false?'':`<div class="admin-hero-preview-copy">${eyebrow?`<small>${bannerLineHtml(eyebrow)}</small>`:''}${headline?`<strong>${bannerLineHtml(headline)}</strong>`:''}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b>${bannerLineHtml(c.button_text)} →</b>`:''}</div>`;
     return `<div class="lean-admin-preview ${mode}${bannerCreativeClasses(c)} is-active" ${bannerCreativeStyle(c)} data-preview-slot="${escapeHtml(entry.id)}"><img src="${escapeHtml(img)}" alt="" loading="lazy">${copy}</div>`;
   }
   function syncAdminHeroPreview(){
@@ -3726,7 +3744,7 @@
       <div class="admin-form-section admin-banner-copy-editor"><div class="admin-form-section-title"><strong>Text bannera</strong><span>Prázdne pole zostane skryté. Pôvodný skrytý doplnkový nadpis sa nepoužíva.</span></div><div class="admin-form-grid">
         <label>Popiska <small>(prázdne = skryť)</small><input data-simple-banner-field="eyebrow" value="${escapeHtml(c.eyebrow||'')}"></label>
         <label>Animácia<select data-simple-banner-field="effect">${effects.map(v=>`<option value="${v}"${v===(c.effect||'fade-up')?' selected':''}>${v}</option>`).join('')}</select></label>
-        <label class="span-2">Nadpis<input data-simple-banner-field="headline" value="${escapeHtml(c.headline||'')}"></label>
+        <label class="span-2">Nadpis <small>(Enter = ručné zalomenie)</small><textarea rows="2" data-simple-banner-field="headline">${escapeHtml(c.headline||'')}</textarea></label>
         <label class="span-2">Podnadpis<textarea rows="3" data-simple-banner-field="text">${escapeHtml(c.text||'')}</textarea></label>
         <label>Text tlačidla<input data-simple-banner-field="button_text" value="${escapeHtml(c.button_text||'')}"></label>
         <label>Odkaz<input data-simple-banner-field="link" value="${escapeHtml(c.link||'')}"></label>
@@ -3742,6 +3760,13 @@
       <div class="admin-form-section admin-banner-image-editor"><div class="admin-form-section-title"><strong>Grafické podklady · Banner ${escapeHtml(selectedId.split('_').pop())}</strong><span>Vlastný desktop a mobilný obrázok bez textu.</span></div><div class="admin-form-grid">
         <label class="span-2">Desktop hero · 1920×640<input data-simple-banner-field="image_url" value="${escapeHtml(c.image_url||'')}" placeholder="/assets/hero.webp"></label>
         <label class="span-2">Mobilný hero · 1080×720<input data-simple-banner-field="mobile_image_url" value="${escapeHtml(c.mobile_image_url||'')}" placeholder="/assets/hero-mobile.webp"></label>
+        <div class="admin-banner-layout-grid span-2">
+          <fieldset><legend>Desktop · poloha obrázka</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_image_x" value="${Number.isFinite(Number(c.desktop_image_x))?Number(c.desktop_image_x):50}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_image_y" value="${Number.isFinite(Number(c.desktop_image_y))?Number(c.desktop_image_y):50}"></label></fieldset>
+          <fieldset><legend>Mobil · poloha obrázka</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_image_x" value="${Number.isFinite(Number(c.mobile_image_x))?Number(c.mobile_image_x):50}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_image_y" value="${Number.isFinite(Number(c.mobile_image_y))?Number(c.mobile_image_y):50}"></label></fieldset>
+          <fieldset><legend>Desktop · text</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_text_x" value="${Number.isFinite(Number(c.desktop_text_x))?Number(c.desktop_text_x):3}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="desktop_text_y" value="${Number.isFinite(Number(c.desktop_text_y))?Number(c.desktop_text_y):50}"></label><label>Šírka %<input type="number" min="18" max="96" step="1" data-simple-banner-field="desktop_text_width" value="${Number.isFinite(Number(c.desktop_text_width))?Number(c.desktop_text_width):42}"></label></fieldset>
+          <fieldset><legend>Mobil · text</legend><label>X %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_text_x" value="${Number.isFinite(Number(c.mobile_text_x))?Number(c.mobile_text_x):4}"></label><label>Y %<input type="number" min="0" max="100" step="1" data-simple-banner-field="mobile_text_y" value="${Number.isFinite(Number(c.mobile_text_y))?Number(c.mobile_text_y):50}"></label><label>Šírka %<input type="number" min="22" max="96" step="1" data-simple-banner-field="mobile_text_width" value="${Number.isFinite(Number(c.mobile_text_width))?Number(c.mobile_text_width):70}"></label></fieldset>
+        </div>
+        <p class="admin-banner-layout-help span-2">X/Y posúva výrez obrázka a blok textu nezávisle pre desktop a mobil. Šírka textu riadi automatické zalomenie; Enter v nadpise vytvorí pevný riadok.</p>
         <label class="admin-toggle-line span-2"><input type="checkbox" data-simple-banner-field="show_copy" ${c.show_copy!==false?'checked':''}><span>Zobraziť text nad obrázkom</span></label>
       </div></div>
       <div class="admin-form-section admin-page-background-editor" data-simple-banner="HERO_BANNER_1"><div class="admin-form-section-title"><strong>Pozadie hlavnej stránky</strong><span>Predvolené je rovnaké zelené tenisové pozadie ako pri prihlásení a loadingu, bez watermarku.</span></div><div class="admin-form-grid">
@@ -4999,7 +5024,7 @@
       if(t.dataset.adminHeroRotate!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.auto_rotate=t.checked;renderHeroBanner();rerenderAdmin();return;}
       if(t.dataset.adminHeroDots!==undefined){state.ui.hero_banner=state.ui.hero_banner||{};state.ui.hero_banner.show_dots=t.checked;renderHeroBanner();rerenderAdmin();return;}
       const simpleBanner=t.closest('[data-simple-banner]');
-      if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/_size$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;state.adminPreviewPinnedId=id;state.adminPreviewPaused=true;renderAllUiContent();rerenderAdmin();}return;}
+      if(simpleBanner&&t.dataset.simpleBannerField){const id=simpleBanner.dataset.simpleBanner,item=elements()?.[id];if(item){item.content=item.content||{};item.content[t.dataset.simpleBannerField]=t.type==='checkbox'?t.checked:/(?:_size|_x|_y|_width)$/.test(t.dataset.simpleBannerField)?Number(t.value):t.value;state.adminPreviewPinnedId=id;state.adminPreviewPaused=true;renderAllUiContent();rerenderAdmin();}return;}
       if(t.dataset.adminKpiIndex!==undefined&&t.dataset.adminKpiField){
         const index=Number(t.dataset.adminKpiIndex),field=t.dataset.adminKpiField;
         if(!Number.isInteger(index)||index<0||index>=3)return;
@@ -5032,14 +5057,16 @@
     // Live copy feedback without replacing the selected editor or interrupting typing.
     host.oninput=event=>{
       const t=event.target,field=t?.dataset?.simpleBannerField;
-      if(!field||!['eyebrow','headline','text','button_text'].includes(field))return;
+      const liveFields=['eyebrow','headline','text','button_text','desktop_image_x','desktop_image_y','mobile_image_x','mobile_image_y','desktop_text_x','desktop_text_y','desktop_text_width','mobile_text_x','mobile_text_y','mobile_text_width'];
+      if(!field||!liveFields.includes(field))return;
       const wrap=t.closest('[data-simple-banner]'),item=elements()?.[wrap?.dataset?.simpleBanner];
       if(!item)return;
       item.content=item.content||{};
-      item.content[field]=t.value;
+      item.content[field]=/(?:_x|_y|_width)$/.test(field)?Number(t.value):t.value;
       state.adminPreviewPinnedId=wrap.dataset.simpleBanner;
       state.adminPreviewPaused=true;
       syncAdminHeroPreview();
+      renderHeroBanner();
     };
     startAdminHeroPreview();
     const search=$('adminUserSearch');if(search)search.oninput=()=>{adminUserFilterState().q=search.value;adminApplyUserFilters();};
