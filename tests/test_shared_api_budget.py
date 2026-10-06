@@ -13,26 +13,31 @@ from tbt.providers.rapidapi import RapidTennisClient
 NOW = datetime(2026, 9, 27, 12, 0, tzinfo=timezone.utc)
 
 
-def test_all_purposes_share_provider_day_pool_with_500_reserve():
+def test_all_purposes_share_provider_day_pool_with_10_percent_reserve():
     ledger = None
     for purpose, amount in (
-        ("live", 2500),
-        ("refresh", 2500),
-        ("match", 1000),
-        ("history", 3000),
-        ("history", 3000),
+        ("live", 3000),
+        ("refresh", 5500),
+        ("match", 2500),
         ("history", 2500),
     ):
         ledger, result = shared_budget.calculate(ledger, purpose, amount, now=NOW)
 
     assert result["provider_plan_limit"] == 15000
-    assert result["global_limit"] == 14500
-    assert result["global_spent"] == 14500
+    assert result["global_limit"] == 13500
+    assert result["global_spent"] == 13500
     assert result["global_remaining"] == 0
-    assert result["reserved_provider_headroom"] == 500
+    assert result["reserved_provider_headroom"] == 1500
     with pytest.raises(shared_budget.SharedBudgetExhausted):
         shared_budget.calculate(ledger, "refresh", 1, now=NOW)
 
+
+def test_history_purpose_cannot_consume_the_provider_day():
+    ledger, result = shared_budget.calculate(None, "history", 2500, now=NOW)
+    assert result["spent"]["history"] == 2500
+    assert result["remaining"]["history"] == 0
+    with pytest.raises(shared_budget.SharedBudgetExhausted):
+        shared_budget.calculate(ledger, "history", 1, now=NOW)
 
 def test_provider_day_resets_at_1910_bratislava():
     # 2026-09-27 is CEST, so 19:10 Europe/Bratislava == 17:10 UTC.
@@ -44,7 +49,7 @@ def test_provider_day_resets_at_1910_bratislava():
 
     ledger, result = shared_budget.calculate(ledger, "refresh", 1000, now=at_reset)
     assert result["global_spent"] == 1000
-    assert result["global_remaining"] == 13500
+    assert result["global_remaining"] == 12500
     assert result["window"] == "provider_day_19_10_europe_bratislava"
 
 
