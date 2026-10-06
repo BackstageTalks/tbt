@@ -1,0 +1,10 @@
+{
+  "mode": "write",
+  "source_ref": "main",
+  "source_prefix": "research/offline-sources/blinq-import-2026-10-06",
+  "expected_sha256": "1de9f6046eff1930341bc02c25171cfb28846955ef364625e7adffc0013ba06d",
+  "expected_file_lines": 35010,
+  "expected_source_rows": 34983,
+  "tour": "atp",
+  "source_label": "operator_uploaded_atp_2013_2026_avg_ps_b365_bfe"
+}
