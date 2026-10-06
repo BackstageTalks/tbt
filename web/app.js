@@ -1152,7 +1152,7 @@
   function populateFilters(){ const rows=(state.feed.upcoming||[]).map(normalize); populateSelect('tournamentFilter',new Set(rows.map(x=>x.tournament)),publicText('All Tournaments')); populateSelect('surfaceFilter',new Set(rows.map(x=>x.surface)),publicText('All Surfaces')); }
   function compactCount(value){ const n=Number(value); if(!Number.isFinite(n)) return '—'; if(n>=1000000) return `${(n/1000000).toFixed(n>=10000000?0:1)}M`; if(n>=1000) return `${(n/1000).toFixed(n>=100000?0:1)}K`; return String(Math.round(n)); }
   function rankedPredictions(){
-    return marketRows('prime').map(normalize).sort((a,b)=>b.probability-a.probability || new Date(a.date)-new Date(b.date)).map((m,index)=>({...m,accessIndex:index}));
+    return shortOddsDisplayRows(marketRows('prime')).map(normalize).map((m,index)=>({...m,accessIndex:index}));
   }
   function filtered(){ const rows=rankedPredictions(),tour=$('tourFilter')?.value||'',tournament=$('tournamentFilter')?.value||'',surface=$('surfaceFilter')?.value||'',confidence=$('confidenceFilter')?.value||'',q=($('searchInput')?.value||'').trim().toLowerCase(); return rows.filter(m=>{ if(tour&&m.tour!==tour)return false;if(tournament&&m.tournament!==tournament)return false;if(surface&&m.surface!==surface)return false;if(confidence&&m.confidence!==confidence)return false;if(q&&!`${m.p1} ${m.p2} ${m.tournament}`.toLowerCase().includes(q))return false;return true; }); }
 
@@ -1964,6 +1964,29 @@
     (marketRows('sg')||[]).filter(offerSurfaceEligible).forEach(row=>{const market=String(row?.market||'').toLowerCase();if(market==='games'||market==='sets')add({...row,_hub_source:market});});
     return rows.sort((a,b)=>(marketProbability(b)||0)-(marketProbability(a)||0));
   }
+  function shortOddsDisplayRows(rows){
+    const source=(Array.isArray(rows)?rows:[]).filter(offerSurfaceEligible);
+    const probability=row=>marketProbability(row)??-1;
+    const odds=row=>{const value=Number(row?.odds??row?.betting?.odds);return Number.isFinite(value)?value:0;};
+    // Short Odds has two jobs: surface attractive pre-match picks and keep the
+    // full favourite pool available to Comeback Radar. Re-rank display only.
+    // First five favour >=80% candidates with playable prices; the remaining
+    // five (and everything below them) retain probability-first ordering.
+    const displayScore=row=>{
+      const p=probability(row),price=odds(row);
+      if(p<0.80||price<1.14)return -Infinity;
+      const priceBonus=price>=1.20&&price<=1.30?0.030:price>=1.31?0.025:0.015;
+      return p+priceBonus;
+    };
+    const promoted=source.filter(row=>displayScore(row)>-Infinity)
+      .sort((a,b)=>displayScore(b)-displayScore(a)||probability(b)-probability(a)||odds(b)-odds(a))
+      .slice(0,5);
+    const promotedRows=new Set(promoted);
+    const remainder=source.filter(row=>!promotedRows.has(row))
+      .sort((a,b)=>probability(b)-probability(a)||odds(b)-odds(a));
+    return [...promoted,...remainder];
+  }
+
   function dailyHubRows(tab){
     if(tab==='daily'){
       // `daily_picks` is already server-authorized; never re-merge legacy arrays client-side.
@@ -1971,7 +1994,7 @@
       return (Array.isArray(state.feed?.daily_picks)?state.feed.daily_picks:[]).filter(offerSurfaceEligible);
     }
     if(tab==='top200')return marketRows('top200').filter(offerSurfaceEligible);
-    if(tab==='prime')return marketRows('prime').filter(offerSurfaceEligible);
+    if(tab==='prime')return shortOddsDisplayRows(marketRows('prime'));
     if(tab==='value')return marketRows('value').filter(offerSurfaceEligible);
     if(tab==='ace')return marketRows('ace').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()==='aces');
     if(tab==='double_faults')return marketRows('ace').filter(row=>offerSurfaceEligible(row)&&String(row?.market||'').toLowerCase()==='double_faults');
