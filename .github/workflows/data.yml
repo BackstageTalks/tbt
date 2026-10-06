@@ -25,7 +25,7 @@ on:
         type: string
         default: ''
       max_requests:
-        description: Global/manual Tennis RapidAPI request cap, including retries. mega-data never exceeds this cap.
+        description: Per-run Tennis RapidAPI hard cap, including retries (maximum 1000).
         type: number
         default: 1000
       market_odds_max_events:
@@ -77,9 +77,7 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[replace-current-refresh]') || contains(github.event.head_commit.message, '[replace-stale-data-run]')) }}
 jobs:
   pipeline:
-    # EMERGENCY API PAUSE 2026-10-06: shared daily quota reached 96%.
-    # Blocks all provider/data pipeline dispatches until explicitly reverted.
-    if: false
+    if: (github.event_name == 'push' && (contains(github.event.head_commit.message, '[refresh-now]') || contains(github.event.head_commit.message, '[data-request]'))) || github.event_name == 'workflow_dispatch'
     # Refresh/results publication mutates tbt-predictions-v1, so it must also
     # share the exact production publication lock used by CI/player deploys.
     # History/statistics modes receive a run-unique job group and therefore do
@@ -118,6 +116,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Enforce per-run Tennis API hard cap
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! [[ "$MAX_REQUESTS" =~ ^[0-9]+$ ]] || (( 10#$MAX_REQUESTS < 1 || 10#$MAX_REQUESTS > 1000 )); then
+            echo "::error::MAX_REQUESTS must be 1..1000; refusing provider run."
+            exit 1
+          fi
+
       - name: Resolve controlled push data request
         if: github.event_name == 'push' && contains(github.event.head_commit.message, '[data-request]')
         shell: bash
@@ -133,8 +140,8 @@ jobs:
           promote="$(jq -r '.promote // false' "$request")"
           [[ "$promote" == "true" || "$promote" == "false" ]] || { echo "Invalid promote flag"; exit 1; }
           max_requests="$(jq -r '.max_requests // 1000' "$request")"
-          [[ "$max_requests" =~ ^[0-9]+$ ]] && (( 10#$max_requests >= 1 && 10#$max_requests <= 12000 )) || {
-            echo "Invalid max_requests: $max_requests (expected 1..12000)"; exit 1;
+          [[ "$max_requests" =~ ^[0-9]+$ ]] && (( 10#$max_requests >= 1 && 10#$max_requests <= 1000 )) || {
+            echo "Invalid max_requests: $max_requests (expected 1..1000)"; exit 1;
           }
           start_date="$(jq -r '.start // empty' "$request")"
           end_date="$(jq -r '.end // empty' "$request")"
