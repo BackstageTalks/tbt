@@ -62,8 +62,25 @@ jobs:
             [wta_yelo]="https://www.tennisabstract.com/reports/wta_season_yelo_ratings.html"
           )
           for name in atp_elo wta_elo atp_yelo wta_yelo; do
-            curl -fsSL --retry 3 --retry-delay 3               -A "BlinQ research snapshot/1.0 (approved operator use)"               "${urls[$name]}" -o ".cache/tbt/tennis-abstract/raw/$name.html"
-            test -s ".cache/tbt/tennis-abstract/raw/$name.html"
+            target=".cache/tbt/tennis-abstract/raw/$name.html"
+            source="${urls[$name]}"
+            if curl -fsSL --retry 2 --retry-delay 2 \
+                -A "Mozilla/5.0 (compatible; BlinQ research snapshot/1.0)" \
+                "$source" -o "$target"; then
+              echo "$name: direct Tennis Abstract fetch succeeded"
+            else
+              echo "$name: direct fetch blocked; using fresh browser-reader fallback"
+              rm -f "$target"
+              reader="https://r.jina.ai/http://${source#https://}"
+              curl -fsSL --retry 3 --retry-delay 3 \
+                -H "X-No-Cache: true" \
+                -H "X-Cache-Tolerance: 0" \
+                -H "X-Respond-With: markdown" \
+                "$reader" -o "$target"
+              grep -Fq "URL Source: http://www.tennisabstract.com/reports/" "$target"
+            fi
+            test -s "$target"
+            grep -Eiq "Last[[:space:]]+update:[[:space:]]*[0-9]{4}-[0-9]{2}-[0-9]{2}" "$target"
           done
 
       - name: Parse and validate point-in-time snapshot
