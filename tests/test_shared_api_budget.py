@@ -17,7 +17,8 @@ def test_all_purposes_share_provider_day_pool_with_10_percent_reserve():
     ledger = None
     for purpose, amount in (
         ("live", 3000),
-        ("refresh", 5500),
+        ("refresh", 3000),
+        ("refresh", 2500),
         ("match", 2500),
         ("history", 2500),
     ):
