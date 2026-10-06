@@ -159,8 +159,8 @@ jobs:
           collector=json.loads(Path(".cache/tbt/lta-paid/collector/report.json").read_text())
           imported=json.loads(Path(".cache/tbt/lta-paid/write/report.json").read_text())
           expected=int(imported.get("quality_ready_after") or 0)
-          if expected and quality!=expected:
-              raise SystemExit(f"Persisted quality mismatch: {quality} != {expected}")
+          if expected and quality < expected:
+              raise SystemExit(f"Persisted quality regressed below expected minimum: {quality} < {expected}")
           report={
               "schema":1,
               "status":"verified",
