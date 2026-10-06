@@ -1,0 +1,241 @@
+name: Export OddsTrader ATP 20260901 CSV
+
+on:
+  push:
+    branches: [research/oddstrader-probe-20260901]
+    paths:
+      - ".github/workflows/oddstrader-export-20260901.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: research/oddstrader-probe-20260901
+
+      - name: Build tidy opening/closing odds CSV
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p research/oddstrader
+          python - <<'PY'
+          import csv, json, math, urllib.parse, urllib.request
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          DATE="20260901"
+          PAGE=f"https://www.oddstrader.com/atp/?date={DATE}&g=match&m=winner"
+          API="https://ms.virginia.us-east-1.oddstrader.com/odds-v2/odds-v2-service"
+          MARKETS=[
+              ("match","winner",126),
+              ("match","spread",395),
+              ("match","total",396),
+              ("1st-set","winner",279),
+              ("1st-set","spread",434),
+              ("1st-set","total",439),
+          ]
+
+          def fetch(url):
+              req=urllib.request.Request(url,headers={
+                  "User-Agent":"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/154 Safari/537.36",
+                  "Accept":"application/json,text/html;q=0.9",
+                  "Referer":PAGE,
+              })
+              with urllib.request.urlopen(req,timeout=40) as h:
+                  return h.read().decode("utf-8","replace")
+
+          html=fetch(PAGE)
+          marker="window.__INITIAL_STATE__="
+          pos=html.index(marker)+len(marker)
+          state,_=json.JSONDecoder().raw_decode(html[pos:])
+          events=(state.get("events") or {}).get("events") or {}
+          if not events:
+              raise SystemExit("No OddsTrader ATP events found")
+
+          books=[]
+          for b in (state.get("sportsbooks") or {}).get("sportsbooks") or []:
+              if not isinstance(b,dict) or b.get("paid") is None:
+                  continue
+              books.append({
+                  "bookmaker":str(b.get("nam") or ""),
+                  "paid":int(b["paid"]),
+                  "sbid":int(b.get("sbid") or 0),
+              })
+          if not books:
+              raise SystemExit("No OddsTrader sportsbooks found")
+          paid_to_book={b["paid"]:b for b in books}
+
+          event_ids=sorted((int(x) for x in events), key=int)
+          eid_list=",".join(map(str,event_ids))
+          paid_list=",".join(str(b["paid"]) for b in books)
+
+          def gql(query):
+              url=API+"?"+urllib.parse.urlencode({"query":query})
+              raw=fetch(url)
+              payload=json.loads(raw)
+              if payload.get("errors") and not payload.get("data"):
+                  raise RuntimeError(payload["errors"])
+              return payload.get("data") or {}
+
+          def iso_ms(value):
+              if value in (None,""):
+                  return ""
+              try:
+                  ms=float(value)
+                  return datetime.fromtimestamp(ms/1000,tz=timezone.utc).isoformat()
+              except Exception:
+                  return ""
+
+          def player_map(ev):
+              out={}
+              for k,p in (ev.get("participants") or {}).items():
+                  if not isinstance(p,dict): continue
+                  src=p.get("source") or {}
+                  name=" ".join(x for x in (str(src.get("fn") or "").strip(),str(src.get("lnam") or "").strip()) if x).strip()
+                  out[int(p.get("partid") or k)]=name or str(k)
+              return out
+
+          rows=[]
+          stats={"events":len(events),"books":len(books),"markets":{},"dropped_post_start_current":0}
+          for group,market,mtid in MARKETS:
+              q=(
+                  "{"
+                  f" openingLines(eid:[{eid_list}],mtid:[{mtid}],paid:[{paid_list}])"
+                  f" currentLines(eid:[{eid_list}],mtid:[{mtid}],paid:[{paid_list}])"
+                  f" bettingOptionsByEvent(eid:[{eid_list}],mtid:{mtid})"
+                  " { eid partid boid nam mtid spid sequence }"
+                  "}"
+              )
+              data=gql(q)
+              opening=[x for x in (data.get("openingLines") or []) if isinstance(x,dict)]
+              current=[x for x in (data.get("currentLines") or []) if isinstance(x,dict)]
+              options=[x for x in (data.get("bettingOptionsByEvent") or []) if isinstance(x,dict)]
+
+              label_by_exact={}
+              label_by_part={}
+              for o in options:
+                  try:
+                      key=(int(o.get("eid")),int(o.get("mtid")),int(o.get("partid")),int(o.get("boid")))
+                      label_by_exact[key]=str(o.get("nam") or "").strip()
+                      label_by_part.setdefault(key[:3],str(o.get("nam") or "").strip())
+                  except Exception:
+                      pass
+
+              stats["markets"][f"{group}:{market}"]={
+                  "opening":len(opening),"current":len(current),"options":len(options)
+              }
+              for snapshot,items in (("opening",opening),("closing",current)):
+                  for line in items:
+                      eid=int(line.get("eid") or 0)
+                      ev=events.get(str(eid)) or {}
+                      if not ev:
+                          continue
+                      start_ms=float(ev.get("dt") or 0)
+                      tim_ms=float(line.get("tim") or 0)
+                      minutes_before=(start_ms-tim_ms)/60000 if start_ms and tim_ms else None
+                      # CurrentLines on completed events should be final pre-match lines.
+                      # Fail closed for model-quality export if a line is actually after first serve.
+                      if snapshot=="closing" and minutes_before is not None and minutes_before < 0:
+                          stats["dropped_post_start_current"]+=1
+                          continue
+
+                      pmap=player_map(ev)
+                      partid=int(line.get("partid") or 0)
+                      boid=int(line.get("boid") or 0)
+                      label=(
+                          label_by_exact.get((eid,mtid,partid,boid))
+                          or label_by_part.get((eid,mtid,partid))
+                          or pmap.get(partid)
+                          or f"option_{partid or boid}"
+                      )
+
+                      participants=list(pmap.items())
+                      away=next(((pid,n) for pid,n in participants if not (ev.get("participants") or {}).get(str(pid),{}).get("ih")), (None,""))
+                      home=next(((pid,n) for pid,n in participants if (ev.get("participants") or {}).get(str(pid),{}).get("ih")), (None,""))
+                      book=paid_to_book.get(int(line.get("paid") or 0),{})
+
+                      view=f"https://www.oddstrader.com/atp/?date={DATE}&eid={eid}&g={group}&m={market}"
+                      merged=f"https://www.oddstrader.com/atp/?date={DATE}&eid={eid}&g={group}&m=merged"
+
+                      rows.append({
+                          "date":"2026-09-01",
+                          "event_id":eid,
+                          "event_start_utc":iso_ms(start_ms),
+                          "event_status":ev.get("es") or "",
+                          "tournament":((ev.get("eventGroup") or {}).get("nam") or ""),
+                          "city":ev.get("cit") or "",
+                          "venue":ev.get("ven") or "",
+                          "away_player":away[1],
+                          "away_participant_id":away[0] or "",
+                          "home_player":home[1],
+                          "home_participant_id":home[0] or "",
+                          "market_group":group,
+                          "market":market,
+                          "market_id":mtid,
+                          "snapshot":snapshot,
+                          "bookmaker":book.get("bookmaker") or f"paid_{line.get('paid')}",
+                          "provider_account_id":line.get("paid") or "",
+                          "sportsbook_id":book.get("sbid") or "",
+                          "outcome":label,
+                          "participant_id":partid or "",
+                          "betting_option_id":boid or "",
+                          "line":line.get("adj"),
+                          "american_odds":line.get("ap"),
+                          "decimal_odds":line.get("pri"),
+                          "quote_time_utc":iso_ms(tim_ms),
+                          "minutes_before_start":round(minutes_before,3) if minutes_before is not None else "",
+                          "is_off":bool(line.get("iof")),
+                          "source_view":view,
+                          "merged_view":merged,
+                      })
+
+          rows.sort(key=lambda r:(
+              r["event_start_utc"],r["event_id"],r["market_group"],r["market"],
+              r["bookmaker"],r["outcome"],r["snapshot"]
+          ))
+          if not rows:
+              raise SystemExit("No odds rows extracted")
+
+          fields=list(rows[0])
+          out=Path("research/oddstrader/oddstrader_atp_20260901.csv")
+          with out.open("w",newline="",encoding="utf-8") as f:
+              w=csv.DictWriter(f,fieldnames=fields)
+              w.writeheader(); w.writerows(rows)
+
+          manifest={
+              "date":"2026-09-01",
+              "source_page":PAGE,
+              "events":len(events),
+              "sportsbooks":books,
+              "market_ids":{f"{g}:{m}":mid for g,m,mid in MARKETS},
+              "rows":len(rows),
+              "snapshots":{
+                  "opening":sum(r["snapshot"]=="opening" for r in rows),
+                  "closing":sum(r["snapshot"]=="closing" for r in rows),
+              },
+              "dropped_post_start_current":stats["dropped_post_start_current"],
+              "market_counts":stats["markets"],
+              "policy":"openingLines + final currentLines; closing rows after event start are excluded",
+          }
+          Path("research/oddstrader/oddstrader_atp_20260901_manifest.json").write_text(
+              json.dumps(manifest,indent=2,ensure_ascii=False),encoding="utf-8"
+          )
+          print(json.dumps(manifest,indent=2,ensure_ascii=False))
+          PY
+
+      - name: Commit research CSV to probe branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add research/oddstrader/oddstrader_atp_20260901.csv research/oddstrader/oddstrader_atp_20260901_manifest.json
+          git diff --cached --quiet && exit 0
+          git commit -m "Export OddsTrader ATP odds for 2026-09-01"
+          git push origin HEAD:research/oddstrader-probe-20260901
