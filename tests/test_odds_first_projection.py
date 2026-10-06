@@ -78,7 +78,8 @@ def test_board_discovers_all_four_complete_markets_and_reuses_requests():
     )
     assert provider.calls == [("100", 1), ("101", 1)]
     assert ace_out[0]["odds"] == 1.68
-    assert "odds_contract_version" not in ace_out[0]
+    assert ace_out[0]["odds_contract_version"] == "ace_df_real_api_v1"
+    assert ace_out[0]["odds_source"] == "rapidapi"
     assert sg_out[0]["odds"] == 1.86
     assert sg_out[0]["market_line"] == 23.5
     assert diagnostics["priced_cards"]["games"] == 1
@@ -114,3 +115,74 @@ def test_unknown_market_or_no_budget_does_not_call_provider():
     )
     assert cache == markets == {}
     assert report["events_requested"] == 0
+
+
+def test_primary_exact_ace_market_wins_over_propline_fallback():
+    class Provider:
+        def event_odds(self, event_id, provider_id=1):
+            return _payload()
+
+    ace = [{
+        "event_id": "100", "market": "aces",
+        "player1": {"id": "11", "name": "Alpha"},
+        "player2": {"id": "22", "name": "Beta"},
+        "selection_id": "11", "projection": 7.0,
+    }]
+    alternate = {
+        "100": {"aces": {
+            "provider_id": 2,
+            "captured_at": NOW.isoformat(),
+            "bookmaker": "FallbackBook",
+            "provider_event_id": "p100",
+            "payload": {"markets": [
+                {"marketName": "Most Aces", "choiceName": "Alpha", "decimalOdds": 1.91},
+                {"marketName": "Most Aces", "choiceName": "Beta", "decimalOdds": 1.91},
+            ]},
+        }}
+    }
+    out, _, report = enrich_projection_odds(
+        Provider(), ace, [], max_events=1,
+        prefetched_payloads={"100": _payload()},
+        alternate_market_payloads=alternate,
+    )
+    assert out[0]["odds"] == 1.68
+    assert out[0]["odds_source"] == "rapidapi"
+    assert out[0]["provider_id"] == 1
+    assert report["attached_by_provider"]["rapidapi"] == 1
+    assert report["attached_by_provider"]["propline"] == 0
+
+
+def test_propline_is_used_only_when_primary_contract_is_not_exact():
+    class Provider:
+        def event_odds(self, event_id, provider_id=1):
+            return {}
+
+    ace = [{
+        "event_id": "100", "market": "double_faults",
+        "player1": {"id": "11", "name": "Alpha"},
+        "player2": {"id": "22", "name": "Beta"},
+        "selection_id": "11", "projection": 4.0,
+    }]
+    alternate = {
+        "100": {"double_faults": {
+            "provider_id": 2,
+            "captured_at": NOW.isoformat(),
+            "bookmaker": "FallbackBook",
+            "provider_event_id": "p100",
+            "payload": {"markets": [
+                {"marketName": "Most Double Faults", "choiceName": "Alpha", "decimalOdds": 1.88},
+                {"marketName": "Most Double Faults", "choiceName": "Beta", "decimalOdds": 1.89},
+            ]},
+        }}
+    }
+    out, _, report = enrich_projection_odds(
+        Provider(), ace, [], max_events=1,
+        prefetched_payloads={"100": {"markets": []}},
+        alternate_market_payloads=alternate,
+    )
+    assert out[0]["odds"] == 1.88
+    assert out[0]["odds_source"] == "propline"
+    assert out[0]["provider_id"] == 2
+    assert out[0]["odds_bookmaker"] == "FallbackBook"
+    assert out[0]["odds_contract_version"] == "ace_df_real_api_v1"
+    assert report["attached_by_provider"]["propline"] == 1
