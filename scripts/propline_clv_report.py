@@ -2,9 +2,12 @@
 """Offline simulated CLV report from private PropLine snapshot archives."""
 import base64
 import gzip
+import http.client
 import json
 import os
+import socket
 import statistics
+import time
 import urllib.error
 import urllib.request
 from collections import defaultdict
@@ -18,18 +21,30 @@ ROOT = "research/propline_clv"
 def gh_contents(path):
     if not TOKEN:
         raise RuntimeError("Missing TBT_DATA_GH_TOKEN")
-    req = urllib.request.Request(
-        "https://api.github.com/repos/" + REPO + "/contents/" + path,
-        headers={"Authorization": "Bearer " + TOKEN,
-                 "Accept": "application/vnd.github+json",
-                 "X-GitHub-Api-Version": "2022-11-28"})
-    try:
-        with urllib.request.urlopen(req, timeout=35) as response:
-            return json.load(response)
-    except urllib.error.HTTPError as exc:
-        if exc.code == 404:
-            return None
-        raise RuntimeError("GitHub archive fetch HTTP " + str(exc.code)) from None
+    url = "https://api.github.com/repos/" + REPO + "/contents/" + path
+    headers = {"Authorization": "Bearer " + TOKEN,
+               "Accept": "application/vnd.github+json",
+               "X-GitHub-Api-Version": "2022-11-28"}
+    last_error = None
+    for attempt in range(4):
+        req = urllib.request.Request(url, headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=35) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return None
+            if exc.code != 429 and not 500 <= exc.code < 600:
+                raise RuntimeError("GitHub archive fetch HTTP " + str(exc.code)) from None
+            last_error = exc
+        except (urllib.error.URLError, http.client.RemoteDisconnected,
+                ConnectionResetError, TimeoutError, socket.timeout) as exc:
+            last_error = exc
+        if attempt < 3:
+            time.sleep(2 ** attempt)
+    raise RuntimeError(
+        "GitHub archive fetch failed after retries: " + type(last_error).__name__
+    ) from None
 
 def read_archives(days):
     now = datetime.now(timezone.utc)
