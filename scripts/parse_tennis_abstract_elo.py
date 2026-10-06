@@ -73,6 +73,43 @@ class _TableParser(HTMLParser):
             self._table = None
 
 
+def _find_text_table(text: str, *, kind: str) -> pd.DataFrame:
+    """Parse the tab-delimited text emitted by browser/Reader fallbacks."""
+    required = {"player", "elo"} if kind == "elo" else {"player", "yelo"}
+    lines = text.replace("\r\n", "\n").replace("\xa0", " ").splitlines()
+    for pos, line in enumerate(lines):
+        if "\t" not in line:
+            continue
+        header = [cell.strip() for cell in line.split("\t")]
+        names = [_column_name(cell) for cell in header]
+        if not required.issubset(set(names)):
+            continue
+        rows: list[list[str]] = []
+        width = len(header)
+        for raw in lines[pos + 1:]:
+            if not raw.strip():
+                if rows:
+                    break
+                continue
+            if "\t" not in raw:
+                if rows:
+                    break
+                continue
+            row = [cell.replace("\xa0", " ").strip() for cell in raw.split("\t")]
+            if not row or not re.fullmatch(r"\d+", row[0] or ""):
+                if rows:
+                    break
+                continue
+            if len(row) < width:
+                row += [""] * (width - len(row))
+            elif len(row) > width:
+                row = row[:width]
+            rows.append(row)
+        if rows:
+            return pd.DataFrame(rows, columns=names)
+    raise ValueError(f"No Tennis Abstract {kind} text table found")
+
+
 def _find_table(html: str, *, kind: str) -> pd.DataFrame:
     parser = _TableParser()
     parser.feed(html)
@@ -88,7 +125,7 @@ def _find_table(html: str, *, kind: str) -> pd.DataFrame:
         normalized = [row + [""] * (width - len(row)) for row in rows[1:]]
         frame = pd.DataFrame(normalized, columns=names)
         return frame
-    raise ValueError(f"No Tennis Abstract {kind} table found")
+    return _find_text_table(html, kind=kind)
 
 
 def _numeric(frame: pd.DataFrame, columns: list[str]) -> None:
