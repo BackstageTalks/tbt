@@ -230,6 +230,17 @@ def main() -> None:
         ),
     )
     parser.add_argument(
+        "--atp-rank-history-players-csv",
+        default="",
+        help="Jeff Sackmann ATP player master CSV for weekly ranking identity mapping.",
+    )
+    parser.add_argument(
+        "--atp-rank-history-csv",
+        action="append",
+        default=[],
+        help="Jeff Sackmann ATP ranking CSV; may be supplied multiple times.",
+    )
+    parser.add_argument(
         "--wta-rank-history-players-csv",
         default="",
         help="Sackmann WTA player master CSV for ranking-history identity mapping.",
@@ -349,8 +360,22 @@ def main() -> None:
     atp_coverage = atp_coverage_summary(atp_feature_rows)
 
     atp_rank_history_rows = []
-    if args.atp_rank_history_sqlite:
+    atp_rank_history_source = ""
+    if args.atp_rank_history_players_csv and args.atp_rank_history_csv:
+        if args.atp_rank_history_sqlite:
+            raise ValueError("Choose either Sackmann ATP rank CSVs or ATP rank SQLite, not both")
+        rank_history = ATPRankHistory.from_sackmann(
+            args.atp_rank_history_players_csv,
+            args.atp_rank_history_csv,
+        )
+        atp_rank_history_source = "sackmann_weekly_rankings"
+        for match_id in frame["match_id"]:
+            original = source[match_id]
+            oriented, _ = FeatureBuilder.orient_for_training(original)
+            atp_rank_history_rows.append(rank_history.features_for_match(oriented))
+    elif args.atp_rank_history_sqlite:
         rank_history = ATPRankHistory.from_sqlite(args.atp_rank_history_sqlite)
+        atp_rank_history_source = "validated_weekly_sqlite"
         for match_id in frame["match_id"]:
             original = source[match_id]
             oriented, _ = FeatureBuilder.orient_for_training(original)
@@ -456,7 +481,10 @@ def main() -> None:
         "production_enabled": False,
         "features": list(ATP_RANK_HISTORY_FEATURE_NAMES),
         "historical_policy": "latest_weekly_snapshot_strictly_before_match_date",
+        "source": atp_rank_history_source,
         "source_sqlite": str(args.atp_rank_history_sqlite or ""),
+        "players_csv": str(args.atp_rank_history_players_csv or ""),
+        "ranking_csvs": list(args.atp_rank_history_csv or []),
     }
     report.setdefault("candidate_feature_groups", {})["atp_rank_history"] = {
         "schema_eligible": True,
