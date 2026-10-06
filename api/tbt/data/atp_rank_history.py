@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import bisect
+import csv
 import math
 import re
 import sqlite3
 import unicodedata
+from datetime import datetime
 from collections import defaultdict
 from datetime import timedelta
 from pathlib import Path
@@ -89,6 +91,59 @@ class ATPRankHistory:
             self._ranks[name] = ranks
             self._points[name] = points
             self._career_best[name] = bests
+
+    @classmethod
+    def from_sackmann(
+        cls,
+        players_csv: str | Path,
+        ranking_csvs: Iterable[str | Path],
+    ) -> "ATPRankHistory":
+        """Load Jeff Sackmann ATP weekly rankings with stable player-id mapping."""
+        names: dict[str, str] = {}
+        with Path(players_csv).open("r", encoding="utf-8-sig", newline="") as handle:
+            reader = csv.DictReader(handle)
+            required = {"player_id", "name_first", "name_last"}
+            missing = required - set(reader.fieldnames or [])
+            if missing:
+                raise ValueError(f"ATP players CSV missing columns: {sorted(missing)}")
+            for row in reader:
+                pid = str(row.get("player_id") or "").strip()
+                name = " ".join(
+                    part for part in (
+                        str(row.get("name_first") or "").strip(),
+                        str(row.get("name_last") or "").strip(),
+                    ) if part
+                ).strip()
+                if pid and name:
+                    names[pid] = name
+
+        def rows():
+            for raw_path in ranking_csvs:
+                path = Path(raw_path)
+                with path.open("r", encoding="utf-8-sig", newline="") as handle:
+                    reader = csv.DictReader(handle)
+                    required = {"ranking_date", "rank", "player", "points"}
+                    missing = required - set(reader.fieldnames or [])
+                    if missing:
+                        raise ValueError(f"{path}: ATP ranking columns missing: {sorted(missing)}")
+                    for row in reader:
+                        pid = str(row.get("player") or "").strip()
+                        name = names.get(pid)
+                        raw_date = str(row.get("ranking_date") or "").strip()
+                        if not name or not raw_date:
+                            continue
+                        try:
+                            source_date = datetime.strptime(raw_date, "%Y%m%d").date()
+                        except ValueError:
+                            continue
+                        yield {
+                            "date": source_date,
+                            "rank": row.get("rank"),
+                            "name": name,
+                            "points": row.get("points"),
+                        }
+
+        return cls(rows())
 
     @classmethod
     def from_sqlite(cls, path: str | Path) -> "ATPRankHistory":
