@@ -2477,7 +2477,7 @@
       "goat": "all"
     }
   },
-  "ui_revision": "7.3.7",
+  "ui_revision": "7.3.6",
   "watermark_presets": {
     "violet": {
       "label": "BlinQ Violet",
@@ -2652,7 +2652,7 @@
       }
     }
   },
-  "ui_patch": "736-r61",
+  "ui_patch": "736-r62",
   "account_inactivity": {
     "enabled": true,
     "inactive_days": 30,
