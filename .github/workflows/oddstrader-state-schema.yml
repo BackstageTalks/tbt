@@ -1,0 +1,58 @@
+name: Map OddsTrader state schema
+on:
+  push:
+    branches: [research/oddstrader-probe-20260901]
+    paths: [".github/workflows/oddstrader-state-schema.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          u="https://www.oddstrader.com/atp/?date=20260901&g=match&m=winner"
+          r=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0"})
+          with urllib.request.urlopen(r,timeout=30) as h: s=h.read().decode("utf-8","replace")
+          marker="window.__INITIAL_STATE__="
+          i=s.index(marker)+len(marker)
+          state,end=json.JSONDecoder().raw_decode(s[i:])
+          print("TOP",list(state))
+          for k,v in state.items():
+              if isinstance(v,dict): print("TOPKEY",k,"dict keys",list(v)[:80])
+              elif isinstance(v,list): print("TOPKEY",k,"list",len(v))
+              else: print("TOPKEY",k,type(v).__name__)
+          targets={"Francisco Comesana","Taylor Fritz","Flavio Cobolli"}
+          hits=[]
+          def walk(x,path=(),parent=None):
+              if isinstance(x,dict):
+                  for k,v in x.items():
+                      if isinstance(v,str) and any(t in v for t in targets):
+                          hits.append((path+(k,),v,x))
+                      walk(v,path+(k,),x)
+              elif isinstance(x,list):
+                  for n,v in enumerate(x): walk(v,path+(n,),x)
+          walk(state)
+          print("PLAYER_HITS",len(hits))
+          for path,val,obj in hits[:20]:
+              print("\nPATH",path,"VALUE",val)
+              print("OBJECT",json.dumps(obj,ensure_ascii=False)[:7000])
+          # Identify containers with odds-like keys.
+          found=[]
+          def scan(x,path=()):
+              if isinstance(x,dict):
+                  keys=[str(k) for k in x]
+                  if any(any(t in k.lower() for t in ("odd","line","price","market","opener")) for k in keys):
+                      found.append((path,keys[:80],x))
+                  for k,v in x.items(): scan(v,path+(k,))
+              elif isinstance(x,list):
+                  for n,v in enumerate(x): scan(v,path+(n,))
+          scan(state)
+          print("\nODDSISH",len(found))
+          for path,keys,obj in found[:40]:
+              print("ODDSPATH",path,"KEYS",keys)
+              print("OBJ",json.dumps(obj,ensure_ascii=False)[:3500])
+          PY
