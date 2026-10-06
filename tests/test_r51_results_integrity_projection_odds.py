@@ -25,7 +25,8 @@ def test_r51_release_and_result_identity_are_id_authoritative():
 
 
 def test_results_use_compact_model_odds_result_columns_and_projection_odds():
-    assert "<th>Model / BlinQ %</th><th>Kurz</th><th>Výsledok</th>" in APP
+    assert '<th data-mobile-label="BlinQ %">Model / BlinQ %' in APP
+    assert '</small></th><th>Kurz</th><th>Výsledok</th><th>Jednotky</th>' in APP
     assert "<th>Skutočne</th>" not in APP
     assert "projectionOdds=publication?.odds==null?NaN:Number(publication?.odds)" in APP
     assert "Number.isFinite(projectionOdds)&&projectionOdds>1?projectionOdds.toFixed(2):'—'" in APP
