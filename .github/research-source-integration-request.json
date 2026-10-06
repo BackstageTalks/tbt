@@ -1,17 +1,18 @@
 {
   "schema": 1,
-  "requested_at_utc": "2026-10-06T09:30:00Z",
+  "requested_at_utc": "2026-10-06T16:45:00Z",
   "action": "integrate_research_sources_v1",
   "promote_model": false,
   "canonical_history_policy": "strict_identity_safe_pbp_only",
   "open_meteo_from": "2024-01-01",
   "open_meteo_to": "2026-10-05",
-  "open_meteo_max_requests": 1200,
+  "open_meteo_max_requests": 1800,
   "sources": [
     "private tbt-data research release ATP rankings archive",
     "private tbt-data research release WTA rankings archive",
     "private tbt-data research release Grand Slam PBP 2011-2024",
     "private tbt-data research release Valuebetennis market history 2021-2026",
     "Open-Meteo Previous Runs fixed 24h pre-match forecasts"
-  ]
+  ],
+  "retry_reason": "Previous run calculated an exact need of 1607 Open-Meteo requests; raise the explicit cap to 1800 while retaining the fail-closed no-partial-extraction rule."
 }
