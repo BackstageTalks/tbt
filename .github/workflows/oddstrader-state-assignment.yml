@@ -1,0 +1,32 @@
+name: Find OddsTrader state assignment
+on:
+  push:
+    branches: [research/oddstrader-probe-20260901]
+    paths: [".github/workflows/oddstrader-state-assignment.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        run: |
+          python - <<'PY'
+          import re, urllib.request
+          u="https://www.oddstrader.com/atp/?date=20260901&g=match&m=winner"
+          r=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0"})
+          with urllib.request.urlopen(r,timeout=30) as h: s=h.read().decode("utf-8","replace")
+          patterns=[
+              r'window\.[A-Za-z0-9_$]+\s*=',
+              r'__[A-Z][A-Z0-9_]{3,}__\s*=',
+              r'<script[^>]*>\s*\{\s*"',
+          ]
+          for p in patterns:
+              print("PATTERN",p)
+              for m in list(re.finditer(p,s))[:30]:
+                  print("IDX",m.start(),repr(s[m.start():m.start()+180]))
+          for needle in ['"leagues":', '"events":', '"lines":', '"odds":', '"sportsbooks":']:
+              hits=[m.start() for m in re.finditer(re.escape(needle),s)]
+              print("KEY",needle,"count",len(hits),"first",hits[:20])
+          PY
