@@ -140,6 +140,7 @@ jobs:
           node --check web/app.js
           node --check web/auth.js
           node --check web/responsive.js
+          node tests/test_projection_display.cjs
           node tests/test_frontend_runtime_contract.js
           node tests/test_auth_refresh_race.js
           node tests/test_firebase_web_auth.js

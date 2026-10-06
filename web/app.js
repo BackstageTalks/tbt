@@ -10,6 +10,7 @@
   const pct = value => `${(Number(value || 0) * (Number(value || 0) <= 1 ? 100 : 1)).toFixed(1)}%`;
   const number = (value, digits=3) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : '—';
   const fmtTime = value => value ? new Intl.DateTimeFormat(localeTag,{hour:'2-digit',minute:'2-digit'}).format(new Date(value)) : publicText('TBA');
+  const fmtResultDate = value => value ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'2-digit',year:'2-digit'}).format(new Date(value)).replace(/\s/g,'') : '—';
   const fmtDate = value => value ? new Intl.DateTimeFormat(localeTag,{day:'2-digit',month:'short',year:'numeric'}).format(new Date(value)) : '—';
   const fmtCompactDate = value => {
     if(!value)return '—';
@@ -2047,7 +2048,7 @@
     });
   }
   function dailyHubTabLabel(tab){
-    return {top200:'TOP200',daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:'ACES',double_faults:'DVOJCHYBY',doubles:'DOUBLES',games:'GAMES',sets:'SETS',see_all:'SEE ALL'}[tab]||String(tab||'').toUpperCase();
+    return {top200:'TOP200',daily:'TOP',prime:'SHORT ODDS',value:'VALUE',ace:lcopy('ACES','ESÁ','ESA'),double_faults:lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),doubles:lcopy('DOUBLES','ŠTVORHRA','ČTYŘHRA'),games:lcopy('GAMES','GAMY','GEMY'),sets:lcopy('SETS','SETY','SETY'),see_all:lcopy('SEE ALL','VŠETKY','VŠECHNY')}[tab]||String(tab||'').toUpperCase();
   }
   function dailyHubIsComingSoon(tab){return false;}
   function dailyHubColumns(tab){
@@ -3007,7 +3008,7 @@
   function projectionResultTypeLabel(publication){
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
     return ({
-      aces:lcopy('ACES','ACES','ACES'),
+      aces:lcopy('ACES','ESÁ','ESA'),
       double_faults:lcopy('DOUBLE FAULTS','DVOJCHYBY','DVOJCHYBY'),
       sets:lcopy('SETS','SETY','SETY'),
       games:lcopy('GAMES','GAMY','GEMY'),
@@ -3016,28 +3017,32 @@
   function projectionResultSelectionText(publication,fallback='—'){
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
     const selection=String(publication?.selection||fallback||'—').trim();
-    if(metric==='games'){
-      const direction=String(publication?.projection_direction||'').toLowerCase();
-      const line=Number(publication?.reference_projection);
-      const side=['high','over'].includes(direction)?lcopy('Over','Over','Over'):['low','under'].includes(direction)?lcopy('Under','Under','Under'):'';
-      if(side&&Number.isFinite(line))return `${side} ${line.toFixed(1)} ${lcopy('Games','Games','Games')}`;
-      return selection.replace(/^High\s+Total\s+Games$/i,lcopy('Over total games','Over total games','Over total games')).replace(/^Low\s+Total\s+Games$/i,lcopy('Under total games','Under total games','Under total games'));
+    const unit=projectionResultUnitLabel(publication);
+    const localized=selection.replace(/Double Faults/gi,lcopy('Double Faults','dvojchyby','dvojchyby')).replace(/Aces/gi,lcopy('Aces','esá','esa')).replace(/Games/gi,lcopy('Games','gamy','gemy')).replace(/Sets/gi,lcopy('Sets','sety','sety'));
+    // An archived explicit contract wins over direction inferred from a projection.
+    // Only remove identical repeated suffixes, never a different line or side.
+    const parts=localized.split(/\s*[·|]\s*/);
+    const unique=parts.filter((part,i)=>!parts.slice(0,i).some(previous=>previous.trim().toLowerCase()===part.trim().toLowerCase()));
+    const cleaned=unique.join(' · ').replace(/(\b(?:Over|Under)\s+\d+(?:[.,]\d+)?\s+[^·]+?)\s*·\s*\1$/i,'$1');
+    const explicit=cleaned.match(/\b(Over|Under)\s+\d+(?:[.,]\d+)?\s+.+$/i);
+    if(explicit)return cleaned.endsWith(' · '+explicit[0])&&cleaned.slice(0,-explicit[0].length-3).toLowerCase().endsWith(explicit[0].toLowerCase())?cleaned.slice(0,-explicit[0].length-3):cleaned;
+    const rawLine=metric==='games'?publication?.reference_projection:publication?.market_line??publication?.line??publication?.threshold;
+    const line=rawLine==null?NaN:Number(rawLine);
+    const direction=String(publication?.projection_direction||'').toLowerCase();
+    const projected=publication?.projection==null?NaN:Number(publication.projection);
+    const side=['over','high'].includes(direction)?'Over':['under','low'].includes(direction)?'Under':Number.isFinite(projected)&&Number.isFinite(line)?(projected>=line?'Over':'Under'):'';
+    if(side&&Number.isFinite(line)&&['aces','double_faults','games'].includes(metric)){
+      const player=['aces','double_faults'].includes(metric)&&selection!=='—'?selection+' · ':'';
+      return `${player}${side} ${line.toFixed(1)} ${unit}`;
     }
-    if(metric==='sets')return selection;
-    const line=Number(publication?.market_line??publication?.line??publication?.threshold);
-    if((metric==='aces'||metric==='double_faults')&&Number.isFinite(line)){
-      const projected=Number(publication?.projection),side=Number.isFinite(projected)?(projected>=line?'Over':'Under'):'';
-      const unit=metric==='aces'?'Aces':lcopy('Double Faults','Dvojchyby','Dvojchyby');
-      if(side)return `${selection&&selection!=='—'?selection+' · ':''}${side} ${line.toFixed(1)} ${unit}`;
-    }
-    return selection;
+    return cleaned;
   }
   function projectionResultUnitLabel(publication){
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
-    return ({aces:'Aces',double_faults:lcopy('Double Faults','Dvojchyby','Dvojchyby'),sets:lcopy('Sets','Sety','Sety'),games:lcopy('Games','Games','Gemy')})[metric]||'';
+    return ({aces:lcopy('aces','esá','esa'),double_faults:lcopy('double faults','dvojchyby','dvojchyby'),sets:lcopy('sets','sety','sety'),games:lcopy('games','gamy','gemy')})[metric]||'';
   }
   function projectionResultNumber(value,publication,digits=1){
-    const numberValue=Number(value);if(!Number.isFinite(numberValue))return '—';
+    const numberValue=value==null?NaN:Number(value);if(!Number.isFinite(numberValue))return '—';
     const unit=projectionResultUnitLabel(publication);const rendered=numberValue.toFixed(Number.isInteger(numberValue)?0:digits);
     return unit?`${rendered} ${unit}`:rendered;
   }
@@ -3045,7 +3050,7 @@
     const metric=String(publication?.projection_metric||publication?.market||'').toLowerCase();
     if(metric==='sets'){
       const totalSets=setsTotalProjectionValue(publication);
-      if(Number.isFinite(totalSets))return `${totalSets.toFixed(2)} ${lcopy('Sets','Sety','Sety')}`;
+      if(Number.isFinite(totalSets))return `${totalSets.toFixed(2)} ${projectionResultUnitLabel(publication)}`;
     }
     return projectionResultNumber(publication?.projection,publication,1);
   }
@@ -3487,12 +3492,12 @@
         const unitsText=Number.isFinite(displayUnits)?
           `${displayUnits>0?'+':''}${displayUnits.toFixed(2)}u`:'—';
         const outcomeDetail=actualText&&actualText!=='—'?`<span class="results-actual">${escapeHtml(actualText)}</span>`:'';
-        return `<tr class="results-card-row result-${escapeHtml(outcome.kind)} is-projection"><td class="result-date">${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(displayPick)}</strong></td><td class="result-confidence">${escapeHtml(projectionText)}</td><td class="result-odds"${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td class="result-status"><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td class="result-units"><span class="results-units-depth"><b${!hasSettledUnits?projectionOddsTitle:''} class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b></span></td></tr>`;
+        return `<tr class="results-card-row result-${escapeHtml(outcome.kind)} is-projection"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(displayPick)}</strong></td><td class="result-confidence result-projection"><span class="result-projection-value">${escapeHtml(projectionText)}</span><small class="result-projection-label">${escapeHtml(lcopy('Projection','Projekcia','Projekce'))}</small></td><td class="result-odds"${projectionOddsTitle}>${escapeHtml(displayedProjectionOdds)}</td><td class="result-status"><span class="results-outcome-stack">${resultHtml}${outcomeDetail}</span></td><td class="result-units"><span class="results-units-depth"><b${!hasSettledUnits?projectionOddsTitle:''} class="${Number.isFinite(displayUnits)&&displayUnits>0?'correct':Number.isFinite(displayUnits)&&displayUnits<0?'wrong':'void'}">${escapeHtml(unitsText)}</b></span></td></tr>`;
       }
-      return `<tr class="results-card-row result-${escapeHtml(outcome.kind)}"><td class="result-date">${escapeHtml(fmtDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(pickName)}</strong></td><td class="result-confidence">${Number.isFinite(probability)?pct(probability):'—'}</td><td class="result-odds">${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td class="result-status">${resultHtml}</td><td class="result-units ${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
+      return `<tr class="results-card-row result-${escapeHtml(outcome.kind)}"><td class="result-date">${escapeHtml(fmtResultDate(r.scheduled_at))}<small>${escapeHtml(fmtTime(r.scheduled_at))}</small></td><td class="result-category">${tags}</td><td class="result-tournament">${tournamentCell}</td><td class="result-match">${match}</td><td class="result-prediction"><strong>${escapeHtml(pickName)}</strong></td><td class="result-confidence">${Number.isFinite(probability)?pct(probability):'—'}</td><td class="result-odds">${Number.isFinite(odds)?odds.toFixed(2):'—'}</td><td class="result-status">${resultHtml}</td><td class="result-units ${outcome.kind==='void'?'void':!Number.isFinite(units)?'unit-excluded':units>=0?'correct':'wrong'}">${outcome.kind==='void'?'0.00u':Number.isFinite(units)?`${units>0?'+':''}${units.toFixed(2)}u`:'—'}</td></tr>`;
     }).join('');
     const pager=`<div class="results-pagination"><div class="results-pagination-meta"><strong>${startIndex+1}–${endIndex}</strong><span>z ${entries.length}</span></div><label><span>Riadkov</span><select id="resultsPageSize">${allowedSizes.map(size=>`<option value="${size}"${size===pageSize?' selected':''}>${size}</option>`).join('')}</select></label><div class="results-pagination-nav"><button type="button" id="resultsPrevPage" ${state.resultsPage<=0?'disabled':''}>←</button><span>Strana <strong>${state.resultsPage+1}</strong> / ${pages}</span><button type="button" id="resultsNextPage" ${state.resultsPage>=pages-1?'disabled':''}>→</button></div></div>`;
-    const head='<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia</th><th>Model / BlinQ %</th><th>Kurz</th><th>Výsledok</th><th>Jednotky</th></tr>';
+    const head=`<tr><th>Dátum</th><th>Kategória</th><th>Turnaj</th><th>Zápas</th><th>Predikcia</th><th data-mobile-label="BlinQ %">Model / BlinQ %<small class="results-model-heading">${escapeHtml(lcopy('or projection','alebo projekcia','nebo projekce'))}</small></th><th>Kurz</th><th>Výsledok</th><th>Jednotky</th></tr>`;
     return `<div class="admin-table-wrap results-table-wrap"><table class="admin-analytics-table results-table"><thead>${head}</thead><tbody>${body}</tbody></table></div>${pager}`;
   }
 

@@ -49,7 +49,7 @@
       table.querySelectorAll('thead,tbody').forEach(group => group.setAttribute('role', 'rowgroup'));
       table.querySelectorAll('tr').forEach(row => row.setAttribute('role', 'row'));
       table.querySelectorAll('td').forEach(cell => cell.setAttribute('role', 'cell'));
-      const headers = [...table.querySelectorAll('thead th')].map(th => th.textContent.trim());
+      const headers = [...table.querySelectorAll('thead th')].map(th => th.dataset.mobileLabel || th.textContent.trim());
       table.querySelectorAll('tbody tr').forEach(row => {
         [...row.children].forEach((cell, i) => cell.dataset.label = headers[i] || '');
       });
