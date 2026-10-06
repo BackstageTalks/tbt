@@ -1,0 +1,91 @@
+name: BlinQ Loss Review
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/loss-review-request'
+  workflow_dispatch:
+    inputs:
+      window_days:
+        description: Retrospective issued-bet window
+        type: number
+        default: 10
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: blinq-loss-review-readonly
+  cancel-in-progress: false
+
+jobs:
+  loss_review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      WINDOW_DAYS: ${{ github.event_name == 'workflow_dispatch' && inputs.window_days || 10 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - run: python -m pip install -r api/requirements-train.txt pytest
+
+      - name: Validate Loss Review contracts
+        run: python -m pytest tests/test_loss_review_audit.py -q
+
+      - name: Analyze issued losses and shadow selection filters
+        run: |
+          python scripts/audit_loss_review.py \
+            --data-repository "$TBT_DATA_REPOSITORY" \
+            --window-days "$WINDOW_DAYS"
+
+      - name: Persist latest private Loss Review evidence
+        if: success()
+        run: |
+          python - <<'PY'
+          import base64, json, os, subprocess
+          from pathlib import Path
+
+          repo = os.environ["TBT_DATA_REPOSITORY"]
+          targets = [
+              (".cache/tbt/loss-review/report.json", "audit/loss-review-latest.json"),
+              (".cache/tbt/loss-review/report.md", "audit/loss-review-latest.md"),
+          ]
+          for source, target in targets:
+              lookup = subprocess.run(
+                  ["gh", "api", f"repos/{repo}/contents/{target}"],
+                  capture_output=True, text=True,
+              )
+              body = {
+                  "message": "Update BlinQ Loss Review evidence",
+                  "content": base64.b64encode(Path(source).read_bytes()).decode(),
+              }
+              if lookup.returncode == 0:
+                  body["sha"] = json.loads(lookup.stdout)["sha"]
+              elif "404" not in lookup.stderr:
+                  raise RuntimeError(f"Cannot safely inspect {target}: {lookup.stderr}")
+              payload = Path("/tmp/blinq-loss-review-upload.json")
+              payload.write_text(json.dumps(body))
+              subprocess.run(
+                  ["gh", "api", "--method", "PUT", f"repos/{repo}/contents/{target}", "--input", str(payload)],
+                  check=True, stdout=subprocess.DEVNULL,
+              )
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: blinq-loss-review-${{ github.run_id }}
+          path: |
+            .cache/tbt/loss-review/report.json
+            .cache/tbt/loss-review/report.md
+          if-no-files-found: warn
