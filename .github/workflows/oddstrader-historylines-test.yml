@@ -1,0 +1,32 @@
+name: Test OddsTrader grouped history
+on:
+  push:
+    branches: [research/oddstrader-probe-20260901]
+    paths: [".github/workflows/oddstrader-historylines-test.yml"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.parse, urllib.request
+          base="https://ms.virginia.us-east-1.oddstrader.com/odds-v2/odds-v2-service"
+          for mtid in (126,395,396,279,434,439):
+              q=f'{{ historyLines(eid:4808893,mtid:{mtid},paid:8) {{ historyLine }} }}'
+              url=base+"?"+urllib.parse.urlencode({"query":q})
+              req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Accept":"application/json"})
+              with urllib.request.urlopen(req,timeout=30) as h:
+                  data=json.loads(h.read().decode())
+              x=(data.get("data") or {}).get("historyLines")
+              print("\nMTID",mtid,"TYPE",type(x).__name__)
+              if isinstance(x,dict):
+                  hist=x.get("historyLine")
+                  print("HISTORY_TYPE",type(hist).__name__,"LEN",len(hist) if isinstance(hist,list) else None)
+                  print(json.dumps(hist,ensure_ascii=False)[:25000])
+              else:
+                  print(json.dumps(data,ensure_ascii=False)[:5000])
+          PY
