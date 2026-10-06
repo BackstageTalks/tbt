@@ -1225,10 +1225,13 @@
     const label=(en,sk,cz)=>escapeHtml(lcopy(en,sk,cz));
     const noData=label('Verified odds history is not available for this match.','Overená história kurzov pre tento zápas nie je dostupná.','Ověřená historie kurzů pro tento zápas není dostupná.');
     const betting=row?.betting&&typeof row.betting==='object'?row.betting:{};
+    const winnerMarket=row?.match_winner_market&&typeof row.match_winner_market==='object'?row.match_winner_market:{};
     const market=row?.market_movement||betting.market_movement||row?.marq||betting.marq||{};
     const src=market&&typeof market==='object'?market:{};
     const raw=[src.history,src.points,src.odds_history,betting.odds_history,row?.odds_history,row?.market_odds_history].find(Array.isArray);
-    const source=src.bookmaker||src.provider||src.source||betting.bookmaker||'';
+    const preferredBook=String(src.bookmaker||winnerMarket.bookmaker||betting.odds_bookmaker||row?.odds_bookmaker||betting.bookmaker||'').trim();
+    const providerSource=String(src.provider||src.source||winnerMarket.source||betting.odds_source||row?.odds_source||'').trim();
+    const source=preferredBook||providerSource;
     const exact=src.exact_event_id_used===true||src.marq_exact_event_id_used===true||row?.marq_exact_event_id_used===true||src.verified===true||betting.odds_history_verified===true;
     const selected=String(row?.winner_id||row?.pick_id||'');
     const side=selected&&selected===String(row?.player1?.id)?1:selected&&selected===String(row?.player2?.id)?2:0;
@@ -1240,22 +1243,51 @@
         if(!item||typeof item!=='object')continue;
         const rawEvent=item.event_id??item.eventId;
         if(rawEvent!=null&&String(rawEvent)!==eventId)continue;
-        const book=String(item.bookmaker||item.provider||source||'').trim();
-        if(source&&book&&String(source).toLowerCase()!==book.toLowerCase())continue;
+        const book=String(item.bookmaker||item.provider||preferredBook||providerSource||'').trim();
+        if(preferredBook&&book&&preferredBook.toLowerCase()!==book.toLowerCase())continue;
         const timestamp=Date.parse(item.captured_at||item.timestamp||item.sourceAddTime||item.time||'');
         const pick=number(item.pick_odds??item.selected_odds??(side===1?item.odds1??item.od1:item.odds2??item.od2));
         const opponent=number(item.opponent_odds??(side===1?item.odds2??item.od2:item.odds1??item.od1));
         if(Number.isFinite(timestamp)&&pick!=null&&opponent!=null)points.push({timestamp,pick,opponent,book});
       }
     }
+
+    // A freshly published fallback quote is useful immediately even before a
+    // second CLV observation exists. Keep it separate from history unless the
+    // bookmaker identity matches, so different books are never stitched into
+    // a synthetic movement series.
+    const providerId=Number(winnerMarket.provider_id??betting.provider_id??row?.provider_id);
+    const currentTimestamp=Date.parse(winnerMarket.captured_at||betting.captured_at||row?.captured_at||'');
+    const currentP1=number(winnerMarket.player1_odds);
+    const currentP2=number(winnerMarket.player2_odds);
+    const currentPick=side===1?currentP1:side===2?currentP2:null;
+    const currentOpponent=side===1?currentP2:side===2?currentP1:null;
+    const currentBook=String(winnerMarket.bookmaker||betting.odds_bookmaker||row?.odds_bookmaker||preferredBook||providerSource||'').trim();
+    const currentQuote=Number.isInteger(providerId)&&providerId>0&&Number.isFinite(currentTimestamp)&&currentPick!=null&&currentOpponent!=null
+      ?{timestamp:currentTimestamp,pick:currentPick,opponent:currentOpponent,book:currentBook}
+      :null;
+    if(currentQuote&&(!points.length||!currentBook||points.some(p=>!p.book||p.book.toLowerCase()===currentBook.toLowerCase()))){
+      if(!points.some(p=>p.timestamp===currentQuote.timestamp&&Math.abs(p.pick-currentQuote.pick)<.0001&&Math.abs(p.opponent-currentQuote.opponent)<.0001))points.push(currentQuote);
+    }
+
     points.sort((a,b)=>a.timestamp-b.timestamp);
-    const book=points[0]?.book||'';
-    const series=points.filter((p,i)=>p.book===book&&(!i||p.timestamp!==points[i-1].timestamp));
+    const book=preferredBook||points[0]?.book||currentBook||'';
+    const series=points.filter((p,i)=>{
+      if(book&&p.book&&p.book.toLowerCase()!==book.toLowerCase())return false;
+      const previous=i?points[i-1]:null;
+      return !previous||p.timestamp!==previous.timestamp||p.book!==previous.book;
+    });
     const pickName=String(row?.winner_id)===String(row?.player1?.id)?row?.player1?.name:row?.player2?.name;
     const opponentName=String(row?.winner_id)===String(row?.player1?.id)?row?.player2?.name:row?.player1?.name;
     const heading='<div class="market-trend-heading"><div><small>MARKET INTELLIGENCE</small><h3>'+label('Market trend','Trend trhu','Trend trhu')+'</h3></div></div>';
     const caveat='<p class="market-trend-note">'+label('Information only · market movement does not change the BlinQ prediction. CLV is final only after market close.','Iba informatívne · pohyb trhu nemení predikciu BlinQ. Finálne CLV poznáme až po uzavretí trhu.','Pouze informativně · pohyb trhu nemění predikci BlinQ. Finální CLV známe až po uzavření trhu.')+'</p>';
-    if(series.length<2)return '<section class="market-trend-panel">'+heading+'<div class="market-trend-empty">'+noData+'</div>'+caveat+'</section>';
+    if(series.length<2){
+      const quote=currentQuote&&(!book||!currentQuote.book||currentQuote.book.toLowerCase()===book.toLowerCase())?currentQuote:series[0]||currentQuote;
+      if(!quote)return '<section class="market-trend-panel">'+heading+'<div class="market-trend-empty">'+noData+'</div>'+caveat+'</section>';
+      const when=new Date(quote.timestamp).toLocaleString(contentLocale()==='en'?'en-GB':contentLocale()==='cs'?'cs-CZ':'sk-SK',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+      const sourceText=escapeHtml(quote.book||source||label('verified source','overený zdroj','ověřený zdroj'));
+      return '<section class="market-trend-panel">'+heading+'<div class="market-trend-summary"><span class="market-trend-status neutral">'+label('Verified current quote','Overený aktuálny kurz','Ověřený aktuální kurz')+'</span><span>'+label('Pick odds','Kurz picku','Kurz tipu')+': <strong>'+quote.pick.toFixed(2)+'</strong></span><span>'+label('Opponent','Súper','Soupeř')+': <strong>'+quote.opponent.toFixed(2)+'</strong></span></div><div class="market-trend-source">'+sourceText+' · '+escapeHtml(when)+'</div><div class="market-trend-empty">'+label('A second verified snapshot is needed to draw the CLV trend.','Na vykreslenie CLV trendu potrebujeme druhý overený snapshot.','Pro vykreslení CLV trendu potřebujeme druhý ověřený snapshot.')+'</div>'+caveat+'</section>';
+    }
     const first=series[0],last=series[series.length-1];
     const pctMove=(last.pick/first.pick-1)*100;
     const direction=pctMove>3?'against':pctMove< -3?'toward':'neutral';
@@ -1265,7 +1297,7 @@
     const y=v=>160-(v-lo)/(hi-lo)*126;
     const path=key=>series.map((p,i)=>(i?'L':'M')+x(p).toFixed(1)+' '+y(p[key]).toFixed(1)).join(' ');
     const date=ts=>new Date(ts).toLocaleString(contentLocale()==='en'?'en-GB':contentLocale()==='cs'?'cs-CZ':'sk-SK',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
-    const chart='<svg class="market-trend-chart" role="img" aria-label="'+label('Verified bookmaker odds over time','Overený vývoj kurzov v čase','Ověřený vývoj kurzů v čase')+'" viewBox="0 0 730 194" preserveAspectRatio="xMidYMid meet"><path d="M32 18V160H698" fill="none" stroke="#416158" stroke-width="1"/><path d="'+path('pick')+'" fill="none" stroke="#7cf2bc" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="'+path('opponent')+'" fill="none" stroke="#f8b16f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="'+x(last).toFixed(1)+'" cy="'+y(last.pick).toFixed(1)+'" r="4" fill="#7cf2bc"/><circle cx="'+x(last).toFixed(1)+'" cy="'+y(last.opponent).toFixed(1)+'" r="4" fill="#f8b16f"/><text x="32" y="182" fill="#91aea4" font-size="12">'+escapeHtml(date(first.timestamp))+'</text><text x="698" y="182" text-anchor="end" fill="#91aea4" font-size="12">'+escapeHtml(date(last.timestamp))+'</text></svg>';
+    const chart='<svg class="market-trend-chart" role="img" aria-label="'+label('Verified bookmaker odds over time','Overený vývoj kurzov v čase','Ověřený vývoj kurzů v čase')+'" viewBox="0 0 730 194" preserveAspectRatio="xMidYMid meet"><path d="M32 18V160H698" fill="none" stroke="#416158" stroke-width="1"/><path d="'+path('pick')+'" fill="none" stroke="#7cf2bc" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><path d="'+path('opponent')+'" fill="none" stroke="#f8b16f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/><circle cx="'+x(last).toFixed(1)+'" cy="'+y(last.pick).toFixed(1)+'" r="4" fill="#7cf2bc"/><circle cx="'+x(last).toFixed(1)+'" cy="'+y(last.opponent).toFixed(1)+'" r="4" fill="#f8b16f"/><text x="32" y="182" fill="#91aea4" font-size="12">'+escapeHtml(date(first.timestamp))+'</text><text x="698" y="182" text-anchor="end" fill="#91aea4(date(last.timestamp))+'</text></svg>';
     const odds=v=>v.toFixed(2);
     return '<section class="market-trend-panel">'+heading+'<div class="market-trend-summary"><span class="market-trend-status '+direction+'">'+status+'</span><span>'+label('Pick odds','Kurz picku','Kurz tipu')+': <strong>'+odds(first.pick)+' → '+odds(last.pick)+'</strong></span><span class="market-trend-change '+direction+'">'+(pctMove>0?'+':'')+pctMove.toFixed(1)+'%</span></div><div class="market-trend-legend"><span><i class="pick"></i>'+escapeHtml(pickName||'Pick')+'</span><span><i class="opponent"></i>'+escapeHtml(opponentName||'Opponent')+'</span></div>'+chart+'<div class="market-trend-source">'+escapeHtml(book||source||'')+' · '+series.length+' '+label('observations','meraní','měření')+'</div>'+caveat+'</section>';
   }
