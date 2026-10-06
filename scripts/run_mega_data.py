@@ -121,8 +121,8 @@ def main() -> None:
     ap.add_argument("--sg-lookback-days", type=int, default=730)
     args = ap.parse_args()
 
-    if not 500 <= args.max_requests <= 12000:
-        ap.error("mega-data max-requests must be 500..12000")
+    if not 500 <= args.max_requests <= 1000:
+        ap.error("mega-data max-requests must be 500..1000")
 
     report_dir = ROOT / ".cache/tbt/mega-data"
     report_dir.mkdir(parents=True, exist_ok=True)
