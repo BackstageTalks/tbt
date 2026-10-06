@@ -1,0 +1,229 @@
+name: Live Tennis API paid history closeout
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/livetennisapi-paid-history-request.json"
+      - ".github/workflows/livetennisapi-paid-history.yml"
+      - "scripts/collect_livetennisapi_paid_history.py"
+      - "api/tbt/providers/livetennisapi.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: tbt-history-data-writer
+  cancel-in-progress: false
+
+jobs:
+  closeout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      LIVE_TENNIS_API_KEY: ${{ secrets.LIVE_TENNIS_API_KEY }}
+      RESEARCH_RELEASE: tbt-research-sources-v1
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install and verify controlled paid request
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m compileall -q api scripts
+          python -m pytest tests/test_livetennisapi_provider.py tests/test_livetennisapi_paid_history.py -q
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN" >&2; exit 1; }
+          test -n "$LIVE_TENNIS_API_KEY" || { echo "Missing LIVE_TENNIS_API_KEY" >&2; exit 1; }
+          test "$(gh repo view "$TBT_DATA_REPOSITORY" --json visibility -q .visibility)" = "PRIVATE"
+          request=.github/livetennisapi-paid-history-request.json
+          test "$(jq -r .action "$request")" = "collect_paid_history_quality_gaps"
+          test "$(jq -r .promote_model "$request")" = "false"
+          test "$(jq -r .expected_min_daily "$request")" -eq 1000
+          test "$(jq -r .max_calls "$request")" -le 700
+          test "$(jq -r .daily_reserve "$request")" -ge 200
+
+      - name: Download canonical history
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/download_production_preflight_inputs.py
+          rm -rf .cache/tbt/lta-paid
+          mkdir -p .cache/tbt/lta-paid/{collector,dry,write,history,readback}
+          cp -a .cache/tbt/history/. .cache/tbt/lta-paid/history/
+
+      - name: Collect only paid-history quality gaps
+        shell: bash
+        run: |
+          set -euo pipefail
+          request=.github/livetennisapi-paid-history-request.json
+          python -u scripts/collect_livetennisapi_paid_history.py             --history-dir .cache/tbt/lta-paid/history             --from-date "$(jq -r .from "$request")"             --to-date "$(jq -r .to "$request")"             --out-dir .cache/tbt/lta-paid/collector             --max-calls "$(jq -r .max_calls "$request")"             --daily-reserve "$(jq -r .daily_reserve "$request")"             --expected-min-daily "$(jq -r .expected_min_daily "$request")"             --target-new "$(jq -r .target_new_quality_ready "$request")"             --max-list-pages-per-tour "$(jq -r .max_list_pages_per_tour "$request")"             --tours "$(jq -r .tours "$request")"
+          test -s .cache/tbt/lta-paid/collector/report.json
+          test -s .cache/tbt/lta-paid/collector/auto_linked.jsonl || touch .cache/tbt/lta-paid/collector/auto_linked.jsonl
+
+      - name: Dry-run strict canonical import
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/lta-paid/collector/auto_linked.jsonl             --history-dir .cache/tbt/lta-paid/history             --out-dir .cache/tbt/lta-paid/dry
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path(".cache/tbt/lta-paid/dry/report.json").read_text())
+          counts=report.get("counts") or {}
+          forbidden={k:int(counts.get(k) or 0) for k in ("identity_missing","identity_changed","invalid_stats","stat_conflicts")}
+          if any(forbidden.values()):
+              raise SystemExit(f"Paid Live Tennis dry-run safety failure: {forbidden}")
+          print(json.dumps({
+              "stage_rows":report.get("stage_rows",0),
+              "quality_ready_added":report.get("quality_ready_added",0),
+              "safety":forbidden,
+          },indent=2))
+          PY
+
+      - name: Write verified additions locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/import_offline_linked_serve_return.py             --stage .cache/tbt/lta-paid/collector/auto_linked.jsonl             --history-dir .cache/tbt/lta-paid/history             --out-dir .cache/tbt/lta-paid/write             --write-partitions             --write-history-dir .cache/tbt/lta-paid/history
+
+      - name: Validate and publish changed canonical partitions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_safety import sanitize_history_identities
+          from tbt.data.history_snapshot import load_partitions
+
+          root=Path(".cache/tbt/lta-paid/history")
+          matches=load_partitions(root)
+          safe,safety=sanitize_history_identities(matches)
+          if safety.get("quarantined_rows") or len(safe)!=len(matches):
+              raise SystemExit("Identity safety failed after paid Live Tennis import")
+          report=json.loads(Path(".cache/tbt/lta-paid/write/report.json").read_text())
+          counts=report.get("counts") or {}
+          forbidden={k:int(counts.get(k) or 0) for k in ("identity_missing","identity_changed","invalid_stats","stat_conflicts")}
+          if any(forbidden.values()):
+              raise SystemExit(f"Write safety failure: {forbidden}")
+          years=sorted({int(y) for y in report.get("changed_years") or []})
+          if years:
+              paths=[root/f"history-{year:04d}.parquet" for year in years]+[root/"history_manifest.json"]
+              if any(not p.is_file() or p.stat().st_size<=0 for p in paths):
+                  raise SystemExit("Missing canonical publish asset")
+              ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).upload_bundle(paths)
+          print(json.dumps({"changed_years":years,"quality_ready_added":report.get("quality_ready_added",0)},indent=2))
+          PY
+
+      - name: Persisted readback and audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from datetime import datetime, timezone
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_safety import sanitize_history_identities
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.models.feature_builder import FeatureBuilder
+
+          root=Path(".cache/tbt/lta-paid/readback")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",root).download(require_bundle_manifest=True)
+          matches=load_partitions(root)
+          safe,safety=sanitize_history_identities(matches)
+          if safety.get("quarantined_rows") or len(safe)!=len(matches):
+              raise SystemExit("Persisted identity safety failed")
+          quality=sum(
+              1 for m in safe
+              if all(
+                  FeatureBuilder._extract_quality(m.stats or {},side)[0] is not None
+                  and FeatureBuilder._extract_quality(m.stats or {},side)[1] is not None
+                  for side in ("p1","p2")
+              )
+          )
+          collector=json.loads(Path(".cache/tbt/lta-paid/collector/report.json").read_text())
+          imported=json.loads(Path(".cache/tbt/lta-paid/write/report.json").read_text())
+          expected=int(imported.get("quality_ready_after") or 0)
+          if expected and quality < expected:
+              raise SystemExit(f"Persisted quality regressed below expected minimum: {quality} < {expected}")
+          report={
+              "schema":1,
+              "status":"verified",
+              "generated_at":datetime.now(timezone.utc).isoformat(),
+              "source":"Live Tennis API paid history",
+              "canonical_rows":len(safe),
+              "quality_ready_after":quality,
+              "quality_ready_added":int(imported.get("quality_ready_added") or 0),
+              "changed_years":imported.get("changed_years") or [],
+              "collector":collector,
+              "import_report":imported,
+              "identity_safety":safety,
+              "production_model_mutated":False,
+              "raw_public_redistribution":False,
+          }
+          Path(".cache/tbt/lta-paid/verification.json").write_text(
+              json.dumps(report,ensure_ascii=False,indent=2),encoding="utf-8"
+          )
+          print(json.dumps({
+              "status":"verified",
+              "quality_ready_after":quality,
+              "quality_ready_added":report["quality_ready_added"],
+              "stop_reason":collector.get("stop_reason"),
+              "provider_calls":((collector.get("usage_initial") or {}).get("today") or {}).get("remaining_day"),
+          },indent=2))
+          PY
+
+      - name: Preserve private raw evidence and latest audit
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -s .cache/tbt/lta-paid/collector/raw-tapes.jsonl.gz ]]; then
+            asset="livetennisapi-paid-history-${GITHUB_RUN_ID}.jsonl.gz"
+            cp .cache/tbt/lta-paid/collector/raw-tapes.jsonl.gz "/tmp/$asset"
+            if ! gh release view "$RESEARCH_RELEASE" -R "$TBT_DATA_REPOSITORY" >/dev/null 2>&1; then
+              gh release create "$RESEARCH_RELEASE" -R "$TBT_DATA_REPOSITORY"                 --title "BlinQ research source bundles"                 --notes "Private research-only source snapshots."
+            fi
+            gh release upload "$RESEARCH_RELEASE" -R "$TBT_DATA_REPOSITORY" --clobber "/tmp/$asset"
+          fi
+
+          file=.cache/tbt/lta-paid/verification.json
+          [[ -s "$file" ]] || file=.cache/tbt/lta-paid/collector/report.json
+          test -s "$file"
+          path=audit/livetennisapi-paid-history-latest.json
+          encoded="$(base64 -w0 "$file")"
+          sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+          if [[ -n "$sha" ]]; then
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Update paid Live Tennis history audit"               -f content="$encoded" -f sha="$sha" >/dev/null
+          else
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               -f message="Add paid Live Tennis history audit"               -f content="$encoded" >/dev/null
+          fi
+
+      - name: Upload workflow evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-livetennisapi-paid-history-${{ github.run_id }}
+          path: |
+            .cache/tbt/lta-paid/collector/report.json
+            .cache/tbt/lta-paid/collector/review.jsonl
+            .cache/tbt/lta-paid/dry/report.json
+            .cache/tbt/lta-paid/write/report.json
+            .cache/tbt/lta-paid/verification.json
+          if-no-files-found: warn
+          retention-days: 14

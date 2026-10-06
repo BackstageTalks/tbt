@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "action": "archive_tennis_abstract_elo_snapshot",
+  "requested_at_utc": "2026-10-06T16:55:00Z",
+  "operator_permission_confirmed": true,
+  "promote_model": false,
+  "training_eligible_current_snapshot": false,
+  "purpose": "Archive approved ATP/WTA Elo and yElo reports as genuine weekly point-in-time snapshots. Never retroactively backfill current ratings into historical matches."
+}
