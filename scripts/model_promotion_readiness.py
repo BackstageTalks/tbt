@@ -92,7 +92,7 @@ def build_readiness(
         "minimum_gate_rows": int(minimum_gate_rows),
         "recommended_target_rows": int(target_rows),
         "recommended_minimum_days": int(minimum_days),
-        "ready_for_metric_gate": rows >= minimum_gate_rows,
+        "ready_for_metric_gate": rows >= minimum_gate_rows and distinct_days >= minimum_days,
         "ready_for_retrain": rows >= target_rows and distinct_days >= minimum_days,
         "remaining_to_gate": max(0, minimum_gate_rows - rows),
         "remaining_to_target": max(0, target_rows - rows),
