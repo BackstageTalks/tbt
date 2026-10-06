@@ -4,6 +4,7 @@ from tbt.services.propline_live import (
     PropLineClient, _match_board, _normalize_book, _price,
     discover_propline_fallback,
 )
+from tbt.services.market_selection import extract_match_winner_odds
 from tbt.services.projection_odds import (
     enrich_projection_odds, extract_match_total_odds, extract_player_total_ou,
 )
@@ -19,6 +20,10 @@ PROP = {"id": "1234", "home_team": "Jan Lennard Struff",
         "away_team": "Alex de Minaur", "commence_time": START}
 # American odds are the official default, not decimal!
 PRICE_MARKETS = [
+    {"key": "h2h", "outcomes": [
+        {"name": "Álex de Miñaur", "price": -125},
+        {"name": "Jan-Lennard Struff", "price": 115},
+    ]},
     {"key": "total_games", "outcomes": [
         {"name": "Over", "point": 22.5, "price": -110},
         {"name": "Under", "point": 22.5, "price": -105},
@@ -55,10 +60,18 @@ def test_event_match_is_exact_unaccented_both_players_and_time():
     assert _match_board([MATCH], [PROP, PROP], NOW) == _match_board([MATCH], [PROP], NOW)
 
 
-def test_normalized_complete_book_pairs_for_all_four_markets():
+def test_normalized_complete_book_pairs_for_all_supported_markets():
     book = {"key": "draftkings", "markets": PRICE_MARKETS}
-    result = _normalize_book(book, MATCH, {"games", "sets", "aces", "double_faults"})
-    assert set(result) == {"games", "sets", "aces", "double_faults"}
+    result = _normalize_book(
+        book, MATCH, {"match_winner", "games", "sets", "aces", "double_faults"}
+    )
+    assert set(result) == {"match_winner", "games", "sets", "aces", "double_faults"}
+    winner = extract_match_winner_odds(
+        result["match_winner"], "Álex de Miñaur", "Jan-Lennard Struff"
+    )
+    assert winner is not None
+    assert winner["player1_odds"] == 1.8
+    assert winner["player2_odds"] == 2.15
     assert abs(extract_match_total_odds(result["games"], "games")[0]["over"] - 1.90909) < .0001
     assert extract_match_total_odds(result["sets"], "sets")[0]["under"] == 1.625
     assert extract_player_total_ou(result["aces"], "aces", "Álex de Miñaur")
@@ -98,7 +111,10 @@ def test_fallback_discovers_and_attaches_real_prices_with_source_provenance():
     client = FakeProp()
     payloads, report = discover_propline_fallback(client, [MATCH], {}, now=NOW, max_events=2)
     assert report["calls"] == client.calls == 3
-    assert report["priced_by_market"] == {"aces": 1, "double_faults": 1, "sets": 1, "games": 1}
+    assert report["priced_by_market"] == {
+        "match_winner": 1, "aces": 1, "double_faults": 1, "sets": 1, "games": 1
+    }
+    assert payloads["rapid-133"]["match_winner"]["bookmaker"] == "draftkings"
     assert payloads["rapid-133"]["games"]["bookmaker"] == "draftkings"
 
     ace = [{
@@ -128,10 +144,11 @@ def test_fallback_discovers_and_attaches_real_prices_with_source_provenance():
 def test_only_fetch_missing_market_and_keep_rapidapi_primary():
     client = FakeProp()
     found, report = discover_propline_fallback(
-        client, [MATCH], {"rapid-133": {"games", "sets", "aces"}},
+        client, [MATCH], {"rapid-133": {"match_winner", "games", "sets", "aces"}},
         now=NOW, max_events=2,
     )
     assert set(found["rapid-133"]) == {"double_faults"}
+    assert report["priced_by_market"]["match_winner"] == 0
     assert report["priced_by_market"]["games"] == 0
     assert client.calls == 3
 
@@ -158,13 +175,16 @@ def test_wide_market_discovery_reports_advertised_versus_genuine_two_sided_quote
     assert audit["events_skipped_no_target_market"] == 0
     assert audit["odds_payload_events"] == 1
     assert audit["markets_advertised_by_type"] == {
-        "aces": 1, "double_faults": 1, "games": 1, "sets": 1
+        "match_winner": 1, "aces": 1, "double_faults": 1, "games": 1, "sets": 1
     }
+    assert audit["bookmakers_priced_by_market"]["match_winner"]["draftkings"] == 1
     assert audit["bookmakers_priced_by_market"]["aces"]["draftkings"] == 1
     assert audit["sample_offers"]["games"][0]["line"] == 22.5
     assert abs(audit["sample_offers"]["games"][0]["over"] - 1.90909) < .0001
     assert audit["sample_offers"]["aces"][0]["player"] == "Álex de Miñaur"
-    assert set(found["rapid-133"]) == {"aces", "double_faults", "games", "sets"}
+    assert set(found["rapid-133"]) == {
+        "match_winner", "aces", "double_faults", "games", "sets"
+    }
 
 
 def test_shared_free_tier_quota_budget_and_active_clv_defaults():
@@ -212,3 +232,14 @@ def test_conflicting_prop_fixture_identity_and_identical_duplicate_handling():
     found, report = _match_board_with_diagnostics([MATCH], [PROP, conflicting], NOW)
     assert not found
     assert report["ambiguous_rejected"] == 2
+
+
+def test_match_winner_h2h_is_not_returned_when_primary_already_has_price():
+    client = FakeProp()
+    found, report = discover_propline_fallback(
+        client, [MATCH], {"rapid-133": {"match_winner"}},
+        now=NOW, max_events=2,
+    )
+    assert "match_winner" not in found["rapid-133"]
+    assert report["priced_by_market"]["match_winner"] == 0
+    assert set(found["rapid-133"]) == {"aces", "double_faults", "games", "sets"}
