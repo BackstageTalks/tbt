@@ -1,0 +1,24 @@
+name: Resolve OddsTrader betting options
+on:
+  push:
+    branches: [research/oddstrader-probe-20260901]
+    paths: [".github/workflows/oddstrader-option-labels.yml"]
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.parse, urllib.request
+          base="https://ms.virginia.us-east-1.oddstrader.com/odds-v2/odds-v2-service"
+          ids=[119611,119681,119609,119679,9508229,10922486,6757217,10916548]
+          q='{ bettingOptions(boid:['+','.join(map(str,ids))+']) { boid nam sequence } }'
+          url=base+"?"+urllib.parse.urlencode({"query":q})
+          req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Accept":"application/json"})
+          with urllib.request.urlopen(req,timeout=30) as h:
+              print(h.read().decode())
+          PY
