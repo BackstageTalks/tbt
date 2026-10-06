@@ -1,0 +1,27 @@
+name: Inspect OddsTrader market line shapes
+on:
+  push:
+    branches: [research/oddstrader-probe-20260901]
+    paths: [".github/workflows/oddstrader-market-shapes.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.parse, urllib.request
+          eid=4808893; paid=8
+          base="https://ms.virginia.us-east-1.oddstrader.com/odds-v2/odds-v2-service"
+          for name,mtid in [("match_winner",126),("match_spread",395),("match_total",396),("set1_winner",279),("set1_spread",434),("set1_total",439)]:
+              q=f'{{ openingLines(eid:[{eid}],mtid:[{mtid}],paid:[{paid}]) currentLines(eid:[{eid}],mtid:[{mtid}],paid:[{paid}]) }}'
+              url=base+"?"+urllib.parse.urlencode({"query":q})
+              req=urllib.request.Request(url,headers={"User-Agent":"Mozilla/5.0","Accept":"application/json"})
+              with urllib.request.urlopen(req,timeout=30) as h:
+                  data=json.loads(h.read().decode())
+              print("\n###",name,mtid)
+              print(json.dumps(data,ensure_ascii=False,indent=2)[:30000])
+          PY
