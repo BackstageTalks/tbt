@@ -42,7 +42,7 @@
     document.querySelectorAll('[data-match-tab]').forEach(node=>{
       const active=node===button;
       node.classList.toggle('active',active);
-      node.setAttribute('aria-selected',active?'true':'false');
+      node.setAttribute('aria-pressed',active?'true':'false');
     });
     document.querySelectorAll('[data-match-panel]').forEach(panel=>{
       const active=panel.dataset.matchPanel===id;

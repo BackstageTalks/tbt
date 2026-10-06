@@ -1,0 +1,13 @@
+const fs=require('node:fs'),vm=require('node:vm'),assert=require('node:assert/strict');
+const source=fs.readFileSync('web/app.js','utf8');
+const a=source.indexOf('  function renderMatchHistoryPanel('),b=source.indexOf('  function mergeLiveMatchIntelligence(',a);
+const context={normalize:r=>r,playerInsightStats:(r,n)=>r['s'+n],escapeHtml:s=>String(s).replaceAll('<','&lt;'),lcopy:(en,sk)=>sk};
+vm.createContext(context);vm.runInContext(source.slice(a,b),context);
+const base={p1:'<Alice>',p2:'Bea',s1:{},s2:{}};
+assert.match(context.renderMatchHistoryPanel(base),/nie sú dostupné/);
+assert.doesNotMatch(context.renderMatchHistoryPanel(base),/0 : 0/);
+assert.match(context.renderMatchHistoryPanel({...base,s1:{h2hWins:4,h2hLosses:0}}),/4 : 0/);
+assert.match(context.renderMatchHistoryPanel({...base,s1:{h2hWins:0,h2hLosses:0}}),/0 : 0/);
+assert.doesNotMatch(context.renderMatchHistoryPanel({...base,s1:{h2hWins:-1,h2hLosses:0}}),/-1 : 0/);
+assert.match(context.renderMatchHistoryPanel(base),/&lt;Alice>/);
+console.log('Detail H2H: available, zero, missing, invalid and escaped names PASS');
