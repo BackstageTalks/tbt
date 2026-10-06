@@ -40,7 +40,7 @@
   }
   const safePhotoUrl = value => { const url=String(value||'').trim(); if(/^\/assets\/[A-Za-z0-9_.\/-]+(?:\?[A-Za-z0-9_=&.%-]+)?$/.test(url)&&!url.split('?')[0].split('/').includes('..'))return url; if(/^\/api\/v1\/(?:tournament-logo|player-image)\/[0-9]{1,12}$/.test(url))return url; if(/^\/api\/v1\/media\/[A-Za-z0-9._-]+(?:\?[A-Za-z0-9_=&.%-]+)?$/.test(url))return url; if(/^https:\/\//i.test(url)){try{const parsed=new URL(url);if(parsed.protocol==='https:'&&parsed.host&&!parsed.username&&!parsed.password)return parsed.href;}catch{}} return ''; };
   const safeUiAsset = value => { const url=String(value||'').trim(); if(!/^\/assets\/[A-Za-z0-9_.\/-]+$/.test(url)||url.split('/').includes('..'))return ''; return url; };
-  const webPatch = () => String(document.querySelector('meta[name="blinq-web-patch"]')?.content||'736').trim();
+  const webPatch = () => String(document.querySelector('meta[name="blinq-web-patch"]')?.content||'737').trim();
   const versionedPlayerAsset = value => { const url=String(value||'').trim(); return /^\/assets\/(?:players\/|missing_foto_)/.test(url)?`${url}${url.includes('?')?'&':'?'}p=${encodeURIComponent(webPatch())}&photo-pairs=1`:url; };
   const avatarAssetSrc = value => { const url=safeUiAsset(value); return url ? `${url}?v=v6544` : ''; };
   function playerFallbackUrl(tour,gender=''){
@@ -425,8 +425,8 @@
     // optional endpoint must not serialize several timeout windows and hold an
     // authenticated user behind presentation configuration.
     const [uiResult,telegramResult,runtimeResult,linksResult]=await Promise.allSettled([
-      getJSON('/ui-config.json?v=7360&p=61&dashboard-setting=1',{timeoutMs:3000}),
-      getJSON('/config/telegram-groups.json?v=7360&p=61',{timeoutMs:3000}),
+      getJSON('/ui-config.json?v=7370&p=1&dashboard-setting=1',{timeoutMs:3000}),
+      getJSON('/config/telegram-groups.json?v=7370&p=1',{timeoutMs:3000}),
       getJSON('/api/v1/ui-config',{timeoutMs:3500}),
       getJSON('/membership-links.json',{timeoutMs:3000})
     ]);
@@ -2864,7 +2864,7 @@
     // same-origin script instead of an inline <script>. The popup runtime also
     // reinstalls image fallback handling because DOM event listeners are not
     // copied with innerHTML.
-    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7360&p=61"><script defer src="/match-popout.js?v=7360&p=61"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
+    w.document.open();w.document.write(`<!doctype html><html lang="${escapeHtml(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><base href="${escapeHtml(base)}"><title>BlinQ · ${escapeHtml(lcopy('Match detail','Detail zápasu','Detail zápasu'))}</title><link rel="stylesheet" href="/blinq-app.css?v=7370&p=1"><script defer src="/match-popout.js?v=7370&p=1"><\/script></head><body id="blinqPremium" class="blinq-detail-popout"><main class="match-popout-shell">${source.innerHTML}</main></body></html>`);w.document.close();w.focus();
   }
   function openMatch(m,tab='daily',rowOverride=null,skipLiveHydration=false){
     if(!matchDetailPlanAllowed()){const required=firstMatchDetailUnlockPlan();showUpgradePrompt(required,lcopy('Match detail','Detail zápasu','Detail zápasu'),true);return;}
