@@ -1,0 +1,351 @@
+name: BlinQ Tennis-Data historical odds integration
+
+on:
+  pull_request:
+    paths:
+      - ".github/tennis-data-historical-odds-request.json"
+      - ".github/workflows/tennis-data-historical-odds.yml"
+      - "scripts/link_tennis_data_historical_odds.py"
+      - "scripts/link_tennis_data_player_profiles.py"
+      - "scripts/import_offline_linked_match_winner_odds.py"
+      - "api/tbt/data/offline_odds.py"
+      - "tests/test_tennis_data_historical_odds.py"
+      - "tests/test_tennis_data_player_profiles.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/tennis-data-historical-odds-request.json"
+      - ".github/workflows/tennis-data-historical-odds.yml"
+      - "scripts/link_tennis_data_historical_odds.py"
+      - "scripts/link_tennis_data_player_profiles.py"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('tbt-tennis-data-odds-pr-{0}', github.ref) || 'tbt-tennis-data-odds-write' }}
+  cancel-in-progress: false
+
+jobs:
+  integrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      PYTHONPATH: api:scripts
+      GH_TOKEN: ${{ secrets.TBT_DATA_GH_TOKEN }}
+      TBT_DATA_REPOSITORY: ${{ vars.TBT_DATA_REPOSITORY || 'BackstageTalks/tbt-data' }}
+      SOURCE_LABEL: operator_tennis_data_v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate controlled request
+        run: |
+          set -euo pipefail
+          request=.github/tennis-data-historical-odds-request.json
+          test -s "$request"
+          test "$(jq -r '.mode' "$request")" = "write"
+          test "$(jq -r '.api_requests' "$request")" = "0"
+          test "$(jq -r '.model_promotion' "$request")" = "false"
+          test -n "$GH_TOKEN" || { echo "Missing TBT_DATA_GH_TOKEN"; exit 1; }
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: api/requirements-train.txt
+
+      - name: Install dependencies and focused tests
+        run: |
+          set -euo pipefail
+          python -m pip install -r api/requirements-train.txt pytest
+          python -m pytest             tests/test_tennis_data_historical_odds.py             tests/test_tennis_data_player_profiles.py             tests/test_offline_odds.py -q
+
+      - name: Download exact operator-matching source mirrors
+        run: |
+          set -euo pipefail
+          mkdir -p .cache/tbt/tennis-data/source
+          curl --fail --location --retry 5             "https://raw.githubusercontent.com/0xsimulacra/MLT/cb2e4002058d75288e0ee09925b6aacb81f4900f/df_atp.csv"             -o .cache/tbt/tennis-data/source/df_atp.csv
+          curl --fail --location --retry 5             "https://raw.githubusercontent.com/0xsimulacra/MLT/cb2e4002058d75288e0ee09925b6aacb81f4900f/df_wta.csv"             -o .cache/tbt/tennis-data/source/df_wta.csv
+          curl --fail --location --retry 5             "https://raw.githubusercontent.com/com-480-data-visualization/datavis-project-2022-plot-twist/49d954bf03a1ffdbf2a7f2b9cffaa27e2b242284/data/tennis_data.csv"             -o .cache/tbt/tennis-data/source/tennis_data.csv
+
+      - name: Verify exact bytes and source shape
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv, hashlib, json
+          from pathlib import Path
+
+          request=json.loads(Path(".github/tennis-data-historical-odds-request.json").read_text())
+          root=Path(".cache/tbt/tennis-data/source")
+          checks=[
+              ("archive_atp", root/"df_atp.csv"),
+              ("archive_wta", root/"df_wta.csv"),
+              ("enriched_atp_2007_2022", root/"tennis_data.csv"),
+          ]
+          report={}
+          for key,path in checks:
+              cfg=request["sources"][key]
+              data=path.read_bytes()
+              sha=hashlib.sha256(data).hexdigest()
+              rows=sum(1 for _ in path.open("r",encoding="utf-8-sig",newline=""))-1
+              expected_sha=cfg["expected_sha256"]
+              expected_rows=int(cfg["expected_rows"])
+              if sha != expected_sha:
+                  raise SystemExit(f"{key} SHA mismatch: {sha} != {expected_sha}")
+              if rows != expected_rows:
+                  raise SystemExit(f"{key} row mismatch: {rows} != {expected_rows}")
+              if cfg.get("expected_bytes") is not None and len(data) != int(cfg["expected_bytes"]):
+                  raise SystemExit(f"{key} byte-size mismatch")
+              report[key]={"rows":rows,"bytes":len(data),"sha256":sha}
+          Path(".cache/tbt/tennis-data/source-audit.json").write_text(
+              json.dumps(report,indent=2),encoding="utf-8"
+          )
+          print(json.dumps(report,indent=2))
+          PY
+
+      - name: Build non-overlapping 2020-2022 ATP odds slice
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import csv
+          from pathlib import Path
+
+          src=Path(".cache/tbt/tennis-data/source/tennis_data.csv")
+          out=Path(".cache/tbt/tennis-data/source/tennis_data_2020_2022.csv")
+          with src.open("r",encoding="utf-8-sig",newline="") as i, out.open("w",encoding="utf-8",newline="") as o:
+              reader=csv.DictReader(i)
+              writer=csv.DictWriter(o,fieldnames=reader.fieldnames)
+              writer.writeheader()
+              count=0
+              for row in reader:
+                  date=str(row.get("Date") or "")
+                  if date >= "2020-01-01":
+                      writer.writerow(row)
+                      count += 1
+          if count != 4354:
+              raise SystemExit(f"Unexpected 2020-2022 row count: {count}")
+          print(f"2020-2022 rows={count}")
+          PY
+
+      - name: Download checksum-verified canonical history
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          directory=Path(".cache/tbt/tennis-data/history")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",directory).download(
+              require_bundle_manifest=True
+          )
+          PY
+
+      - name: Link historical Match Winner odds
+        run: |
+          set -euo pipefail
+          python scripts/link_tennis_data_historical_odds.py             --history-dir .cache/tbt/tennis-data/history             --atp-source .cache/tbt/tennis-data/source/df_atp.csv             --atp-source .cache/tbt/tennis-data/source/tennis_data_2020_2022.csv             --wta-source .cache/tbt/tennis-data/source/df_wta.csv             --source-label "$SOURCE_LABEL"             --out-dir .cache/tbt/tennis-data/link-odds
+
+      - name: Link validated ATP player profiles
+        run: |
+          set -euo pipefail
+          python scripts/link_tennis_data_player_profiles.py             --history-dir .cache/tbt/tennis-data/history             --source-csv .cache/tbt/tennis-data/source/tennis_data.csv             --source-label "$SOURCE_LABEL"             --out-dir .cache/tbt/tennis-data/link-profiles
+
+      - name: Validate link reports
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          odds=json.loads(Path(".cache/tbt/tennis-data/link-odds/report.json").read_text())
+          profiles=json.loads(Path(".cache/tbt/tennis-data/link-profiles/report.json").read_text())
+          oc=odds.get("counts") or {}
+          pc=profiles.get("counts") or {}
+          if odds.get("api_requests") != 0 or profiles.get("api_requests") != 0:
+              raise SystemExit("Offline integration unexpectedly used provider API")
+          if odds.get("production_mutated") is not False or profiles.get("production_mutated") is not False:
+              raise SystemExit("Link stage unexpectedly mutated production")
+          if int(oc.get("linked_matches") or 0) <= 0:
+              raise SystemExit("No historical odds linked")
+          if int(oc.get("reference_markers_staged") or 0) <= 0 and int(oc.get("existing_reference_preserved") or 0) <= 0:
+              raise SystemExit("No canonical historical odds reference coverage")
+          if int(pc.get("safe_players") or 0) <= 0:
+              raise SystemExit("No safe player profiles linked")
+          if int(pc.get("players_with_conflicting_fields") or 0) > 100:
+              raise SystemExit("Unexpectedly high player-profile conflict count")
+          print(json.dumps({"odds":oc,"profiles":pc},indent=2))
+          PY
+
+      - name: Dry-run strict canonical odds importer
+        run: |
+          set -euo pipefail
+          stage=.cache/tbt/tennis-data/link-odds/reference_stage.jsonl
+          mkdir -p .cache/tbt/tennis-data/dry-run
+          if [[ -s "$stage" ]]; then
+            python scripts/import_offline_linked_match_winner_odds.py               --stage "$stage"               --history-dir .cache/tbt/tennis-data/history               --out-dir .cache/tbt/tennis-data/dry-run
+          else
+            printf '%s\n' '{"schema":1,"stage_rows":0,"counts":{},"changed_years":[],"production_mutated":false,"local_partitions_written":false,"api_requests":0}'               > .cache/tbt/tennis-data/dry-run/report.json
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path(".cache/tbt/tennis-data/dry-run/report.json").read_text())
+          c=r.get("counts") or {}
+          for key in ("identity_missing","identity_changed","invalid_market","market_conflicts"):
+              if int(c.get(key) or 0):
+                  raise SystemExit(f"Strict importer rejected rows: {key}={c.get(key)}")
+          if r.get("api_requests") != 0:
+              raise SystemExit("Importer used provider API")
+          print(json.dumps(r,indent=2))
+          PY
+
+      - name: Write verified historical odds into private canonical history
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          stage=.cache/tbt/tennis-data/link-odds/reference_stage.jsonl
+          mkdir -p .cache/tbt/tennis-data/write
+          if [[ -s "$stage" ]]; then
+            python scripts/import_offline_linked_match_winner_odds.py               --stage "$stage"               --history-dir .cache/tbt/tennis-data/history               --out-dir .cache/tbt/tennis-data/write               --write-partitions               --write-history-dir .cache/tbt/tennis-data/history
+          else
+            cp .cache/tbt/tennis-data/dry-run/report.json .cache/tbt/tennis-data/write/report.json
+          fi
+
+      - name: Publish changed canonical history and verify readback
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from release_store import ReleaseStore
+          from tbt.data.history_snapshot import load_partitions
+          from tbt.data.history_safety import sanitize_history_identities
+
+          directory=Path(".cache/tbt/tennis-data/history")
+          report=json.loads(Path(".cache/tbt/tennis-data/write/report.json").read_text())
+          c=report.get("counts") or {}
+          for key in ("identity_missing","identity_changed","invalid_market","market_conflicts"):
+              if int(c.get(key) or 0):
+                  raise SystemExit(f"Write rejected rows: {key}={c.get(key)}")
+          years=[int(y) for y in report.get("changed_years") or []]
+          if years:
+              paths=[directory/f"history-{year:04d}.parquet" for year in years]
+              paths.append(directory/"history_manifest.json")
+              store=ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",directory)
+              store.upload_bundle(paths)
+          verify=Path(".cache/tbt/tennis-data/verify")
+          ReleaseStore(os.environ["TBT_DATA_REPOSITORY"],"tbt-data-v1",verify).download(
+              require_bundle_manifest=True
+          )
+          matches,safety=sanitize_history_identities(load_partitions(verify))
+          if safety.get("quarantined_rows"):
+              raise SystemExit("Persisted canonical history identity validation failed")
+          by_id={str(m.match_id):m for m in matches}
+          staged=[]
+          stage=Path(".cache/tbt/tennis-data/link-odds/reference_stage.jsonl")
+          if stage.is_file():
+              staged=[json.loads(line) for line in stage.read_text().splitlines() if line.strip()]
+          missing=[]
+          for row in staged:
+              m=by_id.get(str(row["match_id"]))
+              marker=(m.provider_payload or {}).get("_tbt_match_winner_odds") if m else None
+              if not isinstance(marker,dict) or marker.get("source") != os.environ["SOURCE_LABEL"]:
+                  missing.append(str(row["match_id"]))
+          if missing:
+              raise SystemExit(f"Persisted odds readback missing {len(missing)} staged rows")
+          print(json.dumps({"rows":len(matches),"changed_years":years,"verified_staged":len(staged)},indent=2))
+          PY
+
+      - name: Publish rich market and player-profile sidecars
+        if: github.event_name == 'push'
+        run: |
+          set -euo pipefail
+          upload_file() {
+            local source="$1"
+            local path="$2"
+            local message="$3"
+            local existing_sha
+            existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            SOURCE_FILE="$source" EXISTING_SHA="$existing_sha" COMMIT_MESSAGE="$message" python - <<'PY'
+          import base64,json,os
+          from pathlib import Path
+          payload={
+              "message":os.environ["COMMIT_MESSAGE"],
+              "content":base64.b64encode(Path(os.environ["SOURCE_FILE"]).read_bytes()).decode("ascii"),
+          }
+          if os.environ.get("EXISTING_SHA"):
+              payload["sha"]=os.environ["EXISTING_SHA"]
+          Path("/tmp/tennis-data-upload.json").write_text(json.dumps(payload),encoding="utf-8")
+          PY
+            gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"               --input /tmp/tennis-data-upload.json >/dev/null
+          }
+
+          for file in .cache/tbt/tennis-data/link-odds/market-sidecar-*.jsonl.gz; do
+            base="$(basename "$file")"
+            upload_file "$file" "research/historical_market/tennis_data/$base"               "Update Tennis-Data historical market $base from run $GITHUB_RUN_ID"
+          done
+          upload_file             .cache/tbt/tennis-data/link-profiles/player-profile-sidecar.jsonl.gz             research/player_profile/operator-atp-2007-2022.jsonl.gz             "Update operator ATP player profile sidecar from run $GITHUB_RUN_ID"
+
+      - name: Persist integration audit
+        if: always()
+        continue-on-error: true
+        env:
+          JOB_STATUS: ${{ job.status }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json,os
+          from datetime import datetime,timezone
+          from pathlib import Path
+          def read(path):
+              p=Path(path)
+              if not p.is_file(): return None
+              try: return json.loads(p.read_text())
+              except Exception as exc: return {"read_error":str(exc)}
+          audit={
+              "schema":1,
+              "generated_at_utc":datetime.now(timezone.utc).isoformat(),
+              "job_status":os.environ.get("JOB_STATUS"),
+              "run_id":os.environ.get("RUN_ID"),
+              "run_sha":os.environ.get("RUN_SHA"),
+              "source_audit":read(".cache/tbt/tennis-data/source-audit.json"),
+              "odds_link":read(".cache/tbt/tennis-data/link-odds/report.json"),
+              "profile_link":read(".cache/tbt/tennis-data/link-profiles/report.json"),
+              "dry_run":read(".cache/tbt/tennis-data/dry-run/report.json"),
+              "write":read(".cache/tbt/tennis-data/write/report.json"),
+              "api_requests":0,
+              "model_promoted":False,
+          }
+          Path("/tmp/tennis-data-integration-audit.json").write_text(
+              json.dumps(audit,ensure_ascii=False,indent=2),encoding="utf-8"
+          )
+          PY
+          if [[ "${{ github.event_name }}" == "push" ]]; then
+            path="audit/tennis-data-historical-odds-latest.json"
+            existing_sha="$(gh api "repos/$TBT_DATA_REPOSITORY/contents/$path" --jq .sha 2>/dev/null || true)"
+            encoded="$(base64 -w0 /tmp/tennis-data-integration-audit.json)"
+            if [[ -n "$existing_sha" ]]; then
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"                 -f message="Audit Tennis-Data integration run $RUN_ID"                 -f content="$encoded" -f sha="$existing_sha" >/dev/null
+            else
+              gh api --method PUT "repos/$TBT_DATA_REPOSITORY/contents/$path"                 -f message="Audit Tennis-Data integration run $RUN_ID"                 -f content="$encoded" >/dev/null
+            fi
+          fi
+
+      - name: Upload evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blinq-tennis-data-historical-odds-${{ github.run_id }}
+          path: |
+            .cache/tbt/tennis-data/source-audit.json
+            .cache/tbt/tennis-data/link-odds/report.json
+            .cache/tbt/tennis-data/link-odds/review.jsonl.gz
+            .cache/tbt/tennis-data/link-odds/quarantine.jsonl.gz
+            .cache/tbt/tennis-data/link-profiles/report.json
+            .cache/tbt/tennis-data/link-profiles/review.jsonl.gz
+            .cache/tbt/tennis-data/dry-run/report.json
+            .cache/tbt/tennis-data/write/report.json
+          if-no-files-found: warn
+          retention-days: 14
