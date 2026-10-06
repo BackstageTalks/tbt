@@ -102,12 +102,16 @@ def player_pair(a, b):
 
 
 def blinq_priority_pairs(now):
-    """Read the compact current public-offer snapshot; no provider requests."""
+    """Read current offer and rank pairs for CLV capture; no provider requests.
+
+    TOP gets first claim on the tiny 12-event CLV sample, followed by Value,
+    then Short Odds/other published markets. Lower numeric values are stronger.
+    """
     directory = Path(".cache/tbt/propline-clv-predictions")
     try:
         store = ReleaseStore(DATA_REPO, "tbt-predictions-v1", directory)
         if "daily_offer_snapshot.json" not in store._asset_names():
-            return set()
+            return {}
         store.download(
             extra_names=("daily_offer_snapshot.json",),
             required_names=("daily_offer_snapshot.json",),
@@ -116,14 +120,24 @@ def blinq_priority_pairs(now):
             (directory / "daily_offer_snapshot.json").read_text(encoding="utf-8")
         )
     except Exception:
-        return set()
+        return {}
 
-    pairs = set()
+    pairs = {}
     if not isinstance(payload, dict):
         return pairs
-    for rows in payload.values():
+    section_priority = {
+        "top_daily_picks": 0,
+        "top200_picks": 0,
+        "value_picks": 1,
+        "prime_picks": 2,
+        "doubles_picks": 2,
+        "ace_picks": 2,
+        "sg_picks": 2,
+    }
+    for section, rows in payload.items():
         if not isinstance(rows, list):
             continue
+        priority = section_priority.get(section, 3)
         for row in rows:
             if not isinstance(row, dict):
                 continue
@@ -135,14 +149,17 @@ def blinq_priority_pairs(now):
                 continue
             hours = (kickoff - now).total_seconds() / 3600
             if 0 < hours <= 48:
-                pairs.add(pair)
+                pairs[pair] = min(priority, pairs.get(pair, priority))
     return pairs
 
 
 def pick_events(events, now, priority_pairs=()):
     buckets = [[], [], [], []]
     all_items = []
-    priority_pairs = set(priority_pairs or ())
+    if isinstance(priority_pairs, dict):
+        pair_priority = dict(priority_pairs)
+    else:
+        pair_priority = {pair: 0 for pair in set(priority_pairs or ())}
     for event in events:
         if not isinstance(event, dict):
             continue
@@ -154,7 +171,7 @@ def pick_events(events, now, priority_pairs=()):
         if not 0 < hours <= 48:
             continue
         pair = player_pair(event.get("home_team"), event.get("away_team"))
-        priority = 0 if pair in priority_pairs else 1
+        priority = pair_priority.get(pair, 4)
         tier = 0 if any(word in str(event).lower() for word in
                         ('"atp"', '"wta"', 'atp ', 'wta ')) else 1
         bucket_idx = 0 if hours <= 3 else 1 if hours <= 12 else 2 if hours <= 24 else 3
@@ -166,9 +183,10 @@ def pick_events(events, now, priority_pairs=()):
         bucket.sort(key=lambda item: (item[0], item[1], item[2]))
 
     # Published/current BlinQ pairs always get first claim on the bounded budget.
+    # Within them, TOP (0) precedes Value (1) and the rest of the offer (2).
     selected = sorted(
-        (item for item in all_items if item[0] == 0),
-        key=lambda item: (item[2], item[1]),
+        (item for item in all_items if item[0] < 4),
+        key=lambda item: (item[0], item[2], item[1]),
     )[:MAX_EVENTS]
     used = {item[3] for item in selected}
 
@@ -232,7 +250,9 @@ def main():
             report["board_events"] = len(events)
             report["eligible_upcoming"] = eligible
             report["blinq_priority_pairs"] = len(priority_pairs)
-            report["selected_blinq_matches"] = sum(item[0] == 0 for item in selected)
+            report["selected_blinq_matches"] = sum(item[0] < 4 for item in selected)
+            report["selected_top_matches"] = sum(item[0] == 0 for item in selected)
+            report["selected_value_matches"] = sum(item[0] == 1 for item in selected)
             # 2 calls/event for discovery + priced lines. No retries.
             for priority, _, kickoff, event_id, event in selected[:min(MAX_EVENTS, (remaining - api_calls)//2)]:
                 if int(quota.get("X-Daily-Remaining", "9999")) < MIN_PROVIDER_REMAINING:
