@@ -1981,8 +1981,8 @@
     const promoted=source.filter(row=>displayScore(row)>-Infinity)
       .sort((a,b)=>displayScore(b)-displayScore(a)||probability(b)-probability(a)||odds(b)-odds(a))
       .slice(0,5);
-    const promotedIds=new Set(promoted.map(dailyPickIdentity));
-    const remainder=source.filter(row=>!promotedIds.has(dailyPickIdentity(row)))
+    const promotedRows=new Set(promoted);
+    const remainder=source.filter(row=>!promotedRows.has(row))
       .sort((a,b)=>probability(b)-probability(a)||odds(b)-odds(a));
     return [...promoted,...remainder];
   }
