@@ -1,0 +1,29 @@
+name: Resolve OddsTrader total labels from state
+on:
+  push:
+    branches: [research/oddstrader-probe-20260901]
+    paths: [".github/workflows/oddstrader-total-label-state.yml"]
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.request
+          u="https://www.oddstrader.com/atp/?date=20260901&g=match&m=total"
+          r=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0"})
+          with urllib.request.urlopen(r,timeout=30) as h: s=h.read().decode("utf-8","replace")
+          for needle in ('15143','15144','119611','119681'):
+              print("\nNEEDLE",needle)
+              start=0
+              found=0
+              while True:
+                  i=s.find(needle,start)
+                  if i<0 or found>=8: break
+                  print(s[max(0,i-350):i+500])
+                  start=i+len(needle); found+=1
+          PY
