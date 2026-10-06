@@ -397,7 +397,7 @@ body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-confidence{display:flex!
 body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-confidence strong{font-size:18px!important;line-height:1.2!important}
 body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-confidence>i{display:block!important;width:110px!important;height:3px!important;background:#234235!important}
 body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-confidence>i>b{display:block!important;height:100%!important;background:#38e8a4!important}
-body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-data-depth{font-size:9px!important;line-height:1.4!important;white-space:nowrap!important;max-width:none!important;color:#95b2a4!important}
+body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-data-depth{font-size:10px!important;line-height:1.4!important;white-space:nowrap!important;max-width:none!important;overflow:visible!important;text-overflow:clip!important;color:#95b2a4!important}
 body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-action-cell{justify-self:end!important;align-self:center!important;padding:0!important}
 body#blinqPremium.bqm-enabled .site-main #dailyHub .hub-tournament-copy b{font-size:13px!important;line-height:1.35!important}
 body#blinqPremium.bqm-enabled .site-main #dailyHub .daily-tabs-row{background:rgba(5,24,18,.8)!important;border-radius:12px 12px 0 0!important;padding:4px!important;margin-bottom:12px!important}

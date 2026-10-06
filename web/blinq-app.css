@@ -9344,10 +9344,10 @@ body#blinqPremium .reference-topbar #bqm-projects{color:#b694f5!important}
  body#blinqPremium .results-table th:nth-child(6){min-width:120px}
 }
 @media(max-width:900px){
- body#blinqPremium:not(.blinq-admin) #dailyHubTabs{scrollbar-width:thin!important;scrollbar-color:rgba(71,187,137,.55) transparent!important;padding-bottom:5px!important}
- body#blinqPremium:not(.blinq-admin) #dailyHubTabs::-webkit-scrollbar{display:block!important;height:3px}
+ body#blinqPremium:not(.blinq-admin) #dailyHubTabs{scrollbar-width:none!important;padding-bottom:0!important}
+ body#blinqPremium:not(.blinq-admin) #dailyHubTabs::-webkit-scrollbar{display:none!important}
  body#blinqPremium:not(.blinq-admin) .daily-tabs-row{position:relative!important}
- body#blinqPremium:not(.blinq-admin) .daily-tabs-row::after{content:'↔';position:absolute;right:46px;top:1px;font-size:11px;color:#8fbbab;pointer-events:none}
+ body#blinqPremium:not(.blinq-admin) .daily-tabs-row::after{content:none!important}
  body#blinqPremium:not(.blinq-admin) #dailyHubTabs::-webkit-scrollbar-thumb{background:rgba(71,187,137,.55);border-radius:3px}
  body#blinqPremium.blinq-route:not(.blinq-admin) .results-filter-field:first-child{grid-column:1/-1!important}
  body#blinqPremium.blinq-route:not(.blinq-admin) .results-card-row :is(.result-date,.result-date small,.results-actual){font-size:11px!important;line-height:1.35!important;color:#a6c0b6!important}
@@ -9374,3 +9374,8 @@ body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile .admin-he
 body#blinqPremium .admin-hero-preview-stage .lean-admin-preview:is(.desktop,.mobile) .admin-hero-preview-copy strong{font-size:calc(var(--preview-headline-ratio)*1cqw)!important;line-height:1.05!important;margin:calc(var(--preview-gap-ratio)*1cqw) 0!important}
 body#blinqPremium .admin-hero-preview-stage .lean-admin-preview:is(.desktop,.mobile) .admin-hero-preview-copy small{font-size:calc(var(--preview-eyebrow-ratio)*1cqw)!important;line-height:1.4!important}
 body#blinqPremium .admin-hero-preview-stage .lean-admin-preview:is(.desktop,.mobile) .admin-hero-preview-copy p{font-size:calc(var(--preview-text-ratio)*1cqw)!important;line-height:1.4!important;margin:0!important}
+
+@media(max-width:900px){
+ body#blinqPremium:not(.blinq-admin) #dailyHubTabs{mask-image:linear-gradient(to right,#000 calc(100% - 14px),transparent)!important}
+ body#blinqPremium:not(.blinq-admin) #dailyHub .daily-hub-table .hub-data-depth{font-size:10px!important;max-width:none!important;white-space:normal!important;line-height:1.4!important;overflow:visible!important;text-overflow:clip!important}
+}
