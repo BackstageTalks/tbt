@@ -1,9 +1,8 @@
 {
   "schema": 1,
-  "requested_at": "2026-10-04T21:19:30+02:00",
-  "action": "integrate_valuebetennis_market_history",
+  "requested_at": "2026-10-06T07:09:00+02:00",
+  "action": "rerun_valuebetennis_market_history_with_strict_player_id_recovery",
   "source": "Valuebetennis 2021-2026 public CSV, CC BY 4.0",
-  "policy": "opening odds stored as pre-match candidate; closing odds validation/CLV only; fail closed on identity or market conflicts",
-  "note": "Final verified Valuebet persistence closeout after successful Library sweep and canonical snapshot persistence fix; require publish + persisted readback + audit.",
-  "attempt": 7
+  "policy": "opening odds stored as pre-match candidate; closing odds validation/CLV only; strict one-to-one learned player-ID recovery; fail closed on identity or market conflicts",
+  "note": "Post-PR #303 verified rerun. Publish only exact/unique or strict one-to-one ID-recovered links; validate persisted read-back; no model promotion."
 }
