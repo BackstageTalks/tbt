@@ -77,7 +77,9 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'push' && (contains(github.event.head_commit.message, '[replace-current-refresh]') || contains(github.event.head_commit.message, '[replace-stale-data-run]')) }}
 jobs:
   pipeline:
-    if: (github.event_name == 'push' && (contains(github.event.head_commit.message, '[refresh-now]') || contains(github.event.head_commit.message, '[data-request]'))) || github.event_name == 'workflow_dispatch'
+    # EMERGENCY API PAUSE 2026-10-06: shared daily quota reached 96%.
+    # Blocks all provider/data pipeline dispatches until explicitly reverted.
+    if: false
     # Refresh/results publication mutates tbt-predictions-v1, so it must also
     # share the exact production publication lock used by CI/player deploys.
     # History/statistics modes receive a run-unique job group and therefore do
