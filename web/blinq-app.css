@@ -9363,3 +9363,14 @@ body#blinqPremium .reference-topbar #bqm-projects{color:#b694f5!important}
 }
 
 @media(min-width:901px){body#blinqPremium.blinq-route .results-table .is-projection .result-prediction strong{white-space:normal!important;overflow-wrap:anywhere!important;line-height:1.4!important}}
+
+/* Preview uses the rendered banner ratio, not the uploaded artwork ratio.
+   Mobile settings apply to the mobile preview even on a desktop Admin screen. */
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview{container-type:inline-size!important;height:auto!important;min-height:0!important;max-height:none!important}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.desktop{aspect-ratio:1396/203!important}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile{aspect-ratio:370/190!important}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile>img{object-position:var(--hero-img-mobile-x,50%) var(--hero-img-mobile-y,50%)!important}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview.mobile .admin-hero-preview-copy{inset:auto!important;left:var(--hero-copy-mobile-x,4%)!important;top:var(--hero-copy-mobile-y,50%)!important;width:var(--hero-copy-mobile-width,70%)!important;max-width:var(--hero-copy-mobile-width,70%)!important;padding:0!important;transform:translateY(-50%)!important}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview:is(.desktop,.mobile) .admin-hero-preview-copy strong{font-size:calc(var(--preview-headline-ratio)*1cqw)!important;line-height:1.05!important;margin:calc(var(--preview-gap-ratio)*1cqw) 0!important}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview:is(.desktop,.mobile) .admin-hero-preview-copy small{font-size:calc(var(--preview-eyebrow-ratio)*1cqw)!important;line-height:1.4!important}
+body#blinqPremium .admin-hero-preview-stage .lean-admin-preview:is(.desktop,.mobile) .admin-hero-preview-copy p{font-size:calc(var(--preview-text-ratio)*1cqw)!important;line-height:1.4!important;margin:0!important}

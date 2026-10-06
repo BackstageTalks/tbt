@@ -3667,7 +3667,12 @@
     const headline=String(c.headline||'').trim();
     const subtitle=String(c.text||'').trim();
     const copy=c.show_copy===false?'':`<div class="admin-hero-preview-copy">${eyebrow?`<small>${bannerLineHtml(eyebrow)}</small>`:''}${headline?`<strong>${bannerLineHtml(headline)}</strong>`:''}${subtitle?`<p>${bannerLineHtml(subtitle)}</p>`:''}${c.button_text?`<b>${bannerLineHtml(c.button_text)} →</b>`:''}</div>`;
-    return `<div class="lean-admin-preview ${mode}${bannerCreativeClasses(c)} is-active" ${bannerCreativeStyle(c)} data-preview-slot="${escapeHtml(entry.id)}"><img src="${escapeHtml(img)}" alt="" loading="lazy">${copy}</div>`;
+    const clampSize=(value,min,max,fallback)=>value!=null&&Number.isFinite(Number(value))?Math.max(min,Math.min(max,Number(value))):fallback;
+    const previewWidth=mode==='mobile'?370:1396;
+    const headlineSize=clampSize(c.headline_size,12,72,36),textSize=clampSize(c.text_size,9,32,14),eyebrowSize=clampSize(c.eyebrow_size,7,18,10);
+    const mobileHeadline=Math.min(headlineSize,headlineSize*.75+6),mobileText=Math.max(9,Math.min(24,textSize*.78));
+    const previewStyle=bannerCreativeStyle(c).replace(/"$/,`;--preview-headline-ratio:${100*(mode==='mobile'?mobileHeadline:headlineSize)/previewWidth};--preview-text-ratio:${100*(mode==='mobile'?mobileText:textSize)/previewWidth};--preview-eyebrow-ratio:${100*eyebrowSize/previewWidth};--preview-gap-ratio:${700/previewWidth}"`);
+    return `<div class="lean-admin-preview ${mode}${bannerCreativeClasses(c)} is-active" ${previewStyle} data-preview-slot="${escapeHtml(entry.id)}"><img src="${escapeHtml(img)}" alt="" loading="lazy">${copy}</div>`;
   }
   function syncAdminHeroPreview(){
     const stage=document.querySelector('#adminHeroLivePreview');
@@ -3742,7 +3747,7 @@
       <div class="admin-hero-tabs" role="group" aria-label="Vybrať banner na úpravu">${tabs}</div>
       <section class="admin-hero-preview-stage" id="adminHeroLivePreview" aria-label="Živý náhľad carouselu">
         <div class="admin-hero-preview-toolbar"><div><small>ŽIVÝ NÁHĽAD</small><strong data-admin-preview-status>${escapeHtml(adminPreviewStatus(entries,previewEntry))}</strong></div><div class="admin-hero-preview-actions"><button type="button" data-admin-preview-step="-1" aria-label="Predchádzajúci banner">‹</button><button type="button" data-admin-preview-pause aria-pressed="${state.adminPreviewPaused}">${state.adminPreviewPaused?'Spustiť':'Pozastaviť'}</button><button type="button" data-admin-preview-step="1" aria-label="Nasledujúci banner">›</button></div></div>
-        <div class="lean-admin-preview-grid"><div><span>Desktop · 1920 × 640</span><div data-admin-preview-card="desktop">${adminHeroPreviewCard(previewEntry,'desktop')}</div></div><div><span>Mobil · 1080 × 720</span><div data-admin-preview-card="mobile">${adminHeroPreviewCard(previewEntry,'mobile')}</div></div></div>
+        <div class="lean-admin-preview-grid"><div><span>PC · zobrazenie pri šírke 1440 px</span><div data-admin-preview-card="desktop">${adminHeroPreviewCard(previewEntry,'desktop')}</div></div><div><span>Mobil · zobrazenie pri šírke 390 px</span><div data-admin-preview-card="mobile">${adminHeroPreviewCard(previewEntry,'mobile')}</div></div></div>
         <div class="admin-hero-preview-dots" aria-label="Pozícia náhľadu">${entries.map((_,i)=>`<button type="button" data-admin-preview-dot="${i}" class="${i===state.adminPreviewIndex?'is-active':''}" aria-current="${i===state.adminPreviewIndex}" aria-label="Zobraziť banner ${i+1}"></button>`).join('')}</div>
       </section>
       <div class="admin-hero-selected-head"><div><small>UPRAVUJEŠ</small><strong>${escapeHtml(item.label||selectedId)}</strong></div><span>${Number(selectedId.split('_').pop())<=activeCount?'V rotácii':'Neaktívny banner'}</span></div>
