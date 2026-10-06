@@ -1,0 +1,35 @@
+name: Probe OddsTrader ATP history depth
+on:
+  push:
+    branches: [research/oddstrader-probe-20260901]
+    paths: [".github/workflows/oddstrader-history-depth.yml"]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          for d in ["20050901","20100901","20150901","20200901","20250901"]:
+              u=f"https://www.oddstrader.com/atp/?date={d}&g=match&m=winner"
+              req=urllib.request.Request(u,headers={"User-Agent":"Mozilla/5.0","Accept":"text/html"})
+              try:
+                  with urllib.request.urlopen(req,timeout=30) as h:
+                      s=h.read().decode("utf-8","replace")
+                  marker="window.__INITIAL_STATE__="
+                  i=s.find(marker)
+                  if i<0:
+                      print(d,"NO_STATE","bytes",len(s)); continue
+                  st,_=json.JSONDecoder().raw_decode(s[i+len(marker):])
+                  ev=(st.get("events") or {}).get("events") or {}
+                  print(d,"events",len(ev),"ids",list(ev)[:5])
+                  if ev:
+                      first=ev[next(iter(ev))]
+                      print(" sample",first.get("des"),first.get("dt"),first.get("es"))
+              except Exception as e:
+                  print(d,"ERROR",repr(e))
+          PY
