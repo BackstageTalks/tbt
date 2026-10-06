@@ -7,8 +7,6 @@ on:
       - ".github/tennis-abstract-elo-request.json"
       - ".github/workflows/tennis-abstract-elo.yml"
       - "scripts/parse_tennis_abstract_elo.py"
-  schedule:
-    - cron: "15 6 * * 1"
   workflow_dispatch:
 
 permissions:
