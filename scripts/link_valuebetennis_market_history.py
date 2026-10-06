@@ -16,7 +16,7 @@ from tbt.data.history_safety import sanitize_history_identities
 from tbt.data.offline_market_history import (
     build_market_history_marker, candidate_link, parse_valuebet_row,
 )
-from tbt.data.offline_odds import norm_text
+from tbt.data.offline_odds import norm_surface, norm_text, tournament_score
 
 
 def _signature(match):
@@ -71,6 +71,130 @@ def _index_add(index, key, match):
     mid = str(match.match_id)
     if mid not in bucket:
         bucket[mid] = match
+
+
+def _name_scored_candidates(source, by_exact_name, by_legacy_surname):
+    lookup_a = _source_lookup(source.player_a)
+    lookup_b = _source_lookup(source.player_b)
+    if lookup_a is None or lookup_b is None:
+        return []
+    candidates = {}
+    for delta in (-1, 0, 1):
+        day = source.event_date + timedelta(days=delta)
+        index_a = by_legacy_surname if lookup_a[0] == "legacy" else by_exact_name
+        index_b = by_legacy_surname if lookup_b[0] == "legacy" else by_exact_name
+        a = index_a.get((source.tour, day, lookup_a[1]), {})
+        b = index_b.get((source.tour, day, lookup_b[1]), {})
+        if not a or not b:
+            continue
+        for mid in a.keys() & b.keys():
+            candidates[mid] = a[mid]
+    scored = []
+    for match in candidates.values():
+        linked = candidate_link(
+            source,
+            canonical_tour=match.tour,
+            canonical_date=match.scheduled_at.date(),
+            canonical_player1=match.player1_name,
+            canonical_player2=match.player2_name,
+            canonical_winner=_winner_name(match),
+            canonical_tournament=match.tournament,
+            canonical_surface=match.surface,
+            canonical_round=match.round_name,
+        )
+        if linked.get("score", -100) > -100:
+            scored.append((int(linked["score"]), bool(linked["accepted"]), match, linked))
+    scored.sort(key=lambda row: row[0], reverse=True)
+    return scored
+
+
+def _unique_accepted(scored):
+    if not scored:
+        return None
+    top_score = scored[0][0]
+    top = [row for row in scored if row[0] == top_score]
+    if len(top) != 1 or not top[0][1]:
+        return None
+    return top[0]
+
+
+def _strict_one_to_one_crosswalk(observations):
+    forward = defaultdict(set)
+    reverse = defaultdict(set)
+    for tour, source_player_id, canonical_player_id in observations:
+        source_key = (str(tour), str(source_player_id))
+        canonical_key = (str(tour), str(canonical_player_id))
+        if source_key[1] and canonical_key[1]:
+            forward[source_key].add(canonical_key[1])
+            reverse[canonical_key].add(source_key[1])
+    result = {}
+    for source_key, canonical_ids in forward.items():
+        if len(canonical_ids) != 1:
+            continue
+        canonical_id = next(iter(canonical_ids))
+        if len(reverse[(source_key[0], canonical_id)]) != 1:
+            continue
+        result[source_key] = canonical_id
+    return result
+
+
+def _orient_market(value, orientation):
+    if value is None:
+        return None
+    if orientation == "direct":
+        return dict(value)
+    return {
+        "player1_odds": value["player2_odds"],
+        "player2_odds": value["player1_odds"],
+        "player1_implied_probability": value["player2_implied_probability"],
+        "player2_implied_probability": value["player1_implied_probability"],
+        "raw_overround": value["raw_overround"],
+    }
+
+
+def _crosswalk_link(source, match, crosswalk):
+    a = crosswalk.get((source.tour, str(source.player_a_id)))
+    b = crosswalk.get((source.tour, str(source.player_b_id)))
+    if not a or not b or a == b:
+        return None
+    p1, p2 = str(match.player1_id), str(match.player2_id)
+    if {a, b} != {p1, p2}:
+        return None
+    if match.scheduled_at.date() != source.event_date:
+        return None
+    orientation = "direct" if (a, b) == (p1, p2) else "reversed"
+    source_winner_id = (
+        str(source.player_a_id)
+        if source.winner == source.player_a
+        else str(source.player_b_id)
+    )
+    mapped_winner = crosswalk.get((source.tour, source_winner_id))
+    if not mapped_winner or mapped_winner != str(match.winner_id or ""):
+        return None
+    source_surface = norm_surface(source.surface)
+    target_surface = norm_surface(match.surface)
+    if (
+        source_surface not in {"", "unknown"}
+        and target_surface not in {"", "unknown"}
+        and source_surface != target_surface
+    ):
+        return None
+    tournament_points, tournament_evidence = tournament_score(
+        source.tournament, match.tournament
+    )
+    if tournament_points <= 0:
+        return None
+    evidence = ["player_id_crosswalk", "date_exact", "winner_id", tournament_evidence]
+    if source_surface not in {"", "unknown"} and target_surface not in {"", "unknown"}:
+        evidence.append("surface")
+    return {
+        "accepted": True,
+        "score": 20 + int(tournament_points),
+        "evidence": evidence,
+        "orientation": orientation,
+        "opening": _orient_market(source.opening, orientation),
+        "closing": _orient_market(source.closing, orientation),
+    }
 
 
 def main():
