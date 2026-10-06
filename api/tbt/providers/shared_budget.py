@@ -3,7 +3,7 @@
 The provider allowance resets at 19:10 Europe/Bratislava. One ETag-protected
 Azure Table row coordinates every BlinQ TennisAPI caller. Reserve BEFORE every
 billable attempt, including retries; never refund an ambiguous network failure.
-A 500-request provider reserve is kept untouched.
+A 10% (1,500-request) provider reserve is kept untouched, so BlinQ hard-stops at 90%.
 """
 from __future__ import annotations
 
@@ -18,14 +18,19 @@ from .budget import RequestBudgetExceeded
 
 SLOT_SECONDS = 300
 PROVIDER_PLAN_LIMIT = 15000
-PROVIDER_RESERVE = 500
+PROVIDER_RESERVE = 1500
 GLOBAL_CEILING = PROVIDER_PLAN_LIMIT - PROVIDER_RESERVE
 RESET_TIMEZONE = ZoneInfo("Europe/Bratislava")
 RESET_HOUR = 19
 RESET_MINUTE = 10
-# Purpose counters are observability labels only. Every TennisAPI workload shares
-# the same provider-day pool and may use available capacity up to the global stop.
-PURPOSE_CAPS = {name: GLOBAL_CEILING for name in ("live", "match", "refresh", "history")}
+# Hard provider-day allocations prevent any workload class from consuming the
+# entire subscription. Their sum equals the 90% global ceiling.
+PURPOSE_CAPS = {
+    "live": 3000,
+    "match": 2500,
+    "refresh": 5500,
+    "history": 2500,
+}
 PURPOSE_INDEX = {name: pos + 1 for pos, name in enumerate(PURPOSE_CAPS)}
 TABLE = "BlinQApiBudget"
 PARTITION = "rapidapi"
