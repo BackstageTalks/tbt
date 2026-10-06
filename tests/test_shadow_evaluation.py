@@ -95,6 +95,7 @@ def _settled_rows(n):
             "production_model_version": "prod-v1",
             "challenger_model_version": "chal-v1",
             "status": "settled",
+            "scheduled_at": datetime(2026, 10, 1 + (i % 3), 12, tzinfo=timezone.utc).isoformat(),
             "target_player1_win": target,
             "production_player1_probability": 0.60 if target else 0.40,
             "challenger_player1_probability": 0.80 if target else 0.20,
@@ -122,6 +123,7 @@ def test_shadow_promotion_review_requires_200_settled_matches():
     )
     assert report_200["cohort"]["settled"] == 200
     assert report_200["gate"]["minimum_matches_met"] is True
+    assert report_200["gate"]["minimum_days_met"] is True
     assert report_200["gate"]["accuracy_not_worse"] is True
     assert report_200["gate"]["log_loss_better"] is True
     assert report_200["gate"]["brier_better"] is True
@@ -144,3 +146,19 @@ def test_new_challenger_version_starts_a_separate_cohort():
     )
     assert report["cohort"]["settled"] == 1
     assert report["gate"]["minimum_matches_met"] is False
+
+
+def test_shadow_review_requires_three_distinct_utc_days():
+    rows = _settled_rows(200)
+    for row in rows:
+        row["scheduled_at"] = datetime(2026, 10, 1, 12, tzinfo=timezone.utc).isoformat()
+    report = build_shadow_report(
+        rows,
+        production_model_version="prod-v1",
+        challenger_model_version="chal-v1",
+    )
+    assert report["cohort"]["settled"] == 200
+    assert report["cohort"]["settled_utc_days"] == 1
+    assert report["gate"]["minimum_matches_met"] is True
+    assert report["gate"]["minimum_days_met"] is False
+    assert report["gate"]["ready_for_promotion_review"] is False

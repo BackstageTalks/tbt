@@ -16,6 +16,7 @@ from .engine import _match_void_reason
 
 
 MIN_SHADOW_MATCHES = 200
+MIN_SHADOW_DAYS = 3
 
 
 def _utc(value: datetime | str) -> datetime:
@@ -200,6 +201,7 @@ def build_shadow_report(
     production_model_version: str,
     challenger_model_version: str,
     min_matches: int = MIN_SHADOW_MATCHES,
+    min_days: int = MIN_SHADOW_DAYS,
 ) -> dict:
     """Evaluate only the active exact model-pair cohort."""
     cohort = [
@@ -225,7 +227,13 @@ def build_shadow_report(
     )
 
     n = len(settled)
+    settled_days = sorted({
+        _utc(str(row.get("scheduled_at"))).date().isoformat()
+        for row in settled
+        if row.get("scheduled_at")
+    })
     min_matches_met = n >= int(min_matches)
+    min_days_met = len(settled_days) >= int(min_days)
     accuracy_not_worse = (
         n > 0 and challenger.get("accuracy", 0.0) >= production.get("accuracy", 0.0)
     )
@@ -240,6 +248,7 @@ def build_shadow_report(
     )
     ready = bool(
         min_matches_met
+        and min_days_met
         and accuracy_not_worse
         and log_loss_better
         and brier_better
@@ -257,6 +266,8 @@ def build_shadow_report(
             "void": sum(row.get("status") == "void" for row in cohort),
             "excluded": sum(row.get("status") == "excluded" for row in cohort),
             "minimum_for_review": int(min_matches),
+            "minimum_days_for_review": int(min_days),
+            "settled_utc_days": len(settled_days),
         },
         "production": production,
         "challenger": challenger,
@@ -271,6 +282,7 @@ def build_shadow_report(
         },
         "gate": {
             "minimum_matches_met": min_matches_met,
+            "minimum_days_met": min_days_met,
             "accuracy_not_worse": accuracy_not_worse,
             "log_loss_better": log_loss_better,
             "brier_better": brier_better,
