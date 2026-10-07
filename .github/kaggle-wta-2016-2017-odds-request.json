@@ -1,0 +1,25 @@
+{
+  "schema": 1,
+  "mode": "write",
+  "purpose": "Integrate operator-supplied Kaggle WTA 2016-2017 historical Match Winner odds into private BlinQ canonical history and research market sidecars.",
+  "source": {
+    "platform": "Kaggle",
+    "dataset_slug": "serangu/woman-tennis-2016-2017-years",
+    "dataset_title": "Women's tennis matches for 2016-2017",
+    "file": "2016-2017_orig.csv",
+    "expected_rows": 85288,
+    "expected_bytes": 7497725,
+    "expected_sha256": "50dcfc4d9dfb2f4c7bd60a0d029581ff274b7265e870884eae9ffc81be4cdeba",
+    "expected_mirrored_match_groups": 42644,
+    "expected_valid_two_way_odds_groups": 23466,
+    "date_range": "2016-01-01..2017-12-31",
+    "license_status": "operator_confirmed_compatible_for_noncommercial_blinq_use"
+  },
+  "dedup_policy": "Each match must have exactly two mutually mirrored rows with swapped names/ages/ratings/odds, identical result and complementary winner flag. Any inconsistency fails closed.",
+  "identity_policy": "Exact source date + exact normalized unordered WTA player pair + exact canonical winner + unique canonical candidate; rank differences over 25 are rejected when both sides have uncapped rank evidence.",
+  "market_policy": "Existing canonical historical odds marker is never replaced. Source odds are persisted as player1/player2, bookmaker identity unknown, timestamp unknown, benchmark-only.",
+  "result_policy": "Source result and winner flag are identity-validation evidence only and are never introduced as same-match model features.",
+  "api_requests": 0,
+  "model_promotion": false,
+  "requested_at_utc": "2026-10-07T01:44:00Z"
+}
