@@ -415,7 +415,7 @@ def main() -> None:
             "source": SOURCE_LABEL,
             "source_slug": SOURCE_SLUG,
             "source_match_id": src.source_match_id,
-            "source_file_sha256": sha256(source_path),
+            "source_file_sha256": source_file_sha256,
             "identity_evidence": evidence,
             "markets": oriented,
             "feature_policy": {
@@ -445,7 +445,7 @@ def main() -> None:
             "platform": "Kaggle",
             "slug": SOURCE_SLUG,
             "file": source_path.name,
-            "file_sha256": sha256(source_path),
+            "file_sha256": source_file_sha256,
             "license_status": "review_required_other",
         },
         "canonical_rows": len(matches),
